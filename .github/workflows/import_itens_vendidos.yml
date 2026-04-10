@@ -1,0 +1,61 @@
+name: Import Itens Vendidos (Omie → Supabase)
+
+on:
+  # Trigger manual pelo dashboard do GitHub ou via `gh workflow run`
+  workflow_dispatch:
+    inputs:
+      empresas:
+        description: "Empresas (CSV, ex: SF ou SF,CD,WW)"
+        required: false
+        default: "SF"
+      forcar_full:
+        description: "Forçar FULL import (ignorar sync_state)"
+        required: false
+        default: "false"
+        type: choice
+        options: ["false", "true"]
+      data_inicio:
+        description: "Data início FULL (dd/mm/aaaa)"
+        required: false
+        default: "01/01/2025"
+
+  # Agenda automática: a cada hora, aos 17min (off-peak)
+  # Remova o bloco abaixo se não quiser agendamento automático ainda.
+  schedule:
+    - cron: "17 * * * *"
+
+jobs:
+  import:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Run import script
+        env:
+          # Supabase
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+
+          # Omie credentials (por empresa)
+          OMIE_APP_KEY_SF: ${{ secrets.OMIE_APP_KEY_SF }}
+          OMIE_APP_SECRET_SF: ${{ secrets.OMIE_APP_SECRET_SF }}
+          OMIE_APP_KEY_CD: ${{ secrets.OMIE_APP_KEY_CD }}
+          OMIE_APP_SECRET_CD: ${{ secrets.OMIE_APP_SECRET_CD }}
+          OMIE_APP_KEY_WW: ${{ secrets.OMIE_APP_KEY_WW }}
+          OMIE_APP_SECRET_WW: ${{ secrets.OMIE_APP_SECRET_WW }}
+
+          # Inputs do workflow_dispatch (com defaults para schedule)
+          EMPRESAS_ALVO: ${{ github.event.inputs.empresas || 'SF' }}
+          FORCAR_FULL: ${{ github.event.inputs.forcar_full || 'false' }}
+          DATA_INICIO_FULL: ${{ github.event.inputs.data_inicio || '01/01/2025' }}
+
+          PYTHONUNBUFFERED: "1"
+        run: python3 scripts/import_itens_vendidos.py
