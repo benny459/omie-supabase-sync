@@ -22,6 +22,9 @@ OPCIONAIS:
   FORCAR_FULL            default "false"       ("true" para ignorar sync_state)
   ITENS_POR_PAGINA       default "100"         (max real do endpoint)
   PAUSA_ENTRE_CHAMADAS   default "2"           (segundos)
+  SHEETS_MIRROR_URL      opcional              (URL do Web App Apps Script)
+  SHEETS_MIRROR_TOKEN    opcional              (token compartilhado)
+  SHEETS_MIRROR_CFG      default "ItensVendidos" (nome da config em MIRROR_CFG no Apps Script)
 
 USO LOCAL:
     export SUPABASE_URL=https://...
@@ -64,6 +67,11 @@ FORCAR_FULL = env("FORCAR_FULL", "false").lower() == "true"
 ITENS_POR_PAGINA = int(env("ITENS_POR_PAGINA", "100"))
 PAUSA_ENTRE_CHAMADAS = int(env("PAUSA_ENTRE_CHAMADAS", "2"))
 MAX_TENTATIVAS_OMIE = 5
+
+# Sheets mirror (opcional)
+SHEETS_MIRROR_URL = env("SHEETS_MIRROR_URL", "")
+SHEETS_MIRROR_TOKEN = env("SHEETS_MIRROR_TOKEN", "")
+SHEETS_MIRROR_CFG = env("SHEETS_MIRROR_CFG", "ItensVendidos")
 
 OMIE_URL = "https://app.omie.com.br/api/v1/produtos/pedido/"
 
@@ -362,6 +370,50 @@ def importar_empresa(sigla: str):
     return resultado
 
 # ══════════════════════════════════════════════════════════════════════════
+# 🪞 TRIGGER SHEETS MIRROR (via Apps Script Web App webhook)
+# ══════════════════════════════════════════════════════════════════════════
+
+def trigger_sheets_mirror():
+    """Chama o Web App do Apps Script pra espelhar Supabase → Sheets."""
+    if not SHEETS_MIRROR_URL or not SHEETS_MIRROR_TOKEN:
+        print("\nℹ️  Sheets mirror desabilitado (SHEETS_MIRROR_URL/TOKEN não configurados)")
+        return
+
+    print(f"\n🪞 Disparando Sheets mirror: {SHEETS_MIRROR_CFG}")
+    inicio = time.time()
+
+    payload = {
+        "token": SHEETS_MIRROR_TOKEN,
+        "cfgName": SHEETS_MIRROR_CFG,
+    }
+
+    # Apps Script Web Apps redirecionam (302) para script.googleusercontent.com;
+    # urllib segue redirects automaticamente, mas precisamos aceitar follow.
+    try:
+        code, body, _ = http_post_json(SHEETS_MIRROR_URL, payload, {"User-Agent": "OmieGHA/1.0"}, timeout=300)
+    except Exception as e:
+        print(f"   ⚠️  Mirror falhou (exceção): {e}")
+        return
+
+    elapsed = int(time.time() - inicio)
+    body_txt = body[:500].decode("utf-8", errors="replace") if body else ""
+
+    if code < 200 or code >= 300:
+        print(f"   ⚠️  Mirror HTTP {code} em {elapsed}s | {body_txt[:200]}")
+        return
+
+    try:
+        resp = json.loads(body_txt)
+    except Exception:
+        print(f"   ⚠️  Mirror resposta não é JSON ({elapsed}s): {body_txt[:200]}")
+        return
+
+    if resp.get("ok"):
+        print(f"   ✅ Mirror OK: {resp.get('linhas')} linhas escritas na aba em {resp.get('segundos')}s (webhook {elapsed}s total)")
+    else:
+        print(f"   ⚠️  Mirror falhou: {resp.get('error')}")
+
+# ══════════════════════════════════════════════════════════════════════════
 # 🎯 MAIN
 # ══════════════════════════════════════════════════════════════════════════
 
@@ -405,6 +457,9 @@ def main():
         else:
             print(f"   ✅ {r['empresa']}: {r['total_pedidos']} pedidos → {r['total_linhas']} linhas ({r['modo']}, {r['segundos']}s)")
     print("═══════════════════════════════════════════════════════════════")
+
+    # Dispara o mirror pro Google Sheets (opcional, controlado por env vars)
+    trigger_sheets_mirror()
 
     # Exit code != 0 se qualquer empresa deu erro (GitHub Actions marca o run como falho)
     if houve_erro:

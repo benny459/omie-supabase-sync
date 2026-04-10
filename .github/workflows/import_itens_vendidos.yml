@@ -57,5 +57,10 @@ jobs:
           FORCAR_FULL: ${{ github.event.inputs.forcar_full || 'false' }}
           DATA_INICIO_FULL: ${{ github.event.inputs.data_inicio || '01/01/2025' }}
 
+          # Sheets mirror via Apps Script Web App (opcional)
+          SHEETS_MIRROR_URL: ${{ secrets.SHEETS_MIRROR_URL }}
+          SHEETS_MIRROR_TOKEN: ${{ secrets.SHEETS_MIRROR_TOKEN }}
+          SHEETS_MIRROR_CFG: "ItensVendidos"
+
           PYTHONUNBUFFERED: "1"
         run: python3 scripts/import_itens_vendidos.py
