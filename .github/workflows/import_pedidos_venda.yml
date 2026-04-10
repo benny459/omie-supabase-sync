@@ -1,0 +1,51 @@
+name: Import Pedidos Venda (Omie → Supabase)
+
+on:
+  workflow_dispatch:
+    inputs:
+      empresas:
+        description: "Empresas (CSV)"
+        required: false
+        default: "SF"
+      forcar_full:
+        description: "Forçar FULL (ignora sync_state)"
+        required: false
+        default: "false"
+        type: choice
+        options: ["false", "true"]
+      data_inicio:
+        description: "Data início FULL"
+        required: false
+        default: "01/01/2025"
+
+  schedule:
+    - cron: "22 * * * *"  # todo :22 de cada hora (depois de Etapas :05 e ItensVendidos :17)
+
+jobs:
+  import:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Run
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          OMIE_APP_KEY_SF: ${{ secrets.OMIE_APP_KEY_SF }}
+          OMIE_APP_SECRET_SF: ${{ secrets.OMIE_APP_SECRET_SF }}
+          OMIE_APP_KEY_CD: ${{ secrets.OMIE_APP_KEY_CD }}
+          OMIE_APP_SECRET_CD: ${{ secrets.OMIE_APP_SECRET_CD }}
+          OMIE_APP_KEY_WW: ${{ secrets.OMIE_APP_KEY_WW }}
+          OMIE_APP_SECRET_WW: ${{ secrets.OMIE_APP_SECRET_WW }}
+          EMPRESAS_ALVO: ${{ github.event.inputs.empresas || 'SF' }}
+          FORCAR_FULL: ${{ github.event.inputs.forcar_full || 'false' }}
+          DATA_INICIO_FULL: ${{ github.event.inputs.data_inicio || '01/01/2025' }}
+          SHEETS_MIRROR_URL: ${{ secrets.SHEETS_MIRROR_URL }}
+          SHEETS_MIRROR_TOKEN: ${{ secrets.SHEETS_MIRROR_TOKEN }}
+          PYTHONUNBUFFERED: "1"
+        run: python3 scripts/import_pedidos_venda.py
