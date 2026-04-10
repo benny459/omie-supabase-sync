@@ -90,6 +90,18 @@ def importar_empresa(sigla: str):
 
     rows = [map_etapa_to_row(e, sigla) for e in items]
     rows = [r for r in rows if r["codigo_pedido"]]  # skipa rows sem PK
+    count_raw = len(rows)
+
+    # 🔧 DEDUP: A API retorna múltiplas entradas por pedido (histórico de etapas).
+    # Mantemos 1 row por (empresa, codigo_pedido) — a ÚLTIMA vista na paginação
+    # (tipicamente a mais recente). Se quisermos guardar histórico completo,
+    # aí precisamos mudar a PK pra incluir dt_etapa+hr_etapa.
+    dedup = {}
+    for r in rows:
+        key = (r["empresa"], r["codigo_pedido"])
+        dedup[key] = r  # sobrescreve — última vence
+    rows = list(dedup.values())
+    print(f"   🔧 Dedup: {count_raw} rows brutos → {len(rows)} pedidos únicos")
 
     maior_d_alt = ""
     maior_h_alt = ""
