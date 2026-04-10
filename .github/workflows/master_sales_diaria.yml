@@ -1,0 +1,138 @@
+name: 🚀 MASTER Sales Diária (Omie → Supabase)
+
+# Executa todos os importers em SEQUÊNCIA pra evitar rate limit paralelo na Omie.
+# Disparado 1x ao dia (03:15 UTC = 00:15 BRT) + manual.
+
+on:
+  workflow_dispatch:
+    inputs:
+      empresas:
+        description: "Empresas (CSV, default: SF)"
+        required: false
+        default: "SF"
+      forcar_full:
+        description: "Forçar FULL em todos os importers incrementais"
+        required: false
+        default: "false"
+        type: choice
+        options: ["false", "true"]
+
+  schedule:
+    - cron: "15 3 * * *"  # Todo dia às 03:15 UTC (00:15 BRT)
+
+concurrency:
+  group: master-sales-diaria
+  cancel-in-progress: false   # NÃO cancela run em andamento se disparar outro
+
+jobs:
+  import:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      # ─────────────────────────────────────
+      # 1. Etapas de Pedidos (3000-6000 rows)
+      # ─────────────────────────────────────
+      - name: 1️⃣ Etapas de Pedidos
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          OMIE_APP_KEY_SF: ${{ secrets.OMIE_APP_KEY_SF }}
+          OMIE_APP_SECRET_SF: ${{ secrets.OMIE_APP_SECRET_SF }}
+          OMIE_APP_KEY_CD: ${{ secrets.OMIE_APP_KEY_CD }}
+          OMIE_APP_SECRET_CD: ${{ secrets.OMIE_APP_SECRET_CD }}
+          OMIE_APP_KEY_WW: ${{ secrets.OMIE_APP_KEY_WW }}
+          OMIE_APP_SECRET_WW: ${{ secrets.OMIE_APP_SECRET_WW }}
+          EMPRESAS_ALVO: ${{ github.event.inputs.empresas || 'SF' }}
+          SHEETS_MIRROR_URL: ${{ secrets.SHEETS_MIRROR_URL }}
+          SHEETS_MIRROR_TOKEN: ${{ secrets.SHEETS_MIRROR_TOKEN }}
+          PYTHONUNBUFFERED: "1"
+        run: python3 scripts/import_etapas_pedidos.py
+        continue-on-error: true
+
+      - name: ⏸️ Pausa entre módulos (30s)
+        run: sleep 30
+
+      # ─────────────────────────────────────
+      # 2. Itens Vendidos (incremental diário)
+      # ─────────────────────────────────────
+      - name: 2️⃣ Itens Vendidos
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          OMIE_APP_KEY_SF: ${{ secrets.OMIE_APP_KEY_SF }}
+          OMIE_APP_SECRET_SF: ${{ secrets.OMIE_APP_SECRET_SF }}
+          OMIE_APP_KEY_CD: ${{ secrets.OMIE_APP_KEY_CD }}
+          OMIE_APP_SECRET_CD: ${{ secrets.OMIE_APP_SECRET_CD }}
+          OMIE_APP_KEY_WW: ${{ secrets.OMIE_APP_KEY_WW }}
+          OMIE_APP_SECRET_WW: ${{ secrets.OMIE_APP_SECRET_WW }}
+          EMPRESAS_ALVO: ${{ github.event.inputs.empresas || 'SF' }}
+          FORCAR_FULL: ${{ github.event.inputs.forcar_full || 'false' }}
+          DATA_INICIO_FULL: "01/01/2025"
+          SHEETS_MIRROR_URL: ${{ secrets.SHEETS_MIRROR_URL }}
+          SHEETS_MIRROR_TOKEN: ${{ secrets.SHEETS_MIRROR_TOKEN }}
+          SHEETS_MIRROR_CFG: "ItensVendidos"
+          PYTHONUNBUFFERED: "1"
+        run: python3 scripts/import_itens_vendidos.py
+        continue-on-error: true
+
+      - name: ⏸️ Pausa entre módulos (30s)
+        run: sleep 30
+
+      # ─────────────────────────────────────
+      # 3. Pedidos Venda (incremental diário)
+      # ─────────────────────────────────────
+      - name: 3️⃣ Pedidos Venda
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          OMIE_APP_KEY_SF: ${{ secrets.OMIE_APP_KEY_SF }}
+          OMIE_APP_SECRET_SF: ${{ secrets.OMIE_APP_SECRET_SF }}
+          OMIE_APP_KEY_CD: ${{ secrets.OMIE_APP_KEY_CD }}
+          OMIE_APP_SECRET_CD: ${{ secrets.OMIE_APP_SECRET_CD }}
+          OMIE_APP_KEY_WW: ${{ secrets.OMIE_APP_KEY_WW }}
+          OMIE_APP_SECRET_WW: ${{ secrets.OMIE_APP_SECRET_WW }}
+          EMPRESAS_ALVO: ${{ github.event.inputs.empresas || 'SF' }}
+          FORCAR_FULL: ${{ github.event.inputs.forcar_full || 'false' }}
+          DATA_INICIO_FULL: "01/01/2025"
+          SHEETS_MIRROR_URL: ${{ secrets.SHEETS_MIRROR_URL }}
+          SHEETS_MIRROR_TOKEN: ${{ secrets.SHEETS_MIRROR_TOKEN }}
+          PYTHONUNBUFFERED: "1"
+        run: python3 scripts/import_pedidos_venda.py
+        continue-on-error: true
+
+      - name: ⏸️ Pausa entre módulos (30s)
+        run: sleep 30
+
+      # ─────────────────────────────────────
+      # 4. Serviços (OS + Contratos)
+      # ─────────────────────────────────────
+      - name: 4️⃣ Serviços (OS + Contratos)
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          OMIE_APP_KEY_SF: ${{ secrets.OMIE_APP_KEY_SF }}
+          OMIE_APP_SECRET_SF: ${{ secrets.OMIE_APP_SECRET_SF }}
+          OMIE_APP_KEY_CD: ${{ secrets.OMIE_APP_KEY_CD }}
+          OMIE_APP_SECRET_CD: ${{ secrets.OMIE_APP_SECRET_CD }}
+          OMIE_APP_KEY_WW: ${{ secrets.OMIE_APP_KEY_WW }}
+          OMIE_APP_SECRET_WW: ${{ secrets.OMIE_APP_SECRET_WW }}
+          EMPRESAS_ALVO: ${{ github.event.inputs.empresas || 'SF' }}
+          SHEETS_MIRROR_URL: ${{ secrets.SHEETS_MIRROR_URL }}
+          SHEETS_MIRROR_TOKEN: ${{ secrets.SHEETS_MIRROR_TOKEN }}
+          PYTHONUNBUFFERED: "1"
+        run: python3 scripts/import_servicos.py
+        continue-on-error: true
+
+      - name: 🏁 Resumo
+        if: always()
+        run: |
+          echo "════════════════════════════════════════════════════"
+          echo "🏁 Master Sales Diária concluída"
+          echo "Empresas: ${{ github.event.inputs.empresas || 'SF' }}"
+          echo "════════════════════════════════════════════════════"

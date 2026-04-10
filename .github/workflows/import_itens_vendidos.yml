@@ -1,28 +1,23 @@
 name: Import Itens Vendidos (Omie → Supabase)
 
 on:
-  # Trigger manual pelo dashboard do GitHub ou via `gh workflow run`
+  # Apenas manual — chamado pelo master_sales_diaria ou via `gh workflow run`
   workflow_dispatch:
     inputs:
       empresas:
-        description: "Empresas (CSV, ex: SF ou SF,CD,WW)"
+        description: "Empresas (CSV)"
         required: false
         default: "SF"
       forcar_full:
-        description: "Forçar FULL import (ignorar sync_state)"
+        description: "Forçar FULL"
         required: false
         default: "false"
         type: choice
         options: ["false", "true"]
       data_inicio:
-        description: "Data início FULL (dd/mm/aaaa)"
+        description: "Data início FULL"
         required: false
         default: "01/01/2025"
-
-  # Agenda automática: a cada hora, aos 17min (off-peak)
-  # Remova o bloco abaixo se não quiser agendamento automático ainda.
-  schedule:
-    - cron: "17 * * * *"
 
 jobs:
   import:

@@ -8,10 +8,6 @@ on:
         required: false
         default: "SF"
 
-  schedule:
-    # Domingo às 03:17 UTC (00:17 BRT) — fora do horário comercial
-    - cron: "17 3 * * 0"
-
 jobs:
   import:
     runs-on: ubuntu-latest

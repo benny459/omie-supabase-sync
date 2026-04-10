@@ -8,10 +8,6 @@ on:
         required: false
         default: "SF,CD,WW"
 
-  schedule:
-    # Domingo às 03:27 UTC (00:27 BRT) — 10 min depois de Produtos
-    - cron: "27 3 * * 0"
-
 jobs:
   import:
     runs-on: ubuntu-latest

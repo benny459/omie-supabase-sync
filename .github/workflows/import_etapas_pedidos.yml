@@ -8,9 +8,6 @@ on:
         required: false
         default: "SF"
 
-  schedule:
-    - cron: "5 * * * *"  # todo :05 de cada hora
-
 jobs:
   import:
     runs-on: ubuntu-latest
