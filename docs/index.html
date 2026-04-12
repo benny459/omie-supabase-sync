@@ -1,0 +1,597 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Omie → Supabase — Painel de Controle</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg-0:#0a0b0f;--bg-1:#12131a;--bg-2:#1a1c26;--bg-3:#242636;
+  --tx-0:#e8e9ed;--tx-1:#a0a3b1;--tx-2:#6b6e7d;
+  --accent:#3b82f6;--accent-dim:#1e3a5f;
+  --ok:#22c55e;--ok-bg:#0a2a16;
+  --err:#ef4444;--err-bg:#2a0a0a;
+  --warn:#f59e0b;--warn-bg:#2a1f0a;
+  --blue:#3b82f6;--blue-bg:#0a1a2a;
+  --border:#2a2c3a;
+  --radius:8px;
+  --mono:'JetBrains Mono',monospace;
+  --sans:'DM Sans',system-ui,sans-serif;
+}
+html{font-size:14px;scroll-behavior:smooth}
+body{
+  background:var(--bg-0);color:var(--tx-0);
+  font-family:var(--sans);line-height:1.6;
+  min-height:100vh;
+}
+/* Noise overlay */
+body::before{
+  content:'';position:fixed;inset:0;z-index:0;pointer-events:none;
+  opacity:.03;
+  background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+.app{position:relative;z-index:1;max-width:1100px;margin:0 auto;padding:1.5rem}
+
+/* HEADER */
+header{
+  padding:2rem 0 1.5rem;
+  border-bottom:1px solid var(--border);
+  margin-bottom:2rem;
+}
+header h1{
+  font-family:var(--mono);font-size:1.4rem;font-weight:700;
+  letter-spacing:-0.02em;
+  background:linear-gradient(135deg,#fff 0%,var(--accent) 100%);
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;
+}
+header p{color:var(--tx-2);font-size:.85rem;margin-top:.25rem}
+.status-dot{
+  display:inline-block;width:8px;height:8px;border-radius:50%;
+  background:var(--ok);margin-right:6px;
+  animation:pulse 2s ease-in-out infinite;
+}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+
+/* SECTIONS */
+section{margin-bottom:2rem}
+.section-head{
+  display:flex;align-items:center;justify-content:space-between;
+  margin-bottom:1rem;flex-wrap:wrap;gap:.5rem;
+}
+.section-head h2{font-family:var(--mono);font-size:1rem;font-weight:600;color:var(--tx-0)}
+.section-head .actions{display:flex;gap:.5rem;flex-wrap:wrap}
+
+/* BUTTONS */
+.btn{
+  font-family:var(--mono);font-size:.75rem;font-weight:600;
+  padding:.5rem 1rem;border:1px solid var(--border);border-radius:var(--radius);
+  background:var(--bg-2);color:var(--tx-0);cursor:pointer;
+  transition:all .15s;display:inline-flex;align-items:center;gap:.4rem;
+  white-space:nowrap;
+}
+.btn:hover{background:var(--bg-3);border-color:var(--tx-2)}
+.btn:active{transform:scale(.97)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn.primary:hover{background:#2563eb}
+.btn.ok{background:var(--ok-bg);border-color:#1a5c2e;color:var(--ok)}
+.btn.ok:hover{background:#0f3a1e;border-color:var(--ok)}
+.btn.warn{background:var(--warn-bg);border-color:#5c4a1a;color:var(--warn)}
+.btn.warn:hover{background:#3a2f0f;border-color:var(--warn)}
+.btn.blue{background:var(--blue-bg);border-color:#1a3a5c;color:var(--blue)}
+.btn.blue:hover{background:#0f2a4a;border-color:var(--blue)}
+.btn:disabled{opacity:.5;cursor:not-allowed;transform:none}
+.btn .spin{display:inline-block;width:12px;height:12px;border:2px solid currentColor;border-top-color:transparent;border-radius:50%;animation:spin .6s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* CARDS GRID */
+.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:1rem}
+.card{
+  background:var(--bg-1);border:1px solid var(--border);border-radius:var(--radius);
+  padding:1.25rem;
+  transition:border-color .2s;
+}
+.card:hover{border-color:var(--tx-2)}
+.card h3{font-family:var(--mono);font-size:.85rem;font-weight:600;margin-bottom:.25rem}
+.card p{color:var(--tx-2);font-size:.8rem;margin-bottom:1rem}
+.card .btn{width:100%;justify-content:center}
+
+/* TABLE */
+.table-wrap{overflow-x:auto;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg-1)}
+table{width:100%;border-collapse:collapse;font-size:.8rem}
+th{
+  font-family:var(--mono);font-weight:600;font-size:.7rem;
+  text-transform:uppercase;letter-spacing:.05em;
+  color:var(--tx-2);text-align:left;
+  padding:.75rem 1rem;border-bottom:1px solid var(--border);
+  background:var(--bg-2);position:sticky;top:0;
+}
+td{padding:.6rem 1rem;border-bottom:1px solid var(--border);color:var(--tx-1);vertical-align:middle}
+tr:last-child td{border-bottom:none}
+tr:hover td{background:var(--bg-2)}
+.badge{
+  display:inline-flex;align-items:center;gap:4px;
+  padding:2px 8px;border-radius:4px;font-family:var(--mono);
+  font-size:.7rem;font-weight:600;
+}
+.badge.ok{background:var(--ok-bg);color:var(--ok)}
+.badge.err{background:var(--err-bg);color:var(--err)}
+.badge.warn{background:var(--warn-bg);color:var(--warn)}
+.badge.blue{background:var(--blue-bg);color:var(--blue)}
+.num{font-family:var(--mono);font-weight:600;color:var(--tx-0)}
+
+/* SETTINGS */
+.settings{
+  background:var(--bg-1);border:1px solid var(--border);border-radius:var(--radius);
+  margin-bottom:2rem;overflow:hidden;
+}
+.settings-toggle{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:1rem 1.25rem;cursor:pointer;user-select:none;
+  font-family:var(--mono);font-size:.85rem;font-weight:600;
+  color:var(--tx-1);
+}
+.settings-toggle:hover{color:var(--tx-0)}
+.settings-toggle .arrow{transition:transform .2s;font-size:.7rem}
+.settings-body{
+  padding:0 1.25rem;max-height:0;overflow:hidden;
+  transition:max-height .3s,padding .3s;
+}
+.settings.open .settings-body{max-height:500px;padding:0 1.25rem 1.25rem}
+.settings.open .arrow{transform:rotate(90deg)}
+.field{margin-bottom:1rem}
+.field label{display:block;font-family:var(--mono);font-size:.7rem;font-weight:600;color:var(--tx-2);text-transform:uppercase;letter-spacing:.05em;margin-bottom:.35rem}
+.field input{
+  width:100%;padding:.5rem .75rem;font-family:var(--mono);font-size:.8rem;
+  background:var(--bg-0);border:1px solid var(--border);border-radius:6px;
+  color:var(--tx-0);outline:none;
+}
+.field input:focus{border-color:var(--accent)}
+.field-row{display:grid;grid-template-columns:1fr 1fr;gap:1rem}
+@media(max-width:600px){.field-row{grid-template-columns:1fr}}
+
+/* SCHEDULE */
+.sched-list{display:flex;flex-direction:column;gap:.75rem}
+.sched-item{
+  display:flex;align-items:center;justify-content:space-between;
+  background:var(--bg-1);border:1px solid var(--border);border-radius:var(--radius);
+  padding:1rem 1.25rem;gap:1rem;flex-wrap:wrap;
+}
+.sched-item .name{font-family:var(--mono);font-size:.85rem;font-weight:600;min-width:200px}
+.sched-item .time{
+  font-family:var(--mono);font-size:1.3rem;font-weight:700;
+  color:var(--accent);letter-spacing:-.02em;
+}
+.sched-item .freq{color:var(--tx-2);font-size:.75rem}
+
+/* MODAL */
+.modal-overlay{
+  position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:100;
+  display:none;align-items:center;justify-content:center;padding:1rem;
+  backdrop-filter:blur(4px);
+}
+.modal-overlay.open{display:flex}
+.modal{
+  background:var(--bg-1);border:1px solid var(--border);border-radius:12px;
+  padding:2rem;width:100%;max-width:380px;
+}
+.modal h3{font-family:var(--mono);font-size:1rem;margin-bottom:1rem}
+.modal .field{margin-bottom:1.5rem}
+.modal .btn-row{display:flex;gap:.75rem;justify-content:flex-end}
+
+/* TOAST */
+.toast-container{position:fixed;top:1rem;right:1rem;z-index:200;display:flex;flex-direction:column;gap:.5rem}
+.toast{
+  font-family:var(--mono);font-size:.8rem;
+  padding:.75rem 1.25rem;border-radius:var(--radius);
+  border:1px solid;
+  animation:slideIn .3s ease-out;
+  max-width:360px;
+}
+.toast.ok{background:var(--ok-bg);border-color:#1a5c2e;color:var(--ok)}
+.toast.err{background:var(--err-bg);border-color:#5c1a1a;color:var(--err)}
+@keyframes slideIn{from{opacity:0;transform:translateX(20px)}to{opacity:1;transform:translateX(0)}}
+
+/* EMPTY STATE */
+.empty{text-align:center;padding:2rem;color:var(--tx-2);font-size:.85rem}
+
+/* LINKS */
+a{color:var(--accent);text-decoration:none}
+a:hover{text-decoration:underline}
+
+/* RESPONSIVE */
+@media(max-width:700px){
+  .app{padding:1rem}
+  header h1{font-size:1.1rem}
+  .cards{grid-template-columns:1fr}
+  th,td{padding:.5rem .6rem;font-size:.72rem}
+}
+</style>
+</head>
+<body>
+<div class="app">
+
+<!-- HEADER -->
+<header>
+  <h1><span class="status-dot"></span>Omie → Supabase — Painel de Controle</h1>
+  <p>Gerenciamento de sincronização de dados</p>
+</header>
+
+<!-- SETTINGS -->
+<div class="settings" id="settings">
+  <div class="settings-toggle" onclick="toggleSettings()">
+    <span>⚙️ Configurações</span>
+    <span class="arrow">▶</span>
+  </div>
+  <div class="settings-body">
+    <div class="field">
+      <label>GitHub Personal Access Token</label>
+      <input type="password" id="ghToken" placeholder="ghp_xxxxxxxxxxxxxxxxxxxx">
+    </div>
+    <div class="field-row">
+      <div class="field">
+        <label>Supabase URL</label>
+        <input type="text" id="supaUrl" placeholder="https://xxxxx.supabase.co">
+      </div>
+      <div class="field">
+        <label>Supabase Service Role Key</label>
+        <input type="password" id="supaKey" placeholder="eyJ...">
+      </div>
+    </div>
+    <button class="btn primary" onclick="saveSettings()">💾 Salvar Configurações</button>
+  </div>
+</div>
+
+<!-- DASHBOARD -->
+<section>
+  <div class="section-head">
+    <h2>📊 Status das Tabelas</h2>
+    <div class="actions">
+      <button class="btn" onclick="loadDashboard()" id="btnRefresh">🔄 Atualizar</button>
+    </div>
+  </div>
+  <div class="table-wrap">
+    <table>
+      <thead><tr>
+        <th>Módulo</th><th>Emp</th><th>Status</th><th>Modo</th>
+        <th>Total</th><th>Novos</th><th>Atual.</th><th>Duração</th><th>Última Sync</th>
+      </tr></thead>
+      <tbody id="dashBody"><tr><td colspan="9" class="empty">Clique em "Atualizar" para carregar</td></tr></tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ACTIONS -->
+<section>
+  <div class="section-head"><h2>🚀 Disparar Workflows</h2></div>
+  <div class="cards">
+    <div class="card">
+      <h3>🚀 Master Diária</h3>
+      <p>Etapas → Itens Vendidos → Pedidos → Serviços (sequência)</p>
+      <button class="btn ok" onclick="dispatch('master_sales_diaria','Disparar Master Diária?',{empresas:'SF',forcar_full:'false'})">▶ Disparar</button>
+    </div>
+    <div class="card">
+      <h3>📦 Master Semanal</h3>
+      <p>Produtos → Auxiliares (Categorias + FormasPag)</p>
+      <button class="btn blue" onclick="dispatch('master_sales_semanal','Disparar Master Semanal?',{empresas:'SF,CD,WW'})">▶ Disparar</button>
+    </div>
+    <div class="card">
+      <h3>⚠️ Master Diária FULL</h3>
+      <p>Reimporta tudo desde 01/01/2025 (ignora sync_state)</p>
+      <button class="btn warn" onclick="dispatch('master_sales_diaria','⚠️ Forçar FULL? Vai reimportar TUDO.',{empresas:'SF',forcar_full:'true'})">⚠ Forçar FULL</button>
+    </div>
+  </div>
+</section>
+
+<!-- INDIVIDUAL RUNS -->
+<section>
+  <div class="section-head"><h2>🛠️ Execuções Individuais</h2></div>
+  <div class="cards" style="grid-template-columns:repeat(auto-fill,minmax(200px,1fr))">
+    <div class="card">
+      <h3>📋 Etapas</h3>
+      <p>ListarEtapasPedido (FULL)</p>
+      <button class="btn" onclick="dispatch('import_etapas_pedidos','Disparar Etapas?',{empresas:'SF'})">▶ Rodar</button>
+    </div>
+    <div class="card">
+      <h3>🛒 Itens Vendidos</h3>
+      <p>ListarPedidos (itens, incremental)</p>
+      <button class="btn" onclick="dispatch('import_itens_vendidos','Disparar Itens Vendidos?',{empresas:'SF',forcar_full:'false',data_inicio:'01/01/2025'})">▶ Rodar</button>
+    </div>
+    <div class="card">
+      <h3>📦 Pedidos Venda</h3>
+      <p>ListarPedidos (cabeçalho, incremental)</p>
+      <button class="btn" onclick="dispatch('import_pedidos_venda','Disparar Pedidos Venda?',{empresas:'SF',forcar_full:'false',data_inicio:'01/01/2025'})">▶ Rodar</button>
+    </div>
+    <div class="card">
+      <h3>🔧 Serviços</h3>
+      <p>OS + Contratos (FULL)</p>
+      <button class="btn" onclick="dispatch('import_servicos','Disparar Serviços?',{empresas:'SF'})">▶ Rodar</button>
+    </div>
+    <div class="card">
+      <h3>📦 Produtos</h3>
+      <p>Catálogo resumido (FULL)</p>
+      <button class="btn" onclick="dispatch('import_produtos','Disparar Produtos?',{empresas:'SF'})">▶ Rodar</button>
+    </div>
+    <div class="card">
+      <h3>📂 Auxiliares</h3>
+      <p>FormasPag + Categorias (SF,CD,WW)</p>
+      <button class="btn" onclick="dispatch('import_auxiliares','Disparar Auxiliares?',{empresas:'SF,CD,WW'})">▶ Rodar</button>
+    </div>
+  </div>
+</section>
+
+<!-- SCHEDULE -->
+<section>
+  <div class="section-head">
+    <h2>⏰ Agenda</h2>
+    <button class="btn" onclick="loadSchedules()" id="btnSched">🔄 Atualizar</button>
+  </div>
+  <div class="sched-list" id="schedList">
+    <div class="empty">Clique em "Atualizar" para carregar horários</div>
+  </div>
+</section>
+
+<!-- RECENT RUNS -->
+<section>
+  <div class="section-head">
+    <h2>📜 Últimos Runs</h2>
+    <button class="btn" onclick="loadRuns()" id="btnRuns">🔄 Atualizar</button>
+  </div>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Workflow</th><th>Status</th><th>Duração</th><th>Data/Hora</th><th>Link</th></tr></thead>
+      <tbody id="runsBody"><tr><td colspan="5" class="empty">Clique em "Atualizar" para carregar</td></tr></tbody>
+    </table>
+  </div>
+</section>
+
+</div>
+
+<!-- MODAL -->
+<div class="modal-overlay" id="modalOverlay">
+  <div class="modal">
+    <h3 id="modalTitle">Editar Horário</h3>
+    <div class="field">
+      <label>Novo horário (BRT)</label>
+      <input type="time" id="modalTime" value="00:00">
+    </div>
+    <div class="field">
+      <label>Horário atual</label>
+      <p id="modalCurrent" style="color:var(--tx-1);font-family:var(--mono);font-size:.85rem">—</p>
+    </div>
+    <div class="btn-row">
+      <button class="btn" onclick="closeModal()">Cancelar</button>
+      <button class="btn primary" onclick="saveSchedule()">💾 Salvar</button>
+    </div>
+  </div>
+</div>
+
+<!-- TOAST -->
+<div class="toast-container" id="toasts"></div>
+
+<script>
+const GH_REPO = 'benny459/omie-supabase-sync';
+const GH_API = 'https://api.github.com';
+const DAYS = {0:'Dom',1:'Seg',2:'Ter',3:'Qua',4:'Qui',5:'Sex',6:'Sáb','*':'Todo dia'};
+let modalState = {};
+
+// ─── SETTINGS ───
+function toggleSettings() {
+  document.getElementById('settings').classList.toggle('open');
+}
+function loadSettings() {
+  const s = k => localStorage.getItem(k) || '';
+  document.getElementById('ghToken').value = s('gh_token');
+  document.getElementById('supaUrl').value = s('supa_url') || 'https://zodflkfdnjhtwcjutbjl.supabase.co';
+  document.getElementById('supaKey').value = s('supa_key');
+}
+function saveSettings() {
+  localStorage.setItem('gh_token', document.getElementById('ghToken').value.trim());
+  localStorage.setItem('supa_url', document.getElementById('supaUrl').value.trim());
+  localStorage.setItem('supa_key', document.getElementById('supaKey').value.trim());
+  toast('Configurações salvas!', 'ok');
+  document.getElementById('settings').classList.remove('open');
+}
+function ghToken() { return localStorage.getItem('gh_token') || ''; }
+function supaUrl() { return (localStorage.getItem('supa_url') || '').replace(/\/$/,''); }
+function supaKey() { return localStorage.getItem('supa_key') || ''; }
+
+// ─── TOAST ───
+function toast(msg, type='ok') {
+  const c = document.getElementById('toasts');
+  const t = document.createElement('div');
+  t.className = `toast ${type}`;
+  t.textContent = msg;
+  c.appendChild(t);
+  setTimeout(() => { t.style.opacity='0'; t.style.transition='opacity .3s'; setTimeout(()=>t.remove(),300); }, 4000);
+}
+
+// ─── HELPERS ───
+function fmtBRT(iso) {
+  if (!iso) return '—';
+  try {
+    const d = new Date(iso);
+    return d.toLocaleString('pt-BR', { timeZone:'America/Sao_Paulo', day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' });
+  } catch { return iso.substring(0,16); }
+}
+function fmtDuration(start, end) {
+  if (!start || !end) return '—';
+  const s = Math.round((new Date(end) - new Date(start)) / 1000);
+  return s < 60 ? `${s}s` : `${Math.floor(s/60)}m${s%60}s`;
+}
+function cronToBRT(cron) {
+  const p = cron.split(' ');
+  const m = parseInt(p[0]), h = parseInt(p[1]), dow = p[4];
+  const hBRT = (h - 3 + 24) % 24;
+  return { time: `${String(hBRT).padStart(2,'0')}:${String(m).padStart(2,'0')}`, day: DAYS[dow] || dow };
+}
+async function ghFetch(endpoint, method='GET', body=null) {
+  if (!ghToken()) throw new Error('Configure o GitHub Token nas Configurações');
+  const opts = { method, headers: { 'Authorization':`Bearer ${ghToken()}`, 'Accept':'application/vnd.github.v3+json' } };
+  if (body) { opts.headers['Content-Type'] = 'application/json'; opts.body = JSON.stringify(body); }
+  const r = await fetch(GH_API + endpoint, opts);
+  if (!r.ok && r.status !== 204) throw new Error(`GitHub ${r.status}: ${(await r.text()).substring(0,120)}`);
+  return r.status === 204 ? {} : r.json();
+}
+async function supaFetch(table, query='') {
+  if (!supaKey()) throw new Error('Configure a Supabase Key nas Configurações');
+  const r = await fetch(`${supaUrl()}/rest/v1/${table}?${query}`, {
+    headers: { 'apikey':supaKey(), 'Authorization':`Bearer ${supaKey()}`, 'Accept-Profile':'sales' }
+  });
+  if (!r.ok) throw new Error(`Supabase ${r.status}`);
+  return r.json();
+}
+
+// ─── DASHBOARD ───
+async function loadDashboard() {
+  const btn = document.getElementById('btnRefresh');
+  btn.innerHTML = '<span class="spin"></span> Carregando';
+  btn.disabled = true;
+  try {
+    const data = await supaFetch('sync_state', 'select=*&order=modulo');
+    const body = document.getElementById('dashBody');
+    if (!data.length) { body.innerHTML = '<tr><td colspan="9" class="empty">Nenhum dado no sync_state</td></tr>'; return; }
+    body.innerHTML = data.map(s => {
+      const isOk = s.ultima_execucao_status === 'SUCESSO';
+      const modo = s.modo || ((s.ultima_execucao_msg||'').match(/modo=(\w+)/)||[])[1] || '—';
+      return `<tr>
+        <td>${(s.modulo||'').replace(/_/g,' ')}</td>
+        <td class="num">${s.empresa||''}</td>
+        <td><span class="badge ${isOk?'ok':'err'}">${isOk?'✅':'❌'} ${s.ultima_execucao_status||''}</span></td>
+        <td><span class="badge ${modo==='INCREMENTAL'?'blue':'warn'}">${modo}</span></td>
+        <td class="num">${(s.total_registros||0).toLocaleString('pt-BR')}</td>
+        <td class="num">${s.rows_inserted||0}</td>
+        <td class="num">${s.rows_updated||0}</td>
+        <td>${s.duracao_segundos ? s.duracao_segundos+'s' : '—'}</td>
+        <td>${fmtBRT(s.last_sync_at)}</td>
+      </tr>`;
+    }).join('');
+    toast('Dashboard atualizado', 'ok');
+  } catch (e) { toast(e.message, 'err'); }
+  finally { btn.innerHTML = '🔄 Atualizar'; btn.disabled = false; }
+}
+
+// ─── DISPATCH ───
+async function dispatch(workflow, msg, inputs) {
+  if (!confirm(msg)) return;
+  try {
+    await ghFetch(`/repos/${GH_REPO}/actions/workflows/${workflow}.yml/dispatches`, 'POST', { ref:'main', inputs });
+    toast(`✅ ${workflow} disparado!`, 'ok');
+  } catch (e) { toast(e.message, 'err'); }
+}
+
+// ─── SCHEDULES ───
+async function loadSchedules() {
+  const btn = document.getElementById('btnSched');
+  btn.innerHTML = '<span class="spin"></span>'; btn.disabled = true;
+  const wfs = [
+    { file:'master_sales_diaria.yml', name:'🚀 Master Diária', desc:'Etapas → Itens → Pedidos → Serviços' },
+    { file:'master_sales_semanal.yml', name:'📦 Master Semanal', desc:'Produtos → Auxiliares' }
+  ];
+  try {
+    const list = document.getElementById('schedList');
+    list.innerHTML = '';
+    for (const wf of wfs) {
+      const data = await ghFetch(`/repos/${GH_REPO}/contents/.github/workflows/${wf.file}`);
+      const content = atob(data.content.replace(/\n/g,''));
+      const match = content.match(/cron:\s*"([^"]*)"/);
+      const cron = match ? match[1] : '???';
+      const brt = cronToBRT(cron);
+      const item = document.createElement('div');
+      item.className = 'sched-item';
+      item.innerHTML = `
+        <div>
+          <div class="name">${wf.name}</div>
+          <div class="freq">${brt.day} · ${wf.desc}</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:1rem">
+          <div class="time">${brt.time}</div>
+          <button class="btn" onclick="openModal('${wf.file}','${wf.name}','${cron}','${data.sha}')">✏️ Editar</button>
+        </div>
+      `;
+      list.appendChild(item);
+    }
+    toast('Horários carregados', 'ok');
+  } catch (e) { toast(e.message, 'err'); }
+  finally { btn.innerHTML = '🔄 Atualizar'; btn.disabled = false; }
+}
+
+// ─── MODAL ───
+function openModal(file, name, cron, sha) {
+  const brt = cronToBRT(cron);
+  modalState = { file, name, cron, sha };
+  document.getElementById('modalTitle').textContent = `Editar — ${name}`;
+  document.getElementById('modalTime').value = brt.time;
+  document.getElementById('modalCurrent').textContent = `${brt.time} BRT (${brt.day}) · cron: ${cron}`;
+  document.getElementById('modalOverlay').classList.add('open');
+}
+function closeModal() { document.getElementById('modalOverlay').classList.remove('open'); }
+
+async function saveSchedule() {
+  const time = document.getElementById('modalTime').value;
+  const [hBRT, m] = time.split(':').map(Number);
+  const hUTC = (hBRT + 3) % 24;
+  const parts = modalState.cron.split(' ');
+  const newCron = `${m} ${hUTC} ${parts[2]} ${parts[3]} ${parts[4]}`;
+
+  try {
+    const data = await ghFetch(`/repos/${GH_REPO}/contents/.github/workflows/${modalState.file}`);
+    let content = atob(data.content.replace(/\n/g,''));
+    content = content.replace(/cron:\s*"[^"]*"/, `cron: "${newCron}"`);
+    const encoded = btoa(unescape(encodeURIComponent(content)));
+
+    await ghFetch(`/repos/${GH_REPO}/contents/.github/workflows/${modalState.file}`, 'PUT', {
+      message: `chore: horário ${modalState.name} → ${time} BRT (via Painel)`,
+      content: encoded,
+      sha: data.sha
+    });
+    toast(`✅ ${modalState.name} → ${time} BRT`, 'ok');
+    closeModal();
+    loadSchedules();
+  } catch (e) { toast(e.message, 'err'); }
+}
+
+// ─── RUNS ───
+async function loadRuns() {
+  const btn = document.getElementById('btnRuns');
+  btn.innerHTML = '<span class="spin"></span>'; btn.disabled = true;
+  try {
+    const data = await ghFetch(`/repos/${GH_REPO}/actions/runs?per_page=15&branch=main`);
+    const runs = data.workflow_runs || [];
+    const body = document.getElementById('runsBody');
+    if (!runs.length) { body.innerHTML = '<tr><td colspan="5" class="empty">Nenhum run encontrado</td></tr>'; return; }
+    body.innerHTML = runs.map(r => {
+      const icon = r.conclusion==='success'?'✅':r.conclusion==='failure'?'❌':r.status==='in_progress'?'🔄':'⏳';
+      const cls = r.conclusion==='success'?'ok':r.conclusion==='failure'?'err':r.status==='in_progress'?'blue':'warn';
+      const name = r.name.replace('(Omie → Supabase)','').replace('[Semanal]','').trim();
+      const dur = fmtDuration(r.run_started_at, r.updated_at);
+      return `<tr>
+        <td>${name}</td>
+        <td><span class="badge ${cls}">${icon} ${r.conclusion||r.status||''}</span></td>
+        <td class="num">${dur}</td>
+        <td>${fmtBRT(r.created_at)}</td>
+        <td><a href="${r.html_url}" target="_blank">Abrir ↗</a></td>
+      </tr>`;
+    }).join('');
+    toast('Runs carregados', 'ok');
+  } catch (e) { toast(e.message, 'err'); }
+  finally { btn.innerHTML = '🔄 Atualizar'; btn.disabled = false; }
+}
+
+// ─── INIT ───
+document.addEventListener('DOMContentLoaded', () => {
+  loadSettings();
+  if (ghToken() && supaKey()) {
+    loadDashboard();
+    loadRuns();
+    loadSchedules();
+  } else {
+    document.getElementById('settings').classList.add('open');
+  }
+});
+document.getElementById('modalOverlay').addEventListener('click', e => { if (e.target === e.currentTarget) closeModal(); });
+</script>
+</body>
+</html>
