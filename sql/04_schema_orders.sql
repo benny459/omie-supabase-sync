@@ -340,7 +340,7 @@ GRANT ALL ON orders.formas_pagamento_compras  TO service_role;
 -- ---------------------------------------------------------------------------
 -- Expose orders schema via PostgREST (add to existing list)
 -- ---------------------------------------------------------------------------
-ALTER ROLE authenticator SET pgrst.db_schemas = 'public, sales, orders';
+ALTER ROLE authenticator SET pgrst.db_schemas = 'public, sales, orders, storage, graphql_public';
 NOTIFY pgrst, 'reload config';
 
 -- ---------------------------------------------------------------------------
