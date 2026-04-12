@@ -1,0 +1,59 @@
+name: MASTER Orders Semanal (Omie -> Supabase)
+
+# Roda semanalmente os importers de cadastros do modulo Orders:
+# Produtos + Etapas Faturamento + Formas Pag + Familias + Produto Fornecedor + Unidades + Formas Pag Compras
+# Esses dados mudam raramente, entao uma vez por semana e suficiente.
+
+on:
+  workflow_dispatch:
+    inputs:
+      empresas:
+        description: "Empresas (CSV, default: SF)"
+        required: false
+        default: "SF"
+
+  schedule:
+    - cron: "30 4 * * 0"  # Domingo 04:30 UTC (01:30 BRT)
+
+concurrency:
+  group: master-orders-semanal
+  cancel-in-progress: false
+
+jobs:
+  import:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      # -----------------------------------------
+      # 1. Orders Auxiliares (7 tabelas em 1 script)
+      # -----------------------------------------
+      - name: "1 Orders Auxiliares (7 tabelas)"
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          OMIE_APP_KEY_SF: ${{ secrets.OMIE_APP_KEY_SF }}
+          OMIE_APP_SECRET_SF: ${{ secrets.OMIE_APP_SECRET_SF }}
+          OMIE_APP_KEY_CD: ${{ secrets.OMIE_APP_KEY_CD }}
+          OMIE_APP_SECRET_CD: ${{ secrets.OMIE_APP_SECRET_CD }}
+          OMIE_APP_KEY_WW: ${{ secrets.OMIE_APP_KEY_WW }}
+          OMIE_APP_SECRET_WW: ${{ secrets.OMIE_APP_SECRET_WW }}
+          EMPRESAS_ALVO: ${{ github.event.inputs.empresas || 'SF' }}
+          SHEETS_MIRROR_URL: ${{ secrets.SHEETS_MIRROR_URL }}
+          SHEETS_MIRROR_TOKEN: ${{ secrets.SHEETS_MIRROR_TOKEN }}
+          PYTHONUNBUFFERED: "1"
+        run: python3 scripts/import_orders_auxiliares.py
+        continue-on-error: true
+
+      - name: Resumo
+        if: always()
+        run: |
+          echo "========================================================"
+          echo "Master Orders Semanal concluida"
+          echo "Empresas: ${{ github.event.inputs.empresas || 'SF' }}"
+          echo "========================================================"
