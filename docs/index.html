@@ -211,7 +211,25 @@ a:hover{text-decoration:underline}
 </style>
 </head>
 <body>
-<div class="app">
+
+<!-- LOGIN SCREEN -->
+<div id="loginScreen" style="display:flex;align-items:center;justify-content:center;min-height:100vh;position:relative;z-index:10">
+  <div style="background:var(--bg-1);border:1px solid var(--border);border-radius:12px;padding:2.5rem;width:100%;max-width:380px;text-align:center">
+    <div style="font-size:2.5rem;margin-bottom:.5rem">🔒</div>
+    <h1 style="font-family:var(--mono);font-size:1.1rem;margin-bottom:.25rem">Omie → Supabase</h1>
+    <p style="color:var(--tx-2);font-size:.8rem;margin-bottom:2rem">Painel de Controle</p>
+    <div class="field">
+      <label>Senha de acesso</label>
+      <input type="password" id="loginPass" placeholder="••••••••" onkeydown="if(event.key==='Enter')doLogin()" autofocus
+        style="text-align:center;font-size:1rem;letter-spacing:.15em;padding:.75rem">
+    </div>
+    <button class="btn primary" onclick="doLogin()" style="width:100%;justify-content:center;margin-top:.5rem;padding:.7rem">🔓 Entrar</button>
+    <p id="loginError" style="color:var(--err);font-size:.75rem;margin-top:.75rem;display:none">Senha incorreta</p>
+    <p style="color:var(--tx-2);font-size:.65rem;margin-top:1.5rem">Primeira vez? Use a senha padrão e depois mude nas configurações.</p>
+  </div>
+</div>
+
+<div class="app" id="mainApp" style="display:none">
 
 <!-- HEADER -->
 <header>
@@ -240,7 +258,14 @@ a:hover{text-decoration:underline}
         <input type="password" id="supaKey" placeholder="eyJ...">
       </div>
     </div>
-    <button class="btn primary" onclick="saveSettings()">💾 Salvar Configurações</button>
+    <div style="margin-top:1.5rem;padding-top:1rem;border-top:1px solid var(--border)">
+      <div class="field">
+        <label>🔐 Mudar senha do painel</label>
+        <input type="password" id="newPass" placeholder="Nova senha (mín. 4 caracteres)">
+      </div>
+      <button class="btn warn" onclick="changePassword()" style="margin-bottom:.5rem">🔐 Mudar Senha</button>
+    </div>
+    <button class="btn primary" onclick="saveSettings()" style="margin-top:.5rem">💾 Salvar Configurações API</button>
   </div>
 </div>
 
@@ -375,7 +400,47 @@ a:hover{text-decoration:underline}
 const GH_REPO = 'benny459/omie-supabase-sync';
 const GH_API = 'https://api.github.com';
 const DAYS = {0:'Dom',1:'Seg',2:'Ter',3:'Qua',4:'Qui',5:'Sex',6:'Sáb','*':'Todo dia'};
+const DEFAULT_PASS_HASH = '5e884898da28047151d0e56f8dc6292773603d0d6aabbdd62a11ef721d1542d8'; // "password"
 let modalState = {};
+
+// ─── LOGIN ───
+async function hashStr(str) {
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str));
+  return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('');
+}
+async function doLogin() {
+  const pass = document.getElementById('loginPass').value;
+  if (!pass) return;
+  const hash = await hashStr(pass);
+  const stored = localStorage.getItem('panel_pass_hash') || DEFAULT_PASS_HASH;
+  if (hash === stored) {
+    sessionStorage.setItem('authed','1');
+    document.getElementById('loginScreen').style.display = 'none';
+    document.getElementById('mainApp').style.display = 'block';
+    initApp();
+  } else {
+    const err = document.getElementById('loginError');
+    err.style.display = 'block';
+    err.textContent = 'Senha incorreta';
+    document.getElementById('loginPass').select();
+  }
+}
+async function changePassword() {
+  const np = document.getElementById('newPass').value;
+  if (!np || np.length < 4) { toast('Senha precisa ter pelo menos 4 caracteres','err'); return; }
+  const hash = await hashStr(np);
+  localStorage.setItem('panel_pass_hash', hash);
+  document.getElementById('newPass').value = '';
+  toast('✅ Senha alterada! Use a nova na próxima vez.','ok');
+}
+function checkAuth() {
+  if (sessionStorage.getItem('authed') === '1') {
+    document.getElementById('loginScreen').style.display = 'none';
+    document.getElementById('mainApp').style.display = 'block';
+    return true;
+  }
+  return false;
+}
 
 // ─── SETTINGS ───
 function toggleSettings() {
@@ -581,7 +646,7 @@ async function loadRuns() {
 }
 
 // ─── INIT ───
-document.addEventListener('DOMContentLoaded', () => {
+function initApp() {
   loadSettings();
   if (ghToken() && supaKey()) {
     loadDashboard();
@@ -590,6 +655,9 @@ document.addEventListener('DOMContentLoaded', () => {
   } else {
     document.getElementById('settings').classList.add('open');
   }
+}
+document.addEventListener('DOMContentLoaded', () => {
+  if (checkAuth()) initApp();
 });
 document.getElementById('modalOverlay').addEventListener('click', e => { if (e.target === e.currentTarget) closeModal(); });
 </script>
