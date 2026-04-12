@@ -68,6 +68,9 @@ ITENS_POR_PAGINA = int(env("ITENS_POR_PAGINA", "100"))
 PAUSA_ENTRE_CHAMADAS = int(env("PAUSA_ENTRE_CHAMADAS", "2"))
 MAX_TENTATIVAS_OMIE = 5
 
+# Import tracking
+from _common import upsert_with_tracking, count_rows
+
 # Sheets mirror (opcional)
 SHEETS_MIRROR_URL = env("SHEETS_MIRROR_URL", "")
 SHEETS_MIRROR_TOKEN = env("SHEETS_MIRROR_TOKEN", "")

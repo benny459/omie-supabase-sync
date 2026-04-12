@@ -251,9 +251,41 @@ def get_last_d_alt(modulo: str):
         print(f"   ⚠️ Falha lendo sync_state: {e}")
     return None
 
+def count_rows(schema: str, table: str, empresa: str = None):
+    """Conta rows numa tabela, opcionalmente filtrando por empresa."""
+    try:
+        q = "select=empresa&limit=1"
+        if empresa:
+            q += f"&empresa=eq.{urllib.parse.quote(empresa)}"
+        url = f"{SUPABASE_URL}/rest/v1/{table}?{q}"
+        headers = supa_headers(schema)
+        headers["Prefer"] = "count=exact"
+        headers["Range"] = "0-0"
+        _, _, resp_headers = http_request(url, "GET", headers)
+        cr = resp_headers.get("content-range") or resp_headers.get("Content-Range") or ""
+        m = cr.split("/")
+        return int(m[1]) if len(m) > 1 and m[1].isdigit() else 0
+    except Exception:
+        return -1
+
+def upsert_with_tracking(schema: str, table: str, records: list,
+                          on_conflict: str, empresa: str = None):
+    """UPSERT com tracking de inserted vs updated.
+    Retorna (total_upserted, rows_inserted, rows_updated, count_before, count_after)."""
+    if not records:
+        return 0, 0, 0, 0, 0
+    count_before = count_rows(schema, table, empresa)
+    total = supa_upsert(schema, table, records, on_conflict)
+    count_after = count_rows(schema, table, empresa)
+    inserted = max(0, count_after - count_before) if count_before >= 0 and count_after >= 0 else 0
+    updated = max(0, total - inserted)
+    return total, inserted, updated, count_before, count_after
+
 def update_sync_state(modulo: str, empresa: str, total_linhas: int,
                       maior_d_alt: str = None, maior_h_alt: str = None,
-                      modo: str = "FULL", status: str = "SUCESSO", erro: str = None):
+                      modo: str = "FULL", status: str = "SUCESSO", erro: str = None,
+                      rows_inserted: int = 0, rows_updated: int = 0,
+                      rows_before: int = 0, duracao_segundos: int = 0):
     row = {
         "modulo": modulo,
         "empresa": empresa,
@@ -261,6 +293,11 @@ def update_sync_state(modulo: str, empresa: str, total_linhas: int,
         "total_registros": total_linhas,
         "ultima_execucao_status": status,
         "ultima_execucao_msg": erro if erro else f"modo={modo} linhas={total_linhas}",
+        "modo": modo,
+        "rows_inserted": rows_inserted,
+        "rows_updated": rows_updated,
+        "rows_before": rows_before,
+        "duracao_segundos": duracao_segundos,
     }
     if maior_d_alt:
         row["last_d_alt_processed"] = maior_d_alt
