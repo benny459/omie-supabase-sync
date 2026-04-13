@@ -310,6 +310,23 @@ a:hover{text-decoration:underline}
   </div>
 </section>
 
+<!-- ORDERS ACTIONS -->
+<section>
+  <div class="section-head"><h2>🛒 Disparar Orders (Compras)</h2></div>
+  <div class="cards">
+    <div class="card">
+      <h3>🛒 Master Orders Diária</h3>
+      <p>NFe Entrada → Recebimento → Pedidos Compra (sequência)</p>
+      <button class="btn ok" onclick="dispatch('master_orders_diaria','Disparar Master Orders Diária?',{empresas:'SF'})">▶ Disparar</button>
+    </div>
+    <div class="card">
+      <h3>📦 Master Orders Semanal</h3>
+      <p>Produtos + 7 tabelas auxiliares</p>
+      <button class="btn blue" onclick="dispatch('master_orders_semanal','Disparar Master Orders Semanal?',{empresas:'SF'})">▶ Disparar</button>
+    </div>
+  </div>
+</section>
+
 <!-- INDIVIDUAL RUNS -->
 <section>
   <div class="section-head"><h2>🛠️ Execuções Individuais</h2></div>
@@ -343,6 +360,26 @@ a:hover{text-decoration:underline}
       <h3>📂 Auxiliares</h3>
       <p>FormasPag + Categorias (SF,CD,WW)</p>
       <button class="btn" onclick="dispatch('import_auxiliares','Disparar Auxiliares?',{empresas:'SF,CD,WW'})">▶ Rodar</button>
+    </div>
+    <div class="card" style="border-color:#8E44AD33">
+      <h3>📄 NFe Entrada</h3>
+      <p>ListarDocumentos (XML)</p>
+      <button class="btn" onclick="dispatch('master_orders_diaria','Disparar só NFe?',{empresas:'SF'})">▶ Rodar</button>
+    </div>
+    <div class="card" style="border-color:#8E44AD33">
+      <h3>📥 Recebimento NFe</h3>
+      <p>ListarRecebimentos (50 cols)</p>
+      <button class="btn" onclick="dispatch('master_orders_diaria','Disparar Orders Diária?',{empresas:'SF'})">▶ Rodar</button>
+    </div>
+    <div class="card" style="border-color:#8E44AD33">
+      <h3>🛒 Pedidos Compra</h3>
+      <p>PesquisarPedCompra (53 cols)</p>
+      <button class="btn" onclick="dispatch('master_orders_diaria','Disparar Orders Diária?',{empresas:'SF'})">▶ Rodar</button>
+    </div>
+    <div class="card" style="border-color:#8E44AD33">
+      <h3>📂 Orders Auxiliares</h3>
+      <p>Produtos + 6 tabelas aux (semanal)</p>
+      <button class="btn" onclick="dispatch('master_orders_semanal','Disparar Orders Semanal?',{empresas:'SF'})">▶ Rodar</button>
     </div>
   </div>
 </section>
@@ -553,7 +590,9 @@ async function loadSchedules() {
   btn.innerHTML = '<span class="spin"></span>'; btn.disabled = true;
   const wfs = [
     { file:'master_sales_diaria.yml', name:'🚀 Master Diária', desc:'Etapas → Itens → Pedidos → Serviços' },
-    { file:'master_sales_semanal.yml', name:'📦 Master Semanal', desc:'Produtos → Auxiliares' }
+    { file:'master_sales_semanal.yml', name:'📦 Sales Semanal', desc:'Produtos → Auxiliares' },
+    { file:'master_orders_diaria.yml', name:'🛒 Orders Diária', desc:'NFe → Recebimento → Pedidos Compra' },
+    { file:'master_orders_semanal.yml', name:'📦 Orders Semanal', desc:'Produtos + 7 tabelas aux' }
   ];
   try {
     const list = document.getElementById('schedList');
