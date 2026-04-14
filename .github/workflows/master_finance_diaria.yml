@@ -1,0 +1,127 @@
+name: MASTER Finance Diaria (Omie -> Supabase)
+
+# Executa ContasPagar -> ContasReceber -> PesquisaTitulos -> ExtratosCC em sequencia.
+# Disparado 1x ao dia (04:30 UTC = 01:30 BRT, apos Orders master terminar) + manual.
+
+on:
+  workflow_dispatch:
+    inputs:
+      empresas:
+        description: "Empresas (CSV, default: SF)"
+        required: false
+        default: "SF"
+
+  schedule:
+    - cron: "30 4 * * *"  # Todo dia as 04:30 UTC (01:30 BRT)
+
+concurrency:
+  group: master-finance-diaria
+  cancel-in-progress: false
+
+jobs:
+  import:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      # -----------------------------------------
+      # 1. Contas a Pagar (ListarContasPagar)
+      # -----------------------------------------
+      - name: "1 Contas a Pagar"
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          OMIE_APP_KEY_SF: ${{ secrets.OMIE_APP_KEY_SF }}
+          OMIE_APP_SECRET_SF: ${{ secrets.OMIE_APP_SECRET_SF }}
+          OMIE_APP_KEY_CD: ${{ secrets.OMIE_APP_KEY_CD }}
+          OMIE_APP_SECRET_CD: ${{ secrets.OMIE_APP_SECRET_CD }}
+          OMIE_APP_KEY_WW: ${{ secrets.OMIE_APP_KEY_WW }}
+          OMIE_APP_SECRET_WW: ${{ secrets.OMIE_APP_SECRET_WW }}
+          EMPRESAS_ALVO: ${{ github.event.inputs.empresas || 'SF' }}
+          SHEETS_MIRROR_URL: ${{ secrets.SHEETS_MIRROR_URL }}
+          SHEETS_MIRROR_TOKEN: ${{ secrets.SHEETS_MIRROR_TOKEN }}
+          PYTHONUNBUFFERED: "1"
+        run: python3 scripts/import_contas_pagar.py
+        continue-on-error: true
+
+      - name: "Pausa entre modulos (30s)"
+        run: sleep 30
+
+      # -----------------------------------------
+      # 2. Contas a Receber (ListarContasReceber)
+      # -----------------------------------------
+      - name: "2 Contas a Receber"
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          OMIE_APP_KEY_SF: ${{ secrets.OMIE_APP_KEY_SF }}
+          OMIE_APP_SECRET_SF: ${{ secrets.OMIE_APP_SECRET_SF }}
+          OMIE_APP_KEY_CD: ${{ secrets.OMIE_APP_KEY_CD }}
+          OMIE_APP_SECRET_CD: ${{ secrets.OMIE_APP_SECRET_CD }}
+          OMIE_APP_KEY_WW: ${{ secrets.OMIE_APP_KEY_WW }}
+          OMIE_APP_SECRET_WW: ${{ secrets.OMIE_APP_SECRET_WW }}
+          EMPRESAS_ALVO: ${{ github.event.inputs.empresas || 'SF' }}
+          SHEETS_MIRROR_URL: ${{ secrets.SHEETS_MIRROR_URL }}
+          SHEETS_MIRROR_TOKEN: ${{ secrets.SHEETS_MIRROR_TOKEN }}
+          PYTHONUNBUFFERED: "1"
+        run: python3 scripts/import_contas_receber.py
+        continue-on-error: true
+
+      - name: "Pausa entre modulos (30s)"
+        run: sleep 30
+
+      # -----------------------------------------
+      # 3. Pesquisa Titulos (PesquisarLancamentos)
+      # -----------------------------------------
+      - name: "3 Pesquisa Titulos"
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          OMIE_APP_KEY_SF: ${{ secrets.OMIE_APP_KEY_SF }}
+          OMIE_APP_SECRET_SF: ${{ secrets.OMIE_APP_SECRET_SF }}
+          OMIE_APP_KEY_CD: ${{ secrets.OMIE_APP_KEY_CD }}
+          OMIE_APP_SECRET_CD: ${{ secrets.OMIE_APP_SECRET_CD }}
+          OMIE_APP_KEY_WW: ${{ secrets.OMIE_APP_KEY_WW }}
+          OMIE_APP_SECRET_WW: ${{ secrets.OMIE_APP_SECRET_WW }}
+          EMPRESAS_ALVO: ${{ github.event.inputs.empresas || 'SF' }}
+          SHEETS_MIRROR_URL: ${{ secrets.SHEETS_MIRROR_URL }}
+          SHEETS_MIRROR_TOKEN: ${{ secrets.SHEETS_MIRROR_TOKEN }}
+          PYTHONUNBUFFERED: "1"
+        run: python3 scripts/import_pesquisa_titulos.py
+        continue-on-error: true
+
+      - name: "Pausa entre modulos (30s)"
+        run: sleep 30
+
+      # -----------------------------------------
+      # 4. Extratos CC (ListarExtrato per account)
+      # -----------------------------------------
+      - name: "4 Extratos CC"
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          OMIE_APP_KEY_SF: ${{ secrets.OMIE_APP_KEY_SF }}
+          OMIE_APP_SECRET_SF: ${{ secrets.OMIE_APP_SECRET_SF }}
+          OMIE_APP_KEY_CD: ${{ secrets.OMIE_APP_KEY_CD }}
+          OMIE_APP_SECRET_CD: ${{ secrets.OMIE_APP_SECRET_CD }}
+          OMIE_APP_KEY_WW: ${{ secrets.OMIE_APP_KEY_WW }}
+          OMIE_APP_SECRET_WW: ${{ secrets.OMIE_APP_SECRET_WW }}
+          EMPRESAS_ALVO: ${{ github.event.inputs.empresas || 'SF' }}
+          SHEETS_MIRROR_URL: ${{ secrets.SHEETS_MIRROR_URL }}
+          SHEETS_MIRROR_TOKEN: ${{ secrets.SHEETS_MIRROR_TOKEN }}
+          PYTHONUNBUFFERED: "1"
+        run: python3 scripts/import_extratos_cc.py
+        continue-on-error: true
+
+      - name: Resumo
+        if: always()
+        run: |
+          echo "========================================================"
+          echo "Master Finance Diaria concluida"
+          echo "Empresas: ${{ github.event.inputs.empresas || 'SF' }}"
+          echo "========================================================"
