@@ -17,12 +17,13 @@
   --warn:#d29922;--warn-bg:#2a1f0a;
   --sales:#58a6ff;--sales-bg:#0d1d33;
   --orders:#a371f7;--orders-bg:#1a0d33;
+  --finance:#d29922;--finance-bg:#2a1f0a;
   --border:#21262d;--border-hi:#30363d;
   --radius:6px;
   --mono:'IBM Plex Mono',monospace;
   --sans:'Outfit',system-ui,sans-serif;
 }
-html{font-size:15px;scroll-behavior:smooth}
+html{font-size:16px;scroll-behavior:smooth}
 body{background:var(--bg-0);color:var(--tx-0);font-family:var(--sans);line-height:1.5;min-height:100vh}
 body::before{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;opacity:.02;background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")}
 .shell{position:relative;z-index:1;max-width:1080px;margin:0 auto;padding:1rem 1.25rem}
@@ -42,6 +43,8 @@ body::before{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;opa
 .tab.active{color:var(--tx-0);border-bottom-color:var(--accent)}
 .tab.active[data-tab="sales"]{border-bottom-color:var(--sales)}
 .tab.active[data-tab="orders"]{border-bottom-color:var(--orders)}
+.tab.active[data-tab="finance"]{border-bottom-color:var(--finance)}
+.pill.finance-pill:hover{border-color:var(--finance);color:var(--finance)}
 .tab-pane{display:none}
 .tab-pane.active{display:block}
 
@@ -80,13 +83,17 @@ body::before{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;opa
 .pill-label{font-size:.6rem;color:var(--tx-2);font-family:var(--mono);font-weight:600;text-transform:uppercase;letter-spacing:.04em;margin-bottom:.25rem}
 
 /* SCHEDULE INLINE */
-.sched-row{display:flex;gap:.75rem;flex-wrap:wrap;margin-top:1rem}
-.sched-card{flex:1;min-width:220px;background:var(--bg-1);border:1px solid var(--border);border-radius:var(--radius);padding:.8rem 1rem;display:flex;align-items:center;justify-content:space-between;gap:.5rem}
-.sched-card .lbl{font-size:.7rem;color:var(--tx-2)}
-.sched-card .lbl b{color:var(--tx-0);font-family:var(--mono)}
-.sched-card .time-big{font-family:var(--mono);font-size:1.4rem;font-weight:700;letter-spacing:-.02em}
-.sched-card[data-kind="sales"] .time-big{color:var(--sales)}
-.sched-card[data-kind="orders"] .time-big{color:var(--orders)}
+.sched-row{display:flex;gap:.75rem;flex-wrap:wrap;margin-top:.75rem}
+.sched-card{flex:1;min-width:280px;background:var(--bg-1);border:1px solid var(--border);border-radius:var(--radius);padding:.9rem 1rem}
+.sched-card .sched-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:.6rem}
+.sched-card .sched-name{font-family:var(--mono);font-size:.75rem;font-weight:600}
+.sched-card .sched-time{font-family:var(--mono);font-size:1.5rem;font-weight:700;letter-spacing:-.02em}
+.sched-card[data-kind="sales"] .sched-time{color:var(--sales)}
+.sched-card[data-kind="orders"] .sched-time{color:var(--orders)}
+.sched-card[data-kind="finance"] .sched-time{color:var(--warn)}
+.sched-detail{display:flex;gap:.5rem;flex-wrap:wrap;align-items:center;margin-top:.4rem}
+.sched-detail .tag{font-family:var(--mono);font-size:.6rem;padding:.15rem .45rem;border-radius:3px;background:var(--bg-3);color:var(--tx-1);display:inline-flex;align-items:center;gap:.2rem}
+.sched-actions{display:flex;gap:.35rem;margin-top:.6rem}
 
 /* TABLE */
 .table-wrap{overflow-x:auto;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg-1);max-height:60vh}
@@ -190,6 +197,7 @@ a:hover{text-decoration:underline}
   <div class="tab active" data-tab="dashboard" onclick="switchTab('dashboard')">📊 Dashboard</div>
   <div class="tab" data-tab="sales" onclick="switchTab('sales')">💰 Sales</div>
   <div class="tab" data-tab="orders" onclick="switchTab('orders')">🛒 Orders</div>
+  <div class="tab" data-tab="finance" onclick="switchTab('finance')">💵 Finance</div>
   <div class="tab" data-tab="runs" onclick="switchTab('runs')">📜 Runs</div>
 </div>
 
@@ -226,10 +234,18 @@ a:hover{text-decoration:underline}
     <span class="pill sales-pill" onclick="dispatch('import_auxiliares','Auxiliares?',{empresas:'SF,CD,WW'})">📂 Auxiliares</span>
   </div>
 
-  <div class="section-label">Agenda</div>
+  <div class="section-label">Agenda automática</div>
   <div class="sched-row" id="schedSales">
-    <div class="sched-card" data-kind="sales"><div class="lbl"><b>Sales Diária</b><br>Carregando...</div><div class="time-big">—</div></div>
-    <div class="sched-card" data-kind="sales"><div class="lbl"><b>Sales Semanal</b><br>Carregando...</div><div class="time-big">—</div></div>
+    <div class="sched-card" data-kind="sales" id="sched-sales-d">
+      <div class="sched-top"><span class="sched-name">🚀 Sales Diária</span><span class="sched-time">—</span></div>
+      <div class="sched-detail"><span class="tag">📅 —</span><span class="tag">🔁 —</span></div>
+      <div class="sched-actions"><button class="btn sm blue" onclick="openSchedModal('master_sales_diaria.yml','Sales Diária')">✏️ Editar horário</button></div>
+    </div>
+    <div class="sched-card" data-kind="sales" id="sched-sales-s">
+      <div class="sched-top"><span class="sched-name">📦 Sales Semanal</span><span class="sched-time">—</span></div>
+      <div class="sched-detail"><span class="tag">📅 —</span><span class="tag">🔁 —</span></div>
+      <div class="sched-actions"><button class="btn sm blue" onclick="openSchedModal('master_sales_semanal.yml','Sales Semanal')">✏️ Editar horário</button></div>
+    </div>
   </div>
 </div>
 
@@ -250,10 +266,30 @@ a:hover{text-decoration:underline}
     <span class="pill orders-pill" onclick="dispatch('master_orders_semanal','Auxiliares Orders?',{empresas:'SF'})">📂 Auxiliares</span>
   </div>
 
-  <div class="section-label">Agenda</div>
+  <div class="section-label">Agenda automática</div>
   <div class="sched-row" id="schedOrders">
-    <div class="sched-card" data-kind="orders"><div class="lbl"><b>Orders Diária</b><br>Carregando...</div><div class="time-big">—</div></div>
-    <div class="sched-card" data-kind="orders"><div class="lbl"><b>Orders Semanal</b><br>Carregando...</div><div class="time-big">—</div></div>
+    <div class="sched-card" data-kind="orders" id="sched-orders-d">
+      <div class="sched-top"><span class="sched-name">🛒 Orders Diária</span><span class="sched-time">—</span></div>
+      <div class="sched-detail"><span class="tag">📅 —</span><span class="tag">🔁 —</span></div>
+      <div class="sched-actions"><button class="btn sm purple" onclick="openSchedModal('master_orders_diaria.yml','Orders Diária')">✏️ Editar horário</button></div>
+    </div>
+    <div class="sched-card" data-kind="orders" id="sched-orders-s">
+      <div class="sched-top"><span class="sched-name">📦 Orders Semanal</span><span class="sched-time">—</span></div>
+      <div class="sched-detail"><span class="tag">📅 —</span><span class="tag">🔁 —</span></div>
+      <div class="sched-actions"><button class="btn sm purple" onclick="openSchedModal('master_orders_semanal.yml','Orders Semanal')">✏️ Editar horário</button></div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ TAB: FINANCE (template) ═══ -->
+<div class="tab-pane" id="pane-finance">
+  <div style="text-align:center;padding:3rem 1rem">
+    <div style="font-size:2.5rem;margin-bottom:.5rem">💵</div>
+    <h2 style="font-family:var(--mono);font-size:1rem;margin-bottom:.5rem">Finance — Em breve</h2>
+    <p style="color:var(--tx-2);font-size:.8rem;max-width:400px;margin:0 auto">
+      O módulo Finance será integrado aqui quando os scripts forem migrados.<br>
+      Mesma estrutura: Workflows + Individuais + Agenda.
+    </p>
   </div>
 </div>
 
@@ -276,9 +312,22 @@ a:hover{text-decoration:underline}
 <!-- MODAL -->
 <div class="modal-overlay" id="modalOverlay">
   <div class="modal">
-    <h3 id="modalTitle">Editar Horário</h3>
-    <div class="field"><label>Novo horário (BRT)</label><input type="time" id="modalTime" value="00:00"></div>
-    <div class="field"><label>Atual</label><p id="modalCurrent" style="color:var(--tx-1);font-family:var(--mono);font-size:.8rem">—</p></div>
+    <h3 id="modalTitle">Editar Agendamento</h3>
+    <div class="field"><label>Horário (BRT)</label><input type="time" id="modalTime" value="00:00"></div>
+    <div class="field"><label>Dia da semana</label>
+      <select id="modalDay" style="width:100%;padding:.4rem .6rem;font-family:var(--mono);font-size:.75rem;background:var(--bg-0);border:1px solid var(--border);border-radius:4px;color:var(--tx-0)">
+        <option value="*">Todo dia</option>
+        <option value="1-5">Seg a Sex (dias úteis)</option>
+        <option value="0">Domingo</option>
+        <option value="1">Segunda</option>
+        <option value="2">Terça</option>
+        <option value="3">Quarta</option>
+        <option value="4">Quinta</option>
+        <option value="5">Sexta</option>
+        <option value="6">Sábado</option>
+      </select>
+    </div>
+    <div class="field"><label>Configuração atual</label><p id="modalCurrent" style="color:var(--tx-1);font-family:var(--mono);font-size:.75rem">—</p></div>
     <div class="btn-row"><button class="btn" onclick="closeModal()">Cancelar</button><button class="btn primary" onclick="saveSchedule()">💾 Salvar</button></div>
   </div>
 </div>
@@ -353,33 +402,44 @@ async function loadDashboard(){
 async function dispatch(wf,msg,inputs){if(!confirm(msg))return;try{await ghFetch(`/repos/${GH_REPO}/actions/workflows/${wf}.yml/dispatches`,'POST',{ref:'main',inputs});toast(`✅ ${wf} disparado!`,'ok')}catch(e){toast(e.message,'err')}}
 
 // ─── SCHEDULES ───
+const SCHED_MAP=[
+  {file:'master_sales_diaria.yml',card:'sched-sales-d',name:'Sales Diária',desc:'Etapas→Itens→Pedidos→Serviços'},
+  {file:'master_sales_semanal.yml',card:'sched-sales-s',name:'Sales Semanal',desc:'Produtos + Auxiliares'},
+  {file:'master_orders_diaria.yml',card:'sched-orders-d',name:'Orders Diária',desc:'NFe→Recebimento→Pedidos'},
+  {file:'master_orders_semanal.yml',card:'sched-orders-s',name:'Orders Semanal',desc:'Produtos + Aux'}
+];
+const DAY_LABELS={'*':'Todo dia','0':'Domingo','1':'Segunda','2':'Terça','3':'Quarta','4':'Quinta','5':'Sexta','6':'Sábado','1-5':'Seg a Sex'};
+function cronFreq(cron){const p=cron.split(' ');const d=p[4],dom=p[2],mon=p[3];if(d==='0')return'Semanal (Dom)';if(d==='1-5')return'Dias úteis';if(d==='*'&&dom==='*')return'Diário';return'Personalizado'}
 async function loadSchedules(){
-  const wfs=[
-    {file:'master_sales_diaria.yml',container:'schedSales',idx:0,name:'Sales Diária',desc:'Etapas→Itens→Pedidos→Serviços'},
-    {file:'master_sales_semanal.yml',container:'schedSales',idx:1,name:'Sales Semanal',desc:'Produtos + Auxiliares'},
-    {file:'master_orders_diaria.yml',container:'schedOrders',idx:0,name:'Orders Diária',desc:'NFe→Recebimento→Pedidos'},
-    {file:'master_orders_semanal.yml',container:'schedOrders',idx:1,name:'Orders Semanal',desc:'Produtos + Aux'}
-  ];
-  for(const wf of wfs){
+  for(const wf of SCHED_MAP){
+    const el=document.getElementById(wf.card);if(!el)continue;
     try{
       const d=await ghFetch(`/repos/${GH_REPO}/contents/.github/workflows/${wf.file}`);
       const c=atob(d.content.replace(/\n/g,'')),mt=c.match(/cron:\s*"([^"]*)"/);
-      const cron=mt?mt[1]:'???',brt=cronBRT(cron);
-      const cards=document.getElementById(wf.container).querySelectorAll('.sched-card');
-      if(cards[wf.idx]){
-        cards[wf.idx].querySelector('.lbl').innerHTML=`<b>${wf.name}</b><br>${brt.day} · ${wf.desc}`;
-        cards[wf.idx].querySelector('.time-big').textContent=brt.time;
-        cards[wf.idx].onclick=()=>openModal(wf.file,wf.name,cron,d.sha);
-        cards[wf.idx].style.cursor='pointer';
-      }
-    }catch(e){console.log(wf.file,e)}
+      const cron=mt?mt[1]:'???',brt=cronBRT(cron),freq=cronFreq(cron),dayLbl=DAY_LABELS[cron.split(' ')[4]]||cron.split(' ')[4];
+      el.querySelector('.sched-time').textContent=brt.time;
+      el.querySelector('.sched-detail').innerHTML=`<span class="tag">📅 ${dayLbl}</span><span class="tag">🔁 ${freq}</span><span class="tag">⏰ ${brt.time} BRT</span>`;
+      // Store cron data on element
+      el.dataset.cron=cron;el.dataset.sha=d.sha;el.dataset.file=wf.file;el.dataset.wfname=wf.name;
+    }catch(e){el.querySelector('.sched-time').textContent='⚠️';console.log(wf.file,e)}
   }
+}
+function openSchedModal(file,name){
+  // Find card with this file
+  const card=document.querySelector(`[data-file="${file}"]`);
+  if(!card||!card.dataset.cron)return toast('Carregue a agenda primeiro','err');
+  const cron=card.dataset.cron,sha=card.dataset.sha,brt=cronBRT(cron),parts=cron.split(' ');
+  modalState={file,name,cron,sha};
+  document.getElementById('modalTitle').textContent='Editar — '+name;
+  document.getElementById('modalTime').value=brt.time;
+  document.getElementById('modalDay').value=parts[4];
+  document.getElementById('modalCurrent').textContent=`${brt.time} BRT · ${DAY_LABELS[parts[4]]||parts[4]} · cron: ${cron}`;
+  document.getElementById('modalOverlay').classList.add('open');
 }
 
 // ─── MODAL ───
-function openModal(f,n,c,sha){const b=cronBRT(c);modalState={file:f,name:n,cron:c,sha};document.getElementById('modalTitle').textContent='Editar — '+n;document.getElementById('modalTime').value=b.time;document.getElementById('modalCurrent').textContent=`${b.time} BRT (${b.day}) · cron: ${c}`;document.getElementById('modalOverlay').classList.add('open')}
 function closeModal(){document.getElementById('modalOverlay').classList.remove('open')}
-async function saveSchedule(){const t=document.getElementById('modalTime').value,[hB,m]=t.split(':').map(Number),hU=(hB+3)%24,p=modalState.cron.split(' '),nc=`${m} ${hU} ${p[2]} ${p[3]} ${p[4]}`;try{const d=await ghFetch(`/repos/${GH_REPO}/contents/.github/workflows/${modalState.file}`);let c=atob(d.content.replace(/\n/g,''));c=c.replace(/cron:\s*"[^"]*/,`cron: "${nc}`);await ghFetch(`/repos/${GH_REPO}/contents/.github/workflows/${modalState.file}`,'PUT',{message:`chore: ${modalState.name} → ${t} BRT`,content:btoa(unescape(encodeURIComponent(c))),sha:d.sha});toast(`✅ ${t} BRT`,'ok');closeModal();loadSchedules()}catch(e){toast(e.message,'err')}}
+async function saveSchedule(){const t=document.getElementById('modalTime').value,day=document.getElementById('modalDay').value,[hB,m]=t.split(':').map(Number),hU=(hB+3)%24,p=modalState.cron.split(' '),nc=`${m} ${hU} ${p[2]} ${p[3]} ${day}`;try{const d=await ghFetch(`/repos/${GH_REPO}/contents/.github/workflows/${modalState.file}`);let c=atob(d.content.replace(/\n/g,''));c=c.replace(/cron:\s*"[^"]*/,`cron: "${nc}`);await ghFetch(`/repos/${GH_REPO}/contents/.github/workflows/${modalState.file}`,'PUT',{message:`chore: ${modalState.name} → ${t} BRT`,content:btoa(unescape(encodeURIComponent(c))),sha:d.sha});toast(`✅ ${t} BRT`,'ok');closeModal();loadSchedules()}catch(e){toast(e.message,'err')}}
 
 // ─── RUNS ───
 async function loadRuns(){const btn=document.getElementById('btnRuns');btn.innerHTML='<span class="spin"></span>';btn.disabled=true;try{const d=await ghFetch(`/repos/${GH_REPO}/actions/runs?per_page=20&branch=main`),runs=d.workflow_runs||[],body=document.getElementById('runsBody');if(!runs.length){body.innerHTML='<tr><td colspan="5" class="empty">Nenhum</td></tr>';return}body.innerHTML=runs.filter(r=>!r.name.includes('pages')).map(r=>{const i=r.conclusion==='success'?'✅':r.conclusion==='failure'?'❌':r.status==='in_progress'?'🔄':'⏳',c=r.conclusion==='success'?'ok':r.conclusion==='failure'?'err':r.status==='in_progress'?'blue':'warn',n=r.name.replace('(Omie → Supabase)','').replace('(Omie -> Supabase)','').replace('[Semanal]','').trim();return`<tr><td>${n}</td><td><span class="badge ${c}">${i}</span></td><td class="num">${fmtDur(r.run_started_at,r.updated_at)}</td><td style="font-size:.7rem">${fmtBRT(r.created_at)}</td><td><a href="${r.html_url}" target="_blank">↗</a></td></tr>`}).join('');toast('Runs','ok')}catch(e){toast(e.message,'err')}finally{btn.innerHTML='🔄 Atualizar';btn.disabled=false}}
