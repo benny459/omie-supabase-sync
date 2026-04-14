@@ -13,8 +13,8 @@ import sys, time
 sys.path.insert(0, "scripts")
 from _common import (
     EMPRESAS_ALVO, EMPRESAS_OMIE, env,
-    fetch_omie_paginated, supa_upsert, update_sync_state,
-    to_int, to_float, trigger_sheets_mirror, upsert_with_tracking,
+    fetch_and_upsert_streaming, update_sync_state,
+    to_int, to_float, trigger_sheets_mirror,
 )
 
 OMIE_URL = "https://app.omie.com.br/api/v1/financas/pesquisartitulos/"
@@ -101,68 +101,37 @@ def map_row(titulo: dict, sigla: str) -> dict:
     }
 
 
-def importar_empresa(sigla: str):
-    inicio = time.time()
-    print(f"\n{'='*60}")
-    print(f"  {sigla} | Pesquisa Titulos")
-    print(f"{'='*60}")
-
-    # PesquisarLancamentos uses nPagina/nRegPorPagina pagination
-    items = fetch_omie_paginated(
-        url=OMIE_URL,
-        call="PesquisarLancamentos",
-        sigla=sigla,
-        list_field="titulosEncontrados",
-        page_size=100,
-        extra_param={"lDadosCad": True},
-        page_key="nPagina",
-        size_key="nRegPorPagina",
-        label="PesquisaTitulos",
-    )
-
-    if not items:
-        print(f"   {sigla}: nenhum registro")
-        update_sync_state(f"pesquisa_titulos_{sigla}", sigla, 0, modo="FULL")
-        return 0
-
-    rows = [map_row(t, sigla) for t in items]
-    rows = [r for r in rows if r["cod_titulo"]]
-
-    total, inserted, updated, before, after = upsert_with_tracking(
-        SCHEMA, TABELA, rows, PK, empresa=sigla
-    )
-
-    duracao = int(time.time() - inicio)
-    print(f"   {sigla}: {total} upserted ({inserted} new, {updated} upd) em {duracao}s")
-
-    update_sync_state(
-        f"pesquisa_titulos_{sigla}", sigla, total,
-        modo="FULL", rows_inserted=inserted, rows_updated=updated,
-        rows_before=before, duracao_segundos=duracao,
-    )
-    return total
-
+MAX_SECONDS = int(env("MAX_SECONDS_PER_STEP", "7000"))
 
 def main():
     print("=" * 60)
-    print("  IMPORT PESQUISA TITULOS  (Omie -> Supabase)")
+    print("  IMPORT PESQUISA TITULOS (STREAMING)")
     print("=" * 60)
 
-    total_geral = 0
     for sigla in EMPRESAS_ALVO:
         if not EMPRESAS_OMIE.get(sigla):
-            print(f"   {sigla}: credenciais ausentes, pulando")
             continue
+        inicio = time.time()
         try:
-            total_geral += importar_empresa(sigla)
-        except Exception as e:
-            print(f"   {sigla}: ERRO -> {e}")
-            update_sync_state(
-                f"pesquisa_titulos_{sigla}", sigla, 0,
-                status="ERRO", erro=str(e)[:200],
+            total, completed, pages = fetch_and_upsert_streaming(
+                url=OMIE_URL, call="PesquisarLancamentos", sigla=sigla,
+                list_field="titulosEncontrados",
+                schema=SCHEMA, table=TABELA, pk=PK,
+                mapper_fn=map_row,
+                page_size=100,
+                extra_param={"lDadosCad": True},
+                page_key="nPagina", size_key="nRegPorPagina",
+                max_seconds=MAX_SECONDS,
+                upsert_every=500,
+                label="PesquisaTitulos",
             )
+            duracao = int(time.time() - inicio)
+            modo = "FULL" if completed else "PARCIAL"
+            update_sync_state(f"pesquisa_titulos_{sigla}", sigla, total, modo=modo, duracao_segundos=duracao)
+        except Exception as e:
+            print(f"   ❌ {sigla}: {e}")
+            update_sync_state(f"pesquisa_titulos_{sigla}", sigla, 0, status="ERRO", erro=str(e)[:200])
 
-    print(f"\nTotal geral: {total_geral}")
     trigger_sheets_mirror("pesquisa_titulos")
 
 

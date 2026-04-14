@@ -169,6 +169,95 @@ def fetch_omie_paginated(url: str, call: str, sigla: str, list_field: str,
     return all_items
 
 # ══════════════════════════════════════════════════════════════════════════
+# 🔄 FETCH + UPSERT STREAMING (pra tabelas grandes)
+# UPSERTa cada batch de páginas imediatamente — se der timeout, salva progresso
+# ══════════════════════════════════════════════════════════════════════════
+
+def fetch_and_upsert_streaming(
+    url: str, call: str, sigla: str, list_field: str,
+    schema: str, table: str, pk: str, mapper_fn,
+    page_size: int = 100, extra_param: dict = None,
+    page_key: str = "pagina", size_key: str = "registros_por_pagina",
+    max_seconds: int = 7000,  # ~2h
+    upsert_every: int = 500,  # UPSERTa a cada N rows
+    label: str = "items"
+):
+    """
+    Fetch paginado + UPSERT em batches. Salva progresso mesmo se interrompido.
+
+    Returns: (total_rows, completed: bool, pages_fetched: int)
+    """
+    start = time.time()
+    pagina = 1
+    total_rows = 0
+    pages_fetched = 0
+    buffer = []
+    completed = False
+
+    while True:
+        elapsed = time.time() - start
+        if elapsed > max_seconds:
+            print(f"\n   ⏸️ Limite de tempo ({int(max_seconds)}s / {int(max_seconds/60)}min) atingido na pág {pagina}.")
+            print(f"   Salvando {len(buffer)} rows pendentes...")
+            if buffer:
+                supa_upsert(schema, table, buffer, pk)
+                total_rows += len(buffer)
+                buffer = []
+            break
+
+        param = {page_key: pagina, size_key: page_size}
+        if extra_param:
+            param.update(extra_param)
+
+        print(f"   ⬇️  {sigla} | {label} pág {pagina} ({page_size}/p)...", end=" ", flush=True)
+        data = fetch_omie(url, call, sigla, param)
+
+        if data.get("_empty_page"):
+            print("fim (Omie 500 = sem registros).")
+            completed = True
+            break
+
+        items = data.get(list_field) or []
+        if not items:
+            print("vazio, fim.")
+            completed = True
+            break
+
+        rows = [mapper_fn(item, sigla) for item in items]
+        rows = [r for r in rows if r]  # remove None
+        buffer.extend(rows)
+        pages_fetched += 1
+
+        tot_pag = data.get("total_de_paginas") or data.get("nTotPaginas") or "?"
+        tot_reg = data.get("total_de_registros") or data.get("nTotRegistros") or "?"
+        print(f"{len(items)} items → buffer {len(buffer)} (pág {pagina}/{tot_pag}, {tot_reg} total)")
+
+        # UPSERT quando buffer atinge o threshold
+        if len(buffer) >= upsert_every:
+            print(f"   📤 UPSERT batch: {len(buffer)} rows → {schema}.{table}")
+            supa_upsert(schema, table, buffer, pk)
+            total_rows += len(buffer)
+            buffer = []
+
+        if len(items) < page_size:
+            completed = True
+            break
+        pagina += 1
+        time.sleep(PAUSA_ENTRE_CHAMADAS)
+
+    # Flush remaining buffer
+    if buffer:
+        print(f"   📤 UPSERT final: {len(buffer)} rows → {schema}.{table}")
+        supa_upsert(schema, table, buffer, pk)
+        total_rows += len(buffer)
+
+    elapsed = int(time.time() - start)
+    status = "COMPLETO" if completed else f"PARCIAL (parou na pág {pagina})"
+    print(f"   {'✅' if completed else '⏸️'} {sigla} {label}: {total_rows} rows em {elapsed}s — {status}")
+
+    return total_rows, completed, pages_fetched
+
+# ══════════════════════════════════════════════════════════════════════════
 # 🗺️ HELPERS DE CAST
 # ══════════════════════════════════════════════════════════════════════════
 
