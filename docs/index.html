@@ -353,6 +353,29 @@ a:hover{text-decoration:underline}
     <div class="btn-row"><button class="btn" onclick="closeModal()">Cancelar</button><button class="btn primary" onclick="saveSchedule()">💾 Salvar</button></div>
   </div>
 </div>
+<!-- TABLE VIEWER MODAL -->
+<div class="modal-overlay" id="tableViewOverlay">
+  <div class="modal" style="max-width:90vw;width:900px;max-height:85vh;display:flex;flex-direction:column">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.75rem">
+      <h3 id="tableViewTitle" style="margin:0">Tabela</h3>
+      <div style="display:flex;gap:.5rem;align-items:center">
+        <input type="text" id="tableViewSearch" placeholder="🔍 Filtrar..." style="width:180px;font-family:var(--mono);font-size:.7rem;padding:.3rem .5rem;background:var(--bg-0);border:1px solid var(--border);border-radius:4px;color:var(--tx-0)">
+        <button class="btn sm" onclick="closeTableView()">✕ Fechar</button>
+      </div>
+    </div>
+    <div style="overflow:auto;flex:1;border:1px solid var(--border);border-radius:var(--radius)">
+      <table id="tableViewTable"><thead><tr></tr></thead><tbody></tbody></table>
+    </div>
+    <div style="margin-top:.5rem;display:flex;justify-content:space-between;align-items:center">
+      <span id="tableViewInfo" style="font-size:.65rem;color:var(--tx-2);font-family:var(--mono)">—</span>
+      <div style="display:flex;gap:.35rem">
+        <button class="btn sm" id="tableViewPrev" onclick="tableViewPage(-1)">← Anterior</button>
+        <button class="btn sm" id="tableViewNext" onclick="tableViewPage(1)">Próxima →</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <div class="toast-container" id="toasts"></div>
 
 <script>
@@ -409,7 +432,7 @@ async function loadDashboard(){
       let h=`<tr class="group-head ${cls}"><td colspan="7">${label} (${items.length} módulos)</td></tr>`;
       items.forEach(s=>{
         const ok=s.ultima_execucao_status==='SUCESSO',modo=s.modo||'—',n=(s.total_registros||0);tot+=n;
-        h+=`<tr><td style="padding-left:1.5rem">${(s.modulo||'').replace(/_/g,' ')}</td><td class="num">${s.empresa||''}</td><td><span class="badge ${ok?'ok':'err'}">${ok?'✅':'❌'}</span></td><td><span class="badge ${modo==='INCREMENTAL'?'blue':'warn'}" style="font-size:.6rem">${modo}</span></td><td class="num">${n.toLocaleString('pt-BR')}</td><td>${s.duracao_segundos?s.duracao_segundos+'s':'—'}</td><td style="font-size:.7rem">${fmtBRT(s.last_sync_at)}</td></tr>`;
+        h+=`<tr style="cursor:pointer" onclick="openTableView('${s.modulo}')" title="Clique pra ver dados"><td style="padding-left:1.5rem"><u>${(s.modulo||'').replace(/_/g,' ')}</u></td><td class="num">${s.empresa||''}</td><td><span class="badge ${ok?'ok':'err'}">${ok?'✅':'❌'}</span></td><td><span class="badge ${modo==='INCREMENTAL'?'blue':'warn'}" style="font-size:.6rem">${modo}</span></td><td class="num">${n.toLocaleString('pt-BR')}</td><td>${s.duracao_segundos?s.duracao_segundos+'s':'—'}</td><td style="font-size:.7rem">${fmtBRT(s.last_sync_at)}</td></tr>`;
       });
       h+=`<tr class="group-sub"><td colspan="4" style="text-align:right">Subtotal</td><td class="num">${tot.toLocaleString('pt-BR')}</td><td colspan="2"></td></tr>`;
       return h;
@@ -484,6 +507,71 @@ async function loadRuns(silent){const btn=document.getElementById('btnRuns');if(
   if(hasRunning){runsTimer=setInterval(()=>loadRuns(true),10000);document.getElementById('btnRuns').innerHTML='🔄 Auto (10s)'}
   if(!silent)toast('Runs','ok');
   }catch(e){if(!silent)toast(e.message,'err')}finally{if(!silent){btn.innerHTML='🔄 Atualizar';btn.disabled=false}}}
+
+// ─── TABLE VIEWER ───
+const TABLE_MAP={
+  // sales
+  'itens_vendidos':{s:'sales',t:'itens_vendidos'},'etapas_pedidos':{s:'sales',t:'etapas_pedidos'},'pedidos_venda':{s:'sales',t:'pedidos_venda'},'ordens_servico':{s:'sales',t:'ordens_servico'},'contratos_servico':{s:'sales',t:'contratos_servico'},'produtos':{s:'sales',t:'produtos'},'formas_pagamento':{s:'sales',t:'formas_pagamento'},'categorias':{s:'sales',t:'categorias'},
+  // orders
+  'nfe_entrada':{s:'orders',t:'nfe_entrada'},'recebimento_nfe':{s:'orders',t:'recebimento_nfe'},'pedidos_compra':{s:'orders',t:'pedidos_compra'},'produtos_compras':{s:'orders',t:'produtos_compras'},'etapas_faturamento':{s:'orders',t:'etapas_faturamento'},'formas_pagamento_vendas':{s:'orders',t:'formas_pagamento_vendas'},'familias_produtos':{s:'orders',t:'familias_produtos'},'produto_fornecedor':{s:'orders',t:'produto_fornecedor'},'unidades':{s:'orders',t:'unidades'},'formas_pagamento_compras':{s:'orders',t:'formas_pagamento_compras'},
+  // finance
+  'contas_pagar':{s:'finance',t:'contas_pagar'},'contas_receber':{s:'finance',t:'contas_receber'},'pesquisa_titulos':{s:'finance',t:'pesquisa_titulos'},'extratos_cc':{s:'finance',t:'extratos_cc'},'clientes':{s:'finance',t:'clientes'},'projetos':{s:'finance',t:'projetos'},'contas_correntes':{s:'finance',t:'contas_correntes'},'empresas':{s:'finance',t:'empresas'},'parcelas':{s:'finance',t:'parcelas'},'lancamentos_cc':{s:'finance',t:'lancamentos_cc'},'bandeiras_cartao':{s:'finance',t:'bandeiras_cartao'},'origens_lancamento':{s:'finance',t:'origens_lancamento'},'finalidades_transferencia':{s:'finance',t:'finalidades_transferencia'},'dre':{s:'finance',t:'dre'},'tipos_conta_corrente':{s:'finance',t:'tipos_conta_corrente'},'tipos_documento':{s:'finance',t:'tipos_documento'},'bancos':{s:'finance',t:'bancos'}
+};
+let tvState={schema:'',table:'',offset:0,limit:50,data:[],search:''};
+
+function resolveTable(modulo){
+  // Extract table name from modulo (e.g., "contas_pagar_SF" → "contas_pagar")
+  const mod=modulo.replace(/_(SF|CD|WW)$/,'');
+  if(TABLE_MAP[mod])return TABLE_MAP[mod];
+  // Try partial match
+  for(const k in TABLE_MAP){if(mod.includes(k))return TABLE_MAP[k]}
+  return null;
+}
+
+async function openTableView(modulo){
+  const info=resolveTable(modulo);
+  if(!info){toast('Tabela não mapeada: '+modulo,'err');return}
+  tvState={schema:info.s,table:info.t,offset:0,limit:50,data:[],search:''};
+  document.getElementById('tableViewTitle').textContent=info.s+'.'+info.t;
+  document.getElementById('tableViewSearch').value='';
+  document.getElementById('tableViewOverlay').classList.add('open');
+  await loadTableData();
+}
+
+async function loadTableData(){
+  try{
+    const q=`select=*&limit=${tvState.limit}&offset=${tvState.offset}&order=synced_at.desc`;
+    const r=await fetch(`${supaUrl()}/rest/v1/${tvState.table}?${q}`,{
+      headers:{'apikey':supaKey(),'Authorization':`Bearer ${supaKey()}`,'Accept-Profile':tvState.schema}
+    });
+    if(!r.ok)throw new Error(`HTTP ${r.status}`);
+    tvState.data=await r.json();
+    renderTableView();
+  }catch(e){toast('Erro: '+e.message,'err')}
+}
+
+function renderTableView(){
+  const d=tvState.data,search=tvState.search.toLowerCase();
+  const filtered=search?d.filter(r=>JSON.stringify(r).toLowerCase().includes(search)):d;
+  const thead=document.querySelector('#tableViewTable thead tr');
+  const tbody=document.querySelector('#tableViewTable tbody');
+  if(!filtered.length){thead.innerHTML='';tbody.innerHTML='<tr><td class="empty">Sem dados</td></tr>';return}
+  const cols=Object.keys(filtered[0]).filter(c=>c!=='synced_at');
+  thead.innerHTML=cols.map(c=>`<th style="font-size:.6rem;white-space:nowrap">${c}</th>`).join('');
+  tbody.innerHTML=filtered.map(r=>'<tr>'+cols.map(c=>{
+    let v=r[c];if(v===null)v='';if(typeof v==='number')return`<td class="num" style="font-size:.65rem">${v}</td>`;
+    v=String(v);if(v.length>40)v=v.substring(0,40)+'…';
+    return`<td style="font-size:.65rem;white-space:nowrap">${v}</td>`;
+  }).join('')+'</tr>').join('');
+  document.getElementById('tableViewInfo').textContent=`${tvState.offset+1}-${tvState.offset+filtered.length} de ${tvState.offset+filtered.length}${filtered.length===tvState.limit?'+':''} | ${cols.length} colunas`;
+  document.getElementById('tableViewPrev').disabled=tvState.offset===0;
+  document.getElementById('tableViewNext').disabled=filtered.length<tvState.limit;
+}
+
+function tableViewPage(dir){tvState.offset=Math.max(0,tvState.offset+(dir*tvState.limit));loadTableData()}
+function closeTableView(){document.getElementById('tableViewOverlay').classList.remove('open')}
+document.getElementById('tableViewSearch').addEventListener('input',function(){tvState.search=this.value;renderTableView()});
+document.getElementById('tableViewOverlay').addEventListener('click',e=>{if(e.target===e.currentTarget)closeTableView()});
 
 // ─── INIT ───
 function initApp(){loadSettings();if(ghToken()&&supaKey()){loadDashboard();loadRuns();loadSchedules()}else{document.getElementById('settings').classList.add('open')}}
