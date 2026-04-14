@@ -105,6 +105,7 @@ tr:hover td{background:var(--bg-2)}
 tr.group-head td{background:var(--bg-2);font-family:var(--mono);font-weight:700;font-size:.7rem;color:var(--tx-0);letter-spacing:.03em;padding:.5rem .75rem}
 tr.group-head.sales td{border-left:3px solid var(--sales)}
 tr.group-head.orders td{border-left:3px solid var(--orders)}
+tr.group-head.finance td{border-left:3px solid var(--finance)}
 tr.group-sub td{background:var(--bg-3);font-family:var(--mono);font-weight:600;font-size:.65rem;color:var(--tx-1)}
 .badge{display:inline-flex;align-items:center;gap:3px;padding:1px 6px;border-radius:3px;font-family:var(--mono);font-size:.65rem;font-weight:600}
 .badge.ok{background:var(--ok-bg);color:var(--ok)}
@@ -281,15 +282,36 @@ a:hover{text-decoration:underline}
   </div>
 </div>
 
-<!-- ═══ TAB: FINANCE (template) ═══ -->
+<!-- ═══ TAB: FINANCE ═══ -->
 <div class="tab-pane" id="pane-finance">
-  <div style="text-align:center;padding:3rem 1rem">
-    <div style="font-size:2.5rem;margin-bottom:.5rem">💵</div>
-    <h2 style="font-family:var(--mono);font-size:1rem;margin-bottom:.5rem">Finance — Em breve</h2>
-    <p style="color:var(--tx-2);font-size:.8rem;max-width:400px;margin:0 auto">
-      O módulo Finance será integrado aqui quando os scripts forem migrados.<br>
-      Mesma estrutura: Workflows + Individuais + Agenda.
-    </p>
+  <div class="section-label">Workflows</div>
+  <div class="workflow-row">
+    <div class="wf-card"><h3>💵 Finance Diária</h3><p>Contas Pagar → Receber → Pesquisa Títulos → Extratos CC</p><button class="btn ok" onclick="dispatch('master_finance_diaria','Disparar Finance Diária?',{empresas:'SF'})">▶ Disparar</button></div>
+    <div class="wf-card"><h3>📦 Finance Semanal</h3><p>Clientes + Categorias + Projetos + 8 tabelas aux</p><button class="btn" style="background:var(--finance-bg);border-color:#5c4a1a;color:var(--finance)" onclick="dispatch('master_finance_semanal','Disparar Finance Semanal?',{empresas:'SF'})">▶ Disparar</button></div>
+    <div class="wf-card"><h3>⚠️ Forçar FULL</h3><p>Reimporta todo o financeiro</p><button class="btn warn" onclick="dispatch('master_finance_diaria','⚠️ FULL Finance?',{empresas:'SF'})">⚠ FULL</button></div>
+  </div>
+
+  <div class="section-label">Executar individual</div>
+  <div class="pills">
+    <span class="pill finance-pill" onclick="dispatch('master_finance_diaria','Contas Pagar?',{empresas:'SF'})">💰 Contas Pagar</span>
+    <span class="pill finance-pill" onclick="dispatch('master_finance_diaria','Contas Receber?',{empresas:'SF'})">💵 Contas Receber</span>
+    <span class="pill finance-pill" onclick="dispatch('master_finance_diaria','Pesquisa Títulos?',{empresas:'SF'})">🔍 Pesquisa Títulos</span>
+    <span class="pill finance-pill" onclick="dispatch('master_finance_diaria','Extratos CC?',{empresas:'SF'})">🏦 Extratos CC</span>
+    <span class="pill finance-pill" onclick="dispatch('master_finance_semanal','Cadastros Finance?',{empresas:'SF'})">📂 Cadastros</span>
+  </div>
+
+  <div class="section-label">Agenda automática</div>
+  <div class="sched-row" id="schedFinance">
+    <div class="sched-card" data-kind="finance" id="sched-finance-d">
+      <div class="sched-top"><span class="sched-name">💵 Finance Diária</span><span class="sched-time">—</span></div>
+      <div class="sched-detail"><span class="tag">📅 —</span><span class="tag">🔁 —</span></div>
+      <div class="sched-actions"><button class="btn sm warn" onclick="openSchedModal('master_finance_diaria.yml','Finance Diária')">✏️ Editar horário</button></div>
+    </div>
+    <div class="sched-card" data-kind="finance" id="sched-finance-s">
+      <div class="sched-top"><span class="sched-name">📦 Finance Semanal</span><span class="sched-time">—</span></div>
+      <div class="sched-detail"><span class="tag">📅 —</span><span class="tag">🔁 —</span></div>
+      <div class="sched-actions"><button class="btn sm warn" onclick="openSchedModal('master_finance_semanal.yml','Finance Semanal')">✏️ Editar horário</button></div>
+    </div>
   </div>
 </div>
 
@@ -337,7 +359,8 @@ a:hover{text-decoration:underline}
 const GH_REPO='benny459/omie-supabase-sync',GH_API='https://api.github.com';
 const DAYS={0:'Dom',1:'Seg',2:'Ter',3:'Qua',4:'Qui',5:'Sex',6:'Sáb','*':'Todo dia'};
 const DEFAULT_PASS_HASH='5e884898da28047151d0e56f8dc6292773603d0d6aabbdd62a11ef721d1542d8';
-const SALES_MODS=['itens_vendidos','etapas_pedidos','pedidos_venda','ordens_servico','contratos_servico','produtos_SF','produtos_CD','produtos_WW','formas_pagamento','categorias'];
+const SALES_MODS=['itens_vendidos','etapas_pedidos','pedidos_venda','ordens_servico','contratos_servico','produtos_SF','produtos_CD','produtos_WW','formas_pagamento_SF','formas_pagamento_CD','formas_pagamento_WW','categorias'];
+const FINANCE_MODS=['contas_pagar','contas_receber','pesquisa_titulos','extratos_cc','clientes_SF','clientes_CD','clientes_WW','categorias_fin','projetos_fin','contas_correntes','empresas','parcelas','lancamentos_cc','bandeiras','origens','finalidades','dre','tipos_conta','tipos_documento','bancos'];
 let modalState={};
 
 // ─── TABS ───
@@ -367,6 +390,7 @@ function fmtBRT(iso){if(!iso)return'—';try{return new Date(iso).toLocaleString
 function fmtDur(s,e){if(!s||!e)return'—';const x=Math.round((new Date(e)-new Date(s))/1000);return x<60?x+'s':Math.floor(x/60)+'m'+x%60+'s'}
 function cronBRT(c){const p=c.split(' '),m=+p[0],h=+p[1],d=p[4];return{time:`${String((h-3+24)%24).padStart(2,'0')}:${String(m).padStart(2,'0')}`,day:DAYS[d]||d}}
 function isSalesMod(mod){return SALES_MODS.some(s=>mod.includes(s))}
+function isFinanceMod(mod){return FINANCE_MODS.some(s=>mod.includes(s))}
 async function ghFetch(ep,mt='GET',bd=null){if(!ghToken())throw new Error('Configure GitHub Token');const o={method:mt,headers:{'Authorization':`Bearer ${ghToken()}`,'Accept':'application/vnd.github.v3+json'}};if(bd){o.headers['Content-Type']='application/json';o.body=JSON.stringify(bd)}const r=await fetch(GH_API+ep,o);if(!r.ok&&r.status!==204)throw new Error(`GitHub ${r.status}`);return r.status===204?{}:r.json()}
 async function supaFetch(tbl,q=''){if(!supaKey())throw new Error('Configure Supabase Key');const r=await fetch(`${supaUrl()}/rest/v1/${tbl}?${q}`,{headers:{'apikey':supaKey(),'Authorization':`Bearer ${supaKey()}`,'Accept-Profile':'sales'}});if(!r.ok)throw new Error(`Supabase ${r.status}`);return r.json()}
 
@@ -377,7 +401,7 @@ async function loadDashboard(){
     const data=await supaFetch('sync_state','select=*&order=modulo');
     const body=document.getElementById('dashBody');
     if(!data.length){body.innerHTML='<tr><td colspan="7" class="empty">Vazio</td></tr>';return}
-    const sales=data.filter(s=>isSalesMod(s.modulo)),orders=data.filter(s=>!isSalesMod(s.modulo));
+    const sales=data.filter(s=>isSalesMod(s.modulo)),finance=data.filter(s=>isFinanceMod(s.modulo)),orders=data.filter(s=>!isSalesMod(s.modulo)&&!isFinanceMod(s.modulo));
     let html='';
     const renderGroup=(label,cls,items)=>{
       if(!items.length)return'';
@@ -392,6 +416,7 @@ async function loadDashboard(){
     };
     html+=renderGroup('💰 SALES','sales',sales);
     html+=renderGroup('🛒 ORDERS','orders',orders);
+    html+=renderGroup('💵 FINANCE','finance',finance);
     body.innerHTML=html;
     toast('Atualizado','ok');
   }catch(e){toast(e.message,'err')}
@@ -406,7 +431,9 @@ const SCHED_MAP=[
   {file:'master_sales_diaria.yml',card:'sched-sales-d',name:'Sales Diária',desc:'Etapas→Itens→Pedidos→Serviços'},
   {file:'master_sales_semanal.yml',card:'sched-sales-s',name:'Sales Semanal',desc:'Produtos + Auxiliares'},
   {file:'master_orders_diaria.yml',card:'sched-orders-d',name:'Orders Diária',desc:'NFe→Recebimento→Pedidos'},
-  {file:'master_orders_semanal.yml',card:'sched-orders-s',name:'Orders Semanal',desc:'Produtos + Aux'}
+  {file:'master_orders_semanal.yml',card:'sched-orders-s',name:'Orders Semanal',desc:'Produtos + Aux'},
+  {file:'master_finance_diaria.yml',card:'sched-finance-d',name:'Finance Diária',desc:'Pagar→Receber→Títulos→Extratos'},
+  {file:'master_finance_semanal.yml',card:'sched-finance-s',name:'Finance Semanal',desc:'Cadastros (Clientes+Cat+Proj+Aux)'}
 ];
 const DAY_LABELS={'*':'Todo dia','0':'Domingo','1':'Segunda','2':'Terça','3':'Quarta','4':'Quinta','5':'Sexta','6':'Sábado','1-5':'Seg a Sex'};
 function cronFreq(cron){const p=cron.split(' ');const d=p[4],dom=p[2],mon=p[3];if(d==='0')return'Semanal (Dom)';if(d==='1-5')return'Dias úteis';if(d==='*'&&dom==='*')return'Diário';return'Personalizado'}
@@ -446,7 +473,7 @@ function runGroup(name){
   const n=name.toLowerCase();
   if(n.includes('sales')||n.includes('itens')||n.includes('etapas')||n.includes('pedidos venda')||n.includes('servic')||n.includes('import aux')||n.includes('import prod'))return{label:'💰 Sales',cls:'blue'};
   if(n.includes('order')||n.includes('nfe')||n.includes('recebimento')||n.includes('compra'))return{label:'🛒 Orders',cls:'purple'};
-  if(n.includes('finance'))return{label:'💵 Finance',cls:'warn'};
+  if(n.includes('finance')||n.includes('contas')||n.includes('extrato')||n.includes('titulo')||n.includes('cadastro'))return{label:'💵 Finance',cls:'warn'};
   return{label:'⚙️',cls:'warn'};
 }
 let runsTimer=null;
