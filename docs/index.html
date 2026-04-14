@@ -225,7 +225,8 @@ a:hover{text-decoration:underline}
     </div>
     <button class="btn primary" onclick="doLogin()" style="width:100%;justify-content:center;margin-top:.5rem;padding:.7rem">🔓 Entrar</button>
     <p id="loginError" style="color:var(--err);font-size:.75rem;margin-top:.75rem;display:none">Senha incorreta</p>
-    <p style="color:var(--tx-2);font-size:.65rem;margin-top:1.5rem">Primeira vez? Use a senha padrão e depois mude nas configurações.</p>
+    <button class="btn" onclick="resetPassword()" style="width:100%;justify-content:center;margin-top:1rem;font-size:.7rem">🔓 Resetar senha (volta pra padrão)</button>
+    <p style="color:var(--tx-2);font-size:.65rem;margin-top:.75rem">Senha padrão após reset: <b>password</b></p>
   </div>
 </div>
 
@@ -288,51 +289,35 @@ a:hover{text-decoration:underline}
   </div>
 </section>
 
-<!-- ACTIONS -->
+<!-- ═══════════════════════════════════════ -->
+<!-- 💰 SALES (VENDAS)                     -->
+<!-- ═══════════════════════════════════════ -->
 <section>
-  <div class="section-head"><h2>🚀 Disparar Workflows</h2></div>
+  <div class="section-head"><h2>💰 Sales — Workflows</h2></div>
   <div class="cards">
     <div class="card">
-      <h3>🚀 Master Diária</h3>
-      <p>Etapas → Itens Vendidos → Pedidos → Serviços (sequência)</p>
-      <button class="btn ok" onclick="dispatch('master_sales_diaria','Disparar Master Diária?',{empresas:'SF',forcar_full:'false'})">▶ Disparar</button>
+      <h3>🚀 Sales Diária</h3>
+      <p>Etapas → Itens Vendidos → Pedidos Venda → Serviços (sequência)</p>
+      <button class="btn ok" onclick="dispatch('master_sales_diaria','Disparar Sales Diária?',{empresas:'SF',forcar_full:'false'})">▶ Disparar</button>
     </div>
     <div class="card">
-      <h3>📦 Master Semanal</h3>
+      <h3>📦 Sales Semanal</h3>
       <p>Produtos → Auxiliares (Categorias + FormasPag)</p>
-      <button class="btn blue" onclick="dispatch('master_sales_semanal','Disparar Master Semanal?',{empresas:'SF,CD,WW'})">▶ Disparar</button>
+      <button class="btn blue" onclick="dispatch('master_sales_semanal','Disparar Sales Semanal?',{empresas:'SF,CD,WW'})">▶ Disparar</button>
     </div>
     <div class="card">
-      <h3>⚠️ Master Diária FULL</h3>
-      <p>Reimporta tudo desde 01/01/2025 (ignora sync_state)</p>
-      <button class="btn warn" onclick="dispatch('master_sales_diaria','⚠️ Forçar FULL? Vai reimportar TUDO.',{empresas:'SF',forcar_full:'true'})">⚠ Forçar FULL</button>
+      <h3>⚠️ Sales Diária FULL</h3>
+      <p>Reimporta tudo desde 01/01/2025</p>
+      <button class="btn warn" onclick="dispatch('master_sales_diaria','⚠️ Forçar FULL Sales?',{empresas:'SF',forcar_full:'true'})">⚠ Forçar FULL</button>
     </div>
   </div>
 </section>
 
-<!-- ORDERS ACTIONS -->
 <section>
-  <div class="section-head"><h2>🛒 Disparar Orders (Compras)</h2></div>
-  <div class="cards">
-    <div class="card">
-      <h3>🛒 Master Orders Diária</h3>
-      <p>NFe Entrada → Recebimento → Pedidos Compra (sequência)</p>
-      <button class="btn ok" onclick="dispatch('master_orders_diaria','Disparar Master Orders Diária?',{empresas:'SF'})">▶ Disparar</button>
-    </div>
-    <div class="card">
-      <h3>📦 Master Orders Semanal</h3>
-      <p>Produtos + 7 tabelas auxiliares</p>
-      <button class="btn blue" onclick="dispatch('master_orders_semanal','Disparar Master Orders Semanal?',{empresas:'SF'})">▶ Disparar</button>
-    </div>
-  </div>
-</section>
-
-<!-- INDIVIDUAL RUNS -->
-<section>
-  <div class="section-head"><h2>🛠️ Execuções Individuais</h2></div>
+  <div class="section-head"><h2>💰 Sales — Individuais</h2></div>
   <div class="cards" style="grid-template-columns:repeat(auto-fill,minmax(200px,1fr))">
     <div class="card">
-      <h3>📋 Etapas</h3>
+      <h3>📋 Etapas Pedidos</h3>
       <p>ListarEtapasPedido (FULL)</p>
       <button class="btn" onclick="dispatch('import_etapas_pedidos','Disparar Etapas?',{empresas:'SF'})">▶ Rodar</button>
     </div>
@@ -352,34 +337,64 @@ a:hover{text-decoration:underline}
       <button class="btn" onclick="dispatch('import_servicos','Disparar Serviços?',{empresas:'SF'})">▶ Rodar</button>
     </div>
     <div class="card">
-      <h3>📦 Produtos</h3>
-      <p>Catálogo resumido (FULL)</p>
+      <h3>📦 Produtos Sales</h3>
+      <p>Catálogo resumido (semanal)</p>
       <button class="btn" onclick="dispatch('import_produtos','Disparar Produtos?',{empresas:'SF'})">▶ Rodar</button>
     </div>
     <div class="card">
-      <h3>📂 Auxiliares</h3>
-      <p>FormasPag + Categorias (SF,CD,WW)</p>
+      <h3>📂 Auxiliares Sales</h3>
+      <p>FormasPag + Categorias</p>
       <button class="btn" onclick="dispatch('import_auxiliares','Disparar Auxiliares?',{empresas:'SF,CD,WW'})">▶ Rodar</button>
     </div>
-    <div class="card" style="border-color:#8E44AD33">
-      <h3>📄 NFe Entrada</h3>
-      <p>ListarDocumentos (XML)</p>
-      <button class="btn" onclick="dispatch('master_orders_diaria','Disparar só NFe?',{empresas:'SF'})">▶ Rodar</button>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════ -->
+<!-- 🛒 ORDERS (COMPRAS)                    -->
+<!-- ═══════════════════════════════════════ -->
+<section>
+  <div class="section-head"><h2>🛒 Orders — Workflows</h2></div>
+  <div class="cards">
+    <div class="card">
+      <h3>🛒 Orders Diária</h3>
+      <p>NFe Entrada → Recebimento NFe → Pedidos Compra (sequência)</p>
+      <button class="btn ok" onclick="dispatch('master_orders_diaria','Disparar Orders Diária?',{empresas:'SF'})">▶ Disparar</button>
     </div>
-    <div class="card" style="border-color:#8E44AD33">
+    <div class="card">
+      <h3>📦 Orders Semanal</h3>
+      <p>Produtos Compras + 7 tabelas auxiliares</p>
+      <button class="btn blue" onclick="dispatch('master_orders_semanal','Disparar Orders Semanal?',{empresas:'SF'})">▶ Disparar</button>
+    </div>
+    <div class="card">
+      <h3>⚠️ Orders Diária FULL</h3>
+      <p>Reimporta NF + Recebimento + Pedidos</p>
+      <button class="btn warn" onclick="dispatch('master_orders_diaria','⚠️ Forçar FULL Orders?',{empresas:'SF'})">⚠ Forçar FULL</button>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="section-head"><h2>🛒 Orders — Individuais</h2></div>
+  <div class="cards" style="grid-template-columns:repeat(auto-fill,minmax(200px,1fr))">
+    <div class="card">
+      <h3>📄 NFe Entrada</h3>
+      <p>ListarDocumentos XML</p>
+      <button class="btn" onclick="dispatch('master_orders_diaria','Disparar NFe Entrada?',{empresas:'SF'})">▶ Rodar</button>
+    </div>
+    <div class="card">
       <h3>📥 Recebimento NFe</h3>
       <p>ListarRecebimentos (50 cols)</p>
-      <button class="btn" onclick="dispatch('master_orders_diaria','Disparar Orders Diária?',{empresas:'SF'})">▶ Rodar</button>
+      <button class="btn" onclick="dispatch('master_orders_diaria','Disparar Recebimento?',{empresas:'SF'})">▶ Rodar</button>
     </div>
-    <div class="card" style="border-color:#8E44AD33">
+    <div class="card">
       <h3>🛒 Pedidos Compra</h3>
       <p>PesquisarPedCompra (53 cols)</p>
-      <button class="btn" onclick="dispatch('master_orders_diaria','Disparar Orders Diária?',{empresas:'SF'})">▶ Rodar</button>
+      <button class="btn" onclick="dispatch('master_orders_diaria','Disparar Pedidos Compra?',{empresas:'SF'})">▶ Rodar</button>
     </div>
-    <div class="card" style="border-color:#8E44AD33">
-      <h3>📂 Orders Auxiliares</h3>
-      <p>Produtos + 6 tabelas aux (semanal)</p>
-      <button class="btn" onclick="dispatch('master_orders_semanal','Disparar Orders Semanal?',{empresas:'SF'})">▶ Rodar</button>
+    <div class="card">
+      <h3>📂 Auxiliares Orders</h3>
+      <p>Produtos + Famílias + Fornecedores + Unidades</p>
+      <button class="btn" onclick="dispatch('master_orders_semanal','Disparar Auxiliares Orders?',{empresas:'SF'})">▶ Rodar</button>
     </div>
   </div>
 </section>
@@ -458,7 +473,7 @@ async function doLogin() {
   } else {
     const err = document.getElementById('loginError');
     err.style.display = 'block';
-    err.textContent = 'Senha incorreta';
+    err.textContent = 'Senha incorreta. Dica: clique "Resetar senha" abaixo.';
     document.getElementById('loginPass').select();
   }
 }
@@ -469,6 +484,13 @@ async function changePassword() {
   localStorage.setItem('panel_pass_hash', hash);
   document.getElementById('newPass').value = '';
   toast('✅ Senha alterada! Use a nova na próxima vez.','ok');
+}
+function resetPassword() {
+  localStorage.removeItem('panel_pass_hash');
+  document.getElementById('loginError').style.display = 'none';
+  document.getElementById('loginPass').value = '';
+  toast('Senha resetada! Use: password','ok');
+  document.getElementById('loginPass').focus();
 }
 function checkAuth() {
   if (sessionStorage.getItem('authed') === '1') {
