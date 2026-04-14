@@ -301,7 +301,7 @@ a:hover{text-decoration:underline}
   </div>
   <div class="table-wrap">
     <table>
-      <thead><tr><th>Workflow</th><th>Status</th><th>Duração</th><th>Data/Hora</th><th></th></tr></thead>
+      <thead><tr><th>Grupo</th><th>Workflow</th><th>Status</th><th>Duração</th><th>Data/Hora</th><th></th></tr></thead>
       <tbody id="runsBody"><tr><td colspan="5" class="empty">Clique "Atualizar"</td></tr></tbody>
     </table>
   </div>
@@ -442,7 +442,21 @@ function closeModal(){document.getElementById('modalOverlay').classList.remove('
 async function saveSchedule(){const t=document.getElementById('modalTime').value,day=document.getElementById('modalDay').value,[hB,m]=t.split(':').map(Number),hU=(hB+3)%24,p=modalState.cron.split(' '),nc=`${m} ${hU} ${p[2]} ${p[3]} ${day}`;try{const d=await ghFetch(`/repos/${GH_REPO}/contents/.github/workflows/${modalState.file}`);let c=atob(d.content.replace(/\n/g,''));c=c.replace(/cron:\s*"[^"]*/,`cron: "${nc}`);await ghFetch(`/repos/${GH_REPO}/contents/.github/workflows/${modalState.file}`,'PUT',{message:`chore: ${modalState.name} → ${t} BRT`,content:btoa(unescape(encodeURIComponent(c))),sha:d.sha});toast(`✅ ${t} BRT`,'ok');closeModal();loadSchedules()}catch(e){toast(e.message,'err')}}
 
 // ─── RUNS ───
-async function loadRuns(){const btn=document.getElementById('btnRuns');btn.innerHTML='<span class="spin"></span>';btn.disabled=true;try{const d=await ghFetch(`/repos/${GH_REPO}/actions/runs?per_page=20&branch=main`),runs=d.workflow_runs||[],body=document.getElementById('runsBody');if(!runs.length){body.innerHTML='<tr><td colspan="5" class="empty">Nenhum</td></tr>';return}body.innerHTML=runs.filter(r=>!r.name.includes('pages')).map(r=>{const i=r.conclusion==='success'?'✅':r.conclusion==='failure'?'❌':r.status==='in_progress'?'🔄':'⏳',c=r.conclusion==='success'?'ok':r.conclusion==='failure'?'err':r.status==='in_progress'?'blue':'warn',n=r.name.replace('(Omie → Supabase)','').replace('(Omie -> Supabase)','').replace('[Semanal]','').trim();return`<tr><td>${n}</td><td><span class="badge ${c}">${i}</span></td><td class="num">${fmtDur(r.run_started_at,r.updated_at)}</td><td style="font-size:.7rem">${fmtBRT(r.created_at)}</td><td><a href="${r.html_url}" target="_blank">↗</a></td></tr>`}).join('');toast('Runs','ok')}catch(e){toast(e.message,'err')}finally{btn.innerHTML='🔄 Atualizar';btn.disabled=false}}
+function runGroup(name){
+  const n=name.toLowerCase();
+  if(n.includes('sales')||n.includes('itens')||n.includes('etapas')||n.includes('pedidos venda')||n.includes('servic')||n.includes('import aux')||n.includes('import prod'))return{label:'💰 Sales',cls:'blue'};
+  if(n.includes('order')||n.includes('nfe')||n.includes('recebimento')||n.includes('compra'))return{label:'🛒 Orders',cls:'purple'};
+  if(n.includes('finance'))return{label:'💵 Finance',cls:'warn'};
+  return{label:'⚙️',cls:'warn'};
+}
+let runsTimer=null;
+async function loadRuns(silent){const btn=document.getElementById('btnRuns');if(!silent){btn.innerHTML='<span class="spin"></span>';btn.disabled=true}try{const d=await ghFetch(`/repos/${GH_REPO}/actions/runs?per_page=25&branch=main`),runs=d.workflow_runs||[],body=document.getElementById('runsBody');if(!runs.length){body.innerHTML='<tr><td colspan="6" class="empty">Nenhum</td></tr>';return}const filtered=runs.filter(r=>!r.name.includes('pages'));body.innerHTML=filtered.map(r=>{const i=r.conclusion==='success'?'✅':r.conclusion==='failure'?'❌':r.status==='in_progress'?'🔄':'⏳';const c=r.conclusion==='success'?'ok':r.conclusion==='failure'?'err':r.status==='in_progress'?'blue':'warn';const n=r.name.replace('(Omie → Supabase)','').replace('(Omie -> Supabase)','').replace('[Semanal]','').trim();const g=runGroup(r.name);const dur=r.status==='in_progress'?fmtDur(r.run_started_at,new Date().toISOString())+' ⏱️':fmtDur(r.run_started_at,r.updated_at);return`<tr${r.status==='in_progress'?' style="background:var(--bg-2)"':''}><td><span class="badge ${g.cls}">${g.label}</span></td><td>${n}</td><td><span class="badge ${c}">${i} ${r.status==='in_progress'?'rodando...':r.conclusion||''}</span></td><td class="num">${dur}</td><td style="font-size:.7rem">${fmtBRT(r.created_at)}</td><td><a href="${r.html_url}" target="_blank">↗</a></td></tr>`}).join('');
+  // Auto-refresh se tem algo in_progress
+  const hasRunning=filtered.some(r=>r.status==='in_progress');
+  if(runsTimer)clearInterval(runsTimer);
+  if(hasRunning){runsTimer=setInterval(()=>loadRuns(true),10000);document.getElementById('btnRuns').innerHTML='🔄 Auto (10s)'}
+  if(!silent)toast('Runs','ok');
+  }catch(e){if(!silent)toast(e.message,'err')}finally{if(!silent){btn.innerHTML='🔄 Atualizar';btn.disabled=false}}}
 
 // ─── INIT ───
 function initApp(){loadSettings();if(ghToken()&&supaKey()){loadDashboard();loadRuns();loadSchedules()}else{document.getElementById('settings').classList.add('open')}}
