@@ -5,722 +5,389 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Omie → Supabase — Painel de Controle</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=Outfit:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{
-  --bg-0:#0a0b0f;--bg-1:#12131a;--bg-2:#1a1c26;--bg-3:#242636;
-  --tx-0:#e8e9ed;--tx-1:#a0a3b1;--tx-2:#6b6e7d;
-  --accent:#3b82f6;--accent-dim:#1e3a5f;
-  --ok:#22c55e;--ok-bg:#0a2a16;
-  --err:#ef4444;--err-bg:#2a0a0a;
-  --warn:#f59e0b;--warn-bg:#2a1f0a;
-  --blue:#3b82f6;--blue-bg:#0a1a2a;
-  --border:#2a2c3a;
-  --radius:8px;
-  --mono:'JetBrains Mono',monospace;
-  --sans:'DM Sans',system-ui,sans-serif;
+  --bg-0:#080a0e;--bg-1:#0e1117;--bg-2:#161b22;--bg-3:#21262d;
+  --tx-0:#e6edf3;--tx-1:#8b949e;--tx-2:#484f58;
+  --accent:#58a6ff;--accent-dim:#1a3a5f;
+  --ok:#3fb950;--ok-bg:#0b2a16;
+  --err:#f85149;--err-bg:#2a0a0a;
+  --warn:#d29922;--warn-bg:#2a1f0a;
+  --sales:#58a6ff;--sales-bg:#0d1d33;
+  --orders:#a371f7;--orders-bg:#1a0d33;
+  --border:#21262d;--border-hi:#30363d;
+  --radius:6px;
+  --mono:'IBM Plex Mono',monospace;
+  --sans:'Outfit',system-ui,sans-serif;
 }
-html{font-size:14px;scroll-behavior:smooth}
-body{
-  background:var(--bg-0);color:var(--tx-0);
-  font-family:var(--sans);line-height:1.6;
-  min-height:100vh;
-}
-/* Noise overlay */
-body::before{
-  content:'';position:fixed;inset:0;z-index:0;pointer-events:none;
-  opacity:.03;
-  background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
-}
-.app{position:relative;z-index:1;max-width:1100px;margin:0 auto;padding:1.5rem}
+html{font-size:13px;scroll-behavior:smooth}
+body{background:var(--bg-0);color:var(--tx-0);font-family:var(--sans);line-height:1.5;min-height:100vh}
+body::before{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;opacity:.02;background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")}
+.shell{position:relative;z-index:1;max-width:1080px;margin:0 auto;padding:1rem 1.25rem}
 
-/* HEADER */
-header{
-  padding:2rem 0 1.5rem;
-  border-bottom:1px solid var(--border);
-  margin-bottom:2rem;
-}
-header h1{
-  font-family:var(--mono);font-size:1.4rem;font-weight:700;
-  letter-spacing:-0.02em;
-  background:linear-gradient(135deg,#fff 0%,var(--accent) 100%);
-  -webkit-background-clip:text;-webkit-text-fill-color:transparent;
-}
-header p{color:var(--tx-2);font-size:.85rem;margin-top:.25rem}
-.status-dot{
-  display:inline-block;width:8px;height:8px;border-radius:50%;
-  background:var(--ok);margin-right:6px;
-  animation:pulse 2s ease-in-out infinite;
-}
-@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+/* TOPBAR */
+.topbar{display:flex;align-items:center;justify-content:space-between;padding:.75rem 0;border-bottom:1px solid var(--border);margin-bottom:1rem;gap:.5rem;flex-wrap:wrap}
+.topbar h1{font-family:var(--mono);font-size:1rem;font-weight:600;display:flex;align-items:center;gap:6px}
+.topbar h1 .dot{width:7px;height:7px;border-radius:50%;background:var(--ok);animation:pulse 2s ease-in-out infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+.topbar .gear{font-size:.8rem;cursor:pointer;color:var(--tx-2);transition:color .2s}
+.topbar .gear:hover{color:var(--tx-0)}
 
-/* SECTIONS */
-section{margin-bottom:2rem}
-.section-head{
-  display:flex;align-items:center;justify-content:space-between;
-  margin-bottom:1rem;flex-wrap:wrap;gap:.5rem;
-}
-.section-head h2{font-family:var(--mono);font-size:1rem;font-weight:600;color:var(--tx-0)}
-.section-head .actions{display:flex;gap:.5rem;flex-wrap:wrap}
+/* TABS */
+.tabs{display:flex;gap:0;border-bottom:2px solid var(--border);margin-bottom:1.25rem;position:sticky;top:0;z-index:5;background:var(--bg-0);padding-top:.25rem}
+.tab{font-family:var(--mono);font-size:.8rem;font-weight:600;padding:.6rem 1.25rem;cursor:pointer;color:var(--tx-2);border-bottom:2px solid transparent;margin-bottom:-2px;transition:all .15s;user-select:none;white-space:nowrap}
+.tab:hover{color:var(--tx-1)}
+.tab.active{color:var(--tx-0);border-bottom-color:var(--accent)}
+.tab.active[data-tab="sales"]{border-bottom-color:var(--sales)}
+.tab.active[data-tab="orders"]{border-bottom-color:var(--orders)}
+.tab-pane{display:none}
+.tab-pane.active{display:block}
 
-/* BUTTONS */
-.btn{
-  font-family:var(--mono);font-size:.75rem;font-weight:600;
-  padding:.5rem 1rem;border:1px solid var(--border);border-radius:var(--radius);
-  background:var(--bg-2);color:var(--tx-0);cursor:pointer;
-  transition:all .15s;display:inline-flex;align-items:center;gap:.4rem;
-  white-space:nowrap;
-}
-.btn:hover{background:var(--bg-3);border-color:var(--tx-2)}
+/* BTNS */
+.btn{font-family:var(--mono);font-size:.72rem;font-weight:600;padding:.4rem .85rem;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg-2);color:var(--tx-0);cursor:pointer;transition:all .12s;display:inline-flex;align-items:center;gap:.35rem;white-space:nowrap}
+.btn:hover{background:var(--bg-3);border-color:var(--border-hi)}
 .btn:active{transform:scale(.97)}
+.btn.sm{font-size:.65rem;padding:.3rem .6rem}
 .btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
-.btn.primary:hover{background:#2563eb}
+.btn.primary:hover{filter:brightness(1.15)}
 .btn.ok{background:var(--ok-bg);border-color:#1a5c2e;color:var(--ok)}
-.btn.ok:hover{background:#0f3a1e;border-color:var(--ok)}
+.btn.ok:hover{border-color:var(--ok)}
 .btn.warn{background:var(--warn-bg);border-color:#5c4a1a;color:var(--warn)}
-.btn.warn:hover{background:#3a2f0f;border-color:var(--warn)}
-.btn.blue{background:var(--blue-bg);border-color:#1a3a5c;color:var(--blue)}
-.btn.blue:hover{background:#0f2a4a;border-color:var(--blue)}
-.btn:disabled{opacity:.5;cursor:not-allowed;transform:none}
-.btn .spin{display:inline-block;width:12px;height:12px;border:2px solid currentColor;border-top-color:transparent;border-radius:50%;animation:spin .6s linear infinite}
+.btn.warn:hover{border-color:var(--warn)}
+.btn.blue{background:var(--sales-bg);border-color:#1a3a5c;color:var(--sales)}
+.btn.purple{background:var(--orders-bg);border-color:#3a1a5c;color:var(--orders)}
+.btn:disabled{opacity:.4;cursor:not-allowed}
+.btn .spin{display:inline-block;width:10px;height:10px;border:2px solid currentColor;border-top-color:transparent;border-radius:50%;animation:spin .6s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
 
-/* CARDS GRID */
-.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:1rem}
-.card{
-  background:var(--bg-1);border:1px solid var(--border);border-radius:var(--radius);
-  padding:1.25rem;
-  transition:border-color .2s;
-}
-.card:hover{border-color:var(--tx-2)}
-.card h3{font-family:var(--mono);font-size:.85rem;font-weight:600;margin-bottom:.25rem}
-.card p{color:var(--tx-2);font-size:.8rem;margin-bottom:1rem}
-.card .btn{width:100%;justify-content:center}
+/* CARDS */
+.workflow-row{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:.75rem;margin-bottom:1rem}
+.wf-card{background:var(--bg-1);border:1px solid var(--border);border-radius:var(--radius);padding:1rem;transition:border-color .2s}
+.wf-card:hover{border-color:var(--border-hi)}
+.wf-card h3{font-family:var(--mono);font-size:.8rem;font-weight:600;margin-bottom:.2rem}
+.wf-card p{color:var(--tx-2);font-size:.72rem;margin-bottom:.75rem}
+.wf-card .btn{width:100%;justify-content:center}
+
+/* PILLS (individual runs) */
+.pills{display:flex;flex-wrap:wrap;gap:.4rem;margin-bottom:1.25rem}
+.pill{font-family:var(--mono);font-size:.65rem;font-weight:500;padding:.3rem .65rem;border-radius:20px;background:var(--bg-2);border:1px solid var(--border);color:var(--tx-1);cursor:pointer;transition:all .12s;display:inline-flex;align-items:center;gap:.3rem}
+.pill:hover{background:var(--bg-3);color:var(--tx-0);border-color:var(--border-hi)}
+.pill:active{transform:scale(.95)}
+.pill.sales-pill:hover{border-color:var(--sales);color:var(--sales)}
+.pill.orders-pill:hover{border-color:var(--orders);color:var(--orders)}
+.pill-label{font-size:.6rem;color:var(--tx-2);font-family:var(--mono);font-weight:600;text-transform:uppercase;letter-spacing:.04em;margin-bottom:.25rem}
+
+/* SCHEDULE INLINE */
+.sched-row{display:flex;gap:.75rem;flex-wrap:wrap;margin-top:1rem}
+.sched-card{flex:1;min-width:220px;background:var(--bg-1);border:1px solid var(--border);border-radius:var(--radius);padding:.8rem 1rem;display:flex;align-items:center;justify-content:space-between;gap:.5rem}
+.sched-card .lbl{font-size:.7rem;color:var(--tx-2)}
+.sched-card .lbl b{color:var(--tx-0);font-family:var(--mono)}
+.sched-card .time-big{font-family:var(--mono);font-size:1.4rem;font-weight:700;letter-spacing:-.02em}
+.sched-card[data-kind="sales"] .time-big{color:var(--sales)}
+.sched-card[data-kind="orders"] .time-big{color:var(--orders)}
 
 /* TABLE */
-.table-wrap{overflow-x:auto;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg-1)}
-table{width:100%;border-collapse:collapse;font-size:.8rem}
-th{
-  font-family:var(--mono);font-weight:600;font-size:.7rem;
-  text-transform:uppercase;letter-spacing:.05em;
-  color:var(--tx-2);text-align:left;
-  padding:.75rem 1rem;border-bottom:1px solid var(--border);
-  background:var(--bg-2);position:sticky;top:0;
-}
-td{padding:.6rem 1rem;border-bottom:1px solid var(--border);color:var(--tx-1);vertical-align:middle}
+.table-wrap{overflow-x:auto;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg-1);max-height:60vh}
+table{width:100%;border-collapse:collapse;font-size:.75rem}
+th{font-family:var(--mono);font-weight:600;font-size:.65rem;text-transform:uppercase;letter-spacing:.04em;color:var(--tx-2);text-align:left;padding:.5rem .75rem;border-bottom:1px solid var(--border);background:var(--bg-2);position:sticky;top:0;z-index:2}
+td{padding:.4rem .75rem;border-bottom:1px solid var(--border);color:var(--tx-1);vertical-align:middle}
 tr:last-child td{border-bottom:none}
 tr:hover td{background:var(--bg-2)}
-.badge{
-  display:inline-flex;align-items:center;gap:4px;
-  padding:2px 8px;border-radius:4px;font-family:var(--mono);
-  font-size:.7rem;font-weight:600;
-}
+tr.group-head td{background:var(--bg-2);font-family:var(--mono);font-weight:700;font-size:.7rem;color:var(--tx-0);letter-spacing:.03em;padding:.5rem .75rem}
+tr.group-head.sales td{border-left:3px solid var(--sales)}
+tr.group-head.orders td{border-left:3px solid var(--orders)}
+tr.group-sub td{background:var(--bg-3);font-family:var(--mono);font-weight:600;font-size:.65rem;color:var(--tx-1)}
+.badge{display:inline-flex;align-items:center;gap:3px;padding:1px 6px;border-radius:3px;font-family:var(--mono);font-size:.65rem;font-weight:600}
 .badge.ok{background:var(--ok-bg);color:var(--ok)}
 .badge.err{background:var(--err-bg);color:var(--err)}
 .badge.warn{background:var(--warn-bg);color:var(--warn)}
-.badge.blue{background:var(--blue-bg);color:var(--blue)}
+.badge.blue{background:var(--sales-bg);color:var(--sales)}
+.badge.purple{background:var(--orders-bg);color:var(--orders)}
 .num{font-family:var(--mono);font-weight:600;color:var(--tx-0)}
 
 /* SETTINGS */
-.settings{
-  background:var(--bg-1);border:1px solid var(--border);border-radius:var(--radius);
-  margin-bottom:2rem;overflow:hidden;
-}
-.settings-toggle{
-  display:flex;align-items:center;justify-content:space-between;
-  padding:1rem 1.25rem;cursor:pointer;user-select:none;
-  font-family:var(--mono);font-size:.85rem;font-weight:600;
-  color:var(--tx-1);
-}
-.settings-toggle:hover{color:var(--tx-0)}
-.settings-toggle .arrow{transition:transform .2s;font-size:.7rem}
-.settings-body{
-  padding:0 1.25rem;max-height:0;overflow:hidden;
-  transition:max-height .3s,padding .3s;
-}
-.settings.open .settings-body{max-height:500px;padding:0 1.25rem 1.25rem}
-.settings.open .arrow{transform:rotate(90deg)}
-.field{margin-bottom:1rem}
-.field label{display:block;font-family:var(--mono);font-size:.7rem;font-weight:600;color:var(--tx-2);text-transform:uppercase;letter-spacing:.05em;margin-bottom:.35rem}
-.field input{
-  width:100%;padding:.5rem .75rem;font-family:var(--mono);font-size:.8rem;
-  background:var(--bg-0);border:1px solid var(--border);border-radius:6px;
-  color:var(--tx-0);outline:none;
-}
+.settings{background:var(--bg-1);border:1px solid var(--border);border-radius:var(--radius);margin-bottom:1.25rem;overflow:hidden;display:none}
+.settings.open{display:block}
+.settings-body{padding:1rem 1.25rem}
+.field{margin-bottom:.75rem}
+.field label{display:block;font-family:var(--mono);font-size:.65rem;font-weight:600;color:var(--tx-2);text-transform:uppercase;letter-spacing:.04em;margin-bottom:.25rem}
+.field input{width:100%;padding:.4rem .6rem;font-family:var(--mono);font-size:.75rem;background:var(--bg-0);border:1px solid var(--border);border-radius:4px;color:var(--tx-0);outline:none}
 .field input:focus{border-color:var(--accent)}
-.field-row{display:grid;grid-template-columns:1fr 1fr;gap:1rem}
+.field-row{display:grid;grid-template-columns:1fr 1fr;gap:.75rem}
 @media(max-width:600px){.field-row{grid-template-columns:1fr}}
 
-/* SCHEDULE */
-.sched-list{display:flex;flex-direction:column;gap:.75rem}
-.sched-item{
-  display:flex;align-items:center;justify-content:space-between;
-  background:var(--bg-1);border:1px solid var(--border);border-radius:var(--radius);
-  padding:1rem 1.25rem;gap:1rem;flex-wrap:wrap;
-}
-.sched-item .name{font-family:var(--mono);font-size:.85rem;font-weight:600;min-width:200px}
-.sched-item .time{
-  font-family:var(--mono);font-size:1.3rem;font-weight:700;
-  color:var(--accent);letter-spacing:-.02em;
-}
-.sched-item .freq{color:var(--tx-2);font-size:.75rem}
-
 /* MODAL */
-.modal-overlay{
-  position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:100;
-  display:none;align-items:center;justify-content:center;padding:1rem;
-  backdrop-filter:blur(4px);
-}
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:100;display:none;align-items:center;justify-content:center;padding:1rem;backdrop-filter:blur(3px)}
 .modal-overlay.open{display:flex}
-.modal{
-  background:var(--bg-1);border:1px solid var(--border);border-radius:12px;
-  padding:2rem;width:100%;max-width:380px;
-}
-.modal h3{font-family:var(--mono);font-size:1rem;margin-bottom:1rem}
-.modal .field{margin-bottom:1.5rem}
-.modal .btn-row{display:flex;gap:.75rem;justify-content:flex-end}
+.modal{background:var(--bg-1);border:1px solid var(--border);border-radius:10px;padding:1.5rem;width:100%;max-width:340px}
+.modal h3{font-family:var(--mono);font-size:.9rem;margin-bottom:.75rem}
+.modal .btn-row{display:flex;gap:.5rem;justify-content:flex-end}
 
 /* TOAST */
-.toast-container{position:fixed;top:1rem;right:1rem;z-index:200;display:flex;flex-direction:column;gap:.5rem}
-.toast{
-  font-family:var(--mono);font-size:.8rem;
-  padding:.75rem 1.25rem;border-radius:var(--radius);
-  border:1px solid;
-  animation:slideIn .3s ease-out;
-  max-width:360px;
-}
+.toast-container{position:fixed;top:.75rem;right:.75rem;z-index:200;display:flex;flex-direction:column;gap:.4rem}
+.toast{font-family:var(--mono);font-size:.72rem;padding:.5rem 1rem;border-radius:var(--radius);border:1px solid;animation:slideIn .25s ease-out;max-width:320px}
 .toast.ok{background:var(--ok-bg);border-color:#1a5c2e;color:var(--ok)}
 .toast.err{background:var(--err-bg);border-color:#5c1a1a;color:var(--err)}
-@keyframes slideIn{from{opacity:0;transform:translateX(20px)}to{opacity:1;transform:translateX(0)}}
-
-/* EMPTY STATE */
-.empty{text-align:center;padding:2rem;color:var(--tx-2);font-size:.85rem}
-
-/* LINKS */
+@keyframes slideIn{from{opacity:0;transform:translateX(16px)}to{opacity:1;transform:translateX(0)}}
+.empty{text-align:center;padding:1.5rem;color:var(--tx-2);font-size:.8rem}
 a{color:var(--accent);text-decoration:none}
 a:hover{text-decoration:underline}
 
-/* RESPONSIVE */
-@media(max-width:700px){
-  .app{padding:1rem}
-  header h1{font-size:1.1rem}
-  .cards{grid-template-columns:1fr}
-  th,td{padding:.5rem .6rem;font-size:.72rem}
-}
+.section-label{font-family:var(--mono);font-size:.65rem;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--tx-2);margin-bottom:.5rem;display:flex;align-items:center;gap:.5rem}
+.section-label::after{content:'';flex:1;height:1px;background:var(--border)}
+.section-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:.75rem;gap:.5rem}
+.section-head h2{font-family:var(--mono);font-size:.9rem;font-weight:600}
+
+@media(max-width:700px){.shell{padding:.75rem} .tabs{overflow-x:auto} .workflow-row{grid-template-columns:1fr} th,td{padding:.35rem .5rem;font-size:.68rem}}
 </style>
 </head>
 <body>
 
-<!-- LOGIN SCREEN -->
+<!-- LOGIN -->
 <div id="loginScreen" style="display:flex;align-items:center;justify-content:center;min-height:100vh;position:relative;z-index:10">
-  <div style="background:var(--bg-1);border:1px solid var(--border);border-radius:12px;padding:2.5rem;width:100%;max-width:380px;text-align:center">
-    <div style="font-size:2.5rem;margin-bottom:.5rem">🔒</div>
-    <h1 style="font-family:var(--mono);font-size:1.1rem;margin-bottom:.25rem">Omie → Supabase</h1>
-    <p style="color:var(--tx-2);font-size:.8rem;margin-bottom:2rem">Painel de Controle</p>
-    <div class="field">
-      <label>Senha de acesso</label>
-      <input type="password" id="loginPass" placeholder="••••••••" onkeydown="if(event.key==='Enter')doLogin()" autofocus
-        style="text-align:center;font-size:1rem;letter-spacing:.15em;padding:.75rem">
+  <div style="background:var(--bg-1);border:1px solid var(--border);border-radius:10px;padding:2.5rem;width:100%;max-width:360px;text-align:center">
+    <div style="font-size:2.2rem;margin-bottom:.4rem">🔒</div>
+    <h1 style="font-family:var(--mono);font-size:1rem;margin-bottom:.2rem">Omie → Supabase</h1>
+    <p style="color:var(--tx-2);font-size:.75rem;margin-bottom:1.75rem">Painel de Controle</p>
+    <div class="field"><label>Senha</label>
+      <input type="password" id="loginPass" placeholder="••••••••" onkeydown="if(event.key==='Enter')doLogin()" autofocus style="text-align:center;font-size:1rem;letter-spacing:.15em;padding:.6rem">
     </div>
-    <button class="btn primary" onclick="doLogin()" style="width:100%;justify-content:center;margin-top:.5rem;padding:.7rem">🔓 Entrar</button>
-    <p id="loginError" style="color:var(--err);font-size:.75rem;margin-top:.75rem;display:none">Senha incorreta</p>
-    <button class="btn" onclick="resetPassword()" style="width:100%;justify-content:center;margin-top:1rem;font-size:.7rem">🔓 Resetar senha (volta pra padrão)</button>
-    <p style="color:var(--tx-2);font-size:.65rem;margin-top:.75rem">Senha padrão após reset: <b>password</b></p>
+    <button class="btn primary" onclick="doLogin()" style="width:100%;justify-content:center;margin-top:.4rem;padding:.6rem">🔓 Entrar</button>
+    <p id="loginError" style="color:var(--err);font-size:.7rem;margin-top:.6rem;display:none">Senha incorreta</p>
+    <button class="btn sm" onclick="resetPassword()" style="margin-top:.8rem;font-size:.6rem">Resetar senha (volta pra padrão: password)</button>
   </div>
 </div>
 
-<div class="app" id="mainApp" style="display:none">
+<div class="shell" id="mainApp" style="display:none">
 
-<!-- HEADER -->
-<header>
-  <h1><span class="status-dot"></span>Omie → Supabase — Painel de Controle</h1>
-  <p>Gerenciamento de sincronização de dados</p>
-</header>
+<!-- TOPBAR -->
+<div class="topbar">
+  <h1><span class="dot"></span> Omie → Supabase</h1>
+  <span class="gear" onclick="toggleSettings()">⚙️ Config</span>
+</div>
 
 <!-- SETTINGS -->
 <div class="settings" id="settings">
-  <div class="settings-toggle" onclick="toggleSettings()">
-    <span>⚙️ Configurações</span>
-    <span class="arrow">▶</span>
-  </div>
   <div class="settings-body">
-    <div class="field">
-      <label>GitHub Personal Access Token</label>
-      <input type="password" id="ghToken" placeholder="ghp_xxxxxxxxxxxxxxxxxxxx">
-    </div>
+    <div class="field"><label>GitHub Personal Access Token</label><input type="password" id="ghToken" placeholder="ghp_xxxx"></div>
     <div class="field-row">
-      <div class="field">
-        <label>Supabase URL</label>
-        <input type="text" id="supaUrl" placeholder="https://xxxxx.supabase.co">
-      </div>
-      <div class="field">
-        <label>Supabase Service Role Key</label>
-        <input type="password" id="supaKey" placeholder="eyJ...">
-      </div>
+      <div class="field"><label>Supabase URL</label><input type="text" id="supaUrl" placeholder="https://xxxxx.supabase.co"></div>
+      <div class="field"><label>Supabase Key</label><input type="password" id="supaKey" placeholder="eyJ..."></div>
     </div>
-    <div style="margin-top:1.5rem;padding-top:1rem;border-top:1px solid var(--border)">
-      <div class="field">
-        <label>🔐 Mudar senha do painel</label>
-        <input type="password" id="newPass" placeholder="Nova senha (mín. 4 caracteres)">
-      </div>
-      <button class="btn warn" onclick="changePassword()" style="margin-bottom:.5rem">🔐 Mudar Senha</button>
+    <div style="display:flex;gap:.5rem;flex-wrap:wrap;margin-top:.5rem">
+      <button class="btn primary" onclick="saveSettings()">💾 Salvar API</button>
+      <div style="flex:1"></div>
+      <input type="password" id="newPass" placeholder="Nova senha" style="width:140px;font-family:var(--mono);font-size:.72rem;padding:.35rem .5rem;background:var(--bg-0);border:1px solid var(--border);border-radius:4px;color:var(--tx-0)">
+      <button class="btn warn sm" onclick="changePassword()">🔐 Mudar</button>
     </div>
-    <button class="btn primary" onclick="saveSettings()" style="margin-top:.5rem">💾 Salvar Configurações API</button>
   </div>
 </div>
 
-<!-- DASHBOARD -->
-<section>
+<!-- TABS -->
+<div class="tabs">
+  <div class="tab active" data-tab="dashboard" onclick="switchTab('dashboard')">📊 Dashboard</div>
+  <div class="tab" data-tab="sales" onclick="switchTab('sales')">💰 Sales</div>
+  <div class="tab" data-tab="orders" onclick="switchTab('orders')">🛒 Orders</div>
+  <div class="tab" data-tab="runs" onclick="switchTab('runs')">📜 Runs</div>
+</div>
+
+<!-- ═══ TAB: DASHBOARD ═══ -->
+<div class="tab-pane active" id="pane-dashboard">
   <div class="section-head">
-    <h2>📊 Status das Tabelas</h2>
-    <div class="actions">
-      <button class="btn" onclick="loadDashboard()" id="btnRefresh">🔄 Atualizar</button>
-    </div>
+    <h2>📊 Sync Status</h2>
+    <button class="btn sm" onclick="loadDashboard()" id="btnRefresh">🔄 Atualizar</button>
   </div>
   <div class="table-wrap">
     <table>
-      <thead><tr>
-        <th>Módulo</th><th>Emp</th><th>Status</th><th>Modo</th>
-        <th>Total</th><th>Novos</th><th>Atual.</th><th>Duração</th><th>Última Sync</th>
-      </tr></thead>
-      <tbody id="dashBody"><tr><td colspan="9" class="empty">Clique em "Atualizar" para carregar</td></tr></tbody>
+      <thead><tr><th>Módulo</th><th>Emp</th><th>Status</th><th>Modo</th><th>Total</th><th>Duração</th><th>Última Sync</th></tr></thead>
+      <tbody id="dashBody"><tr><td colspan="7" class="empty">Clique "Atualizar"</td></tr></tbody>
     </table>
   </div>
-</section>
+</div>
 
-<!-- ═══════════════════════════════════════ -->
-<!-- 💰 SALES (VENDAS)                     -->
-<!-- ═══════════════════════════════════════ -->
-<section>
-  <div class="section-head"><h2>💰 Sales — Workflows</h2></div>
-  <div class="cards">
-    <div class="card">
-      <h3>🚀 Sales Diária</h3>
-      <p>Etapas → Itens Vendidos → Pedidos Venda → Serviços (sequência)</p>
-      <button class="btn ok" onclick="dispatch('master_sales_diaria','Disparar Sales Diária?',{empresas:'SF',forcar_full:'false'})">▶ Disparar</button>
-    </div>
-    <div class="card">
-      <h3>📦 Sales Semanal</h3>
-      <p>Produtos → Auxiliares (Categorias + FormasPag)</p>
-      <button class="btn blue" onclick="dispatch('master_sales_semanal','Disparar Sales Semanal?',{empresas:'SF,CD,WW'})">▶ Disparar</button>
-    </div>
-    <div class="card">
-      <h3>⚠️ Sales Diária FULL</h3>
-      <p>Reimporta tudo desde 01/01/2025</p>
-      <button class="btn warn" onclick="dispatch('master_sales_diaria','⚠️ Forçar FULL Sales?',{empresas:'SF',forcar_full:'true'})">⚠ Forçar FULL</button>
-    </div>
+<!-- ═══ TAB: SALES ═══ -->
+<div class="tab-pane" id="pane-sales">
+  <div class="section-label">Workflows</div>
+  <div class="workflow-row">
+    <div class="wf-card"><h3>🚀 Sales Diária</h3><p>Etapas → Itens → Pedidos → Serviços</p><button class="btn ok" onclick="dispatch('master_sales_diaria','Disparar Sales Diária?',{empresas:'SF',forcar_full:'false'})">▶ Disparar</button></div>
+    <div class="wf-card"><h3>📦 Sales Semanal</h3><p>Produtos + Auxiliares (Cat + FormasPag)</p><button class="btn blue" onclick="dispatch('master_sales_semanal','Disparar Sales Semanal?',{empresas:'SF,CD,WW'})">▶ Disparar</button></div>
+    <div class="wf-card"><h3>⚠️ Forçar FULL</h3><p>Reimporta tudo desde 01/01/2025</p><button class="btn warn" onclick="dispatch('master_sales_diaria','⚠️ FULL Sales — reimporta tudo?',{empresas:'SF',forcar_full:'true'})">⚠ FULL</button></div>
   </div>
-</section>
 
-<section>
-  <div class="section-head"><h2>💰 Sales — Individuais</h2></div>
-  <div class="cards" style="grid-template-columns:repeat(auto-fill,minmax(200px,1fr))">
-    <div class="card">
-      <h3>📋 Etapas Pedidos</h3>
-      <p>ListarEtapasPedido (FULL)</p>
-      <button class="btn" onclick="dispatch('import_etapas_pedidos','Disparar Etapas?',{empresas:'SF'})">▶ Rodar</button>
-    </div>
-    <div class="card">
-      <h3>🛒 Itens Vendidos</h3>
-      <p>ListarPedidos (itens, incremental)</p>
-      <button class="btn" onclick="dispatch('import_itens_vendidos','Disparar Itens Vendidos?',{empresas:'SF',forcar_full:'false',data_inicio:'01/01/2025'})">▶ Rodar</button>
-    </div>
-    <div class="card">
-      <h3>📦 Pedidos Venda</h3>
-      <p>ListarPedidos (cabeçalho, incremental)</p>
-      <button class="btn" onclick="dispatch('import_pedidos_venda','Disparar Pedidos Venda?',{empresas:'SF',forcar_full:'false',data_inicio:'01/01/2025'})">▶ Rodar</button>
-    </div>
-    <div class="card">
-      <h3>🔧 Serviços</h3>
-      <p>OS + Contratos (FULL)</p>
-      <button class="btn" onclick="dispatch('import_servicos','Disparar Serviços?',{empresas:'SF'})">▶ Rodar</button>
-    </div>
-    <div class="card">
-      <h3>📦 Produtos Sales</h3>
-      <p>Catálogo resumido (semanal)</p>
-      <button class="btn" onclick="dispatch('import_produtos','Disparar Produtos?',{empresas:'SF'})">▶ Rodar</button>
-    </div>
-    <div class="card">
-      <h3>📂 Auxiliares Sales</h3>
-      <p>FormasPag + Categorias</p>
-      <button class="btn" onclick="dispatch('import_auxiliares','Disparar Auxiliares?',{empresas:'SF,CD,WW'})">▶ Rodar</button>
-    </div>
+  <div class="section-label">Executar individual</div>
+  <div class="pills">
+    <span class="pill sales-pill" onclick="dispatch('import_etapas_pedidos','Etapas?',{empresas:'SF'})">📋 Etapas</span>
+    <span class="pill sales-pill" onclick="dispatch('import_itens_vendidos','Itens Vendidos?',{empresas:'SF',forcar_full:'false',data_inicio:'01/01/2025'})">🛒 Itens Vendidos</span>
+    <span class="pill sales-pill" onclick="dispatch('import_pedidos_venda','Pedidos Venda?',{empresas:'SF',forcar_full:'false',data_inicio:'01/01/2025'})">📦 Pedidos Venda</span>
+    <span class="pill sales-pill" onclick="dispatch('import_servicos','Serviços?',{empresas:'SF'})">🔧 Serviços</span>
+    <span class="pill sales-pill" onclick="dispatch('import_produtos','Produtos?',{empresas:'SF'})">📦 Produtos</span>
+    <span class="pill sales-pill" onclick="dispatch('import_auxiliares','Auxiliares?',{empresas:'SF,CD,WW'})">📂 Auxiliares</span>
   </div>
-</section>
 
-<!-- ═══════════════════════════════════════ -->
-<!-- 🛒 ORDERS (COMPRAS)                    -->
-<!-- ═══════════════════════════════════════ -->
-<section>
-  <div class="section-head"><h2>🛒 Orders — Workflows</h2></div>
-  <div class="cards">
-    <div class="card">
-      <h3>🛒 Orders Diária</h3>
-      <p>NFe Entrada → Recebimento NFe → Pedidos Compra (sequência)</p>
-      <button class="btn ok" onclick="dispatch('master_orders_diaria','Disparar Orders Diária?',{empresas:'SF'})">▶ Disparar</button>
-    </div>
-    <div class="card">
-      <h3>📦 Orders Semanal</h3>
-      <p>Produtos Compras + 7 tabelas auxiliares</p>
-      <button class="btn blue" onclick="dispatch('master_orders_semanal','Disparar Orders Semanal?',{empresas:'SF'})">▶ Disparar</button>
-    </div>
-    <div class="card">
-      <h3>⚠️ Orders Diária FULL</h3>
-      <p>Reimporta NF + Recebimento + Pedidos</p>
-      <button class="btn warn" onclick="dispatch('master_orders_diaria','⚠️ Forçar FULL Orders?',{empresas:'SF'})">⚠ Forçar FULL</button>
-    </div>
+  <div class="section-label">Agenda</div>
+  <div class="sched-row" id="schedSales">
+    <div class="sched-card" data-kind="sales"><div class="lbl"><b>Sales Diária</b><br>Carregando...</div><div class="time-big">—</div></div>
+    <div class="sched-card" data-kind="sales"><div class="lbl"><b>Sales Semanal</b><br>Carregando...</div><div class="time-big">—</div></div>
   </div>
-</section>
+</div>
 
-<section>
-  <div class="section-head"><h2>🛒 Orders — Individuais</h2></div>
-  <div class="cards" style="grid-template-columns:repeat(auto-fill,minmax(200px,1fr))">
-    <div class="card">
-      <h3>📄 NFe Entrada</h3>
-      <p>ListarDocumentos XML</p>
-      <button class="btn" onclick="dispatch('master_orders_diaria','Disparar NFe Entrada?',{empresas:'SF'})">▶ Rodar</button>
-    </div>
-    <div class="card">
-      <h3>📥 Recebimento NFe</h3>
-      <p>ListarRecebimentos (50 cols)</p>
-      <button class="btn" onclick="dispatch('master_orders_diaria','Disparar Recebimento?',{empresas:'SF'})">▶ Rodar</button>
-    </div>
-    <div class="card">
-      <h3>🛒 Pedidos Compra</h3>
-      <p>PesquisarPedCompra (53 cols)</p>
-      <button class="btn" onclick="dispatch('master_orders_diaria','Disparar Pedidos Compra?',{empresas:'SF'})">▶ Rodar</button>
-    </div>
-    <div class="card">
-      <h3>📂 Auxiliares Orders</h3>
-      <p>Produtos + Famílias + Fornecedores + Unidades</p>
-      <button class="btn" onclick="dispatch('master_orders_semanal','Disparar Auxiliares Orders?',{empresas:'SF'})">▶ Rodar</button>
-    </div>
+<!-- ═══ TAB: ORDERS ═══ -->
+<div class="tab-pane" id="pane-orders">
+  <div class="section-label">Workflows</div>
+  <div class="workflow-row">
+    <div class="wf-card"><h3>🛒 Orders Diária</h3><p>NFe Entrada → Recebimento → Pedidos Compra</p><button class="btn ok" onclick="dispatch('master_orders_diaria','Disparar Orders Diária?',{empresas:'SF'})">▶ Disparar</button></div>
+    <div class="wf-card"><h3>📦 Orders Semanal</h3><p>Produtos + 7 tabelas auxiliares</p><button class="btn purple" onclick="dispatch('master_orders_semanal','Disparar Orders Semanal?',{empresas:'SF'})">▶ Disparar</button></div>
+    <div class="wf-card"><h3>⚠️ Forçar FULL</h3><p>Reimporta NF + Recebimento + Pedidos</p><button class="btn warn" onclick="dispatch('master_orders_diaria','⚠️ FULL Orders — reimporta tudo?',{empresas:'SF'})">⚠ FULL</button></div>
   </div>
-</section>
 
-<!-- SCHEDULE -->
-<section>
-  <div class="section-head">
-    <h2>⏰ Agenda</h2>
-    <button class="btn" onclick="loadSchedules()" id="btnSched">🔄 Atualizar</button>
+  <div class="section-label">Executar individual</div>
+  <div class="pills">
+    <span class="pill orders-pill" onclick="dispatch('master_orders_diaria','NFe Entrada?',{empresas:'SF'})">📄 NFe Entrada</span>
+    <span class="pill orders-pill" onclick="dispatch('master_orders_diaria','Recebimento?',{empresas:'SF'})">📥 Recebimento</span>
+    <span class="pill orders-pill" onclick="dispatch('master_orders_diaria','Pedidos Compra?',{empresas:'SF'})">🛒 Pedidos Compra</span>
+    <span class="pill orders-pill" onclick="dispatch('master_orders_semanal','Auxiliares Orders?',{empresas:'SF'})">📂 Auxiliares</span>
   </div>
-  <div class="sched-list" id="schedList">
-    <div class="empty">Clique em "Atualizar" para carregar horários</div>
-  </div>
-</section>
 
-<!-- RECENT RUNS -->
-<section>
+  <div class="section-label">Agenda</div>
+  <div class="sched-row" id="schedOrders">
+    <div class="sched-card" data-kind="orders"><div class="lbl"><b>Orders Diária</b><br>Carregando...</div><div class="time-big">—</div></div>
+    <div class="sched-card" data-kind="orders"><div class="lbl"><b>Orders Semanal</b><br>Carregando...</div><div class="time-big">—</div></div>
+  </div>
+</div>
+
+<!-- ═══ TAB: RUNS ═══ -->
+<div class="tab-pane" id="pane-runs">
   <div class="section-head">
     <h2>📜 Últimos Runs</h2>
-    <button class="btn" onclick="loadRuns()" id="btnRuns">🔄 Atualizar</button>
+    <button class="btn sm" onclick="loadRuns()" id="btnRuns">🔄 Atualizar</button>
   </div>
   <div class="table-wrap">
     <table>
-      <thead><tr><th>Workflow</th><th>Status</th><th>Duração</th><th>Data/Hora</th><th>Link</th></tr></thead>
-      <tbody id="runsBody"><tr><td colspan="5" class="empty">Clique em "Atualizar" para carregar</td></tr></tbody>
+      <thead><tr><th>Workflow</th><th>Status</th><th>Duração</th><th>Data/Hora</th><th></th></tr></thead>
+      <tbody id="runsBody"><tr><td colspan="5" class="empty">Clique "Atualizar"</td></tr></tbody>
     </table>
   </div>
-</section>
-
 </div>
+
+</div><!-- shell -->
 
 <!-- MODAL -->
 <div class="modal-overlay" id="modalOverlay">
   <div class="modal">
     <h3 id="modalTitle">Editar Horário</h3>
-    <div class="field">
-      <label>Novo horário (BRT)</label>
-      <input type="time" id="modalTime" value="00:00">
-    </div>
-    <div class="field">
-      <label>Horário atual</label>
-      <p id="modalCurrent" style="color:var(--tx-1);font-family:var(--mono);font-size:.85rem">—</p>
-    </div>
-    <div class="btn-row">
-      <button class="btn" onclick="closeModal()">Cancelar</button>
-      <button class="btn primary" onclick="saveSchedule()">💾 Salvar</button>
-    </div>
+    <div class="field"><label>Novo horário (BRT)</label><input type="time" id="modalTime" value="00:00"></div>
+    <div class="field"><label>Atual</label><p id="modalCurrent" style="color:var(--tx-1);font-family:var(--mono);font-size:.8rem">—</p></div>
+    <div class="btn-row"><button class="btn" onclick="closeModal()">Cancelar</button><button class="btn primary" onclick="saveSchedule()">💾 Salvar</button></div>
   </div>
 </div>
-
-<!-- TOAST -->
 <div class="toast-container" id="toasts"></div>
 
 <script>
-const GH_REPO = 'benny459/omie-supabase-sync';
-const GH_API = 'https://api.github.com';
-const DAYS = {0:'Dom',1:'Seg',2:'Ter',3:'Qua',4:'Qui',5:'Sex',6:'Sáb','*':'Todo dia'};
-const DEFAULT_PASS_HASH = '5e884898da28047151d0e56f8dc6292773603d0d6aabbdd62a11ef721d1542d8'; // "password"
-let modalState = {};
+const GH_REPO='benny459/omie-supabase-sync',GH_API='https://api.github.com';
+const DAYS={0:'Dom',1:'Seg',2:'Ter',3:'Qua',4:'Qui',5:'Sex',6:'Sáb','*':'Todo dia'};
+const DEFAULT_PASS_HASH='5e884898da28047151d0e56f8dc6292773603d0d6aabbdd62a11ef721d1542d8';
+const SALES_MODS=['itens_vendidos','etapas_pedidos','pedidos_venda','ordens_servico','contratos_servico','produtos_SF','produtos_CD','produtos_WW','formas_pagamento','categorias'];
+let modalState={};
+
+// ─── TABS ───
+function switchTab(id){
+  document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('active',t.dataset.tab===id));
+  document.querySelectorAll('.tab-pane').forEach(p=>p.classList.toggle('active',p.id==='pane-'+id));
+}
 
 // ─── LOGIN ───
-async function hashStr(str) {
-  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str));
-  return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('');
-}
-async function doLogin() {
-  const pass = document.getElementById('loginPass').value;
-  if (!pass) return;
-  const hash = await hashStr(pass);
-  const stored = localStorage.getItem('panel_pass_hash') || DEFAULT_PASS_HASH;
-  if (hash === stored) {
-    sessionStorage.setItem('authed','1');
-    document.getElementById('loginScreen').style.display = 'none';
-    document.getElementById('mainApp').style.display = 'block';
-    initApp();
-  } else {
-    const err = document.getElementById('loginError');
-    err.style.display = 'block';
-    err.textContent = 'Senha incorreta. Dica: clique "Resetar senha" abaixo.';
-    document.getElementById('loginPass').select();
-  }
-}
-async function changePassword() {
-  const np = document.getElementById('newPass').value;
-  if (!np || np.length < 4) { toast('Senha precisa ter pelo menos 4 caracteres','err'); return; }
-  const hash = await hashStr(np);
-  localStorage.setItem('panel_pass_hash', hash);
-  document.getElementById('newPass').value = '';
-  toast('✅ Senha alterada! Use a nova na próxima vez.','ok');
-}
-function resetPassword() {
-  localStorage.removeItem('panel_pass_hash');
-  document.getElementById('loginError').style.display = 'none';
-  document.getElementById('loginPass').value = '';
-  toast('Senha resetada! Use: password','ok');
-  document.getElementById('loginPass').focus();
-}
-function checkAuth() {
-  if (sessionStorage.getItem('authed') === '1') {
-    document.getElementById('loginScreen').style.display = 'none';
-    document.getElementById('mainApp').style.display = 'block';
-    return true;
-  }
-  return false;
-}
+async function hashStr(s){const b=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(s));return Array.from(new Uint8Array(b)).map(x=>x.toString(16).padStart(2,'0')).join('')}
+async function doLogin(){const p=document.getElementById('loginPass').value;if(!p)return;const h=await hashStr(p),s=localStorage.getItem('panel_pass_hash')||DEFAULT_PASS_HASH;if(h===s){sessionStorage.setItem('authed','1');document.getElementById('loginScreen').style.display='none';document.getElementById('mainApp').style.display='block';initApp()}else{const e=document.getElementById('loginError');e.style.display='block';e.textContent='Senha incorreta. Clique "Resetar" abaixo.';document.getElementById('loginPass').select()}}
+async function changePassword(){const n=document.getElementById('newPass').value;if(!n||n.length<4){toast('Mín. 4 caracteres','err');return}localStorage.setItem('panel_pass_hash',await hashStr(n));document.getElementById('newPass').value='';toast('✅ Senha alterada!','ok')}
+function resetPassword(){localStorage.removeItem('panel_pass_hash');document.getElementById('loginError').style.display='none';document.getElementById('loginPass').value='';toast('Resetada! Use: password','ok');document.getElementById('loginPass').focus()}
+function checkAuth(){if(sessionStorage.getItem('authed')==='1'){document.getElementById('loginScreen').style.display='none';document.getElementById('mainApp').style.display='block';return true}return false}
 
 // ─── SETTINGS ───
-function toggleSettings() {
-  document.getElementById('settings').classList.toggle('open');
-}
-function loadSettings() {
-  const s = k => localStorage.getItem(k) || '';
-  document.getElementById('ghToken').value = s('gh_token');
-  document.getElementById('supaUrl').value = s('supa_url') || 'https://zodflkfdnjhtwcjutbjl.supabase.co';
-  document.getElementById('supaKey').value = s('supa_key');
-}
-function saveSettings() {
-  localStorage.setItem('gh_token', document.getElementById('ghToken').value.trim());
-  localStorage.setItem('supa_url', document.getElementById('supaUrl').value.trim());
-  localStorage.setItem('supa_key', document.getElementById('supaKey').value.trim());
-  toast('Configurações salvas!', 'ok');
-  document.getElementById('settings').classList.remove('open');
-}
-function ghToken() { return localStorage.getItem('gh_token') || ''; }
-function supaUrl() { return (localStorage.getItem('supa_url') || '').replace(/\/$/,''); }
-function supaKey() { return localStorage.getItem('supa_key') || ''; }
-
-// ─── TOAST ───
-function toast(msg, type='ok') {
-  const c = document.getElementById('toasts');
-  const t = document.createElement('div');
-  t.className = `toast ${type}`;
-  t.textContent = msg;
-  c.appendChild(t);
-  setTimeout(() => { t.style.opacity='0'; t.style.transition='opacity .3s'; setTimeout(()=>t.remove(),300); }, 4000);
-}
+function toggleSettings(){document.getElementById('settings').classList.toggle('open')}
+function loadSettings(){const g=k=>localStorage.getItem(k)||'';document.getElementById('ghToken').value=g('gh_token');document.getElementById('supaUrl').value=g('supa_url')||'https://zodflkfdnjhtwcjutbjl.supabase.co';document.getElementById('supaKey').value=g('supa_key')}
+function saveSettings(){localStorage.setItem('gh_token',document.getElementById('ghToken').value.trim());localStorage.setItem('supa_url',document.getElementById('supaUrl').value.trim());localStorage.setItem('supa_key',document.getElementById('supaKey').value.trim());toast('Salvo!','ok');document.getElementById('settings').classList.remove('open');initApp()}
+function ghToken(){return localStorage.getItem('gh_token')||''}
+function supaUrl(){return(localStorage.getItem('supa_url')||'').replace(/\/$/,'')}
+function supaKey(){return localStorage.getItem('supa_key')||''}
 
 // ─── HELPERS ───
-function fmtBRT(iso) {
-  if (!iso) return '—';
-  try {
-    const d = new Date(iso);
-    return d.toLocaleString('pt-BR', { timeZone:'America/Sao_Paulo', day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' });
-  } catch { return iso.substring(0,16); }
-}
-function fmtDuration(start, end) {
-  if (!start || !end) return '—';
-  const s = Math.round((new Date(end) - new Date(start)) / 1000);
-  return s < 60 ? `${s}s` : `${Math.floor(s/60)}m${s%60}s`;
-}
-function cronToBRT(cron) {
-  const p = cron.split(' ');
-  const m = parseInt(p[0]), h = parseInt(p[1]), dow = p[4];
-  const hBRT = (h - 3 + 24) % 24;
-  return { time: `${String(hBRT).padStart(2,'0')}:${String(m).padStart(2,'0')}`, day: DAYS[dow] || dow };
-}
-async function ghFetch(endpoint, method='GET', body=null) {
-  if (!ghToken()) throw new Error('Configure o GitHub Token nas Configurações');
-  const opts = { method, headers: { 'Authorization':`Bearer ${ghToken()}`, 'Accept':'application/vnd.github.v3+json' } };
-  if (body) { opts.headers['Content-Type'] = 'application/json'; opts.body = JSON.stringify(body); }
-  const r = await fetch(GH_API + endpoint, opts);
-  if (!r.ok && r.status !== 204) throw new Error(`GitHub ${r.status}: ${(await r.text()).substring(0,120)}`);
-  return r.status === 204 ? {} : r.json();
-}
-async function supaFetch(table, query='') {
-  if (!supaKey()) throw new Error('Configure a Supabase Key nas Configurações');
-  const r = await fetch(`${supaUrl()}/rest/v1/${table}?${query}`, {
-    headers: { 'apikey':supaKey(), 'Authorization':`Bearer ${supaKey()}`, 'Accept-Profile':'sales' }
-  });
-  if (!r.ok) throw new Error(`Supabase ${r.status}`);
-  return r.json();
-}
+function toast(m,t='ok'){const c=document.getElementById('toasts'),e=document.createElement('div');e.className=`toast ${t}`;e.textContent=m;c.appendChild(e);setTimeout(()=>{e.style.opacity='0';e.style.transition='opacity .3s';setTimeout(()=>e.remove(),300)},3500)}
+function fmtBRT(iso){if(!iso)return'—';try{return new Date(iso).toLocaleString('pt-BR',{timeZone:'America/Sao_Paulo',day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})}catch{return iso.substring(0,16)}}
+function fmtDur(s,e){if(!s||!e)return'—';const x=Math.round((new Date(e)-new Date(s))/1000);return x<60?x+'s':Math.floor(x/60)+'m'+x%60+'s'}
+function cronBRT(c){const p=c.split(' '),m=+p[0],h=+p[1],d=p[4];return{time:`${String((h-3+24)%24).padStart(2,'0')}:${String(m).padStart(2,'0')}`,day:DAYS[d]||d}}
+function isSalesMod(mod){return SALES_MODS.some(s=>mod.includes(s))}
+async function ghFetch(ep,mt='GET',bd=null){if(!ghToken())throw new Error('Configure GitHub Token');const o={method:mt,headers:{'Authorization':`Bearer ${ghToken()}`,'Accept':'application/vnd.github.v3+json'}};if(bd){o.headers['Content-Type']='application/json';o.body=JSON.stringify(bd)}const r=await fetch(GH_API+ep,o);if(!r.ok&&r.status!==204)throw new Error(`GitHub ${r.status}`);return r.status===204?{}:r.json()}
+async function supaFetch(tbl,q=''){if(!supaKey())throw new Error('Configure Supabase Key');const r=await fetch(`${supaUrl()}/rest/v1/${tbl}?${q}`,{headers:{'apikey':supaKey(),'Authorization':`Bearer ${supaKey()}`,'Accept-Profile':'sales'}});if(!r.ok)throw new Error(`Supabase ${r.status}`);return r.json()}
 
 // ─── DASHBOARD ───
-async function loadDashboard() {
-  const btn = document.getElementById('btnRefresh');
-  btn.innerHTML = '<span class="spin"></span> Carregando';
-  btn.disabled = true;
-  try {
-    const data = await supaFetch('sync_state', 'select=*&order=modulo');
-    const body = document.getElementById('dashBody');
-    if (!data.length) { body.innerHTML = '<tr><td colspan="9" class="empty">Nenhum dado no sync_state</td></tr>'; return; }
-    body.innerHTML = data.map(s => {
-      const isOk = s.ultima_execucao_status === 'SUCESSO';
-      const modo = s.modo || ((s.ultima_execucao_msg||'').match(/modo=(\w+)/)||[])[1] || '—';
-      return `<tr>
-        <td>${(s.modulo||'').replace(/_/g,' ')}</td>
-        <td class="num">${s.empresa||''}</td>
-        <td><span class="badge ${isOk?'ok':'err'}">${isOk?'✅':'❌'} ${s.ultima_execucao_status||''}</span></td>
-        <td><span class="badge ${modo==='INCREMENTAL'?'blue':'warn'}">${modo}</span></td>
-        <td class="num">${(s.total_registros||0).toLocaleString('pt-BR')}</td>
-        <td class="num">${s.rows_inserted||0}</td>
-        <td class="num">${s.rows_updated||0}</td>
-        <td>${s.duracao_segundos ? s.duracao_segundos+'s' : '—'}</td>
-        <td>${fmtBRT(s.last_sync_at)}</td>
-      </tr>`;
-    }).join('');
-    toast('Dashboard atualizado', 'ok');
-  } catch (e) { toast(e.message, 'err'); }
-  finally { btn.innerHTML = '🔄 Atualizar'; btn.disabled = false; }
+async function loadDashboard(){
+  const btn=document.getElementById('btnRefresh');btn.innerHTML='<span class="spin"></span>';btn.disabled=true;
+  try{
+    const data=await supaFetch('sync_state','select=*&order=modulo');
+    const body=document.getElementById('dashBody');
+    if(!data.length){body.innerHTML='<tr><td colspan="7" class="empty">Vazio</td></tr>';return}
+    const sales=data.filter(s=>isSalesMod(s.modulo)),orders=data.filter(s=>!isSalesMod(s.modulo));
+    let html='';
+    const renderGroup=(label,cls,items)=>{
+      if(!items.length)return'';
+      let tot=0;
+      let h=`<tr class="group-head ${cls}"><td colspan="7">${label} (${items.length} módulos)</td></tr>`;
+      items.forEach(s=>{
+        const ok=s.ultima_execucao_status==='SUCESSO',modo=s.modo||'—',n=(s.total_registros||0);tot+=n;
+        h+=`<tr><td style="padding-left:1.5rem">${(s.modulo||'').replace(/_/g,' ')}</td><td class="num">${s.empresa||''}</td><td><span class="badge ${ok?'ok':'err'}">${ok?'✅':'❌'}</span></td><td><span class="badge ${modo==='INCREMENTAL'?'blue':'warn'}" style="font-size:.6rem">${modo}</span></td><td class="num">${n.toLocaleString('pt-BR')}</td><td>${s.duracao_segundos?s.duracao_segundos+'s':'—'}</td><td style="font-size:.7rem">${fmtBRT(s.last_sync_at)}</td></tr>`;
+      });
+      h+=`<tr class="group-sub"><td colspan="4" style="text-align:right">Subtotal</td><td class="num">${tot.toLocaleString('pt-BR')}</td><td colspan="2"></td></tr>`;
+      return h;
+    };
+    html+=renderGroup('💰 SALES','sales',sales);
+    html+=renderGroup('🛒 ORDERS','orders',orders);
+    body.innerHTML=html;
+    toast('Atualizado','ok');
+  }catch(e){toast(e.message,'err')}
+  finally{btn.innerHTML='🔄 Atualizar';btn.disabled=false}
 }
 
 // ─── DISPATCH ───
-async function dispatch(workflow, msg, inputs) {
-  if (!confirm(msg)) return;
-  try {
-    await ghFetch(`/repos/${GH_REPO}/actions/workflows/${workflow}.yml/dispatches`, 'POST', { ref:'main', inputs });
-    toast(`✅ ${workflow} disparado!`, 'ok');
-  } catch (e) { toast(e.message, 'err'); }
-}
+async function dispatch(wf,msg,inputs){if(!confirm(msg))return;try{await ghFetch(`/repos/${GH_REPO}/actions/workflows/${wf}.yml/dispatches`,'POST',{ref:'main',inputs});toast(`✅ ${wf} disparado!`,'ok')}catch(e){toast(e.message,'err')}}
 
 // ─── SCHEDULES ───
-async function loadSchedules() {
-  const btn = document.getElementById('btnSched');
-  btn.innerHTML = '<span class="spin"></span>'; btn.disabled = true;
-  const wfs = [
-    { file:'master_sales_diaria.yml', name:'🚀 Master Diária', desc:'Etapas → Itens → Pedidos → Serviços' },
-    { file:'master_sales_semanal.yml', name:'📦 Sales Semanal', desc:'Produtos → Auxiliares' },
-    { file:'master_orders_diaria.yml', name:'🛒 Orders Diária', desc:'NFe → Recebimento → Pedidos Compra' },
-    { file:'master_orders_semanal.yml', name:'📦 Orders Semanal', desc:'Produtos + 7 tabelas aux' }
+async function loadSchedules(){
+  const wfs=[
+    {file:'master_sales_diaria.yml',container:'schedSales',idx:0,name:'Sales Diária',desc:'Etapas→Itens→Pedidos→Serviços'},
+    {file:'master_sales_semanal.yml',container:'schedSales',idx:1,name:'Sales Semanal',desc:'Produtos + Auxiliares'},
+    {file:'master_orders_diaria.yml',container:'schedOrders',idx:0,name:'Orders Diária',desc:'NFe→Recebimento→Pedidos'},
+    {file:'master_orders_semanal.yml',container:'schedOrders',idx:1,name:'Orders Semanal',desc:'Produtos + Aux'}
   ];
-  try {
-    const list = document.getElementById('schedList');
-    list.innerHTML = '';
-    for (const wf of wfs) {
-      const data = await ghFetch(`/repos/${GH_REPO}/contents/.github/workflows/${wf.file}`);
-      const content = atob(data.content.replace(/\n/g,''));
-      const match = content.match(/cron:\s*"([^"]*)"/);
-      const cron = match ? match[1] : '???';
-      const brt = cronToBRT(cron);
-      const item = document.createElement('div');
-      item.className = 'sched-item';
-      item.innerHTML = `
-        <div>
-          <div class="name">${wf.name}</div>
-          <div class="freq">${brt.day} · ${wf.desc}</div>
-        </div>
-        <div style="display:flex;align-items:center;gap:1rem">
-          <div class="time">${brt.time}</div>
-          <button class="btn" onclick="openModal('${wf.file}','${wf.name}','${cron}','${data.sha}')">✏️ Editar</button>
-        </div>
-      `;
-      list.appendChild(item);
-    }
-    toast('Horários carregados', 'ok');
-  } catch (e) { toast(e.message, 'err'); }
-  finally { btn.innerHTML = '🔄 Atualizar'; btn.disabled = false; }
+  for(const wf of wfs){
+    try{
+      const d=await ghFetch(`/repos/${GH_REPO}/contents/.github/workflows/${wf.file}`);
+      const c=atob(d.content.replace(/\n/g,'')),mt=c.match(/cron:\s*"([^"]*)"/);
+      const cron=mt?mt[1]:'???',brt=cronBRT(cron);
+      const cards=document.getElementById(wf.container).querySelectorAll('.sched-card');
+      if(cards[wf.idx]){
+        cards[wf.idx].querySelector('.lbl').innerHTML=`<b>${wf.name}</b><br>${brt.day} · ${wf.desc}`;
+        cards[wf.idx].querySelector('.time-big').textContent=brt.time;
+        cards[wf.idx].onclick=()=>openModal(wf.file,wf.name,cron,d.sha);
+        cards[wf.idx].style.cursor='pointer';
+      }
+    }catch(e){console.log(wf.file,e)}
+  }
 }
 
 // ─── MODAL ───
-function openModal(file, name, cron, sha) {
-  const brt = cronToBRT(cron);
-  modalState = { file, name, cron, sha };
-  document.getElementById('modalTitle').textContent = `Editar — ${name}`;
-  document.getElementById('modalTime').value = brt.time;
-  document.getElementById('modalCurrent').textContent = `${brt.time} BRT (${brt.day}) · cron: ${cron}`;
-  document.getElementById('modalOverlay').classList.add('open');
-}
-function closeModal() { document.getElementById('modalOverlay').classList.remove('open'); }
-
-async function saveSchedule() {
-  const time = document.getElementById('modalTime').value;
-  const [hBRT, m] = time.split(':').map(Number);
-  const hUTC = (hBRT + 3) % 24;
-  const parts = modalState.cron.split(' ');
-  const newCron = `${m} ${hUTC} ${parts[2]} ${parts[3]} ${parts[4]}`;
-
-  try {
-    const data = await ghFetch(`/repos/${GH_REPO}/contents/.github/workflows/${modalState.file}`);
-    let content = atob(data.content.replace(/\n/g,''));
-    content = content.replace(/cron:\s*"[^"]*"/, `cron: "${newCron}"`);
-    const encoded = btoa(unescape(encodeURIComponent(content)));
-
-    await ghFetch(`/repos/${GH_REPO}/contents/.github/workflows/${modalState.file}`, 'PUT', {
-      message: `chore: horário ${modalState.name} → ${time} BRT (via Painel)`,
-      content: encoded,
-      sha: data.sha
-    });
-    toast(`✅ ${modalState.name} → ${time} BRT`, 'ok');
-    closeModal();
-    loadSchedules();
-  } catch (e) { toast(e.message, 'err'); }
-}
+function openModal(f,n,c,sha){const b=cronBRT(c);modalState={file:f,name:n,cron:c,sha};document.getElementById('modalTitle').textContent='Editar — '+n;document.getElementById('modalTime').value=b.time;document.getElementById('modalCurrent').textContent=`${b.time} BRT (${b.day}) · cron: ${c}`;document.getElementById('modalOverlay').classList.add('open')}
+function closeModal(){document.getElementById('modalOverlay').classList.remove('open')}
+async function saveSchedule(){const t=document.getElementById('modalTime').value,[hB,m]=t.split(':').map(Number),hU=(hB+3)%24,p=modalState.cron.split(' '),nc=`${m} ${hU} ${p[2]} ${p[3]} ${p[4]}`;try{const d=await ghFetch(`/repos/${GH_REPO}/contents/.github/workflows/${modalState.file}`);let c=atob(d.content.replace(/\n/g,''));c=c.replace(/cron:\s*"[^"]*/,`cron: "${nc}`);await ghFetch(`/repos/${GH_REPO}/contents/.github/workflows/${modalState.file}`,'PUT',{message:`chore: ${modalState.name} → ${t} BRT`,content:btoa(unescape(encodeURIComponent(c))),sha:d.sha});toast(`✅ ${t} BRT`,'ok');closeModal();loadSchedules()}catch(e){toast(e.message,'err')}}
 
 // ─── RUNS ───
-async function loadRuns() {
-  const btn = document.getElementById('btnRuns');
-  btn.innerHTML = '<span class="spin"></span>'; btn.disabled = true;
-  try {
-    const data = await ghFetch(`/repos/${GH_REPO}/actions/runs?per_page=15&branch=main`);
-    const runs = data.workflow_runs || [];
-    const body = document.getElementById('runsBody');
-    if (!runs.length) { body.innerHTML = '<tr><td colspan="5" class="empty">Nenhum run encontrado</td></tr>'; return; }
-    body.innerHTML = runs.map(r => {
-      const icon = r.conclusion==='success'?'✅':r.conclusion==='failure'?'❌':r.status==='in_progress'?'🔄':'⏳';
-      const cls = r.conclusion==='success'?'ok':r.conclusion==='failure'?'err':r.status==='in_progress'?'blue':'warn';
-      const name = r.name.replace('(Omie → Supabase)','').replace('[Semanal]','').trim();
-      const dur = fmtDuration(r.run_started_at, r.updated_at);
-      return `<tr>
-        <td>${name}</td>
-        <td><span class="badge ${cls}">${icon} ${r.conclusion||r.status||''}</span></td>
-        <td class="num">${dur}</td>
-        <td>${fmtBRT(r.created_at)}</td>
-        <td><a href="${r.html_url}" target="_blank">Abrir ↗</a></td>
-      </tr>`;
-    }).join('');
-    toast('Runs carregados', 'ok');
-  } catch (e) { toast(e.message, 'err'); }
-  finally { btn.innerHTML = '🔄 Atualizar'; btn.disabled = false; }
-}
+async function loadRuns(){const btn=document.getElementById('btnRuns');btn.innerHTML='<span class="spin"></span>';btn.disabled=true;try{const d=await ghFetch(`/repos/${GH_REPO}/actions/runs?per_page=20&branch=main`),runs=d.workflow_runs||[],body=document.getElementById('runsBody');if(!runs.length){body.innerHTML='<tr><td colspan="5" class="empty">Nenhum</td></tr>';return}body.innerHTML=runs.filter(r=>!r.name.includes('pages')).map(r=>{const i=r.conclusion==='success'?'✅':r.conclusion==='failure'?'❌':r.status==='in_progress'?'🔄':'⏳',c=r.conclusion==='success'?'ok':r.conclusion==='failure'?'err':r.status==='in_progress'?'blue':'warn',n=r.name.replace('(Omie → Supabase)','').replace('(Omie -> Supabase)','').replace('[Semanal]','').trim();return`<tr><td>${n}</td><td><span class="badge ${c}">${i}</span></td><td class="num">${fmtDur(r.run_started_at,r.updated_at)}</td><td style="font-size:.7rem">${fmtBRT(r.created_at)}</td><td><a href="${r.html_url}" target="_blank">↗</a></td></tr>`}).join('');toast('Runs','ok')}catch(e){toast(e.message,'err')}finally{btn.innerHTML='🔄 Atualizar';btn.disabled=false}}
 
 // ─── INIT ───
-function initApp() {
-  loadSettings();
-  if (ghToken() && supaKey()) {
-    loadDashboard();
-    loadRuns();
-    loadSchedules();
-  } else {
-    document.getElementById('settings').classList.add('open');
-  }
-}
-document.addEventListener('DOMContentLoaded', () => {
-  if (checkAuth()) initApp();
-});
-document.getElementById('modalOverlay').addEventListener('click', e => { if (e.target === e.currentTarget) closeModal(); });
+function initApp(){loadSettings();if(ghToken()&&supaKey()){loadDashboard();loadRuns();loadSchedules()}else{document.getElementById('settings').classList.add('open')}}
+document.addEventListener('DOMContentLoaded',()=>{if(checkAuth())initApp()});
+document.getElementById('modalOverlay').addEventListener('click',e=>{if(e.target===e.currentTarget)closeModal()});
 </script>
 </body>
 </html>
