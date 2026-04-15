@@ -11,7 +11,7 @@ on:
         required: false
         default: "SF"
       forcar_full:
-        description: "Forçar FULL (ignora filtro 90 dias)"
+        description: "ForÃ§ar FULL (ignora filtro 90 dias)"
         required: false
         default: "false"
         type: choice
@@ -22,7 +22,7 @@ on:
         default: "90"
 
   schedule:
-    - cron: "30 4 * * 1-5"  # Seg a Sex 04:30 UTC (01:30 BRT) — incremental 90 dias
+    - cron: "0 10 * * 1-5"  # Seg a Sex 04:30 UTC (01:30 BRT) â incremental 90 dias
 
 concurrency:
   group: master-finance-diaria
@@ -31,7 +31,7 @@ concurrency:
 jobs:
   import:
     runs-on: ubuntu-latest
-    timeout-minutes: 180  # 3h - Contas Pagar (54k) + Receber + Títulos (60k) + Extratos
+    timeout-minutes: 180  # 3h - Contas Pagar (54k) + Receber + TÃ­tulos (60k) + Extratos
 
     steps:
       - uses: actions/checkout@v4
