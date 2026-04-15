@@ -7,6 +7,7 @@ Freq:     Diaria
 Pagination: pagina / registros_por_pagina (max 500)
 """
 import sys, time
+from datetime import datetime, timedelta
 
 sys.path.insert(0, "scripts")
 from _common import (
@@ -19,8 +20,16 @@ OMIE_URL = "https://app.omie.com.br/api/v1/financas/contareceber/"
 SCHEMA   = "finance"
 TABELA   = "contas_receber"
 PK       = "empresa,codigo_lancamento_omie"
+FORCAR_FULL = env("FORCAR_FULL", "false").lower() == "true"
+DIAS_INCREMENTAL = int(env("DIAS_INCREMENTAL", "90"))
+DATA_INICIO_FULL = env("DATA_INICIO_FULL", "01/01/2024")
+MAX_SECONDS = int(env("MAX_SECONDS_PER_STEP", "7000"))
 
-DATA_INICIO = env("DATA_INICIO_FULL", "01/01/2024")
+def _data_filtro():
+    if FORCAR_FULL:
+        return DATA_INICIO_FULL, "FULL"
+    dt = datetime.now() - timedelta(days=DIAS_INCREMENTAL)
+    return dt.strftime("%d/%m/%Y"), f"INCREMENTAL ({DIAS_INCREMENTAL}d)"
 
 
 def map_row(c: dict, sigla: str) -> dict:
@@ -90,13 +99,15 @@ def main():
             continue
         inicio = time.time()
         try:
+            data_filtro, modo = _data_filtro()
+            print(f"\n   Modo: {modo} | Filtro: {data_filtro}")
             total, completed, pages = fetch_and_upsert_streaming(
                 url=OMIE_URL, call="ListarContasReceber", sigla=sigla,
                 list_field="conta_receber_cadastro",
                 schema=SCHEMA, table=TABELA, pk=PK,
                 mapper_fn=map_row,
                 page_size=100,
-                extra_param={"apenas_importado_api": "N", "filtrar_por_data_de": DATA_INICIO},
+                extra_param={"apenas_importado_api": "N", "filtrar_por_data_de": data_filtro},
                 max_seconds=MAX_SECONDS,
                 upsert_every=500,
                 label="ContasReceber",

@@ -9,6 +9,7 @@ NOTE: This endpoint uses different pagination param names (nPagina/nRegPorPagina
       and different response structure (titulosEncontrados -> cabecTitulo + resumo).
 """
 import sys, time
+from datetime import datetime, timedelta
 
 sys.path.insert(0, "scripts")
 from _common import (
@@ -21,6 +22,9 @@ OMIE_URL = "https://app.omie.com.br/api/v1/financas/pesquisartitulos/"
 SCHEMA   = "finance"
 TABELA   = "pesquisa_titulos"
 PK       = "empresa,cod_titulo"
+FORCAR_FULL = env("FORCAR_FULL", "false").lower() == "true"
+DIAS_INCREMENTAL = int(env("DIAS_INCREMENTAL", "90"))
+MAX_SECONDS = int(env("MAX_SECONDS_PER_STEP", "7000"))
 
 
 def map_row(titulo: dict, sigla: str) -> dict:
@@ -101,7 +105,11 @@ def map_row(titulo: dict, sigla: str) -> dict:
     }
 
 
-MAX_SECONDS = int(env("MAX_SECONDS_PER_STEP", "7000"))
+def _data_filtro():
+    if FORCAR_FULL:
+        return None, "FULL"
+    dt = datetime.now() - timedelta(days=DIAS_INCREMENTAL)
+    return dt.strftime("%d/%m/%Y"), f"INCREMENTAL ({DIAS_INCREMENTAL}d)"
 
 def main():
     print("=" * 60)
@@ -112,6 +120,11 @@ def main():
         if not EMPRESAS_OMIE.get(sigla):
             continue
         inicio = time.time()
+        data_filtro, modo_label = _data_filtro()
+        print(f"\n   Modo: {modo_label} | Filtro: {data_filtro or 'sem filtro'}")
+        extra = {"lDadosCad": True}
+        if data_filtro:
+            extra["dDtIncDe"] = data_filtro  # PesquisarLancamentos usa dDtIncDe
         try:
             total, completed, pages = fetch_and_upsert_streaming(
                 url=OMIE_URL, call="PesquisarLancamentos", sigla=sigla,
@@ -119,7 +132,7 @@ def main():
                 schema=SCHEMA, table=TABELA, pk=PK,
                 mapper_fn=map_row,
                 page_size=100,
-                extra_param={"lDadosCad": True},
+                extra_param=extra,
                 page_key="nPagina", size_key="nRegPorPagina",
                 max_seconds=MAX_SECONDS,
                 upsert_every=500,
