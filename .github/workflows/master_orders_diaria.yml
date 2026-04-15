@@ -12,7 +12,7 @@ on:
         default: "SF"
 
   schedule:
-    - cron: "45 3 * * *"  # Todo dia as 03:45 UTC (00:45 BRT)
+    - cron: "0 9 * * *"  # Todo dia as 03:45 UTC (00:45 BRT)
 
 concurrency:
   group: master-orders-diaria
