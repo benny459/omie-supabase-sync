@@ -1,6 +1,6 @@
-name: 🚀 MASTER Sales Diária (Omie → Supabase)
+name: ð MASTER Sales DiÃ¡ria (Omie â Supabase)
 
-# Executa todos os importers em SEQUÊNCIA pra evitar rate limit paralelo na Omie.
+# Executa todos os importers em SEQUÃNCIA pra evitar rate limit paralelo na Omie.
 # Disparado 1x ao dia (03:15 UTC = 00:15 BRT) + manual.
 
 on:
@@ -11,18 +11,18 @@ on:
         required: false
         default: "SF"
       forcar_full:
-        description: "Forçar FULL em todos os importers incrementais"
+        description: "ForÃ§ar FULL em todos os importers incrementais"
         required: false
         default: "false"
         type: choice
         options: ["false", "true"]
 
   schedule:
-    - cron: "15 3 * * *"  # Todo dia às 03:15 UTC (00:15 BRT)
+    - cron: "0 8 * * *"  # Todo dia Ã s 03:15 UTC (00:15 BRT)
 
 concurrency:
   group: master-sales-diaria
-  cancel-in-progress: false   # NÃO cancela run em andamento se disparar outro
+  cancel-in-progress: false   # NÃO cancela run em andamento se disparar outro
 
 jobs:
   import:
@@ -35,10 +35,10 @@ jobs:
         with:
           python-version: "3.11"
 
-      # ─────────────────────────────────────
+      # âââââââââââââââââââââââââââââââââââââ
       # 1. Etapas de Pedidos (3000-6000 rows)
-      # ─────────────────────────────────────
-      - name: 1️⃣ Etapas de Pedidos
+      # âââââââââââââââââââââââââââââââââââââ
+      - name: 1ï¸â£ Etapas de Pedidos
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
@@ -55,13 +55,13 @@ jobs:
         run: python3 scripts/import_etapas_pedidos.py
         continue-on-error: true
 
-      - name: ⏸️ Pausa entre módulos (30s)
+      - name: â¸ï¸ Pausa entre mÃ³dulos (30s)
         run: sleep 30
 
-      # ─────────────────────────────────────
-      # 2. Itens Vendidos (incremental diário)
-      # ─────────────────────────────────────
-      - name: 2️⃣ Itens Vendidos
+      # âââââââââââââââââââââââââââââââââââââ
+      # 2. Itens Vendidos (incremental diÃ¡rio)
+      # âââââââââââââââââââââââââââââââââââââ
+      - name: 2ï¸â£ Itens Vendidos
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
@@ -81,13 +81,13 @@ jobs:
         run: python3 scripts/import_itens_vendidos.py
         continue-on-error: true
 
-      - name: ⏸️ Pausa entre módulos (30s)
+      - name: â¸ï¸ Pausa entre mÃ³dulos (30s)
         run: sleep 30
 
-      # ─────────────────────────────────────
-      # 3. Pedidos Venda (incremental diário)
-      # ─────────────────────────────────────
-      - name: 3️⃣ Pedidos Venda
+      # âââââââââââââââââââââââââââââââââââââ
+      # 3. Pedidos Venda (incremental diÃ¡rio)
+      # âââââââââââââââââââââââââââââââââââââ
+      - name: 3ï¸â£ Pedidos Venda
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
@@ -106,13 +106,13 @@ jobs:
         run: python3 scripts/import_pedidos_venda.py
         continue-on-error: true
 
-      - name: ⏸️ Pausa entre módulos (30s)
+      - name: â¸ï¸ Pausa entre mÃ³dulos (30s)
         run: sleep 30
 
-      # ─────────────────────────────────────
-      # 4. Serviços (OS + Contratos)
-      # ─────────────────────────────────────
-      - name: 4️⃣ Serviços (OS + Contratos)
+      # âââââââââââââââââââââââââââââââââââââ
+      # 4. ServiÃ§os (OS + Contratos)
+      # âââââââââââââââââââââââââââââââââââââ
+      - name: 4ï¸â£ ServiÃ§os (OS + Contratos)
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
@@ -129,10 +129,10 @@ jobs:
         run: python3 scripts/import_servicos.py
         continue-on-error: true
 
-      - name: 🏁 Resumo
+      - name: ð Resumo
         if: always()
         run: |
-          echo "════════════════════════════════════════════════════"
-          echo "🏁 Master Sales Diária concluída"
+          echo "ââââââââââââââââââââââââââââââââââââââââââââââââââââ"
+          echo "ð Master Sales DiÃ¡ria concluÃ­da"
           echo "Empresas: ${{ github.event.inputs.empresas || 'SF' }}"
-          echo "════════════════════════════════════════════════════"
+          echo "ââââââââââââââââââââââââââââââââââââââââââââââââââââ"
