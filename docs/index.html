@@ -288,7 +288,7 @@ a:hover{text-decoration:underline}
   <div class="workflow-row">
     <div class="wf-card"><h3>💵 Finance Diária</h3><p>Contas Pagar → Receber → Pesquisa Títulos → Extratos CC</p><button class="btn ok" onclick="dispatch('master_finance_diaria','Disparar Finance Diária?',{empresas:'SF'})">▶ Disparar</button></div>
     <div class="wf-card"><h3>📦 Finance Semanal</h3><p>Clientes + Categorias + Projetos + 8 tabelas aux</p><button class="btn" style="background:var(--finance-bg);border-color:#5c4a1a;color:var(--finance)" onclick="dispatch('master_finance_semanal','Disparar Finance Semanal?',{empresas:'SF'})">▶ Disparar</button></div>
-    <div class="wf-card"><h3>⚠️ Forçar FULL</h3><p>Reimporta todo o financeiro</p><button class="btn warn" onclick="dispatch('master_finance_diaria','⚠️ FULL Finance?',{empresas:'SF'})">⚠ FULL</button></div>
+    <div class="wf-card"><h3>⚠️ Forçar FULL</h3><p>Import completo (todo histórico)</p><button class="btn warn" onclick="dispatch('master_finance_full','⚠️ FULL Finance — pode demorar 2h+?',{empresas:'SF'})">⚠ FULL</button></div>
   </div>
 
   <div class="section-label">Executar individual</div>
@@ -307,10 +307,15 @@ a:hover{text-decoration:underline}
       <div class="sched-detail"><span class="tag">📅 —</span><span class="tag">🔁 —</span></div>
       <div class="sched-actions"><button class="btn sm warn" onclick="openSchedModal('master_finance_diaria.yml','Finance Diária')">✏️ Editar horário</button></div>
     </div>
-    <div class="sched-card" data-kind="finance" id="sched-finance-s">
-      <div class="sched-top"><span class="sched-name">📦 Finance Semanal</span><span class="sched-time">—</span></div>
+    <div class="sched-card" data-kind="finance" id="sched-finance-f">
+      <div class="sched-top"><span class="sched-name">⚠️ Finance FULL</span><span class="sched-time">—</span></div>
       <div class="sched-detail"><span class="tag">📅 —</span><span class="tag">🔁 —</span></div>
-      <div class="sched-actions"><button class="btn sm warn" onclick="openSchedModal('master_finance_semanal.yml','Finance Semanal')">✏️ Editar horário</button></div>
+      <div class="sched-actions"><button class="btn sm warn" onclick="openSchedModal('master_finance_full.yml','Finance FULL')">✏️ Editar horário</button></div>
+    </div>
+    <div class="sched-card" data-kind="finance" id="sched-finance-s">
+      <div class="sched-top"><span class="sched-name">📦 Finance Cadastros</span><span class="sched-time">—</span></div>
+      <div class="sched-detail"><span class="tag">📅 —</span><span class="tag">🔁 —</span></div>
+      <div class="sched-actions"><button class="btn sm warn" onclick="openSchedModal('master_finance_semanal.yml','Finance Cadastros')">✏️ Editar horário</button></div>
     </div>
   </div>
 </div>
@@ -455,8 +460,9 @@ const SCHED_MAP=[
   {file:'master_sales_semanal.yml',card:'sched-sales-s',name:'Sales Semanal',desc:'Produtos + Auxiliares'},
   {file:'master_orders_diaria.yml',card:'sched-orders-d',name:'Orders Diária',desc:'NFe→Recebimento→Pedidos'},
   {file:'master_orders_semanal.yml',card:'sched-orders-s',name:'Orders Semanal',desc:'Produtos + Aux'},
-  {file:'master_finance_diaria.yml',card:'sched-finance-d',name:'Finance Diária',desc:'Pagar→Receber→Títulos→Extratos'},
-  {file:'master_finance_semanal.yml',card:'sched-finance-s',name:'Finance Semanal',desc:'Cadastros (Clientes+Cat+Proj+Aux)'}
+  {file:'master_finance_diaria.yml',card:'sched-finance-d',name:'Finance Diária',desc:'Pagar→Receber→Títulos→Extratos (90d)'},
+  {file:'master_finance_full.yml',card:'sched-finance-f',name:'Finance FULL',desc:'Import completo (todo histórico)'},
+  {file:'master_finance_semanal.yml',card:'sched-finance-s',name:'Finance Cadastros',desc:'Clientes+Cat+Proj+Aux'}
 ];
 const DAY_LABELS={'*':'Todo dia','0':'Domingo','1':'Segunda','2':'Terça','3':'Quarta','4':'Quinta','5':'Sexta','6':'Sábado','1-5':'Seg a Sex'};
 function cronFreq(cron){const p=cron.split(' ');const d=p[4],dom=p[2],mon=p[3];if(d==='0')return'Semanal (Dom)';if(d==='1-5')return'Dias úteis';if(d==='*'&&dom==='*')return'Diário';return'Personalizado'}

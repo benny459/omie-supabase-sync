@@ -1,37 +1,28 @@
-name: MASTER Finance Diaria (Omie -> Supabase)
+name: MASTER Finance FULL Semanal (Omie -> Supabase)
 
-# Executa ContasPagar -> ContasReceber -> PesquisaTitulos -> ExtratosCC em sequencia.
-# Disparado 1x ao dia (04:30 UTC = 01:30 BRT, apos Orders master terminar) + manual.
+# Import COMPLETO de todo o financeiro — roda 1x por semana (domingo).
+# Garante que registros antigos (fora dos 90 dias do diário) sejam atualizados.
+# Demora ~1-2h mas roda só no domingo.
 
 on:
   workflow_dispatch:
     inputs:
       empresas:
-        description: "Empresas (CSV, default: SF)"
+        description: "Empresas (CSV)"
         required: false
         default: "SF"
-      forcar_full:
-        description: "Forçar FULL (ignora filtro 90 dias)"
-        required: false
-        default: "false"
-        type: choice
-        options: ["false", "true"]
-      dias_incremental:
-        description: "Dias do filtro incremental (default: 90)"
-        required: false
-        default: "90"
 
   schedule:
-    - cron: "30 4 * * 1-5"  # Seg a Sex 04:30 UTC (01:30 BRT) — incremental 90 dias
+    - cron: "0 6 * * 0"  # Domingo 06:00 UTC (03:00 BRT) — depois dos cadastros
 
 concurrency:
-  group: master-finance-diaria
+  group: master-finance-full
   cancel-in-progress: false
 
 jobs:
   import:
     runs-on: ubuntu-latest
-    timeout-minutes: 180  # 3h - Contas Pagar (54k) + Receber + Títulos (60k) + Extratos
+    timeout-minutes: 240  # 4h — bases grandes (60k+ títulos)
 
     steps:
       - uses: actions/checkout@v4
@@ -39,10 +30,7 @@ jobs:
         with:
           python-version: "3.11"
 
-      # -----------------------------------------
-      # 1. Contas a Pagar (ListarContasPagar)
-      # -----------------------------------------
-      - name: "1 Contas a Pagar"
+      - name: "1 Contas a Pagar (FULL)"
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
@@ -53,21 +41,15 @@ jobs:
           OMIE_APP_KEY_WW: ${{ secrets.OMIE_APP_KEY_WW }}
           OMIE_APP_SECRET_WW: ${{ secrets.OMIE_APP_SECRET_WW }}
           EMPRESAS_ALVO: ${{ github.event.inputs.empresas || 'SF' }}
-          FORCAR_FULL: ${{ github.event.inputs.forcar_full || 'false' }}
-          DIAS_INCREMENTAL: ${{ github.event.inputs.dias_incremental || '90' }}
-          SHEETS_MIRROR_URL: ${{ secrets.SHEETS_MIRROR_URL }}
-          SHEETS_MIRROR_TOKEN: ${{ secrets.SHEETS_MIRROR_TOKEN }}
+          FORCAR_FULL: "true"
           PYTHONUNBUFFERED: "1"
         run: python3 scripts/import_contas_pagar.py
         continue-on-error: true
 
-      - name: "Pausa entre modulos (30s)"
-        run: sleep 30
+      - name: "Pausa (60s)"
+        run: sleep 60
 
-      # -----------------------------------------
-      # 2. Contas a Receber (ListarContasReceber)
-      # -----------------------------------------
-      - name: "2 Contas a Receber"
+      - name: "2 Contas a Receber (FULL)"
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
@@ -78,21 +60,15 @@ jobs:
           OMIE_APP_KEY_WW: ${{ secrets.OMIE_APP_KEY_WW }}
           OMIE_APP_SECRET_WW: ${{ secrets.OMIE_APP_SECRET_WW }}
           EMPRESAS_ALVO: ${{ github.event.inputs.empresas || 'SF' }}
-          FORCAR_FULL: ${{ github.event.inputs.forcar_full || 'false' }}
-          DIAS_INCREMENTAL: ${{ github.event.inputs.dias_incremental || '90' }}
-          SHEETS_MIRROR_URL: ${{ secrets.SHEETS_MIRROR_URL }}
-          SHEETS_MIRROR_TOKEN: ${{ secrets.SHEETS_MIRROR_TOKEN }}
+          FORCAR_FULL: "true"
           PYTHONUNBUFFERED: "1"
         run: python3 scripts/import_contas_receber.py
         continue-on-error: true
 
-      - name: "Pausa entre modulos (30s)"
-        run: sleep 30
+      - name: "Pausa (60s)"
+        run: sleep 60
 
-      # -----------------------------------------
-      # 3. Pesquisa Titulos (PesquisarLancamentos)
-      # -----------------------------------------
-      - name: "3 Pesquisa Titulos"
+      - name: "3 Pesquisa Titulos (FULL)"
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
@@ -103,21 +79,15 @@ jobs:
           OMIE_APP_KEY_WW: ${{ secrets.OMIE_APP_KEY_WW }}
           OMIE_APP_SECRET_WW: ${{ secrets.OMIE_APP_SECRET_WW }}
           EMPRESAS_ALVO: ${{ github.event.inputs.empresas || 'SF' }}
-          FORCAR_FULL: ${{ github.event.inputs.forcar_full || 'false' }}
-          DIAS_INCREMENTAL: ${{ github.event.inputs.dias_incremental || '90' }}
-          SHEETS_MIRROR_URL: ${{ secrets.SHEETS_MIRROR_URL }}
-          SHEETS_MIRROR_TOKEN: ${{ secrets.SHEETS_MIRROR_TOKEN }}
+          FORCAR_FULL: "true"
           PYTHONUNBUFFERED: "1"
         run: python3 scripts/import_pesquisa_titulos.py
         continue-on-error: true
 
-      - name: "Pausa entre modulos (30s)"
-        run: sleep 30
+      - name: "Pausa (60s)"
+        run: sleep 60
 
-      # -----------------------------------------
-      # 4. Extratos CC (ListarExtrato per account)
-      # -----------------------------------------
-      - name: "4 Extratos CC"
+      - name: "4 Extratos CC (FULL)"
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
@@ -128,10 +98,7 @@ jobs:
           OMIE_APP_KEY_WW: ${{ secrets.OMIE_APP_KEY_WW }}
           OMIE_APP_SECRET_WW: ${{ secrets.OMIE_APP_SECRET_WW }}
           EMPRESAS_ALVO: ${{ github.event.inputs.empresas || 'SF' }}
-          FORCAR_FULL: ${{ github.event.inputs.forcar_full || 'false' }}
-          DIAS_INCREMENTAL: ${{ github.event.inputs.dias_incremental || '90' }}
-          SHEETS_MIRROR_URL: ${{ secrets.SHEETS_MIRROR_URL }}
-          SHEETS_MIRROR_TOKEN: ${{ secrets.SHEETS_MIRROR_TOKEN }}
+          FORCAR_FULL: "true"
           PYTHONUNBUFFERED: "1"
         run: python3 scripts/import_extratos_cc.py
         continue-on-error: true
@@ -140,6 +107,5 @@ jobs:
         if: always()
         run: |
           echo "========================================================"
-          echo "Master Finance Diaria concluida"
-          echo "Empresas: ${{ github.event.inputs.empresas || 'SF' }}"
+          echo "Master Finance FULL Semanal concluida"
           echo "========================================================"
