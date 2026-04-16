@@ -236,18 +236,7 @@ a:hover{text-decoration:underline}
   </div>
 
   <div class="section-label">Agenda automática</div>
-  <div class="sched-row" id="schedSales">
-    <div class="sched-card" data-kind="sales" id="sched-sales-d">
-      <div class="sched-top"><span class="sched-name">🚀 Sales Diária</span><span class="sched-time">—</span></div>
-      <div class="sched-detail"><span class="tag">📅 —</span><span class="tag">🔁 —</span></div>
-      <div class="sched-actions"><button class="btn sm blue" onclick="openSchedModal('master_sales_diaria.yml','Sales Diária')">✏️ Editar horário</button></div>
-    </div>
-    <div class="sched-card" data-kind="sales" id="sched-sales-s">
-      <div class="sched-top"><span class="sched-name">📦 Sales Semanal</span><span class="sched-time">—</span></div>
-      <div class="sched-detail"><span class="tag">📅 —</span><span class="tag">🔁 —</span></div>
-      <div class="sched-actions"><button class="btn sm blue" onclick="openSchedModal('master_sales_semanal.yml','Sales Semanal')">✏️ Editar horário</button></div>
-    </div>
-  </div>
+  <div class="sched-row" id="schedSales"></div>
 </div>
 
 <!-- ═══ TAB: ORDERS ═══ -->
@@ -268,18 +257,7 @@ a:hover{text-decoration:underline}
   </div>
 
   <div class="section-label">Agenda automática</div>
-  <div class="sched-row" id="schedOrders">
-    <div class="sched-card" data-kind="orders" id="sched-orders-d">
-      <div class="sched-top"><span class="sched-name">🛒 Orders Diária</span><span class="sched-time">—</span></div>
-      <div class="sched-detail"><span class="tag">📅 —</span><span class="tag">🔁 —</span></div>
-      <div class="sched-actions"><button class="btn sm purple" onclick="openSchedModal('master_orders_diaria.yml','Orders Diária')">✏️ Editar horário</button></div>
-    </div>
-    <div class="sched-card" data-kind="orders" id="sched-orders-s">
-      <div class="sched-top"><span class="sched-name">📦 Orders Semanal</span><span class="sched-time">—</span></div>
-      <div class="sched-detail"><span class="tag">📅 —</span><span class="tag">🔁 —</span></div>
-      <div class="sched-actions"><button class="btn sm purple" onclick="openSchedModal('master_orders_semanal.yml','Orders Semanal')">✏️ Editar horário</button></div>
-    </div>
-  </div>
+  <div class="sched-row" id="schedOrders"></div>
 </div>
 
 <!-- ═══ TAB: FINANCE ═══ -->
@@ -301,23 +279,7 @@ a:hover{text-decoration:underline}
   </div>
 
   <div class="section-label">Agenda automática</div>
-  <div class="sched-row" id="schedFinance">
-    <div class="sched-card" data-kind="finance" id="sched-finance-d">
-      <div class="sched-top"><span class="sched-name">💵 Finance Diária</span><span class="sched-time">—</span></div>
-      <div class="sched-detail"><span class="tag">📅 —</span><span class="tag">🔁 —</span></div>
-      <div class="sched-actions"><button class="btn sm warn" onclick="openSchedModal('master_finance_diaria.yml','Finance Diária')">✏️ Editar horário</button></div>
-    </div>
-    <div class="sched-card" data-kind="finance" id="sched-finance-f">
-      <div class="sched-top"><span class="sched-name">⚠️ Finance FULL</span><span class="sched-time">—</span></div>
-      <div class="sched-detail"><span class="tag">📅 —</span><span class="tag">🔁 —</span></div>
-      <div class="sched-actions"><button class="btn sm warn" onclick="openSchedModal('master_finance_full.yml','Finance FULL')">✏️ Editar horário</button></div>
-    </div>
-    <div class="sched-card" data-kind="finance" id="sched-finance-s">
-      <div class="sched-top"><span class="sched-name">📦 Finance Cadastros</span><span class="sched-time">—</span></div>
-      <div class="sched-detail"><span class="tag">📅 —</span><span class="tag">🔁 —</span></div>
-      <div class="sched-actions"><button class="btn sm warn" onclick="openSchedModal('master_finance_semanal.yml','Finance Cadastros')">✏️ Editar horário</button></div>
-    </div>
-  </div>
+  <div class="sched-row" id="schedFinance"></div>
 </div>
 
 <!-- ═══ TAB: RUNS ═══ -->
@@ -454,39 +416,77 @@ async function loadDashboard(){
 // ─── DISPATCH ───
 async function dispatch(wf,msg,inputs){if(!confirm(msg))return;try{await ghFetch(`/repos/${GH_REPO}/actions/workflows/${wf}.yml/dispatches`,'POST',{ref:'main',inputs});toast(`✅ ${wf} disparado!`,'ok')}catch(e){toast(e.message,'err')}}
 
-// ─── SCHEDULES ───
+// ─── SCHEDULES (N slots por workflow) ───
+// slots = quantos crons fixos o workflow deve ter (diárias=2, resto=1)
 const SCHED_MAP=[
-  {file:'master_sales_diaria.yml',card:'sched-sales-d',name:'Sales Diária',desc:'Etapas→Itens→Pedidos→Serviços'},
-  {file:'master_sales_semanal.yml',card:'sched-sales-s',name:'Sales Semanal',desc:'Produtos + Auxiliares'},
-  {file:'master_orders_diaria.yml',card:'sched-orders-d',name:'Orders Diária',desc:'NFe→Recebimento→Pedidos'},
-  {file:'master_orders_semanal.yml',card:'sched-orders-s',name:'Orders Semanal',desc:'Produtos + Aux'},
-  {file:'master_finance_diaria.yml',card:'sched-finance-d',name:'Finance Diária',desc:'Pagar→Receber→Títulos→Extratos (90d)'},
-  {file:'master_finance_full.yml',card:'sched-finance-f',name:'Finance FULL',desc:'Import completo (todo histórico)'},
-  {file:'master_finance_semanal.yml',card:'sched-finance-s',name:'Finance Cadastros',desc:'Clientes+Cat+Proj+Aux'}
+  {file:'master_sales_diaria.yml',name:'Sales Diária',kind:'sales',emoji:'🚀',slots:2,cls:'blue'},
+  {file:'master_sales_semanal.yml',name:'Sales Semanal',kind:'sales',emoji:'📦',slots:1,cls:'blue'},
+  {file:'master_orders_diaria.yml',name:'Orders Diária',kind:'orders',emoji:'🛒',slots:2,cls:'purple'},
+  {file:'master_orders_semanal.yml',name:'Orders Semanal',kind:'orders',emoji:'📦',slots:1,cls:'purple'},
+  {file:'master_finance_diaria.yml',name:'Finance Diária',kind:'finance',emoji:'💵',slots:2,cls:'warn'},
+  {file:'master_finance_full.yml',name:'Finance FULL',kind:'finance',emoji:'⚠️',slots:1,cls:'warn'},
+  {file:'master_finance_semanal.yml',name:'Finance Cadastros',kind:'finance',emoji:'📦',slots:1,cls:'warn'}
 ];
 const DAY_LABELS={'*':'Todo dia','0':'Domingo','1':'Segunda','2':'Terça','3':'Quarta','4':'Quinta','5':'Sexta','6':'Sábado','1-5':'Seg a Sex'};
-function cronFreq(cron){const p=cron.split(' ');const d=p[4],dom=p[2],mon=p[3];if(d==='0')return'Semanal (Dom)';if(d==='1-5')return'Dias úteis';if(d==='*'&&dom==='*')return'Diário';return'Personalizado'}
+function cronFreq(cron){const p=cron.split(' ');const d=p[4],dom=p[2];if(d==='0')return'Semanal (Dom)';if(d==='1-5')return'Dias úteis';if(d==='*'&&dom==='*')return'Diário';return'Personalizado'}
+
+// Extrai TODOS os crons do YAML (mantém ordem)
+function extractCrons(yamlText){
+  const re=/cron:\s*"([^"]+)"/g;
+  const out=[];let m;
+  while((m=re.exec(yamlText))!==null)out.push(m[1]);
+  return out;
+}
+
+// Cria HTML de 1 card de slot
+function cardHtml(wf,cron,idx,sha){
+  const brt=cronBRT(cron),freq=cronFreq(cron),dayLbl=DAY_LABELS[cron.split(' ')[4]]||cron.split(' ')[4];
+  const label=wf.slots>1?`${wf.emoji} ${wf.name} · #${idx+1}`:`${wf.emoji} ${wf.name}`;
+  return `<div class="sched-card" data-kind="${wf.kind}" data-file="${wf.file}" data-slot="${idx}" data-cron="${cron}" data-sha="${sha}">
+    <div class="sched-top"><span class="sched-name">${label}</span><span class="sched-time">${brt.time}</span></div>
+    <div class="sched-detail"><span class="tag">📅 ${dayLbl}</span><span class="tag">🔁 ${freq}</span><span class="tag">⏰ ${brt.time} BRT</span></div>
+    <div class="sched-actions"><button class="btn sm ${wf.cls}" onclick="openSchedModal('${wf.file}','${wf.name}',${idx})">✏️ Editar horário</button></div>
+  </div>`;
+}
+function cardErrorHtml(wf,idx,msg){
+  const label=wf.slots>1?`${wf.emoji} ${wf.name} · #${idx+1}`:`${wf.emoji} ${wf.name}`;
+  return `<div class="sched-card" data-kind="${wf.kind}">
+    <div class="sched-top"><span class="sched-name">${label}</span><span class="sched-time">⚠️</span></div>
+    <div class="sched-detail"><span class="tag">${msg||'sem cron'}</span></div>
+  </div>`;
+}
+
 async function loadSchedules(){
+  // Limpa contêineres
+  const containers={sales:document.getElementById('schedSales'),orders:document.getElementById('schedOrders'),finance:document.getElementById('schedFinance')};
+  Object.values(containers).forEach(c=>{if(c)c.innerHTML=''});
   for(const wf of SCHED_MAP){
-    const el=document.getElementById(wf.card);if(!el)continue;
+    const cont=containers[wf.kind];if(!cont)continue;
     try{
       const d=await ghFetch(`/repos/${GH_REPO}/contents/.github/workflows/${wf.file}`);
-      const c=atob(d.content.replace(/\n/g,'')),mt=c.match(/cron:\s*"([^"]*)"/);
-      const cron=mt?mt[1]:'???',brt=cronBRT(cron),freq=cronFreq(cron),dayLbl=DAY_LABELS[cron.split(' ')[4]]||cron.split(' ')[4];
-      el.querySelector('.sched-time').textContent=brt.time;
-      el.querySelector('.sched-detail').innerHTML=`<span class="tag">📅 ${dayLbl}</span><span class="tag">🔁 ${freq}</span><span class="tag">⏰ ${brt.time} BRT</span>`;
-      // Store cron data on element
-      el.dataset.cron=cron;el.dataset.sha=d.sha;el.dataset.file=wf.file;el.dataset.wfname=wf.name;
-    }catch(e){el.querySelector('.sched-time').textContent='⚠️';console.log(wf.file,e)}
+      const yaml=atob(d.content.replace(/\n/g,''));
+      const crons=extractCrons(yaml);
+      // Renderiza 1 card para cada slot esperado
+      for(let i=0;i<wf.slots;i++){
+        if(crons[i])cont.insertAdjacentHTML('beforeend',cardHtml(wf,crons[i],i,d.sha));
+        else cont.insertAdjacentHTML('beforeend',cardErrorHtml(wf,i,'slot vazio'));
+      }
+    }catch(e){
+      for(let i=0;i<wf.slots;i++)cont.insertAdjacentHTML('beforeend',cardErrorHtml(wf,i,'erro'));
+      console.log(wf.file,e);
+    }
   }
 }
-function openSchedModal(file,name){
-  // Find card with this file
-  const card=document.querySelector(`[data-file="${file}"]`);
+
+function openSchedModal(file,name,slotIdx){
+  slotIdx=slotIdx||0;
+  const card=document.querySelector(`[data-file="${file}"][data-slot="${slotIdx}"]`);
   if(!card||!card.dataset.cron)return toast('Carregue a agenda primeiro','err');
   const cron=card.dataset.cron,sha=card.dataset.sha,brt=cronBRT(cron),parts=cron.split(' ');
-  modalState={file,name,cron,sha};
-  document.getElementById('modalTitle').textContent='Editar — '+name;
+  modalState={file,name,slotIdx,cron,sha};
+  const wf=SCHED_MAP.find(x=>x.file===file);
+  const suffix=(wf&&wf.slots>1)?` · slot #${slotIdx+1}`:'';
+  document.getElementById('modalTitle').textContent='Editar — '+name+suffix;
   document.getElementById('modalTime').value=brt.time;
   document.getElementById('modalDay').value=parts[4];
   document.getElementById('modalCurrent').textContent=`${brt.time} BRT · ${DAY_LABELS[parts[4]]||parts[4]} · cron: ${cron}`;
@@ -495,7 +495,28 @@ function openSchedModal(file,name){
 
 // ─── MODAL ───
 function closeModal(){document.getElementById('modalOverlay').classList.remove('open')}
-async function saveSchedule(){const t=document.getElementById('modalTime').value,day=document.getElementById('modalDay').value,[hB,m]=t.split(':').map(Number),hU=(hB+3)%24,p=modalState.cron.split(' '),nc=`${m} ${hU} ${p[2]} ${p[3]} ${day}`;try{const d=await ghFetch(`/repos/${GH_REPO}/contents/.github/workflows/${modalState.file}`);let c=atob(d.content.replace(/\n/g,''));c=c.replace(/cron:\s*"[^"]*/,`cron: "${nc}`);await ghFetch(`/repos/${GH_REPO}/contents/.github/workflows/${modalState.file}`,'PUT',{message:`chore: ${modalState.name} → ${t} BRT`,content:btoa(unescape(encodeURIComponent(c))),sha:d.sha});toast(`✅ ${t} BRT`,'ok');closeModal();loadSchedules()}catch(e){toast(e.message,'err')}}
+async function saveSchedule(){
+  const t=document.getElementById('modalTime').value,day=document.getElementById('modalDay').value;
+  const [hB,m]=t.split(':').map(Number),hU=(hB+3)%24;
+  const p=modalState.cron.split(' '),nc=`${m} ${hU} ${p[2]} ${p[3]} ${day}`;
+  try{
+    const d=await ghFetch(`/repos/${GH_REPO}/contents/.github/workflows/${modalState.file}`);
+    let yaml=atob(d.content.replace(/\n/g,''));
+    // Substitui apenas a N-ésima ocorrência de cron: "..."
+    let idx=0;
+    yaml=yaml.replace(/cron:\s*"([^"]+)"/g,function(match,cap){
+      if(idx===modalState.slotIdx){idx++;return `cron: "${nc}"`}
+      idx++;return match;
+    });
+    await ghFetch(`/repos/${GH_REPO}/contents/.github/workflows/${modalState.file}`,'PUT',{
+      message:`chore: ${modalState.name} slot #${modalState.slotIdx+1} → ${t} BRT`,
+      content:btoa(unescape(encodeURIComponent(yaml))),
+      sha:d.sha
+    });
+    toast(`✅ ${t} BRT (slot #${modalState.slotIdx+1})`,'ok');
+    closeModal();loadSchedules();
+  }catch(e){toast(e.message,'err')}
+}
 
 // ─── RUNS ───
 function runGroup(name){

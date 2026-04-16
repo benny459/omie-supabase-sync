@@ -22,7 +22,8 @@ on:
         default: "90"
 
   schedule:
-    - cron: "0 10 * * 1-5"  # Seg a Sex 04:30 UTC (01:30 BRT) â incremental 90 dias
+    - cron: "0 10 * * 1-5"   # Slot #1 — Seg a Sex 10:00 UTC (07:00 BRT)
+    - cron: "0 22 * * 1-5"   # Slot #2 — Seg a Sex 22:00 UTC (19:00 BRT)
 
 concurrency:
   group: master-finance-diaria

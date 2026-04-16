@@ -12,7 +12,8 @@ on:
         default: "SF"
 
   schedule:
-    - cron: "0 9 * * 1-5"  # Todo dia as 03:45 UTC (00:45 BRT)
+    - cron: "0 9 * * 1-5"   # Slot #1 — Seg a Sex  9:00 UTC (06:00 BRT)
+    - cron: "0 21 * * 1-5"   # Slot #2 — Seg a Sex 21:00 UTC (18:00 BRT)
 
 concurrency:
   group: master-orders-diaria
