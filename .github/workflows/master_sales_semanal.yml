@@ -72,6 +72,18 @@ jobs:
         run: python3 scripts/import_auxiliares.py
         continue-on-error: true
 
+      - name: "Mirror Tudo (Sheets Sales)"
+        if: always()
+        env:
+          SHEETS_MIRROR_URL: ${{ secrets.SHEETS_MIRROR_URL_SALES }}
+          SHEETS_MIRROR_TOKEN: ${{ secrets.SHEETS_MIRROR_TOKEN }}
+        run: |
+          if [ -z "$SHEETS_MIRROR_URL" ]; then echo "URL Sales nao configurado - pulando"; exit 0; fi
+          curl -sS -L -X POST "$SHEETS_MIRROR_URL" \
+            -H "Content-Type: application/json" \
+            -d "{\"token\":\"$SHEETS_MIRROR_TOKEN\",\"cfgName\":\"TUDO\"}" \
+            --max-time 360 || echo "Webhook falhou (nao-critico)"
+
       - name: Resumo
         if: always()
         run: |
