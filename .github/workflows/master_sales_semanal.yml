@@ -1,7 +1,7 @@
-name: ð MASTER Sales Semanal (Omie â Supabase)
+name: MASTER Sales Semanal (Omie -> Supabase)
 
 # Roda semanalmente os importers de cadastros (Produtos + Auxiliares).
-# Esses dados mudam raramente, entÃ£o uma vez por semana Ã© suficiente.
+# Esses dados mudam raramente, entao uma vez por semana e suficiente.
 
 on:
   workflow_dispatch:
@@ -12,7 +12,7 @@ on:
         default: "SF,CD,WW"
 
   schedule:
-    - cron: "0 8 * * 0"  # Domingo 04:00 UTC (01:00 BRT)
+    - cron: "0 8 * * 0"  # Domingo 08:00 UTC (05:00 BRT)
 
 concurrency:
   group: master-sales-semanal
@@ -29,10 +29,10 @@ jobs:
         with:
           python-version: "3.11"
 
-      # âââââââââââââââââââââââââââââââââââââ
+      # -----------------------------------------
       # 1. Produtos (7k-12k rows)
-      # âââââââââââââââââââââââââââââââââââââ
-      - name: 1ï¸â£ Produtos
+      # -----------------------------------------
+      - name: "1 Produtos"
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
@@ -49,13 +49,13 @@ jobs:
         run: python3 scripts/import_produtos.py
         continue-on-error: true
 
-      - name: â¸ï¸ Pausa (60s)
+      - name: "Pausa (60s)"
         run: sleep 60
 
-      # âââââââââââââââââââââââââââââââââââââ
+      # -----------------------------------------
       # 2. Auxiliares (FormasPag + Categorias)
-      # âââââââââââââââââââââââââââââââââââââ
-      - name: 2ï¸â£ Auxiliares
+      # -----------------------------------------
+      - name: "2 Auxiliares"
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
@@ -72,10 +72,10 @@ jobs:
         run: python3 scripts/import_auxiliares.py
         continue-on-error: true
 
-      - name: ð Resumo
+      - name: Resumo
         if: always()
         run: |
-          echo "ââââââââââââââââââââââââââââââââââââââââââââââââââââ"
-          echo "ð Master Sales Semanal concluÃ­da"
+          echo "========================================================"
+          echo "Master Sales Semanal concluida"
           echo "Empresas: ${{ github.event.inputs.empresas || 'SF,CD,WW' }}"
-          echo "ââââââââââââââââââââââââââââââââââââââââââââââââââââ"
+          echo "========================================================"
