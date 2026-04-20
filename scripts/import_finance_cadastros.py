@@ -16,6 +16,7 @@ Tabelas: finance.*
 Freq:    Semanal (domingo)
 """
 import sys, time
+from datetime import datetime, timedelta
 
 sys.path.insert(0, "scripts")
 from _common import (
@@ -25,6 +26,11 @@ from _common import (
 )
 
 SCHEMA = "finance"
+
+# Incremental (aplicado a lancamentos_cc). Outras tabelas de cadastro permanecem FULL.
+FORCAR_FULL = env("FORCAR_FULL", "false").lower() == "true"
+DIAS_INCREMENTAL = int(env("DIAS_INCREMENTAL", "90"))
+DATA_INICIO_FULL = env("DATA_INICIO_FULL", "01/01/2024")
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -463,16 +469,30 @@ def import_lancamentos_cc():
             "info_imp_api": info.get("cImpAPI") or None,
         }
 
+    # Determina filtro de data (FULL ou incremental de N dias)
+    if FORCAR_FULL:
+        dt_inicial = DATA_INICIO_FULL
+        modo_label = "FULL"
+    else:
+        dt = datetime.now() - timedelta(days=DIAS_INCREMENTAL)
+        dt_inicial = dt.strftime("%d/%m/%Y")
+        modo_label = f"INCREMENTAL ({DIAS_INCREMENTAL}d)"
+
+    dt_final = datetime.now().strftime("%d/%m/%Y")
+    print(f"   Modo: {modo_label} | Período: {dt_inicial} → {dt_final}")
+
     total = 0
     for sigla in EMPRESAS_ALVO:
         if not EMPRESAS_OMIE.get(sigla): continue
         inicio = time.time()
         try:
             # ListarLancCC uses nPagina/nRegPorPagina and returns nTotPaginas
+            # Filtro de data: dDtInicial e dDtFinal (DD/MM/AAAA)
             items = fetch_omie_paginated(
                 url=URL, call="ListarLancCC", sigla=sigla,
                 list_field="listaLancamentos", page_size=100,
                 page_key="nPagina", size_key="nRegPorPagina",
+                extra_param={"dDtInicial": dt_inicial, "dDtFinal": dt_final},
                 label="LancCC",
             )
             rows = [map_lanc(l, sigla) for l in items]
@@ -482,7 +502,8 @@ def import_lancamentos_cc():
             )
             dur = int(time.time() - inicio)
             print(f"   {sigla}: {n} ({ins} new, {upd} upd) {dur}s")
-            update_sync_state(f"lancamentos_cc_{sigla}", sigla, n, modo="FULL",
+            modo_final = "FULL" if FORCAR_FULL else "INCREMENTAL"
+            update_sync_state(f"lancamentos_cc_{sigla}", sigla, n, modo=modo_final,
                               rows_inserted=ins, rows_updated=upd, rows_before=bef, duracao_segundos=dur)
             total += n
         except Exception as e:
