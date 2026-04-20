@@ -138,6 +138,7 @@ tr.group-sub td{background:var(--bg-3);font-family:var(--mono);font-weight:600;f
 .toast{font-family:var(--mono);font-size:.72rem;padding:.5rem 1rem;border-radius:var(--radius);border:1px solid;animation:slideIn .25s ease-out;max-width:320px}
 .toast.ok{background:var(--ok-bg);border-color:#1a5c2e;color:var(--ok)}
 .toast.err{background:var(--err-bg);border-color:#5c1a1a;color:var(--err)}
+.toast.warn{background:var(--warn-bg);border-color:#5c4a1a;color:var(--warn)}
 @keyframes slideIn{from{opacity:0;transform:translateX(16px)}to{opacity:1;transform:translateX(0)}}
 .empty{text-align:center;padding:1.5rem;color:var(--tx-2);font-size:.8rem}
 a{color:var(--accent);text-decoration:none}
@@ -414,7 +415,25 @@ async function loadDashboard(){
 }
 
 // ─── DISPATCH ───
-async function dispatch(wf,msg,inputs){if(!confirm(msg))return;try{await ghFetch(`/repos/${GH_REPO}/actions/workflows/${wf}.yml/dispatches`,'POST',{ref:'main',inputs});toast(`✅ ${wf} disparado!`,'ok')}catch(e){toast(e.message,'err')}}
+// Dispatch com confirmação via toast (em vez de confirm() nativo que alguns browsers bloqueiam).
+// 1º click mostra confirmação e arma dispatch por 5s; 2º click dentro desse prazo dispara.
+var _dispatchPending = {};
+async function dispatch(wf,msg,inputs){
+  var key = wf + JSON.stringify(inputs||{});
+  if(!_dispatchPending[key]){
+    _dispatchPending[key] = setTimeout(function(){ delete _dispatchPending[key]; }, 5000);
+    toast(`⚠️ ${msg} Clique de novo em 5s pra confirmar`, 'warn');
+    return;
+  }
+  clearTimeout(_dispatchPending[key]);
+  delete _dispatchPending[key];
+  try{
+    await ghFetch(`/repos/${GH_REPO}/actions/workflows/${wf}.yml/dispatches`,'POST',{ref:'main',inputs});
+    toast(`✅ ${wf} disparado!`,'ok')
+  }catch(e){
+    toast(e.message,'err')
+  }
+}
 
 // ─── SCHEDULES (N slots por workflow) ───
 // slots = quantos crons fixos o workflow deve ter (diárias=2, resto=1)
