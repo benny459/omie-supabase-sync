@@ -10,7 +10,7 @@ Combines multiple cadastro importers into a single script:
   5. Empresas       /geral/empresas/           | ListarEmpresas        (single-key SF)
   6. Parcelas       /geral/parcelas/           | ListarParcelas        (single-key SF)
   7. LancamentosCC  /financas/contacorrentelancamentos/ | ListarLancCC (nPagina/nRegPorPagina)
-  8. Auxiliares     (7 small tables: bandeiras, origens, finalidades, DRE, tiposCC, tiposDoc, bancos)
+  8. Auxiliares     (6 small tables: origens, finalidades, DRE, tiposCC, tiposDoc, bancos)
 
 Tabelas: finance.*
 Freq:    Semanal (domingo)
@@ -517,15 +517,7 @@ def import_lancamentos_cc():
 # ═════════════════════════════════════════════════════════════════════════════
 
 AUXILIARES_CONFIG = {
-    "bandeiras_cartao": {
-        "url": "https://app.omie.com.br/api/v1/geral/bandeiracartao/",
-        "call": "ListarBandeiras",
-        "list_field": "listaBandeira",
-        "pk": "codigo",
-        "paginated": True,
-        "page_key": "nPagina", "size_key": "nRegPorPagina",
-        "fields": lambda r: {"codigo": r.get("cCodigo") or "", "descricao": r.get("cDescricao") or None},
-    },
+    # bandeiras_cartao REMOVIDO — endpoint da Omie instavel (dava pau) e nao usamos esses dados.
     "origens_lancamento": {
         "url": "https://app.omie.com.br/api/v1/geral/origemlancamento/",
         "call": "ListarOrigem",
