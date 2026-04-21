@@ -1,7 +1,7 @@
 name: MASTER Finance Diaria (Omie -> Supabase)
 
 # Executa ContasPagar -> ContasReceber -> PesquisaTitulos -> ExtratosCC em sequencia.
-# Disparado 1x ao dia (04:30 UTC = 01:30 BRT, apos Orders master terminar) + manual.
+# Disparado 2x ao dia (slots configuraveis via painel web) + manual.
 
 on:
   workflow_dispatch:
@@ -11,7 +11,7 @@ on:
         required: false
         default: "SF,CD,WW"
       forcar_full:
-        description: "ForÃÂ§ar FULL (ignora filtro 90 dias)"
+        description: "Forcar FULL (ignora filtro 90 dias)"
         required: false
         default: "false"
         type: choice
@@ -22,8 +22,8 @@ on:
         default: "90"
 
   schedule:
-    - cron: "0 10 * * 1-5"   # Slot #1 â Seg a Sex 10:00 UTC (07:00 BRT)
-    - cron: "0 18 * * 1-5"   # Slot #2 â Seg a Sex 22:00 UTC (19:00 BRT)
+    - cron: "0 10 * * 1-5"   # Slot #1 - Seg a Sex 10:00 UTC (07:00 BRT)
+    - cron: "0 18 * * 1-5"   # Slot #2 - Seg a Sex 18:00 UTC (15:00 BRT)
 
 concurrency:
   group: master-finance-diaria
@@ -32,7 +32,7 @@ concurrency:
 jobs:
   import:
     runs-on: ubuntu-latest
-    timeout-minutes: 180  # 3h - Contas Pagar (54k) + Receber + TÃÂ­tulos (60k) + Extratos
+    timeout-minutes: 180  # 3h - Contas Pagar (54k) + Receber + Titulos (60k) + Extratos
 
     steps:
       - uses: actions/checkout@v4
