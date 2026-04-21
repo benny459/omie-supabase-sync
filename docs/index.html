@@ -449,24 +449,53 @@ const SCHED_MAP=[
 const DAY_LABELS={'*':'Todo dia','0':'Domingo','1':'Segunda','2':'Terça','3':'Quarta','4':'Quinta','5':'Sexta','6':'Sábado','1-5':'Seg a Sex'};
 function cronFreq(cron){const p=cron.split(' ');const d=p[4],dom=p[2];if(d==='0')return'Semanal (Dom)';if(d==='1-5')return'Dias úteis';if(d==='*'&&dom==='*')return'Diário';return'Personalizado'}
 
-// Extrai TODOS os crons do YAML (mantém ordem)
+// Extrai TODOS os crons ATIVOS do YAML (ignora linhas comentadas)
 function extractCrons(yamlText){
-  const re=/cron:\s*"([^"]+)"/g;
-  const out=[];let m;
-  while((m=re.exec(yamlText))!==null)out.push(m[1]);
+  const lines=yamlText.split('\n');
+  const out=[];
+  for(const line of lines){
+    const trimmed=line.replace(/^\s*/,'');
+    if(trimmed.startsWith('#'))continue; // pula comentados
+    const m=line.match(/cron:\s*"([^"]+)"/);
+    if(m)out.push(m[1]);
+  }
   return out;
 }
 
-// Cria HTML de 1 card de slot
-function cardHtml(wf,cron,idx,sha){
+// Detecta se schedule está ativo, desativado ou ausente
+function scheduleStatus(yaml){
+  for(const line of yaml.split('\n')){
+    if(/^\s*schedule:\s*$/.test(line))return 'ativo';
+    if(/^\s*#\s*schedule\s*DESATIVADO/i.test(line))return 'desativado';
+  }
+  return 'ausente';
+}
+
+// Cria HTML de 1 card de slot ATIVO
+function cardHtml(wf,cron,idx,sha,totalSlots){
   const brt=cronBRT(cron),freq=cronFreq(cron),dayLbl=DAY_LABELS[cron.split(' ')[4]]||cron.split(' ')[4];
-  const label=wf.slots>1?`${wf.emoji} ${wf.name} · #${idx+1}`:`${wf.emoji} ${wf.name}`;
+  const label=totalSlots>1?`${wf.emoji} ${wf.name} · #${idx+1}`:`${wf.emoji} ${wf.name}`;
+  // Botão "Desativar" só aparece no slot #1 (não duplicar)
+  const btnDesativar=idx===0?`<button class="btn sm" onclick="desativarSchedule('${wf.file}','${wf.name}')" title="Desliga a agenda automática deste workflow">🔕 Desativar</button>`:'';
   return `<div class="sched-card" data-kind="${wf.kind}" data-file="${wf.file}" data-slot="${idx}" data-cron="${cron}" data-sha="${sha}">
     <div class="sched-top"><span class="sched-name">${label}</span><span class="sched-time">${brt.time}</span></div>
     <div class="sched-detail"><span class="tag">📅 ${dayLbl}</span><span class="tag">🔁 ${freq}</span><span class="tag">⏰ ${brt.time} BRT</span></div>
-    <div class="sched-actions"><button class="btn sm ${wf.cls}" onclick="openSchedModal('${wf.file}','${wf.name}',${idx})">✏️ Editar horário</button></div>
+    <div class="sched-actions">
+      <button class="btn sm ${wf.cls}" onclick="openSchedModal('${wf.file}','${wf.name}',${idx})">✏️ Editar horário</button>
+      ${btnDesativar}
+    </div>
   </div>`;
 }
+
+// Card pra schedule DESATIVADO (só manual)
+function cardDesativadoHtml(wf){
+  return `<div class="sched-card" data-kind="${wf.kind}" data-file="${wf.file}" style="opacity:.7">
+    <div class="sched-top"><span class="sched-name">${wf.emoji} ${wf.name}</span><span class="sched-time" style="font-size:1rem">⏸</span></div>
+    <div class="sched-detail"><span class="tag">🔕 Agenda desativada (só manual)</span></div>
+    <div class="sched-actions"><button class="btn sm ${wf.cls}" onclick="ativarSchedule('${wf.file}','${wf.name}')">🔔 Ativar agenda</button></div>
+  </div>`;
+}
+
 function cardErrorHtml(wf,idx,msg){
   const label=wf.slots>1?`${wf.emoji} ${wf.name} · #${idx+1}`:`${wf.emoji} ${wf.name}`;
   return `<div class="sched-card" data-kind="${wf.kind}">
@@ -484,10 +513,19 @@ async function loadSchedules(){
     try{
       const d=await ghFetch(`/repos/${GH_REPO}/contents/.github/workflows/${wf.file}`);
       const yaml=atob(d.content.replace(/\n/g,''));
+      const status=scheduleStatus(yaml);
+      if(status==='desativado'){
+        cont.insertAdjacentHTML('beforeend',cardDesativadoHtml(wf));
+        continue;
+      }
       const crons=extractCrons(yaml);
-      // Renderiza 1 card para cada slot esperado
+      if(crons.length===0){
+        cont.insertAdjacentHTML('beforeend',cardDesativadoHtml(wf));
+        continue;
+      }
+      // Renderiza 1 card para cada slot ativo
       for(let i=0;i<wf.slots;i++){
-        if(crons[i])cont.insertAdjacentHTML('beforeend',cardHtml(wf,crons[i],i,d.sha));
+        if(crons[i])cont.insertAdjacentHTML('beforeend',cardHtml(wf,crons[i],i,d.sha,wf.slots));
         else cont.insertAdjacentHTML('beforeend',cardErrorHtml(wf,i,'slot vazio'));
       }
     }catch(e){
@@ -495,6 +533,87 @@ async function loadSchedules(){
       console.log(wf.file,e);
     }
   }
+}
+
+// ─── DESATIVAR / ATIVAR SCHEDULE ───
+async function desativarSchedule(file,name){
+  if(!confirm(`Desativar a agenda automática de "${name}"?\n\nO workflow só rodará quando você disparar manualmente pelo botão "▶ Disparar".\nDá pra reativar a qualquer momento.`))return;
+  try{
+    const d=await ghFetch(`/repos/${GH_REPO}/contents/.github/workflows/${file}`);
+    let yaml=atob(d.content.replace(/\n/g,''));
+    yaml=_comentarSchedule(yaml);
+    await ghFetch(`/repos/${GH_REPO}/contents/.github/workflows/${file}`,'PUT',{
+      message:`chore: desativa schedule de ${name} via painel`,
+      content:btoa(unescape(encodeURIComponent(yaml))),
+      sha:d.sha
+    });
+    toast(`🔕 Agenda de ${name} desativada`,'ok');
+    loadSchedules();
+  }catch(e){toast(e.message,'err')}
+}
+
+async function ativarSchedule(file,name){
+  if(!confirm(`Reativar agenda automática de "${name}"?`))return;
+  try{
+    const d=await ghFetch(`/repos/${GH_REPO}/contents/.github/workflows/${file}`);
+    let yaml=atob(d.content.replace(/\n/g,''));
+    yaml=_descomentarSchedule(yaml);
+    await ghFetch(`/repos/${GH_REPO}/contents/.github/workflows/${file}`,'PUT',{
+      message:`chore: reativa schedule de ${name} via painel`,
+      content:btoa(unescape(encodeURIComponent(yaml))),
+      sha:d.sha
+    });
+    toast(`🔔 Agenda de ${name} reativada`,'ok');
+    loadSchedules();
+  }catch(e){toast(e.message,'err')}
+}
+
+/** Comenta o bloco schedule: e seus crons no YAML. */
+function _comentarSchedule(yaml){
+  const lines=yaml.split('\n');
+  const result=[];
+  let i=0;let done=false;
+  while(i<lines.length){
+    const line=lines[i];
+    if(!done&&/^(\s*)schedule:\s*$/.test(line)){
+      const indent=line.match(/^(\s*)/)[1];
+      result.push(indent+'# schedule DESATIVADO via painel web - rodar apenas manual');
+      result.push(indent+'# '+line.trimStart());
+      i++;
+      while(i<lines.length&&/^\s*-\s*cron:/.test(lines[i])){
+        result.push(indent+'# '+lines[i].trimStart());
+        i++;
+      }
+      done=true;continue;
+    }
+    result.push(line);i++;
+  }
+  return result.join('\n');
+}
+
+/** Descomenta o bloco schedule: e seus crons no YAML. */
+function _descomentarSchedule(yaml){
+  const lines=yaml.split('\n');
+  const result=[];
+  let i=0;let done=false;
+  while(i<lines.length){
+    const line=lines[i];
+    // Pula linha "# schedule DESATIVADO ..."
+    if(!done&&/^\s*#\s*schedule\s*DESATIVADO/i.test(line)){i++;continue;}
+    // Descomenta "# schedule:"
+    if(!done&&/^(\s*)#\s*schedule:\s*$/.test(line)){
+      const indent=line.match(/^(\s*)/)[1];
+      result.push(indent+'schedule:');
+      i++;
+      while(i<lines.length&&/^\s*#\s*-\s*cron:/.test(lines[i])){
+        result.push(lines[i].replace(/^(\s*)#\s*/,'$1'));
+        i++;
+      }
+      done=true;continue;
+    }
+    result.push(line);i++;
+  }
+  return result.join('\n');
 }
 
 function openSchedModal(file,name,slotIdx){

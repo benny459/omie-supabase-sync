@@ -12,8 +12,9 @@ on:
         required: false
         default: "SF,CD,WW"
 
-  schedule:
-    - cron: "0 6 * * 0"  # Domingo 06:00 UTC (03:00 BRT) — depois dos cadastros
+  # schedule DESATIVADO via painel web - rodar apenas manual
+  # schedule:
+  #   - cron: "0 6 * * 0"  # Domingo 06:00 UTC (03:00 BRT)
 
 concurrency:
   group: master-finance-full
