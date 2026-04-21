@@ -10,7 +10,7 @@ on:
       empresas:
         description: "Empresas (CSV)"
         required: false
-        default: "SF"
+        default: "SF,CD,WW"
 
   schedule:
     - cron: "0 6 * * 0"  # Domingo 06:00 UTC (03:00 BRT) — depois dos cadastros
@@ -40,7 +40,7 @@ jobs:
           OMIE_APP_SECRET_CD: ${{ secrets.OMIE_APP_SECRET_CD }}
           OMIE_APP_KEY_WW: ${{ secrets.OMIE_APP_KEY_WW }}
           OMIE_APP_SECRET_WW: ${{ secrets.OMIE_APP_SECRET_WW }}
-          EMPRESAS_ALVO: ${{ github.event.inputs.empresas || 'SF' }}
+          EMPRESAS_ALVO: ${{ github.event.inputs.empresas || 'SF,CD,WW' }}
           FORCAR_FULL: "true"
           PYTHONUNBUFFERED: "1"
         run: python3 scripts/import_contas_pagar.py
@@ -59,7 +59,7 @@ jobs:
           OMIE_APP_SECRET_CD: ${{ secrets.OMIE_APP_SECRET_CD }}
           OMIE_APP_KEY_WW: ${{ secrets.OMIE_APP_KEY_WW }}
           OMIE_APP_SECRET_WW: ${{ secrets.OMIE_APP_SECRET_WW }}
-          EMPRESAS_ALVO: ${{ github.event.inputs.empresas || 'SF' }}
+          EMPRESAS_ALVO: ${{ github.event.inputs.empresas || 'SF,CD,WW' }}
           FORCAR_FULL: "true"
           PYTHONUNBUFFERED: "1"
         run: python3 scripts/import_contas_receber.py
@@ -78,7 +78,7 @@ jobs:
           OMIE_APP_SECRET_CD: ${{ secrets.OMIE_APP_SECRET_CD }}
           OMIE_APP_KEY_WW: ${{ secrets.OMIE_APP_KEY_WW }}
           OMIE_APP_SECRET_WW: ${{ secrets.OMIE_APP_SECRET_WW }}
-          EMPRESAS_ALVO: ${{ github.event.inputs.empresas || 'SF' }}
+          EMPRESAS_ALVO: ${{ github.event.inputs.empresas || 'SF,CD,WW' }}
           FORCAR_FULL: "true"
           PYTHONUNBUFFERED: "1"
         run: python3 scripts/import_pesquisa_titulos.py
@@ -97,7 +97,7 @@ jobs:
           OMIE_APP_SECRET_CD: ${{ secrets.OMIE_APP_SECRET_CD }}
           OMIE_APP_KEY_WW: ${{ secrets.OMIE_APP_KEY_WW }}
           OMIE_APP_SECRET_WW: ${{ secrets.OMIE_APP_SECRET_WW }}
-          EMPRESAS_ALVO: ${{ github.event.inputs.empresas || 'SF' }}
+          EMPRESAS_ALVO: ${{ github.event.inputs.empresas || 'SF,CD,WW' }}
           FORCAR_FULL: "true"
           PYTHONUNBUFFERED: "1"
         run: python3 scripts/import_extratos_cc.py

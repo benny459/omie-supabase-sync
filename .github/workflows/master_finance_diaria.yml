@@ -7,9 +7,9 @@ on:
   workflow_dispatch:
     inputs:
       empresas:
-        description: "Empresas (CSV, default: SF)"
+        description: "Empresas (CSV, default: SF,CD,WW)"
         required: false
-        default: "SF"
+        default: "SF,CD,WW"
       forcar_full:
         description: "ForÃÂ§ar FULL (ignora filtro 90 dias)"
         required: false
@@ -53,7 +53,7 @@ jobs:
           OMIE_APP_SECRET_CD: ${{ secrets.OMIE_APP_SECRET_CD }}
           OMIE_APP_KEY_WW: ${{ secrets.OMIE_APP_KEY_WW }}
           OMIE_APP_SECRET_WW: ${{ secrets.OMIE_APP_SECRET_WW }}
-          EMPRESAS_ALVO: ${{ github.event.inputs.empresas || 'SF' }}
+          EMPRESAS_ALVO: ${{ github.event.inputs.empresas || 'SF,CD,WW' }}
           FORCAR_FULL: ${{ github.event.inputs.forcar_full || 'false' }}
           DIAS_INCREMENTAL: ${{ github.event.inputs.dias_incremental || '90' }}
           SHEETS_MIRROR_URL: ${{ secrets.SHEETS_MIRROR_URL }}
@@ -78,7 +78,7 @@ jobs:
           OMIE_APP_SECRET_CD: ${{ secrets.OMIE_APP_SECRET_CD }}
           OMIE_APP_KEY_WW: ${{ secrets.OMIE_APP_KEY_WW }}
           OMIE_APP_SECRET_WW: ${{ secrets.OMIE_APP_SECRET_WW }}
-          EMPRESAS_ALVO: ${{ github.event.inputs.empresas || 'SF' }}
+          EMPRESAS_ALVO: ${{ github.event.inputs.empresas || 'SF,CD,WW' }}
           FORCAR_FULL: ${{ github.event.inputs.forcar_full || 'false' }}
           DIAS_INCREMENTAL: ${{ github.event.inputs.dias_incremental || '90' }}
           SHEETS_MIRROR_URL: ${{ secrets.SHEETS_MIRROR_URL }}
@@ -103,7 +103,7 @@ jobs:
           OMIE_APP_SECRET_CD: ${{ secrets.OMIE_APP_SECRET_CD }}
           OMIE_APP_KEY_WW: ${{ secrets.OMIE_APP_KEY_WW }}
           OMIE_APP_SECRET_WW: ${{ secrets.OMIE_APP_SECRET_WW }}
-          EMPRESAS_ALVO: ${{ github.event.inputs.empresas || 'SF' }}
+          EMPRESAS_ALVO: ${{ github.event.inputs.empresas || 'SF,CD,WW' }}
           FORCAR_FULL: ${{ github.event.inputs.forcar_full || 'false' }}
           DIAS_INCREMENTAL: ${{ github.event.inputs.dias_incremental || '90' }}
           SHEETS_MIRROR_URL: ${{ secrets.SHEETS_MIRROR_URL }}
@@ -128,7 +128,7 @@ jobs:
           OMIE_APP_SECRET_CD: ${{ secrets.OMIE_APP_SECRET_CD }}
           OMIE_APP_KEY_WW: ${{ secrets.OMIE_APP_KEY_WW }}
           OMIE_APP_SECRET_WW: ${{ secrets.OMIE_APP_SECRET_WW }}
-          EMPRESAS_ALVO: ${{ github.event.inputs.empresas || 'SF' }}
+          EMPRESAS_ALVO: ${{ github.event.inputs.empresas || 'SF,CD,WW' }}
           FORCAR_FULL: ${{ github.event.inputs.forcar_full || 'false' }}
           DIAS_INCREMENTAL: ${{ github.event.inputs.dias_incremental || '90' }}
           SHEETS_MIRROR_URL: ${{ secrets.SHEETS_MIRROR_URL }}
@@ -154,5 +154,5 @@ jobs:
         run: |
           echo "========================================================"
           echo "Master Finance Diaria concluida"
-          echo "Empresas: ${{ github.event.inputs.empresas || 'SF' }}"
+          echo "Empresas: ${{ github.event.inputs.empresas || 'SF,CD,WW' }}"
           echo "========================================================"
