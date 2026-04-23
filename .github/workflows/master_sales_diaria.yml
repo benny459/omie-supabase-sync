@@ -18,8 +18,7 @@ on:
         options: ["false", "true"]
 
   schedule:
-    - cron: "0 8 * * 1-5"   # Slot #1 - Seg a Sex 08:00 UTC (05:00 BRT)
-    - cron: "0 20 * * 1-5"  # Slot #2 - Seg a Sex 20:00 UTC (17:00 BRT)
+    - cron: "0 9,12,15,18,21 * * 1-5"
 
 concurrency:
   group: master-sales-diaria
