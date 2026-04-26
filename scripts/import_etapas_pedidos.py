@@ -71,11 +71,9 @@ def importar_empresa(sigla: str):
     print(f"\n▶️  {sigla} | Etapas de Pedidos | FULL (estado atual de todos os pedidos)")
 
     # Etapas não tem filtro de data nativo — faz FULL sempre.
-    # Otimizações:
-    #   - page_size 500 (Omie aceita) → ~5× menos roundtrips
-    #   - cExibirHistorico="N" → API devolve só etapa atual de cada pedido
-    #     (sem o histórico de transições), ~3× menos linhas brutas. O dedup
-    #     local segue ativo como fallback caso a API ignore o flag.
+    # Otimização: page_size 500 (Omie aceita) → ~5× menos roundtrips.
+    # cExibirHistorico foi testado e a API rejeita ("Tag não faz parte da estrutura").
+    # O dedup local segue cobrindo o caso de a API devolver histórico.
     items = fetch_omie_paginated(
         url=OMIE_URL,
         call="ListarEtapasPedido",
@@ -84,7 +82,6 @@ def importar_empresa(sigla: str):
         page_size=500,
         page_key="nPagina",
         size_key="nRegPorPagina",
-        extra_param={"cExibirHistorico": "N"},
         label="Etapas",
     )
 
