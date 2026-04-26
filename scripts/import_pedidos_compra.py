@@ -137,9 +137,9 @@ def importar_empresa(sigla: str):
     print(f"   {sigla}: {len(items)} pedidos -> {len(rows)} linhas (itens)")
 
     n = supa_upsert(SCHEMA, TABELA, rows, PK)
-    update_sync_state(f"pedidos_compra_{sigla}", sigla, n, modo="FULL")
-
     elapsed = int(time.time() - inicio)
+    update_sync_state(f"pedidos_compra_{sigla}", sigla, n, modo="FULL", duracao_segundos=elapsed)
+
     print(f"   {sigla}: {n} rows em {elapsed}s")
     return n
 

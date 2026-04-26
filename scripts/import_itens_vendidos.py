@@ -296,6 +296,8 @@ def atualizar_sync_state(sigla: str, resultado: dict, status: str = "SUCESSO", e
         "total_registros": resultado.get("total_linhas", 0),
         "ultima_execucao_status": status,
         "ultima_execucao_msg": erro if erro else f"modo={resultado.get('modo','')} pedidos={resultado.get('total_pedidos',0)} linhas={resultado.get('total_linhas',0)}",
+        "modo": resultado.get("modo") or status,
+        "duracao_segundos": int(resultado.get("segundos") or 0),
     }
     if resultado.get("maior_d_alt"):
         row["last_d_alt_processed"] = resultado["maior_d_alt"]

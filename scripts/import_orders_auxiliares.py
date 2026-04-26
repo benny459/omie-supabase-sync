@@ -67,8 +67,9 @@ def importar_produtos(sigla: str):
     rows = [map_produto(p, sigla) for p in items]
     rows = [r for r in rows if r["id_omie"]]
     n = supa_upsert(SCHEMA, "produtos_compras", rows, "empresa,id_omie")
-    update_sync_state(f"produtos_compras_{sigla}", sigla, n, modo="FULL")
-    print(f"   {sigla}: {n} produtos em {int(time.time()-inicio)}s")
+    elapsed = int(time.time()-inicio)
+    update_sync_state(f"produtos_compras_{sigla}", sigla, n, modo="FULL", duracao_segundos=elapsed)
+    print(f"   {sigla}: {n} produtos em {elapsed}s")
     return n
 
 
@@ -127,8 +128,9 @@ def importar_etapas_faturamento(sigla: str):
         rows.extend(map_etapa_fat(reg, sigla))
     rows = [r for r in rows if r["cod_operacao"]]
     n = supa_upsert(SCHEMA, "etapas_faturamento", rows, "empresa,cod_operacao,cod_etapa")
-    update_sync_state(f"etapas_faturamento_{sigla}", sigla, n, modo="FULL")
-    print(f"   {sigla}: {n} etapas em {int(time.time()-inicio)}s")
+    elapsed = int(time.time()-inicio)
+    update_sync_state(f"etapas_faturamento_{sigla}", sigla, n, modo="FULL", duracao_segundos=elapsed)
+    print(f"   {sigla}: {n} etapas em {elapsed}s")
     return n
 
 
@@ -163,8 +165,9 @@ def importar_formas_pag_vendas(sigla: str):
     rows = [map_forma_pag_venda(r, sigla) for r in items]
     rows = [r for r in rows if r["codigo"]]
     n = supa_upsert(SCHEMA, "formas_pagamento_vendas", rows, "empresa,codigo")
-    update_sync_state(f"formas_pag_vendas_{sigla}", sigla, n, modo="FULL")
-    print(f"   {sigla}: {n} formas em {int(time.time()-inicio)}s")
+    elapsed = int(time.time()-inicio)
+    update_sync_state(f"formas_pag_vendas_{sigla}", sigla, n, modo="FULL", duracao_segundos=elapsed)
+    print(f"   {sigla}: {n} formas em {elapsed}s")
     return n
 
 
@@ -200,8 +203,9 @@ def importar_familias(sigla: str):
     rows = [map_familia(r, sigla) for r in items]
     rows = [r for r in rows if r["codigo"]]
     n = supa_upsert(SCHEMA, "familias_produtos", rows, "empresa,codigo")
-    update_sync_state(f"familias_produtos_{sigla}", sigla, n, modo="FULL")
-    print(f"   {sigla}: {n} familias em {int(time.time()-inicio)}s")
+    elapsed = int(time.time()-inicio)
+    update_sync_state(f"familias_produtos_{sigla}", sigla, n, modo="FULL", duracao_segundos=elapsed)
+    print(f"   {sigla}: {n} familias em {elapsed}s")
     return n
 
 
@@ -268,8 +272,9 @@ def importar_produto_fornecedor(sigla: str):
         rows.extend(map_produto_fornecedor(cad, sigla))
     rows = [r for r in rows if r["cod_forn"]]
     n = supa_upsert(SCHEMA, "produto_fornecedor", rows, "empresa,cod_forn,cod_prod")
-    update_sync_state(f"produto_fornecedor_{sigla}", sigla, n, modo="FULL")
-    print(f"   {sigla}: {n} vinculos em {int(time.time()-inicio)}s")
+    elapsed = int(time.time()-inicio)
+    update_sync_state(f"produto_fornecedor_{sigla}", sigla, n, modo="FULL", duracao_segundos=elapsed)
+    print(f"   {sigla}: {n} vinculos em {elapsed}s")
     return n
 
 
@@ -305,8 +310,9 @@ def importar_unidades(sigla: str):
     rows = [map_unidade(r, sigla) for r in items]
     rows = [r for r in rows if r["sigla"]]
     n = supa_upsert(SCHEMA, "unidades", rows, "empresa,sigla")
-    update_sync_state(f"unidades_{sigla}", sigla, n, modo="FULL")
-    print(f"   {sigla}: {n} unidades em {int(time.time()-inicio)}s")
+    elapsed = int(time.time()-inicio)
+    update_sync_state(f"unidades_{sigla}", sigla, n, modo="FULL", duracao_segundos=elapsed)
+    print(f"   {sigla}: {n} unidades em {elapsed}s")
     return n
 
 
@@ -342,8 +348,9 @@ def importar_formas_pag_compras(sigla: str):
     rows = [map_forma_pag_compra(r, sigla) for r in items]
     rows = [r for r in rows if r["codigo"]]
     n = supa_upsert(SCHEMA, "formas_pagamento_compras", rows, "empresa,codigo")
-    update_sync_state(f"formas_pag_compras_{sigla}", sigla, n, modo="FULL")
-    print(f"   {sigla}: {n} formas em {int(time.time()-inicio)}s")
+    elapsed = int(time.time()-inicio)
+    update_sync_state(f"formas_pag_compras_{sigla}", sigla, n, modo="FULL", duracao_segundos=elapsed)
+    print(f"   {sigla}: {n} formas em {elapsed}s")
     return n
 
 

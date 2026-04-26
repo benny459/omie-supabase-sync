@@ -107,9 +107,10 @@ def importar_ordens_servico(sigla: str):
     print(f"   🔧 Dedup: {len(all_rows)} → {len(rows)} rows únicos")
 
     n = supa_upsert(SCHEMA, "ordens_servico", rows, "empresa,codigo_os,seq_item")
-    update_sync_state(f"ordens_servico_{sigla}", sigla, n, modo="FULL")
+    elapsed = int(time.time() - inicio)
+    update_sync_state(f"ordens_servico_{sigla}", sigla, n, modo="FULL", duracao_segundos=elapsed)
 
-    print(f"   ✅ {sigla} OS: {len(items)} OS → {n} rows em {int(time.time()-inicio)}s")
+    print(f"   ✅ {sigla} OS: {len(items)} OS → {n} rows em {elapsed}s")
     return n
 
 # ══════════════════════════════════════════════════════════════════════════
@@ -189,9 +190,10 @@ def importar_contratos(sigla: str):
     rows = list(dedup.values())
 
     n = supa_upsert(SCHEMA, "contratos_servico", rows, "empresa,codigo_contrato,seq")
-    update_sync_state(f"contratos_servico_{sigla}", sigla, n, modo="FULL")
+    elapsed = int(time.time() - inicio)
+    update_sync_state(f"contratos_servico_{sigla}", sigla, n, modo="FULL", duracao_segundos=elapsed)
 
-    print(f"   ✅ {sigla} Contratos: {len(items)} → {n} rows em {int(time.time()-inicio)}s")
+    print(f"   ✅ {sigla} Contratos: {len(items)} → {n} rows em {elapsed}s")
     return n
 
 # ══════════════════════════════════════════════════════════════════════════

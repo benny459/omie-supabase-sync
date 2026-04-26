@@ -49,8 +49,9 @@ def importar_formas(sigla: str):
     rows = [map_forma(r, sigla) for r in items]
     rows = [r for r in rows if r["codigo"]]
     n = supa_upsert(SCHEMA, "formas_pagamento", rows, "empresa,codigo")
-    update_sync_state(f"formas_pagamento_{sigla}", sigla, n, modo="FULL")
-    print(f"   ✅ {sigla}: {n} formas em {int(time.time()-inicio)}s")
+    elapsed = int(time.time()-inicio)
+    update_sync_state(f"formas_pagamento_{sigla}", sigla, n, modo="FULL", duracao_segundos=elapsed)
+    print(f"   ✅ {sigla}: {n} formas em {elapsed}s")
     return n
 
 # ────────────────────────────────────────
@@ -83,8 +84,9 @@ def importar_categorias(sigla: str):
     rows = [map_categoria(r, sigla) for r in items]
     rows = [r for r in rows if r["codigo"]]
     n = supa_upsert(SCHEMA, "categorias", rows, "empresa,codigo")
-    update_sync_state(f"categorias_{sigla}", sigla, n, modo="FULL")
-    print(f"   ✅ {sigla}: {n} categorias em {int(time.time()-inicio)}s")
+    elapsed = int(time.time()-inicio)
+    update_sync_state(f"categorias_{sigla}", sigla, n, modo="FULL", duracao_segundos=elapsed)
+    print(f"   ✅ {sigla}: {n} categorias em {elapsed}s")
     return n
 
 # ────────────────────────────────────────

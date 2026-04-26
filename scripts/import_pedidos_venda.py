@@ -124,10 +124,11 @@ def importar_empresa(sigla: str):
             maior_h_alt = r.get("h_alt") or ""
 
     n = supa_upsert(SCHEMA, TABELA, rows, PK)
-    update_sync_state(f"pedidos_venda_{sigla}", sigla, n,
-                      maior_d_alt=maior_d_alt, maior_h_alt=maior_h_alt, modo=modo)
-
     elapsed = int(time.time() - inicio)
+    update_sync_state(f"pedidos_venda_{sigla}", sigla, n,
+                      maior_d_alt=maior_d_alt, maior_h_alt=maior_h_alt,
+                      modo=modo, duracao_segundos=elapsed)
+
     print(f"   ✅ {sigla}: {len(items)} pedidos → {n} rows em {elapsed}s ({modo})")
     return n
 

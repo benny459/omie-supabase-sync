@@ -71,9 +71,9 @@ def importar_empresa(sigla: str):
     rows = [r for r in rows if r["id_omie"]]
 
     n = supa_upsert(SCHEMA, TABELA, rows, PK)
-    update_sync_state(f"produtos_{sigla}", sigla, n, modo="FULL")
-
     elapsed = int(time.time() - inicio)
+    update_sync_state(f"produtos_{sigla}", sigla, n, modo="FULL", duracao_segundos=elapsed)
+
     print(f"   ✅ {sigla}: {len(items)} items → {n} rows em {elapsed}s")
     return n
 
