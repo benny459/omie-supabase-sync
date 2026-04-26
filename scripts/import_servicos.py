@@ -84,7 +84,7 @@ def importar_ordens_servico(sigla: str):
         call="ListarOS",
         sigla=sigla,
         list_field="osCadastro",
-        page_size=50,  # OS é mais pesado, menor page
+        page_size=200,  # subiu de 50 → 200 (OS tem payload grande, mas 200 é seguro)
         extra_param={"apenas_importado_api": "N"},
         label="OS",
     )
@@ -169,7 +169,7 @@ def importar_contratos(sigla: str):
         call="ListarContratos",
         sigla=sigla,
         list_field="contratoCadastro",
-        page_size=50,
+        page_size=200,  # subiu de 50 → 200
         extra_param={"apenas_importado_api": "N"},
         label="Contratos",
     )
