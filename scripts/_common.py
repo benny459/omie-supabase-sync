@@ -157,12 +157,23 @@ def fetch_omie_paginated(url: str, call: str, sigla: str, list_field: str,
             break
 
         all_items.extend(items)
-        tot_pag = data.get("total_de_paginas", "?")
-        tot_reg = data.get("total_de_registros", "?")
-        print(f"{len(items)} registros (acum: {len(all_items)} | {pagina}/{tot_pag} pág, {tot_reg} total API)")
+        tot_pag_raw = data.get("total_de_paginas") or data.get("nTotPaginas")
+        tot_reg = data.get("total_de_registros") or data.get("nTotRegistros") or "?"
+        print(f"{len(items)} registros (acum: {len(all_items)} | {pagina}/{tot_pag_raw or '?'} pág, {tot_reg} total API)")
 
-        if len(items) < page_size:
-            break
+        # Decide fim da paginação:
+        # - Se a API informou total_de_paginas → usa isso (autoritativo)
+        # - Senão → cai no heurístico de comparar com page_size pedido
+        try:
+            tot_pag_int = int(tot_pag_raw) if tot_pag_raw is not None else None
+        except (TypeError, ValueError):
+            tot_pag_int = None
+        if tot_pag_int is not None:
+            if pagina >= tot_pag_int:
+                break
+        else:
+            if len(items) < page_size:
+                break
         pagina += 1
         time.sleep(PAUSA_ENTRE_CHAMADAS)
 
@@ -228,9 +239,9 @@ def fetch_and_upsert_streaming(
         buffer.extend(rows)
         pages_fetched += 1
 
-        tot_pag = data.get("total_de_paginas") or data.get("nTotPaginas") or "?"
+        tot_pag_raw = data.get("total_de_paginas") or data.get("nTotPaginas")
         tot_reg = data.get("total_de_registros") or data.get("nTotRegistros") or "?"
-        print(f"{len(items)} items → buffer {len(buffer)} (pág {pagina}/{tot_pag}, {tot_reg} total)")
+        print(f"{len(items)} items → buffer {len(buffer)} (pág {pagina}/{tot_pag_raw or '?'}, {tot_reg} total)")
 
         # UPSERT quando buffer atinge o threshold
         if len(buffer) >= upsert_every:
@@ -239,9 +250,19 @@ def fetch_and_upsert_streaming(
             total_rows += len(buffer)
             buffer = []
 
-        if len(items) < page_size:
-            completed = True
-            break
+        # Decide fim: total_de_paginas da API tem prioridade sobre len(items)<page_size
+        try:
+            tot_pag_int = int(tot_pag_raw) if tot_pag_raw is not None else None
+        except (TypeError, ValueError):
+            tot_pag_int = None
+        if tot_pag_int is not None:
+            if pagina >= tot_pag_int:
+                completed = True
+                break
+        else:
+            if len(items) < page_size:
+                completed = True
+                break
         pagina += 1
         time.sleep(PAUSA_ENTRE_CHAMADAS)
 
