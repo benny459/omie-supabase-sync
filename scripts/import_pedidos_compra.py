@@ -4,19 +4,37 @@
 IMPORT PEDIDOS DE COMPRA -- Omie -> Supabase
 Endpoint: /produtos/pedidocompra/PesquisarPedCompra
 Tabela:   orders.pedidos_compra
-Freq:     Diaria
-Volume:   Variavel -- cada pedido gera N rows (1 por item)
+Freq:     Diaria (incremental) + 1x/semana FULL
+Volume:   ~4200 PCs / 13.6k linhas (cada pedido gera N rows = 1 por item)
+==========================================================================
+
+MODO DE OPERAÇÃO:
+  - INCREMENTAL (padrão): pagina pelo PesquisarPedCompra (que retorna em
+    ordem decrescente de ncod_ped) e PARA quando atinge ncod_ped já
+    sincronizado. Tipicamente baixa só 1-3 páginas (~100-300 PCs novos).
+
+  - FULL: baixa tudo. Acionado por:
+      * FORCAR_FULL=true (env var)
+      * Sem dados prévios no Supabase (1º run)
+      * Domingo (DIA_FULL_SEMANAL=6 por default, Python weekday)
+
+A API do PesquisarPedCompra é brutalmente limitada (ver
+test_omie_pc_filters.py): não aceita filtros de data, etapa, page_size > 100.
+Mas confirmamos empiricamente que retorna em ordem ncod_ped DESC, então
+incremental por offset/early-stop é viável.
 ==========================================================================
 """
-import os
+import datetime
+import json
 import sys
 import time
+import urllib.parse
 
 sys.path.insert(0, "scripts")
 from _common import (
-    EMPRESAS_ALVO, EMPRESAS_OMIE, PAUSA_ENTRE_CHAMADAS,
-    fetch_omie_paginated, supa_upsert, update_sync_state,
-    to_int, to_float, trigger_sheets_mirror
+    EMPRESAS_ALVO, EMPRESAS_OMIE, PAUSA_ENTRE_CHAMADAS, env,
+    fetch_omie, supa_upsert, supa_select, update_sync_state,
+    to_int, to_float, trigger_sheets_mirror,
 )
 
 OMIE_URL = "https://app.omie.com.br/api/v1/produtos/pedidocompra/"
@@ -24,6 +42,11 @@ MODULO = "pedidos_compra"
 SCHEMA = "orders"
 TABELA = "pedidos_compra"
 PK = "empresa,ncod_ped,ncod_item"
+
+# Config:
+FORCAR_FULL = env("FORCAR_FULL", "false").lower() == "true"
+DIA_FULL_SEMANAL = int(env("DIA_FULL_SEMANAL", "6"))  # 6=domingo (Python weekday)
+PAGE_SIZE = 100  # cap rígido da API
 
 
 def map_pedido_item(sigla: str, cab: dict, prod: dict) -> dict:
@@ -48,7 +71,7 @@ def map_pedido_item(sigla: str, cab: dict, prod: dict) -> dict:
         "ncod_proj": to_int(cab.get("nCodProj")),
         "ccod_int_ped": cab.get("cCodIntPed") or None,
         "cnum_pedido": cab.get("cNumPedido") or None,
-        "ccontrato": cab.get("cContrato") or None,
+        "ccontrato": cab.get("ccontrato") or None,
         "cobs": cab.get("cObs") or None,
         "cobs_int": cab.get("cObsInt") or None,
         "ntotal_pedido": to_float(cab.get("nTotalPedido")),
@@ -89,64 +112,130 @@ def map_pedido_item(sigla: str, cab: dict, prod: dict) -> dict:
 
 
 def explodir_pedido(ped: dict, sigla: str) -> list:
-    """Expande 1 pedido em N rows (1 por item, como ItensVendidos)."""
+    """Expande 1 pedido em N rows (1 por item)."""
     cab = ped.get("cabecalho_consulta") or {}
     prods = ped.get("produtos_consulta") or []
     if not prods:
-        # Pedido sem itens -- gera 1 row com campos de produto vazios
         return [map_pedido_item(sigla, cab, {})]
     return [map_pedido_item(sigla, cab, p) for p in prods]
 
 
+def get_max_ncod_ped(sigla: str):
+    """Retorna o maior ncod_ped já sincronizado pra essa empresa, ou None."""
+    try:
+        rows = supa_select(
+            SCHEMA, TABELA,
+            f"select=ncod_ped&empresa=eq.{urllib.parse.quote(sigla)}&order=ncod_ped.desc&limit=1"
+        )
+        if rows and rows[0].get("ncod_ped"):
+            return rows[0]["ncod_ped"]
+    except Exception as e:
+        print(f"   ⚠️ Falha lendo MAX(ncod_ped): {e}")
+    return None
+
+
+def decidir_modo(sigla: str):
+    """Retorna ('FULL'|'INCREMENTAL', max_ncod_ped_atual_ou_None)."""
+    if FORCAR_FULL:
+        return "FULL", None
+    if datetime.datetime.now().weekday() == DIA_FULL_SEMANAL:
+        return "FULL", None
+    last = get_max_ncod_ped(sigla)
+    if last is None:
+        return "FULL", None  # primeiro run
+    return "INCREMENTAL", last
+
+
 def importar_empresa(sigla: str):
     inicio = time.time()
-    print(f"\n-> {sigla} | Pedidos de Compra | FULL")
+    modo, last_ncod_ped = decidir_modo(sigla)
 
-    # PesquisarPedCompra uses nPagina / nRegsPorPagina
-    items = fetch_omie_paginated(
-        url=OMIE_URL,
-        call="PesquisarPedCompra",
-        sigla=sigla,
-        list_field="pedidos_pesquisa",
-        page_size=100,
-        page_key="nPagina",
-        size_key="nRegsPorPagina",
-        extra_param={
-            "lExibirPedidosPendentes": "S",
-            "lExibirPedidosFaturados": "S",
-            "lExibirPedidosCancelados": "S",
-            "lExibirPedidosRecebidos": "S",
-            "lExibirPedidosEncerrados": "S",
-        },
-        label="PedCompra",
-    )
+    if modo == "INCREMENTAL":
+        print(f"\n-> {sigla} | Pedidos de Compra | INCREMENTAL (early-stop em ncod_ped <= {last_ncod_ped})")
+    else:
+        print(f"\n-> {sigla} | Pedidos de Compra | FULL")
 
-    if not items:
-        print(f"   {sigla}: nenhum registro")
-        update_sync_state(f"pedidos_compra_{sigla}", sigla, 0, modo="FULL")
+    extra_param = {
+        "lExibirPedidosPendentes":  "S",
+        "lExibirPedidosFaturados":  "S",
+        "lExibirPedidosCancelados": "S",
+        "lExibirPedidosRecebidos":  "S",
+        "lExibirPedidosEncerrados": "S",
+    }
+
+    all_items = []
+    pagina = 1
+    parou_por_overlap = False
+
+    while True:
+        param = {"nPagina": pagina, "nRegsPorPagina": PAGE_SIZE, **extra_param}
+        print(f"   ⬇️  {sigla} | PedCompra pág {pagina} ({PAGE_SIZE}/p)...", end=" ", flush=True)
+        data = fetch_omie(OMIE_URL, "PesquisarPedCompra", sigla, param)
+
+        if data.get("_empty_page"):
+            print("fim (sem mais registros).")
+            break
+
+        items = data.get("pedidos_pesquisa") or []
+        if not items:
+            print("vazio, fim.")
+            break
+
+        # Em INCREMENTAL: extrair menor ncod_ped da página → se já está abaixo
+        # do limite, pegamos os PCs > limite desta página e paramos.
+        if modo == "INCREMENTAL" and last_ncod_ped is not None:
+            ncods_pag = [to_int(p.get("cabecalho_consulta", {}).get("nCodPed")) for p in items]
+            ncods_pag = [n for n in ncods_pag if n]
+            min_pagina = min(ncods_pag) if ncods_pag else 0
+            if min_pagina <= last_ncod_ped:
+                # Última página relevante: filtra só os > last_ncod_ped
+                items_relevantes = [
+                    p for p in items
+                    if to_int((p.get("cabecalho_consulta") or {}).get("nCodPed") or 0) > last_ncod_ped
+                ]
+                all_items.extend(items_relevantes)
+                print(f"{len(items)} registros (filtrou {len(items_relevantes)} novos | min ncod_ped={min_pagina} <= limite={last_ncod_ped} → fim)")
+                parou_por_overlap = True
+                break
+
+        all_items.extend(items)
+        print(f"{len(items)} registros (acum: {len(all_items)} | pág {pagina})")
+
+        # Limite de segurança: 100 páginas (10k PCs) — se não parou ainda algo está errado
+        if pagina >= 100:
+            print(f"   ⚠ Atingiu limite de 100 páginas — parando por segurança")
+            break
+
+        pagina += 1
+        time.sleep(PAUSA_ENTRE_CHAMADAS)
+
+    if not all_items:
+        msg = "nenhum registro novo" if modo == "INCREMENTAL" else "nenhum registro"
+        print(f"   {sigla}: {msg}")
+        elapsed = int(time.time() - inicio)
+        update_sync_state(f"pedidos_compra_{sigla}", sigla, 0, modo=modo, duracao_segundos=elapsed)
         return 0
 
     # Explodir pedidos em linhas de itens
     rows = []
-    for ped in items:
+    for ped in all_items:
         rows.extend(explodir_pedido(ped, sigla))
-
-    # Filtra rows sem PK
     rows = [r for r in rows if r["ncod_ped"]]
 
-    print(f"   {sigla}: {len(items)} pedidos -> {len(rows)} linhas (itens)")
+    print(f"   {sigla}: {len(all_items)} pedidos -> {len(rows)} linhas (itens)")
 
     n = supa_upsert(SCHEMA, TABELA, rows, PK)
     elapsed = int(time.time() - inicio)
-    update_sync_state(f"pedidos_compra_{sigla}", sigla, n, modo="FULL", duracao_segundos=elapsed)
+    update_sync_state(f"pedidos_compra_{sigla}", sigla, n, modo=modo, duracao_segundos=elapsed)
 
-    print(f"   {sigla}: {n} rows em {elapsed}s")
+    print(f"   {sigla}: {n} rows em {elapsed}s ({modo})")
     return n
 
 
 def main():
     print("=" * 63)
-    print("Import Pedidos de Compra -- Omie -> Supabase")
+    print(f"Import Pedidos de Compra -- Omie -> Supabase")
+    print(f"Modo: {'FORCAR_FULL=true' if FORCAR_FULL else f'auto (FULL aos domingos, INCREMENTAL nos demais)'}")
     print("=" * 63)
     print(f"Empresas: {', '.join(EMPRESAS_ALVO)}")
 
