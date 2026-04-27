@@ -1,0 +1,40 @@
+name: TEST Pedidos Compra (incremental)
+
+on:
+  workflow_dispatch:
+    inputs:
+      forcar_full:
+        description: "Forçar modo FULL (em vez de incremental)"
+        required: false
+        default: "false"
+        type: choice
+        options:
+          - "false"
+          - "true"
+      empresas:
+        description: "Empresas a importar (separar por vírgula)"
+        required: false
+        default: "SF"
+        type: string
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: "Run import_pedidos_compra.py"
+        env:
+          SUPABASE_URL:              ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          OMIE_APP_KEY_SF:           ${{ secrets.OMIE_APP_KEY_SF }}
+          OMIE_APP_SECRET_SF:        ${{ secrets.OMIE_APP_SECRET_SF }}
+          OMIE_APP_KEY_CD:           ${{ secrets.OMIE_APP_KEY_CD }}
+          OMIE_APP_SECRET_CD:        ${{ secrets.OMIE_APP_SECRET_CD }}
+          OMIE_APP_KEY_WW:           ${{ secrets.OMIE_APP_KEY_WW }}
+          OMIE_APP_SECRET_WW:        ${{ secrets.OMIE_APP_SECRET_WW }}
+          EMPRESAS_ALVO:             ${{ inputs.empresas }}
+          FORCAR_FULL:               ${{ inputs.forcar_full }}
+        run: python scripts/import_pedidos_compra.py
