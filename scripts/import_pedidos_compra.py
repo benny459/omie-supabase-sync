@@ -179,6 +179,21 @@ def importar_empresa(sigla: str):
     for ped in all_items:
         rows.extend(explodir_pedido(ped, sigla))
     rows = [r for r in rows if r["ncod_ped"]]
+    count_raw = len(rows)
+
+    # Dedup por PK (empresa, ncod_ped, ncod_item) — necessário porque:
+    #   1. PCs sem itens explodem para 1 row com ncod_item=0
+    #   2. Itens sem nCodItem na resposta também viram ncod_item=0
+    #   3. Mesmo PC pode aparecer em 2 páginas se a API tiver hiccup
+    # UPSERT do Supabase rejeita duplicatas no batch (erro 21000).
+    # Mantém a ÚLTIMA ocorrência (sobrescreve no dict).
+    dedup: dict = {}
+    for r in rows:
+        key = (r["empresa"], r["ncod_ped"], r["ncod_item"])
+        dedup[key] = r
+    rows = list(dedup.values())
+    if len(rows) < count_raw:
+        print(f"   🔧 Dedup PK: {count_raw} → {len(rows)} rows únicos ({count_raw - len(rows)} duplicatas removidas)")
 
     print(f"   {sigla}: {len(all_items)} pedidos -> {len(rows)} linhas (itens)")
 
