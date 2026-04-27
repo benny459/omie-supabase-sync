@@ -1,0 +1,25 @@
+name: TEST ConsultarPedCompra (single PC detail)
+
+on:
+  workflow_dispatch:
+    inputs:
+      pc_numeros:
+        description: "Números de PC a investigar (vírgula-separado)"
+        required: false
+        default: "6593,6597,6605"
+        type: string
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: "Comparar Pesquisar vs Consultar"
+        env:
+          OMIE_APP_KEY_SF:    ${{ secrets.OMIE_APP_KEY_SF }}
+          OMIE_APP_SECRET_SF: ${{ secrets.OMIE_APP_SECRET_SF }}
+          PC_NUMEROS:         ${{ inputs.pc_numeros }}
+        run: python scripts/test_consultar_pc.py
