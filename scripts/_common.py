@@ -102,9 +102,20 @@ def fetch_omie(url: str, call: str, sigla: str, param: dict):
 
         text = body[:300].decode("utf-8", errors="replace")
 
-        # 500 "Não existem registros para a página [X]" = paginação normal chegou ao fim
-        if code == 500 and "ao existem registros para a p" in text:
-            return {"_empty_page": True}
+        # 500 com faultstring "Não existem registros para a página [X]" = fim normal de paginação.
+        # JSON cru tem o "ã" escaped (ã), então precisamos decodar como JSON pra match certo.
+        if code == 500:
+            fs = ""
+            try:
+                parsed = json.loads(body.decode("utf-8", errors="replace"))
+                fs = (parsed.get("faultstring") or "") if isinstance(parsed, dict) else ""
+            except Exception:
+                pass
+            # Cobre ambos os padrões observados:
+            #   "Não existem registros para a página [X]"
+            #   "Não existem cadastros para a página [X]"  (alguns endpoints)
+            if "ão existem" in fs and "página" in fs:
+                return {"_empty_page": True}
 
         if code == 429:
             espera = 20 * t  # 20, 40, 60, 80s

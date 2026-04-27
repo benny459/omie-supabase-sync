@@ -1,7 +1,16 @@
-name: TEST Omie ListarOS Filters
+name: TEST Omie API Filters
 
 on:
   workflow_dispatch:
+    inputs:
+      target:
+        description: "Qual endpoint testar"
+        required: true
+        default: "pedidocompra"
+        type: choice
+        options:
+          - listaros
+          - pedidocompra
 
 jobs:
   test:
@@ -12,7 +21,14 @@ jobs:
         with:
           python-version: "3.11"
       - name: "Test ListarOS filters"
+        if: ${{ inputs.target == 'listaros' }}
         env:
           OMIE_APP_KEY_SF:    ${{ secrets.OMIE_APP_KEY_SF }}
           OMIE_APP_SECRET_SF: ${{ secrets.OMIE_APP_SECRET_SF }}
         run: python scripts/test_omie_os_filters.py
+      - name: "Test PesquisarPedCompra filters"
+        if: ${{ inputs.target == 'pedidocompra' }}
+        env:
+          OMIE_APP_KEY_SF:    ${{ secrets.OMIE_APP_KEY_SF }}
+          OMIE_APP_SECRET_SF: ${{ secrets.OMIE_APP_SECRET_SF }}
+        run: python scripts/test_omie_pc_filters.py
