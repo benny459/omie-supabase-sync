@@ -110,6 +110,49 @@ r_g = chamar({"cFiltrarApenasNaoFaturados": "S"}, "nao_fat")
 print("\n[H] cEtapa='10' (filtra etapa específica)")
 r_h = chamar({"cEtapa": "10"}, "etapa10")
 
+print("\n[I] Validar ordem da paginação — pegar pág 1 e pág 10, comparar ncod_ped range")
+def get_ncod_range(page_num: int):
+    param = {**BASE_PARAM, "nPagina": page_num, "nRegsPorPagina": 100}
+    payload = {"call": CALL, "app_key": APP_KEY, "app_secret": APP_SECRET, "param": [param]}
+    try:
+        req = urllib.request.Request(URL, data=json.dumps(payload).encode("utf-8"),
+                                      headers={"Content-Type": "application/json"})
+        with urllib.request.urlopen(req, timeout=60) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+    except Exception as e:
+        return None
+    items = data.get("pedidos_pesquisa") or []
+    if not items:
+        return None
+    ncods = []
+    for ped in items:
+        cab = ped.get("cabecalho_consulta") or {}
+        ncods.append(cab.get("nCodPed"))
+    ncods = [n for n in ncods if n is not None]
+    if not ncods:
+        return None
+    return {
+        "pagina": page_num, "n_items": len(items),
+        "ncod_min": min(ncods), "ncod_max": max(ncods),
+        "ncod_first": ncods[0], "ncod_last": ncods[-1],
+    }
+
+r_p1 = get_ncod_range(1)
+time.sleep(0.5)
+r_p10 = get_ncod_range(10)
+
+if r_p1 and r_p10:
+    print(f"   pág 1: {r_p1['n_items']} itens, ncod_ped {r_p1['ncod_min']}–{r_p1['ncod_max']} (1º={r_p1['ncod_first']}, último={r_p1['ncod_last']})")
+    print(f"   pág 10: {r_p10['n_items']} itens, ncod_ped {r_p10['ncod_min']}–{r_p10['ncod_max']} (1º={r_p10['ncod_first']}, último={r_p10['ncod_last']})")
+    if r_p1['ncod_min'] > r_p10['ncod_max']:
+        print(f"   ✅ ORDEM DECRESCENTE confirmada (pág 1 tem ncod_ped > pág 10) → incremental por offset É VIÁVEL")
+    elif r_p1['ncod_max'] < r_p10['ncod_min']:
+        print(f"   ⚠ ORDEM CRESCENTE (pág 1 tem ncod_ped < pág 10) → incremental por offset INVERTIDO (baixar últimas N páginas)")
+    else:
+        print(f"   ⚠ Ordem mista/imprevisível → incremental por offset NÃO CONFIÁVEL")
+else:
+    print("   ❌ Falha buscando dados — Omie pode estar bloqueada")
+
 print("\n" + "=" * 70)
 print("📋 RESUMO — comparar com baseline pra saber o que filtrou de verdade")
 print("=" * 70)
