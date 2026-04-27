@@ -78,8 +78,10 @@ jobs:
 
       # -----------------------------------------
       # 3. Pedidos Compra (PesquisarPedCompra)
+      # Modo DIARIO: pega so 10 pgs (~1000 PCs mais recentes) — ~10s.
+      # FULL completo roda 1x/semana via master_orders_semanal.
       # -----------------------------------------
-      - name: "3 Pedidos de Compra"
+      - name: "3 Pedidos de Compra (DIARIO — 1000 mais recentes)"
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
@@ -92,6 +94,7 @@ jobs:
           EMPRESAS_ALVO: ${{ github.event.inputs.empresas || 'SF' }}
           SHEETS_MIRROR_URL: ${{ secrets.SHEETS_MIRROR_URL }}
           SHEETS_MIRROR_TOKEN: ${{ secrets.SHEETS_MIRROR_TOKEN }}
+          MAX_PAGINAS_PEDCOMPRA: "10"
           PYTHONUNBUFFERED: "1"
         run: python3 scripts/import_pedidos_compra.py
         continue-on-error: true

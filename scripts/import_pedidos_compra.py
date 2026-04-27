@@ -4,23 +4,29 @@
 IMPORT PEDIDOS DE COMPRA -- Omie -> Supabase
 Endpoint: /produtos/pedidocompra/PesquisarPedCompra
 Tabela:   orders.pedidos_compra
-Freq:     Toda execução -- sempre FULL
 Volume:   ~4200 PCs / 13.6k linhas (cada pedido gera N rows = 1 por item)
 ==========================================================================
 
-MODO: SEMPRE FULL.
+MODO via env var MAX_PAGINAS_PEDCOMPRA:
 
-Razão: a API Omie não retorna data de alteração nem aceita filtro por ela
-(testado em test_omie_pc_filters.py). Modo incremental por ncod_ped pega
-só PCs NOVOS, mas miss alterações em PCs antigos (ex: usuário preenche
-valor/fornecedor depois de criar). Como o usuário escolheu garantia de
-dados sempre frescos, fazemos FULL toda execução (~60-90s).
+  - MAX_PAGINAS_PEDCOMPRA=10 (DIARIO) → pega so as 10 primeiras paginas
+    (~1000 PCs mais recentes — API retorna em ordem ncod_ped DESC).
+    Tempo: ~10-15s. Cobre edits em PCs criados/editados nos ultimos
+    ~30 dias, que representam 95%+ dos casos.
 
-A API tem cap de 100 registros/página e detecta fim de paginação via
-faultstring "Não existem registros para a página [X]" (tratada em
-_common.fetch_omie).
+  - MAX_PAGINAS_PEDCOMPRA=0 ou ausente (SEMANAL/FULL) → pega tudo.
+    Tempo: ~60-90s. Garante captura de edits em PCs antigos raramente
+    modificados.
+
+A API Omie nao retorna data de alteracao nem aceita filtro por ela
+(testado em test_omie_pc_filters.py), entao paginacao por DESC e a
+unica forma viavel de ter incremental.
+
+API tem cap de 100 registros/pagina. Fim de paginacao via faultstring
+"Nao existem registros para a pagina [X]" (tratada em _common.fetch_omie).
 ==========================================================================
 """
+import os
 import sys
 import time
 
@@ -30,6 +36,10 @@ from _common import (
     fetch_omie, supa_upsert, update_sync_state,
     to_int, to_float, trigger_sheets_mirror,
 )
+
+# 0 ou ausente = pega todas as páginas (FULL).
+# > 0 = limita a N páginas (DIARIO captura recentes).
+MAX_PAGINAS = int(os.environ.get("MAX_PAGINAS_PEDCOMPRA", "0") or "0")
 
 OMIE_URL = "https://app.omie.com.br/api/v1/produtos/pedidocompra/"
 MODULO = "pedidos_compra"
@@ -114,7 +124,8 @@ def explodir_pedido(ped: dict, sigla: str) -> list:
 
 def importar_empresa(sigla: str):
     inicio = time.time()
-    print(f"\n-> {sigla} | Pedidos de Compra | FULL")
+    modo_label = f"DIARIO ({MAX_PAGINAS} pgs / ~{MAX_PAGINAS*100} PCs recentes)" if MAX_PAGINAS > 0 else "FULL"
+    print(f"\n-> {sigla} | Pedidos de Compra | {modo_label}")
 
     extra_param = {
         "lExibirPedidosPendentes":  "S",
@@ -144,7 +155,12 @@ def importar_empresa(sigla: str):
         all_items.extend(items)
         print(f"{len(items)} registros (acum: {len(all_items)} | pág {pagina})")
 
-        # Limite de segurança: 100 páginas (10k PCs) — se não parou ainda algo está errado
+        # Modo DIARIO: para após N páginas configuradas em MAX_PAGINAS_PEDCOMPRA
+        if MAX_PAGINAS > 0 and pagina >= MAX_PAGINAS:
+            print(f"   ✋ Modo DIARIO: parando após {MAX_PAGINAS} páginas configuradas")
+            break
+
+        # Limite de segurança: 100 páginas (10k PCs) — proteção pra modo FULL
         if pagina >= 100:
             print(f"   ⚠ Atingiu limite de 100 páginas — parando por segurança")
             break
@@ -168,16 +184,20 @@ def importar_empresa(sigla: str):
 
     n = supa_upsert(SCHEMA, TABELA, rows, PK)
     elapsed = int(time.time() - inicio)
-    update_sync_state(f"pedidos_compra_{sigla}", sigla, n, modo="FULL", duracao_segundos=elapsed)
+    modo = "DIARIO" if MAX_PAGINAS > 0 else "FULL"
+    update_sync_state(f"pedidos_compra_{sigla}", sigla, n, modo=modo, duracao_segundos=elapsed)
 
-    print(f"   {sigla}: {n} rows em {elapsed}s (FULL)")
+    print(f"   {sigla}: {n} rows em {elapsed}s ({modo})")
     return n
 
 
 def main():
     print("=" * 63)
     print("Import Pedidos de Compra -- Omie -> Supabase")
-    print("Modo: SEMPRE FULL (capta alteracoes em PCs antigos)")
+    if MAX_PAGINAS > 0:
+        print(f"Modo: DIARIO (primeiras {MAX_PAGINAS} pgs = ~{MAX_PAGINAS*100} PCs mais recentes)")
+    else:
+        print("Modo: FULL (todas as paginas, ~4200 PCs)")
     print("=" * 63)
     print(f"Empresas: {', '.join(EMPRESAS_ALVO)}")
 

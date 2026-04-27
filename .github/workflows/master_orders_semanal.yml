@@ -1,8 +1,9 @@
 name: MASTER Orders Semanal (Omie -> Supabase)
 
-# Roda semanalmente os importers de cadastros do modulo Orders:
-# Produtos + Etapas Faturamento + Formas Pag + Familias + Produto Fornecedor + Unidades + Formas Pag Compras
-# Esses dados mudam raramente, entao uma vez por semana e suficiente.
+# Roda semanalmente:
+# 1. Orders Auxiliares (7 tabelas de cadastros: produtos, etapas, formas pag, etc)
+# 2. Pedidos Compra FULL (~4200 PCs / ~90s) — pra captar edits em PCs antigos
+#    que o DIARIO (que pega so 10 pgs / 1000 PCs recentes) nao detecta.
 
 on:
   workflow_dispatch:
@@ -48,6 +49,30 @@ jobs:
           SHEETS_MIRROR_TOKEN: ${{ secrets.SHEETS_MIRROR_TOKEN }}
           PYTHONUNBUFFERED: "1"
         run: python3 scripts/import_orders_auxiliares.py
+        continue-on-error: true
+
+      - name: "Pausa entre modulos (30s)"
+        run: sleep 30
+
+      # -----------------------------------------
+      # 2. Pedidos Compra FULL (todas as paginas)
+      # Sem MAX_PAGINAS_PEDCOMPRA = pega tudo (~4200 PCs / ~90s)
+      # -----------------------------------------
+      - name: "2 Pedidos de Compra (FULL semanal — todos PCs)"
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          OMIE_APP_KEY_SF: ${{ secrets.OMIE_APP_KEY_SF }}
+          OMIE_APP_SECRET_SF: ${{ secrets.OMIE_APP_SECRET_SF }}
+          OMIE_APP_KEY_CD: ${{ secrets.OMIE_APP_KEY_CD }}
+          OMIE_APP_SECRET_CD: ${{ secrets.OMIE_APP_SECRET_CD }}
+          OMIE_APP_KEY_WW: ${{ secrets.OMIE_APP_KEY_WW }}
+          OMIE_APP_SECRET_WW: ${{ secrets.OMIE_APP_SECRET_WW }}
+          EMPRESAS_ALVO: ${{ github.event.inputs.empresas || 'SF' }}
+          SHEETS_MIRROR_URL: ${{ secrets.SHEETS_MIRROR_URL }}
+          SHEETS_MIRROR_TOKEN: ${{ secrets.SHEETS_MIRROR_TOKEN }}
+          PYTHONUNBUFFERED: "1"
+        run: python3 scripts/import_pedidos_compra.py
         continue-on-error: true
 
       - name: "Mirror Tudo (Sheets Orders)"
