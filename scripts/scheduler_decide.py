@@ -102,6 +102,28 @@ def already_fired_recently(s: dict, now: dt.datetime, kind: str) -> bool:
     threshold_min = 30 if kind == "daily" else 30
     return (now - last_dt).total_seconds() < threshold_min * 60
 
+def log_decision(now_brt_dt: dt.datetime, kind: str, decision: str, targets: list, reason: str = ""):
+    """Insere uma linha em platform.scheduler_log com a decisão tomada nesta execução."""
+    payload = {
+        "brt_label": now_brt_dt.strftime("%Y-%m-%d %H:%M BRT"),
+        "kind": kind,
+        "decision": decision,
+        "targets": targets or [],
+        "dry_run": DRY,
+        "reason": reason or None,
+    }
+    body = json.dumps(payload).encode()
+    req = Request(
+        f"{SUP_URL}/rest/v1/scheduler_log",
+        method="POST",
+        data=body,
+        headers={"apikey": SUP_KEY, "Authorization": f"Bearer {SUP_KEY}",
+                 "Content-Profile": "platform", "Content-Type": "application/json",
+                 "Prefer": "return=minimal"},
+    )
+    try: urlopen(req, timeout=8).read()
+    except Exception as e: print(f"   ⚠ falha ao logar decisão: {e}")
+
 # ─── Main ───────────────────────────────────────────────────────────────
 def main():
     now = now_brt()
@@ -112,18 +134,25 @@ def main():
 
     fired = []
     for kind, sch in by_kind.items():
+        if not sch.get("enabled"):
+            print(f"  [{kind}] disabled — skip")
+            log_decision(now, kind, "skip_disabled", [])
+            continue
         check = should_fire_daily if kind == "daily" else should_fire_weekly
         if not check(sch, now):
             print(f"  [{kind}] not in window — skip")
+            log_decision(now, kind, "skip_window", [], reason=f"now={now.strftime('%H:%M')} weekday={now.isoweekday()}")
             continue
         if already_fired_recently(sch, now, kind):
             print(f"  [{kind}] já disparou recentemente — skip (last_fired_at={sch.get('last_fired_at')})")
+            log_decision(now, kind, "skip_recent", [], reason=f"last_fired_at={sch.get('last_fired_at')}")
             continue
         targets = sch.get("targets") or []
         suffix = "diaria" if kind == "daily" else "semanal"
         print(f"  [{kind}] FIRE — targets: {targets}")
         for t in targets:
             gh_dispatch(f"master_{t}_{suffix}.yml")
+        log_decision(now, kind, "fired", targets)
         fired.append(kind)
 
     # Atualiza last_fired_at (mesmo em dry-run? não — só real)

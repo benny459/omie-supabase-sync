@@ -11,8 +11,7 @@ on:
         required: false
         default: "SF,CD,WW"
 
-  schedule:
-    - cron: "0 8 * * 0"  # Domingo 08:00 UTC (05:00 BRT)
+  # Cron individual REMOVIDO. Disparado pelo master_scheduler.yml.
 
 concurrency:
   group: master-sales-semanal

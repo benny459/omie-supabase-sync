@@ -11,9 +11,10 @@ on:
         required: false
         default: "SF"
 
-  schedule:
-    - cron: "0 9 * * 1-5"   # Slot #1 — Seg a Sex  9:00 UTC (06:00 BRT)
-    - cron: "0 21 * * 1-5"   # Slot #2 — Seg a Sex 21:00 UTC (18:00 BRT)
+  # Cron individual REMOVIDO. Agora é o master_scheduler.yml que dispara este
+  # workflow nos horários definidos em platform.workflow_schedule (UI em
+  # /configuracoes → Agendamento). Pra rodar manual: workflow_dispatch acima
+  # ou botão "Rodar agora" no painel.
 
 concurrency:
   group: master-orders-diaria

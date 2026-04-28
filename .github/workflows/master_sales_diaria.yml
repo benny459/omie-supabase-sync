@@ -17,8 +17,7 @@ on:
         type: choice
         options: ["false", "true"]
 
-  schedule:
-    - cron: "0 */2 * * *"
+  # Cron individual REMOVIDO. Disparado pelo master_scheduler.yml.
 
 concurrency:
   group: master-sales-diaria

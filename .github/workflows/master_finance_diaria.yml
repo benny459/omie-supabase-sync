@@ -21,9 +21,7 @@ on:
         required: false
         default: "90"
 
-  schedule:
-    - cron: "0 10 * * 1-5"   # Slot #1 - Seg a Sex 10:00 UTC (07:00 BRT)
-    - cron: "0 18 * * 1-5"   # Slot #2 - Seg a Sex 18:00 UTC (15:00 BRT)
+  # Cron individual REMOVIDO. Disparado pelo master_scheduler.yml.
 
 concurrency:
   group: master-finance-diaria

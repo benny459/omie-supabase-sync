@@ -331,18 +331,38 @@ def supa_headers(schema: str, extra: dict = None):
     return h
 
 def supa_upsert(schema: str, table: str, records: list, on_conflict: str):
+    """UPSERT em batches. Detecta "fake success": HTTP 2xx mas Content-Range
+    indica zero rows afetadas (caso típico de RLS bloqueando silenciosamente).
+    Levanta RuntimeError se isso acontecer.
+    """
     if not records:
         return 0
     base_url = f"{SUPABASE_URL}/rest/v1/{table}?on_conflict={urllib.parse.quote(on_conflict)}"
-    headers = supa_headers(schema, {"Prefer": "resolution=merge-duplicates,return=minimal"})
+    # count=exact: PostgREST inclui header Content-Range com qtd afetada.
+    headers = supa_headers(schema, {"Prefer": "resolution=merge-duplicates,return=minimal,count=exact"})
 
     total = 0
+    fake_success_chunks = 0
     for i in range(0, len(records), SUPABASE_BATCH_SIZE):
         chunk = records[i:i + SUPABASE_BATCH_SIZE]
-        code, body, _ = http_post_json(base_url, chunk, headers)
+        code, body, resp_headers = http_post_json(base_url, chunk, headers)
         if code < 200 or code >= 300:
             raise RuntimeError(f"Supabase UPSERT HTTP {code}: {body[:500].decode('utf-8', errors='replace')}")
+        # Valida que rows afetadas == chunk size (detecta RLS/fake success)
+        cr = (resp_headers or {}).get("content-range") or (resp_headers or {}).get("Content-Range") or ""
+        affected = -1
+        if "/" in cr:
+            try: affected = int(cr.split("/")[-1])
+            except (ValueError, IndexError): pass
+        if affected == 0 and len(chunk) > 0:
+            fake_success_chunks += 1
+            print(f"   ⚠️ FAKE SUCCESS: chunk de {len(chunk)} rows enviado, 0 afetadas (Content-Range={cr!r}). RLS bloqueando?")
         total += len(chunk)
+    if fake_success_chunks > 0:
+        raise RuntimeError(
+            f"Supabase aceitou {fake_success_chunks} chunk(s) com HTTP 2xx mas 0 rows afetadas — "
+            f"RLS provavelmente bloqueou silenciosamente. Confira políticas em {schema}.{table}."
+        )
     return total
 
 def supa_select(schema: str, table: str, query: str):

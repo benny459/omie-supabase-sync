@@ -13,8 +13,8 @@ on:
         required: false
         default: "SF"
 
-  schedule:
-    - cron: "0 9 * * 0"  # Domingo 04:30 UTC (01:30 BRT)
+  # Cron individual REMOVIDO. Disparado pelo master_scheduler conforme
+  # platform.workflow_schedule (kind='weekly').
 
 concurrency:
   group: master-orders-semanal
