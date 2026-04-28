@@ -4,19 +4,41 @@
 🏆 IMPORT ETAPAS DE PEDIDOS — Omie → Supabase
 Endpoint: /produtos/pedidoetapas/ListarEtapasPedido
 Tabela:   sales.etapas_pedidos
-Freq:     Diária
-Volume:   3000-5000 registros
+Freq:     Diária / Semanal
+Volume:   ~12k registros raw (5-6k após dedup)
+
+═════════════════════════════════════════════════════════════════════════════
+MODO via env var MAX_PAGINAS_ETAPAS:
+
+  - MAX_PAGINAS_ETAPAS=20 (DIARIO) → pega só as ÚLTIMAS 20 páginas
+    (~2.000 registros mais novos). API ordena por nCodPed ASC, então
+    as últimas páginas trazem os pedidos com codigo mais alto = mais
+    recentes. Análise da base mostra que 95%+ dos pedidos alterados
+    nos últimos meses estão nas ~20 últimas páginas (de ~124 totais).
+    Tempo: ~17s vs 100s do FULL.
+
+  - MAX_PAGINAS_ETAPAS=0 ou ausente (SEMANAL/FULL) → pega todas as
+    páginas. Garante que pedidos antigos reabertos sejam capturados.
+
+A API ListarEtapasPedido não aceita filtro nativo por data alteração
+(documentado no script anterior). Tail-by-page é a única estratégia
+incremental viável.
 ═════════════════════════════════════════════════════════════════════════════
 """
+import os
 import sys
 import time
 
 sys.path.insert(0, "scripts")
 from _common import (
     EMPRESAS_ALVO, EMPRESAS_OMIE, PAUSA_ENTRE_CHAMADAS,
-    fetch_omie_paginated, supa_upsert, update_sync_state,
+    fetch_omie, supa_upsert, update_sync_state,
     to_int, trigger_sheets_mirror
 )
+
+# 0 ou ausente = pega todas as páginas (FULL).
+# > 0 = limita às N últimas páginas (DIARIO captura apenas pedidos recentes).
+MAX_PAGINAS = int(os.environ.get("MAX_PAGINAS_ETAPAS", "0") or "0")
 
 OMIE_URL = "https://app.omie.com.br/api/v1/produtos/pedidoetapas/"
 MODULO = "etapas_pedidos"
@@ -66,28 +88,78 @@ def map_etapa_to_row(e: dict, sigla: str):
         "imp_api": e.get("cImpAPI") or None,
     }
 
+PAGE_SIZE = 500
+
+def fetch_etapas(sigla: str, max_paginas: int):
+    """
+    Paginação custom com 2 modos:
+    - max_paginas == 0 → FULL: pega todas as páginas (ASC, página 1 até o fim)
+    - max_paginas > 0 → TAIL: pega só as últimas N páginas (descobre total na 1ª chamada)
+
+    Retorna lista de items.
+    """
+    # 1ª chamada SEMPRE em página 1 pra descobrir total_de_paginas
+    print(f"   ⬇️  {sigla} | Etapas pág 1 (descobrindo total)...", end=" ", flush=True)
+    first = fetch_omie(OMIE_URL, "ListarEtapasPedido", sigla,
+                       {"nPagina": 1, "nRegPorPagina": PAGE_SIZE})
+    if first.get("_empty_page"):
+        print("nada.")
+        return []
+    items_p1 = first.get("etapasPedido") or []
+    if not items_p1:
+        print("vazio.")
+        return []
+    tot_pag = first.get("total_de_paginas") or first.get("nTotPaginas") or 0
+    tot_reg = first.get("total_de_registros") or "?"
+    try: tot_pag = int(tot_pag)
+    except (TypeError, ValueError): tot_pag = 0
+    print(f"{len(items_p1)} regs (total: {tot_pag} pgs / {tot_reg} regs)")
+
+    # Decide range de páginas
+    if max_paginas > 0 and tot_pag > 0:
+        # TAIL: páginas (tot_pag - max_paginas + 1) até tot_pag
+        start_page = max(1, tot_pag - max_paginas + 1)
+        end_page = tot_pag
+        print(f"   ✋ Modo TAIL: pegando páginas {start_page}–{end_page} de {tot_pag} (últimas {end_page - start_page + 1})")
+        # Página 1 já foi puxada; só usa se cair no range
+        all_items = list(items_p1) if 1 >= start_page else []
+        first_to_fetch = max(start_page, 2)
+    else:
+        # FULL: usa página 1 e itera o resto
+        print(f"   📜 Modo FULL: pegando todas as {tot_pag or '?'} páginas")
+        start_page = 1
+        end_page = tot_pag if tot_pag > 0 else 999  # safety cap
+        all_items = list(items_p1)
+        first_to_fetch = 2
+
+    for p in range(first_to_fetch, end_page + 1):
+        time.sleep(PAUSA_ENTRE_CHAMADAS)
+        print(f"   ⬇️  {sigla} | Etapas pág {p}/{end_page}...", end=" ", flush=True)
+        data = fetch_omie(OMIE_URL, "ListarEtapasPedido", sigla,
+                          {"nPagina": p, "nRegPorPagina": PAGE_SIZE})
+        if data.get("_empty_page"):
+            print("fim.")
+            break
+        chunk = data.get("etapasPedido") or []
+        if not chunk:
+            print("vazio, fim.")
+            break
+        all_items.extend(chunk)
+        print(f"{len(chunk)} regs (acum: {len(all_items)})")
+
+    return all_items
+
 def importar_empresa(sigla: str):
     inicio = time.time()
-    print(f"\n▶️  {sigla} | Etapas de Pedidos | FULL (estado atual de todos os pedidos)")
+    modo_label = f"DIARIO (últimas {MAX_PAGINAS} pgs / ~{MAX_PAGINAS*PAGE_SIZE} regs novos)" if MAX_PAGINAS > 0 else "FULL"
+    print(f"\n▶️  {sigla} | Etapas de Pedidos | {modo_label}")
 
-    # Etapas não tem filtro de data nativo — faz FULL sempre.
-    # Otimização: page_size 500 (Omie aceita) → ~5× menos roundtrips.
-    # cExibirHistorico foi testado e a API rejeita ("Tag não faz parte da estrutura").
-    # O dedup local segue cobrindo o caso de a API devolver histórico.
-    items = fetch_omie_paginated(
-        url=OMIE_URL,
-        call="ListarEtapasPedido",
-        sigla=sigla,
-        list_field="etapasPedido",
-        page_size=500,
-        page_key="nPagina",
-        size_key="nRegPorPagina",
-        label="Etapas",
-    )
+    items = fetch_etapas(sigla, MAX_PAGINAS)
 
     if not items:
         print(f"   📭 {sigla}: nenhum registro")
-        update_sync_state(f"etapas_pedidos_{sigla}", sigla, 0, modo="FULL")
+        update_sync_state(f"etapas_pedidos_{sigla}", sigla, 0,
+                          modo="DIARIO" if MAX_PAGINAS > 0 else "FULL")
         return 0
 
     rows = [map_etapa_to_row(e, sigla) for e in items]
@@ -114,16 +186,21 @@ def importar_empresa(sigla: str):
 
     n = supa_upsert(SCHEMA, TABELA, rows, PK)
     elapsed = int(time.time() - inicio)
+    modo = "DIARIO" if MAX_PAGINAS > 0 else "FULL"
     update_sync_state(f"etapas_pedidos_{sigla}", sigla, n,
                       maior_d_alt=maior_d_alt, maior_h_alt=maior_h_alt,
-                      modo="FULL", duracao_segundos=elapsed)
+                      modo=modo, duracao_segundos=elapsed)
 
-    print(f"   ✅ {sigla}: {len(items)} items → {n} rows em {elapsed}s")
+    print(f"   ✅ {sigla}: {len(items)} items → {n} rows em {elapsed}s ({modo})")
     return n
 
 def main():
     print("═══════════════════════════════════════════════════════════════")
     print("🏆 Import Etapas de Pedidos — Omie → Supabase")
+    if MAX_PAGINAS > 0:
+        print(f"📅 Modo: DIARIO (últimas {MAX_PAGINAS} pgs ≈ {MAX_PAGINAS*PAGE_SIZE} regs novos)")
+    else:
+        print("📜 Modo: FULL (todas as páginas)")
     print("═══════════════════════════════════════════════════════════════")
     print(f"🎯 Empresas: {', '.join(EMPRESAS_ALVO)}")
 

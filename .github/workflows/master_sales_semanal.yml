@@ -30,6 +30,31 @@ jobs:
           python-version: "3.11"
 
       # -----------------------------------------
+      # 0. Etapas de Pedidos FULL — semanal pega TODAS as páginas pra cobrir
+      #    pedidos antigos reabertos/alterados que o diário (últimas 20 pgs)
+      #    pode ter perdido. Sem MAX_PAGINAS_ETAPAS = FULL.
+      # -----------------------------------------
+      - name: "0 Etapas de Pedidos (FULL semanal)"
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          OMIE_APP_KEY_SF: ${{ secrets.OMIE_APP_KEY_SF }}
+          OMIE_APP_SECRET_SF: ${{ secrets.OMIE_APP_SECRET_SF }}
+          OMIE_APP_KEY_CD: ${{ secrets.OMIE_APP_KEY_CD }}
+          OMIE_APP_SECRET_CD: ${{ secrets.OMIE_APP_SECRET_CD }}
+          OMIE_APP_KEY_WW: ${{ secrets.OMIE_APP_KEY_WW }}
+          OMIE_APP_SECRET_WW: ${{ secrets.OMIE_APP_SECRET_WW }}
+          EMPRESAS_ALVO: ${{ github.event.inputs.empresas || 'SF,CD,WW' }}
+          SHEETS_MIRROR_URL: ${{ secrets.SHEETS_MIRROR_URL }}
+          SHEETS_MIRROR_TOKEN: ${{ secrets.SHEETS_MIRROR_TOKEN }}
+          PYTHONUNBUFFERED: "1"
+        run: python3 scripts/import_etapas_pedidos.py
+        continue-on-error: true
+
+      - name: "Pausa (60s)"
+        run: sleep 60
+
+      # -----------------------------------------
       # 1. Produtos (7k-12k rows)
       # -----------------------------------------
       - name: "1 Produtos"

@@ -36,9 +36,12 @@ jobs:
           python-version: "3.11"
 
       # -----------------------------------------
-      # 1. Etapas de Pedidos (3000-6000 rows)
+      # 1. Etapas de Pedidos (DIARIO: últimas 20 pgs ≈ 2k registros novos)
+      # API ordena por nCodPed ASC; pedidos novos ficam no fim. Captura
+      # 95%+ das alterações dos últimos meses. Semanal pega FULL pra
+      # cobrir reaberturas de pedidos antigos.
       # -----------------------------------------
-      - name: "1 Etapas de Pedidos"
+      - name: "1 Etapas de Pedidos (DIARIO — últimas 20 pgs)"
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
@@ -51,6 +54,7 @@ jobs:
           EMPRESAS_ALVO: ${{ github.event.inputs.empresas || 'SF' }}
           SHEETS_MIRROR_URL: ${{ secrets.SHEETS_MIRROR_URL }}
           SHEETS_MIRROR_TOKEN: ${{ secrets.SHEETS_MIRROR_TOKEN }}
+          MAX_PAGINAS_ETAPAS: "20"
           PYTHONUNBUFFERED: "1"
         run: python3 scripts/import_etapas_pedidos.py
         continue-on-error: true
