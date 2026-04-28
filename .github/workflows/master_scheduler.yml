@@ -1,0 +1,45 @@
+name: MASTER Scheduler (controla diaria/semanal a partir de platform.workflow_schedule)
+
+# Controller central. Roda a cada 15 min, lê platform.workflow_schedule
+# e decide quais workflows disparar. Substitui os cron individuais antigos.
+#
+# Ativar dry-run: workflow_dispatch com input scheduler_dry_run=true
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+    inputs:
+      scheduler_dry_run:
+        description: "Dry-run (só loga, não dispara)"
+        type: boolean
+        default: false
+
+concurrency:
+  group: master-scheduler
+  cancel-in-progress: false
+
+jobs:
+  decide:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.11" }
+
+      - name: Decide e dispara
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          GH_REPO: ${{ github.repository }}
+          GITHUB_TOKEN: ${{ secrets.GH_DISPATCH_TOKEN || secrets.GITHUB_TOKEN }}
+          PYTHONUNBUFFERED: "1"
+          # Em modo automático (cron) sempre LIVE. Manual pode forçar dry-run.
+          DRY_RUN_FLAG: ${{ github.event.inputs.scheduler_dry_run == 'true' && '--dry-run' || '' }}
+        run: |
+          # IMPORTANTE: enquanto a fase de validação não terminar, descomente
+          # a linha abaixo pra forçar DRY-RUN em todas as execuções (cron e manual).
+          # DRY_RUN_FLAG="--dry-run"
+          python3 scripts/scheduler_decide.py $DRY_RUN_FLAG
