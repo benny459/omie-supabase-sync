@@ -81,8 +81,11 @@ def should_fire_daily(s: dict, now: dt.datetime) -> bool:
     if ws is None or we is None or iv is None: return False
     if h < ws or h > we: return False
     if (h - ws) % iv != 0: return False
-    # Minute window: só dispara nos primeiros 15 min da hora-alvo
-    if now.minute >= 15: return False
+    # Minute window: tolera até 45 min depois da hora-alvo. GitHub Actions
+    # atrasa o cron */15 com frequência (15-30min é comum em horas de pico),
+    # então uma janela de 15min era apertada demais e fazia pular slots
+    # inteiros. already_fired_recently() (threshold 30min) protege duplo-fire.
+    if now.minute >= 45: return False
     return True
 
 def should_fire_weekly(s: dict, now: dt.datetime) -> bool:
