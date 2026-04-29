@@ -11,10 +11,10 @@ on:
         required: false
         default: "SF"
 
-  # Cron individual REMOVIDO. Agora é o master_scheduler.yml que dispara este
-  # workflow nos horários definidos em platform.workflow_schedule (UI em
-  # /configuracoes → Agendamento). Pra rodar manual: workflow_dispatch acima
-  # ou botão "Rodar agora" no painel.
+  # Cron fixo: 7, 10, 13, 16, 19 BRT (= 10, 13, 16, 19, 22 UTC)
+  # Dias: seg-sex + dom (1-5,0 em cron; 6=sab é pulado)
+  schedule:
+    - cron: "0 10,13,16,19,22 * * 1-5,0"
 
 concurrency:
   group: master-orders-diaria

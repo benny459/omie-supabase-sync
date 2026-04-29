@@ -1,19 +1,19 @@
-name: MASTER Scheduler (controla diaria/semanal a partir de platform.workflow_schedule)
+name: MASTER Scheduler (legado — só workflow_dispatch manual)
 
-# Controller central. Roda a cada 15 min, lê platform.workflow_schedule
-# e decide quais workflows disparar. Substitui os cron individuais antigos.
+# DESATIVADO como controller automático. Cada master_*.yml agora tem seu
+# próprio cron fixo (decisão tomada em 2026-04-29). Mantido só pra rodar
+# manualmente em modo dry-run quando precisar diagnosticar a logica.
 #
-# Ativar dry-run: workflow_dispatch com input scheduler_dry_run=true
+# Pra mudar horário: edita o cron do workflow específico (ex:
+# .github/workflows/master_finance_diaria.yml) e commita.
 
 on:
-  schedule:
-    - cron: "*/15 * * * *"
   workflow_dispatch:
     inputs:
       scheduler_dry_run:
         description: "Dry-run (só loga, não dispara)"
         type: boolean
-        default: false
+        default: true
 
 concurrency:
   group: master-scheduler

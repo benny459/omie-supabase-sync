@@ -17,7 +17,10 @@ on:
         type: choice
         options: ["false", "true"]
 
-  # Cron individual REMOVIDO. Disparado pelo master_scheduler.yml.
+  # Cron fixo: 7, 10, 13, 16, 19 BRT (= 10, 13, 16, 19, 22 UTC)
+  # Dias: seg-sex + dom (1-5,0 em cron; 6=sab é pulado)
+  schedule:
+    - cron: "0 10,13,16,19,22 * * 1-5,0"
 
 concurrency:
   group: master-sales-diaria
