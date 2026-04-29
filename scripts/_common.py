@@ -93,14 +93,17 @@ def fetch_omie(url: str, call: str, sigla: str, param: dict):
         "User-Agent": "OmieImporter-GHA/1.0",
     }
 
+    last_code, last_body = None, ""
     for t in range(1, MAX_TENTATIVAS_OMIE + 1):
         code, body, _ = http_post_json(url, payload, headers)
+        last_code = code
+        last_body = body[:300].decode("utf-8", errors="replace") if body else ""
         if code == 200:
             if t > 1:
                 print(f"   ✅ Omie retry sucesso (tent {t})")
             return json.loads(body.decode("utf-8"))
 
-        text = body[:300].decode("utf-8", errors="replace")
+        text = last_body
 
         # 500 com faultstring "Não existem registros para a página [X]" = fim normal de paginação.
         # JSON cru tem o "ã" escaped (ã), então precisamos decodar como JSON pra match certo.
@@ -130,7 +133,16 @@ def fetch_omie(url: str, call: str, sigla: str, param: dict):
 
         raise RuntimeError(f"Omie HTTP {code}: {text}")
 
-    raise RuntimeError(f"Omie falhou após {MAX_TENTATIVAS_OMIE} tentativas")
+    # Esgotou as tentativas. Reporta o último HTTP + extrato do body pra o
+    # painel de detalhes mostrar o motivo real (em vez de "5 tentativas" só).
+    fault = ""
+    try:
+        parsed = json.loads(last_body)
+        fault = parsed.get("faultstring", "") or parsed.get("message", "")
+    except Exception:
+        pass
+    detail = fault[:160] if fault else last_body[:160]
+    raise RuntimeError(f"Omie falhou após {MAX_TENTATIVAS_OMIE} tentativas (último: HTTP {last_code} | {detail})")
 
 def fetch_omie_paginated(url: str, call: str, sigla: str, list_field: str,
                           page_size: int = 100, extra_param: dict = None,

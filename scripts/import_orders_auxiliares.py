@@ -271,6 +271,14 @@ def importar_produto_fornecedor(sigla: str):
     for cad in items:
         rows.extend(map_produto_fornecedor(cad, sigla))
     rows = [r for r in rows if r["cod_forn"]]
+    # Dedup por (empresa, cod_forn, cod_prod) — Omie às vezes retorna o mesmo
+    # produto duas vezes pro mesmo fornecedor, e ON CONFLICT DO UPDATE não pode
+    # tocar a mesma row 2x na mesma transação (Postgres erro 21000).
+    dedup = {}
+    for r in rows:
+        key = (r["empresa"], r["cod_forn"], r["cod_prod"])
+        dedup[key] = r  # last-wins
+    rows = list(dedup.values())
     n = supa_upsert(SCHEMA, "produto_fornecedor", rows, "empresa,cod_forn,cod_prod")
     elapsed = int(time.time()-inicio)
     update_sync_state(f"produto_fornecedor_{sigla}", sigla, n, modo="FULL", duracao_segundos=elapsed)

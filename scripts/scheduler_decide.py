@@ -121,8 +121,14 @@ def log_decision(now_brt_dt: dt.datetime, kind: str, decision: str, targets: lis
                  "Content-Profile": "platform", "Content-Type": "application/json",
                  "Prefer": "return=minimal"},
     )
-    try: urlopen(req, timeout=8).read()
-    except Exception as e: print(f"   ⚠ falha ao logar decisão: {e}")
+    try:
+        with urlopen(req, timeout=8) as r:
+            print(f"   📝 log_decision({kind}/{decision}) → HTTP {r.status}")
+    except HTTPError as e:
+        body = e.read().decode("utf-8", errors="replace")[:300]
+        print(f"   ⚠ log_decision({kind}/{decision}) HTTP {e.code}: {body}")
+    except Exception as e:
+        print(f"   ⚠ log_decision({kind}/{decision}) falhou: {type(e).__name__}: {e}")
 
 # ─── Main ───────────────────────────────────────────────────────────────
 def main():
