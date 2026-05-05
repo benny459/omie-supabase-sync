@@ -65,6 +65,7 @@ def map_pedido_to_row(p: dict, sigla: str):
         "codigo_categoria": add.get("codigo_categoria") or None,
         "codigo_conta": add.get("codigo_conta_corrente") or None,
         "num_pedido_cliente": add.get("numero_pedido_cliente") or None,
+        "numero_contrato": add.get("numero_contrato") or None,
         "contato": add.get("contato") or None,
         "consumidor_final": add.get("consumidor_final") or None,
         "email": add.get("enviar_email") or None,

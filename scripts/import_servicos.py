@@ -68,6 +68,7 @@ def map_os_rows(item: dict, sigla: str):
 
             "codigo_vendedor": str(cab.get("nCodVend")) if cab.get("nCodVend") else None,
             "num_recibo": add.get("cNumRecibo") or None,
+            "numero_contrato": add.get("cNumContrato") or None,
         }
 
     if not servicos:

@@ -40,6 +40,7 @@ CREATE TABLE IF NOT EXISTS sales.ordens_servico (
 
   codigo_vendedor    TEXT,                  -- nCodVend
   num_recibo         TEXT,                  -- cNumRecibo
+  numero_contrato    TEXT,                  -- InformacoesAdicionais.cNumContrato (Nº do Contrato de Venda Omie = nº proposta CRM)
 
   synced_at          TIMESTAMPTZ DEFAULT NOW(),
   PRIMARY KEY (empresa, codigo_os, seq_item)

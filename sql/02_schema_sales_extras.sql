@@ -103,6 +103,7 @@ CREATE TABLE IF NOT EXISTS sales.pedidos_venda (
   codigo_categoria     TEXT,
   codigo_conta         TEXT,
   num_pedido_cliente   TEXT,
+  numero_contrato      TEXT,                  -- informacoes_adicionais.numero_contrato (Nº do Contrato de Venda Omie = nº proposta CRM)
   contato              TEXT,
   consumidor_final     TEXT,
   email                TEXT,
