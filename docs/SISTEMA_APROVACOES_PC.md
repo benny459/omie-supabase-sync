@@ -3,7 +3,7 @@
 > **App em produção**: https://painel.waterworks.com.br
 > **Repositório**: `benny459/omie-supabase-sync`
 > **Stack**: Next.js 16 (App Router) + React 19 + Tailwind 3 + Supabase Postgres + GitHub Actions (sync) + Vercel (hosting)
-> **Versão atual**: v1.2.5 (atualizado 2026-05-05)
+> **Versão atual**: v1.2.8 (atualizado 2026-05-06)
 
 ---
 
@@ -403,6 +403,37 @@ Fluxo:
 
 ## 9. Histórico recente de mudanças relevantes
 
+### v1.2.8 (2026-05-06) — Trigger normalize modulo (fix RLS pra aprovadores de projetos)
+
+- 🐛 **Bug reportado pelo Marcelo**: aprovador de projetos recebia `new row violates row-level security policy for table "approvals"` ao tentar aprovar 13 rows específicas em `/projetos`
+- 🔍 **Causa-raiz**: views `v_pc_projetos`/`v_pc_avulsos` classificam rows pelo `modulo_calc` (derivado dinamicamente de `projeto_nome` — `^PJ` → projetos, `^(40_VS|41_VP)` → avulsos), mas a policy `approvals_write` valida pelo **`modulo` físico** da tabela base. Quando há divergência (row aparece em `/projetos` mas tem `modulo='avulsos'`), o aprovador de projetos é bloqueado pela policy
+- 🛠 **Origem das 13 rows discrepantes**:
+  - 7 rows criadas via "+ Nova linha" no painel (default `'avulsos'`)
+  - 3 rows recentes do `waterworks-app` (PJ351_ ITAMED — gravadas com `modulo='avulsos'` mas projeto começa com PJ)
+  - 1 row de PC sincronizado naturalmente do Omie
+  - 2 rows manuais antigas
+- ✅ **Fix retroativo**: UPDATE corrigiu as 13 rows pra `modulo='projetos'`
+- ✅ **Fix permanente**: trigger `trg_normalize_modulo` em `approval.approvals` (BEFORE INSERT/UPDATE) seta `modulo` automaticamente baseado no `projeto_nome` da venda vinculada via `pv_os_label` (PV ou OS) → JOIN com `sales.pedidos_venda`/`sales.ordens_servico` → JOIN com `finance.projetos`. Função `approval.fn_normalize_modulo` (`SECURITY DEFINER` pra bypass RLS na consulta de `sales.*` e `finance.*`)
+- 📝 **Migration**: `sql/09_normalize_modulo_trigger.sql`
+
+### v1.2.7 (2026-05-05) — Ícone 🔗 antes da data quando vem do app de serviços
+
+- ✅ Coluna `*V.Nova Prev. Serviços` ganha prefixo 🔗 (azul, com tooltip "Data sincronizada do app de serviços (vinculada à OS)") quando `servicos_os_numero IS NOT NULL`. Heurística: existe OS vinculada → data foi escrita pelo waterworks-app via attach-os ou patch service-orders
+- Campo continua editável (EditableCell) — ícone só sinaliza origem
+
+### v1.2.6 (2026-05-05) — Fix link 404 da coluna 🔗 Link Serviços
+
+- 🐛 **Bug**: link da OS dava "página não encontrada". O painel construía `/ordens-de-servico/<num>` removendo o prefixo "OS" (ex: `OS0505260839 → 0505260839`), mas a rota do waterworks-app espera `service_id` exato (text completo) ou UUID
+- ✅ **Fix**: passa `service_id` cru via `encodeURIComponent(osRaw)` — link vira `/ordens-de-servico/OS0505260839` que casa com `WHERE so.service_id = $1`
+
+### Lado consumidor — `waterworks-app` v3.6.7→v3.6.9 (2026-05-05)
+
+Pré-requisito da feature 🔗 Link Serviços. Mudanças no app de serviços:
+
+- **v3.6.7** — `attach-os` agora SEMPRE grava `servicos_os_numero` ao vincular uma OS (antes só sincronizava `nova_prev_servicos`). `patchApproval` removeu `updated_by` (era TEXT, schema é UUID FK pra auth.users → erro 22P02 silencioso engolido pelo try/catch fazia toda escrita falhar invisivelmente — confirmado via audit_log com `updated_by=NULL` em todas escritas anteriores). Email do operador continua rastreado via `servicos_concluidos_por` (TEXT)
+- **v3.6.8** — PATCH `/api/service-orders/[id]` ganhou hook fire-and-forget que repara `servicos_os_numero` retroativamente em qualquer edição da OS (recupera OSs criadas antes do v3.6.7)
+- **v3.6.9** — Quando OS vira `status='Cancelada'`, hook zera `servicos_os_numero` + `servicos_concluidos` no painel + libera `venda_servico_link.os_gerada_id` (se ainda não executada). `nova_prev_servicos` mantém última data conhecida — pode editar manualmente no painel se quiser zerar
+
 ### v1.2.5 (2026-05-05) — Coluna "🔗 Link Serviços" com 3 estados + filtro 4 opções
 
 - ✅ **Coluna renomeada** de `V.Serviços OK` → **`🔗 Link Serviços`**
@@ -585,4 +616,4 @@ grep -A2 "^  schedule:" .github/workflows/master_*.yml
 
 ---
 
-_Documento atualizado em 2026-05-05. Estado refletido: schemas, views, RLS, triggers, scheduling fixo, busca global ⌘K, paginação client, fetch targeted, permissões granulares, batch delete, version watcher sempre visível, FetchOmieButton admin, **coluna Proposta (Nº contrato venda Omie) em PV/OS**, **fix botão "+ Nova linha" em modo projeto**, **🔗 Link Serviços com 3 estados (—/🕓/✅) + filtro 4 opções + trigger de propagação por bucket**, **multi-select dos facets corrigido + "✕ Limpar todos os filtros" mestre**._
+_Documento atualizado em 2026-05-06. Estado refletido: schemas, views, RLS, triggers (propagação servicos_*, normalize modulo), scheduling fixo, busca global ⌘K, paginação client, fetch targeted, permissões granulares, batch delete, version watcher, FetchOmieButton admin, **coluna Proposta (Nº contrato venda Omie)**, **fix botão "+ Nova linha" em modo projeto**, **🔗 Link Serviços com 3 estados + ícone 🔗 prefixando data sincronizada do app de serviços + ciclo completo agendar/executar/cancelar entre painel e waterworks-app**, **multi-select dos facets corrigido + "✕ Limpar todos os filtros" mestre**, **trigger normalize_modulo evita RLS bloqueando aprovador de projetos**._
