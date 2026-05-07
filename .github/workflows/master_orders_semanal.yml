@@ -72,6 +72,7 @@ jobs:
           EMPRESAS_ALVO: ${{ github.event.inputs.empresas || 'SF' }}
           SHEETS_MIRROR_URL: ${{ secrets.SHEETS_MIRROR_URL }}
           SHEETS_MIRROR_TOKEN: ${{ secrets.SHEETS_MIRROR_TOKEN }}
+          PURGE_ORFAOS: "true"
           PYTHONUNBUFFERED: "1"
         run: python3 scripts/import_pedidos_compra.py
         continue-on-error: true
