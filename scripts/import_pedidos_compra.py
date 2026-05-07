@@ -34,6 +34,7 @@ sys.path.insert(0, "scripts")
 from _common import (
     EMPRESAS_ALVO, EMPRESAS_OMIE, PAUSA_ENTRE_CHAMADAS,
     fetch_omie, supa_upsert, supa_delete_orfaos, supa_normalize_pc_cab,
+    consultar_ped_compra, supa_select_pcs_inconsistentes,
     update_sync_state,
     to_int, to_float, trigger_sheets_mirror,
 )
@@ -67,6 +68,12 @@ PURGE_ORFAOS = (os.environ.get("PURGE_ORFAOS", "false") or "false").lower() in (
 # etapa, status etc). No Omie esses sao 1-por-pedido — se ficou inconsistente
 # no nosso DB e bug do sync (item nao tocado pela paginacao). Default OFF.
 NORMALIZE_PC_CAB = (os.environ.get("NORMALIZE_PC_CAB", "false") or "false").lower() in ("true", "1", "yes", "on")
+
+# Quando true, ao final do main() detecta PCs ainda com cab inconsistente
+# (ex: ccod_parc misto entre items de um mesmo PC) e faz ConsultarPedCompra
+# targeted neles pra refresh garantido. Cobre o caso onde o PesquisarPedCompra
+# (paginado) pulou um PC. Default OFF pra rollback.
+AUTO_FIX_INCONSISTENTES = (os.environ.get("AUTO_FIX_INCONSISTENTES", "false") or "false").lower() in ("true", "1", "yes", "on")
 
 OMIE_URL = "https://app.omie.com.br/api/v1/produtos/pedidocompra/"
 MODULO = "pedidos_compra"
@@ -255,6 +262,67 @@ def importar_empresa(sigla: str):
     return n
 
 
+def auto_fix_inconsistentes():
+    """Detecta PCs com cab inconsistente (forma de pagamento misturada entre
+    items) e refetcha cada um via ConsultarPedCompra (endpoint nao-paginado,
+    consulta direta por nCodPed). Atualiza items, normaliza cab, purga orfaos
+    pra cada PC corrigido. Cobre o gap onde PesquisarPedCompra (paginado)
+    pulou o PC.
+    """
+    print("\n" + "─" * 63)
+    print("🔍 Auto-fix: detectando PCs com cab inconsistente...")
+    inconsistentes = supa_select_pcs_inconsistentes(SCHEMA)
+    if not inconsistentes:
+        print("   ✓ Nenhum PC inconsistente. DB consistente.")
+        return 0
+    print(f"   {len(inconsistentes)} PC(s) inconsistente(s) detectado(s):")
+    for pc in inconsistentes:
+        print(f"      • {pc.get('cnumero')} (ncod_ped={pc.get('ncod_ped')}, parcelas={pc.get('parcelas')})")
+
+    fixed = 0
+    failed = 0
+    for pc in inconsistentes:
+        sigla = pc["empresa"]
+        ncod_ped = pc["ncod_ped"]
+        cnumero = pc.get("cnumero", "?")
+        time.sleep(PAUSA_ENTRE_CHAMADAS)
+
+        ped = consultar_ped_compra(sigla, ncod_ped)
+        if not ped:
+            print(f"   ❌ PC {cnumero}: ConsultarPedCompra falhou — pulando")
+            failed += 1
+            continue
+
+        rows = explodir_pedido(ped, sigla)
+        rows = [r for r in rows if r["ncod_ped"]]
+        if not rows:
+            print(f"   ⚠️  PC {cnumero}: ConsultarPedCompra devolveu vazio — pulando")
+            failed += 1
+            continue
+
+        # Dedup interno
+        dedup = {}
+        for r in rows:
+            dedup[(r["empresa"], r["ncod_ped"], r["ncod_item"])] = r
+        rows = list(dedup.values())
+
+        try:
+            supa_upsert(SCHEMA, TABELA, rows, PK)
+            # Limpa items que sumiram + força cab uniforme
+            pcs_keys = {(r["empresa"], r["ncod_ped"]) for r in rows}
+            valid_keys = {(r["empresa"], r["ncod_ped"], r["ncod_item"]) for r in rows}
+            supa_delete_orfaos(SCHEMA, TABELA, pcs_keys, valid_keys)
+            supa_normalize_pc_cab(SCHEMA, TABELA, rows, CAB_FIELDS)
+            print(f"   ✅ PC {cnumero}: refetched ({len(rows)} items) e normalizado")
+            fixed += 1
+        except Exception as e:
+            print(f"   ❌ PC {cnumero}: falha ao aplicar — {e}")
+            failed += 1
+
+    print(f"   📊 Auto-fix: {fixed} corrigido(s) | {failed} falha(s)")
+    return fixed
+
+
 def main():
     print("=" * 63)
     print("Import Pedidos de Compra -- Omie -> Supabase")
@@ -283,6 +351,15 @@ def main():
                                   status="ERRO", erro=str(e)[:500])
             except Exception:
                 pass
+
+    # Auto-fix: passo final de garantia. Detecta PCs com cab inconsistente no
+    # DB (mistura ccod_parc) e refetcha via ConsultarPedCompra targeted.
+    if AUTO_FIX_INCONSISTENTES:
+        try:
+            auto_fix_inconsistentes()
+        except Exception as e:
+            print(f"⚠️  auto_fix_inconsistentes falhou: {e}")
+            houve_erro = True
 
     elapsed = int(time.time() - inicio_geral)
     print()

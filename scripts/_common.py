@@ -385,6 +385,53 @@ def supa_select(schema: str, table: str, query: str):
     return json.loads(body.decode("utf-8"))
 
 
+def consultar_ped_compra(sigla: str, ncod_ped: int, timeout: int = 30) -> dict:
+    """Chama ConsultarPedCompra no Omie pra UM PC especifico (nao paginado).
+    Devolve o dict com 'cabecalho_consulta' (ou 'cabecalho') + 'produtos_consulta'
+    (ou 'produtos'). Retorna None se erro/nao-encontrado.
+    """
+    creds = EMPRESAS_OMIE.get(sigla)
+    if not creds:
+        return None
+    payload = {
+        "call": "ConsultarPedCompra",
+        "app_key": creds["app_key"],
+        "app_secret": creds["app_secret"],
+        "param": [{"nCodPed": ncod_ped}],
+    }
+    url = "https://app.omie.com.br/api/v1/produtos/pedidocompra/"
+    headers = {"Content-Type": "application/json"}
+    try:
+        body = json.dumps(payload).encode("utf-8")
+        code, resp_body, _ = http_request(url, "POST", headers, body, timeout)
+        if code != 200:
+            return None
+        d = json.loads(resp_body.decode("utf-8"))
+        if isinstance(d, dict) and "faultstring" in d:
+            return None
+        # Normaliza nome dos campos: ConsultarPedCompra pode usar
+        # "cabecalho"/"produtos" enquanto Pesquisar usa "_consulta".
+        if "cabecalho" in d and "cabecalho_consulta" not in d:
+            d["cabecalho_consulta"] = d["cabecalho"]
+        if "produtos" in d and "produtos_consulta" not in d:
+            d["produtos_consulta"] = d["produtos"]
+        return d
+    except Exception:
+        return None
+
+
+def supa_select_pcs_inconsistentes(schema: str = "orders") -> list:
+    """Lista PCs com forma de pagamento inconsistente entre seus items.
+    Le da view orders.v_pcs_inconsistentes.
+    """
+    try:
+        return supa_select(schema, "v_pcs_inconsistentes",
+                           "select=empresa,ncod_ped,cnumero,parcelas&order=ncod_ped")
+    except Exception as e:
+        print(f"   ⚠️  select v_pcs_inconsistentes falhou: {e}")
+        return []
+
+
 def supa_normalize_pc_cab(schema: str, table: str, rows: list, cab_fields: list):
     """Garante que TODOS os items de um PC tenham os MESMOS valores nos
     campos de cabeçalho (cab_fields). Forma de pagamento, fornecedor, etapa
