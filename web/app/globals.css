@@ -1,0 +1,63 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ─────────────────────────────────────────────────────────────────────────
+   Variação D — "Bold ⌘K" — Paleta warm + teal accent
+   Variáveis CSS em RGB tuple pra suportar alpha do Tailwind via
+   rgb(var(--x) / <alpha-value>).
+   ───────────────────────────────────────────────────────────────────────── */
+:root {
+  --color-ww-bg:           244 244 240;  /* warm off-white */
+  --color-ww-panel:        255 255 255;
+  --color-ww-border:       227 227 220;
+  --color-ww-borderStrong: 200 200 190;
+  --color-ww-text:         14 14 12;
+  --color-ww-textMuted:    91 91 84;
+  --color-ww-textFaint:    142 142 132;
+  --color-ww-accent:       14 110 87;     /* deep teal */
+  --color-ww-accentSoft:   219 238 229;
+  --color-ww-rowHover:     249 249 245;
+  --color-ww-editHi:       254 249 214;
+  --color-ww-editLine:     207 183 66;
+  --color-ww-drawer:       255 255 255;
+  --color-ww-drawerHead:   244 244 240;
+}
+
+.dark {
+  --color-ww-bg:           10 10 8;
+  --color-ww-panel:        20 20 18;
+  --color-ww-border:       35 35 30;
+  --color-ww-borderStrong: 52 52 44;
+  --color-ww-text:         241 241 234;
+  --color-ww-textMuted:    168 168 158;
+  --color-ww-textFaint:    108 108 97;
+  --color-ww-accent:       62 186 154;
+  --color-ww-accentSoft:   21 48 42;
+  --color-ww-rowHover:     26 26 22;
+  --color-ww-editHi:       58 52 22;
+  --color-ww-editLine:     110 96 36;
+  --color-ww-drawer:       20 20 18;
+  --color-ww-drawerHead:   14 14 12;
+}
+
+/* Stack tipográfico — Inter (UI) + JetBrains Mono (códigos/valores)
+   carregados via next/font no app/layout.tsx (CSS vars --font-sans, --font-mono). */
+html, body {
+  background: rgb(var(--color-ww-bg));
+  color: rgb(var(--color-ww-text));
+  font-family: -apple-system, BlinkMacSystemFont, system-ui, "SF Pro Text", "SF Pro Display", "Segoe UI", Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  font-feature-settings: "kern", "liga", "cv11", "ss03";
+  text-rendering: optimizeLegibility;
+}
+
+*, *::before, *::after {
+  font-family: inherit;
+}
+
+code, kbd, samp, pre, .font-mono {
+  font-family: var(--font-mono, "JetBrains Mono", ui-monospace, "SF Mono", "Menlo", "Consolas", monospace);
+  font-feature-settings: "kern", "liga", "calt";
+}
