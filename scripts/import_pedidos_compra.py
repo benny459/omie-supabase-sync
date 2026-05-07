@@ -33,9 +33,25 @@ import time
 sys.path.insert(0, "scripts")
 from _common import (
     EMPRESAS_ALVO, EMPRESAS_OMIE, PAUSA_ENTRE_CHAMADAS,
-    fetch_omie, supa_upsert, supa_delete_orfaos, update_sync_state,
+    fetch_omie, supa_upsert, supa_delete_orfaos, supa_normalize_pc_cab,
+    update_sync_state,
     to_int, to_float, trigger_sheets_mirror,
 )
+
+# Campos do CABECALHO do PC (1 por pedido no Omie). Ficam denormalizados
+# em cada item-row aqui, mas o valor deve ser identico entre rows do mesmo PC.
+# Quando NORMALIZE_PC_CAB=true, depois do upsert, força UPDATE em todos
+# items do PC pra garantir consistencia (mesmo nos items que o sync nao tocou).
+CAB_FIELDS = [
+    "cnumero", "ccod_categ", "cetapa", "dinc_data", "cinc_hora",
+    "ncod_for", "ccod_int_for", "ccontato",
+    "ccod_parc", "nqtde_parc", "ddt_previsao",
+    "ncod_cc", "ncod_int_cc", "ncod_compr", "ncod_proj",
+    "ccod_int_ped", "cnum_pedido", "ccontrato",
+    "cobs", "cobs_int", "ntotal_pedido",
+    "ccod_status", "cdesc_status", "crecebido",
+    "ddata_recebimento", "ddt_faturamento", "cnumero_nf",
+]
 
 # 0 ou ausente = pega todas as páginas (FULL).
 # > 0 = limita a N páginas (DIARIO captura recentes).
@@ -45,6 +61,12 @@ MAX_PAGINAS = int(os.environ.get("MAX_PAGINAS_PEDCOMPRA", "0") or "0")
 # banco mas nao vieram da API atual) — corrige ccod_parc inconsistente em
 # PCs editados no Omie. Default OFF pra rollback facil. (2026-05-07)
 PURGE_ORFAOS = (os.environ.get("PURGE_ORFAOS", "false") or "false").lower() in ("true", "1", "yes", "on")
+
+# Quando true, depois do UPSERT força que TODOS items de cada PC tenham os
+# mesmos valores nos campos de cabeçalho (forma de pagamento, fornecedor,
+# etapa, status etc). No Omie esses sao 1-por-pedido — se ficou inconsistente
+# no nosso DB e bug do sync (item nao tocado pela paginacao). Default OFF.
+NORMALIZE_PC_CAB = (os.environ.get("NORMALIZE_PC_CAB", "false") or "false").lower() in ("true", "1", "yes", "on")
 
 OMIE_URL = "https://app.omie.com.br/api/v1/produtos/pedidocompra/"
 MODULO = "pedidos_compra"
@@ -205,9 +227,6 @@ def importar_empresa(sigla: str):
     n = supa_upsert(SCHEMA, TABELA, rows, PK)
 
     # Purge de orfaos: remove items que estavam no DB mas nao vieram do Omie agora.
-    # Causa: UPSERT atualiza items existentes mas nunca deleta — items removidos
-    # no Omie ficavam no DB com valores antigos (ccod_parc velho, etc).
-    # Default OFF (PURGE_ORFAOS=false). Setar true em GH Actions pra ativar.
     if PURGE_ORFAOS:
         pcs_processados = {(r["empresa"], r["ncod_ped"]) for r in rows}
         valid_keys = {(r["empresa"], r["ncod_ped"], r["ncod_item"]) for r in rows}
@@ -216,11 +235,23 @@ def importar_empresa(sigla: str):
         except Exception as e:
             print(f"   ⚠️  Purge orfaos falhou: {e}")
 
+    # Normaliza cab fields: garante que todos items de cada PC tenham os mesmos
+    # valores em campos PC-level (forma_pgto etc). Independente do upsert/purge.
+    if NORMALIZE_PC_CAB:
+        try:
+            supa_normalize_pc_cab(SCHEMA, TABELA, rows, CAB_FIELDS)
+        except Exception as e:
+            print(f"   ⚠️  Normalize cab falhou: {e}")
+
     elapsed = int(time.time() - inicio)
     modo = "DIARIO" if MAX_PAGINAS > 0 else "FULL"
     update_sync_state(f"pedidos_compra_{sigla}", sigla, n, modo=modo, duracao_segundos=elapsed)
 
-    print(f"   {sigla}: {n} rows em {elapsed}s ({modo}){' [+purge]' if PURGE_ORFAOS else ''}")
+    flags = []
+    if PURGE_ORFAOS: flags.append("+purge")
+    if NORMALIZE_PC_CAB: flags.append("+norm-cab")
+    flag_str = f" [{','.join(flags)}]" if flags else ""
+    print(f"   {sigla}: {n} rows em {elapsed}s ({modo}){flag_str}")
     return n
 
 

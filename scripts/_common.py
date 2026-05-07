@@ -385,6 +385,50 @@ def supa_select(schema: str, table: str, query: str):
     return json.loads(body.decode("utf-8"))
 
 
+def supa_normalize_pc_cab(schema: str, table: str, rows: list, cab_fields: list):
+    """Garante que TODOS os items de um PC tenham os MESMOS valores nos
+    campos de cabeçalho (cab_fields). Forma de pagamento, fornecedor, etapa
+    etc no Omie sao 1 por PC — desnormalizamos em cada item-row porque o
+    sync explode em N rows. Se algum item especifico nao foi tocado pelo
+    upsert (paginacao, skip, race), fica com cab antigo enquanto outros
+    items ja tem o cab novo. Esta funcao força consistencia: pega o cab
+    da 1a row representativa de cada PC nos rows incoming e PATCH em
+    todos os items existentes no DB pra esse PC.
+
+    Retorna (n_pcs_normalizados, n_pcs_falha).
+    """
+    if not rows:
+        return 0, 0
+
+    # Pega 1 row representativa por PC com os cab_fields
+    by_pc: dict = {}
+    for r in rows:
+        key = (r["empresa"], r["ncod_ped"])
+        if key not in by_pc:
+            by_pc[key] = {f: r.get(f) for f in cab_fields}
+
+    h = supa_headers(schema, {"Prefer": "return=minimal"})
+    ok = 0; fail = 0
+    for (emp, ncod), cab_payload in by_pc.items():
+        url = (
+            f"{SUPABASE_URL}/rest/v1/{table}"
+            f"?empresa=eq.{urllib.parse.quote(emp)}"
+            f"&ncod_ped=eq.{ncod}"
+        )
+        body = json.dumps(cab_payload).encode("utf-8")
+        code, resp_body, _ = http_request(url, "PATCH", h, body)
+        if code in (200, 204):
+            ok += 1
+        else:
+            fail += 1
+            if code != 404:
+                msg = (resp_body or b"")[:200].decode("utf-8", errors="replace")
+                print(f"   ⚠️  Normalizar cab PC {emp}/{ncod}: HTTP {code} — {msg}")
+    if ok > 0:
+        print(f"   🔄 Cab normalizado em {ok} PC(s)" + (f" | {fail} falha(s)" if fail else ""))
+    return ok, fail
+
+
 def supa_delete_orfaos(schema: str, table: str, pcs_processados: set, valid_keys: set):
     """Pra cada (empresa, ncod_ped) em pcs_processados, DELETA rows com
     (empresa, ncod_ped, ncod_item) que NAO estao em valid_keys.
