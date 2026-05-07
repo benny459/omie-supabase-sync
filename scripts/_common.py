@@ -384,6 +384,58 @@ def supa_select(schema: str, table: str, query: str):
         raise RuntimeError(f"Supabase SELECT HTTP {code}: {body[:300].decode('utf-8', errors='replace')}")
     return json.loads(body.decode("utf-8"))
 
+
+def supa_delete_orfaos(schema: str, table: str, pcs_processados: set, valid_keys: set):
+    """Pra cada (empresa, ncod_ped) em pcs_processados, DELETA rows com
+    (empresa, ncod_ped, ncod_item) que NAO estao em valid_keys.
+
+    Use case: o sync re-fetcha PCs do Omie e, via UPSERT, atualiza items
+    existentes. Mas se o usuario removeu items no Omie, eles ficavam orfaos
+    no banco com valores antigos (causa raiz da inconsistencia ccod_parc
+    vista em 2026-05-06).
+
+    Retorna o total de rows deletadas. Skip seguro: se nao tiver items
+    validos pra um PC, NAO deleta nada (evita zerar acidentalmente).
+    """
+    if not pcs_processados:
+        return 0
+
+    h = supa_headers(schema, {"Prefer": "return=minimal,count=exact"})
+    deleted_total = 0
+    pcs_com_delete = 0
+
+    # Indexa valid_keys por (empresa, ncod_ped) -> set de ncod_item
+    valid_by_pc: dict = {}
+    for (emp, ncod, item) in valid_keys:
+        valid_by_pc.setdefault((emp, ncod), set()).add(item)
+
+    for (empresa, ncod_ped) in pcs_processados:
+        items_validos = valid_by_pc.get((empresa, ncod_ped))
+        if not items_validos:
+            continue  # safety
+        items_csv = ",".join(str(i) for i in sorted(items_validos))
+        url = (
+            f"{SUPABASE_URL}/rest/v1/{table}"
+            f"?empresa=eq.{urllib.parse.quote(empresa)}"
+            f"&ncod_ped=eq.{ncod_ped}"
+            f"&ncod_item=not.in.({items_csv})"
+        )
+        code, body, resp_headers = http_request(url, "DELETE", h)
+        if code in (200, 204):
+            cr = (resp_headers or {}).get("content-range") or (resp_headers or {}).get("Content-Range") or ""
+            n = 0
+            if "/" in cr:
+                try: n = int(cr.split("/")[-1])
+                except (ValueError, IndexError): pass
+            if n > 0:
+                deleted_total += n
+                pcs_com_delete += 1
+        elif code != 404:
+            print(f"   ⚠️  PC {empresa}/{ncod_ped}: DELETE retornou HTTP {code} — {body[:200].decode('utf-8', errors='replace') if body else ''}")
+    if deleted_total > 0:
+        print(f"   🗑️  Purge orfaos: {deleted_total} item(ns) deletado(s) em {pcs_com_delete} PC(s)")
+    return deleted_total
+
 # ══════════════════════════════════════════════════════════════════════════
 # 💾 SYNC STATE
 # ══════════════════════════════════════════════════════════════════════════

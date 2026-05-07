@@ -33,13 +33,18 @@ import time
 sys.path.insert(0, "scripts")
 from _common import (
     EMPRESAS_ALVO, EMPRESAS_OMIE, PAUSA_ENTRE_CHAMADAS,
-    fetch_omie, supa_upsert, update_sync_state,
+    fetch_omie, supa_upsert, supa_delete_orfaos, update_sync_state,
     to_int, to_float, trigger_sheets_mirror,
 )
 
 # 0 ou ausente = pega todas as páginas (FULL).
 # > 0 = limita a N páginas (DIARIO captura recentes).
 MAX_PAGINAS = int(os.environ.get("MAX_PAGINAS_PEDCOMPRA", "0") or "0")
+
+# Quando true, depois do UPSERT remove items orfaos (items que estavam no
+# banco mas nao vieram da API atual) — corrige ccod_parc inconsistente em
+# PCs editados no Omie. Default OFF pra rollback facil. (2026-05-07)
+PURGE_ORFAOS = (os.environ.get("PURGE_ORFAOS", "false") or "false").lower() in ("true", "1", "yes", "on")
 
 OMIE_URL = "https://app.omie.com.br/api/v1/produtos/pedidocompra/"
 MODULO = "pedidos_compra"
@@ -198,11 +203,24 @@ def importar_empresa(sigla: str):
     print(f"   {sigla}: {len(all_items)} pedidos -> {len(rows)} linhas (itens)")
 
     n = supa_upsert(SCHEMA, TABELA, rows, PK)
+
+    # Purge de orfaos: remove items que estavam no DB mas nao vieram do Omie agora.
+    # Causa: UPSERT atualiza items existentes mas nunca deleta — items removidos
+    # no Omie ficavam no DB com valores antigos (ccod_parc velho, etc).
+    # Default OFF (PURGE_ORFAOS=false). Setar true em GH Actions pra ativar.
+    if PURGE_ORFAOS:
+        pcs_processados = {(r["empresa"], r["ncod_ped"]) for r in rows}
+        valid_keys = {(r["empresa"], r["ncod_ped"], r["ncod_item"]) for r in rows}
+        try:
+            supa_delete_orfaos(SCHEMA, TABELA, pcs_processados, valid_keys)
+        except Exception as e:
+            print(f"   ⚠️  Purge orfaos falhou: {e}")
+
     elapsed = int(time.time() - inicio)
     modo = "DIARIO" if MAX_PAGINAS > 0 else "FULL"
     update_sync_state(f"pedidos_compra_{sigla}", sigla, n, modo=modo, duracao_segundos=elapsed)
 
-    print(f"   {sigla}: {n} rows em {elapsed}s ({modo})")
+    print(f"   {sigla}: {n} rows em {elapsed}s ({modo}){' [+purge]' if PURGE_ORFAOS else ''}")
     return n
 
 
