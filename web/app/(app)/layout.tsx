@@ -42,7 +42,10 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         </div>
         <div className="p-4 md:p-6 min-w-0">{children}</div>
       </main>
-      <SupportWidget user={user ? { email: user.email, nome: (user.user_metadata as { full_name?: string } | null)?.full_name || user.email } : null} />
+      <SupportWidget
+        user={user ? { email: user.email, nome: (user.user_metadata as { full_name?: string } | null)?.full_name || user.email } : null}
+        isAdmin={!!perms?.is_admin}
+      />
     </UserPermsProvider>
   );
 }

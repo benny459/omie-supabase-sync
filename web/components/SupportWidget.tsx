@@ -7,7 +7,7 @@ type Msg = { id: string; role: "user" | "assistant"; content: string; images?: I
 type ImgAtt = { name: string; data_url: string };
 type Draft = { id: string; messages: Msg[]; summary: string; images: ImgAtt[] };
 type View = "closed" | "open" | "minimized";
-type Tab = "chat" | "history";
+type Tab = "chat" | "history" | "admin";
 
 const WELCOME: Msg = {
   id: "welcome",
@@ -77,7 +77,7 @@ function installConsoleCapture() {
 
 interface UserLike { email?: string | null; nome?: string | null }
 
-export default function SupportWidget({ user }: { user: UserLike | null | undefined }) {
+export default function SupportWidget({ user, isAdmin = false }: { user: UserLike | null | undefined; isAdmin?: boolean }) {
   const [view, setView] = useState<View>("closed");
 
   useEffect(() => { installConsoleCapture(); }, []);
@@ -107,6 +107,7 @@ export default function SupportWidget({ user }: { user: UserLike | null | undefi
         <div style={{ display: view === "minimized" ? "none" : undefined }}>
           <SupportPanel
             user={user}
+            isAdmin={isAdmin}
             onMinimize={() => setView("minimized")}
             onClose={() => setView("closed")}
           />
@@ -116,7 +117,7 @@ export default function SupportWidget({ user }: { user: UserLike | null | undefi
   );
 }
 
-function SupportPanel({ user, onMinimize, onClose }: { user: UserLike; onMinimize: () => void; onClose: () => void }) {
+function SupportPanel({ user, isAdmin, onMinimize, onClose }: { user: UserLike; isAdmin: boolean; onMinimize: () => void; onClose: () => void }) {
   const [tab, setTab] = useState<Tab>("chat");
   const [messages, setMessages] = useState<Msg[]>([WELCOME]);
   const [pendingImages, setPendingImages] = useState<ImgAtt[]>([]);
@@ -253,10 +254,18 @@ function SupportPanel({ user, onMinimize, onClose }: { user: UserLike; onMinimiz
           className={`flex-1 py-2 text-xs font-medium ${tab === "history" ? "bg-zinc-100 dark:bg-zinc-800 border-b-2 border-blue-500" : "text-zinc-500 hover:text-zinc-700"}`}>
           📋 Meus tickets
         </button>
+        {isAdmin && (
+          <button onClick={() => setTab("admin")}
+            className={`flex-1 py-2 text-xs font-medium ${tab === "admin" ? "bg-zinc-100 dark:bg-zinc-800 border-b-2 border-emerald-500" : "text-zinc-500 hover:text-zinc-700"}`}>
+            🛡️ Admin
+          </button>
+        )}
       </div>
 
       {tab === "history" ? (
         <MyTicketsPanel user={user} />
+      ) : tab === "admin" ? (
+        <AdminTicketsPanel />
       ) : (
         <>
           {drafts.length > 0 && (
@@ -421,7 +430,7 @@ function MyTicketsPanel({ user }: { user: UserLike }) {
 
   return (
     <div className="flex-1 overflow-y-auto p-3 space-y-2">
-      {tickets.map(t => {
+      {tickets.map((t) => {
         const meta = STATUS_LABEL[t.status] || { label: t.status, bg: "#e2e8f0", tx: "#1e293b" };
         const isOpen = openId === t.id;
         const friendlyMsgs = (t.mensagens || []).filter(m => m.role === "assistant").map(m => humanize(m.content));
@@ -475,8 +484,12 @@ function MyTicketsPanel({ user }: { user: UserLike }) {
 
                 <div className="text-[10px] uppercase tracking-wider text-zinc-500">Histórico</div>
                 {(t.mensagens || []).map((m, i) => (
-                  <div key={i} className={`text-xs rounded-md px-2.5 py-1.5 ${m.role === "user" ? "bg-blue-100 dark:bg-blue-950/40 ml-6" : "bg-zinc-100 dark:bg-zinc-800 mr-6"}`}>
-                    <div className="text-[9px] uppercase tracking-wider mb-0.5 opacity-60">{m.role === "user" ? "Você" : (m.from === "claude-loop" ? "Suporte" : "Assistente")}</div>
+                  <div key={i} className={`text-xs rounded-md px-2.5 py-1.5 ${
+                    m.role === "user" ? "bg-blue-100 dark:bg-blue-950/40 ml-6" :
+                    m.from === "admin" ? "bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-900 mr-6" :
+                    "bg-zinc-100 dark:bg-zinc-800 mr-6"
+                  }`}>
+                    <div className="text-[9px] uppercase tracking-wider mb-0.5 opacity-60">{m.role === "user" ? "Você" : (m.from === "admin" ? "Admin" : (m.from === "claude-loop" ? "Suporte" : "Assistente"))}</div>
                     <div className="whitespace-pre-wrap break-words">{m.role === "assistant" ? humanize(m.content) : m.content}</div>
                   </div>
                 ))}
@@ -499,6 +512,200 @@ function MyTicketsPanel({ user }: { user: UserLike }) {
           </div>
         );
       })}
+    </div>
+  );
+}
+
+const ADMIN_STATUS_OPTIONS = [
+  { key: "aberto", label: "Recebido" },
+  { key: "em_processamento", label: "Em proc." },
+  { key: "aguardando_user", label: "Aguard. user" },
+  { key: "pronto", label: "Pronto" },
+  { key: "pendente_merge", label: "Pendente merge" },
+  { key: "validado", label: "Validado" },
+  { key: "excede_escopo", label: "Excede" },
+  { key: "falhou", label: "Falhou" },
+  { key: "recusado", label: "Recusado" },
+  { key: "cancelado", label: "Cancelado" },
+];
+
+type AdminBugRow = BugRow & { reporter_nome: string | null };
+
+function AdminTicketsPanel() {
+  const [tickets, setTickets] = useState<AdminBugRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [openId, setOpenId] = useState<string | null>(null);
+  const [replyById, setReplyById] = useState<Record<string, string>>({});
+  const [sendingById, setSendingById] = useState<Record<string, boolean>>({});
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState<Set<string>>(new Set());
+  const [hideTerminal, setHideTerminal] = useState(true);
+
+  useEffect(() => {
+    let alive = true;
+    const load = async () => {
+      try {
+        const cols = "id,ticket_code,descricao,url,status,mensagens,imagens_extras,reporter_email,reporter_nome,colaboradores,created_at";
+        const { data, error } = await bugSupabase.from("bugs")
+          .select(cols).order("created_at", { ascending: false }).limit(300);
+        if (!alive) return;
+        if (error) setError(error.message);
+        else setTickets((data as AdminBugRow[]) || []);
+      } catch (e) { if (alive) setError(e instanceof Error ? e.message : "erro"); }
+      finally { if (alive) setLoading(false); }
+    };
+    load();
+    const channel = bugSupabase.channel("admin-bugs-all")
+      .on("postgres_changes", { event: "*", schema: "public", table: "bugs" }, () => { if (alive) load(); })
+      .subscribe();
+    return () => { alive = false; bugSupabase.removeChannel(channel); };
+  }, []);
+
+  const toggleStatus = (k: string) => setStatusFilter(p => {
+    const n = new Set(p); if (n.has(k)) n.delete(k); else n.add(k); return n;
+  });
+
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    const terminal = new Set(["validado", "cancelado", "recusado"]);
+    return tickets.filter(t => {
+      if (hideTerminal && statusFilter.size === 0 && terminal.has(t.status)) return false;
+      if (statusFilter.size > 0 && !statusFilter.has(t.status)) return false;
+      if (q) {
+        const hay = [t.descricao || "", t.reporter_email || "", t.reporter_nome || "", t.ticket_code || ""].join(" ").toLowerCase();
+        if (!hay.includes(q)) return false;
+      }
+      return true;
+    });
+  }, [tickets, search, statusFilter, hideTerminal]);
+
+  const sendAdminReply = async (id: string) => {
+    const text = (replyById[id] || "").trim();
+    if (!text) return;
+    setSendingById(p => ({ ...p, [id]: true }));
+    try {
+      const t = tickets.find(x => x.id === id);
+      const prev = (t?.mensagens || []) as { role: string; content: string; from?: string; ts?: string }[];
+      const newMsg = { role: "assistant", content: text, from: "admin", ts: new Date().toISOString() };
+      const { error } = await bugSupabase.from("bugs").update({ mensagens: [...prev, newMsg] }).eq("id", id);
+      if (error) throw error;
+      setReplyById(p => ({ ...p, [id]: "" }));
+    } catch (e) { alert(`Falha: ${e instanceof Error ? e.message : "erro"}`); }
+    finally { setSendingById(p => ({ ...p, [id]: false })); }
+  };
+
+  if (loading) return <div className="p-6 text-center text-sm text-zinc-500">Carregando…</div>;
+  if (error) return <div className="p-6 text-sm text-red-600">Erro: {error}</div>;
+
+  return (
+    <div className="flex-1 overflow-y-auto">
+      <div className="sticky top-0 z-10 bg-white dark:bg-zinc-900 border-b border-zinc-200 dark:border-zinc-700 p-3 space-y-1.5">
+        <input value={search} onChange={e => setSearch(e.target.value)}
+          placeholder="Buscar (descrição, email, código...)"
+          className="w-full border border-zinc-300 dark:border-zinc-600 rounded-md px-2 py-1.5 text-xs bg-white dark:bg-zinc-800 outline-none" />
+        <div className="flex flex-wrap gap-1">
+          {ADMIN_STATUS_OPTIONS.map(o => {
+            const m = STATUS_LABEL[o.key];
+            const active = statusFilter.has(o.key);
+            return (
+              <button key={o.key} onClick={() => toggleStatus(o.key)}
+                style={active && m ? { background: m.bg, color: m.tx } : undefined}
+                className={`px-1.5 py-0.5 rounded-md text-[10px] font-medium border ${active ? "border-transparent" : "bg-white dark:bg-zinc-800 text-zinc-500 border-zinc-300 dark:border-zinc-600 hover:border-zinc-400"}`}>
+                {o.label}
+              </button>
+            );
+          })}
+          {statusFilter.size > 0 && (
+            <button onClick={() => setStatusFilter(new Set())} className="px-1.5 py-0.5 text-[10px] text-zinc-500 hover:text-zinc-700">limpar</button>
+          )}
+        </div>
+        <div className="flex items-center justify-between text-[10px] text-zinc-500">
+          <label className="flex items-center gap-1 cursor-pointer">
+            <input type="checkbox" checked={hideTerminal} onChange={e => setHideTerminal(e.target.checked)} className="h-3 w-3" />
+            Ocultar finalizados
+          </label>
+          <span>{filtered.length} de {tickets.length}</span>
+        </div>
+      </div>
+
+      <div className="p-3 space-y-2">
+        {filtered.length === 0 ? (
+          <div className="p-6 text-center text-sm text-zinc-500">Nenhum ticket pra esses filtros.</div>
+        ) : filtered.map(t => {
+          const meta = STATUS_LABEL[t.status] || { label: t.status, bg: "#e2e8f0", tx: "#1e293b" };
+          const isOpen = openId === t.id;
+          const lastMsg = (t.mensagens || []).slice(-1)[0];
+          return (
+            <div key={t.id} className="rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 overflow-hidden">
+              <button onClick={() => setOpenId(isOpen ? null : t.id)} className="w-full p-3 text-left hover:bg-zinc-50 dark:hover:bg-zinc-800/50">
+                <div className="flex items-center gap-2 mb-1 flex-wrap">
+                  <span className="inline-block px-2 py-0.5 rounded-md text-[10px] font-semibold" style={{ background: meta.bg, color: meta.tx }}>{t.status}</span>
+                  <span className="text-[10px] text-zinc-400 tabular-nums">{t.ticket_code || t.id.slice(0, 8)}</span>
+                  <span className="text-[10px] text-zinc-500 truncate max-w-[180px]">{t.reporter_nome || t.reporter_email}</span>
+                  <span className="text-[10px] text-zinc-400 ml-auto">{new Date(t.created_at).toLocaleDateString("pt-BR")}</span>
+                </div>
+                <p className="text-sm line-clamp-2 break-words">{t.descricao || "(sem descrição)"}</p>
+                {lastMsg && (
+                  <p className="text-xs text-zinc-500 mt-1 line-clamp-2 italic">
+                    ↳ <span className="opacity-70">[{lastMsg.role}{lastMsg.from ? "/" + lastMsg.from : ""}]</span> {lastMsg.content}
+                  </p>
+                )}
+              </button>
+              {isOpen && (
+                <div className="border-t border-zinc-200 dark:border-zinc-700 p-3 space-y-2 bg-zinc-50 dark:bg-zinc-800/30">
+                  <div className="text-[10px] text-zinc-500 space-y-0.5">
+                    <div><span className="opacity-60">Reporter:</span> {t.reporter_email}{t.reporter_nome ? ` (${t.reporter_nome})` : ""}</div>
+                    {t.url && <div className="truncate"><span className="opacity-60">URL:</span> {t.url}</div>}
+                    <div><span className="opacity-60">Aberto:</span> {new Date(t.created_at).toLocaleString("pt-BR")}</div>
+                    {t.colaboradores && t.colaboradores.length > 0 && (
+                      <div><span className="opacity-60">Colab:</span> {t.colaboradores.join(", ")}</div>
+                    )}
+                  </div>
+
+                  {(t.imagens_extras || []).length > 0 && (
+                    <div className="flex flex-wrap gap-1.5">
+                      {(t.imagens_extras || []).map((img, i) => (
+                        <img key={i} src={img.data_url} alt={img.name} onClick={() => window.open(img.data_url, "_blank")}
+                          className="h-16 rounded-md border object-cover cursor-pointer hover:opacity-90" />
+                      ))}
+                    </div>
+                  )}
+
+                  <div className="text-[10px] uppercase tracking-wider text-zinc-500">Histórico (cru)</div>
+                  {(t.mensagens || []).map((m, i) => {
+                    const senderLabel = m.role === "user" ? "Usuário" : m.from === "admin" ? "Admin (você)" : m.from === "claude-loop" ? "Bot" : "Assistente";
+                    const align =
+                      m.role === "user" ? "ml-6 bg-blue-100 dark:bg-blue-950/40" :
+                      m.from === "admin" ? "mr-6 bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-900" :
+                      "mr-6 bg-zinc-100 dark:bg-zinc-800";
+                    return (
+                      <div key={i} className={`text-xs rounded-md px-2.5 py-1.5 ${align}`}>
+                        <div className="text-[9px] uppercase tracking-wider mb-0.5 opacity-60 flex justify-between gap-2">
+                          <span>{senderLabel}</span>
+                        </div>
+                        <div className="whitespace-pre-wrap break-words">{m.content}</div>
+                      </div>
+                    );
+                  })}
+                  <div className="pt-2 space-y-1.5">
+                    <textarea value={replyById[t.id] || ""} onChange={e => setReplyById(p => ({ ...p, [t.id]: e.target.value }))}
+                      placeholder="Responder como Admin (vai aparecer pro usuário no thread dele)..."
+                      rows={2} disabled={!!sendingById[t.id]}
+                      className="w-full border border-zinc-300 dark:border-zinc-600 rounded-md px-2 py-1.5 text-xs resize-none outline-none focus:ring-2 focus:ring-emerald-500/30 bg-white dark:bg-zinc-800 disabled:opacity-50" />
+                    <div className="flex justify-end">
+                      <button onClick={() => sendAdminReply(t.id)} disabled={!(replyById[t.id] || "").trim() || !!sendingById[t.id]}
+                        className="px-3 py-1 rounded-md text-xs font-semibold bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-40">
+                        {sendingById[t.id] ? "Enviando..." : "Enviar como Admin"}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
