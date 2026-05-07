@@ -98,6 +98,7 @@ jobs:
           MAX_PAGINAS_PEDCOMPRA: "10"
           PURGE_ORFAOS: "true"
           NORMALIZE_PC_CAB: "true"
+          AUTO_FIX_INCONSISTENTES: "true"
           PYTHONUNBUFFERED: "1"
         run: python3 scripts/import_pedidos_compra.py
         continue-on-error: true
