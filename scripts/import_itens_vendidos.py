@@ -476,3 +476,11 @@ if __name__ == "__main__":
     except KeyboardInterrupt:
         print("\n⚠️ Interrompido pelo usuário")
         sys.exit(130)
+    except Exception as _e:
+        try:
+            from _bug_reporter import report_sync_failure
+            _ctx = {"empresas_alvo": ",".join(EMPRESAS_ALVO)} if "EMPRESAS_ALVO" in globals() else {}
+            report_sync_failure("import_itens_vendidos", _e, _ctx)
+        except Exception:
+            pass
+        raise

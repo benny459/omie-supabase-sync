@@ -384,6 +384,149 @@ def supa_select(schema: str, table: str, query: str):
         raise RuntimeError(f"Supabase SELECT HTTP {code}: {body[:300].decode('utf-8', errors='replace')}")
     return json.loads(body.decode("utf-8"))
 
+
+def consultar_ped_compra(sigla: str, ncod_ped: int, timeout: int = 30) -> dict:
+    """Chama ConsultarPedCompra no Omie pra UM PC especifico (nao paginado).
+    Devolve o dict com 'cabecalho_consulta' (ou 'cabecalho') + 'produtos_consulta'
+    (ou 'produtos'). Retorna None se erro/nao-encontrado.
+    """
+    creds = EMPRESAS_OMIE.get(sigla)
+    if not creds:
+        return None
+    payload = {
+        "call": "ConsultarPedCompra",
+        "app_key": creds["app_key"],
+        "app_secret": creds["app_secret"],
+        "param": [{"nCodPed": ncod_ped}],
+    }
+    url = "https://app.omie.com.br/api/v1/produtos/pedidocompra/"
+    headers = {"Content-Type": "application/json"}
+    try:
+        body = json.dumps(payload).encode("utf-8")
+        code, resp_body, _ = http_request(url, "POST", headers, body, timeout)
+        if code != 200:
+            return None
+        d = json.loads(resp_body.decode("utf-8"))
+        if isinstance(d, dict) and "faultstring" in d:
+            return None
+        # Normaliza nome dos campos: ConsultarPedCompra pode usar
+        # "cabecalho"/"produtos" enquanto Pesquisar usa "_consulta".
+        if "cabecalho" in d and "cabecalho_consulta" not in d:
+            d["cabecalho_consulta"] = d["cabecalho"]
+        if "produtos" in d and "produtos_consulta" not in d:
+            d["produtos_consulta"] = d["produtos"]
+        return d
+    except Exception:
+        return None
+
+
+def supa_select_pcs_inconsistentes(schema: str = "orders") -> list:
+    """Lista PCs com forma de pagamento inconsistente entre seus items.
+    Le da view orders.v_pcs_inconsistentes.
+    """
+    try:
+        return supa_select(schema, "v_pcs_inconsistentes",
+                           "select=empresa,ncod_ped,cnumero,parcelas&order=ncod_ped")
+    except Exception as e:
+        print(f"   ⚠️  select v_pcs_inconsistentes falhou: {e}")
+        return []
+
+
+def supa_normalize_pc_cab(schema: str, table: str, rows: list, cab_fields: list):
+    """Garante que TODOS os items de um PC tenham os MESMOS valores nos
+    campos de cabeçalho (cab_fields). Forma de pagamento, fornecedor, etapa
+    etc no Omie sao 1 por PC — desnormalizamos em cada item-row porque o
+    sync explode em N rows. Se algum item especifico nao foi tocado pelo
+    upsert (paginacao, skip, race), fica com cab antigo enquanto outros
+    items ja tem o cab novo. Esta funcao força consistencia: pega o cab
+    da 1a row representativa de cada PC nos rows incoming e PATCH em
+    todos os items existentes no DB pra esse PC.
+
+    Retorna (n_pcs_normalizados, n_pcs_falha).
+    """
+    if not rows:
+        return 0, 0
+
+    # Pega 1 row representativa por PC com os cab_fields
+    by_pc: dict = {}
+    for r in rows:
+        key = (r["empresa"], r["ncod_ped"])
+        if key not in by_pc:
+            by_pc[key] = {f: r.get(f) for f in cab_fields}
+
+    h = supa_headers(schema, {"Prefer": "return=minimal"})
+    ok = 0; fail = 0
+    for (emp, ncod), cab_payload in by_pc.items():
+        url = (
+            f"{SUPABASE_URL}/rest/v1/{table}"
+            f"?empresa=eq.{urllib.parse.quote(emp)}"
+            f"&ncod_ped=eq.{ncod}"
+        )
+        body = json.dumps(cab_payload).encode("utf-8")
+        code, resp_body, _ = http_request(url, "PATCH", h, body)
+        if code in (200, 204):
+            ok += 1
+        else:
+            fail += 1
+            if code != 404:
+                msg = (resp_body or b"")[:200].decode("utf-8", errors="replace")
+                print(f"   ⚠️  Normalizar cab PC {emp}/{ncod}: HTTP {code} — {msg}")
+    if ok > 0:
+        print(f"   🔄 Cab normalizado em {ok} PC(s)" + (f" | {fail} falha(s)" if fail else ""))
+    return ok, fail
+
+
+def supa_delete_orfaos(schema: str, table: str, pcs_processados: set, valid_keys: set):
+    """Pra cada (empresa, ncod_ped) em pcs_processados, DELETA rows com
+    (empresa, ncod_ped, ncod_item) que NAO estao em valid_keys.
+
+    Use case: o sync re-fetcha PCs do Omie e, via UPSERT, atualiza items
+    existentes. Mas se o usuario removeu items no Omie, eles ficavam orfaos
+    no banco com valores antigos (causa raiz da inconsistencia ccod_parc
+    vista em 2026-05-06).
+
+    Retorna o total de rows deletadas. Skip seguro: se nao tiver items
+    validos pra um PC, NAO deleta nada (evita zerar acidentalmente).
+    """
+    if not pcs_processados:
+        return 0
+
+    h = supa_headers(schema, {"Prefer": "return=minimal,count=exact"})
+    deleted_total = 0
+    pcs_com_delete = 0
+
+    # Indexa valid_keys por (empresa, ncod_ped) -> set de ncod_item
+    valid_by_pc: dict = {}
+    for (emp, ncod, item) in valid_keys:
+        valid_by_pc.setdefault((emp, ncod), set()).add(item)
+
+    for (empresa, ncod_ped) in pcs_processados:
+        items_validos = valid_by_pc.get((empresa, ncod_ped))
+        if not items_validos:
+            continue  # safety
+        items_csv = ",".join(str(i) for i in sorted(items_validos))
+        url = (
+            f"{SUPABASE_URL}/rest/v1/{table}"
+            f"?empresa=eq.{urllib.parse.quote(empresa)}"
+            f"&ncod_ped=eq.{ncod_ped}"
+            f"&ncod_item=not.in.({items_csv})"
+        )
+        code, body, resp_headers = http_request(url, "DELETE", h)
+        if code in (200, 204):
+            cr = (resp_headers or {}).get("content-range") or (resp_headers or {}).get("Content-Range") or ""
+            n = 0
+            if "/" in cr:
+                try: n = int(cr.split("/")[-1])
+                except (ValueError, IndexError): pass
+            if n > 0:
+                deleted_total += n
+                pcs_com_delete += 1
+        elif code != 404:
+            print(f"   ⚠️  PC {empresa}/{ncod_ped}: DELETE retornou HTTP {code} — {body[:200].decode('utf-8', errors='replace') if body else ''}")
+    if deleted_total > 0:
+        print(f"   🗑️  Purge orfaos: {deleted_total} item(ns) deletado(s) em {pcs_com_delete} PC(s)")
+    return deleted_total
+
 # ══════════════════════════════════════════════════════════════════════════
 # 💾 SYNC STATE
 # ══════════════════════════════════════════════════════════════════════════

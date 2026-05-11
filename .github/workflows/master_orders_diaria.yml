@@ -12,7 +12,7 @@ on:
         default: "SF"
 
   # Cron fixo: 7, 10, 13, 16, 19 BRT (= 10, 13, 16, 19, 22 UTC)
-  # Dias: seg-sex + dom (1-5,0 em cron; 6=sab é pulado)
+  # Dias: seg-sex + dom (1-5,0 em cron; 6=sab é pulado
   schedule:
     - cron: "0 10,13,16,19,22 * * 1-5,0"
 
@@ -96,6 +96,9 @@ jobs:
           SHEETS_MIRROR_URL: ${{ secrets.SHEETS_MIRROR_URL }}
           SHEETS_MIRROR_TOKEN: ${{ secrets.SHEETS_MIRROR_TOKEN }}
           MAX_PAGINAS_PEDCOMPRA: "10"
+          PURGE_ORFAOS: "true"
+          NORMALIZE_PC_CAB: "true"
+          AUTO_FIX_INCONSISTENTES: "true"
           PYTHONUNBUFFERED: "1"
         run: python3 scripts/import_pedidos_compra.py
         continue-on-error: true

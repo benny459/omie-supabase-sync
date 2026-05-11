@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 260 70" role="img" aria-label="WaterWorks">
+  <g fill="#115580">
+    <!-- W estilizado acima (simplificado do original) -->
+    <path d="M18 4 L26 4 L30 20 L34 4 L40 4 L44 20 L48 4 L56 4 L47 34 L40 34 L37 22 L34 34 L27 34 L18 4 Z"/>
+    <ellipse cx="37" cy="40" rx="18" ry="2" fill="#115580" opacity="0.35"/>
+  </g>
+  <!-- Wordmark -->
+  <text x="74" y="38" font-family="-apple-system,BlinkMacSystemFont,system-ui,'SF Pro Display','Inter',sans-serif" font-size="36" font-weight="700" fill="#115580" letter-spacing="-0.5">WaterWorks</text>
+</svg>
