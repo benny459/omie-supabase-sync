@@ -45,6 +45,23 @@ function humanize(s: string): string {
   return out;
 }
 
+type MsgLike = { role?: string; from?: string; content?: string };
+type StatusBugLike = { status: string; mensagens?: MsgLike[] | null; github_issue_number?: number | null };
+
+function isClaudeLoopResolved(t: StatusBugLike): boolean {
+  const msgs = t.mensagens || [];
+  if (msgs.length === 0) return false;
+  const last = msgs[msgs.length - 1];
+  if (last.from !== "claude-loop") return false;
+  return /v\d+\.\d+\.\d+\s*\(sobe em/i.test(String(last.content || ""));
+}
+
+function effectiveStatus(t: StatusBugLike): string {
+  if (isClaudeLoopResolved(t) && t.status === "aguardando_user") return "pronto";
+  if (t.github_issue_number && (t.status === "aberto" || t.status === "em_processamento")) return "pronto";
+  return t.status;
+}
+
 const CONSOLE_BUFFER: { level: string; msg: string; ts: string }[] = [];
 const CONSOLE_BUFFER_MAX = 80;
 
@@ -484,7 +501,8 @@ function MyTicketsPanel({ user }: { user: UserLike }) {
         </button>
       </div>
       {tickets.map((t) => {
-        const meta = STATUS_LABEL[t.status] || { label: t.status, bg: "#e2e8f0", tx: "#1e293b" };
+        const eff = effectiveStatus(t);
+        const meta = STATUS_LABEL[eff] || { label: eff, bg: "#e2e8f0", tx: "#1e293b" };
         const isOpen = openId === t.id;
         const friendlyMsgs = (t.mensagens || []).filter(m => m.role === "assistant").map(m => humanize(m.content));
         const latest = friendlyMsgs[friendlyMsgs.length - 1];
@@ -686,7 +704,8 @@ function AdminTicketsPanel() {
         {filtered.length === 0 ? (
           <div className="p-6 text-center text-sm text-zinc-500">Nenhum ticket pra esses filtros.</div>
         ) : filtered.map(t => {
-          const meta = STATUS_LABEL[t.status] || { label: t.status, bg: "#e2e8f0", tx: "#1e293b" };
+          const eff = effectiveStatus(t);
+          const meta = STATUS_LABEL[eff] || { label: eff, bg: "#e2e8f0", tx: "#1e293b" };
           const isOpen = openId === t.id;
           const lastMsg = (t.mensagens || []).slice(-1)[0];
           return (
