@@ -362,6 +362,7 @@ type BugRow = {
   status: string; mensagens: { role: string; content: string; from?: string; images?: ImgAtt[] }[] | null;
   imagens_extras: ImgAtt[] | null; reporter_email: string | null; colaboradores: string[] | null;
   created_at: string;
+  processed_at?: string | null;
 };
 
 function MyTicketsPanel({ user }: { user: UserLike }) {
@@ -373,18 +374,20 @@ function MyTicketsPanel({ user }: { user: UserLike }) {
   const [sendingById, setSendingById] = useState<Record<string, boolean>>({});
   const [collabInputById, setCollabInputById] = useState<Record<string, string>>({});
 
+  // Lista sem `mensagens` / `imagens_extras` (JSONB pesado quando tem screenshots base64).
+  const LIST_COLS = "id,ticket_code,descricao,url,status,reporter_email,colaboradores,created_at,processed_at";
+
   useEffect(() => {
     let alive = true;
     const load = async () => {
       try {
-        const cols = "id,ticket_code,descricao,url,status,mensagens,imagens_extras,reporter_email,colaboradores,created_at";
         const { data, error } = await bugSupabase.from("bugs")
-          .select(cols)
+          .select(LIST_COLS)
           .or(`reporter_email.eq.${user.email},colaboradores.cs.{${user.email}}`)
           .order("created_at", { ascending: false }).limit(30);
         if (!alive) return;
         if (error) setError(error.message);
-        else setTickets((data as BugRow[]) || []);
+        else setTickets((((data as unknown) as BugRow[]) || []).map(r => ({ ...r, mensagens: r.mensagens || [], imagens_extras: r.imagens_extras || [] })));
       } catch (e) { if (alive) setError(e instanceof Error ? e.message : "erro"); }
       finally { if (alive) setLoading(false); }
     };
@@ -394,6 +397,49 @@ function MyTicketsPanel({ user }: { user: UserLike }) {
       .subscribe();
     return () => { alive = false; bugSupabase.removeChannel(channel); };
   }, [user.email]);
+
+  const loadFullTicket = async (id: string, force = false) => {
+    const t = tickets.find(x => x.id === id);
+    if (!t) return;
+    if (!force && t.mensagens && t.mensagens.length > 0) return;
+    try {
+      const { data, error } = await bugSupabase.from("bugs")
+        .select("mensagens,imagens_extras,status,processed_at,github_issue_number,github_issue_url,branch_name,preview_url,analyzed_at,analysis_confidence")
+        .eq("id", id).single();
+      if (error) throw error;
+      if (data) {
+        setTickets(prev => prev.map(x => x.id === id ? {
+          ...x,
+          mensagens: (data.mensagens || []) as BugRow["mensagens"],
+          imagens_extras: (data.imagens_extras || x.imagens_extras || []) as BugRow["imagens_extras"],
+          status: (data.status as string) ?? x.status,
+          processed_at: (data.processed_at as string | null) ?? x.processed_at,
+        } : x));
+      }
+    } catch (e) { console.warn("loadFullTicket:", e); }
+  };
+
+  const [refreshing, setRefreshing] = useState(false);
+  const refreshAll = async () => {
+    setRefreshing(true);
+    try {
+      const { data } = await bugSupabase.from("bugs").select(LIST_COLS)
+        .or(`reporter_email.eq.${user.email},colaboradores.cs.{${user.email}}`)
+        .order("created_at", { ascending: false }).limit(30);
+      if (Array.isArray(data)) {
+        setTickets(prev => {
+          const byId = new Map(prev.map(p => [p.id, p]));
+          return ((data as unknown) as BugRow[]).map(r => {
+            const existing = byId.get(r.id);
+            return existing
+              ? { ...existing, ...r, mensagens: existing.mensagens, imagens_extras: existing.imagens_extras }
+              : { ...r, mensagens: [], imagens_extras: [] };
+          });
+        });
+      }
+      if (openId) await loadFullTicket(openId, true);
+    } finally { setRefreshing(false); }
+  };
 
   const sendReply = async (id: string) => {
     const text = (replyById[id] || "").trim();
@@ -430,6 +476,13 @@ function MyTicketsPanel({ user }: { user: UserLike }) {
 
   return (
     <div className="flex-1 overflow-y-auto p-3 space-y-2">
+      <div className="flex items-center justify-between px-1">
+        <span className="text-[11px] text-zinc-500">{tickets.length} ticket{tickets.length !== 1 ? "s" : ""}</span>
+        <button onClick={refreshAll} disabled={refreshing} className="inline-flex items-center gap-1 text-[11px] text-zinc-500 hover:text-zinc-900 dark:hover:text-white disabled:opacity-40" title="Atualizar">
+          <span className={refreshing ? "inline-block animate-spin" : "inline-block"}>↻</span>
+          {refreshing ? "Atualizando..." : "Atualizar"}
+        </button>
+      </div>
       {tickets.map((t) => {
         const meta = STATUS_LABEL[t.status] || { label: t.status, bg: "#e2e8f0", tx: "#1e293b" };
         const isOpen = openId === t.id;
@@ -438,7 +491,7 @@ function MyTicketsPanel({ user }: { user: UserLike }) {
         const canEdit = t.reporter_email === user.email;
         return (
           <div key={t.id} className="rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 overflow-hidden">
-            <button onClick={() => setOpenId(isOpen ? null : t.id)} className="w-full p-3 text-left hover:bg-zinc-50 dark:hover:bg-zinc-800/50">
+            <button onClick={() => { if (!isOpen) loadFullTicket(t.id); setOpenId(isOpen ? null : t.id); }} className="w-full p-3 text-left hover:bg-zinc-50 dark:hover:bg-zinc-800/50">
               <div className="flex items-start justify-between gap-2">
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-1">
