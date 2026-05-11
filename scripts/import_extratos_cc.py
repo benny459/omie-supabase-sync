@@ -153,8 +153,20 @@ def importar_empresa(sigla: str):
         update_sync_state(f"extratos_cc_{sigla}", sigla, 0, modo="FULL")
         return 0
 
+    # Dedup por PK (empresa, cod_conta_corrente, cod_lancamento) — Omie as
+    # vezes retorna o mesmo nCodLancamento em duas contas (ex: lancamento de
+    # transferencia entre contas aparece em ambas). Sem isso o UPSERT estoura
+    # com 21000 "ON CONFLICT DO UPDATE command cannot affect row a second time".
+    dedup = {}
+    for r in all_rows:
+        key = (r["empresa"], r["cod_conta_corrente"], r["cod_lancamento"])
+        dedup[key] = r
+    deduped = list(dedup.values())
+    if len(deduped) < len(all_rows):
+        print(f"   Dedup: {len(all_rows)} -> {len(deduped)} (removidas {len(all_rows) - len(deduped)} duplicatas por PK)")
+
     total, inserted, updated, before, after = upsert_with_tracking(
-        SCHEMA, TABELA, all_rows, PK, empresa=sigla
+        SCHEMA, TABELA, deduped, PK, empresa=sigla
     )
 
     duracao = int(time.time() - inicio)
