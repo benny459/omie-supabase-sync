@@ -1,0 +1,11 @@
+{
+  "functions": {
+    "app/api/cron/bug-analyze/route.ts": { "maxDuration": 300 }
+  },
+  "crons": [
+    {
+      "path": "/api/cron/bug-analyze",
+      "schedule": "*/5 * * * *"
+    }
+  ]
+}

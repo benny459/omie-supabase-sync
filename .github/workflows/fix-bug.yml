@@ -1,0 +1,308 @@
+name: Fix Bug from ADK Agent (Omie painel)
+
+# Dispara quando uma Issue ganha label `fix-me` (criada pelo cron bug-analyze).
+# Pipeline em 2 níveis:
+#   1) Gemini 2.5 Pro tenta aplicar o fix (~80% dos casos, ~$0.02/run)
+#   2) Se Gemini não conseguir → Claude Sonnet 4.6 escala (~$0.20/run)
+#   3) Se ambos falharem → comenta na Issue pedindo review manual
+
+on:
+  issues:
+    types: [labeled]
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+  statuses: read
+  checks: read
+
+jobs:
+  fix:
+    if: ${{ github.event.label.name == 'fix-me' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install Gemini CLI + Claude Code CLI
+        run: |
+          npm install -g @google/gemini-cli
+          npm install -g @anthropic-ai/claude-code
+
+      - name: Configure Gemini CLI (auto-trust workspace + yolo)
+        run: |
+          mkdir -p "$HOME/.gemini"
+          WS="${GITHUB_WORKSPACE:-/home/runner/work/omie-supabase-sync/omie-supabase-sync}"
+          cat > "$HOME/.gemini/settings.json" <<EOF
+          {
+            "approvalMode": "yolo",
+            "yolo": true,
+            "folderTrust": { "enabled": false },
+            "trustAllFolders": true,
+            "trustedFolders": ["$WS", "/home/runner"]
+          }
+          EOF
+          echo "GEMINI_CLI_TRUST_WORKSPACE=true" >> $GITHUB_ENV
+          echo "GEMINI_TRUST_FOLDER=true" >> $GITHUB_ENV
+          echo "GEMINI_TRUST_ALL=true" >> $GITHUB_ENV
+
+      - name: Configure git author
+        run: |
+          git config user.email "benny@waterworks.com.br"
+          git config user.name "Omie Painel ADK Agent"
+
+      - name: Create branch
+        id: branch
+        run: |
+          TS=$(date -u +%Y%m%d%H%M%S)
+          BRANCH="fix/issue-${{ github.event.issue.number }}-${TS}"
+          git checkout -b "$BRANCH"
+          echo "name=$BRANCH" >> $GITHUB_OUTPUT
+
+      - name: Persist Issue body + comments (history)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          mkdir -p .agent-context
+          cat > .agent-context/issue.md <<'__ISSUE__'
+          ${{ github.event.issue.body }}
+          __ISSUE__
+          echo "Issue #${{ github.event.issue.number }} — ${{ github.event.issue.title }}" \
+            > .agent-context/issue-title.txt
+          gh issue view ${{ github.event.issue.number }} --json comments \
+            --jq '.comments[] | "## Comentário de @\(.author.login) em \(.createdAt[0:19])\n\n\(.body)\n\n---\n"' \
+            > .agent-context/comments.md 2>/dev/null || echo "" > .agent-context/comments.md
+          rm -f .agent-context/questions.md
+
+      - name: Try Gemini 2.5 Pro (primary)
+        id: gemini
+        continue-on-error: true
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: |
+          gemini --skip-trust --yolo --model gemini-2.5-pro --prompt "$(cat <<'__PROMPT__'
+          Estás a trabalhar no app painel Omie (subpasta web/ do repo omie-supabase-sync).
+          Stack: Next.js 15 + TS5 + Tailwind 4 + PostgREST (schemas approval, platform, sales, orders).
+          Cliente Supabase server-side: web/lib/bug-supabase-server.ts.
+          Acesso PostgREST: header Accept-Profile: <schema>.
+          UI: web/app, web/components.
+
+          Lê .agent-context/issue.md para o diagnóstico do agente ADK.
+          Lê .agent-context/comments.md para histórico de comentários da Issue
+          (incluindo respostas a perguntas tuas em runs anteriores).
+
+          PASSO 1 — VERIFICAR DIAGNÓSTICO ANTES DE APLICAR FIX
+          O diagnóstico foi gerado por outro agente que NÃO consultou os ficheiros.
+          Pode mencionar paths/funções que NÃO existem.
+
+          Antes de aplicar QUALQUER alteração:
+          1. ls/cat/find no path mencionado.
+          2. Se não existir, grep -r pelos conceitos do diagnóstico.
+          3. Lê o código atual e confirma que o problema bate.
+
+          PASSO 2 — APLICAR FIX
+          Se confirmaste o problema:
+          - Aplica o fix mínimo necessário (em web/...).
+          - Não toques em web/components/SupportWidget.tsx nem em web/lib/bug-supabase-server.ts nem em web/app/api/cron/bug-analyze/.
+          - Incrementa patch em web/package.json (version).
+          - git add + git commit "fix: <resumo curto> (Issue #${{ github.event.issue.number }}, Gemini)"
+          - Não faças push.
+
+          PASSO 3 — QUANDO NÃO CONSEGUIRES
+          Se o diagnóstico estiver completamente errado, faltar info crítica, ou
+          o código não estiver claro:
+          - Escreve em .agent-context/questions.md uma lista NUMERADA de perguntas
+            ESPECÍFICAS (1 por linha).
+          - Sai sem commit. O workflow vai postar as perguntas na Issue.
+          __PROMPT__
+          )"
+
+      - name: Check if Gemini committed or asked questions
+        id: check_gemini
+        run: |
+          git fetch origin main 2>/dev/null || true
+          NEW_COMMITS=$(git rev-list --count HEAD ^origin/main 2>/dev/null || echo "0")
+          if [ "$NEW_COMMITS" -gt "0" ]; then
+            echo "applied=true" >> $GITHUB_OUTPUT
+            echo "asked_questions=false" >> $GITHUB_OUTPUT
+          elif [ -s .agent-context/questions.md ]; then
+            echo "applied=false" >> $GITHUB_OUTPUT
+            echo "asked_questions=true" >> $GITHUB_OUTPUT
+          else
+            echo "applied=false" >> $GITHUB_OUTPUT
+            echo "asked_questions=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Post Gemini questions to Issue
+        if: steps.check_gemini.outputs.asked_questions == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          QUESTIONS=$(cat .agent-context/questions.md)
+          gh issue comment ${{ github.event.issue.number }} --body "👋 Para conseguir aplicar o fix, preciso de mais info:
+
+          $QUESTIONS
+
+          Responde em comentário — quando responderes vou tentar de novo automaticamente."
+
+      - name: Escalate to Claude Sonnet 4.6
+        id: claude
+        if: steps.check_gemini.outputs.applied == 'false' && steps.check_gemini.outputs.asked_questions == 'false'
+        continue-on-error: true
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          claude code --print --dangerously-skip-permissions <<'__PROMPT__'
+          Gemini 2.5 Pro tentou e não conseguiu — tu és o nível 2 (Claude Sonnet 4.6).
+
+          App painel Omie (subpasta web/ do repo omie-supabase-sync).
+          Next.js 15 + TS5 + Tailwind 4 + PostgREST (schemas approval/platform/sales/orders).
+          Lê .agent-context/issue.md para o diagnóstico.
+
+          Regras:
+          - Fix mínimo em web/...
+          - Não toques em web/components/SupportWidget.tsx, web/lib/bug-supabase-server.ts, web/app/api/cron/bug-analyze/.
+          - Pode envolver múltiplos ficheiros se causa raiz exigir.
+          - Incrementa patch em web/package.json (version).
+          - git add + git commit "fix: <resumo curto> (Issue #${{ github.event.issue.number }}, Claude escalation)"
+          - Não faças push.
+          - Se mesmo assim não tiveres certeza, sai sem commit — vai virar review manual.
+          __PROMPT__
+
+      - name: Verify final changes
+        id: verify
+        run: |
+          git fetch origin main 2>/dev/null || true
+          NEW_COMMITS=$(git rev-list --count HEAD ^origin/main 2>/dev/null || echo "0")
+          if [ "$NEW_COMMITS" -gt "0" ]; then
+            echo "no_changes=false" >> $GITHUB_OUTPUT
+          else
+            echo "no_changes=true" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Push branch
+        if: steps.verify.outputs.no_changes == 'false'
+        run: git push -u origin ${{ steps.branch.outputs.name }}
+
+      - name: Open PR
+        id: open_pr
+        if: steps.verify.outputs.no_changes == 'false'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if [ "${{ steps.check_gemini.outputs.applied }}" = "true" ]; then
+            APPLIED_BY="Gemini 2.5 Pro"
+          else
+            APPLIED_BY="Claude Sonnet 4.6 (escalation)"
+          fi
+          PR_URL=$(gh pr create \
+            --base main \
+            --head ${{ steps.branch.outputs.name }} \
+            --title "fix(adk): Issue #${{ github.event.issue.number }} — ${{ github.event.issue.title }}" \
+            --body "Fix automático aplicado pelo agente ADK (painel Omie).
+
+          Closes #${{ github.event.issue.number }}
+
+          - Issue: #${{ github.event.issue.number }}
+          - Branch: \`${{ steps.branch.outputs.name }}\`
+          - Aplicado por: $APPLIED_BY
+
+          Auto-merge ao Vercel preview ficar verde.")
+          echo "url=$PR_URL" >> $GITHUB_OUTPUT
+          PR_NUMBER=$(echo "$PR_URL" | grep -oE '[0-9]+$')
+          echo "number=$PR_NUMBER" >> $GITHUB_OUTPUT
+
+      - name: Wait for Vercel preview + auto-merge
+        if: steps.verify.outputs.no_changes == 'false' && steps.open_pr.outputs.number != ''
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR: ${{ steps.open_pr.outputs.number }}
+        run: |
+          TIMEOUT=600
+          INTERVAL=20
+          ELAPSED=0
+          MERGED=0
+
+          while [ $ELAPSED -lt $TIMEOUT ]; do
+            PR_STATE=$(gh pr view "$PR" --json state -q '.state' 2>/dev/null || echo "UNKNOWN")
+            if [ "$PR_STATE" != "OPEN" ]; then
+              echo "PR #$PR state=$PR_STATE — aborto"
+              break
+            fi
+
+            CHECKS=$(gh pr checks "$PR" 2>/dev/null || echo "")
+            VERCEL_LINE=$(echo "$CHECKS" | grep -E "^Vercel[[:space:]]" | head -1)
+            VERCEL_STATE=$(echo "$VERCEL_LINE" | awk -F'\t' '{print $2}')
+            VERCEL_STATE_UP=$(echo "${VERCEL_STATE:-PENDING}" | tr '[:lower:]' '[:upper:]')
+            case "$VERCEL_STATE_UP" in
+              PASS|SUCCESS) VERCEL_STATE_UP="SUCCESS" ;;
+              FAIL|FAILURE|ERROR) VERCEL_STATE_UP="FAILURE" ;;
+              *) VERCEL_STATE_UP="PENDING" ;;
+            esac
+
+            echo "[$ELAPSED s] Vercel=$VERCEL_STATE_UP"
+
+            if [ "$VERCEL_STATE_UP" = "SUCCESS" ]; then
+              if gh pr merge "$PR" --squash --delete-branch --admin 2>/tmp/merge_err; then
+                MERGED=1
+              else
+                cat /tmp/merge_err
+                gh pr merge "$PR" --squash --delete-branch && MERGED=1
+              fi
+
+              if [ $MERGED -eq 1 ]; then
+                if [ "${{ steps.check_gemini.outputs.applied }}" = "true" ]; then
+                  MODEL_USED="gemini"
+                else
+                  MODEL_USED="anthropic"
+                fi
+                SUPABASE_URL="https://zodflkfdnjhtwcjutbjl.supabase.co"
+                ANON_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpvZGZsa2ZkbmpodHdjanV0YmpsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU4NDY4MTEsImV4cCI6MjA5MTQyMjgxMX0.Swde5fyjxeOU8jT0dQb7GoJZuRBTRAeW5I1IKtrWg_E"
+                NOW_ISO=$(date -u +"%Y-%m-%dT%H:%M:%S.000Z")
+                curl -sS -X PATCH \
+                  "$SUPABASE_URL/rest/v1/bugs?github_issue_number=eq.${{ github.event.issue.number }}" \
+                  -H "apikey: $ANON_KEY" \
+                  -H "Authorization: Bearer $ANON_KEY" \
+                  -H "Content-Type: application/json" \
+                  -H "Prefer: return=minimal" \
+                  -d "{\"fixed_by_model\":\"$MODEL_USED\",\"status\":\"validado\",\"validated_at\":\"$NOW_ISO\",\"processed_at\":\"$NOW_ISO\"}" \
+                  && echo "status=validado gravado" \
+                  || echo "Falha ao gravar (não crítico)"
+              fi
+              break
+            fi
+
+            if [ "$VERCEL_STATE_UP" = "FAILURE" ] || [ "$VERCEL_STATE_UP" = "ERROR" ]; then
+              gh issue comment ${{ github.event.issue.number }} --body \
+                "⚠️ Vercel preview falhou no PR #$PR — auto-merge cancelado."
+              break
+            fi
+
+            sleep $INTERVAL
+            ELAPSED=$((ELAPSED + INTERVAL))
+          done
+
+          if [ $MERGED -eq 0 ] && [ $ELAPSED -ge $TIMEOUT ]; then
+            gh issue comment ${{ github.event.issue.number }} --body \
+              "⏱ Timeout (10min) aguardando Vercel preview no PR #$PR."
+          fi
+
+      - name: Comment on issue if no changes
+        if: steps.verify.outputs.no_changes == 'true' && steps.check_gemini.outputs.asked_questions != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh issue comment ${{ github.event.issue.number }} --body \
+            "Nenhum dos agentes (Gemini Pro nem Claude Sonnet) conseguiu aplicar fix concreto a partir deste diagnóstico. Revê manualmente."

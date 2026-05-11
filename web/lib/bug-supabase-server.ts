@@ -9,15 +9,13 @@ const FALLBACK_URL = "https://zodflkfdnjhtwcjutbjl.supabase.co";
 const FALLBACK_ANON =
   "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpvZGZsa2ZkbmpodHdjanV0YmpsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU4NDY4MTEsImV4cCI6MjA5MTQyMjgxMX0.Swde5fyjxeOU8jT0dQb7GoJZuRBTRAeW5I1IKtrWg_E";
 
-const URL =
-  process.env.BUG_SUPABASE_URL ||
-  process.env.NEXT_PUBLIC_SUPABASE_URL ||
-  FALLBACK_URL;
+// IMPORTANTE: NÃO cair em NEXT_PUBLIC_SUPABASE_URL nem SUPABASE_SERVICE_ROLE_KEY
+// — essas apontam pro projeto omie-data (DB do painel), não pro waterworks-os
+// (DB dos bugs). Se BUG_SUPABASE_URL não estiver setada, usa o FALLBACK_*.
+const URL = process.env.BUG_SUPABASE_URL || FALLBACK_URL;
 
 const SERVICE_KEY =
   process.env.BUG_SUPABASE_SERVICE_ROLE_KEY ||
-  process.env.SUPABASE_SERVICE_ROLE_KEY ||
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
   FALLBACK_ANON;
 
 let _client: SupabaseClient | null = null;
