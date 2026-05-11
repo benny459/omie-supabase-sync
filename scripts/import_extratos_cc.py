@@ -25,7 +25,21 @@ OMIE_URL_EXT    = "https://app.omie.com.br/api/v1/financas/extrato/"
 SCHEMA          = "finance"
 TABELA          = "extratos_cc"
 PK              = "empresa,cod_conta_corrente,cod_lancamento"
-DIAS_BUSCA      = int(env("EXTRATO_DIAS_BUSCA", "7"))
+EXTRATO_DATA_INICIO = env("EXTRATO_DATA_INICIO", "")  # override DD/MM/YYYY
+EXTRATO_DIAS_BUSCA  = env("EXTRATO_DIAS_BUSCA", "")    # legado opcional
+
+
+def calcular_dt_inicio(hoje: datetime) -> str:
+    """Resolve data de inicio do extrato:
+       1) EXTRATO_DATA_INICIO=DD/MM/YYYY (override absoluto, util pra backfill)
+       2) EXTRATO_DIAS_BUSCA=N (legado: N dias atras)
+       3) Default: 01/01 do ano corrente -> garante extrato sempre completo
+          desde inicio do ano sem precisar tunar por env."""
+    if EXTRATO_DATA_INICIO:
+        return EXTRATO_DATA_INICIO
+    if EXTRATO_DIAS_BUSCA:
+        return (hoje - timedelta(days=int(EXTRATO_DIAS_BUSCA))).strftime("%d/%m/%Y")
+    return f"01/01/{hoje.year}"
 
 
 def obter_contas_correntes(sigla: str) -> list:
@@ -86,8 +100,7 @@ def importar_empresa(sigla: str):
 
     # Date range
     hoje = datetime.now()
-    dt_inicio = hoje - timedelta(days=DIAS_BUSCA)
-    dt_inicio_str = dt_inicio.strftime("%d/%m/%Y")
+    dt_inicio_str = calcular_dt_inicio(hoje)
     dt_fim_str    = hoje.strftime("%d/%m/%Y")
     print(f"   Periodo: {dt_inicio_str} -> {dt_fim_str}")
 
