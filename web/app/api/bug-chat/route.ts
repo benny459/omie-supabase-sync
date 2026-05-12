@@ -47,7 +47,9 @@ async function callGemini(systemText: string, messages: Msg[]) {
   const key = process.env.GEMINI_API_KEY;
   if (!key) return null;
   const contents = messages.map(m => ({ role: m.role === "assistant" ? "model" : "user", parts: [{ text: String(m.content || "") }] }));
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${key}`;
+  // gemini-2.5-flash — modelo mais recente + 1500 req/min (chat conversacional).
+  // Reserva-se 2.5-pro pro cron bug-analyze (50 req/min, qualidade alta).
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${key}`;
   const resp = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ contents, systemInstruction: { parts: [{ text: systemText }] }, generationConfig: { temperature: 0.5, maxOutputTokens: 600 } }) });
   if (!resp.ok) throw new Error(`gemini ${resp.status}: ${(await resp.text()).slice(0, 300)}`);
   const data = await resp.json();
@@ -97,7 +99,9 @@ export async function POST(req: Request) {
       try { const r = await p.fn(); if (r === null) continue; if (r && r.length > 0) { text = r; used = p.name; break; } }
       catch (e) { errs.push(`${p.name}: ${e instanceof Error ? e.message : "err"}`); }
     }
-    if (!text) return Response.json({ ok: true, message: "Ótimo, vou já lhe atender. Quer reportar algo mais?", closed: true, closedKind: "bug", provider: "fallback_offline", diagnostics: errs.join(" | ") });
+    // Modo degradado — nenhum provedor disponível (rate limit / network).
+    // Mensagem honesta sobre o que se passou, registando o ticket à mesma.
+    if (!text) return Response.json({ ok: true, message: "Os meus modelos estão a engasgar agora (rate limit). A sua mensagem fica registada como ticket — o Benny olha pessoalmente.", closed: true, closedKind: "bug", provider: "fallback_offline", diagnostics: errs.join(" | ") });
     const closedNoBug = /\[?TICKET_FECHADO_NAO_BUG\]?/.test(text);
     const closed = !closedNoBug && /\[?TICKET_FECHADO\]?/.test(text);
     const message = text.replace(/\[?TICKET_FECHADO_NAO_BUG\]?/g, "").replace(/\[?TICKET_FECHADO\]?/g, "").trim();
