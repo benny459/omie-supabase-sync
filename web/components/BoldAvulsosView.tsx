@@ -9,6 +9,8 @@ import { canApprove, canEdit, type BlockKey } from "@/lib/permissions";
 import EditableCell from "./EditableCell";
 import EditableStatusCell from "./EditableStatusCell";
 import RcExcelDropZone from "./RcExcelDropZone";
+import RcProjetoUploadButton from "./RcProjetoUploadButton";
+import RcProjetoItensBlock from "./RcProjetoItensBlock";
 import AddRowButton from "./AddRowButton";
 import GlobalSearch from "./GlobalSearch";
 
@@ -1443,10 +1445,11 @@ function BucketCard({
           )}
 
           {/* Footer: AddRowButton sempre visível (com seletor de PV/OS quando bucket
-              é projeto); RcExcelDropZone só em modo PV/OS pois precisa de destino único. */}
+              é projeto); RcExcelDropZone só em modo PV/OS pois precisa de destino único.
+              Lista RC (Projeto): só em /projetos com codigo_projeto identificado. */}
           {userCanEdit && (
             <div className="flex items-center justify-between gap-3 px-4 py-2 border-t border-ww-border bg-ww-bg flex-wrap">
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 {bucket.groupKind === "pvos" && (
                   <RcExcelDropZone empresa={bucket.rows[0]?.empresa as string ?? "SF"}
                     pv_os_label={bucket.pv_os_label} modulo={modulo} />
@@ -1455,12 +1458,33 @@ function BucketCard({
                   pv_os_label={bucket.groupKind === "pvos" ? bucket.pv_os_label : null}
                   modulo={modulo}
                   pvOsOptions={bucket.groupKind === "pvos" ? undefined : [...new Set(bucket.rows.map(r => String(r.pv_os_label ?? "")).filter(Boolean))]} />
+                {(() => {
+                  // Em /projetos com codigo_projeto identificado, oferece upload da Lista RC
+                  if (modulo !== "projetos") return null;
+                  const codProj = Number(bucket.rows.find(r => r.codigo_projeto)?.codigo_projeto ?? 0);
+                  if (!codProj) return null;
+                  return (
+                    <RcProjetoUploadButton
+                      empresa={bucket.rows[0]?.empresa as string ?? "SF"}
+                      codigoProjeto={codProj} />
+                  );
+                })()}
               </div>
               <span className="text-[10px] text-ww-textFaint font-mono">
                 {items.length} item(s){bucket.groupKind === "pvos" ? " · upload XLSX preenche linhas em branco primeiro" : ""}
               </span>
             </div>
           )}
+          {/* Bloco "Itens RC" — só em /projetos, renderiza quando tem dados */}
+          {modulo === "projetos" && (() => {
+            const codProj = Number(bucket.rows.find(r => r.codigo_projeto)?.codigo_projeto ?? 0);
+            if (!codProj) return null;
+            return (
+              <RcProjetoItensBlock
+                empresa={bucket.rows[0]?.empresa as string ?? "SF"}
+                codigoProjeto={codProj} />
+            );
+          })()}
         </div>
       )}
     </div>
