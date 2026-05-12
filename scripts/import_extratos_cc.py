@@ -6,8 +6,16 @@ Endpoints:
   - /financas/extrato/      | ListarExtrato          (get movements per account)
 Tabela:   finance.extratos_cc
 Freq:     Diaria
-NOTE: ListarExtrato is NOT paginated -- it returns all movements for a given
-      account + date range in a single call. We loop over each account per empresa.
+
+ATENCAO sobre paginacao do ListarExtrato:
+  O endpoint NAO aceita nPagina/nRegPorPagina (responde "Tag [NPAGINA] não faz
+  parte da estrutura"). Mas silenciosamente LIMITA a 50 movimentos por call.
+  Comprovado em 2026-05-12 com Bradesco-Safe: 01-11/05 retornava 50 movs
+  com ultimo em 04/05 -- todos os manuais conciliados de 08-11/05 sumiam.
+
+  Workaround: chamamos em JANELAS de WINDOW_DAYS (default 7). Se uma janela
+  retorna >=50 movs, SUBDIVIDIMOS recursivamente (split por data) ate caber.
+  Dedup posterior por (empresa, cod_cc, cod_lancamento) absorve overlap.
 """
 import sys, time
 from datetime import datetime, timedelta
@@ -27,6 +35,60 @@ TABELA          = "extratos_cc"
 PK              = "empresa,cod_conta_corrente,cod_lancamento"
 EXTRATO_DATA_INICIO = env("EXTRATO_DATA_INICIO", "")  # override DD/MM/YYYY
 EXTRATO_DIAS_BUSCA  = env("EXTRATO_DIAS_BUSCA", "")    # legado opcional
+WINDOW_DAYS         = int(env("EXTRATO_WINDOW_DAYS", "7"))  # janela base de chamada
+API_HARD_LIMIT      = 50  # Omie ListarExtrato corta silenciosamente em 50/call
+MIN_WINDOW_DAYS     = 1   # nao subdivide alem de 1 dia (se mesmo assim vier 50, registra warning)
+
+
+def _br_to_date(s: str) -> datetime:
+    return datetime.strptime(s, "%d/%m/%Y")
+
+def _date_to_br(d: datetime) -> str:
+    return d.strftime("%d/%m/%Y")
+
+def fetch_window_adaptive(sigla: str, cod_cc: int, dt_ini: datetime, dt_fim: datetime, depth: int = 0):
+    """Chama ListarExtrato para janela [dt_ini, dt_fim]. Se a API retornar
+    >=API_HARD_LIMIT movimentos (provavel corte silencioso), subdivide a janela
+    ao meio e re-chama recursivamente. Retorna (lista_movimentos_agregada, cc_meta).
+
+    Profundidade tipica: 2-3 niveis. Dedup posterior por PK absorve overlap."""
+    di_str = _date_to_br(dt_ini); df_str = _date_to_br(dt_fim)
+    indent = "    " + ("│ " * depth)
+    try:
+        data = fetch_omie(
+            OMIE_URL_EXT, "ListarExtrato", sigla,
+            {"nCodCC": cod_cc, "dPeriodoInicial": di_str, "dPeriodoFinal": df_str, "cExibirApenasSaldo": "N"}
+        )
+    except Exception as e:
+        print(f"{indent}❌ {di_str}->{df_str} erro: {e}")
+        return [], None
+
+    if data.get("_empty_page"):
+        return [], None
+
+    movs = data.get("listaMovimentos") or []
+    cc_meta = {
+        "cDescricao": data.get("cDescricao"),
+        "nCodBanco": data.get("nCodBanco"),
+        "nCodAgencia": data.get("nCodAgencia"),
+        "nNumConta": data.get("nNumConta"),
+    }
+
+    delta = (dt_fim - dt_ini).days
+    # Hit no limite: subdivide se a janela ainda for divisivel
+    if len(movs) >= API_HARD_LIMIT and delta > MIN_WINDOW_DAYS:
+        mid = dt_ini + timedelta(days=delta // 2)
+        print(f"{indent}⚠️  {di_str}->{df_str}: {len(movs)} movs (hit {API_HARD_LIMIT}) — subdividindo")
+        movs_l, meta_l = fetch_window_adaptive(sigla, cod_cc, dt_ini, mid, depth + 1)
+        movs_r, meta_r = fetch_window_adaptive(sigla, cod_cc, mid + timedelta(days=1), dt_fim, depth + 1)
+        cc_meta = meta_l or meta_r or cc_meta
+        return movs_l + movs_r, cc_meta
+
+    if len(movs) >= API_HARD_LIMIT:
+        # Janela ja eh 1 dia mas vem 50 — pode haver clipping real. Loga e segue.
+        print(f"{indent}⚠️  {di_str}->{df_str}: {len(movs)} movs (>= limite e janela ja eh {delta} dia(s))")
+
+    return movs, cc_meta
 
 
 def calcular_dt_inicio(hoje: datetime) -> str:
@@ -112,41 +174,39 @@ def importar_empresa(sigla: str):
         update_sync_state(f"extratos_cc_{sigla}", sigla, 0, modo="FULL")
         return 0
 
+    # Itera por janelas de WINDOW_DAYS pra cada conta corrente. Cada janela é
+    # adaptativa: se Omie retornar 50 movs (corte silencioso), subdivide.
+    dt_ini_total = _br_to_date(dt_inicio_str)
+    dt_fim_total = _br_to_date(dt_fim_str)
+    janelas = []
+    cur = dt_ini_total
+    while cur <= dt_fim_total:
+        nxt = min(cur + timedelta(days=WINDOW_DAYS - 1), dt_fim_total)
+        janelas.append((cur, nxt))
+        cur = nxt + timedelta(days=1)
+    print(f"   Janelas: {len(janelas)} x {WINDOW_DAYS}d")
+
     all_rows = []
     for cc in contas:
         cod_cc = cc.get("nCodCC")
         if not cod_cc:
             continue
-
-        try:
-            data = fetch_omie(
-                OMIE_URL_EXT, "ListarExtrato", sigla,
-                {
-                    "nCodCC": cod_cc,
-                    "dPeriodoInicial": dt_inicio_str,
-                    "dPeriodoFinal": dt_fim_str,
-                    "cExibirApenasSaldo": "N",
-                }
-            )
-        except Exception as e:
-            print(f"   CC {cod_cc}: erro -> {e}")
-            continue
-
-        if data.get("_empty_page"):
-            continue
-
-        movimentos = data.get("listaMovimentos") or []
-        cc_meta = {
-            "cDescricao": data.get("cDescricao"),
-            "nCodBanco": data.get("nCodBanco"),
-            "nCodAgencia": data.get("nCodAgencia"),
-            "nNumConta": data.get("nNumConta"),
-        }
-
-        for m in movimentos:
-            row = map_row(m, sigla, cod_cc, cc_meta)
-            if row["cod_lancamento"]:
-                all_rows.append(row)
+        cc_desc = cc.get("descricao", "?")
+        cc_total = 0
+        cc_meta = None
+        for (jd_i, jd_f) in janelas:
+            movs, meta = fetch_window_adaptive(sigla, cod_cc, jd_i, jd_f)
+            if meta and not cc_meta:
+                cc_meta = meta
+            if not movs:
+                continue
+            cc_total += len(movs)
+            for m in movs:
+                row = map_row(m, sigla, cod_cc, cc_meta or {})
+                if row["cod_lancamento"]:
+                    all_rows.append(row)
+        if cc_total > 0:
+            print(f"   CC {cod_cc} ({cc_desc}): {cc_total} movimentos no total")
 
     if not all_rows:
         print(f"   {sigla}: nenhum movimento")
