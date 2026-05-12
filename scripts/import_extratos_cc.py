@@ -35,7 +35,7 @@ TABELA          = "extratos_cc"
 PK              = "empresa,cod_conta_corrente,cod_lancamento"
 EXTRATO_DATA_INICIO = env("EXTRATO_DATA_INICIO", "")  # override DD/MM/YYYY
 EXTRATO_DIAS_BUSCA  = env("EXTRATO_DIAS_BUSCA", "")    # legado opcional
-WINDOW_DAYS         = int(env("EXTRATO_WINDOW_DAYS", "7"))  # janela base de chamada
+WINDOW_DAYS         = int(env("EXTRATO_WINDOW_DAYS", "30")) # janela base; subdivide adaptativamente em contas ativas
 API_HARD_LIMIT      = 50  # Omie ListarExtrato corta silenciosamente em 50/call
 MIN_WINDOW_DAYS     = 1   # nao subdivide alem de 1 dia (se mesmo assim vier 50, registra warning)
 
