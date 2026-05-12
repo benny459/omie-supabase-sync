@@ -132,6 +132,9 @@ jobs:
           EMPRESAS_ALVO: ${{ github.event.inputs.empresas || 'SF,CD,WW' }}
           FORCAR_FULL: ${{ github.event.inputs.forcar_full || 'false' }}
           DIAS_INCREMENTAL: ${{ github.event.inputs.dias_incremental || '90' }}
+          # Diario pega so ultimos 90 dias (rapido). Full semanal (master_finance_full)
+          # cobre updates retroativos desde 01/01.
+          EXTRATO_DIAS_BUSCA: "90"
           SHEETS_MIRROR_URL: ${{ secrets.SHEETS_MIRROR_URL }}
           SHEETS_MIRROR_TOKEN: ${{ secrets.SHEETS_MIRROR_TOKEN }}
           PYTHONUNBUFFERED: "1"

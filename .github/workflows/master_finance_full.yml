@@ -12,9 +12,10 @@ on:
         required: false
         default: "SF,CD,WW"
 
-  # schedule DESATIVADO via painel web - rodar apenas manual
-  # schedule:
-  #   - cron: "0 6 * * 0"  # Domingo 06:00 UTC (03:00 BRT)
+  # Reativado 2026-05-12 — cobre updates retroativos > 90 dias (o diario
+  # pega so ultimos 90d desde o fix do truncamento ListarExtrato).
+  schedule:
+    - cron: "0 6 * * 0"  # Domingo 06:00 UTC (03:00 BRT)
 
 concurrency:
   group: master-finance-full
