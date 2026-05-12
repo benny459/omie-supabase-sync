@@ -1,0 +1,60 @@
+name: TEMP Explore ListarExtrato com paginacao
+
+on:
+  workflow_dispatch:
+
+jobs:
+  explore:
+    runs-on: ubuntu-latest
+    env:
+      OMIE_APP_KEY_SF:    ${{ secrets.OMIE_APP_KEY_SF }}
+      OMIE_APP_SECRET_SF: ${{ secrets.OMIE_APP_SECRET_SF }}
+    steps:
+      - name: Test pagination
+        run: |
+          python3 - <<'PY'
+          import json, os, urllib.request
+          KEY = os.environ["OMIE_APP_KEY_SF"]; SECRET = os.environ["OMIE_APP_SECRET_SF"]
+          NCC = 2252238644
+
+          def call(p):
+              body = json.dumps({"call":"ListarExtrato","app_key":KEY,"app_secret":SECRET,"param":[p]}).encode()
+              req = urllib.request.Request("https://app.omie.com.br/api/v1/financas/extrato/",
+                  data=body, headers={"Content-Type":"application/json"}, method="POST")
+              with urllib.request.urlopen(req, timeout=60) as r: return json.loads(r.read().decode())
+
+          base = {"nCodCC":NCC,"dPeriodoInicial":"01/05/2026","dPeriodoFinal":"11/05/2026","cExibirApenasSaldo":"N"}
+
+          # Teste 1: nRegPorPagina=500
+          print("=== Teste 1: nRegPorPagina=500 ===")
+          r = call({**base, "nRegPorPagina": 500})
+          movs = r.get("listaMovimentos") or []
+          print(f"  movs={len(movs)}  ultima_data={movs[-1].get('dDataLancamento') if movs else None}")
+          print(f"  keys: {[k for k in r.keys() if k != 'listaMovimentos']}")
+
+          # Teste 2: nPagina=1,2,3 (paginação explícita)
+          print()
+          print("=== Teste 2: paginacao nPagina=1..N ===")
+          tot = 0
+          for pg in range(1, 8):
+              try:
+                  r = call({**base, "nPagina": pg, "nRegPorPagina": 50})
+              except Exception as e:
+                  print(f"  pag {pg} ERRO: {e}")
+                  break
+              movs = r.get("listaMovimentos") or []
+              if not movs: print(f"  pag {pg}: vazia, fim."); break
+              tot += len(movs)
+              ult = movs[-1].get("dDataLancamento")
+              print(f"  pag {pg}: {len(movs)} movs (acum {tot}) | ult={ult} | keys_pag: {[k for k in r if 'pagin' in k.lower() or 'total' in k.lower() or 'reg' in k.lower()]}")
+              if len(movs) < 50: break
+
+          # Teste 3: detalhe dos 08/05 e 11/05 (pega da resposta cheia 500)
+          print()
+          print("=== Lancamentos 08-11/05 na resposta 500-per-page ===")
+          r = call({**base, "nRegPorPagina": 500})
+          for m in (r.get("listaMovimentos") or []):
+              d = m.get("dDataLancamento") or ""
+              if d in ("08/05/2026","09/05/2026","10/05/2026","11/05/2026"):
+                  print(f"  {d} | sit={m.get('cSituacao')!r} | tipo={m.get('cTipoDocumento')!r} | lanc={m.get('nCodLancamento')} | R${m.get('nValorDocumento')} | {m.get('cDesCliente')!r} | cat={m.get('cDesCategoria')!r}")
+          PY
