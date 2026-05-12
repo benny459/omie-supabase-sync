@@ -21,40 +21,32 @@ jobs:
               body = json.dumps({"call":"ListarExtrato","app_key":KEY,"app_secret":SECRET,"param":[p]}).encode()
               req = urllib.request.Request("https://app.omie.com.br/api/v1/financas/extrato/",
                   data=body, headers={"Content-Type":"application/json"}, method="POST")
-              with urllib.request.urlopen(req, timeout=60) as r: return json.loads(r.read().decode())
+              try:
+                  with urllib.request.urlopen(req, timeout=60) as r:
+                      return json.loads(r.read().decode()), None
+              except urllib.error.HTTPError as e:
+                  txt = e.read().decode()[:400]
+                  return None, f"HTTP {e.code}: {txt}"
 
           base = {"nCodCC":NCC,"dPeriodoInicial":"01/05/2026","dPeriodoFinal":"11/05/2026","cExibirApenasSaldo":"N"}
 
-          # Teste 1: nRegPorPagina=500
-          print("=== Teste 1: nRegPorPagina=500 ===")
-          r = call({**base, "nRegPorPagina": 500})
-          movs = r.get("listaMovimentos") or []
-          print(f"  movs={len(movs)}  ultima_data={movs[-1].get('dDataLancamento') if movs else None}")
-          print(f"  keys: {[k for k in r.keys() if k != 'listaMovimentos']}")
-
-          # Teste 2: nPagina=1,2,3 (paginação explícita)
-          print()
-          print("=== Teste 2: paginacao nPagina=1..N ===")
-          tot = 0
-          for pg in range(1, 8):
-              try:
-                  r = call({**base, "nPagina": pg, "nRegPorPagina": 50})
-              except Exception as e:
-                  print(f"  pag {pg} ERRO: {e}")
-                  break
+          print("=== Paginacao nPagina=1..N com nRegPorPagina=50 ===")
+          tot = 0; all_movs = []
+          for pg in range(1, 20):
+              r, err = call({**base, "nPagina": pg, "nRegPorPagina": 50})
+              if err: print(f"  pag {pg}: {err}"); break
               movs = r.get("listaMovimentos") or []
               if not movs: print(f"  pag {pg}: vazia, fim."); break
-              tot += len(movs)
-              ult = movs[-1].get("dDataLancamento")
-              print(f"  pag {pg}: {len(movs)} movs (acum {tot}) | ult={ult} | keys_pag: {[k for k in r if 'pagin' in k.lower() or 'total' in k.lower() or 'reg' in k.lower()]}")
+              tot += len(movs); all_movs.extend(movs)
+              ult = movs[-1].get("dDataLancamento"); pri = movs[0].get("dDataLancamento")
+              pag_keys = [k for k in r if "pagin" in k.lower() or "total" in k.lower() or "nReg" in k]
+              print(f"  pag {pg}: {len(movs)} movs (acum {tot}) | {pri}->{ult} | meta={ {k: r[k] for k in pag_keys} }")
               if len(movs) < 50: break
 
-          # Teste 3: detalhe dos 08/05 e 11/05 (pega da resposta cheia 500)
           print()
-          print("=== Lancamentos 08-11/05 na resposta 500-per-page ===")
-          r = call({**base, "nRegPorPagina": 500})
-          for m in (r.get("listaMovimentos") or []):
-              d = m.get("dDataLancamento") or ""
-              if d in ("08/05/2026","09/05/2026","10/05/2026","11/05/2026"):
-                  print(f"  {d} | sit={m.get('cSituacao')!r} | tipo={m.get('cTipoDocumento')!r} | lanc={m.get('nCodLancamento')} | R${m.get('nValorDocumento')} | {m.get('cDesCliente')!r} | cat={m.get('cDesCategoria')!r}")
+          print("=== Lancamentos 08-11/05 (TODAS paginas agregadas) ===")
+          enc = [m for m in all_movs if (m.get("dDataLancamento") or "") in ("08/05/2026","09/05/2026","10/05/2026","11/05/2026")]
+          print(f"Total: {len(enc)}")
+          for m in enc:
+              print(f"  {m.get('dDataLancamento')} | sit={m.get('cSituacao')!r} | tipo={m.get('cTipoDocumento')!r} | lanc={m.get('nCodLancamento')} | R${m.get('nValorDocumento')} | {(m.get('cDesCliente') or '')[:40]!r} | cat={m.get('cDesCategoria')!r}")
           PY
