@@ -380,7 +380,21 @@ type BugRow = {
   imagens_extras: ImgAtt[] | null; reporter_email: string | null; colaboradores: string[] | null;
   created_at: string;
   processed_at?: string | null;
+  github_issue_number?: number | null;
+  fixed_by_model?: string | null;
 };
+
+function ModelBadge({ model }: { model?: string | null }) {
+  if (!model) return null;
+  const m = model.toLowerCase();
+  if (m === "gemini") {
+    return <span title="Resolvido por Gemini 2.5 Pro" className="inline-block px-1.5 py-0.5 rounded text-[9px] font-semibold" style={{ background: "#dbeafe", color: "#1d4ed8", border: "1px solid #93c5fd" }}>✦ Gemini</span>;
+  }
+  if (m === "anthropic") {
+    return <span title="Resolvido por Claude Sonnet 4.6" className="inline-block px-1.5 py-0.5 rounded text-[9px] font-semibold" style={{ background: "#ffedd5", color: "#c2410c", border: "1px solid #fdba74" }}>◆ Claude</span>;
+  }
+  return null;
+}
 
 function MyTicketsPanel({ user }: { user: UserLike }) {
   const [tickets, setTickets] = useState<BugRow[]>([]);
@@ -617,7 +631,7 @@ function AdminTicketsPanel() {
     let alive = true;
     const load = async () => {
       try {
-        const cols = "id,ticket_code,descricao,url,status,mensagens,imagens_extras,reporter_email,reporter_nome,colaboradores,created_at";
+        const cols = "id,ticket_code,descricao,url,status,mensagens,imagens_extras,reporter_email,reporter_nome,colaboradores,created_at,fixed_by_model";
         const { data, error } = await bugSupabase.from("bugs")
           .select(cols).order("created_at", { ascending: false }).limit(300);
         if (!alive) return;
@@ -714,6 +728,7 @@ function AdminTicketsPanel() {
                 <div className="flex items-center gap-2 mb-1 flex-wrap">
                   <span className="inline-block px-2 py-0.5 rounded-md text-[10px] font-semibold" style={{ background: meta.bg, color: meta.tx }}>{t.status}</span>
                   <span className="text-[10px] text-zinc-400 tabular-nums">{t.ticket_code || t.id.slice(0, 8)}</span>
+                  <ModelBadge model={t.fixed_by_model} />
                   <span className="text-[10px] text-zinc-500 truncate max-w-[180px]">{t.reporter_nome || t.reporter_email}</span>
                   <span className="text-[10px] text-zinc-400 ml-auto">{new Date(t.created_at).toLocaleDateString("pt-BR")}</span>
                 </div>
