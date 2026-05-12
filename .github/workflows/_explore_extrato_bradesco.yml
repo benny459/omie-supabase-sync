@@ -1,0 +1,66 @@
+name: TEMP Explore ListarExtrato Bradesco
+
+on:
+  workflow_dispatch:
+
+jobs:
+  explore:
+    runs-on: ubuntu-latest
+    env:
+      OMIE_APP_KEY_SF:    ${{ secrets.OMIE_APP_KEY_SF }}
+      OMIE_APP_SECRET_SF: ${{ secrets.OMIE_APP_SECRET_SF }}
+    steps:
+      - name: Call Omie ListarExtrato (Bradesco-Safe, 01/05-11/05)
+        run: |
+          python3 - <<'PY'
+          import json, os, urllib.request
+
+          KEY = os.environ["OMIE_APP_KEY_SF"]
+          SECRET = os.environ["OMIE_APP_SECRET_SF"]
+          NCC = 2252238644  # Bradesco-Safe
+
+          def call(action, param):
+              body = json.dumps({"call": action, "app_key": KEY, "app_secret": SECRET, "param": [param]}).encode()
+              req = urllib.request.Request(
+                  "https://app.omie.com.br/api/v1/financas/extrato/",
+                  data=body, headers={"Content-Type": "application/json"}, method="POST",
+              )
+              with urllib.request.urlopen(req, timeout=60) as r:
+                  return json.loads(r.read().decode())
+
+          # Pega periodo 01/05-11/05 (igual o sync faz com default)
+          resp = call("ListarExtrato", {
+              "nCodCC": NCC,
+              "dPeriodoInicial": "01/05/2026",
+              "dPeriodoFinal": "11/05/2026",
+              "cExibirApenasSaldo": "N",
+          })
+
+          movs = resp.get("listaMovimentos") or []
+          print(f"=== ListarExtrato Bradesco-Safe (nCC={NCC}) ===")
+          print(f"Total movimentos retornados: {len(movs)}")
+          print(f"Meta: cDescricao={resp.get('cDescricao')!r}  nCodBanco={resp.get('nCodBanco')}  nNumConta={resp.get('nNumConta')!r}")
+          print(f"Outras keys no response: {[k for k in resp.keys() if k != 'listaMovimentos']}")
+
+          # Tipo dos lançamentos
+          print()
+          print("=== Resumo por data + situacao + tipo_doc ===")
+          for m in movs:
+              d = m.get("dDataLancamento")
+              sit = m.get("cSituacao")
+              tipo = m.get("cTipoDocumento")
+              v = m.get("nValorDocumento")
+              lanc = m.get("nCodLancamento")
+              des = (m.get("cDesCliente") or "")[:40]
+              cat = m.get("cDesCategoria") or ""
+              print(f"  {d} | sit={sit!r:18} | tipo={tipo!r:20} | lanc={lanc} | R${v:>12} | cat={cat[:25]:25} | {des}")
+
+          # Filtra os 08/05 e 11/05 especificamente
+          print()
+          print("=== Detalhe COMPLETO de cada movimento 08-11/05 ===")
+          for m in movs:
+              d = m.get("dDataLancamento") or ""
+              if d in ("08/05/2026", "09/05/2026", "10/05/2026", "11/05/2026"):
+                  print(json.dumps(m, indent=2, ensure_ascii=False))
+                  print("---")
+          PY
