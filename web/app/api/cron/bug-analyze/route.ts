@@ -85,8 +85,27 @@ RESPONDE EM JSON ESTRITO com este shape:
 
 Regras:
 - "high" só quando tens certeza do ficheiro+causa. Não inventes.
-- "out_of_scope": true se a mensagem NÃO é sobre o Painel Omie (ex: pedido sobre app.waterworks.com.br ou Propostas-WW). technical_details vazio.
-- Se duvidoso, prefere "low"/"medium" — Issue só é criada com "high".
+- "out_of_scope": true APENAS se a mensagem NÃO menciona painel.waterworks.com.br
+  nem suas páginas E o problema é claramente de outro produto.
+
+  IN-SCOPE (out_of_scope=false) — qualquer um destes basta:
+    • URL painel.waterworks.com.br (qualquer path: /projetos, /avulsos, /pcs,
+      /configuracoes, /relatorios, etc)
+    • Mencionar +NOVA LINHA, "Anexar RC", "Adicionar PC", upload XLSX
+    • Tabelas/schemas: approvals, v_pc_*, approval.*, rc_projetos_itens, sales.*,
+      orders.pedidos_compra, finance.extratos_cc
+    • Erros PGRST (PGRST205 schema cache, RLS, hydration React #418)
+    • Conceitos do painel: RC, PC, PV/OS, modulo projetos/avulsos/pcs,
+      status_fornec, valor_aprovado, custom_fields
+
+  OUT-OF-SCOPE (out_of_scope=true) — só se o reporte é INEQUIVOCAMENTE outro produto:
+    • app.waterworks.com.br (app de field service, OS, técnicos, chamados)
+    • propostas-ww (CRM, propostas comerciais, oportunidades)
+    • metabase.waterworks (BI, dashboards)
+
+- Se duvidoso, prefere out_of_scope=false — vale criar Issue (com confidence
+  high/medium) pra revisão humana do que perder reporte de produção.
+- Se duvidoso entre high/medium/low, prefere "medium" — Issue ainda é criada com "high".
 - Devolve APENAS os 4 campos.`;
 
 const SECOND_PASS = `\n[Reanálise — outro ângulo. A 1ª passagem foi inconclusiva. Considera hydration SSR/CSR, RLS, schema cache PostgREST, filtros compostos, cron Vercel.]`;
