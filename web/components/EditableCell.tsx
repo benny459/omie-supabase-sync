@@ -41,13 +41,16 @@ export default function EditableCell({
   async function persist(newStr: string) {
     setSaving(true); setError(null);
     const supa = supaBrowser();
+    // .schema("approval") explicito — @supabase/ssr nao respeita db.schema global
+    // (sem isso, todas as edicoes inline caiam silenciosamente em public.approvals)
+    const approval = supa.schema("approval" as never);
 
     const newVal = fromEditStr(newStr, kind);
 
     // custom_fields slug?
     if (field.startsWith("custom:")) {
       const slug = field.slice("custom:".length);
-      const { data: row, error: re } = await supa
+      const { data: row, error: re } = await approval
         .from("approvals")
         .select("custom_fields")
         .eq("empresa", empresa).eq("ncod_ped", ncod_ped)
@@ -58,9 +61,9 @@ export default function EditableCell({
         alert(`❌ Não salvou:\n\n${re.message}`);
         setSaving(false); return;
       }
-      const cf: Record<string, unknown> = { ...(row?.custom_fields as object ?? {}) };
+      const cf: Record<string, unknown> = { ...((row as { custom_fields?: object })?.custom_fields ?? {}) };
       if (newVal === null) delete cf[slug]; else cf[slug] = newVal;
-      const { error: ue } = await supa
+      const { error: ue } = await approval
         .from("approvals")
         .upsert({ empresa, ncod_ped, modulo: "avulsos", custom_fields: cf },
                 { onConflict: "empresa,ncod_ped" });
@@ -79,13 +82,13 @@ export default function EditableCell({
     let saveErr: string | null = null;
     if (isOrphan) {
       // Cria approval row pra esse orphan — precisamos de modulo (default avulsos)
-      const { error: ue } = await supa
+      const { error: ue } = await approval
         .from("approvals")
         .upsert({ empresa, ncod_ped, modulo: "avulsos", source: "native", ...patch },
                 { onConflict: "empresa,ncod_ped" });
       if (ue) saveErr = ue.message;
     } else {
-      const { error: ue } = await supa
+      const { error: ue } = await approval
         .from("approvals")
         .upsert({ empresa, ncod_ped, modulo: "avulsos", ...patch },
                 { onConflict: "empresa,ncod_ped" });

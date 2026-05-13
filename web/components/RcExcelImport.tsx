@@ -135,7 +135,7 @@ export default function RcExcelImport({ empresa = "SF" }: { empresa?: string }) 
       if (r.rc_descricao   != null) patch.rc_descricao   = r.rc_descricao;
       if (r.rc_custo       != null) patch.rc_custo       = r.rc_custo;
       if (r.rc_custo_total != null) patch.rc_custo_total = r.rc_custo_total;
-      const { error } = await supa.from("approvals").upsert(patch, { onConflict: "empresa,ncod_ped" });
+      const { error } = await supa.schema("approval" as never).from("approvals").upsert(patch, { onConflict: "empresa,ncod_ped" });
       if (error) fail++; else ok++;
     }
 

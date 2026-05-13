@@ -51,15 +51,16 @@ export default function DetailDrawer({
     if (!selected) return;
     setLoading(true);
     const supa = supaBrowser();
+    const approval = supa.schema("approval" as never);
     Promise.all([
-      supa
+      approval
         .from("comments")
         .select("id,autor_email,texto,created_at,deleted_at")
         .eq("empresa", selected.empresa)
         .eq("ncod_ped", selected.ncod_ped)
         .order("created_at", { ascending: true })
         .returns<Comment[]>(),
-      supa
+      approval
         .from("audit_log")
         .select("id,action,user_email,diff,created_at")
         .eq("empresa", selected.empresa)
@@ -81,7 +82,7 @@ export default function DetailDrawer({
     if (!selected || !userId || !userEmail || !newComment.trim()) return;
     setPosting(true);
     const supa = supaBrowser();
-    const { data, error } = await supa
+    const { data, error } = await supa.schema("approval" as never)
       .from("comments")
       .insert({
         empresa: selected.empresa,

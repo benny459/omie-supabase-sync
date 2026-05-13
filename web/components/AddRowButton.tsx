@@ -52,12 +52,17 @@ export default function AddRowButton({
     setBusy(true); setErr(null); setMsg(null);
 
     const supa = supaBrowser();
+    // .schema("approval") explicito porque @supabase/ssr nao respeita db.schema
+    // global de forma consistente — sem isso, .from("approvals") cai em
+    // public.approvals (PGRST205) ou INSERT vai pra tabela errada silenciosamente.
+    const approval = supa.schema("approval" as never);
     // Global min pra evitar colisão
-    const { data: minRows, error: mErr } = await supa
+    const { data: minRows, error: mErr } = await approval
       .from("approvals")
       .select("ncod_ped").order("ncod_ped", { ascending: true }).limit(1);
     if (mErr) { setErr(mErr.message); setBusy(false); return; }
-    const globalMin = minRows?.[0]?.ncod_ped ?? 0;
+    const minObj = minRows?.[0] as { ncod_ped: number } | undefined;
+    const globalMin = minObj?.ncod_ped ?? 0;
     let next = Math.min(globalMin, -1) - 1;
 
     const rows = Array.from({ length: n }, () => {
@@ -69,7 +74,7 @@ export default function AddRowButton({
       return row;
     });
 
-    const { error } = await supa.from("approvals").insert(rows);
+    const { error } = await approval.from("approvals").insert(rows);
     setBusy(false);
     if (error) { setErr(error.message); return; }
     setMsg(`✓ ${n} linha${n !== 1 ? "s" : ""} adicionada${n !== 1 ? "s" : ""} em ${target}`);

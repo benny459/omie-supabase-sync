@@ -42,10 +42,13 @@ export default function PasteRcButton({
 
     setBusy(true); setMsg("Processando…");
     const supa = supaBrowser();
+    // .schema("approval") explicito — @supabase/ssr nao respeita db.schema global
+    const approval = supa.schema("approval" as never);
     // Busca min global pra evitar PK collision com placeholders existentes
-    const { data: minRows } = await supa.from("approvals")
+    const { data: minRows } = await approval.from("approvals")
       .select("ncod_ped").order("ncod_ped", { ascending: true }).limit(1);
-    let minNcod = Math.min(minRows?.[0]?.ncod_ped ?? 0, -1);
+    const minObj = minRows?.[0] as { ncod_ped: number } | undefined;
+    let minNcod = Math.min(minObj?.ncod_ped ?? 0, -1);
 
     const rows = lines.map((line) => {
       const parts = line.split(/\t|;|,(?=\s|$)/);  // TSV primeiro, depois ; ou vírgula se não TSV
@@ -69,7 +72,7 @@ export default function PasteRcButton({
       };
     });
 
-    const { error, data } = await supa.from("approvals").insert(rows).select();
+    const { error, data } = await approval.from("approvals").insert(rows).select();
     setBusy(false);
     if (error) { setMsg(`❌ ${error.message}`); return; }
     setMsg(`✅ ${data?.length ?? rows.length} linhas criadas.`);

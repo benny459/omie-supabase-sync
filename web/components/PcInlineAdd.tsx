@@ -72,7 +72,7 @@ export default function PcInlineAdd({ empresa = "SF" }: { empresa?: "SF" | "CD" 
     // Etapa 2: upsert em approvals (essa ainda usa client — RLS já autoriza admin)
     setRows((rs) => rs.map((r) => r.id === id ? { ...r, status: "saving", foundPc: { ncod_ped: pc.ncod_ped, cnumero: pc.cnumero } } : r));
     const supa = supaBrowser();
-    const { error: uErr } = await supa.from("approvals").upsert({
+    const { error: uErr } = await supa.schema("approval" as never).from("approvals").upsert({
       empresa: pc.empresa,
       ncod_ped: pc.ncod_ped,
       modulo: "pcs",

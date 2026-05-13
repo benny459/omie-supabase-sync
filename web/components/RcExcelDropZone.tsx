@@ -112,6 +112,9 @@ export default function RcExcelDropZone({
     if (parsed.items.length === 0) { setMsg({ kind: "err", text: "Nenhuma linha identificada" }); return; }
     setBusy(true); setMsg(null);
     const supa = supaBrowser();
+    // .schema("approval") explicito — @supabase/ssr nao respeita db.schema
+    // global de forma consistente (PGRST205 "table public.approvals not found")
+    const approval = supa.schema("approval" as never);
 
     // 1) Upload do arquivo
     const path = `${empresa}/${pv_os_label}/${Date.now()}-${file.name}`;
@@ -122,21 +125,21 @@ export default function RcExcelDropZone({
 
     // 2) Busca rows EXISTENTES em branco no mesmo PV/OS — serão preenchidas primeiro
     //    (evita desperdiçar placeholders criados antes via "Nova linha")
-    const { data: blanks } = await supa
+    const { data: blanks } = await approval
       .from("approvals")
       .select("ncod_ped")
       .eq("empresa", empresa).eq("pv_os_label", pv_os_label)
       .is("rc_numero", null).is("rc_descricao", null).is("rc_custo", null)
       .order("ncod_ped", { ascending: false });
 
-    const blankNcods = (blanks ?? []).map((r) => Number(r.ncod_ped));
+    const blankNcods = (blanks ?? []).map((r) => Number((r as { ncod_ped: number }).ncod_ped));
     const nBlanks = Math.min(blankNcods.length, parsed.items.length);
 
     // 3) UPDATE nas rows em branco
     const updateResults = await Promise.all(
       Array.from({ length: nBlanks }, async (_, i) => {
         const it = parsed.items[i];
-        const res = await supa.from("approvals").update({
+        const res = await approval.from("approvals").update({
           rc_numero: parsed.rcNumero,
           rc_descricao: it.descricao,
           rc_custo: it.custoUnit,
@@ -156,9 +159,10 @@ export default function RcExcelDropZone({
     let insErr: string | null = null;
     let nInserted = 0;
     if (remaining.length > 0) {
-      const { data: minRows } = await supa
+      const { data: minRows } = await approval
         .from("approvals").select("ncod_ped").order("ncod_ped", { ascending: true }).limit(1);
-      let next = Math.min(minRows?.[0]?.ncod_ped ?? 0, -1) - 1;
+      const minObj = minRows?.[0] as { ncod_ped: number } | undefined;
+      let next = Math.min(minObj?.ncod_ped ?? 0, -1) - 1;
 
       const rows = remaining.map((it) => {
         const row = {
@@ -176,7 +180,7 @@ export default function RcExcelDropZone({
         next -= 1;
         return row;
       });
-      const { error } = await supa.from("approvals").insert(rows);
+      const { error } = await approval.from("approvals").insert(rows);
       if (error) insErr = error.message;
       else nInserted = rows.length;
     }
