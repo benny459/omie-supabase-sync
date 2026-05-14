@@ -18,6 +18,19 @@ type ItemRow = {
   pc_etapa_code: string | null;
 };
 
+type Resumo = {
+  valor_budget: number | null;
+  valor_comprometido: number | null;
+  valor_restante: number | null;
+  qtd_itens: number;
+  qtd_itens_com_pc: number;
+};
+
+const fmtBRL = (v: number | null | undefined): string => {
+  if (v == null) return "—";
+  return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+};
+
 /**
  * Bloco expansível "Itens RC" pra um bucket de projeto. Cada equipamento vira
  * 1 grupo colapsável; clicar expande pra mostrar os itens (item, qtd, modelo,
@@ -35,23 +48,35 @@ export default function RcProjetoItensBlock({
 }) {
   const router = useRouter();
   const [rows, setRows] = useState<ItemRow[]>([]);
+  const [resumo, setResumo] = useState<Resumo | null>(null);
   const [loading, setLoading] = useState(true);
   const [openGroups, setOpenGroups] = useState<Set<string>>(new Set());
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState<string>("");
+  const [editingBudget, setEditingBudget] = useState(false);
+  const [budgetInput, setBudgetInput] = useState<string>("");
 
   const load = useCallback(async () => {
     setLoading(true);
     const supa = supaBrowser();
-    const { data } = await supa
-      .schema("approval" as never)
-      .from("v_rc_projetos_itens")
-      .select("*")
-      .eq("empresa", empresa)
-      .eq("codigo_projeto", codigoProjeto)
-      .order("equipamento", { ascending: true })
-      .order("item", { ascending: true });
-    setRows((data as ItemRow[]) ?? []);
+    const approval = supa.schema("approval" as never);
+    const [itensRes, resumoRes] = await Promise.all([
+      approval
+        .from("v_rc_projetos_itens")
+        .select("*")
+        .eq("empresa", empresa)
+        .eq("codigo_projeto", codigoProjeto)
+        .order("equipamento", { ascending: true })
+        .order("item", { ascending: true }),
+      approval
+        .from("v_rc_projetos_resumo")
+        .select("valor_budget, valor_comprometido, valor_restante, qtd_itens, qtd_itens_com_pc")
+        .eq("empresa", empresa)
+        .eq("codigo_projeto", codigoProjeto)
+        .maybeSingle(),
+    ]);
+    setRows((itensRes.data as ItemRow[]) ?? []);
+    setResumo((resumoRes.data as Resumo | null) ?? null);
     setLoading(false);
   }, [empresa, codigoProjeto]);
 
@@ -60,7 +85,8 @@ export default function RcProjetoItensBlock({
   if (loading) {
     return <div className="text-[11px] text-ww-textFaint italic px-3 py-2">Carregando itens RC…</div>;
   }
-  if (rows.length === 0) return null;  // só renderiza se há lista pra esse projeto
+  // Renderiza se ha itens OU se ha budget definido (caso de projeto que ainda nao subiu lista)
+  if (rows.length === 0 && !resumo?.valor_budget) return null;
 
   // Agrupa por equipamento
   const groups = new Map<string, ItemRow[]>();
@@ -98,10 +124,78 @@ export default function RcProjetoItensBlock({
     else alert("Falha ao excluir");
   }
 
+  async function saveBudget() {
+    const valor = Number(budgetInput.replace(/\./g, "").replace(",", "."));
+    if (!Number.isFinite(valor) || valor < 0) {
+      alert("Valor inválido");
+      return;
+    }
+    const r = await fetch("/api/rc-projetos/budget", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ empresa, codigo_projeto: codigoProjeto, valor_budget: valor }),
+    });
+    setEditingBudget(false);
+    if (r.ok) await load();
+    else {
+      const j = await r.json().catch(() => ({}));
+      alert(`Falha: ${j.error ?? "erro"}`);
+    }
+  }
+
+  const budget = resumo?.valor_budget ?? null;
+  const comprometido = resumo?.valor_comprometido ?? 0;
+  const restante = resumo?.valor_restante ?? null;
+  const overBudget = budget != null && comprometido > budget;
+
   return (
     <div className="border-t border-ww-border bg-violet-50/30 dark:bg-violet-950/20 px-4 py-3">
-      <div className="text-[11px] uppercase tracking-[0.6px] font-bold text-violet-900 dark:text-violet-200 mb-2">
-        📦 Itens RC · {rows.length} itens em {groups.size} equipamento{groups.size !== 1 ? "s" : ""}
+      {/* HEADER: titulo + budget editavel + comprometido + restante */}
+      <div className="flex items-center justify-between flex-wrap gap-2 mb-2">
+        <div className="text-[11px] uppercase tracking-[0.6px] font-bold text-violet-900 dark:text-violet-200">
+          📦 Itens RC · {rows.length} itens em {groups.size} equipamento{groups.size !== 1 ? "s" : ""}
+        </div>
+        <div className="flex items-center gap-3 text-[11px] tabular-nums">
+          {/* Budget */}
+          <div className="flex items-center gap-1.5">
+            <span className="text-violet-700 dark:text-violet-300 uppercase tracking-wider font-semibold text-[10px]">Budget:</span>
+            {editingBudget ? (
+              <span className="inline-flex items-center gap-1">
+                <input autoFocus type="text"
+                  defaultValue={budget != null ? budget.toString().replace(".", ",") : ""}
+                  onChange={(e) => setBudgetInput(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter") saveBudget(); if (e.key === "Escape") setEditingBudget(false); }}
+                  className="w-28 px-1.5 py-0.5 border border-violet-300 rounded font-mono text-[11px] focus:outline-none focus:ring-1 focus:ring-violet-400"
+                  placeholder="0,00" />
+                <button onClick={saveBudget} className="text-[10px] text-emerald-700 font-bold hover:underline">✓ salvar</button>
+                <button onClick={() => setEditingBudget(false)} className="text-[10px] text-rose-600 hover:underline">✕</button>
+              </span>
+            ) : (
+              <button onClick={() => { setEditingBudget(true); setBudgetInput(budget != null ? budget.toString().replace(".", ",") : ""); }}
+                className={`font-mono font-semibold hover:underline ${budget != null ? "text-violet-900 dark:text-violet-100" : "text-violet-500 italic"}`}>
+                {budget != null ? fmtBRL(budget) : "definir"}
+              </button>
+            )}
+          </div>
+          {/* Comprometido */}
+          {budget != null && (
+            <div className="flex items-center gap-1.5">
+              <span className="text-amber-700 dark:text-amber-300 uppercase tracking-wider font-semibold text-[10px]">Comprometido:</span>
+              <span className="font-mono text-amber-900 dark:text-amber-100">{fmtBRL(comprometido)}</span>
+            </div>
+          )}
+          {/* Restante */}
+          {budget != null && restante != null && (
+            <div className="flex items-center gap-1.5">
+              <span className={`uppercase tracking-wider font-semibold text-[10px] ${overBudget ? "text-rose-700 dark:text-rose-300" : "text-emerald-700 dark:text-emerald-300"}`}>
+                {overBudget ? "Estourou:" : "Restante:"}
+              </span>
+              <span className={`font-mono font-semibold ${overBudget ? "text-rose-900 dark:text-rose-100" : "text-emerald-900 dark:text-emerald-100"}`}>
+                {fmtBRL(restante)}
+              </span>
+            </div>
+          )}
+        </div>
       </div>
       <div className="space-y-1.5">
         {[...groups.entries()].map(([eq, items]) => {
