@@ -1461,7 +1461,8 @@ function BucketCard({
                 {(() => {
                   // Em /projetos com codigo_projeto identificado, oferece upload da Lista RC
                   if (modulo !== "projetos") return null;
-                  const codProj = Number(bucket.rows.find(r => r.codigo_projeto)?.codigo_projeto ?? 0);
+                  // codigo_projeto vem do PC (NULL em rows manuais); pv_codigo_projeto vem da venda PV/OS (preenchido)
+                  const codProj = Number(bucket.rows.find(r => r.codigo_projeto || r.pv_codigo_projeto)?.codigo_projeto ?? bucket.rows.find(r => r.pv_codigo_projeto)?.pv_codigo_projeto ?? 0);
                   if (!codProj) return null;
                   return (
                     <RcProjetoUploadButton
@@ -1475,9 +1476,10 @@ function BucketCard({
               </span>
             </div>
           )}
-          {/* Bloco "Itens RC" — só em /projetos, renderiza quando tem dados */}
+          {/* Bloco "Itens RC" — só em /projetos, renderiza quando tem dados.
+              Mesma resolucao do botao acima: pv_codigo_projeto fallback. */}
           {modulo === "projetos" && (() => {
-            const codProj = Number(bucket.rows.find(r => r.codigo_projeto)?.codigo_projeto ?? 0);
+            const codProj = Number(bucket.rows.find(r => r.codigo_projeto)?.codigo_projeto ?? bucket.rows.find(r => r.pv_codigo_projeto)?.pv_codigo_projeto ?? 0);
             if (!codProj) return null;
             return (
               <RcProjetoItensBlock
