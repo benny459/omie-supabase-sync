@@ -76,7 +76,8 @@ export default function PasteRcButton({
     setBusy(false);
     if (error) { setMsg(`❌ ${error.message}`); return; }
     setMsg(`✅ ${data?.length ?? rows.length} linhas criadas.`);
-    setTimeout(() => { setOpen(false); setText(""); setMsg(null); router.refresh(); }, 800);
+    // Reload duro pra garantir que rows novas aparecam.
+    setTimeout(() => { setOpen(false); setText(""); setMsg(null); window.location.reload(); }, 800);
   }
 
   if (!pv_os_label) return null;

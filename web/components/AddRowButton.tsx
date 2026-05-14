@@ -78,7 +78,10 @@ export default function AddRowButton({
     setBusy(false);
     if (error) { setErr(error.message); return; }
     setMsg(`✓ ${n} linha${n !== 1 ? "s" : ""} adicionada${n !== 1 ? "s" : ""} em ${target}`);
-    setTimeout(() => { setOpen(false); router.refresh(); }, 700);
+    // router.refresh() do Next 16 nao invalida fetches client-side em
+    // /api/rows (BoldAvulsosView gerencia fetch com state local).
+    // Reload duro garante que as linhas novas aparecam no bucket.
+    setTimeout(() => { setOpen(false); window.location.reload(); }, 700);
   }
 
   return (

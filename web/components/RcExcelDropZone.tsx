@@ -194,7 +194,9 @@ export default function RcExcelDropZone({
     if (nBlanks > 0)    parts.push(`${nBlanks} linha${nBlanks !== 1 ? "s" : ""} preenchida${nBlanks !== 1 ? "s" : ""}`);
     if (nInserted > 0)  parts.push(`${nInserted} nova${nInserted !== 1 ? "s" : ""} criada${nInserted !== 1 ? "s" : ""}`);
     setMsg({ kind: "ok", text: `✓ ${parts.join(" + ")}. Arquivo anexado.` });
-    setTimeout(() => { setParsed(null); setFile(null); setMsg(null); router.refresh(); }, 1000);
+    // Reload duro pra garantir que as rows novas aparecam (router.refresh nao
+    // invalida fetches client-side de /api/rows).
+    setTimeout(() => { setParsed(null); setFile(null); setMsg(null); window.location.reload(); }, 1000);
   }
 
 
