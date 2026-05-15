@@ -3,50 +3,54 @@
 @tailwind utilities;
 
 /* ─────────────────────────────────────────────────────────────────────────
-   Variação D — "Bold ⌘K" — Paleta warm + teal accent
-   Variáveis CSS em RGB tuple pra suportar alpha do Tailwind via
-   rgb(var(--x) / <alpha-value>).
+   Tema AURALIS NEURAL — palette violet primary (#4F46E5) + cyan accent2
+   (#06B6D4) sobre fundo branco, dark surface #1C1C1E. Adaptado do
+   neuform-top-creators-featured (Auralis Neural Audio Engine).
    ───────────────────────────────────────────────────────────────────────── */
 :root {
-  --color-ww-bg:           244 244 240;  /* warm off-white */
-  --color-ww-panel:        255 255 255;
-  --color-ww-border:       227 227 220;
-  --color-ww-borderStrong: 200 200 190;
-  --color-ww-text:         14 14 12;
-  --color-ww-textMuted:    91 91 84;
-  --color-ww-textFaint:    142 142 132;
-  --color-ww-accent:       14 110 87;     /* deep teal */
-  --color-ww-accentSoft:   219 238 229;
-  --color-ww-rowHover:     249 249 245;
+  --color-ww-bg:           255 255 255;  /* white */
+  --color-ww-panel:        255 255 255;  /* white */
+  --color-ww-border:       229 231 235;  /* #E5E7EB */
+  --color-ww-borderStrong: 209 213 219;  /* #D1D5DB */
+  --color-ww-text:          17  24  39;  /* #111827 */
+  --color-ww-textMuted:     75  85  99;  /* #4B5563 */
+  --color-ww-textFaint:    156 163 175;  /* #9CA3AF */
+  --color-ww-accent:        79  70 229;  /* #4F46E5 — indigo primary */
+  --color-ww-accentSoft:   238 242 255;  /* indigo-50 */
+  --color-ww-accent2:        6 182 212;  /* #06B6D4 — cyan secondary */
+  --color-ww-accent2Soft:  207 250 254;  /* cyan-50 */
+  --color-ww-rowHover:     249 250 251;  /* gray-50 */
   --color-ww-editHi:       254 249 214;
-  --color-ww-editLine:     207 183 66;
+  --color-ww-editLine:     207 183  66;
   --color-ww-drawer:       255 255 255;
-  --color-ww-drawerHead:   244 244 240;
+  --color-ww-drawerHead:   249 250 251;
 }
 
 .dark {
-  --color-ww-bg:           10 10 8;
-  --color-ww-panel:        20 20 18;
-  --color-ww-border:       35 35 30;
-  --color-ww-borderStrong: 52 52 44;
-  --color-ww-text:         241 241 234;
-  --color-ww-textMuted:    168 168 158;
-  --color-ww-textFaint:    108 108 97;
-  --color-ww-accent:       62 186 154;
-  --color-ww-accentSoft:   21 48 42;
-  --color-ww-rowHover:     26 26 22;
-  --color-ww-editHi:       58 52 22;
-  --color-ww-editLine:     110 96 36;
-  --color-ww-drawer:       20 20 18;
-  --color-ww-drawerHead:   14 14 12;
+  --color-ww-bg:            17  17  19;  /* near-black */
+  --color-ww-panel:         28  28  30;  /* #1C1C1E (Auralis surface) */
+  --color-ww-border:        45  45  48;
+  --color-ww-borderStrong:  68  68  72;
+  --color-ww-text:         243 244 246;
+  --color-ww-textMuted:    156 163 175;
+  --color-ww-textFaint:    107 114 128;
+  --color-ww-accent:       129 140 248;  /* indigo-400 (lighter on dark) */
+  --color-ww-accentSoft:    49  46 129;  /* indigo-900 */
+  --color-ww-accent2:       34 211 238;  /* cyan-400 */
+  --color-ww-accent2Soft:   22  78  99;  /* cyan-900 */
+  --color-ww-rowHover:      35  35  38;
+  --color-ww-editHi:        58  52  22;
+  --color-ww-editLine:     110  96  36;
+  --color-ww-drawer:        28  28  30;
+  --color-ww-drawerHead:    17  17  19;
 }
 
-/* Stack tipográfico — Inter (UI) + JetBrains Mono (códigos/valores)
+/* Stack tipográfico — Geist (UI) + JetBrains Mono (códigos/valores)
    carregados via next/font no app/layout.tsx (CSS vars --font-sans, --font-mono). */
 html, body {
   background: rgb(var(--color-ww-bg));
   color: rgb(var(--color-ww-text));
-  font-family: -apple-system, BlinkMacSystemFont, system-ui, "SF Pro Text", "SF Pro Display", "Segoe UI", Roboto, sans-serif;
+  font-family: var(--font-sans, "Geist"), -apple-system, BlinkMacSystemFont, system-ui, "Segoe UI", Roboto, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   font-feature-settings: "kern", "liga", "cv11", "ss03";

@@ -42,6 +42,8 @@ export default {
           textFaint:    "rgb(var(--color-ww-textFaint) / <alpha-value>)",
           accent:       "rgb(var(--color-ww-accent) / <alpha-value>)",
           accentSoft:   "rgb(var(--color-ww-accentSoft) / <alpha-value>)",
+          accent2:      "rgb(var(--color-ww-accent2) / <alpha-value>)",
+          accent2Soft:  "rgb(var(--color-ww-accent2Soft) / <alpha-value>)",
           rowHover:     "rgb(var(--color-ww-rowHover) / <alpha-value>)",
           editHi:       "rgb(var(--color-ww-editHi) / <alpha-value>)",
           editLine:     "rgb(var(--color-ww-editLine) / <alpha-value>)",

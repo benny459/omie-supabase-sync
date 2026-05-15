@@ -1,10 +1,16 @@
 import type { Metadata } from "next";
-import { JetBrains_Mono } from "next/font/google";
+import { JetBrains_Mono, Geist } from "next/font/google";
 import "./globals.css";
 import UpdateBanner from "@/components/UpdateBanner";
 
-// Fonte UI: San Francisco (sistema, no macOS) via stack — sem fonte web
-// pra preservar o feel "nativo" Apple. JetBrains Mono pra códigos/valores.
+// Tema Auralis (theme/auralis-neural):
+//   • Geist como UI sans (display + body)
+//   • JetBrains Mono pra labels técnicas / valores numéricos
+const geist = Geist({
+  subsets: ["latin"],
+  display: "swap",
+  variable: "--font-sans",
+});
 const jetbrains = JetBrains_Mono({
   subsets: ["latin"],
   display: "swap",
@@ -19,7 +25,7 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   const version = process.env.NEXT_PUBLIC_APP_VERSION;
   return (
-    <html lang="pt-BR" className={jetbrains.variable}>
+    <html lang="pt-BR" className={`${geist.variable} ${jetbrains.variable}`}>
       <head>
         {version && <meta name="app-version" content={version} />}
         {/* Aplica .dark ANTES da hidratação se o user preferiu — evita FOUC */}
