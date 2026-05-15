@@ -48,67 +48,69 @@ export default function ResetPage() {
   }
 
   return (
-    <main className="min-h-screen flex items-center justify-center bg-slate-50 p-6">
-      <div className="w-full max-w-md bg-white rounded-xl border border-slate-200 p-8 shadow-sm">
-        <div className="flex flex-col items-center mb-6">
-          <img
-            src="/logo-waterworks.svg"
-            alt="WaterWorks"
-            className="h-16 w-auto object-contain mb-3"
-            onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
-          />
-          <h1 className="text-xl font-semibold text-slate-900">Nova senha</h1>
-          <p className="text-sm text-slate-500 mt-1">Escolha uma senha forte.</p>
+    <main className="relative min-h-screen overflow-hidden bg-[#0a0a0c] text-white flex items-center justify-center p-6">
+      <div aria-hidden className="auralis-ambient" />
+      <div aria-hidden className="auralis-grid" />
+
+      <div className="relative z-10 w-full max-w-md">
+        <div className="flex items-center gap-2 mb-6 justify-center">
+          <span className="font-mono text-[15px] tracking-[0.18em] font-medium text-white/80">WATERWORKS</span>
+          <span className="text-[#06B6D4] text-[18px] leading-none">°</span>
         </div>
-        {ready ? (
-          <form onSubmit={onSubmit} className="space-y-3">
-            <input
-              type="password"
-              required minLength={8}
-              placeholder="Nova senha (mín. 8 caracteres)"
-              value={pw1}
-              onChange={(e) => setPw1(e.target.value)}
-              className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
-            />
-            <input
-              type="password"
-              required minLength={8}
-              placeholder="Confirmar nova senha"
-              value={pw2}
-              onChange={(e) => setPw2(e.target.value)}
-              className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
-            />
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full bg-brand-600 hover:bg-brand-700 text-white font-medium py-2 rounded-lg transition disabled:opacity-50"
-            >
-              {loading ? "Salvando…" : "Salvar nova senha"}
-            </button>
-          </form>
-        ) : (
-          <div className="text-center py-6 text-sm text-slate-500">
-            {msg ? null : "Validando link…"}
-          </div>
-        )}
-        {msg && (
-          <div
-            className={`mt-4 p-3 rounded-lg text-sm ${
-              msg.kind === "ok"
-                ? "bg-emerald-50 text-emerald-800 border border-emerald-200"
-                : msg.kind === "err"
-                ? "bg-rose-50 text-rose-800 border border-rose-200"
-                : "bg-sky-50 text-sky-800 border border-sky-200"
-            }`}
-          >
-            {msg.text}
-            {msg.kind === "err" && (
-              <div className="mt-2 text-[11px]">
-                <a href="/recover" className="underline underline-offset-2">Reenviar link</a>
+        <div className="bg-white/[0.04] border border-white/10 backdrop-blur-md rounded-2xl p-7 shadow-[0_8px_32px_rgba(0,0,0,0.4)]">
+          <h2 className="font-mono text-[11px] tracking-wider text-white/50 uppercase mb-1">Reset</h2>
+          <p className="text-white text-[18px] font-medium mb-1">Nova senha</p>
+          <p className="text-white/50 text-[13px] mb-6">Escolha uma senha forte.</p>
+          {ready ? (
+            <form onSubmit={onSubmit} className="space-y-3">
+              <div>
+                <label className="block text-[10px] font-mono tracking-wider text-white/40 uppercase mb-1.5">Nova senha</label>
+                <input
+                  type="password" required minLength={8}
+                  placeholder="mín. 8 caracteres"
+                  value={pw1}
+                  onChange={(e) => setPw1(e.target.value)}
+                  className="w-full px-3 py-2.5 bg-white/[0.06] border border-white/10 rounded-lg text-[14px] text-white placeholder:text-white/30 focus:outline-none focus:border-[#4F46E5] focus:bg-white/[0.08] transition"
+                />
               </div>
-            )}
-          </div>
-        )}
+              <div>
+                <label className="block text-[10px] font-mono tracking-wider text-white/40 uppercase mb-1.5">Confirmar</label>
+                <input
+                  type="password" required minLength={8}
+                  placeholder="repita a nova senha"
+                  value={pw2}
+                  onChange={(e) => setPw2(e.target.value)}
+                  className="w-full px-3 py-2.5 bg-white/[0.06] border border-white/10 rounded-lg text-[14px] text-white placeholder:text-white/30 focus:outline-none focus:border-[#4F46E5] focus:bg-white/[0.08] transition"
+                />
+              </div>
+              <button
+                type="submit" disabled={loading}
+                className="w-full mt-2 bg-[#4F46E5] hover:bg-[#4338CA] text-white font-medium py-2.5 rounded-lg transition disabled:opacity-50 shadow-[0_4px_16px_rgba(79,70,229,0.4)]">
+                {loading ? "Salvando…" : "Salvar nova senha"}
+              </button>
+            </form>
+          ) : (
+            <div className="text-center py-6 text-[13px] text-white/50">
+              {msg ? null : "Validando link…"}
+            </div>
+          )}
+          {msg && (
+            <div className={`mt-4 px-3 py-2 rounded-lg text-[12px] border ${
+              msg.kind === "ok"
+                ? "bg-emerald-500/10 text-emerald-300 border-emerald-500/20"
+                : msg.kind === "err"
+                ? "bg-rose-500/10 text-rose-300 border-rose-500/20"
+                : "bg-sky-500/10 text-sky-300 border-sky-500/20"
+            }`}>
+              {msg.text}
+              {msg.kind === "err" && (
+                <div className="mt-2 text-[11px]">
+                  <a href="/recover" className="underline underline-offset-2 hover:text-white">Reenviar link</a>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
       </div>
     </main>
   );

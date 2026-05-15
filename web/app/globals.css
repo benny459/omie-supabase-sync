@@ -65,3 +65,55 @@ code, kbd, samp, pre, .font-mono {
   font-family: var(--font-mono, "JetBrains Mono", ui-monospace, "SF Mono", "Menlo", "Consolas", monospace);
   font-feature-settings: "kern", "liga", "calt";
 }
+
+/* ─────────────────────────────────────────────────────────────────────────
+   Tema AURALIS — Landing/Login (dark hero com gradientes ambient animados).
+   Aplicado em /login, /recover, /reset (paginas publicas antes do auth).
+   Paginas internas (apos login) NAO usam essa estetica.
+   ───────────────────────────────────────────────────────────────────────── */
+.auralis-display {
+  font-family: var(--font-sans, "Geist"), -apple-system, system-ui, sans-serif;
+  font-size: clamp(38px, 6vw, 64px);
+  font-weight: 500;
+  line-height: 1.04;
+  letter-spacing: -0.02em;
+}
+.auralis-gradient {
+  background: linear-gradient(120deg, #818CF8 0%, #06B6D4 60%, #4F46E5 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  background-size: 200% 100%;
+  animation: auralis-shimmer 12s ease-in-out infinite;
+}
+@keyframes auralis-shimmer {
+  0%, 100% { background-position: 0% 50%; }
+  50%      { background-position: 100% 50%; }
+}
+
+/* Camada ambient: 3 blobs radiais movendo lentamente. CSS puro, GPU-accelerated. */
+.auralis-ambient {
+  position: absolute; inset: 0; pointer-events: none; overflow: hidden;
+  background:
+    radial-gradient(700px 600px at 15% 20%, rgba(79, 70, 229, 0.35), transparent 70%),
+    radial-gradient(800px 700px at 85% 30%, rgba(6, 182, 212, 0.28), transparent 70%),
+    radial-gradient(600px 500px at 50% 90%, rgba(129, 140, 248, 0.22), transparent 70%);
+  animation: auralis-drift 24s ease-in-out infinite;
+  filter: blur(20px);
+}
+@keyframes auralis-drift {
+  0%, 100% { transform: translate3d(0, 0, 0)         scale(1); }
+  33%      { transform: translate3d(-3%, 2%, 0)      scale(1.05); }
+  66%      { transform: translate3d(3%, -2%, 0)      scale(0.97); }
+}
+
+/* Grid sutil sobreposto pra dar textura tech */
+.auralis-grid {
+  position: absolute; inset: 0; pointer-events: none;
+  background-image:
+    linear-gradient(rgba(255,255,255,0.025) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,0.025) 1px, transparent 1px);
+  background-size: 64px 64px;
+  mask-image: radial-gradient(ellipse 80% 60% at 50% 40%, #000 30%, transparent 100%);
+  -webkit-mask-image: radial-gradient(ellipse 80% 60% at 50% 40%, #000 30%, transparent 100%);
+}
