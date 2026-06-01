@@ -40,7 +40,7 @@ export default function AddRowButton({
 
   useEffect(() => {
     if (open) {
-      setSelectedPv(pv_os_label ?? (needsPvSelect ? "" : (pvChoices[0] ?? "")));
+      setSelectedPv(pv_os_label ?? pvChoices[0] ?? "");
       setMsg(null); setErr(null);
     }
   }, [open, pv_os_label, needsPvSelect, pvChoices]);
