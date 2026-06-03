@@ -11,10 +11,13 @@ on:
         required: false
         default: "SF"
 
-  # Cron fixo: 7, 10, 13, 16, 19 BRT (= 10, 13, 16, 19, 22 UTC)
-  # Dias: seg-sex + dom (1-5,0 em cron; 6=sab é pulado
+  # Cron: 7, 10, 13, 16, 19 BRT (= 10, 13, 16, 19, 22 UTC)
+  # Dias: seg-sex + dom (1-5,0 em cron; 6=sab é pulado).
+  # Minutos NÃO-redondos + 2 tentativas no slot 7h BRT — mitiga skip do scheduler
+  # do GitHub no slot 10:00 UTC (pico Europa). `concurrency` impede execução duplicada.
   schedule:
-    - cron: "0 10,13,16,19,22 * * 1-5,0"
+    - cron: "7,22 10 * * 1-5,0"
+    - cron: "13 13,16,19,22 * * 1-5,0"
 
 concurrency:
   group: master-orders-diaria
