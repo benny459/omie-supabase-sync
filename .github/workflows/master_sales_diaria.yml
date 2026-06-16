@@ -1,7 +1,7 @@
 name: MASTER Sales Diaria (Omie -> Supabase)
 
 # Executa todos os importers em SEQUENCIA pra evitar rate limit paralelo na Omie.
-# Disparado 2x ao dia (slots configuraveis via painel web) + manual.
+# Disparado a cada hora 08-18h BRT seg-sex (11 slots/dia) + manual.
 
 on:
   workflow_dispatch:
@@ -17,13 +17,14 @@ on:
         type: choice
         options: ["false", "true"]
 
-  # Cron: 7, 10, 13, 16, 19 BRT (= 10, 13, 16, 19, 22 UTC)
-  # Dias: seg-sex + dom (1-5,0 em cron; 6=sab é pulado).
-  # Minutos NÃO-redondos + 2 tentativas no slot 7h BRT — mitiga skip do scheduler
-  # do GitHub no slot 10:00 UTC (pico Europa). `concurrency` impede execução duplicada.
+  # Cron: 8h BRT (2x p/ mitigar skip do GitHub) + 9-18h BRT (1x cada). Seg-sex.
+  # BRT:  08:07, 08:22, 09:13, 10:13, 11:13, 12:13, 13:13, 14:13, 15:13, 16:13, 17:13, 18:13
+  # UTC:  11:07, 11:22, 12:13, 13:13, 14:13, 15:13, 16:13, 17:13, 18:13, 19:13, 20:13, 21:13
+  # Minutos NÃO-redondos pra evitar skip do scheduler em horas cheias.
+  # `concurrency` impede execução duplicada.
   schedule:
-    - cron: "7,22 10 * * 1-5,0"
-    - cron: "13 13,16,19,22 * * 1-5,0"
+    - cron: "7,22 11 * * 1-5"
+    - cron: "13 12,13,14,15,16,17,18,19,20,21 * * 1-5"
 
 concurrency:
   group: master-sales-diaria
