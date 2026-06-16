@@ -79,21 +79,80 @@ export function scheduleStatus(yaml: string): ScheduleStatus {
   return "sem_schedule";
 }
 
-// Converte cron UTC → hora BRT humanizada
-export function cronToBRT(cron: string): { time: string; day: string } {
+// Expande um cron UTC em TODOS os slots (horário BRT) que ele dispara.
+// Resolve listas de minutos/horas e o campo de dias da semana. Retorna o rótulo
+// de dia já agrupado quando bate em padrões comuns ("Seg–Sex", "Todo dia"...).
+export function expandCronToSlotsBRT(cron: string): Array<{
+  time: string;       // "HH:MM" em BRT
+  day: string;        // rótulo legível
+  brtHour: number;
+  brtMinute: number;
+}> {
   const p = cron.split(" ");
-  const minute = parseInt(p[0]);
-  const hour = parseInt(p[1]);
-  const dayOfWeek = p[4];
-  const brtHour = ((hour - 3) + 24) % 24;
-  const dayLabels: Record<string, string> = {
-    "*": "Todo dia", "0": "Dom", "1": "Seg", "2": "Ter", "3": "Qua", "4": "Qui",
-    "5": "Sex", "6": "Sáb", "1-5": "Seg a Sex",
-  };
-  return {
-    time: `${String(brtHour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`,
-    day: dayLabels[dayOfWeek] ?? dayOfWeek,
-  };
+  const minuteField = p[0] ?? "0";
+  const hourField   = p[1] ?? "0";
+  const dowField    = p[4] ?? "*";
+
+  const minutes  = expandField(minuteField, 0, 59);
+  const hoursUtc = expandField(hourField,   0, 23);
+  const day      = formatDow(dowField);
+
+  const out: Array<{ time: string; day: string; brtHour: number; brtMinute: number }> = [];
+  for (const hu of hoursUtc) {
+    const brtHour = ((hu - 3) + 24) % 24;
+    for (const m of minutes) {
+      out.push({
+        time: `${String(brtHour).padStart(2, "0")}:${String(m).padStart(2, "0")}`,
+        day,
+        brtHour,
+        brtMinute: m,
+      });
+    }
+  }
+  return out;
+}
+
+function expandField(f: string, min: number, max: number): number[] {
+  if (f === "*") return Array.from({ length: max - min + 1 }, (_, i) => min + i);
+  if (f.startsWith("*/")) {
+    const n = parseInt(f.slice(2)) || 1;
+    const out: number[] = [];
+    for (let i = min; i <= max; i += n) out.push(i);
+    return out;
+  }
+  const set = new Set<number>();
+  for (const part of f.split(",")) {
+    if (part.includes("-")) {
+      const [a, b] = part.split("-").map(Number);
+      for (let i = a; i <= b; i++) set.add(i);
+    } else {
+      const v = parseInt(part);
+      if (!Number.isNaN(v)) set.add(v);
+    }
+  }
+  return [...set].sort((a, b) => a - b);
+}
+
+function formatDow(f: string): string {
+  if (f === "*") return "Todo dia";
+  const dayLabels = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
+  const nums = new Set<number>();
+  for (const part of f.split(",")) {
+    if (part.includes("-")) {
+      const [a, b] = part.split("-").map(Number);
+      for (let i = a; i <= b; i++) nums.add(i);
+    } else {
+      const v = parseInt(part);
+      if (!Number.isNaN(v)) nums.add(v);
+    }
+  }
+  const sorted = [...nums].sort((a, b) => a - b);
+  const key = sorted.join(",");
+  if (key === "0,1,2,3,4,5,6") return "Todo dia";
+  if (key === "1,2,3,4,5")     return "Seg–Sex";
+  if (key === "0,1,2,3,4,5")   return "Dom + Seg–Sex";
+  if (key === "1,2,3,4,5,6")   return "Seg–Sáb";
+  return sorted.map((n) => dayLabels[n]).join(", ");
 }
 
 // Parse cron UTC simples (formatos: "0 H * * *", "0 H * * 1-5", "0 H1,H2,... * * DOW", "0 */N * * *").

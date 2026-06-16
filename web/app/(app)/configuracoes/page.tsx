@@ -86,11 +86,8 @@ export default async function ConfiguracoesPage() {
         <header className="px-5 py-3 border-b border-slate-200 bg-slate-50/60">
           <h2 className="text-sm font-semibold text-slate-900">Workflows: horários e status</h2>
           <p className="text-xs text-slate-500">
-            Crons fixos no YAML. <strong>Sales + Orders diária:</strong> a cada hora 08-18h BRT, seg-sex (12 disparos/dia).
-            {" "}<strong>Finance diária:</strong> 7/10/13/16/19h BRT, seg-sex + dom.
-            {" "}<strong>Semanais (sales/orders/finance):</strong> dom 07h BRT.
-            {" "}<strong>Finance full:</strong> dom 03h BRT.
-            {" "}Pra mudar horário, peça pro Claude editar o cron no <code>.github/workflows/master_*.yml</code>.
+            Lê o YAML ao vivo no GitHub. Os horários abaixo são o que o GitHub Actions realmente vai disparar.
+            Use <strong>Rodar agora</strong> pra disparar manualmente, <strong>Editar agenda</strong> pra mudar o cron pelo painel, ou edite direto em <code>.github/workflows/master_*.yml</code>.
           </p>
         </header>
         <SyncPanel />

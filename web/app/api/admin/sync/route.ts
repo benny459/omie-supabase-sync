@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireAdmin } from "../_guard";
 import {
-  WORKFLOWS, getWorkflowFile, extractCrons, scheduleStatus, cronToBRT,
+  WORKFLOWS, getWorkflowFile, extractCrons, scheduleStatus, expandCronToSlotsBRT,
   dispatchWorkflow, updateWorkflowFile, disableScheduleInYaml, enableScheduleInYaml,
   buildCrons, replaceScheduleInYaml, ghFetch, nextRunBRT, type WindowMode,
 } from "@/lib/github-admin";
@@ -62,9 +62,28 @@ export async function GET(req: Request) {
       const { yaml, sha } = await getWorkflowFile(wf.file);
       const status = scheduleStatus(yaml);
       const crons = extractCrons(yaml);
-      const slots = crons.map((c) => ({ cron: c, ...cronToBRT(c) }));
+
+      // Expande cada cron em (potencialmente) muitos slots e agrupa por
+      // rótulo de dia. Ex: dois crons "7,22 11 * * 1-5" e "13 12-21 * * 1-5"
+      // viram um único grupo "Seg–Sex" com 12 horários.
+      const byDay = new Map<string, Set<number>>(); // dayLabel → set de "HH*60+MM"
+      for (const c of crons) {
+        for (const s of expandCronToSlotsBRT(c)) {
+          const key = s.day;
+          if (!byDay.has(key)) byDay.set(key, new Set());
+          byDay.get(key)!.add(s.brtHour * 60 + s.brtMinute);
+        }
+      }
+      const slotGroups = [...byDay.entries()].map(([day, mins]) => ({
+        day,
+        times: [...mins].sort((a, b) => a - b).map((t) =>
+          `${String(Math.floor(t / 60)).padStart(2, "0")}:${String(t % 60).padStart(2, "0")}`,
+        ),
+      }));
+      const totalSlots = slotGroups.reduce((acc, g) => acc + g.times.length, 0);
+
       const nextRun = status === "ativo" ? nextRunBRT(crons) : null;
-      return { ...wf, sha, status, slots, nextRun };
+      return { ...wf, sha, status, slotGroups, totalSlots, nextRun };
     }));
     return NextResponse.json({
       workflows: details,

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 
-type Slot = { cron: string; time: string; day: string };
+type SlotGroup = { day: string; times: string[] };
 type WorkflowStatus = "ativo" | "desativado" | "sem_schedule";
 type NextRun = { relative: string; absolute: string; iso: string } | null;
 type Workflow = {
@@ -11,7 +11,8 @@ type Workflow = {
   kind: "sales" | "orders" | "finance";
   description: string;
   status: WorkflowStatus;
-  slots: Slot[];
+  slotGroups: SlotGroup[];
+  totalSlots: number;
   sha: string;
   nextRun: NextRun;
 };
@@ -36,7 +37,6 @@ const KIND_TONE: Record<Workflow["kind"], { bar: string; icon: string; emoji: st
 };
 
 export default function SyncPanel() {
-  const [tab, setTab] = useState<"workflows" | "runs">("workflows");
   const [workflows, setWorkflows] = useState<Workflow[] | null>(null);
   const [actionsUrl, setActionsUrl] = useState<string>("");
   const [runs, setRuns] = useState<Run[] | null>(null);
@@ -76,7 +76,7 @@ export default function SyncPanel() {
     setPending((p) => ({ ...p, [file]: null }));
     if (!r.ok) { const j = await r.json().catch(() => ({})); alert(`Erro: ${j.error ?? r.statusText}`); return; }
     if (kind === "toggle") await loadWorkflows();
-    if (kind === "dispatch") setTimeout(() => tab === "runs" && loadRuns(), 1500);
+    if (kind === "dispatch") setTimeout(() => loadRuns(), 1500);
   }
 
   async function saveSchedule(file: string, intervalHours: number, windowMode: string) {
@@ -121,43 +121,71 @@ export default function SyncPanel() {
         )}
       </div>
 
-      {false && tab === "workflows" && workflows?.map((wf) => {
+      {workflows && workflows.length > 0 && (
+        <WorkflowsSummary workflows={workflows} />
+      )}
+
+      {workflows?.map((wf) => {
         const t = KIND_TONE[wf.kind];
         const p = pending[wf.file];
         return (
           <div key={wf.file} className="bg-white border border-slate-200 rounded-xl overflow-hidden flex">
             <div className={`w-1 ${t.bar}`} />
-            <div className="flex-1 p-4 flex items-start gap-4 flex-wrap">
-              <div className="flex-1 min-w-[220px]">
-                <div className="flex items-center gap-2 mb-1">
+            <div className="flex-1 p-4 grid gap-4 md:grid-cols-[minmax(220px,1fr)_minmax(280px,2fr)_auto]">
+              {/* Coluna 1: identidade do workflow */}
+              <div className="min-w-0">
+                <div className="flex items-center gap-2 mb-1 flex-wrap">
                   <span className={`${t.icon} text-sm`}>{t.emoji}</span>
                   <h3 className="font-semibold text-slate-900 text-sm">{wf.name}</h3>
                   <StatusBadge status={wf.status} />
                 </div>
                 <p className="text-xs text-slate-500">{wf.description}</p>
-                <p className="text-[10px] text-slate-400  mt-1">{wf.file}</p>
+                <p className="text-[10px] text-slate-400 mt-1 font-mono">{wf.file}</p>
               </div>
 
-              <div className="flex flex-col gap-1 min-w-[180px]">
-                <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Agenda (BRT)</div>
-                {wf.slots.length === 0 ? (
-                  <div className="text-xs text-slate-400 italic">Manual apenas</div>
-                ) : wf.slots.map((s, i) => (
-                  <div key={i} className="flex items-center gap-2 text-xs">
-                    <span className=" font-bold text-slate-900 tabular-nums">{s.time}</span>
-                    <span className="text-slate-500">· {s.day}</span>
+              {/* Coluna 2: agenda completa (todos os horários BRT) */}
+              <div className="min-w-0">
+                <div className="flex items-center justify-between mb-1.5">
+                  <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+                    Agenda (horário BRT)
                   </div>
-                ))}
+                  {wf.totalSlots > 0 && (
+                    <div className="text-[10px] font-bold text-slate-700 bg-slate-100 px-1.5 py-0.5 rounded-full tabular-nums">
+                      {wf.totalSlots} disparo{wf.totalSlots !== 1 ? "s" : ""}/dia útil
+                    </div>
+                  )}
+                </div>
+
+                {wf.slotGroups.length === 0 ? (
+                  <div className="text-xs text-slate-400 italic">Manual apenas (sem cron ativo)</div>
+                ) : (
+                  <div className="space-y-2">
+                    {wf.slotGroups.map((g, i) => (
+                      <div key={i}>
+                        <div className="text-[10px] font-semibold text-slate-600 mb-1">{g.day}</div>
+                        <div className="flex flex-wrap gap-1">
+                          {g.times.map((tm, j) => (
+                            <span key={j} className="px-1.5 py-0.5 rounded bg-white border border-slate-200 text-[11px] font-bold text-slate-900 tabular-nums">
+                              {tm}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
                 {wf.nextRun && (
-                  <div className="mt-1 pt-1 border-t border-slate-100 text-[10px]">
-                    <div className="text-slate-500 font-semibold uppercase tracking-wider">Próximo disparo</div>
-                    <div className="text-slate-900 font-medium">{wf.nextRun.absolute}</div>
-                    <div className="text-emerald-700 font-semibold">{wf.nextRun.relative}</div>
+                  <div className="mt-2 pt-2 border-t border-slate-100 flex items-baseline gap-2 flex-wrap">
+                    <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Próximo:</span>
+                    <span className="text-xs text-slate-900 font-medium">{wf.nextRun.absolute}</span>
+                    <span className="text-[11px] text-emerald-700 font-semibold">({wf.nextRun.relative})</span>
                   </div>
                 )}
               </div>
 
-              <div className="flex items-center gap-2 flex-wrap">
+              {/* Coluna 3: ações */}
+              <div className="flex items-start gap-2 flex-wrap">
                 <button onClick={() => action(wf.file, "dispatch")} disabled={!!p}
                   className="inline-flex items-center gap-1 px-3 py-1.5 rounded-md text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm transition disabled:opacity-50">
                   {p === "dispatch" ? "…" : "▶ Rodar agora"}
@@ -255,12 +283,40 @@ function Row({ label, value, strong }: { label: string; value: string; strong?: 
   );
 }
 
-function TabButton({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
+function WorkflowsSummary({ workflows }: { workflows: Workflow[] }) {
+  const ativos = workflows.filter((w) => w.status === "ativo").length;
+  const desativados = workflows.filter((w) => w.status === "desativado").length;
+  const totalDisparos = workflows.reduce((acc, w) => acc + w.totalSlots, 0);
+
+  const proximo = workflows
+    .filter((w) => w.nextRun)
+    .map((w) => ({ name: w.name, nr: w.nextRun! }))
+    .sort((a, b) => a.nr.iso.localeCompare(b.nr.iso))[0];
+
   return (
-    <button onClick={onClick}
-      className={`px-3 py-1 text-xs font-semibold rounded-md transition ${
-        active ? "bg-white shadow-sm text-slate-900" : "text-slate-600 hover:text-slate-900"
-      }`}>{children}</button>
+    <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 flex flex-wrap items-center gap-4 text-xs">
+      <div>
+        <span className="text-slate-500">Workflows: </span>
+        <span className="font-bold text-emerald-700">{ativos} agendados</span>
+        {desativados > 0 && <span className="font-bold text-amber-700"> · {desativados} desativados</span>}
+      </div>
+      <div className="text-slate-300">|</div>
+      <div>
+        <span className="text-slate-500">Disparos automáticos/dia útil: </span>
+        <span className="font-bold text-slate-900 tabular-nums">{totalDisparos}</span>
+      </div>
+      {proximo && (
+        <>
+          <div className="text-slate-300">|</div>
+          <div className="ml-auto">
+            <span className="text-slate-500">Próximo: </span>
+            <span className="font-semibold text-slate-900">{proximo.name}</span>
+            <span className="text-emerald-700 font-bold"> · {proximo.nr.relative}</span>
+            <span className="text-slate-500"> ({proximo.nr.absolute})</span>
+          </div>
+        </>
+      )}
+    </div>
   );
 }
 
