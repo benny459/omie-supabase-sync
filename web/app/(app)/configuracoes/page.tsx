@@ -86,8 +86,11 @@ export default async function ConfiguracoesPage() {
         <header className="px-5 py-3 border-b border-slate-200 bg-slate-50/60">
           <h2 className="text-sm font-semibold text-slate-900">Workflows: horários e status</h2>
           <p className="text-xs text-slate-500">
-            Crons fixos no YAML (decisão 2026-04-29): Diária roda 7/10/13/16/19 BRT seg-sex+dom, Semanal roda dom 7 BRT.
-            Pra mudar horário, peça pro Claude editar o cron no <code>.github/workflows/master_*.yml</code>.
+            Crons fixos no YAML. <strong>Sales + Orders diária:</strong> a cada hora 08-18h BRT, seg-sex (12 disparos/dia).
+            {" "}<strong>Finance diária:</strong> 7/10/13/16/19h BRT, seg-sex + dom.
+            {" "}<strong>Semanais (sales/orders/finance):</strong> dom 07h BRT.
+            {" "}<strong>Finance full:</strong> dom 03h BRT.
+            {" "}Pra mudar horário, peça pro Claude editar o cron no <code>.github/workflows/master_*.yml</code>.
           </p>
         </header>
         <SyncPanel />
