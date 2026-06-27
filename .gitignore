@@ -20,3 +20,8 @@ Thumbs.db
 credentials*.json
 *.secret
 secrets/
+
+# Obsidian vault — config local não vai pro repo (só os .md)
+docs/obsidian/Service/.obsidian/
+docs/obsidian/Service/.trash/
+docs/obsidian/.DS_Store
