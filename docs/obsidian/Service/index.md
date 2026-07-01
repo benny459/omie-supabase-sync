@@ -2,7 +2,7 @@
 
 > Catálogo content-oriented. **Consultar primeiro** em query. Atualizar a cada página nova.
 
-**Última atualização:** 2026-06-27 · **Status:** Skeleton (Fase A)
+**Última atualização:** 2026-07-01 · **Status:** Skeleton (Fase A) + análise financeira inicial
 
 ## Meta
 
@@ -19,9 +19,15 @@
 
 (a preencher na Fase B — fazer ingest de cada módulo do app)
 
+## Decisões e Análises
+
+- [[Sources/bi-decisao-plano-b]] — Decisão: bi.waterworks.com.br será rewrite Next.js sem Metabase em produção
+- [[Sources/metabase-analise-resultados]] — Spec completo do dashboard "Análise de Resultados" (8 cards, SQL pronto)
+
 ## Sources
 
-(vazio — joga em `Sources/` conforme aparecer)
+- `bi-decisao-plano-b.md` — Decisão de arquitetura BI (2026-07-01)
+- `metabase-analise-resultados.md` — Dashboard spec (2026-07-01)
 
 ## Tags
 #painel-waterworks #meta #index
