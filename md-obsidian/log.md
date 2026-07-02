@@ -36,5 +36,28 @@
 - Filtros globais: mes_ref, janela_meses
 - Layout proposto + próximas iterações (Fase 2)
 
+## [2026-07-02] deliverable | Import Cartão Conta Simples (jan-jun/2026) + view consolidada
+
+- **Nova tabela** `finance.despesas_cartao_cs`: 4.125 registros importados (jan-jun/2026, R$ 193.543,10)
+- Fontes combinadas: `Conta Simples.xlsx` (jan → 17/05) + `Transações_cartões...xlsx` (18/05 → 30/06)
+- Categorização: `Categoria Final` do CS (validada) + learner com fallback regex pras 10 categorias Omie
+- Nomes técnicos: nomenclatura Omie oficial (16 fornecedores)
+- **Nova view** `finance.v_extratos_consolidado`: UNION extratos_cc + despesas_cartao_cs pra queries de BI
+- Cards 1, 2, 3, 5, 8 do dashboard atualizados pra usar a view
+- **A partir de 2026-07:** dados vêm via integração app.waterworks ↔ Conta Simples (não usar este import manual daqui em diante)
+
+### Impacto imediato nas análises
+
+Descoberta chave — antes o Cartão CS tinha só R$ 20 de saídas visíveis em 6 meses. Agora aparece R$ 193k de compras categorizadas.
+
+| | Antes | Depois |
+|---|---:|---:|
+| Fluxo líquido jun/26 | +R$ 8k | **−R$ 24.569** |
+| Break-even (rolling 3m) | R$ 612k | **R$ 746.440** |
+| Folga vs receita | +R$ 28k | **−R$ 63.702** |
+| % variável | ~34% | **57,2%** |
+
+O Benny estava operando com viés positivo de ~R$ 90k/mês. Break-even real é ~R$ 130k mais alto que o percebido.
+
 ## Tags
 #painel-waterworks #meta #log

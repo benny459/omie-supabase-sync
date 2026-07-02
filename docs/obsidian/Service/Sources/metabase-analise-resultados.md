@@ -3,11 +3,28 @@ source_type: dashboard-spec
 author: benny + claude
 url_original: (Metabase 100.64.8.120:3000)
 ingested_at: 2026-07-01
+last_updated: 2026-07-02
 ---
 
 # Metabase — Aba "Análise de Resultados"
 
 > Dashboard completo de análise financeira WW/SafeWater. 8 cards. SQL testado no Supabase (jul/2026). Reflete análise de 2026 com retirada do sócio como custo fixo obrigatório.
+
+## Atualização 2026-07-02 — fonte de dados
+
+Cards 1, 2, 3, 5 e 8 agora leem de **`finance.v_extratos_consolidado`** (view que une `extratos_cc` do sync Omie + `despesas_cartao_cs` import manual jan-jun/2026 do Cartão Conta Simples).
+
+- Antes: só `extratos_cc` → gastos do Cartão CS invisíveis (~R$ 30k/mês)
+- Agora: view UNION → gastos do cartão aparecem categorizados corretamente
+- **Card 6 (Delta Inexplicado) mantém `extratos_cc` direto** — depende do saldo running que só existe lá
+- Cards 4 (Aging) e 7 (MRR) leem outras tabelas, não afetados
+
+Nomes de coluna na view:
+- `data` (era `data_lancamento_d`)
+- `valor` (era `valor_documento`)
+- `fornecedor` (era `raz_cliente`)
+- `situacao` (view marca cs_import como 'Conciliado')
+- `natureza`, `des_categoria`, `cod_categoria` — iguais
 
 ## Como usar este arquivo
 
@@ -44,19 +61,20 @@ mov_mes AS (
              AND situacao='Conciliado'
              AND des_categoria NOT ILIKE '%Transfer%'
              AND des_categoria NOT ILIKE '%Obten%Empr%'
-             THEN valor_documento ELSE 0 END) receita_mes,
+             THEN valor ELSE 0 END) receita_mes,
     SUM(CASE WHEN natureza='P'
              AND situacao='Conciliado'
              AND des_categoria NOT ILIKE '%Transfer%'
              AND des_categoria NOT ILIKE 'Empr%SAFE'
              AND des_categoria NOT ILIKE 'Empr%CDG'
              AND des_categoria NOT ILIKE 'Empr%WaterWorks'
-             THEN valor_documento ELSE 0 END) saida_mes
-  FROM finance.extratos_cc
-  WHERE data_lancamento_d BETWEEN (SELECT mes_ref FROM parametros)
-                              AND (SELECT (mes_ref + INTERVAL '1 month - 1 day')::date FROM parametros)
+             THEN valor ELSE 0 END) saida_mes
+  FROM finance.v_extratos_consolidado
+  WHERE data BETWEEN (SELECT mes_ref FROM parametros)
+                 AND (SELECT (mes_ref + INTERVAL '1 month - 1 day')::date FROM parametros)
 ),
 saldo_atual AS (
+  -- Saldo running só existe em extratos_cc — não muda com cs_import
   SELECT SUM(saldo_fim)::numeric(14,2) saldo_hoje
   FROM (
     SELECT DISTINCT ON (cod_conta_corrente) cod_conta_corrente, saldo saldo_fim
@@ -88,7 +106,7 @@ FROM mov_mes m, saldo_atual s;
 ```sql
 WITH mov AS (
   SELECT
-    date_trunc('month', data_lancamento_d)::date mes,
+    date_trunc('month', data)::date mes,
     CASE
       WHEN natureza='R' AND des_categoria ILIKE 'Clientes -%' THEN '01_receita_clientes'
       WHEN natureza='R' AND (des_categoria ILIKE '%Projetos%' OR des_categoria='Receita BOT e SW') THEN '02_receita_projetos'
@@ -101,16 +119,21 @@ WITH mov AS (
       WHEN natureza='P' AND des_categoria = 'Simples Nacional (DAS)' THEN '14_DAS_corrente'
       WHEN natureza='P' AND des_categoria IN ('Parcelamento Impostos','Parcelamento de Impostos') THEN '15_divida_tributaria'
       WHEN natureza='P' AND des_categoria IN ('Locação de Veículos','Pedágio','Estacionamento','Multas','Locação','Combustível') THEN '16_frota'
+      -- NOVO: categorias do Cartão CS (import manual)
+      WHEN natureza='P' AND des_categoria IN ('Combustível por Km','Outros Meios de Transporte','Reserva de Hotel') THEN '16_frota'
+      WHEN natureza='P' AND des_categoria IN ('Despesa Extra com Refeição') THEN '12_folha_CLT'
+      WHEN natureza='P' AND des_categoria IN ('Ferramentas de trabalho','Correios') THEN '19_outras_saidas'
+      WHEN natureza='P' AND des_categoria = 'Locação de Sistemas' THEN '18_admin_fixo'
       WHEN natureza='P' AND des_categoria IN ('Consultoria Jurídica','Advogados','Acordos Homologados','Acordos Homologados Trabalhistas') THEN '17_juridico'
       WHEN natureza='P' AND des_categoria IN ('Contabilidade','Aluguel','Água','Luz','Telefone','Internet','Telefonia','Condomínio') THEN '18_admin_fixo'
       WHEN natureza='P' AND des_categoria NOT ILIKE '%Transfer%' AND des_categoria NOT ILIKE 'Empr%SAFE' AND des_categoria NOT ILIKE 'Empr%CDG' AND des_categoria NOT ILIKE 'Empr%WaterWorks' THEN '19_outras_saidas'
       ELSE NULL END grupo,
-    valor_documento
-  FROM finance.extratos_cc
-  WHERE data_lancamento_d >= CURRENT_DATE - ({{janela_meses}}||' months')::interval
+    valor
+  FROM finance.v_extratos_consolidado
+  WHERE data >= CURRENT_DATE - ({{janela_meses}}||' months')::interval
     AND situacao='Conciliado'
 )
-SELECT mes, grupo, SUM(valor_documento)::numeric(14,2) valor
+SELECT mes, grupo, SUM(valor)::numeric(14,2) valor
 FROM mov WHERE grupo IS NOT NULL
 GROUP BY 1,2 ORDER BY 1,2;
 ```
@@ -134,9 +157,9 @@ WITH periodo AS (
     (({{mes_ref}}::date + INTERVAL '1 month - 1 day'))::date fim
 ),
 mov AS (
-  SELECT valor_documento, natureza, des_categoria
-  FROM finance.extratos_cc, periodo
-  WHERE data_lancamento_d BETWEEN periodo.ini AND periodo.fim
+  SELECT valor, natureza, des_categoria
+  FROM finance.v_extratos_consolidado, periodo
+  WHERE data BETWEEN periodo.ini AND periodo.fim
     AND situacao = 'Conciliado'
     AND des_categoria NOT ILIKE '%Transfer%'
     AND des_categoria NOT ILIKE '%Obten%Empr%'
@@ -146,7 +169,7 @@ mov AS (
 ),
 totais AS (
   SELECT
-    SUM(CASE WHEN natureza='R' THEN valor_documento ELSE 0 END)/3.0 receita_mes,
+    SUM(CASE WHEN natureza='R' THEN valor ELSE 0 END)/3.0 receita_mes,
     -- FIXO OBRIGATÓRIO: retirada + folha CLT + admin + jurídico + frota + DAS + parcelamento
     SUM(CASE WHEN natureza='P' AND des_categoria IN (
       'Antecipação / Distribuição de Lucro',
@@ -156,7 +179,7 @@ totais AS (
       'Locação de Veículos','Pedágio','Estacionamento','Multas','Locação','Combustível',
       'Consultoria Jurídica','Advogados','Acordos Homologados','Acordos Homologados Trabalhistas',
       'Contabilidade','Aluguel','Água','Luz','Telefone','Internet','Telefonia','Condomínio'
-    ) THEN -valor_documento ELSE 0 END)/3.0 fixo_mes,
+    ) THEN -valor ELSE 0 END)/3.0 fixo_mes,
     -- VARIÁVEL: COGS + folha PJ + outras
     SUM(CASE WHEN natureza='P' AND (
       des_categoria IN ('Mercadorias para Revenda','Compras de Materia Prima','Insumos','Frete',
@@ -173,7 +196,7 @@ totais AS (
         'Consultoria Jurídica','Advogados','Acordos Homologados','Acordos Homologados Trabalhistas',
         'Contabilidade','Aluguel','Água','Luz','Telefone','Internet','Telefonia','Condomínio'
       ))
-    ) THEN -valor_documento ELSE 0 END)/3.0 variavel_mes
+    ) THEN -valor ELSE 0 END)/3.0 variavel_mes
   FROM mov
 )
 SELECT
@@ -254,20 +277,20 @@ WITH meses AS (
 ),
 mov AS (
   SELECT
-    date_trunc('month', data_lancamento_d)::date mes,
+    date_trunc('month', data)::date mes,
     SUM(CASE WHEN natureza='R'
              AND des_categoria NOT ILIKE '%Transfer%'
              AND des_categoria NOT ILIKE '%Obten%Empr%'
-             THEN valor_documento ELSE 0 END) receita,
+             THEN valor ELSE 0 END) receita,
     SUM(CASE WHEN natureza='P' AND des_categoria = 'Antecipação / Distribuição de Lucro'
-             THEN -valor_documento ELSE 0 END) retirada,
+             THEN -valor ELSE 0 END) retirada,
     SUM(CASE WHEN natureza='P' AND des_categoria IN ('Serviços Prestados PJ','Empréstimo')
-             THEN -valor_documento ELSE 0 END) folha_pj,
+             THEN -valor ELSE 0 END) folha_pj,
     SUM(CASE WHEN natureza='P' AND des_categoria IN ('Salários','Adiantamento','Pró-Labore','Assistência Médica','Vale Refeição','Vale Transporte','Rescisões','Contratação de M.O','INSS','FGTS','Adiantamento Salário')
-             THEN -valor_documento ELSE 0 END) folha_clt
-  FROM finance.extratos_cc
+             THEN -valor ELSE 0 END) folha_clt
+  FROM finance.v_extratos_consolidado
   WHERE situacao='Conciliado'
-    AND data_lancamento_d >= CURRENT_DATE - INTERVAL '12 months'
+    AND data >= CURRENT_DATE - INTERVAL '12 months'
   GROUP BY 1
 )
 SELECT
@@ -451,10 +474,10 @@ WITH grandes AS (
 SELECT
   COALESCE(NULLIF(des_categoria,''),'(sem_categoria)') "Categoria",
   COUNT(*) "Lançamentos",
-  SUM(-valor_documento)::numeric(14,2) "Total 6m (R$)",
-  (SUM(-valor_documento)/6.0)::numeric(12,2) "Média R$/mês"
-FROM finance.extratos_cc
-WHERE data_lancamento_d >= CURRENT_DATE - INTERVAL '6 months'
+  SUM(-valor)::numeric(14,2) "Total 6m (R$)",
+  (SUM(-valor)/6.0)::numeric(12,2) "Média R$/mês"
+FROM finance.v_extratos_consolidado
+WHERE data >= CURRENT_DATE - INTERVAL '6 months'
   AND situacao = 'Conciliado'
   AND natureza='P'
   AND COALESCE(NULLIF(des_categoria,''),'(sem_categoria)') NOT IN (SELECT c FROM grandes)
