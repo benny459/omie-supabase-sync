@@ -157,7 +157,7 @@ WITH periodo AS (
     (({{mes_ref}}::date + INTERVAL '1 month - 1 day'))::date fim
 ),
 mov AS (
-  SELECT valor, natureza, des_categoria
+  SELECT valor, natureza, des_categoria, fonte
   FROM finance.v_extratos_consolidado, periodo
   WHERE data BETWEEN periodo.ini AND periodo.fim
     AND situacao = 'Conciliado'
@@ -171,7 +171,8 @@ totais AS (
   SELECT
     SUM(CASE WHEN natureza='R' THEN valor ELSE 0 END)/3.0 receita_mes,
     -- FIXO OBRIGATÓRIO: retirada + folha CLT + admin + jurídico + frota + DAS + parcelamento
-    SUM(CASE WHEN natureza='P' AND des_categoria IN (
+    -- IMPORTANTE: cs_import (Cartão Conta Simples de técnicos) SEMPRE variável, mesmo que categoria bata (Pedágio/Estacionamento de rota são variáveis, ≠ MAESTRO fixo)
+    SUM(CASE WHEN natureza='P' AND fonte != 'cs_import' AND des_categoria IN (
       'Antecipação / Distribuição de Lucro',
       'Salários','Adiantamento','Pró-Labore','Assistência Médica','Vale Refeição',
       'Vale Transporte','Rescisões','Contratação de M.O','INSS','FGTS','Adiantamento Salário',
@@ -180,9 +181,10 @@ totais AS (
       'Consultoria Jurídica','Advogados','Acordos Homologados','Acordos Homologados Trabalhistas',
       'Contabilidade','Aluguel','Água','Luz','Telefone','Internet','Telefonia','Condomínio'
     ) THEN -valor ELSE 0 END)/3.0 fixo_mes,
-    -- VARIÁVEL: COGS + folha PJ + outras
+    -- VARIÁVEL: COGS + folha PJ + Cartão CS todo + outras
     SUM(CASE WHEN natureza='P' AND (
-      des_categoria IN ('Mercadorias para Revenda','Compras de Materia Prima','Insumos','Frete',
+      fonte = 'cs_import'   -- Cartão CS de técnicos: sempre variável (custo por operação)
+      OR des_categoria IN ('Mercadorias para Revenda','Compras de Materia Prima','Insumos','Frete',
                         'Compras Material em Garantia','Custo dos Serviços Prestados',
                         'Serviços Prestados PJ','Empréstimo',
                         'Devoluções de Vendas de Mercadoria','Devoluções de Vendas de Serviços Prestados',
