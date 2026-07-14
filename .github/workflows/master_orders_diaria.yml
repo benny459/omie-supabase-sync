@@ -83,10 +83,13 @@ jobs:
 
       # -----------------------------------------
       # 3. Pedidos Compra (PesquisarPedCompra)
-      # Modo DIARIO: pega so 10 pgs (~1000 PCs mais recentes) — ~10s.
-      # FULL completo roda 1x/semana via master_orders_semanal.
+      # Modo DIARIO: pega 30 pgs (~3000 PCs mais recentes) — ~30s.
+      # Aumentado de 10 pra 30 pra cobrir edições em PCs de ~1-2 meses atrás
+      # (Omie não expõe filtro por dt_alteracao, então paginação DESC por
+      # criação é a única forma incremental — janela pequena perde edits em
+      # PCs antigos). FULL completo continua rodando 1x/semana via master_orders_semanal.
       # -----------------------------------------
-      - name: "3 Pedidos de Compra (DIARIO — 1000 mais recentes)"
+      - name: "3 Pedidos de Compra (DIARIO — 3000 mais recentes)"
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
@@ -99,7 +102,7 @@ jobs:
           EMPRESAS_ALVO: ${{ github.event.inputs.empresas || 'SF' }}
           SHEETS_MIRROR_URL: ${{ secrets.SHEETS_MIRROR_URL }}
           SHEETS_MIRROR_TOKEN: ${{ secrets.SHEETS_MIRROR_TOKEN }}
-          MAX_PAGINAS_PEDCOMPRA: "10"
+          MAX_PAGINAS_PEDCOMPRA: "30"
           PURGE_ORFAOS: "true"
           NORMALIZE_PC_CAB: "true"
           AUTO_FIX_INCONSISTENTES: "true"
