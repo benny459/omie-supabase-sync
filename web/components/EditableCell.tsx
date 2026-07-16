@@ -17,6 +17,7 @@ type Kind = "date" | "text" | "number" | "money" | "textarea";
 export default function EditableCell({
   empresa,
   ncod_ped,
+  modulo,
   field,
   kind,
   initialValue,
@@ -24,6 +25,10 @@ export default function EditableCell({
 }: {
   empresa: string;
   ncod_ped: number;
+  // Modulo do row atual (avulsos/pcs/projetos/standby). CRÍTICO pra RLS —
+  // approvals_write checa can_write_module(modulo); hardcoding "avulsos" pra
+  // um PC em /pcs faz o INSERT falhar pra qualquer user não-admin. (2026-07-16)
+  modulo: "avulsos" | "projetos" | "pcs" | "standby";
   field: string;
   kind: Kind;
   initialValue: unknown;
@@ -84,7 +89,7 @@ export default function EditableCell({
       }
       const { error: ue } = await approval
         .from("approvals")
-        .upsert({ empresa, ncod_ped, modulo: "avulsos", custom_fields: cf },
+        .upsert({ empresa, ncod_ped, modulo, custom_fields: cf },
                 { onConflict: "empresa,ncod_ped" });
       if (ue) {
         setError(ue.message);
@@ -100,16 +105,16 @@ export default function EditableCell({
     const patch: Record<string, unknown> = { [field]: newVal };
     let saveErr: string | null = null;
     if (isOrphan) {
-      // Cria approval row pra esse orphan — precisamos de modulo (default avulsos)
+      // Cria approval row pra esse orphan — modulo vem do row atual.
       const { error: ue } = await approval
         .from("approvals")
-        .upsert({ empresa, ncod_ped, modulo: "avulsos", source: "native", ...patch },
+        .upsert({ empresa, ncod_ped, modulo, source: "native", ...patch },
                 { onConflict: "empresa,ncod_ped" });
       if (ue) saveErr = ue.message;
     } else {
       const { error: ue } = await approval
         .from("approvals")
-        .upsert({ empresa, ncod_ped, modulo: "avulsos", ...patch },
+        .upsert({ empresa, ncod_ped, modulo, ...patch },
                 { onConflict: "empresa,ncod_ped" });
       if (ue) saveErr = ue.message;
     }

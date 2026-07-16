@@ -751,6 +751,7 @@ function DataRow({ row, visibleColumns, defaultModulo: _dm, onClick, showToggle 
                 <EditableCell
                   empresa={String(row.empresa)}
                   ncod_ped={Number(row.ncod_ped)}
+                  modulo={modulo}
                   field={col.editableField!}
                   kind={col.editable as "date" | "text" | "number" | "money"}
                   initialValue={val}
@@ -778,6 +779,7 @@ function DataRow({ row, visibleColumns, defaultModulo: _dm, onClick, showToggle 
               <EditableCell
                 empresa={String(row.empresa)}
                 ncod_ped={Number(row.ncod_ped)}
+                modulo={modulo}
                 field={col.editableField}
                 kind={col.editable}
                 initialValue={val}
@@ -959,6 +961,7 @@ function PvBucketView_UNUSED({
                           <EditableCell
                             empresa={String(r.empresa)}
                             ncod_ped={Number(r.ncod_ped)}
+                            modulo="avulsos"
                             field={col.editableField}
                             kind={col.editable as "date" | "text" | "number" | "money"}
                             initialValue={val}

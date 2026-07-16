@@ -2830,10 +2830,11 @@ function NovaPrevServicosCell({
 // - Badge "×N" (laranja) quando comprador remarcou N vezes
 // - Click no badge abre popover com lista cronológica (mais recente em cima)
 function NovaPrevMateriaisCell({
-  empresa, ncod_ped, row, field, value,
+  empresa, ncod_ped, modulo, row, field, value,
 }: {
   empresa: string;
   ncod_ped: number;
+  modulo: "avulsos" | "projetos" | "pcs" | "standby";
   row: AnyRow;
   field: string;
   value: unknown;
@@ -2960,7 +2961,7 @@ function NovaPrevMateriaisCell({
 
   return (
     <span className="inline-flex items-center gap-1.5 relative">
-      <EditableCell empresa={empresa} ncod_ped={ncod_ped}
+      <EditableCell empresa={empresa} ncod_ped={ncod_ped} modulo={modulo}
         field={field} kind="date" initialValue={valueForDisplay} trackHistory />
       {badge && (
         <button type="button" ref={btnRef}
@@ -3055,7 +3056,7 @@ function Cell({
       return (
         <span className="inline-flex items-center gap-1" title="Data sincronizada do app de serviços (vinculada à OS)">
           <span className="text-blue-600 text-[12px]">🔗</span>
-          <EditableCell empresa={empresa} ncod_ped={ncod_ped}
+          <EditableCell empresa={empresa} ncod_ped={ncod_ped} modulo={modulo}
             field={col.editableField} kind={col.editable as "date" | "text" | "number" | "money" | "textarea"}
             initialValue={value} />
         </span>
@@ -3068,7 +3069,7 @@ function Cell({
       const incompleto = (valorTot == null || valorTot === 0) || (codFor == null || codFor === 0);
       return (
         <div className="inline-flex items-center gap-1">
-          <EditableCell empresa={empresa} ncod_ped={ncod_ped}
+          <EditableCell empresa={empresa} ncod_ped={ncod_ped} modulo={modulo}
             field={col.editableField} kind={col.editable as "date" | "text" | "number" | "money" | "textarea"}
             initialValue={value} />
           {incompleto && (
@@ -3085,12 +3086,12 @@ function Cell({
       const hasPc = !!(row.pc_numero || row.pc_numero_manual);
       if (!hasPc) return <span className="text-ww-textFaint">—</span>;
       return (
-        <NovaPrevMateriaisCell empresa={empresa} ncod_ped={ncod_ped} row={row}
+        <NovaPrevMateriaisCell empresa={empresa} ncod_ped={ncod_ped} modulo={modulo} row={row}
           field={col.editableField as string} value={value} />
       );
     }
     return (
-      <EditableCell empresa={empresa} ncod_ped={ncod_ped}
+      <EditableCell empresa={empresa} ncod_ped={ncod_ped} modulo={modulo}
         field={col.editableField} kind={col.editable as "date" | "text" | "number" | "money" | "textarea"}
         initialValue={value} />
     );
