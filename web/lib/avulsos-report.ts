@@ -164,16 +164,18 @@ function computeBuckets(rows: Row[], todayMs: number): Map<string, BucketInfo> {
     const anyPc = items.some((r) => !!r.pc_numero || !!r.pc_numero_manual);
     const kinds = new Set<AlarmKind>();
 
-    // PV "encerrado" (sem ação) → zero alarmes. Além de Faturado (dt_fat/num_nfe/etapa),
-    // considera Cancelado e Entrega como encerrados: no Omie muita PV antiga fica
-    // eternamente com pv_dt_fat vazio mesmo depois de cumprida via OS/recibo — inflavam
-    // "vendas em atraso" e "sem PC" com centenas de PVs históricos. (2026-07-16)
+    // Report espelha o filtro DEFAULT do painel /avulsos ("aberto"), que esconde
+    // ETAPAS_FECHADAS = {Faturado, Cancelado, Entrega}. Entrega inclui as PVs
+    // entregues+faturadas (que já têm dt_fat/num_nfe) e as 238 históricas
+    // entregues-mas-nunca-marcadas — todas escondidas do painel por default,
+    // então também não devem alarmar no report. Semanticamente Entrega ≠ encerrada,
+    // mas a UX default do painel trata como "sem ação necessária". (2026-07-16)
     const pvDtFatHead  = String(head.pv_dt_fat ?? "").trim();
     const pvNumNfeHead = String(head.pv_num_nfe ?? "").trim();
     const pvEtapaHead  = String(head.pv_etapa_texto ?? "").trim();
-    const ENCERRADAS   = new Set(["Faturado", "Cancelado", "Entrega"]);
-    const isFaturado   = pvDtFatHead !== "" || pvNumNfeHead !== "" || ENCERRADAS.has(pvEtapaHead);
-    if (isFaturado) {
+    const ETAPAS_FECHADAS_REPORT = new Set(["Faturado", "Cancelado", "Entrega"]);
+    const isEncerrada  = pvDtFatHead !== "" || pvNumNfeHead !== "" || ETAPAS_FECHADAS_REPORT.has(pvEtapaHead);
+    if (isEncerrada) {
       result.set(k, { kinds, pv_valor: Number(head.pv_valor_total) || 0 });
       continue;
     }

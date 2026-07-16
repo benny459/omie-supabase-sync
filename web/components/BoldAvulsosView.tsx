@@ -437,14 +437,15 @@ function computeBucketAlarms(rows: AnyRow[], todayStartMs: number): Set<AlarmKin
 
   const head = rows[0]; // window functions repetem valor de PV em todas rows
 
-  // PV encerrado → NENHUM alarme. Encerrado = Faturado, Cancelado ou Entrega
-  // (ETAPAS_FECHADAS). Muita PV antiga no Omie fica com dt_fat vazio mesmo
-  // depois de cumprida via OS/recibo — sem essa lista, o report inflava com
-  // centenas de PVs históricos como "atraso" e "sem PC". (2026-07-16)
+  // PV faturado → NENHUM alarme dispara. Se a venda foi concluída, qualquer
+  // pendência histórica (previsão vencida, material atrasado, cadastro
+  // incompleto etc) deixa de importar — não há mais o que agir. Regra global
+  // por pedido explícito do usuário. Redundância intencional (dt_fat OR num_nfe
+  // OR etapa) pra imunizar contra sync lag do Omie.
   const pvDtFatHead  = String(head.pv_dt_fat ?? "").trim();
   const pvNumNfeHead = String(head.pv_num_nfe ?? "").trim();
   const pvEtapaHead  = String(head.pv_etapa_texto ?? "").trim();
-  if (pvDtFatHead !== "" || pvNumNfeHead !== "" || ETAPAS_FECHADAS.has(pvEtapaHead)) {
+  if (pvDtFatHead !== "" || pvNumNfeHead !== "" || pvEtapaHead === "Faturado") {
     return set;
   }
 
