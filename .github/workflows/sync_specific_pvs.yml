@@ -1,0 +1,46 @@
+name: Sync Specific PVs (targeted refetch)
+
+# Refetcha PVs específicos via ConsultarPedido. Dispatched pelo painel via
+# /api/pvs/force-sync quando o sync incremental não pega uma atualização.
+
+on:
+  workflow_dispatch:
+    inputs:
+      pv_numeros:
+        description: "PV numbers (numero_pedido) separados por vírgula. Ex: 1760,1733"
+        required: true
+      empresas:
+        description: "Empresas alvo (default: SF,CD,WW)"
+        required: false
+        default: "SF,CD,WW"
+
+jobs:
+  refetch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: "Refetch PVs específicos"
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          OMIE_APP_KEY_SF: ${{ secrets.OMIE_APP_KEY_SF }}
+          OMIE_APP_SECRET_SF: ${{ secrets.OMIE_APP_SECRET_SF }}
+          OMIE_APP_KEY_CD: ${{ secrets.OMIE_APP_KEY_CD }}
+          OMIE_APP_SECRET_CD: ${{ secrets.OMIE_APP_SECRET_CD }}
+          OMIE_APP_KEY_WW: ${{ secrets.OMIE_APP_KEY_WW }}
+          OMIE_APP_SECRET_WW: ${{ secrets.OMIE_APP_SECRET_WW }}
+          EMPRESAS_ALVO: ${{ github.event.inputs.empresas || 'SF,CD,WW' }}
+          PV_NUMEROS_ESPECIFICOS: ${{ github.event.inputs.pv_numeros }}
+          SHEETS_MIRROR_URL: ${{ secrets.SHEETS_MIRROR_URL }}
+          SHEETS_MIRROR_TOKEN: ${{ secrets.SHEETS_MIRROR_TOKEN }}
+          PYTHONUNBUFFERED: "1"
+        run: |
+          python3 scripts/import_pedidos_venda.py
+          # Também refetch etapas dos PVs pra pegar dt_fat / num_nfe atualizados
+          python3 scripts/import_etapas_pedidos.py || true

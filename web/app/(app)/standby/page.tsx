@@ -1,52 +1,47 @@
 // PCs Standby (admin) — standalone com projeto 40_VS/41_VP aguardando
-// vinculação com PV. Util quando o sync incremental do Omie perde updates
-// em pedidos antigos: usuário abre aqui, identifica o PC específico, e
-// pode disparar uma atualização pontual.
+// vinculação com PV. Tabela flat + tab pra force-sync PVs.
 
 import { supaServer } from "@/lib/supabase-server";
-import BoldAvulsosView from "@/components/BoldAvulsosViewClient";
-import StandbyForceSync from "@/components/StandbyForceSync";
+import StandbyView, { type StandbyPc } from "@/components/StandbyView";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
 
 export default async function StandbyPage() {
   const supa = await supaServer();
-  const { data, error, count } = await supa
+  const { data, error } = await supa
     .from("v_pc_standby")
-    .select("*", { count: "exact" })
+    .select("empresa,pc_numero,ncod_ped,projeto_nome,nome_fornecedor,pc_etapa_texto,valor_total,dt_inclusao,dt_previsao")
     .order("dt_inclusao", { ascending: false, nullsFirst: false })
     .order("pc_numero",   { ascending: true,  nullsFirst: false })
-    .limit(2000);
+    .limit(3000);
+
+  // Dedup por pc_numero (view multiplica por item)
+  const seen = new Set<string>();
+  const pcs: StandbyPc[] = [];
+  for (const r of (data ?? []) as StandbyPc[]) {
+    const k = `${r.empresa}|${r.pc_numero}`;
+    if (seen.has(k)) continue;
+    seen.add(k);
+    pcs.push(r);
+  }
 
   return (
-    <>
-      <div className="mb-4 p-3 rounded-lg border border-amber-300 bg-amber-50 dark:bg-amber-950/40 dark:border-amber-800">
-        <div className="flex items-start gap-2">
-          <span className="text-[16px] leading-none mt-0.5">⏸</span>
-          <div className="text-[12px] text-amber-900 dark:text-amber-100">
-            <div className="font-bold mb-0.5">PCs em Standby — aguardando vinculação</div>
-            <div className="opacity-90 leading-snug">
-              PCs standalone (sem PV/OS vinculado) com projeto <code>40_VS</code> ou <code>41_VP</code>.
-              Ficam ocultos do painel principal até um PV avulso ser criado no Omie e vinculado
-              via <code>pc_numero_manual</code>. Casos antigos que ficaram esquecidos ou o sync
-              incremental não atualizou aparecem aqui pra revisão pontual.
-            </div>
-          </div>
-        </div>
+    <div className="space-y-4">
+      <div>
+        <h1 className="text-[18px] font-bold text-ww-text tracking-[-0.3px]">Standby & Force Sync</h1>
+        <p className="text-[12px] text-ww-textMuted mt-0.5">
+          PCs aguardando vinculação (standalone 40_VS/41_VP) + refetch pontual de PCs/PVs específicos do Omie.
+        </p>
       </div>
-      <StandbyForceSync />
+
       {error && (
-        <div className="p-4 mb-4 bg-rose-50 border border-rose-200 rounded-lg text-rose-800 text-sm">
+        <div className="p-4 bg-rose-50 border border-rose-200 rounded-lg text-rose-800 text-sm">
           <strong>Erro:</strong> {error.message}
         </div>
       )}
-      <BoldAvulsosView
-        modulo="pcs"
-        title="PCs Standby"
-        rows={data ?? []}
-        totalCount={count ?? null}
-      />
-    </>
+
+      <StandbyView pcs={pcs} />
+    </div>
   );
 }

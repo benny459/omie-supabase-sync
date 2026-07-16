@@ -385,6 +385,35 @@ def supa_select(schema: str, table: str, query: str):
     return json.loads(body.decode("utf-8"))
 
 
+def consultar_pedido_venda(sigla: str, numero_pedido: str, timeout: int = 30) -> dict:
+    """Chama ConsultarPedido no Omie pra UM PV especifico (nao paginado).
+    Endpoint: /produtos/pedido/. Retorna dict com 'cabecalho' + 'det' + etc.
+    Retorna None se erro/nao-encontrado.
+    """
+    creds = EMPRESAS_OMIE.get(sigla)
+    if not creds:
+        return None
+    payload = {
+        "call": "ConsultarPedido",
+        "app_key": creds["app_key"],
+        "app_secret": creds["app_secret"],
+        "param": [{"numero_pedido": str(numero_pedido)}],
+    }
+    url = "https://app.omie.com.br/api/v1/produtos/pedido/"
+    headers = {"Content-Type": "application/json"}
+    try:
+        body = json.dumps(payload).encode("utf-8")
+        code, resp_body, _ = http_request(url, "POST", headers, body, timeout)
+        if code != 200:
+            return None
+        d = json.loads(resp_body.decode("utf-8"))
+        if isinstance(d, dict) and "faultstring" in d:
+            return None
+        return d
+    except Exception:
+        return None
+
+
 def consultar_ped_compra(sigla: str, ncod_ped: int, timeout: int = 30) -> dict:
     """Chama ConsultarPedCompra no Omie pra UM PC especifico (nao paginado).
     Devolve o dict com 'cabecalho_consulta' (ou 'cabecalho') + 'produtos_consulta'

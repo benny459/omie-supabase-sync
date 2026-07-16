@@ -8,13 +8,15 @@ Freq:     Diária
 Volume:   150-500 registros
 ═════════════════════════════════════════════════════════════════════════════
 """
+import os
 import sys
 import time
 
 sys.path.insert(0, "scripts")
 from _common import (
-    EMPRESAS_ALVO, EMPRESAS_OMIE, env,
+    EMPRESAS_ALVO, EMPRESAS_OMIE, env, PAUSA_ENTRE_CHAMADAS,
     fetch_omie_paginated, supa_upsert, update_sync_state, get_last_d_alt,
+    consultar_pedido_venda,
     to_int, to_float, trigger_sheets_mirror
 )
 
@@ -133,7 +135,52 @@ def importar_empresa(sigla: str):
     print(f"   ✅ {sigla}: {len(items)} pedidos → {n} rows em {elapsed}s ({modo})")
     return n
 
+def refetch_specific_pvs(pv_numeros_csv: str):
+    """MODO PONTUAL: refetcha PVs específicos via ConsultarPedido."""
+    print("═══════════════════════════════════════════════════════════════")
+    print("🏆 Import Pedidos Venda — MODO PONTUAL")
+    print("═══════════════════════════════════════════════════════════════")
+    pv_numeros = [p.strip() for p in pv_numeros_csv.split(",") if p.strip()]
+    print(f"🎯 PVs solicitados: {len(pv_numeros)} — {', '.join(pv_numeros[:10])}{'...' if len(pv_numeros) > 10 else ''}")
+    if not pv_numeros:
+        return 0
+
+    fixed = 0
+    failed = 0
+    for sigla in EMPRESAS_ALVO:
+        if not EMPRESAS_OMIE.get(sigla):
+            continue
+        for num in pv_numeros:
+            time.sleep(PAUSA_ENTRE_CHAMADAS)
+            ped = consultar_pedido_venda(sigla, num)
+            if not ped or not (ped.get("pedido_venda_produto") or ped.get("cabecalho")):
+                # PV pode não existir nessa empresa — silencioso.
+                continue
+            # Wrap num formato compatível com map_pedido_to_row (usa 'cabecalho', 'infoCadastro', etc)
+            inner = ped.get("pedido_venda_produto") or ped
+            try:
+                row = map_pedido_to_row(inner, sigla)
+                if not row:
+                    failed += 1
+                    continue
+                supa_upsert(SCHEMA, TABELA, [row], PK)
+                print(f"   ✅ PV {num} ({sigla}): refetched")
+                fixed += 1
+            except Exception as e:
+                print(f"   ❌ PV {num} ({sigla}): {e}")
+                failed += 1
+    print(f"\n📊 Modo Pontual: {fixed} corrigido(s) | {failed} falha(s)")
+    return fixed
+
+
 def main():
+    # MODO PONTUAL via env
+    pv_esp = os.environ.get("PV_NUMEROS_ESPECIFICOS", "").strip()
+    if pv_esp:
+        refetch_specific_pvs(pv_esp)
+        trigger_sheets_mirror("PedidosVenda")
+        return
+
     print("═══════════════════════════════════════════════════════════════")
     print("🏆 Import Pedidos Venda — Omie → Supabase")
     print("═══════════════════════════════════════════════════════════════")
