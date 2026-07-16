@@ -298,13 +298,24 @@ const REPORT_COLS = [
 
 export async function computeReportCounts(): Promise<ReportCounts> {
   const admin = supaAdmin();
-  const { data, error } = await admin
-    .schema("approval" as never)
-    .from("v_pc_avulsos")
-    .select(REPORT_COLS)
-    .limit(3000);
-  if (error) throw new Error(`v_pc_avulsos: ${error.message}`);
-  const rows = (data ?? []) as unknown as Row[];
+  // PostgREST tem hard-cap de 1000 rows por request (max-rows do PostgREST).
+  // .limit(3000) NÃO sobrescreve. Sem paginar, o report perdia >40% da view
+  // (v_pc_avulsos tem ~1700 rows), gerando contagens fantasma tipo sem_projeto=41
+  // quando o real era 5. Aqui pagino explícito via .range() até esgotar. (2026-07-16)
+  const PAGE = 1000;
+  const rows: Row[] = [];
+  for (let offset = 0; ; offset += PAGE) {
+    const { data, error } = await admin
+      .schema("approval" as never)
+      .from("v_pc_avulsos")
+      .select(REPORT_COLS)
+      .range(offset, offset + PAGE - 1);
+    if (error) throw new Error(`v_pc_avulsos: ${error.message}`);
+    const batch = (data ?? []) as unknown as Row[];
+    rows.push(...batch);
+    if (batch.length < PAGE) break;
+    if (offset > 50_000) throw new Error("v_pc_avulsos safety cap 50k");
+  }
 
   const todayMs = new Date().setHours(0, 0, 0, 0);
   const bucketMap = computeBuckets(rows, todayMs);
