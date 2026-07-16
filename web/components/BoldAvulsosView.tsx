@@ -22,7 +22,9 @@ import GlobalSearch from "./GlobalSearch";
 
 type AnyRow = Record<string, unknown>;
 type StatusFilter = "todos" | "aprovados" | "nao_aprovados" | "pendentes" | "atrasados";
-type PvEtapaGroup = "todos" | "aberto" | "fechado";
+// "sem_nf" isola PVs sem pv_num_nfe E sem pv_dt_fat — usado pra análise das
+// Entregas históricas que nunca foram faturadas de fato (2026-07-16).
+type PvEtapaGroup = "todos" | "aberto" | "fechado" | "sem_nf";
 type ServicosFilter = "todos" | "concluidos" | "agendados" | "sem_os";
 
 // Etapas que contam como "Exec./Faturado" — pré-faturamento, já faturado ou cancelado
@@ -1087,6 +1089,11 @@ export default function BoldAvulsosView({
       const etapa = String(r.pv_etapa_texto ?? "");
       if (pvEtapaGroup === "aberto" && ETAPAS_FECHADAS.has(etapa)) return false;
       if (pvEtapaGroup === "fechado" && !ETAPAS_FECHADAS.has(etapa)) return false;
+      if (pvEtapaGroup === "sem_nf") {
+        const hasFat = String(r.pv_dt_fat ?? "").trim() !== ""
+                    || String(r.pv_num_nfe ?? "").trim() !== "";
+        if (hasFat) return false;
+      }
     }
     if (!opts.skipStatus) {
       const s = effectiveStatus(r);
@@ -1383,6 +1390,10 @@ export default function BoldAvulsosView({
   const rowsAfterPvEtapa = useMemo(() => {
     if (pvEtapaGroup === "todos") return rowsAfterDateAtraso;
     return rowsAfterDateAtraso.filter((r) => {
+      if (pvEtapaGroup === "sem_nf") {
+        return String(r.pv_dt_fat ?? "").trim() === ""
+            && String(r.pv_num_nfe ?? "").trim() === "";
+      }
       const etapa = String(r.pv_etapa_texto ?? "");
       return pvEtapaGroup === "aberto" ? !ETAPAS_FECHADAS.has(etapa) : ETAPAS_FECHADAS.has(etapa);
     });
@@ -1466,13 +1477,19 @@ export default function BoldAvulsosView({
   const pseudoPvStatusBuckets = useMemo(() => {
     const abertoPv   = new Set<string>();
     const fechadoPv  = new Set<string>();
-    let abertoVal = 0, fechadoVal = 0;
+    const semNfPv    = new Set<string>();
+    let abertoVal = 0, fechadoVal = 0, semNfVal = 0;
     for (const r of rows) {
       if (!passesFilters(r, { skipPvEtapa: true })) continue;
       const k = String(r.pv_os_label ?? "");
       if (!k) continue;
       const etapa = String(r.pv_etapa_texto ?? "");
       const val = Number(r.pv_valor_total) || 0;
+      const hasFat = String(r.pv_dt_fat ?? "").trim() !== ""
+                  || String(r.pv_num_nfe ?? "").trim() !== "";
+      if (!hasFat) {
+        if (!semNfPv.has(k)) { semNfPv.add(k); semNfVal += val; }
+      }
       if (ETAPAS_FECHADAS.has(etapa)) {
         if (!fechadoPv.has(k)) { fechadoPv.add(k); fechadoVal += val; }
       } else {
@@ -1482,16 +1499,20 @@ export default function BoldAvulsosView({
     return [
       { value: "Aberto",   count: abertoPv.size,  val: abertoVal },
       { value: "Faturado", count: fechadoPv.size, val: fechadoVal },
+      { value: "Sem NF",   count: semNfPv.size,   val: semNfVal },
     ];
   }, [rows, passesFilters]);
   const pseudoPvStatusSelected = useMemo(() => {
     const s = new Set<string>();
     if (pvEtapaGroup === "aberto")  s.add("Aberto");
     if (pvEtapaGroup === "fechado") s.add("Faturado");
+    if (pvEtapaGroup === "sem_nf")  s.add("Sem NF");
     return s;
   }, [pvEtapaGroup]);
   const pseudoPvStatusToggle = useCallback((v: string) => {
-    const target: PvEtapaGroup = v === "Aberto" ? "aberto" : "fechado";
+    const target: PvEtapaGroup = v === "Aberto" ? "aberto"
+                               : v === "Faturado" ? "fechado"
+                               : "sem_nf";
     setPvEtapaGroup((cur) => cur === target ? "todos" : target);
   }, []);
 
