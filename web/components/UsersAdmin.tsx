@@ -18,6 +18,8 @@ type ModuleRoleRow = {
   can_edit_pc: boolean;
   can_approve: boolean;
   can_edit_log: boolean;
+  can_view_values: boolean;
+  can_view_margin: boolean;
   approval_ceiling_brl: number | null;
   weekly_budget_brl: number | null;
 };
@@ -353,6 +355,9 @@ function blank(modulo: ModuloKey): ModuleRoleRow {
     modulo,
     can_edit_pv: false, can_edit_rc: false, can_edit_pc: false,
     can_approve: false, can_edit_log: false,
+    // Default TRUE pra visualização — usuário novo não vê edição mas vê valores.
+    // Admin desmarca explicitamente pra restringir.
+    can_view_values: true, can_view_margin: true,
     approval_ceiling_brl: null, weekly_budget_brl: null,
   };
 }
@@ -433,12 +438,18 @@ function PermissionsModal({
                     {label}
                   </div>
                   <div className="px-4 py-3 space-y-3">
+                    <div className="text-[10px] uppercase tracking-[0.6px] font-bold text-slate-500">Edição</div>
                     <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
                       <Toggle label="Editar PV"      value={r.can_edit_pv}  onChange={(v) => update(key, { can_edit_pv: v })} />
                       <Toggle label="Editar RC"      value={r.can_edit_rc}  onChange={(v) => update(key, { can_edit_rc: v })} />
                       <Toggle label="Editar PC"      value={r.can_edit_pc}  onChange={(v) => update(key, { can_edit_pc: v })} />
                       <Toggle label="Aprovar"        value={r.can_approve}  onChange={(v) => update(key, { can_approve: v })} />
                       <Toggle label="Editar Logíst." value={r.can_edit_log} onChange={(v) => update(key, { can_edit_log: v })} />
+                    </div>
+                    <div className="text-[10px] uppercase tracking-[0.6px] font-bold text-slate-500 pt-1 border-t border-slate-100">Visualização</div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <Toggle label="Ver valores (R$)"     value={r.can_view_values} onChange={(v) => update(key, { can_view_values: v })} />
+                      <Toggle label="Ver Margem Bruta"     value={r.can_view_margin} onChange={(v) => update(key, { can_view_margin: v })} />
                     </div>
                     {key === "pcs" && r.can_approve && (
                       <div className="grid grid-cols-2 gap-3 pt-2 border-t border-slate-100">

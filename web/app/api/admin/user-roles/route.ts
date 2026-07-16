@@ -19,6 +19,8 @@ type RolePayload = {
   can_edit_pc: boolean;
   can_approve: boolean;
   can_edit_log: boolean;
+  can_view_values: boolean;
+  can_view_margin: boolean;
   approval_ceiling_brl: number | null;
   weekly_budget_brl: number | null;
 };
@@ -44,7 +46,7 @@ export async function GET(req: Request) {
 
   const admin = supaAdmin();
   const { data, error } = await admin.schema("platform" as never).from("user_module_roles")
-    .select("modulo, can_edit_pv, can_edit_rc, can_edit_pc, can_approve, can_edit_log, approval_ceiling_brl, weekly_budget_brl")
+    .select("modulo, can_edit_pv, can_edit_rc, can_edit_pc, can_approve, can_edit_log, can_view_values, can_view_margin, approval_ceiling_brl, weekly_budget_brl")
     .eq("user_id", userId);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ roles: data ?? [] });
@@ -76,6 +78,8 @@ export async function POST(req: Request) {
     can_edit_pc: !!r.can_edit_pc,
     can_approve: !!r.can_approve,
     can_edit_log: !!r.can_edit_log,
+    can_view_values: r.can_view_values !== false, // default true se omitido (compat)
+    can_view_margin: r.can_view_margin !== false,
     approval_ceiling_brl: r.approval_ceiling_brl,
     weekly_budget_brl: r.weekly_budget_brl,
   }));

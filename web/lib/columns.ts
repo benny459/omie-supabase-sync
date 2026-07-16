@@ -11,6 +11,9 @@ export type Column = {
   editable?: "date" | "text" | "number" | "money" | "status" | "textarea";
   // Campo onde persistir: coluna direta (ex: "rc_numero") ou "custom:<slug>"
   editableField?: string;
+  // Marca "campo com histórico": guarda 1º valor em custom_fields[slug_inicio]
+  // + array de mudanças em custom_fields[slug_hist]. Só faz sentido em custom:*.
+  trackHistory?: boolean;
 };
 
 export type Group = {
@@ -22,7 +25,7 @@ export type Group = {
   columns: Column[];
 };
 
-// ── 1º BLOCO (leftmost) — PV/OS com os 11 campos do Smart + PC número ────
+// ── 1º BLOCO (leftmost) — PV/OS com os 8 campos base do Omie ────
 export const GROUP_PV_OS: Group = {
   key: "pvos",
   label: "PV/OS · Omie",
@@ -39,11 +42,63 @@ export const GROUP_PV_OS: Group = {
     { key: "pv_data_previsao",      label: "V.Previsão Limite_Omie", format: "date" },
     { key: "pv_valor_total",        label: "V.Valor_Omie",            format: "money", align: "right" },
     { key: "pv_etapa_texto",        label: "V.Etapa Venda_Omie" },
-    { key: "pv_dt_fat",             label: "V.Data de Faturamento",   format: "date" },
-    { key: "pv_num_nfe",            label: "V.NF saída",              format: "mono" },
+  ],
+};
+
+// Grupo Serviços — corresponde à bolinha "SERVIÇOS" do pipeline (só /avulsos).
+// Foco em execução do serviço: link pra OS + status + data prevista (read-only,
+// vem do app de serviços). Ordem visual: aparece DEPOIS de Materiais.
+export const GROUP_PREVISAO: Group = {
+  key: "previsao",
+  label: "Serviços",
+  tint: "bg-orange-50/70",
+  border: "border-orange-300",
+  defaultOpen: true,
+  columns: [
     { key: "servicos_concluidos",   label: "🔗 Link Serviços",        width: "130px" },
-    { key: "nova_prev_materiais",   label: "*V.Nova Prev. Materiais", format: "date", editable: "date", editableField: "custom:s4b87bk9" },
-    { key: "nova_prev_servicos",    label: "*V.Nova Prev. Serviços",  format: "date", editable: "date", editableField: "custom:s242fb18ba" },
+    // v3.11.304 (waterworks-app): status agregado da OS + flag pode_faturar.
+    // Rendering em BoldAvulsosView -> case "os_status_bucket".
+    // Fonte: custom_fields.ww_os_status + custom_fields.ww_pode_faturar.
+    { key: "os_status_bucket",      label: "Status OS",               width: "120px" },
+    // nova_prev_servicos NÃO é editável no painel: fonte da verdade é o app
+    // de serviços (waterworks/painel-de-vendas). Aqui só exibimos + link ↗
+    // pra abrir a OS lá. Sync vem via patch em custom:s242fb18ba.
+    { key: "nova_prev_servicos",    label: "V.Nova Prev. Serviços",   format: "date" },
+  ],
+};
+
+// Grupo Cronograma — só em /projetos. Substitui Previsão · Serviços porque
+// projetos não têm OS/serviço agregado; a "próxima etapa" vem de projeto_etapas.
+// Todas as linhas do mesmo projeto mostram os MESMOS valores (dado é por-projeto,
+// não por-PC) — visualmente funciona como header repetido, como o pipeline dot.
+// Renderização em BoldAvulsosView -> case "_cron_*" usa cronogramaMap.
+export const GROUP_CRONOGRAMA: Group = {
+  key: "cronograma",
+  label: "Cronograma · Projeto",
+  tint: "bg-orange-50/70",
+  border: "border-orange-300",
+  defaultOpen: true,
+  columns: [
+    { key: "_cron_status",    label: "Status",         width: "110px" },
+    { key: "_cron_next_nome", label: "Próxima etapa",  width: "220px" },
+    { key: "_cron_next_data", label: "Data prevista",  width: "110px", format: "date" },
+  ],
+};
+
+// Grupo Saída — NFe de saída (venda emitida para o cliente). Vem DEPOIS da
+// Logística (que é entrada de NF do fornecedor). pv_etapa_texto duplicada
+// intencionalmente entre PV/OS e Saída — usuário pediu essa redundância pra
+// visualizar a etapa junto do faturamento sem precisar rolar até o topo.
+export const GROUP_SAIDA: Group = {
+  key: "saida",
+  label: "Saída · NFe Saída",
+  tint: "bg-teal-50/70",
+  border: "border-teal-300",
+  defaultOpen: true,
+  columns: [
+    { key: "pv_etapa_texto", label: "V.Etapa Venda_Omie" },
+    { key: "pv_dt_fat",      label: "V.Data de Faturamento", format: "date" },
+    { key: "pv_num_nfe",     label: "V.NF saída",            format: "mono" },
   ],
 };
 
@@ -97,10 +152,16 @@ export const GROUP_PC_OMIE: Group = {
   ],
 };
 
+// Grupo Materiais — absorve o antigo "Prev. Mat." (nova_prev_materiais).
+// Ordem: nova prev. (o mais acionável) primeiro, depois status/datas de NFe.
 export const GROUP_LOGISTICA: Group = {
-  key: "log", label: "Logística / NFe Entrada", tint: "bg-cyan-50/70", border: "border-cyan-300",
+  key: "log", label: "Materiais / NFe Entrada", tint: "bg-cyan-50/70", border: "border-cyan-300",
   defaultOpen: false,
   columns: [
+    // Nova prev. materiais — comprador ajusta AQUI se precisar remarcar entrega.
+    // Se vazio, previsão segue a original (dt_previsao do PC). Persiste no
+    // custom field s4b87bk9 do Omie; histórico em s4b87bk9_hist.
+    { key: "nova_prev_materiais", label: "*Nova Prev. Materiais", format: "date", editable: "date", editableField: "custom:s4b87bk9", trackHistory: true },
     { key: "mt_status_fornecimento",  label: "Status Fornec" },
     { key: "mt_data_emissao_nf",      label: "Emissão NF", format: "date" },
     { key: "mt_data_recebimento_nf",  label: "Recebto NF", format: "date" },
@@ -178,27 +239,27 @@ export function groupsFor(modulo: "avulsos" | "projetos" | "pcs"): Group[] {
       stripRc(GROUP_EXTRAS),
     ];
   }
-  // avulsos / projetos: PV/OS → RC → PC → Aprovação → Logística → Fórmulas & Metadata
-  // V.Serviços OK só faz sentido em /avulsos (fluxo de OS de campo do app de serviços)
+  // avulsos / projetos: PV/OS → RC → PC → Aprovação → Materiais (entrada,
+  // absorve Nova Prev. Materiais) → [Serviços — só avulsos] → Saída (NFe saída)
+  // → Fórmulas & Metadata. Espelha a nova ordem do pipeline dots.
   if (modulo === "projetos") {
-    const pvOsSemServicos: Group = {
-      ...GROUP_PV_OS,
-      columns: GROUP_PV_OS.columns.filter((c) => c.key !== "servicos_concluidos"),
-    };
-    return [pvOsSemServicos, GROUP_RC, GROUP_PC_OMIE, GROUP_APROVACAO, GROUP_LOGISTICA, GROUP_EXTRAS];
+    // /projetos: sem grupo Serviços (não faz sentido — projetos não têm OS
+    // agregada; cronograma é per-projeto, não per-PC). Detalhe das etapas
+    // aparece num painel dedicado no header do bucket expandido.
+    return [GROUP_PV_OS, GROUP_RC, GROUP_PC_OMIE, GROUP_APROVACAO, GROUP_LOGISTICA, GROUP_SAIDA, GROUP_EXTRAS];
   }
-  return [GROUP_PV_OS, GROUP_RC, GROUP_PC_OMIE, GROUP_APROVACAO, GROUP_LOGISTICA, GROUP_EXTRAS];
+  return [GROUP_PV_OS, GROUP_RC, GROUP_PC_OMIE, GROUP_APROVACAO, GROUP_LOGISTICA, GROUP_PREVISAO, GROUP_SAIDA, GROUP_EXTRAS];
 }
 
-export function formatCell(value: unknown, fmt?: ColumnFormat): string {
+export function formatCell(value: unknown, fmt?: ColumnFormat, opts?: { canViewValues?: boolean }): string {
   if (value == null || value === "") return "—";
   switch (fmt) {
-    case "money":    return fmtBRL(value as number | string);
+    case "money":    return opts?.canViewValues === false ? "R$ •••••" : fmtBRL(value as number | string);
     case "number":   return fmtNum(value as number);
     case "date":     return fmtDate(value as string);
     case "datetime": return fmtDateTime(value as string);
     case "bool":     return fmtBool(value as boolean);
-    case "pct":      return fmtPct(value as number);
+    case "pct":      return opts?.canViewValues === false ? "•••" : fmtPct(value as number);
     case "days":     return fmtDays(value as number);
     case "mono":     return String(value);
     case "status":   return String(value);

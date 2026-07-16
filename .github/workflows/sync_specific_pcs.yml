@@ -1,0 +1,46 @@
+name: Sync Specific PCs (targeted refetch)
+
+# Refetcha PCs específicos via ConsultarPedCompra do Omie. Usado pra
+# atualizar standby antigos que o sync incremental não pega.
+# Dispatched pelo painel via /api/pcs/force-sync.
+
+on:
+  workflow_dispatch:
+    inputs:
+      pc_numeros:
+        description: "PC numbers (cnumero) separados por vírgula. Ex: 2859,3702,431"
+        required: true
+      empresas:
+        description: "Empresas alvo (default: SF,CD,WW)"
+        required: false
+        default: "SF,CD,WW"
+  repository_dispatch:
+    types: [sync_specific_pcs]
+
+jobs:
+  refetch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: "Refetch PCs específicos"
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          OMIE_APP_KEY_SF: ${{ secrets.OMIE_APP_KEY_SF }}
+          OMIE_APP_SECRET_SF: ${{ secrets.OMIE_APP_SECRET_SF }}
+          OMIE_APP_KEY_CD: ${{ secrets.OMIE_APP_KEY_CD }}
+          OMIE_APP_SECRET_CD: ${{ secrets.OMIE_APP_SECRET_CD }}
+          OMIE_APP_KEY_WW: ${{ secrets.OMIE_APP_KEY_WW }}
+          OMIE_APP_SECRET_WW: ${{ secrets.OMIE_APP_SECRET_WW }}
+          EMPRESAS_ALVO: ${{ github.event.inputs.empresas || github.event.client_payload.empresas || 'SF,CD,WW' }}
+          PC_NUMEROS_ESPECIFICOS: ${{ github.event.inputs.pc_numeros || github.event.client_payload.pc_numeros }}
+          SHEETS_MIRROR_URL: ${{ secrets.SHEETS_MIRROR_URL }}
+          SHEETS_MIRROR_TOKEN: ${{ secrets.SHEETS_MIRROR_TOKEN }}
+          PYTHONUNBUFFERED: "1"
+        run: python3 scripts/import_pedidos_compra.py

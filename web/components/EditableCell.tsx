@@ -20,12 +20,18 @@ export default function EditableCell({
   field,
   kind,
   initialValue,
+  trackHistory = false,
 }: {
   empresa: string;
   ncod_ped: number;
   field: string;
   kind: Kind;
   initialValue: unknown;
+  // Só faz sentido em field="custom:<slug>". Quando ativo, além de gravar
+  // custom_fields[slug]=newVal, também grava:
+  //   - custom_fields[slug_inicio] = 1º valor preenchido (fixo depois disso)
+  //   - custom_fields[slug_hist]   = [{ v, at }, …] (append em toda troca)
+  trackHistory?: boolean;
 }) {
   const router = useRouter();
   const [value, setValue]   = useState<string>(toEditStr(initialValue, kind));
@@ -62,7 +68,20 @@ export default function EditableCell({
         setSaving(false); return;
       }
       const cf: Record<string, unknown> = { ...((row as { custom_fields?: object })?.custom_fields ?? {}) };
+      const prevVal = cf[slug];
       if (newVal === null) delete cf[slug]; else cf[slug] = newVal;
+
+      if (trackHistory && newVal !== null && newVal !== prevVal) {
+        // Só registra renovações do usuário. O "início" é derivado no
+        // client (dt_previsao do PC), então NÃO armazenamos aqui.
+        const histKey = `${slug}_hist`;
+        const rawHist = cf[histKey];
+        const hist: Array<{ v: unknown; at: string }> = Array.isArray(rawHist)
+          ? (rawHist as Array<{ v: unknown; at: string }>)
+          : [];
+        hist.push({ v: newVal, at: new Date().toISOString() });
+        cf[histKey] = hist;
+      }
       const { error: ue } = await approval
         .from("approvals")
         .upsert({ empresa, ncod_ped, modulo: "avulsos", custom_fields: cf },

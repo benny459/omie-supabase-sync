@@ -1,11 +1,21 @@
 {
   "functions": {
-    "app/api/cron/bug-analyze/route.ts": { "maxDuration": 300 }
+    "app/api/cron/bug-analyze/route.ts": { "maxDuration": 300 },
+    "app/api/cron/avulsos-snapshot/route.ts": { "maxDuration": 60 },
+    "app/api/cron/avulsos-daily-send/route.ts": { "maxDuration": 60 }
   },
   "crons": [
     {
       "path": "/api/cron/bug-analyze",
       "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/cron/avulsos-snapshot",
+      "schedule": "55 10 * * *"
+    },
+    {
+      "path": "/api/cron/avulsos-daily-send",
+      "schedule": "0 11 * * 1-5"
     }
   ]
 }

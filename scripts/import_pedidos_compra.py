@@ -35,7 +35,7 @@ from _common import (
     EMPRESAS_ALVO, EMPRESAS_OMIE, PAUSA_ENTRE_CHAMADAS,
     fetch_omie, supa_upsert, supa_delete_orfaos, supa_normalize_pc_cab,
     consultar_ped_compra, supa_select_pcs_inconsistentes,
-    update_sync_state,
+    supa_select, update_sync_state,
     to_int, to_float, trigger_sheets_mirror,
 )
 
@@ -323,7 +323,80 @@ def auto_fix_inconsistentes():
     return fixed
 
 
+def refetch_specific_pcs(pc_numeros_csv: str):
+    """MODO PONTUAL: recebe uma lista de pc_numeros (cnumero) via env, lookup
+    ncod_ped no Supabase e refetcha cada um via ConsultarPedCompra (endpoint
+    nao-paginado). Usado pra atualizar PCs standby antigos que o sync
+    incremental nao pega."""
+    print("=" * 63)
+    print("Import Pedidos de Compra -- MODO PONTUAL")
+    print("=" * 63)
+    pc_numeros = [p.strip() for p in pc_numeros_csv.split(",") if p.strip()]
+    print(f"PCs solicitados: {len(pc_numeros)} — {', '.join(pc_numeros[:10])}{'...' if len(pc_numeros) > 10 else ''}")
+    if not pc_numeros:
+        print("Lista vazia — nada a fazer.")
+        return 0
+
+    # Lookup ncod_ped + empresa por cnumero no Supabase (REST via supa_select).
+    # Postgrest `in` filter: cnumero=in.(2859,3702,431)
+    in_clause = ",".join(pc_numeros)
+    query = f"select=empresa,ncod_ped,cnumero&cnumero=in.({in_clause})"
+    try:
+        rows_lookup = supa_select("orders", "pedidos_compra", query)
+    except Exception as e:
+        print(f"Erro consultando Supabase: {e}")
+        return 0
+    if not rows_lookup:
+        print("Nenhum PC encontrado no Supabase pra os números fornecidos.")
+        return 0
+
+    # Dedup por (empresa, ncod_ped)
+    alvos = {(r["empresa"], r["ncod_ped"], r.get("cnumero", "?")) for r in rows_lookup}
+    print(f"Alvos identificados: {len(alvos)}")
+
+    fixed = 0
+    failed = 0
+    for sigla, ncod_ped, cnumero in alvos:
+        time.sleep(PAUSA_ENTRE_CHAMADAS)
+        ped = consultar_ped_compra(sigla, ncod_ped)
+        if not ped:
+            print(f"   ❌ PC {cnumero} ({sigla}): ConsultarPedCompra falhou")
+            failed += 1
+            continue
+        rows = explodir_pedido(ped, sigla)
+        rows = [r for r in rows if r["ncod_ped"]]
+        if not rows:
+            print(f"   ⚠️  PC {cnumero}: vazio")
+            failed += 1
+            continue
+        dedup = {}
+        for r in rows:
+            dedup[(r["empresa"], r["ncod_ped"], r["ncod_item"])] = r
+        rows = list(dedup.values())
+        try:
+            supa_upsert(SCHEMA, TABELA, rows, PK)
+            pcs_keys = {(r["empresa"], r["ncod_ped"]) for r in rows}
+            valid_keys = {(r["empresa"], r["ncod_ped"], r["ncod_item"]) for r in rows}
+            supa_delete_orfaos(SCHEMA, TABELA, pcs_keys, valid_keys)
+            supa_normalize_pc_cab(SCHEMA, TABELA, rows, CAB_FIELDS)
+            print(f"   ✅ PC {cnumero} ({sigla}): refetched ({len(rows)} items)")
+            fixed += 1
+        except Exception as e:
+            print(f"   ❌ PC {cnumero}: apply falhou — {e}")
+            failed += 1
+    print(f"\n📊 Modo Pontual: {fixed} corrigido(s) | {failed} falha(s)")
+    return fixed
+
+
 def main():
+    # MODO PONTUAL: env PC_NUMEROS_ESPECIFICOS='2859,3702,...' — refetcha só
+    # esses via ConsultarPedCompra, ignora paginação.
+    pc_esp = os.environ.get("PC_NUMEROS_ESPECIFICOS", "").strip()
+    if pc_esp:
+        refetch_specific_pcs(pc_esp)
+        trigger_sheets_mirror("PedidosCompra")
+        return
+
     print("=" * 63)
     print("Import Pedidos de Compra -- Omie -> Supabase")
     if MAX_PAGINAS > 0:

@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<title>Guia do Pipeline — Painel Waterworks</title>
+<style>
+  @page { size: A4; margin: 18mm 15mm; }
+  * { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
+    color: #1f2937;
+    font-size: 10.5pt;
+    line-height: 1.45;
+    margin: 0;
+  }
+  h1 { font-size: 22pt; margin: 0 0 4pt 0; color: #0f172a; letter-spacing: -0.4pt; }
+  h2 { font-size: 15pt; margin: 22pt 0 8pt 0; color: #0f172a; border-bottom: 2pt solid #0ea5e9; padding-bottom: 4pt; page-break-after: avoid; }
+  h3 { font-size: 12pt; margin: 14pt 0 6pt 0; color: #1e40af; page-break-after: avoid; }
+  h4 { font-size: 10.5pt; margin: 8pt 0 4pt 0; color: #334155; page-break-after: avoid; }
+  p  { margin: 4pt 0; }
+  ul, ol { margin: 4pt 0 8pt 0; padding-left: 18pt; }
+  li { margin: 2pt 0; }
+  code { font-family: "SF Mono", Menlo, monospace; font-size: 9pt; background: #f1f5f9; padding: 1pt 4pt; border-radius: 3pt; color: #0f172a; }
+  table { border-collapse: collapse; width: 100%; margin: 6pt 0 12pt 0; font-size: 9.5pt; page-break-inside: avoid; }
+  th, td { border: 1pt solid #e2e8f0; padding: 4pt 6pt; text-align: left; vertical-align: top; }
+  th { background: #f8fafc; font-weight: 700; color: #1e293b; }
+  tr.dot-row td:first-child { white-space: nowrap; font-weight: 700; }
+  .cover { text-align: left; padding-top: 20pt; page-break-after: always; }
+  .cover h1 { font-size: 28pt; }
+  .cover .sub { color: #64748b; font-size: 12pt; margin-top: 6pt; }
+  .cover .meta { margin-top: 30pt; padding: 12pt 14pt; background: #f1f5f9; border-left: 4pt solid #0ea5e9; border-radius: 3pt; }
+  .cover .meta div { margin: 3pt 0; }
+  .dot { display: inline-block; width: 10pt; height: 10pt; border-radius: 50%; vertical-align: middle; margin-right: 4pt; }
+  .dot-red    { background: #dc2626; }
+  .dot-yellow { background: #eab308; }
+  .dot-green  { background: #16a34a; }
+  .dot-gray   { background: #cbd5e1; }
+  .tag { display: inline-block; padding: 1pt 6pt; border-radius: 3pt; font-size: 9pt; font-weight: 700; margin-right: 3pt; }
+  .tag-rose    { background: #fee2e2; color: #991b1b; border: 1pt solid #fca5a5; }
+  .tag-violet  { background: #ede9fe; color: #5b21b6; border: 1pt solid #c4b5fd; }
+  .tag-amber   { background: #fef3c7; color: #92400e; border: 1pt solid #fcd34d; }
+  .tag-cyan    { background: #cffafe; color: #155e75; border: 1pt solid #67e8f9; }
+  .tag-emerald { background: #d1fae5; color: #065f46; border: 1pt solid #6ee7b7; }
+  .callout { background: #fef9c3; border-left: 3pt solid #eab308; padding: 6pt 10pt; margin: 8pt 0; border-radius: 3pt; font-size: 9.5pt; }
+  .section { page-break-inside: avoid; margin-bottom: 8pt; }
+  .pipeline-row { display: flex; gap: 4pt; align-items: center; margin: 8pt 0; flex-wrap: wrap; font-size: 9pt; }
+  .stage-pill { padding: 3pt 8pt; background: #f1f5f9; border: 1pt solid #cbd5e1; border-radius: 20pt; font-weight: 600; color: #334155; }
+  .arrow { color: #94a3b8; font-weight: 700; }
+  .kbd { font-family: monospace; background: #e2e8f0; padding: 1pt 4pt; border-radius: 3pt; font-size: 9pt; }
+  hr { border: none; border-top: 1pt solid #e2e8f0; margin: 14pt 0; }
+  .small { font-size: 9pt; color: #64748b; }
+</style>
+</head>
+<body>
+
+<!-- ─── CAPA ─────────────────────────────────────────────────────────── -->
+<section class="cover">
+  <h1>Guia do Pipeline</h1>
+  <div class="sub">Painel Waterworks — o que cada etapa significa e onde agir</div>
+  <div class="meta">
+    <div><strong>Para:</strong> Fernanda, Erick, Cristina + time comercial</div>
+    <div><strong>Painel:</strong> painel.waterworks.com.br/avulsos</div>
+    <div><strong>Versão:</strong> v1.4.82 · Reorganização Jul/2026</div>
+    <div><strong>Report diário:</strong> Webex canal <em>Vendas_Avulsas - Reports</em>, 08:00 BRT</div>
+  </div>
+
+  <h3 style="margin-top: 40pt;">Índice</h3>
+  <ol>
+    <li>Como ler o pipeline</li>
+    <li>As 7 etapas em detalhe</li>
+    <li>Alarmes por responsável</li>
+    <li>O que é editável direto no painel</li>
+    <li>Filtros e "Alarmes Ativos"</li>
+  </ol>
+</section>
+
+<!-- ─── 1. COMO LER ──────────────────────────────────────────────────── -->
+<h2>1. Como ler o pipeline</h2>
+
+<p>Cada linha (bucket) do painel é <strong>um PV/OS</strong>. À direita do cabeçalho aparecem 7 bolinhas (dots) que resumem o estado de cada etapa. As cores seguem sempre a mesma lógica:</p>
+
+<table>
+  <tr><th style="width: 22%;">Cor</th><th>Significa</th></tr>
+  <tr><td><span class="dot dot-red"></span> Vermelho</td><td><strong>Dado faltando / cadastro incompleto</strong> — o pipeline trava aqui até corrigir. Ex: sem PC, sem cliente, sem valor.</td></tr>
+  <tr><td><span class="dot dot-yellow"></span> Amarelo</td><td><strong>Dados OK, mas há alarme ativo</strong> — algo precisa de ação (ex: material não chegou, aprovação pendente).</td></tr>
+  <tr><td><span class="dot dot-green"></span> Verde</td><td><strong>Etapa concluída sem alarme ativo</strong>. Se chegou atrasado mas chegou, é verde.</td></tr>
+  <tr><td><span class="dot dot-gray"></span> Cinza</td><td><strong>Não se aplica</strong> a este tipo de venda (ex: "Serviços" numa venda Mercantil).</td></tr>
+</table>
+
+<h3>Ordem das etapas</h3>
+<p><strong>Avulsos (Mercantil / Mix / Serviços):</strong></p>
+<div class="pipeline-row">
+  <span class="stage-pill">PV/OS</span><span class="arrow">→</span>
+  <span class="stage-pill">RC</span><span class="arrow">→</span>
+  <span class="stage-pill">PC</span><span class="arrow">→</span>
+  <span class="stage-pill">Aprovação</span><span class="arrow">→</span>
+  <span class="stage-pill">Materiais</span><span class="arrow">→</span>
+  <span class="stage-pill">Serviços</span><span class="arrow">→</span>
+  <span class="stage-pill">Saída</span>
+</div>
+<p><strong>Projetos:</strong></p>
+<div class="pipeline-row">
+  <span class="stage-pill">PV/OS</span><span class="arrow">→</span>
+  <span class="stage-pill">Cronograma</span><span class="arrow">→</span>
+  <span class="stage-pill">RC</span><span class="arrow">→</span>
+  <span class="stage-pill">PC</span><span class="arrow">→</span>
+  <span class="stage-pill">Aprovação</span><span class="arrow">→</span>
+  <span class="stage-pill">Materiais</span><span class="arrow">→</span>
+  <span class="stage-pill">Saída</span>
+</div>
+
+<div class="callout">
+  💡 <strong>Clique num dot</strong> pra expandir o card e ir direto ao grupo de colunas dessa etapa.
+</div>
+
+<!-- ─── 2. ETAPAS ────────────────────────────────────────────────────── -->
+<h2>2. As 7 etapas em detalhe</h2>
+
+<!-- PV/OS -->
+<h3>1. PV/OS <span class="small">— cadastro base da venda</span></h3>
+<p>O ponto de partida. Reflete se o Pedido de Venda (PV) ou Ordem de Serviço (OS) foi cadastrado no Omie com os dados mínimos pra rodar o pipeline.</p>
+<table>
+  <tr class="dot-row"><td><span class="dot dot-red"></span> Vermelho</td><td>Falta tipo, cliente ou <em>Previsão Limite</em> no Omie. Bloqueia todo o resto.</td></tr>
+  <tr class="dot-row"><td><span class="dot dot-yellow"></span> Amarelo</td><td>Cadastro completo mas <em>Previsão Limite ultrapassada</em> (data no passado).</td></tr>
+  <tr class="dot-row"><td><span class="dot dot-green"></span> Verde</td><td>Completo, sem atraso.</td></tr>
+</table>
+<p><strong>Editável no painel:</strong> nada (fonte de verdade = Omie). Correções são feitas no ERP e sincronizam automaticamente.</p>
+
+<!-- Cronograma -->
+<h3>2. Cronograma <span class="small">— só em /projetos</span></h3>
+<p>Substitui a coluna Serviços em projetos. Mostra o andamento das etapas do cronograma cadastradas pra aquele projeto.</p>
+<table>
+  <tr class="dot-row"><td><span class="dot dot-gray"></span> Cinza</td><td>Sem etapas cadastradas pro projeto.</td></tr>
+  <tr class="dot-row"><td><span class="dot dot-red"></span> Vermelho</td><td>Alguma etapa vencida sem conclusão.</td></tr>
+  <tr class="dot-row"><td><span class="dot dot-yellow"></span> Amarelo</td><td>Etapas pendentes mas sem atraso.</td></tr>
+  <tr class="dot-row"><td><span class="dot dot-green"></span> Verde</td><td>Todas etapas concluídas.</td></tr>
+</table>
+<p><strong>Editável no painel:</strong> etapas via upload do Fluxo Financeiro (Excel) na página do projeto.</p>
+
+<!-- RC -->
+<h3>3. RC <span class="small">— Requisição de Compra</span></h3>
+<p>Documento que registra a necessidade de compra (item + quantidade + custo estimado) antes de virar Pedido de Compra.</p>
+<table>
+  <tr class="dot-row"><td><span class="dot dot-red"></span> Vermelho</td><td>Sem RC no bucket <strong>OU</strong> RC com dados faltando (nº ou custo em branco).</td></tr>
+  <tr class="dot-row"><td><span class="dot dot-green"></span> Verde</td><td>Todos RCs completos.</td></tr>
+</table>
+<p><em>Sem estado amarelo — RC é binário: existe e está completo, ou é vermelho.</em></p>
+<p><strong>Editável no painel:</strong> <code>RC.Numero</code>, <code>RC.Descrição</code>, <code>RC.Qtd</code>, <code>RC.Custo Unit.</code>. Também dá pra anexar RC via Excel (botão <em>Anexar RC</em>) ou adicionar nova linha (<em>+ Nova linha</em>).</p>
+
+<!-- PC -->
+<h3>4. PC <span class="small">— Pedido de Compra no Omie</span></h3>
+<p>Pedido oficial ao fornecedor. Depois de aprovado, o material pode ser recebido.</p>
+<table>
+  <tr class="dot-row"><td><span class="dot dot-red"></span> Vermelho</td><td>Sem PC no bucket <strong>OU</strong> PC sem fornecedor, valor ou categoria.</td></tr>
+  <tr class="dot-row"><td><span class="dot dot-green"></span> Verde</td><td>Todos PCs completos.</td></tr>
+</table>
+<p><em>Sem estado amarelo — igual ao RC.</em></p>
+<p><strong>Editável no painel:</strong> <code>PC #</code> (vincular manualmente um PC já criado no Omie). Demais campos (fornecedor, valor, categoria, forma pagamento, prazo) vêm do Omie e são editados lá. Ícone ⚠ ao lado do PC sinaliza dados faltando no ERP.</p>
+
+<!-- Aprovação -->
+<h3>5. Aprovação <span class="small">— workflow interno</span></h3>
+<p>Fluxo de aprovação de cada PC. Alçadas por valor + validade da aprovação.</p>
+<table>
+  <tr class="dot-row"><td><span class="dot dot-red"></span> Vermelho</td><td>Sem workflow (nenhum PC no bucket pra aprovar).</td></tr>
+  <tr class="dot-row"><td><span class="dot dot-yellow"></span> Amarelo</td><td>Qualquer pendência (pendente, pré-seleção, bloqueado, rejeitado por validade).</td></tr>
+  <tr class="dot-row"><td><span class="dot dot-green"></span> Verde</td><td>Todos aprovados.</td></tr>
+</table>
+<p><strong>Editável no painel:</strong> <code>Status</code> (aprovar/rejeitar direto na tabela), <code>Justificativa</code>. Também: enviar/reenviar mensagem Webex de aprovação, adicionar comentários e anexos.</p>
+
+<!-- Materiais -->
+<h3>6. Materiais <span class="small">— antes chamado "Logística"</span></h3>
+<p>Recebimento do material do fornecedor. Absorveu o antigo dot <em>Prev. Mat.</em> — agora a Nova Previsão de Materiais vive aqui.</p>
+<table>
+  <tr class="dot-row"><td><span class="dot dot-red"></span> Vermelho</td><td>Sem PC no bucket (nada pra receber).</td></tr>
+  <tr class="dot-row"><td><span class="dot dot-yellow"></span> Amarelo</td><td>Material ainda não recebido (independente do prazo). Chip mostra atraso ou remarcações.</td></tr>
+  <tr class="dot-row"><td><span class="dot dot-green"></span> Verde</td><td>Todos materiais recebidos (NF entrada + <code>Recebto NF</code> preenchido).</td></tr>
+</table>
+<p><strong>Editável no painel:</strong> <code>*Nova Prev. Materiais</code> — data que o comprador ajusta quando fornecedor remarca entrega. Se vazio, herda a Previsão original do PC. Cada alteração fica no histórico (badge <em>×N alt</em>, click abre linha do tempo).</p>
+<div class="callout">
+  💡 O alarme <em>Previsão atrasada</em> dispara com base nesta data efetiva (nova prev. ou original se não remarcado).
+</div>
+
+<!-- Serviços -->
+<h3>7. Serviços <span class="small">— só em /avulsos</span></h3>
+<p>Execução dos serviços na obra do cliente. Dados vêm do app de serviços (waterworks-app).</p>
+<table>
+  <tr class="dot-row"><td><span class="dot dot-gray"></span> Cinza</td><td>Venda Mercantil — não tem serviço associado.</td></tr>
+  <tr class="dot-row"><td><span class="dot dot-red"></span> Vermelho</td><td>Mix/Serviços sem previsão cadastrada.</td></tr>
+  <tr class="dot-row"><td><span class="dot dot-yellow"></span> Amarelo</td><td>Serviço não concluído (chip mostra atraso se aplicável).</td></tr>
+  <tr class="dot-row"><td><span class="dot dot-green"></span> Verde</td><td>Todos serviços concluídos.</td></tr>
+</table>
+<p><strong>Editável no painel:</strong> nada direto — a fonte é o app de serviços. Click no ícone 🔗 abre a OS lá pra editar.</p>
+
+<!-- Saída -->
+<h3>8. Saída <span class="small">— NFe de saída ao cliente</span></h3>
+<p>Faturamento final da venda. Última etapa do ciclo.</p>
+<table>
+  <tr class="dot-row"><td><span class="dot dot-red"></span> Vermelho</td><td>Falta <code>V.Data de Faturamento</code> ou <code>V.NF Saída</code>.</td></tr>
+  <tr class="dot-row"><td><span class="dot dot-green"></span> Verde</td><td>Ambos preenchidos = venda faturada.</td></tr>
+</table>
+<p><em>Sem estado amarelo — Saída é binário.</em></p>
+<p><strong>Editável no painel:</strong> nada (fonte = Omie).</p>
+
+<!-- ─── 3. ALARMES POR RESPONSÁVEL ───────────────────────────────────── -->
+<h2>3. Alarmes por responsável</h2>
+
+<p>Cada alarme tem um dono no time. O <strong>report diário Webex</strong> (08:00 BRT) lista os PVs abertos com pendência agrupados por alarme + responsável.</p>
+
+<h3>Fernanda <span class="small">— Vendas + Faturamento</span></h3>
+<table>
+  <tr><th>Alarme</th><th>Quando dispara</th></tr>
+  <tr><td><span class="tag tag-rose">PV/OS incompleta</span></td><td>Cadastro do PV/OS falta tipo, cliente ou Previsão Limite. (<em>Novo — jul/26</em>)</td></tr>
+  <tr><td><span class="tag tag-rose">Venda em atraso</span></td><td>PV/OS não faturado e Previsão Limite no passado.</td></tr>
+  <tr><td><span class="tag tag-violet">Sem RC ou incompleto</span></td><td>Bucket sem RC ou RC com número sem custo (ou vice-versa).</td></tr>
+  <tr><td><span class="tag tag-amber">Aprovação pendente</span></td><td>PC em Pendente ou Pré-seleção aguardando decisão.</td></tr>
+  <tr><td><span class="tag tag-emerald">Pode faturar</span></td><td>Material recebido, ainda sem NF de saída.</td></tr>
+</table>
+
+<h3>Erick <span class="small">— Compras</span></h3>
+<table>
+  <tr><th>Alarme</th><th>Quando dispara</th></tr>
+  <tr><td><span class="tag tag-violet">Sem PC ou incompleto</span></td><td>Bucket sem PC ou PC sem fornecedor/valor/categoria.</td></tr>
+  <tr><td><span class="tag tag-violet">Previsão atrasada</span></td><td>Material não recebido e previsão efetiva vencida (Nova Prev. Materiais ou Previsão original). <em>Unificou os antigos "Compra em atraso" e "Prev. Mat. atrasada" — jul/26.</em></td></tr>
+  <tr><td><span class="tag tag-violet">Defasagem Omie</span></td><td>PC aprovado no painel mas etapa Omie não está em "Aprovação". Falha de propagação.</td></tr>
+</table>
+
+<h3>Cristina <span class="small">— Serviços</span></h3>
+<table>
+  <tr><th>Alarme</th><th>Quando dispara</th></tr>
+  <tr><td><span class="tag tag-cyan">Sem Vínculo</span></td><td>Venda Mix/Serviços sem OS vinculada no app de serviços.</td></tr>
+  <tr><td><span class="tag tag-cyan">Sem Previsão</span></td><td>Mix/Serviços sem V.Nova Prev. Serviços definida.</td></tr>
+  <tr><td><span class="tag tag-cyan">Previsão vencida</span></td><td>Mix/Serviços com previsão de serviço no passado, ainda em aberto.</td></tr>
+</table>
+
+<!-- ─── 4. EDITÁVEL ─────────────────────────────────────────────────── -->
+<h2>4. O que dá pra editar direto no painel</h2>
+
+<table>
+  <tr><th style="width: 25%;">Campo</th><th style="width: 20%;">Onde</th><th>Notas</th></tr>
+  <tr><td><code>PC #</code></td><td>Grupo PC</td><td>Vincula manualmente um PC criado no Omie a um item do RC.</td></tr>
+  <tr><td><code>Status</code> (Aprovação)</td><td>Grupo Aprovação</td><td>Aprovar / rejeitar / marcar pré-seleção com um click. Dispara Webex automaticamente.</td></tr>
+  <tr><td><code>Justificativa</code></td><td>Grupo Aprovação</td><td>Texto livre — obrigatório em alguns fluxos.</td></tr>
+  <tr><td><code>*Nova Prev. Materiais</code></td><td>Grupo Materiais</td><td>Data que o comprador remarca quando fornecedor atrasa entrega. Se vazio, herda a Previsão original do PC. Todo change é registrado no histórico.</td></tr>
+  <tr><td><code>RC.Numero / Descrição / Qtd / Custo Unit.</code></td><td>Grupo RC</td><td>Digitação linha a linha. Também: botão <em>Anexar RC (Excel)</em> pra colar planilha, ou <em>+ Nova linha</em>.</td></tr>
+  <tr><td><em>Escopo</em> (⚙)</td><td>Header do card /projetos</td><td>Marca "por nossa conta": Frete, Faturamento Direto, Estadia, Deslocamento.</td></tr>
+  <tr><td><em>Fluxo Financeiro</em></td><td>Header do card /projetos</td><td>Upload Excel com etapas do cronograma. Substitui e versiona.</td></tr>
+</table>
+
+<div class="callout">
+  💡 <strong>Tudo o que não estiver na tabela acima é fonte-Omie</strong> — corrija no ERP e o painel atualiza no próximo sync (a cada hora, 8h-18h).
+</div>
+
+<!-- ─── 5. FILTROS + ALARMES ATIVOS ─────────────────────────────────── -->
+<h2>5. Filtros e "Alarmes Ativos"</h2>
+
+<h3>Default = Status PV "aberto"</h3>
+<p>Ao abrir o painel, você vê só os PV/OS em andamento (não faturados). Clique em <em>Todos</em> ou <em>Fechado</em> nos cards do topo pra mudar o escopo. O botão <em>Limpar todos os filtros</em> sempre volta pro default "aberto".</p>
+
+<h3>"Alarmes Ativos" (canto esquerdo, botão vermelho)</h3>
+<p>Só considera PV/OS em aberto — PV faturado ou cancelado nunca aparece aqui, mesmo que houvesse um problema histórico. Clique num alarme pra filtrar o painel só pelos PVs com aquela pendência.</p>
+<ul>
+  <li>União dentro do grupo (Compras = qualquer alarme de compras).</li>
+  <li>Intersecção entre grupos (Compras + Aprovações = PVs com problema em ambos).</li>
+</ul>
+
+<h3>Outros filtros úteis</h3>
+<ul>
+  <li><strong>Busca (lupa)</strong> — texto livre em nº PC, PV/OS, cliente, projeto, fornecedor, RC.</li>
+  <li><strong>Data</strong> — janela de datas por Previsão, Faturamento, Emissão etc.</li>
+  <li><strong>Facets</strong> — Etapa Venda, Projeto, Tipo, Categoria, Fornecedor, Status Fornec.</li>
+  <li><strong>Status Serviços</strong> (só /avulsos) — Pode Faturar / OS Pendente / Em Execução / etc.</li>
+</ul>
+
+<hr>
+<p class="small" style="text-align: center;">Waterworks · Painel v1.4.82 · gerado em 15/07/2026 — dúvidas: benny@waterworks.com.br</p>
+
+</body>
+</html>
