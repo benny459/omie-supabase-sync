@@ -13,9 +13,11 @@ on:
         required: false
         default: "SF"
 
-  # Cron fixo: domingo 7 BRT (= 10 UTC, 0=domingo)
+  # Cron: domingo 07 BRT + quarta 03 BRT — meio de semana pra catch de PCs
+  # antigos editados (semanal só captura no domingo, gera lag de ~3-4d).
   schedule:
-    - cron: "0 10 * * 0"
+    - cron: "0 10 * * 0"   # dom 07:00 BRT
+    - cron: "0 6 * * 3"    # qua 03:00 BRT
 
 concurrency:
   group: master-orders-semanal

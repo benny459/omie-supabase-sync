@@ -1,12 +1,14 @@
 import type { NextConfig } from "next";
 import pkg from "./package.json";
 
-// Build ID único por deploy. Usa o SHA do commit (em Vercel) ou timestamp local.
-// Cliente compara com /api/version (server) pra detectar quando há build novo.
+// Build ID único por deploy. DEPLOYMENT_ID > SHA — SHA repete quando fazemos
+// múltiplos `vercel --prod` sem commit entre (comum em iteração rápida).
+// DEPLOYMENT_ID é único por deploy no Vercel.
+// Fallback: package.version + timestamp (garante novidade em qualquer caso).
 const BUILD_ID =
-  process.env.VERCEL_GIT_COMMIT_SHA?.slice(0, 8)
-  ?? process.env.VERCEL_DEPLOYMENT_ID
-  ?? `local-${Date.now()}`;
+  process.env.VERCEL_DEPLOYMENT_ID
+  ?? process.env.VERCEL_GIT_COMMIT_SHA?.slice(0, 8)
+  ?? `${pkg.version}-${Date.now()}`;
 
 const nextConfig: NextConfig = {
   typescript: { ignoreBuildErrors: false },
