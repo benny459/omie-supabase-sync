@@ -108,10 +108,12 @@ function isPvosIncompleto(r: Row): boolean {
   const dtLimOk   = !!String(r.pv_data_previsao ?? "").trim();
   return !tipoOk || !clienteOk || !dtLimOk;
 }
+// "Sem Projeto" = vendedor não marcou. Só considera nulo/vazio — projetos
+// contratuais (CT*), avulsos (40_VS/41_VP), projetos (PJ*) são todos VÁLIDOS
+// e não devem alarmar. Bug anterior: regex `!/^(40_VS|41_VP|PJ)/` marcava
+// os 500+ CT* como sem_projeto, inflando o alarme 130x. (2026-07-16)
 function isSemProjeto(r: Row): boolean {
-  const proj = String(r.projeto_nome ?? "").trim();
-  if (!proj) return true;
-  return !/^(40_VS|41_VP|PJ)/.test(proj);
+  return String(r.projeto_nome ?? "").trim() === "";
 }
 function isAtrasoVenda(r: Row, todayMs: number): boolean {
   const dt = String(r.pv_dt_fat ?? "").trim();
@@ -162,11 +164,15 @@ function computeBuckets(rows: Row[], todayMs: number): Map<string, BucketInfo> {
     const anyPc = items.some((r) => !!r.pc_numero || !!r.pc_numero_manual);
     const kinds = new Set<AlarmKind>();
 
-    // Mesma regra do painel: PV faturado → zero alarmes (nada a agir).
+    // PV "encerrado" (sem ação) → zero alarmes. Além de Faturado (dt_fat/num_nfe/etapa),
+    // considera Cancelado e Entrega como encerrados: no Omie muita PV antiga fica
+    // eternamente com pv_dt_fat vazio mesmo depois de cumprida via OS/recibo — inflavam
+    // "vendas em atraso" e "sem PC" com centenas de PVs históricos. (2026-07-16)
     const pvDtFatHead  = String(head.pv_dt_fat ?? "").trim();
     const pvNumNfeHead = String(head.pv_num_nfe ?? "").trim();
     const pvEtapaHead  = String(head.pv_etapa_texto ?? "").trim();
-    const isFaturado   = pvDtFatHead !== "" || pvNumNfeHead !== "" || pvEtapaHead === "Faturado";
+    const ENCERRADAS   = new Set(["Faturado", "Cancelado", "Entrega"]);
+    const isFaturado   = pvDtFatHead !== "" || pvNumNfeHead !== "" || ENCERRADAS.has(pvEtapaHead);
     if (isFaturado) {
       result.set(k, { kinds, pv_valor: Number(head.pv_valor_total) || 0 });
       continue;
