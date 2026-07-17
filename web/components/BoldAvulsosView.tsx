@@ -2414,8 +2414,8 @@ function BucketCard({
     // Prev. Mat. foi fundido no dot MATERIAIS (nova prev. só influencia badge,
     // não cor). Prev. Serv. renomeado pra SERVIÇOS e movido pra depois de
     // Materiais. Logística renomeada pra Materiais.
-    const stages: { label: string; state: StageState; detail: string; groupKey: string; dev: Dev }[] = [];
-    stages.push({ label: "PV/OS", state: pvosState, detail: pvosDetail, groupKey: "pvos", dev: pvosDev });
+    const stages: { label: string; state: StageState; detail: string; groupKey: string; dev: Dev; lock?: boolean }[] = [];
+    stages.push({ label: "PV/OS", state: pvosState, detail: pvosDetail, groupKey: "pvos", dev: pvosDev, lock: aguardandoLiberacao });
     if (modulo === "projetos") {
       stages.push({ label: "Cronograma", state: cronogramaState, detail: cronogramaDetail, groupKey: "cronograma", dev: cronogramaDev });
     }
@@ -3374,7 +3374,7 @@ const DEV_TONE = {
 function Pipeline({
   stages, onStageClick, activeGroupKey,
 }: {
-  stages: { label: string; state: "green" | "yellow" | "red" | "off"; detail: string; groupKey: string; dev?: StageDev }[];
+  stages: { label: string; state: "green" | "yellow" | "red" | "off"; detail: string; groupKey: string; dev?: StageDev; lock?: boolean }[];
   onStageClick?: (groupKey: string) => void;
   activeGroupKey?: string | null;
 }) {
@@ -3403,9 +3403,20 @@ function Pipeline({
                   </span>
                 )}
               </span>
-              <span className={`w-2.5 h-2.5 rounded-full inline-block z-10 transition-all group-hover:scale-125 ${cur.dot} ${
-                isActive ? "scale-150 ring-2 ring-offset-1 ring-sky-500 dark:ring-sky-400" : ""
-              }`} />
+              <span className="relative inline-flex items-center justify-center">
+                <span className={`w-2.5 h-2.5 rounded-full inline-block z-10 transition-all group-hover:scale-125 ${cur.dot} ${
+                  isActive ? "scale-150 ring-2 ring-offset-1 ring-sky-500 dark:ring-sky-400" : ""
+                }`} />
+                {s.lock && (
+                  <span
+                    aria-label="Aguardando Liberação"
+                    title="Aguardando Liberação — cliente ainda não enviou pedido de compra"
+                    className="absolute -top-2 -right-2.5 z-20 text-[11px] leading-none drop-shadow"
+                    style={{ textShadow: "0 0 2px #fff, 0 0 2px #fff" }}>
+                    🔒
+                  </span>
+                )}
+              </span>
               <span className={`text-[10px] font-semibold uppercase tracking-[0.5px] mt-1.5 transition ${
                 isActive ? "text-sky-800 dark:text-sky-200" : cur.label
               } group-hover:text-sky-700 dark:group-hover:text-sky-400`}>{s.label}</span>
@@ -5060,7 +5071,7 @@ function LiberacaoToggle({
       onClick={handleClick}
       title="Marcar como 'Aguardando Liberação' — cliente pediu venda mas ainda não enviou pedido de compra"
       className="inline-flex items-center gap-1 px-1.5 py-px rounded-md text-[10.5px] font-semibold uppercase tracking-[0.3px] border border-ww-border bg-ww-panel text-ww-textMuted hover:bg-amber-50 hover:border-amber-400 hover:text-amber-700 dark:hover:bg-amber-950/40 dark:hover:text-amber-300 cursor-pointer">
-      🔓 Marcar Aguardando
+      🔓 Aguardar Liberação
     </button>
   );
 }
