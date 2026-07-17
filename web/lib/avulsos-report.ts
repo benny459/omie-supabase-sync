@@ -182,12 +182,10 @@ function computeBuckets(rows: Row[], todayMs: number, liberacaoSet: Set<string>)
     }
 
     // Aguardando Liberação: cliente pediu venda mas ainda não enviou PC formal.
-    // Silencia demais alarmes — o bloqueio está no cliente, não há ação nossa.
-    // Espelha o mesmo comportamento do painel /avulsos (BoldAvulsosView).
+    // ADITIVO — os demais alarmes continuam disparando ao lado. Sai automaticamente
+    // quando o PV vira Faturado no Omie (isEncerrada acima retorna cedo).
     if (liberacaoSet.has(k)) {
       kinds.add("aguarda_liberacao");
-      result.set(k, { kinds, pv_valor: Number(head.pv_valor_total) || 0 });
-      continue;
     }
 
     // Vendas

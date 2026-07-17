@@ -453,12 +453,12 @@ function computeBucketAlarms(rows: AnyRow[], todayStartMs: number, liberacaoSet?
 
   // Aguardando Liberação: cliente pediu venda mas ainda não enviou PC formal.
   // Estado transitório imposto por usuário autorizado (can_release_pv/is_admin).
-  // Enquanto ativo, silencia os demais alarmes — o bloqueio está no cliente,
-  // não temos ação nossa. Sai da lista quando desmarca (chegou o PC dele).
+  // ADITIVO — os demais alarmes continuam disparando normalmente; este só
+  // adiciona o status "Aguardando" ao lado. Sai automaticamente quando o PV
+  // vira Faturado no Omie (o check isEncerrada acima retorna cedo).
   const pvLabel = String(head.pv_os_label ?? "");
   if (liberacaoSet?.has(pvLabel)) {
     set.add("aguarda_liberacao");
-    return set;
   }
 
   const anyRc = rows.some((r) => !!r.rc_numero);
@@ -4001,7 +4001,7 @@ const ALARM_SHORT_LABEL: Record<AlarmKind, string> = {
 const ALARM_CFG: Record<AlarmKind, { label: string; icon: string; hint: string }> = {
   pvos_incompl: { label: "PV/OS incompleta",      icon: ALARM_ICON, hint: "Cadastro do PV/OS falta dado essencial (tipo, cliente ou V.Previsão Limite_Omie). Reflete o dot PV/OS em vermelho — bloqueia o pipeline até corrigir no Omie." },
   sem_projeto:  { label: "Sem Projeto",           icon: ALARM_ICON, hint: "V.Projeto_Omie não marcado ou fora do padrão. Espera-se projeto começando com 40_VS (Venda de Serviços) ou 41_VP (Venda de Produtos). Vendedor precisa corrigir no Omie." },
-  aguarda_liberacao: { label: "Aguardando Liberação", icon: "🔒",   hint: "Cliente pediu a venda mas ainda não enviou o pedido de compra formal. Marcado manualmente por usuário autorizado. Não é bug — estamos aguardando o cliente. Silencia demais alarmes até destravar." },
+  aguarda_liberacao: { label: "Aguardando Liberação", icon: "🔒",   hint: "Cliente pediu a venda mas ainda não enviou o pedido de compra formal. Marcado manualmente por usuário autorizado. Aditivo: demais alarmes continuam ativos. Sai automaticamente quando o PV é faturado no Omie." },
   venda:        { label: "Venda em atraso",       icon: ALARM_ICON, hint: "PV/OS em atraso: sem NF de saída e V.Previsão Limite_Omie no passado" },
   compra:       { label: "Previsão atrasada",     icon: ALARM_ICON, hint: "Material ainda não recebido E previsão efetiva vencida (Nova Prev. Materiais, ou dt_previsao original se não remarcado). Reflete qualquer atraso na chegada do material." },
   sem_rc:       { label: "Sem RC ou incompleto",  icon: ALARM_ICON, hint: "Nenhum RC no bucket OU RC com apenas 1 dos 2 campos (número/custo) preenchido" },
@@ -5031,9 +5031,9 @@ function LiberacaoToggle({
     e.stopPropagation();
     if (!canToggle || !onToggle) return;
     if (aguardando) {
-      if (!confirm("Desmarcar 'Aguardando Liberação'?\n\nO PV volta a aparecer nos demais alarmes normais.")) return;
+      if (!confirm("Desmarcar 'Aguardando Liberação'?")) return;
     } else {
-      if (!confirm("Marcar 'Aguardando Liberação'?\n\nEnquanto ativo, este PV/OS fica bloqueado no pipeline e some dos outros alarmes até você desmarcar.")) return;
+      if (!confirm("Marcar 'Aguardando Liberação'?\n\nAdiciona um status ao PV/OS. Demais alarmes continuam ativos. Sai automaticamente ao faturar no Omie.")) return;
     }
     onToggle(!aguardando);
   };
@@ -5044,7 +5044,7 @@ function LiberacaoToggle({
         onClick={handleClick}
         disabled={!canToggle}
         title={canToggle
-          ? "Aguardando cliente enviar o pedido de compra formal. Click pra desmarcar."
+          ? "Aguardando cliente enviar o pedido de compra formal. Status aditivo (demais alarmes continuam). Sai ao faturar no Omie. Click pra desmarcar manualmente."
           : "Aguardando cliente enviar o pedido de compra formal. Você não tem permissão pra alterar."}
         className={`inline-flex items-center gap-1 px-1.5 py-px rounded-md text-[10.5px] font-bold uppercase tracking-[0.3px] border border-amber-500 bg-amber-100 dark:bg-amber-900/40 text-amber-900 dark:text-amber-200 ${
           canToggle ? "hover:bg-amber-200 dark:hover:bg-amber-900/60 cursor-pointer" : "cursor-default opacity-90"
