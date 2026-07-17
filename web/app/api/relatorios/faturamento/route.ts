@@ -1,6 +1,6 @@
 // GET /api/relatorios/faturamento?from=YYYY-MM-DD&to=YYYY-MM-DD
 // Lê approval.v_faturamento_diario (OS+PV faturados, classificados por
-// Contrato/Projeto/Avulso/Outro). Todas as empresas SF/CD/WW.
+// codigo_categoria Omie — mesma taxonomia usada pelo Metabase).
 
 import { NextResponse } from "next/server";
 import { supaServer } from "@/lib/supabase-server";
@@ -9,7 +9,13 @@ import { createClient } from "@supabase/supabase-js";
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
-export type Categoria = "Contrato" | "Projeto" | "Avulso" | "Outro";
+export type Categoria =
+  | "Contratuais"  // 1.01.01 — MRR contratual
+  | "Projetos"     // 1.01.02 — faturamento de projeto (PJxxx)
+  | "Revenda"      // 1.01.03 — revenda de mercadoria (PVs)
+  | "Avulsos"      // 1.01.97 — OS avulsa (40_VS/41_VP)
+  | "BOT/SW"       // 1.01.98 — recorrente BOT/SW
+  | "Outras";      // fallback
 export type Tipo = "PV" | "OS";
 
 export type FatRow = {
@@ -80,16 +86,21 @@ export async function GET(req: Request) {
     PV: { qtd: 0, valor: 0 }, OS: { qtd: 0, valor: 0 },
   };
   const by_categoria: Record<Categoria, { qtd: number; valor: number }> = {
-    Contrato: { qtd: 0, valor: 0 }, Projeto: { qtd: 0, valor: 0 },
-    Avulso: { qtd: 0, valor: 0 }, Outro: { qtd: 0, valor: 0 },
+    Contratuais: { qtd: 0, valor: 0 },
+    Projetos:    { qtd: 0, valor: 0 },
+    Revenda:     { qtd: 0, valor: 0 },
+    Avulsos:     { qtd: 0, valor: 0 },
+    "BOT/SW":    { qtd: 0, valor: 0 },
+    Outras:      { qtd: 0, valor: 0 },
   };
   for (const r of rows) {
     totals.qtd += r.qtd;
     totals.valor += r.valor;
     by_tipo[r.tipo].qtd += r.qtd;
     by_tipo[r.tipo].valor += r.valor;
-    by_categoria[r.categoria].qtd += r.qtd;
-    by_categoria[r.categoria].valor += r.valor;
+    const bucket = by_categoria[r.categoria] ?? by_categoria.Outras;
+    bucket.qtd += r.qtd;
+    bucket.valor += r.valor;
   }
 
   const resp: FatResp = { from, to, rows, totals, by_tipo, by_categoria };

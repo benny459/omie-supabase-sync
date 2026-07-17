@@ -5,7 +5,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 
-type Categoria = "Contrato" | "Projeto" | "Avulso" | "Outro";
+type Categoria = "Contratuais" | "Projetos" | "Revenda" | "Avulsos" | "BOT/SW" | "Outras";
 type Tipo = "PV" | "OS";
 
 type FatRow = { date: string; tipo: Tipo; categoria: Categoria; empresa: string; qtd: number; valor: number };
@@ -17,17 +17,21 @@ type FatResp = {
   by_categoria: Record<Categoria, { qtd: number; valor: number }>;
 };
 
-// Ordem visual do stack (bottom → top) e cores. Contratos primeiro (mais volume
-// típico), Avulsos por último. Cores separam PV (frio) de OS (quente).
+// Ordem visual do stack (bottom → top) e cores. Mesma taxonomia do Metabase
+// (mapeamento em public.cat_venda). PV = tons frios, OS = tons quentes.
 const SEGMENTS: { tipo: Tipo; cat: Categoria; label: string; color: string }[] = [
-  { tipo: "PV", cat: "Contrato", label: "PV · Contrato", color: "#0284c7" }, // sky-600
-  { tipo: "PV", cat: "Projeto",  label: "PV · Projeto",  color: "#4f46e5" }, // indigo-600
-  { tipo: "PV", cat: "Avulso",   label: "PV · Avulso",   color: "#7c3aed" }, // violet-600
-  { tipo: "PV", cat: "Outro",    label: "PV · Outro",    color: "#a78bfa" }, // violet-400
-  { tipo: "OS", cat: "Contrato", label: "OS · Contrato", color: "#059669" }, // emerald-600
-  { tipo: "OS", cat: "Projeto",  label: "OS · Projeto",  color: "#0d9488" }, // teal-600
-  { tipo: "OS", cat: "Avulso",   label: "OS · Avulso",   color: "#65a30d" }, // lime-600
-  { tipo: "OS", cat: "Outro",    label: "OS · Outro",    color: "#eab308" }, // yellow-500
+  { tipo: "PV", cat: "Contratuais", label: "PV · Contratuais", color: "#0284c7" }, // sky-600
+  { tipo: "PV", cat: "Projetos",    label: "PV · Projetos",    color: "#4f46e5" }, // indigo-600
+  { tipo: "PV", cat: "Revenda",     label: "PV · Revenda",     color: "#7c3aed" }, // violet-600
+  { tipo: "PV", cat: "Avulsos",     label: "PV · Avulsos",     color: "#c026d3" }, // fuchsia-600
+  { tipo: "PV", cat: "BOT/SW",      label: "PV · BOT/SW",      color: "#0891b2" }, // cyan-600
+  { tipo: "PV", cat: "Outras",      label: "PV · Outras",      color: "#a78bfa" }, // violet-400
+  { tipo: "OS", cat: "Contratuais", label: "OS · Contratuais", color: "#059669" }, // emerald-600
+  { tipo: "OS", cat: "Projetos",    label: "OS · Projetos",    color: "#0d9488" }, // teal-600
+  { tipo: "OS", cat: "Revenda",     label: "OS · Revenda",     color: "#65a30d" }, // lime-600
+  { tipo: "OS", cat: "Avulsos",     label: "OS · Avulsos",     color: "#d97706" }, // amber-600
+  { tipo: "OS", cat: "BOT/SW",      label: "OS · BOT/SW",      color: "#0369a1" }, // sky-700
+  { tipo: "OS", cat: "Outras",      label: "OS · Outras",      color: "#eab308" }, // yellow-500
 ];
 
 const fmtBRL = (v: number) =>
@@ -145,14 +149,13 @@ export default function FaturamentoView() {
 
       {/* KPIs */}
       {data && (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5">
-          <KpiCard label="PV faturados" qtd={data.by_tipo.PV.qtd} valor={data.by_tipo.PV.valor} tone="sky" />
-          <KpiCard label="OS faturadas" qtd={data.by_tipo.OS.qtd} valor={data.by_tipo.OS.valor} tone="emerald" />
-          <KpiCard label="Contrato"     qtd={data.by_categoria.Contrato.qtd} valor={data.by_categoria.Contrato.valor} tone="indigo" />
-          <KpiCard label="Avulso + Projeto + Outro"
-            qtd={data.by_categoria.Avulso.qtd + data.by_categoria.Projeto.qtd + data.by_categoria.Outro.qtd}
-            valor={data.by_categoria.Avulso.valor + data.by_categoria.Projeto.valor + data.by_categoria.Outro.valor}
-            tone="violet" />
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2.5">
+          <KpiCard label="Contratuais" qtd={data.by_categoria.Contratuais.qtd} valor={data.by_categoria.Contratuais.valor} tone="emerald" />
+          <KpiCard label="Projetos"    qtd={data.by_categoria.Projetos.qtd}    valor={data.by_categoria.Projetos.valor}    tone="teal" />
+          <KpiCard label="Revenda"     qtd={data.by_categoria.Revenda.qtd}     valor={data.by_categoria.Revenda.valor}     tone="violet" />
+          <KpiCard label="Avulsos"     qtd={data.by_categoria.Avulsos.qtd}     valor={data.by_categoria.Avulsos.valor}     tone="amber" />
+          <KpiCard label="BOT/SW"      qtd={data.by_categoria["BOT/SW"].qtd}   valor={data.by_categoria["BOT/SW"].valor}   tone="cyan" />
+          <KpiCard label="Outras"      qtd={data.by_categoria.Outras.qtd}      valor={data.by_categoria.Outras.valor}      tone="slate" />
         </div>
       )}
 
@@ -222,12 +225,16 @@ export default function FaturamentoView() {
   );
 }
 
-function KpiCard({ label, qtd, valor, tone }: { label: string; qtd: number; valor: number; tone: "sky"|"emerald"|"indigo"|"violet" }) {
+function KpiCard({ label, qtd, valor, tone }: { label: string; qtd: number; valor: number; tone: "sky"|"emerald"|"indigo"|"violet"|"teal"|"amber"|"cyan"|"slate" }) {
   const toneCls: Record<string, string> = {
     sky:     "border-sky-200 bg-sky-50/60 text-sky-900 dark:border-sky-800 dark:bg-sky-950/30 dark:text-sky-100",
     emerald: "border-emerald-200 bg-emerald-50/60 text-emerald-900 dark:border-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-100",
     indigo:  "border-indigo-200 bg-indigo-50/60 text-indigo-900 dark:border-indigo-800 dark:bg-indigo-950/30 dark:text-indigo-100",
     violet:  "border-violet-200 bg-violet-50/60 text-violet-900 dark:border-violet-800 dark:bg-violet-950/30 dark:text-violet-100",
+    teal:    "border-teal-200 bg-teal-50/60 text-teal-900 dark:border-teal-800 dark:bg-teal-950/30 dark:text-teal-100",
+    amber:   "border-amber-200 bg-amber-50/60 text-amber-900 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-100",
+    cyan:    "border-cyan-200 bg-cyan-50/60 text-cyan-900 dark:border-cyan-800 dark:bg-cyan-950/30 dark:text-cyan-100",
+    slate:   "border-slate-200 bg-slate-50/60 text-slate-900 dark:border-slate-800 dark:bg-slate-950/30 dark:text-slate-100",
   };
   return (
     <div className={`rounded-xl border p-3 ${toneCls[tone]}`}>

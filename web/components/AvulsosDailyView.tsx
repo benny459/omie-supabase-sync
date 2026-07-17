@@ -3,7 +3,7 @@
 // Preview do daily Avulsos que vai ao Webex. Estrutura compacta com counts +
 // valores + owner + link deep-filtered pro painel. Botão pra enviar agora.
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 
 type Pv = { pv_os_label: string; cliente: string; tipo: string; valor: number };
 type Item = {
@@ -225,8 +225,12 @@ export default function AvulsosDailyView() {
 
   async function fetchReport() {
     setLoading(true); setError(null);
+    // Timeout de 55s (a rota tem maxDuration=60s). Sem isso, request travada
+    // deixava a página em branco indefinidamente ("ora abre ora não").
+    const ctrl = new AbortController();
+    const to = setTimeout(() => ctrl.abort(), 55_000);
     try {
-      const res = await fetch("/api/relatorios/avulsos-daily", { cache: "no-store" });
+      const res = await fetch("/api/relatorios/avulsos-daily", { cache: "no-store", signal: ctrl.signal });
       if (!res.ok) {
         const j = await res.json().catch(() => ({}));
         throw new Error(j.error ?? res.statusText);
@@ -234,12 +238,22 @@ export default function AvulsosDailyView() {
       const j = (await res.json()) as ApiResp;
       setData(j);
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      const msg = e instanceof Error
+        ? (e.name === "AbortError" ? "Timeout (55s) — a view v_pc_avulsos demorou demais. Tente atualizar." : e.message)
+        : String(e);
+      setError(msg);
     } finally {
+      clearTimeout(to);
       setLoading(false);
     }
   }
-  useEffect(() => { fetchReport(); }, []);
+  // Fetch inicial + revalida quando usuário volta à aba (dados frescos ao reabrir)
+  useEffect(() => {
+    fetchReport();
+    function onFocus() { if (!document.hidden) fetchReport(); }
+    document.addEventListener("visibilitychange", onFocus);
+    return () => document.removeEventListener("visibilitychange", onFocus);
+  }, []);
 
   // Auto-trigger print dialog quando URL tem ?print=1 (usado pelo botão "PDF"
   // do painel /avulsos — abre em nova aba já direto no dialog de impressão).
@@ -341,6 +355,8 @@ export default function AvulsosDailyView() {
           ✓ Enviado ao Webex às {sentAt}
         </div>
       )}
+      {loading && !data && !error && <LoadingSkeleton />}
+      {data && <WebexPreview markdown={markdown} />}
       {data && <TrendChart trend={data.trend ?? []} />}
 
       {data && (
@@ -436,7 +452,7 @@ export default function AvulsosDailyView() {
 
           <details className="border border-ww-border rounded-lg bg-ww-bg avulsos-daily-noprint">
             <summary className="px-4 py-2 text-[12px] font-semibold text-ww-text cursor-pointer">
-              Markdown enviado ao Webex (preview)
+              Markdown bruto (o que é enviado à API do Webex)
             </summary>
             <pre className="p-4 text-[11px] font-mono leading-[1.6] text-ww-text whitespace-pre-wrap">{markdown}</pre>
           </details>
@@ -449,4 +465,131 @@ export default function AvulsosDailyView() {
       )}
     </div>
   );
+}
+
+// Skeleton exibido enquanto a primeira request está em voo. Sem isso, a
+// página ficava totalmente em branco por 10-30s enquanto v_pc_avulsos carrega.
+function LoadingSkeleton() {
+  return (
+    <div className="space-y-4 avulsos-daily-noprint">
+      <div className="border border-ww-border rounded-lg bg-ww-panel p-4">
+        <div className="flex items-center gap-2 text-[12.5px] text-ww-textMuted">
+          <span className="inline-block w-3 h-3 rounded-full bg-ww-accent animate-pulse" />
+          <span>Puxando dados frescos do painel Avulsos…</span>
+          <span className="ml-auto text-[10.5px] text-ww-textFaint">
+            v_pc_avulsos costuma responder em ~10-25s
+          </span>
+        </div>
+      </div>
+      {[1, 2, 3, 4].map((i) => (
+        <div key={i} className="border border-ww-border rounded-lg bg-ww-panel overflow-hidden">
+          <div className="px-4 py-2 border-b border-ww-border bg-ww-bg">
+            <div className="h-3 w-32 rounded bg-ww-border animate-pulse" />
+          </div>
+          <div className="divide-y divide-ww-border">
+            {[1, 2, 3].map((j) => (
+              <div key={j} className="px-4 py-3 flex items-center gap-3">
+                <div className="flex-1 space-y-1.5">
+                  <div className="h-3 w-2/3 rounded bg-ww-border animate-pulse" />
+                  <div className="h-2 w-24 rounded bg-ww-border/50 animate-pulse" />
+                </div>
+                <div className="h-6 w-10 rounded bg-ww-border animate-pulse" />
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// Renderiza o markdown do Webex como o Webex mostraria — permite conferir
+// visualmente o que os destinatários vão receber ANTES de clicar "Enviar".
+// Parser propositalmente restrito ao subset que buildWebexMarkdown emite:
+// ### heading, **bold**, - lista, [texto](url), _italic_.
+function WebexPreview({ markdown }: { markdown: string }) {
+  const nodes = useMemo(() => renderWebexMarkdown(markdown), [markdown]);
+  return (
+    <div className="border-2 border-emerald-400 dark:border-emerald-700 rounded-lg overflow-hidden bg-ww-panel shadow-sm">
+      <div className="px-4 py-2 border-b border-ww-border bg-emerald-50 dark:bg-emerald-950/30 flex items-center gap-2">
+        <span className="text-[11px] font-bold uppercase tracking-[0.5px] text-emerald-800 dark:text-emerald-200">
+          👀 Assim vai chegar no Webex
+        </span>
+        <span className="text-[10.5px] text-emerald-700 dark:text-emerald-300 ml-auto">
+          confira antes de enviar
+        </span>
+      </div>
+      <div className="p-4 text-[13px] leading-[1.55] text-ww-text">{nodes}</div>
+    </div>
+  );
+}
+
+// Mini renderer: percorre linhas e faz o parse do subset conhecido.
+function renderWebexMarkdown(md: string): ReactNode[] {
+  const out: ReactNode[] = [];
+  const lines = md.split("\n");
+  let listBuf: ReactNode[] = [];
+  const flushList = () => {
+    if (listBuf.length === 0) return;
+    out.push(<ul key={`ul-${out.length}`} className="list-disc pl-5 space-y-1 mb-2">{listBuf}</ul>);
+    listBuf = [];
+  };
+  for (let i = 0; i < lines.length; i++) {
+    const raw = lines[i];
+    const line = raw.trimEnd();
+    if (line === "") { flushList(); continue; }
+    if (line.startsWith("### ")) {
+      flushList();
+      out.push(<h3 key={`h-${i}`} className="text-[15px] font-bold text-ww-text mb-2">{renderInline(line.slice(4))}</h3>);
+      continue;
+    }
+    // Linhas soltas com só **bold** viram subtítulo (seções do report)
+    if (/^\*\*.+\*\*$/.test(line)) {
+      flushList();
+      const inner = line.slice(2, -2);
+      out.push(<div key={`s-${i}`} className="text-[13px] font-bold text-ww-text mt-3 mb-1">{renderInline(inner)}</div>);
+      continue;
+    }
+    if (line.startsWith("- ")) {
+      listBuf.push(<li key={`li-${i}`}>{renderInline(line.slice(2))}</li>);
+      continue;
+    }
+    // Linha comum — pode ter italic (_..._) ou texto puro
+    flushList();
+    out.push(<p key={`p-${i}`} className="text-[12.5px] text-ww-textMuted mb-1">{renderInline(line)}</p>);
+  }
+  flushList();
+  return out;
+}
+
+// Inline: **bold**, [texto](url), _italic_. Ordem importa (bold antes de italic).
+function renderInline(s: string): ReactNode[] {
+  const nodes: ReactNode[] = [];
+  let rest = s;
+  let key = 0;
+  // Regex combinado: link | bold | italic
+  const re = /(\[[^\]]+\]\([^)]+\))|(\*\*[^*]+\*\*)|(_[^_]+_)/;
+  while (rest.length > 0) {
+    const m = rest.match(re);
+    if (!m || m.index === undefined) { nodes.push(rest); break; }
+    if (m.index > 0) nodes.push(rest.slice(0, m.index));
+    const tok = m[0];
+    if (tok.startsWith("[")) {
+      const linkMatch = /^\[([^\]]+)\]\(([^)]+)\)$/.exec(tok);
+      if (linkMatch) {
+        nodes.push(
+          <a key={`a-${key++}`} href={linkMatch[2]} target="_blank" rel="noopener noreferrer"
+             className="text-blue-700 dark:text-blue-400 hover:underline">
+            {linkMatch[1]}
+          </a>
+        );
+      }
+    } else if (tok.startsWith("**")) {
+      nodes.push(<strong key={`b-${key++}`} className="font-bold text-ww-text">{tok.slice(2, -2)}</strong>);
+    } else if (tok.startsWith("_")) {
+      nodes.push(<em key={`i-${key++}`} className="italic text-ww-textMuted">{tok.slice(1, -1)}</em>);
+    }
+    rest = rest.slice(m.index + tok.length);
+  }
+  return nodes;
 }

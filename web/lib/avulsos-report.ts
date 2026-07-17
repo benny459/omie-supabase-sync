@@ -293,11 +293,12 @@ export type ReportCounts = {
 // pesada (v_pc_avulsos tem 60+ colunas, várias com sub-selects).
 const REPORT_COLS = [
   "pv_os_label", "pv_dt_fat", "pv_data_previsao", "pv_cliente_fantasia",
-  "pv_valor_total", "tipo_omie",
+  "pv_valor_total", "tipo_omie", "projeto_nome",
   "rc_numero", "rc_custo",
   "pc_numero", "pc_numero_manual", "pc_etapa_texto",
   "valor_total", "nome_fornecedor", "codigo_fornecedor", "codigo_categoria",
-  "status", "mt_data_recebimento_nf",
+  "status", "mt_data_recebimento_nf", "pv_num_nfe", "pv_etapa_texto",
+  "servicos_os_numero",
   "dt_previsao", "nova_prev_materiais", "nova_prev_servicos",
   "custom_fields",
 ].join(",");
