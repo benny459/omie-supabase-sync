@@ -18,6 +18,7 @@ import FluxoFinanceiroUploadButton from "./FluxoFinanceiroUploadButton";
 import ProjetoEscopoButton from "./ProjetoEscopoButton";
 import PvOsComentarios from "./PvOsComentarios";
 import BucketSyncButton from "./BucketSyncButton";
+import SyncNowButton from "./SyncNowButton";
 import AddRowButton from "./AddRowButton";
 import GlobalSearch from "./GlobalSearch";
 
@@ -1642,6 +1643,7 @@ export default function BoldAvulsosView({
           {loadingMore && <span className="ml-2 text-amber-700 animate-pulse">· carregando mais…</span>}
         </span>
         <div className="self-center"><GlobalSearch /></div>
+        <div className="self-center"><SyncNowButton /></div>
         <div className="flex-1" />
         <span className="text-[11.5px] text-ww-textMuted font-mono uppercase tracking-wider font-semibold">
           {user?.role ?? "viewer"}
