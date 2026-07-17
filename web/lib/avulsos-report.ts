@@ -8,6 +8,7 @@ import { supaAdmin } from "./supabase-admin";
 export type AlarmKind =
   | "pvos_incompl"
   | "sem_projeto"
+  | "aguarda_liberacao"
   | "venda"
   | "compra"
   | "sem_rc"
@@ -28,9 +29,10 @@ export const REPORT_SECTIONS: {
   {
     title: "VENDAS", emoji: "🛍️",
     items: [
-      { kind: "pvos_incompl", label: "PV/OS incompletas (cadastro faltando)" },
-      { kind: "sem_projeto",  label: "Sem Projeto (vendedor não marcou)" },
-      { kind: "venda",        label: "Vendas em atraso" },
+      { kind: "pvos_incompl",      label: "PV/OS incompletas (cadastro faltando)" },
+      { kind: "sem_projeto",       label: "Sem Projeto (vendedor não marcou)" },
+      { kind: "aguarda_liberacao", label: "🔒 Aguardando Liberação (cliente sem PC)" },
+      { kind: "venda",             label: "Vendas em atraso" },
     ],
   },
   {
@@ -62,18 +64,19 @@ export const REPORT_SECTIONS: {
 // Responsáveis por alarme — nome como aparece no Webex. Alterar aqui basta.
 // (Users do painel; ao adicionar novos alarms, mapeia aqui.)
 export const ALARM_OWNERS: Record<AlarmKind, string> = {
-  pvos_incompl: "Fernanda",
-  sem_projeto:  "Fernanda",
-  venda:        "Fernanda",
-  sem_rc:       "Fernanda",
-  aprov_pend:   "Fernanda",
-  sem_pc:       "Erick",
-  compra:       "Erick",
-  defas_omie:   "Erick",
-  sem_vinculo:  "Cristina",
-  agend_vazio:  "Cristina",
-  agend_venc:   "Cristina",
-  pode_faturar: "Fernanda",
+  pvos_incompl:      "Fernanda",
+  sem_projeto:       "Fernanda",
+  aguarda_liberacao: "Fernanda",
+  venda:             "Fernanda",
+  sem_rc:            "Fernanda",
+  aprov_pend:        "Fernanda",
+  sem_pc:            "Erick",
+  compra:            "Erick",
+  defas_omie:        "Erick",
+  sem_vinculo:       "Cristina",
+  agend_vazio:       "Cristina",
+  agend_venc:        "Cristina",
+  pode_faturar:      "Fernanda",
 };
 
 // Base do painel (produção). Report usa deep-link com ?alarme=X&pv=aberto
@@ -146,7 +149,7 @@ function isDefasagemOmie(r: Row): boolean {
 // Agrega alarmes bucket-level (por pv_os_label) — replica computeBucketAlarms.
 // Retorna Map<pv_os_label, { kinds: Set<AlarmKind>; pv_valor: number }>.
 type BucketInfo = { kinds: Set<AlarmKind>; pv_valor: number };
-function computeBuckets(rows: Row[], todayMs: number): Map<string, BucketInfo> {
+function computeBuckets(rows: Row[], todayMs: number, liberacaoSet: Set<string>): Map<string, BucketInfo> {
   const buckets = new Map<string, Row[]>();
   for (const r of rows) {
     const k = String(r.pv_os_label ?? "");
@@ -174,6 +177,15 @@ function computeBuckets(rows: Row[], todayMs: number): Map<string, BucketInfo> {
     const isEncerrada  = pvDtFatHead !== "" || pvNumNfeHead !== ""
                       || pvEtapaHead === "Faturado" || pvEtapaHead === "Cancelado";
     if (isEncerrada) {
+      result.set(k, { kinds, pv_valor: Number(head.pv_valor_total) || 0 });
+      continue;
+    }
+
+    // Aguardando Liberação: cliente pediu venda mas ainda não enviou PC formal.
+    // Silencia demais alarmes — o bloqueio está no cliente, não há ação nossa.
+    // Espelha o mesmo comportamento do painel /avulsos (BoldAvulsosView).
+    if (liberacaoSet.has(k)) {
+      kinds.add("aguarda_liberacao");
       result.set(k, { kinds, pv_valor: Number(head.pv_valor_total) || 0 });
       continue;
     }
@@ -324,8 +336,19 @@ export async function computeReportCounts(): Promise<ReportCounts> {
     if (offset > 50_000) throw new Error("v_pc_avulsos safety cap 50k");
   }
 
+  // "Aguardando Liberação" overlay — puxa PVs ativos numa segunda query leve.
+  const { data: libRows, error: libErr } = await admin
+    .schema("platform" as never)
+    .from("pv_liberacao_status")
+    .select("pv_os_label")
+    .eq("aguardando_liberacao", true);
+  if (libErr) throw new Error(`pv_liberacao_status: ${libErr.message}`);
+  const liberacaoSet = new Set<string>(
+    ((libRows ?? []) as Array<{ pv_os_label: string }>).map((r) => r.pv_os_label),
+  );
+
   const todayMs = new Date().setHours(0, 0, 0, 0);
-  const bucketMap = computeBuckets(rows, todayMs);
+  const bucketMap = computeBuckets(rows, todayMs, liberacaoSet);
 
   // Head-by-label pra ler cliente/tipo/valor sem varrer todas as rows de novo
   const headByLabel = new Map<string, Row>();
@@ -335,7 +358,7 @@ export async function computeReportCounts(): Promise<ReportCounts> {
     headByLabel.set(k, r);
   }
 
-  const KINDS: AlarmKind[] = ["pvos_incompl", "sem_projeto", "venda", "compra", "sem_rc", "sem_pc", "aprov_pend", "defas_omie", "sem_vinculo", "agend_vazio", "agend_venc", "pode_faturar"];
+  const KINDS: AlarmKind[] = ["pvos_incompl", "sem_projeto", "aguarda_liberacao", "venda", "compra", "sem_rc", "sem_pc", "aprov_pend", "defas_omie", "sem_vinculo", "agend_vazio", "agend_venc", "pode_faturar"];
   const counts = Object.fromEntries(KINDS.map((k) => [k, 0])) as Record<AlarmKind, number>;
   const vals   = Object.fromEntries(KINDS.map((k) => [k, 0])) as Record<AlarmKind, number>;
   const pvs_by_kind = Object.fromEntries(KINDS.map((k) => [k, [] as PvEntry[]])) as Record<AlarmKind, PvEntry[]>;

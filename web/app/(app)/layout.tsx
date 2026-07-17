@@ -17,7 +17,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       supa.schema("platform" as never).from("user_profiles")
         .select("role, is_admin, permissions").eq("id", user.id).maybeSingle(),
       supa.schema("platform" as never).from("user_module_roles")
-        .select("modulo, can_edit_pv, can_edit_rc, can_edit_pc, can_approve, can_edit_log, approval_ceiling_brl, weekly_budget_brl")
+        .select("modulo, can_edit_pv, can_edit_rc, can_edit_pc, can_approve, can_edit_log, can_release_pv, approval_ceiling_brl, weekly_budget_brl")
         .eq("user_id", user.id),
     ]);
     const row = profile as { role?: Role; is_admin?: boolean; permissions?: PermsOverride | null } | null;

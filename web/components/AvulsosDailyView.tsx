@@ -58,22 +58,24 @@ function buildWebexMarkdown(data: ApiResp): string {
 // Renderiza séries por AlarmKind ao longo dos snapshots. Só dados reais.
 // Cada série tem toggle (checkbox na legenda) — click liga/desliga.
 const CHART_COLORS: Record<string, string> = {
-  pvos_incompl: "#dc2626", // red-600 — cadastro faltando
-  sem_projeto:  "#be123c", // rose-800 — projeto não marcado
-  venda:        "#f43f5e", // rose
-  compra:       "#f97316", // orange — "Previsão atrasada" (unificado)
-  sem_rc:       "#8b5cf6", // violet
-  sem_pc:       "#a855f7", // purple
-  aprov_pend:   "#f59e0b", // amber
-  defas_omie:   "#ec4899", // pink
-  sem_vinculo:  "#14b8a6", // teal
-  agend_vazio:  "#06b6d4", // cyan
-  agend_venc:   "#0ea5e9", // sky
-  pode_faturar: "#10b981", // emerald
+  pvos_incompl:      "#dc2626", // red-600 — cadastro faltando
+  sem_projeto:       "#be123c", // rose-800 — projeto não marcado
+  aguarda_liberacao: "#d97706", // amber-600 — cliente sem PC formal
+  venda:             "#f43f5e", // rose
+  compra:            "#f97316", // orange — "Previsão atrasada" (unificado)
+  sem_rc:            "#8b5cf6", // violet
+  sem_pc:            "#a855f7", // purple
+  aprov_pend:        "#f59e0b", // amber
+  defas_omie:        "#ec4899", // pink
+  sem_vinculo:       "#14b8a6", // teal
+  agend_vazio:       "#06b6d4", // cyan
+  agend_venc:        "#0ea5e9", // sky
+  pode_faturar:      "#10b981", // emerald
 };
 const CHART_KIND_LABEL: Record<string, string> = {
-  pvos_incompl: "PV/OS incompl.",
-  sem_projeto:  "Sem Projeto",
+  pvos_incompl:      "PV/OS incompl.",
+  sem_projeto:       "Sem Projeto",
+  aguarda_liberacao: "Aguard. Liberação",
   venda: "Vendas atraso", compra: "Previsão atrasada",
   sem_rc: "RC ausente/incompl", sem_pc: "PC ausente/incompl", aprov_pend: "Aprov pend",
   defas_omie: "Defas Omie", sem_vinculo: "Sem Vínculo",

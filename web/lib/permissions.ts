@@ -23,6 +23,7 @@ export type ModuleRole = {
   can_edit_log: boolean;
   can_view_values: boolean;   // vê R$ (PV, RC, PC, aprovado, totais)
   can_view_margin: boolean;   // vê M.B. e badges PC vs RC
+  can_release_pv?: boolean;   // marca PV/OS como "Aguardando Liberação" (só avulsos)
   approval_ceiling_brl: number | null;   // só usado em modulo='pcs'
   weekly_budget_brl:    number | null;   // só usado em modulo='pcs'
 };
@@ -138,6 +139,15 @@ export function canApproveValue(
 
 export function canEdit(user: UserPerms | null | undefined, modulo: Modulo, block: BlockKey): boolean {
   return effective(user, modulo, block).edit;
+}
+
+// Pode marcar PV/OS como "Aguardando Liberação" (cliente pediu venda mas ainda
+// não enviou o pedido de compra formal). Só faz sentido em modulo='avulsos'.
+export function canReleasePv(user: UserPerms | null | undefined): boolean {
+  if (!user) return false;
+  if (user.is_admin) return true;
+  const mr = user.module_roles?.find((r) => r.modulo === "avulsos");
+  return !!mr?.can_release_pv;
 }
 
 export function canApprove(user: UserPerms | null | undefined, modulo: Modulo, block: BlockKey = "aprovacao"): boolean {

@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { supaBrowser } from "@/lib/supabase";
 import { STATUS_META, STATUS_ORDER, isApproved, groupsFor, formatCell, type Group, type ColumnFormat } from "@/lib/columns";
 import { useUserPerms } from "./UserPermsProvider";
-import { canApprove, canEdit, canViewValues, canViewMargin, type BlockKey } from "@/lib/permissions";
+import { canApprove, canEdit, canReleasePv, canViewValues, canViewMargin, type BlockKey } from "@/lib/permissions";
 import EditableCell from "./EditableCell";
 import EditableStatusCell from "./EditableStatusCell";
 import RcExcelDropZone from "./RcExcelDropZone";
@@ -314,14 +314,14 @@ function isRowInWindow(r: AnyRow, fromMs: number, toMs: number): boolean {
 // Webex + oportunidades). Multi-select por união (row entra se match ≥ 1 alarme
 // ativo). Todos avaliam a row atual + hoje (todayStartMs).
 type AlarmKind =
-  | "pvos_incompl" | "sem_projeto" | "venda" | "compra"
+  | "pvos_incompl" | "sem_projeto" | "aguarda_liberacao" | "venda" | "compra"
   | "sem_rc"
   | "sem_pc"
   | "aprov_bloq" | "aprov_pend" | "defas_omie"
   | "sem_vinculo" | "agend_vazio" | "agend_venc"
   | "pode_faturar";
 const ALARM_KINDS: AlarmKind[] = [
-  "pvos_incompl", "sem_projeto", "venda", "compra",
+  "pvos_incompl", "sem_projeto", "aguarda_liberacao", "venda", "compra",
   "sem_rc",
   "sem_pc",
   "aprov_bloq", "aprov_pend", "defas_omie",
@@ -433,7 +433,7 @@ function parseFlexDate(s: string): number | null {
 // pra alarmes que dependem de estado agregado (ex: "Sem PC" só se NENHUMA row tem
 // PC; "Aprov. pendente" só olha rows COM PC — RC-only não gera falso-positivo).
 // Retorna o conjunto de AlarmKind ativos pro bucket.
-function computeBucketAlarms(rows: AnyRow[], todayStartMs: number): Set<AlarmKind> {
+function computeBucketAlarms(rows: AnyRow[], todayStartMs: number, liberacaoSet?: Set<string>): Set<AlarmKind> {
   const set = new Set<AlarmKind>();
   if (rows.length === 0) return set;
 
@@ -448,6 +448,16 @@ function computeBucketAlarms(rows: AnyRow[], todayStartMs: number): Set<AlarmKin
   const pvNumNfeHead = String(head.pv_num_nfe ?? "").trim();
   const pvEtapaHead  = String(head.pv_etapa_texto ?? "").trim();
   if (pvDtFatHead !== "" || pvNumNfeHead !== "" || pvEtapaHead === "Faturado") {
+    return set;
+  }
+
+  // Aguardando Liberação: cliente pediu venda mas ainda não enviou PC formal.
+  // Estado transitório imposto por usuário autorizado (can_release_pv/is_admin).
+  // Enquanto ativo, silencia os demais alarmes — o bloqueio está no cliente,
+  // não temos ação nossa. Sai da lista quando desmarca (chegou o PC dele).
+  const pvLabel = String(head.pv_os_label ?? "");
+  if (liberacaoSet?.has(pvLabel)) {
+    set.add("aguarda_liberacao");
     return set;
   }
 
@@ -572,10 +582,11 @@ function computeBucketAlarms(rows: AnyRow[], todayStartMs: number): Set<AlarmKin
   return set;
 }
 
-function matchesAlarme(r: AnyRow, kind: AlarmKind, todayStartMs: number): boolean {
+function matchesAlarme(r: AnyRow, kind: AlarmKind, todayStartMs: number, liberacaoSet?: Set<string>): boolean {
   switch (kind) {
     case "pvos_incompl": return isPvosIncompleto(r);
     case "sem_projeto":  return isSemProjeto(r);
+    case "aguarda_liberacao": return !!liberacaoSet?.has(String(r.pv_os_label ?? ""));
     case "venda":  return isAtrasoVenda(r, todayStartMs);
     case "compra": return isAtrasoCompra(r, todayStartMs);
     case "sem_rc": {
@@ -645,9 +656,37 @@ export default function BoldAvulsosView({
   const userCanApprove = canApprove(user, modulo);
   const userCanEdit = canEdit(user, modulo, "rc") || canEdit(user, modulo, "pc");
   const isAdmin = user?.is_admin === true || user?.role === "admin";
+  const userCanRelease = canReleasePv(user);
   // Gates de visualização — quando false, R$ vira "R$ •••••" e M.B. some.
   const userCanViewValues = canViewValues(user, modulo);
   const userCanViewMargin = canViewMargin(user, modulo);
+
+  // "Aguardando Liberação" overlay — set de pv_os_label ativos. Só relevante
+  // pra modulo=avulsos. Fetch inicial + revalidação por BroadcastChannel quando
+  // um usuário autorizado marca/desmarca em qualquer aba.
+  const [liberacaoSet, setLiberacaoSet] = useState<Set<string>>(new Set());
+  useEffect(() => {
+    if (modulo !== "avulsos") return;
+    let cancelled = false;
+    const load = async () => {
+      try {
+        const r = await fetch("/api/avulsos/liberacao", { cache: "no-store" });
+        if (!r.ok) return;
+        const j = await r.json() as { map: Record<string, true> };
+        if (!cancelled) setLiberacaoSet(new Set(Object.keys(j.map ?? {})));
+      } catch { /* offline / ignore */ }
+    };
+    load();
+    let ch: BroadcastChannel | null = null;
+    try {
+      ch = new BroadcastChannel("pv-liberacao-updated");
+      ch.addEventListener("message", load);
+    } catch { /* unsupported */ }
+    return () => {
+      cancelled = true;
+      try { ch?.removeEventListener("message", load); ch?.close(); } catch { /* ignore */ }
+    };
+  }, [modulo]);
 
   // PostgREST corta resultset em 1000 rows. SSR pega só primeira página rápido;
   // cliente busca páginas extras em background pra completar (até 5000 rows).
@@ -1056,9 +1095,9 @@ export default function BoldAvulsosView({
       if (g) g.push(r); else groups.set(k, [r]);
     }
     const out = new Map<string, Set<AlarmKind>>();
-    for (const [k, rs] of groups) out.set(k, computeBucketAlarms(rs, todayStartMs));
+    for (const [k, rs] of groups) out.set(k, computeBucketAlarms(rs, todayStartMs, liberacaoSet));
     return out;
-  }, [rows, todayStartMs]);
+  }, [rows, todayStartMs, liberacaoSet]);
 
   // Predicado central de filtros — aceita opções pra pular filtros específicos.
   // skipFacet: usado por facetValues (dropdown mostra opções sem se auto-filtrar).
@@ -1913,6 +1952,44 @@ export default function BoldAvulsosView({
               onToggleAlarme={toggleAlarme}
               cronogramaMap={cronogramaMap}
               budgetMap={budgetMap}
+              aguardandoLiberacao={liberacaoSet.has(b.pv_os_label)}
+              userCanReleasePv={userCanRelease}
+              onToggleLiberacao={async (aguardando) => {
+                const empresa = String(b.rows[0]?.empresa ?? "");
+                // Optimistic update
+                setLiberacaoSet((prev) => {
+                  const next = new Set(prev);
+                  if (aguardando) next.add(b.pv_os_label); else next.delete(b.pv_os_label);
+                  return next;
+                });
+                try {
+                  const r = await fetch("/api/avulsos/liberacao", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ pv_os_label: b.pv_os_label, empresa, aguardando }),
+                  });
+                  if (!r.ok) {
+                    const j = await r.json().catch(() => ({}));
+                    // Reverte optimistic + avisa
+                    setLiberacaoSet((prev) => {
+                      const next = new Set(prev);
+                      if (aguardando) next.delete(b.pv_os_label); else next.add(b.pv_os_label);
+                      return next;
+                    });
+                    alert(`Falha: ${j.error ?? r.statusText}`);
+                    return;
+                  }
+                  // Avisa outras abas
+                  try { new BroadcastChannel("pv-liberacao-updated").postMessage({ pv_os_label: b.pv_os_label, aguardando }); } catch { /* ignore */ }
+                } catch (e) {
+                  setLiberacaoSet((prev) => {
+                    const next = new Set(prev);
+                    if (aguardando) next.delete(b.pv_os_label); else next.add(b.pv_os_label);
+                    return next;
+                  });
+                  alert(`Falha: ${e instanceof Error ? e.message : String(e)}`);
+                }
+              }}
             />
           </div>
         ))}
@@ -1986,6 +2063,7 @@ function Sparkline({ data }: { data: readonly number[] }) {
 
 function BucketCard({
   bucket, modulo, isAdmin, userCanApprove, userCanEdit, open, onToggle, onRowClick, onStatusClick, selected, toggleSel, visibleGroups, onEnsureOpen, optimisticStatus, canViewValues = true, canViewMargin = true, todayStartMs, alarmesActive, onToggleAlarme, cronogramaMap, budgetMap,
+  aguardandoLiberacao = false, userCanReleasePv = false, onToggleLiberacao,
 }: {
   bucket: Bucket;
   modulo: "avulsos" | "projetos" | "pcs";
@@ -2008,16 +2086,21 @@ function BucketCard({
   onToggleAlarme: (k: AlarmKind) => void;
   cronogramaMap?: Map<string, CronogramaSummary>;
   budgetMap?: Map<string, BudgetSummary>;
+  // "Aguardando Liberação" — só avulsos. Marcado por usuários com can_release_pv.
+  aguardandoLiberacao?: boolean;
+  userCanReleasePv?: boolean;
+  onToggleLiberacao?: (aguardando: boolean) => void;
 }) {
   // Alarmes deste bucket — semântica bucket-level (não row): "Sem PC" só flaga
   // se o PV inteiro não tem NENHUM PC, "Aprov. pendente" ignora rows RC-only, etc.
   // Ordena pela ordem canônica dos grupos pra tags saírem consistentes visualmente.
   const bucketAlarms = useMemo(() => {
-    const active = computeBucketAlarms(bucket.rows, todayStartMs);
+    const set = aguardandoLiberacao ? new Set<string>([bucket.pv_os_label]) : undefined;
+    const active = computeBucketAlarms(bucket.rows, todayStartMs, set);
     const ordered: AlarmKind[] = [];
     for (const g of ALARM_GROUPS) for (const k of g.kinds) if (active.has(k)) ordered.push(k);
     return ordered;
-  }, [bucket.rows, todayStartMs]);
+  }, [bucket.rows, bucket.pv_os_label, todayStartMs, aguardandoLiberacao]);
   // Mapa AlarmKind → grupo (pra pintar cada tag na cor certa)
   const kindGroup = useMemo(() => {
     const m: Record<string, typeof ALARM_GROUPS[number]> = {};
@@ -2478,6 +2561,13 @@ function BucketCard({
                       <span className="text-[10px] font-mono text-ww-textFaint">· {items.length} item(s)</span>
                       {cmt}
                       {syncBtn}
+                      {modulo === "avulsos" && bucket.groupKind === "pvos" && (userCanReleasePv || aguardandoLiberacao) && (
+                        <LiberacaoToggle
+                          aguardando={aguardandoLiberacao}
+                          canToggle={userCanReleasePv}
+                          onToggle={onToggleLiberacao}
+                        />
+                      )}
                     </div>
                     <div className="text-[11.5px] text-ww-textMuted mt-0.5 truncate">{bucket.cliente ?? "—"}</div>
                     <div className="text-[11.5px] text-ww-textFaint mt-0.5 font-mono truncate">{bucket.projeto ?? "—"}</div>
@@ -3895,6 +3985,7 @@ const ALARM_ICON = "⚠";
 const ALARM_SHORT_LABEL: Record<AlarmKind, string> = {
   pvos_incompl: "PV/OS incompleta",
   sem_projeto:  "Sem Projeto",
+  aguarda_liberacao: "Aguardando Liberação",
   venda:        "Venda atrasada",
   compra:       "Previsão atrasada",
   sem_rc:       "RC ausente/incompl.",
@@ -3910,6 +4001,7 @@ const ALARM_SHORT_LABEL: Record<AlarmKind, string> = {
 const ALARM_CFG: Record<AlarmKind, { label: string; icon: string; hint: string }> = {
   pvos_incompl: { label: "PV/OS incompleta",      icon: ALARM_ICON, hint: "Cadastro do PV/OS falta dado essencial (tipo, cliente ou V.Previsão Limite_Omie). Reflete o dot PV/OS em vermelho — bloqueia o pipeline até corrigir no Omie." },
   sem_projeto:  { label: "Sem Projeto",           icon: ALARM_ICON, hint: "V.Projeto_Omie não marcado ou fora do padrão. Espera-se projeto começando com 40_VS (Venda de Serviços) ou 41_VP (Venda de Produtos). Vendedor precisa corrigir no Omie." },
+  aguarda_liberacao: { label: "Aguardando Liberação", icon: "🔒",   hint: "Cliente pediu a venda mas ainda não enviou o pedido de compra formal. Marcado manualmente por usuário autorizado. Não é bug — estamos aguardando o cliente. Silencia demais alarmes até destravar." },
   venda:        { label: "Venda em atraso",       icon: ALARM_ICON, hint: "PV/OS em atraso: sem NF de saída e V.Previsão Limite_Omie no passado" },
   compra:       { label: "Previsão atrasada",     icon: ALARM_ICON, hint: "Material ainda não recebido E previsão efetiva vencida (Nova Prev. Materiais, ou dt_previsao original se não remarcado). Reflete qualquer atraso na chegada do material." },
   sem_rc:       { label: "Sem RC ou incompleto",  icon: ALARM_ICON, hint: "Nenhum RC no bucket OU RC com apenas 1 dos 2 campos (número/custo) preenchido" },
@@ -3927,7 +4019,7 @@ const ALARM_CFG: Record<AlarmKind, { label: string; icon: string; hint: string }
 // no dropdown. Ordem no dropdown segue a ordem aqui. Múltiplo select
 // (união entre alarmes ativos) continua igual.
 const ALARM_GROUPS: { key: string; label: string; accent: AccentKey; kinds: AlarmKind[] }[] = [
-  { key: "vendas",       label: "Vendas",       accent: "rose",    kinds: ["pvos_incompl", "sem_projeto", "venda"] },
+  { key: "vendas",       label: "Vendas",       accent: "rose",    kinds: ["pvos_incompl", "sem_projeto", "aguarda_liberacao", "venda"] },
   { key: "compras",      label: "Compras",      accent: "violet",  kinds: ["compra", "sem_rc", "sem_pc", "defas_omie"] },
   { key: "aprovacoes",   label: "Aprovações",   accent: "amber",   kinds: ["aprov_bloq", "aprov_pend"] },
   { key: "servicos",     label: "Serviços",     accent: "cyan",    kinds: ["sem_vinculo", "agend_vazio", "agend_venc"] },
@@ -4922,4 +5014,53 @@ function fmtDate(d: unknown): string {
   try {
     return new Date(String(d)).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
   } catch { return "—"; }
+}
+
+// LiberacaoToggle — checkbox no header do bucket pra marcar/desmarcar
+// "Aguardando Liberação". Só mostra quando ativo (mesmo pra quem não pode
+// mexer — visualização), OU quando o user tem can_release_pv (pode marcar).
+// Estilo: âmbar quando ativo (chama atenção), cinza discreto quando inativo.
+function LiberacaoToggle({
+  aguardando, canToggle, onToggle,
+}: {
+  aguardando: boolean;
+  canToggle: boolean;
+  onToggle?: (aguardando: boolean) => void;
+}) {
+  const handleClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!canToggle || !onToggle) return;
+    if (aguardando) {
+      if (!confirm("Desmarcar 'Aguardando Liberação'?\n\nO PV volta a aparecer nos demais alarmes normais.")) return;
+    } else {
+      if (!confirm("Marcar 'Aguardando Liberação'?\n\nEnquanto ativo, este PV/OS fica bloqueado no pipeline e some dos outros alarmes até você desmarcar.")) return;
+    }
+    onToggle(!aguardando);
+  };
+  if (aguardando) {
+    return (
+      <button
+        type="button"
+        onClick={handleClick}
+        disabled={!canToggle}
+        title={canToggle
+          ? "Aguardando cliente enviar o pedido de compra formal. Click pra desmarcar."
+          : "Aguardando cliente enviar o pedido de compra formal. Você não tem permissão pra alterar."}
+        className={`inline-flex items-center gap-1 px-1.5 py-px rounded-md text-[10.5px] font-bold uppercase tracking-[0.3px] border border-amber-500 bg-amber-100 dark:bg-amber-900/40 text-amber-900 dark:text-amber-200 ${
+          canToggle ? "hover:bg-amber-200 dark:hover:bg-amber-900/60 cursor-pointer" : "cursor-default opacity-90"
+        }`}>
+        🔒 Aguardando Liberação
+      </button>
+    );
+  }
+  // Estado inativo (só renderizado se canToggle=true — controle no parent)
+  return (
+    <button
+      type="button"
+      onClick={handleClick}
+      title="Marcar como 'Aguardando Liberação' — cliente pediu venda mas ainda não enviou pedido de compra"
+      className="inline-flex items-center gap-1 px-1.5 py-px rounded-md text-[10.5px] font-semibold uppercase tracking-[0.3px] border border-ww-border bg-ww-panel text-ww-textMuted hover:bg-amber-50 hover:border-amber-400 hover:text-amber-700 dark:hover:bg-amber-950/40 dark:hover:text-amber-300 cursor-pointer">
+      🔓 Marcar Aguardando
+    </button>
+  );
 }

@@ -9,22 +9,24 @@ import { NextResponse } from "next/server";
 export const runtime = "nodejs";
 
 const CHART_COLORS: Record<AlarmKind, string> = {
-  pvos_incompl: "#dc2626", // red-600
-  sem_projeto:  "#be123c", // rose-800
-  venda:        "#f43f5e",
-  compra:       "#f97316",
-  sem_rc:       "#8b5cf6",
-  sem_pc:       "#a855f7",
-  aprov_pend:   "#f59e0b",
-  defas_omie:   "#ec4899",
-  sem_vinculo:  "#14b8a6",
-  agend_vazio:  "#06b6d4",
-  agend_venc:   "#0ea5e9",
-  pode_faturar: "#10b981",
+  pvos_incompl:      "#dc2626", // red-600
+  sem_projeto:       "#be123c", // rose-800
+  aguarda_liberacao: "#d97706", // amber-600
+  venda:             "#f43f5e",
+  compra:            "#f97316",
+  sem_rc:            "#8b5cf6",
+  sem_pc:            "#a855f7",
+  aprov_pend:        "#f59e0b",
+  defas_omie:        "#ec4899",
+  sem_vinculo:       "#14b8a6",
+  agend_vazio:       "#06b6d4",
+  agend_venc:        "#0ea5e9",
+  pode_faturar:      "#10b981",
 };
 const CHART_LABEL: Record<AlarmKind, string> = {
-  pvos_incompl: "PV/OS incompl.",
-  sem_projeto:  "Sem Projeto",
+  pvos_incompl:      "PV/OS incompl.",
+  sem_projeto:       "Sem Projeto",
+  aguarda_liberacao: "Aguard. Liberação",
   venda: "Vendas atraso", compra: "Previsão atrasada",
   sem_rc: "RC ausente", sem_pc: "PC ausente", aprov_pend: "Aprov pend",
   defas_omie: "Defas Omie", sem_vinculo: "Sem Vínculo",
