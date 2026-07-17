@@ -3367,6 +3367,8 @@ function RelatorioMenu() {
         lines.push("");
       }
       lines.push(`_Total PVs abertos: ${data.total_pvs}_`);
+      lines.push("");
+      lines.push(`📈 [Ver evolução (gráfico + histórico) →](https://painel.waterworks.com.br/relatorios/avulsos-daily)`);
       const markdown = lines.join("\n");
       const send = await fetch("/api/relatorios/avulsos-daily/send", {
         method: "POST",

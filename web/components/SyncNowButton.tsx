@@ -13,10 +13,10 @@ export default function SyncNowButton() {
     e.stopPropagation();
     if (sending) return;
     if (!window.confirm(
-      "Disparar sync master AGORA?\n\n" +
-      "• Roda master_orders + master_sales em paralelo\n" +
-      "• ~5-8 min pra completar\n" +
-      "• Uso emergencial — o cron rotineiro é mais eficiente\n\n" +
+      "Sync leve AGORA?\n\n" +
+      "• Puxa novidades recentes (PVs incrementais + últimas PCs + etapas)\n" +
+      "• ~1-2 min pra completar\n" +
+      "• Emergencial — o cron rotineiro já cobre normalmente\n\n" +
       "Continuar?",
     )) return;
 
