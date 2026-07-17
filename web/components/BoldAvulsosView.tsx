@@ -2089,7 +2089,7 @@ function BucketCard({
   // "Aguardando Liberação" — só avulsos. Marcado por usuários com can_release_pv.
   aguardandoLiberacao?: boolean;
   userCanReleasePv?: boolean;
-  onToggleLiberacao?: (aguardando: boolean) => void;
+  onToggleLiberacao?: (aguardando: boolean) => void | Promise<void>;
 }) {
   // Alarmes deste bucket — semântica bucket-level (não row): "Sem PC" só flaga
   // se o PV inteiro não tem NENHUM PC, "Aprov. pendente" ignora rows RC-only, etc.
@@ -5027,51 +5027,45 @@ function fmtDate(d: unknown): string {
   } catch { return "—"; }
 }
 
-// LiberacaoToggle — checkbox no header do bucket pra marcar/desmarcar
-// "Aguardando Liberação". Só mostra quando ativo (mesmo pra quem não pode
-// mexer — visualização), OU quando o user tem can_release_pv (pode marcar).
-// Estilo: âmbar quando ativo (chama atenção), cinza discreto quando inativo.
+// LiberacaoToggle — cadeado clicável no header do bucket. Toggle em 1 click,
+// sem confirmação. 🔓 destravado (default) ↔ 🔒 travado ("Aguardando Liberação").
+// Quando ativo, o overlay aparece também no dot PV/OS do pipeline.
+// Só renderiza se canToggle=true OU aguardando=true (readonly indicator pros
+// demais usuários verem o estado).
 function LiberacaoToggle({
   aguardando, canToggle, onToggle,
 }: {
   aguardando: boolean;
   canToggle: boolean;
-  onToggle?: (aguardando: boolean) => void;
+  onToggle?: (aguardando: boolean) => void | Promise<void>;
 }) {
-  const handleClick = (e: React.MouseEvent) => {
+  const [pending, setPending] = useState(false);
+  const handleClick = async (e: React.MouseEvent) => {
     e.stopPropagation();
-    if (!canToggle || !onToggle) return;
-    if (aguardando) {
-      if (!confirm("Desmarcar 'Aguardando Liberação'?")) return;
-    } else {
-      if (!confirm("Marcar 'Aguardando Liberação'?\n\nAdiciona um status ao PV/OS. Demais alarmes continuam ativos. Sai automaticamente ao faturar no Omie.")) return;
-    }
-    onToggle(!aguardando);
+    if (!canToggle || !onToggle || pending) return;
+    setPending(true);
+    try { await onToggle(!aguardando); }
+    finally { setPending(false); }
   };
-  if (aguardando) {
-    return (
-      <button
-        type="button"
-        onClick={handleClick}
-        disabled={!canToggle}
-        title={canToggle
-          ? "Aguardando cliente enviar o pedido de compra formal. Status aditivo (demais alarmes continuam). Sai ao faturar no Omie. Click pra desmarcar manualmente."
-          : "Aguardando cliente enviar o pedido de compra formal. Você não tem permissão pra alterar."}
-        className={`inline-flex items-center gap-1 px-1.5 py-px rounded-md text-[10.5px] font-bold uppercase tracking-[0.3px] border border-amber-500 bg-amber-100 dark:bg-amber-900/40 text-amber-900 dark:text-amber-200 ${
-          canToggle ? "hover:bg-amber-200 dark:hover:bg-amber-900/60 cursor-pointer" : "cursor-default opacity-90"
-        }`}>
-        🔒 Aguardando Liberação
-      </button>
-    );
-  }
-  // Estado inativo (só renderizado se canToggle=true — controle no parent)
+  const title = aguardando
+    ? (canToggle
+        ? "🔒 Aguardando Liberação (cliente sem PC formal). Click pra destravar."
+        : "🔒 Aguardando Liberação (cliente sem PC formal). Você não tem permissão pra alterar.")
+    : "🔓 Destravado. Click pra travar como 'Aguardando Liberação' (cliente pediu mas não enviou PC formal).";
   return (
     <button
       type="button"
       onClick={handleClick}
-      title="Marcar como 'Aguardando Liberação' — cliente pediu venda mas ainda não enviou pedido de compra"
-      className="inline-flex items-center gap-1 px-1.5 py-px rounded-md text-[10.5px] font-semibold uppercase tracking-[0.3px] border border-ww-border bg-ww-panel text-ww-textMuted hover:bg-amber-50 hover:border-amber-400 hover:text-amber-700 dark:hover:bg-amber-950/40 dark:hover:text-amber-300 cursor-pointer">
-      🔓 Aguardar Liberação
+      disabled={!canToggle || pending}
+      aria-pressed={aguardando}
+      aria-busy={pending}
+      title={title}
+      className={`inline-flex items-center justify-center w-6 h-6 rounded-md border transition text-[13px] leading-none ${
+        aguardando
+          ? "border-amber-500 bg-amber-100 dark:bg-amber-900/40 text-amber-800 dark:text-amber-200"
+          : "border-ww-border bg-ww-panel text-ww-textMuted hover:border-amber-400 hover:text-amber-700 hover:bg-amber-50 dark:hover:bg-amber-950/40 dark:hover:text-amber-300"
+      } ${canToggle && !pending ? "cursor-pointer" : "cursor-default opacity-80"}`}>
+      {pending ? "…" : (aguardando ? "🔒" : "🔓")}
     </button>
   );
 }
