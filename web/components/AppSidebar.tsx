@@ -56,6 +56,19 @@ const MODULES: NavItem[] = [
       </svg>
     ),
   },
+  {
+    href: "/relatorios/faturamento",
+    label: "Faturamento",
+    tone: "text-teal-600",
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className="w-5 h-5" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M3 20V10"/>
+        <path d="M9 20V4"/>
+        <path d="M15 20v-8"/>
+        <path d="M21 20V8"/>
+      </svg>
+    ),
+  },
 ];
 
 const ADMIN: NavItem[] = [
