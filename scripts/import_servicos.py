@@ -9,13 +9,15 @@ Freq:     Diária
 Volume:   600-1200 OS/dia
 ═════════════════════════════════════════════════════════════════════════════
 """
+import os
 import sys
 import time
 
 sys.path.insert(0, "scripts")
 from _common import (
-    EMPRESAS_ALVO, EMPRESAS_OMIE,
+    EMPRESAS_ALVO, EMPRESAS_OMIE, PAUSA_ENTRE_CHAMADAS,
     fetch_omie_paginated, supa_upsert, update_sync_state,
+    consultar_os,
     to_int, to_float, trigger_sheets_mirror
 )
 
@@ -201,7 +203,52 @@ def importar_contratos(sigla: str):
 # MAIN
 # ══════════════════════════════════════════════════════════════════════════
 
+def refetch_specific_oss(os_numeros_csv: str):
+    """MODO PONTUAL: refetcha OSs específicas via ConsultarOS. Usado pelo
+    botão inline no painel /avulsos quando user vê discrepância Omie vs painel."""
+    print("═══════════════════════════════════════════════════════════════")
+    print("🏆 Import OS — MODO PONTUAL")
+    print("═══════════════════════════════════════════════════════════════")
+    os_numeros = [n.strip() for n in os_numeros_csv.split(",") if n.strip()]
+    print(f"🎯 OSs solicitadas: {len(os_numeros)} — {', '.join(os_numeros[:10])}{'...' if len(os_numeros) > 10 else ''}")
+    if not os_numeros:
+        return 0
+
+    fixed = 0
+    failed = 0
+    for sigla in EMPRESAS_ALVO:
+        if not EMPRESAS_OMIE.get(sigla):
+            continue
+        for num in os_numeros:
+            time.sleep(PAUSA_ENTRE_CHAMADAS)
+            resp = consultar_os(sigla, num)
+            if not resp or not resp.get("Cabecalho"):
+                # OS pode não existir nessa empresa — silencioso.
+                continue
+            try:
+                rows = map_os_rows(resp, sigla)
+                rows = [r for r in rows if r.get("codigo_os")]
+                if not rows:
+                    failed += 1
+                    continue
+                supa_upsert(SCHEMA, "ordens_servico", rows, "empresa,codigo_os,seq_item")
+                print(f"   ✅ OS {num} ({sigla}): refetched ({len(rows)} rows)")
+                fixed += 1
+            except Exception as e:
+                print(f"   ❌ OS {num} ({sigla}): {e}")
+                failed += 1
+    print(f"\n📊 Modo Pontual: {fixed} corrigida(s) | {failed} falha(s)")
+    return fixed
+
+
 def main():
+    # MODO PONTUAL via env — sync inline dispara via OS_NUMEROS_ESPECIFICOS
+    os_esp = os.environ.get("OS_NUMEROS_ESPECIFICOS", "").strip()
+    if os_esp:
+        refetch_specific_oss(os_esp)
+        trigger_sheets_mirror("OrdensServico")
+        return
+
     print("═══════════════════════════════════════════════════════════════")
     print("🏆 Import Serviços (OS + Contratos) — Omie → Supabase")
     print("═══════════════════════════════════════════════════════════════")

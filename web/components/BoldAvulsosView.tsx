@@ -17,14 +17,13 @@ import RcExcelDropZone from "./RcExcelDropZone";
 import FluxoFinanceiroUploadButton from "./FluxoFinanceiroUploadButton";
 import ProjetoEscopoButton from "./ProjetoEscopoButton";
 import PvOsComentarios from "./PvOsComentarios";
+import BucketSyncButton from "./BucketSyncButton";
 import AddRowButton from "./AddRowButton";
 import GlobalSearch from "./GlobalSearch";
 
 type AnyRow = Record<string, unknown>;
 type StatusFilter = "todos" | "aprovados" | "nao_aprovados" | "pendentes" | "atrasados";
-// "sem_nf" isola PVs sem pv_num_nfe E sem pv_dt_fat — usado pra análise das
-// Entregas históricas que nunca foram faturadas de fato (2026-07-16).
-type PvEtapaGroup = "todos" | "aberto" | "fechado" | "sem_nf";
+type PvEtapaGroup = "todos" | "aberto" | "fechado";
 type ServicosFilter = "todos" | "concluidos" | "agendados" | "sem_os";
 
 // Etapas que contam como "Exec./Faturado" — pré-faturamento, já faturado ou cancelado
@@ -1089,11 +1088,6 @@ export default function BoldAvulsosView({
       const etapa = String(r.pv_etapa_texto ?? "");
       if (pvEtapaGroup === "aberto" && ETAPAS_FECHADAS.has(etapa)) return false;
       if (pvEtapaGroup === "fechado" && !ETAPAS_FECHADAS.has(etapa)) return false;
-      if (pvEtapaGroup === "sem_nf") {
-        const hasFat = String(r.pv_dt_fat ?? "").trim() !== ""
-                    || String(r.pv_num_nfe ?? "").trim() !== "";
-        if (hasFat) return false;
-      }
     }
     if (!opts.skipStatus) {
       const s = effectiveStatus(r);
@@ -1390,10 +1384,6 @@ export default function BoldAvulsosView({
   const rowsAfterPvEtapa = useMemo(() => {
     if (pvEtapaGroup === "todos") return rowsAfterDateAtraso;
     return rowsAfterDateAtraso.filter((r) => {
-      if (pvEtapaGroup === "sem_nf") {
-        return String(r.pv_dt_fat ?? "").trim() === ""
-            && String(r.pv_num_nfe ?? "").trim() === "";
-      }
       const etapa = String(r.pv_etapa_texto ?? "");
       return pvEtapaGroup === "aberto" ? !ETAPAS_FECHADAS.has(etapa) : ETAPAS_FECHADAS.has(etapa);
     });
@@ -1477,19 +1467,13 @@ export default function BoldAvulsosView({
   const pseudoPvStatusBuckets = useMemo(() => {
     const abertoPv   = new Set<string>();
     const fechadoPv  = new Set<string>();
-    const semNfPv    = new Set<string>();
-    let abertoVal = 0, fechadoVal = 0, semNfVal = 0;
+    let abertoVal = 0, fechadoVal = 0;
     for (const r of rows) {
       if (!passesFilters(r, { skipPvEtapa: true })) continue;
       const k = String(r.pv_os_label ?? "");
       if (!k) continue;
       const etapa = String(r.pv_etapa_texto ?? "");
       const val = Number(r.pv_valor_total) || 0;
-      const hasFat = String(r.pv_dt_fat ?? "").trim() !== ""
-                  || String(r.pv_num_nfe ?? "").trim() !== "";
-      if (!hasFat) {
-        if (!semNfPv.has(k)) { semNfPv.add(k); semNfVal += val; }
-      }
       if (ETAPAS_FECHADAS.has(etapa)) {
         if (!fechadoPv.has(k)) { fechadoPv.add(k); fechadoVal += val; }
       } else {
@@ -1499,20 +1483,16 @@ export default function BoldAvulsosView({
     return [
       { value: "Aberto",   count: abertoPv.size,  val: abertoVal },
       { value: "Faturado", count: fechadoPv.size, val: fechadoVal },
-      { value: "Sem NF",   count: semNfPv.size,   val: semNfVal },
     ];
   }, [rows, passesFilters]);
   const pseudoPvStatusSelected = useMemo(() => {
     const s = new Set<string>();
     if (pvEtapaGroup === "aberto")  s.add("Aberto");
     if (pvEtapaGroup === "fechado") s.add("Faturado");
-    if (pvEtapaGroup === "sem_nf")  s.add("Sem NF");
     return s;
   }, [pvEtapaGroup]);
   const pseudoPvStatusToggle = useCallback((v: string) => {
-    const target: PvEtapaGroup = v === "Aberto" ? "aberto"
-                               : v === "Faturado" ? "fechado"
-                               : "sem_nf";
+    const target: PvEtapaGroup = v === "Aberto" ? "aberto" : "fechado";
     setPvEtapaGroup((cur) => cur === target ? "todos" : target);
   }, []);
 
@@ -2439,6 +2419,19 @@ function BucketCard({
           {(() => {
             const empBucket = String(items[0]?.empresa ?? "SF");
             const cmt = <PvOsComentarios empresa={empBucket} pvOsLabel={bucket.pv_os_label} />;
+            // Sync button — coleta PCs vinculados no bucket. Kind vem do groupKind:
+            //   default/project: bucket é PV/OS + N PCs → sync PV/OS + PCs
+            //   pc: bucket é 1 PC standalone → sync só o PC
+            //   etapa: bucket é etapa (agrupamento não-sync) → nada
+            const pcsInBucket = Array.from(new Set(
+              items.map((r) => String(r.pc_numero ?? r.pc_numero_manual ?? "").trim()).filter(Boolean),
+            ));
+            const syncBtn = bucket.groupKind === "etapa" ? null
+              : bucket.groupKind === "pc"
+                ? <BucketSyncButton kind="pc_only" pvOsLabel={null} pcNumeros={[bucket.pv_os_label]} />
+                : (/^(PV|OS)\d+/i.test(bucket.pv_os_label)
+                    ? <BucketSyncButton kind="pv_os" pvOsLabel={bucket.pv_os_label} pcNumeros={pcsInBucket} />
+                    : null);
             return (
               <>
                 {bucket.groupKind === "project" ? (
@@ -2447,6 +2440,7 @@ function BucketCard({
                       <span className="text-[13px] font-semibold tracking-[-0.2px] text-ww-text truncate">{bucket.pv_os_label}</span>
                       <span className="text-[10px] font-mono text-ww-textFaint">· {items.length} item(s)</span>
                       {cmt}
+                      {syncBtn}
                     </div>
                     <div className="text-[11.5px] text-ww-textMuted mt-0.5 truncate">{bucket.pvOsCount ?? 0} PV/OS no projeto</div>
                     <div className="text-[11.5px] text-ww-textFaint mt-0.5 truncate">{bucket.cliente ?? "—"}</div>
@@ -2457,6 +2451,7 @@ function BucketCard({
                       <span className="text-[13px] font-semibold tracking-[-0.2px] text-ww-text truncate">{bucket.pv_os_label}</span>
                       <span className="text-[10px] font-mono text-ww-textFaint">· {items.length} PC(s)</span>
                       {cmt}
+                      {syncBtn}
                     </div>
                     <div className="text-[11.5px] text-ww-textMuted mt-0.5 truncate uppercase tracking-[0.4px] font-semibold">Etapa do PC</div>
                   </>
@@ -2466,6 +2461,7 @@ function BucketCard({
                       <span className="font-mono text-[13px] font-semibold tracking-[-0.2px] text-ww-text">PC {bucket.pv_os_label}</span>
                       <span className="text-[10px] font-mono text-ww-textFaint">· {String(items[0]?.empresa ?? "—")}</span>
                       {cmt}
+                      {syncBtn}
                     </div>
                     <div className="text-[11.5px] text-ww-textMuted mt-0.5 truncate">{bucket.cliente ?? "— sem fornecedor —"}</div>
                     <div className="text-[11.5px] text-ww-textFaint mt-0.5 truncate">{bucket.projeto ?? "—"}</div>
@@ -2479,6 +2475,7 @@ function BucketCard({
                       )}
                       <span className="text-[10px] font-mono text-ww-textFaint">· {items.length} item(s)</span>
                       {cmt}
+                      {syncBtn}
                     </div>
                     <div className="text-[11.5px] text-ww-textMuted mt-0.5 truncate">{bucket.cliente ?? "—"}</div>
                     <div className="text-[11.5px] text-ww-textFaint mt-0.5 font-mono truncate">{bucket.projeto ?? "—"}</div>

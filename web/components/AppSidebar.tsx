@@ -46,18 +46,6 @@ const MODULES: NavItem[] = [
     ),
   },
   {
-    href: "/standby",
-    label: "Standby",
-    tone: "text-orange-600",
-    icon: (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className="w-5 h-5" strokeLinecap="round" strokeLinejoin="round">
-        <circle cx="12" cy="12" r="9"/>
-        <line x1="9" y1="9" x2="9" y2="15"/>
-        <line x1="15" y1="9" x2="15" y2="15"/>
-      </svg>
-    ),
-  },
-  {
     href: "/relatorios",
     label: "Relatórios",
     tone: "text-emerald-600",

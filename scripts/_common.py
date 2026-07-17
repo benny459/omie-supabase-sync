@@ -449,6 +449,35 @@ def consultar_ped_compra(sigla: str, ncod_ped: int, timeout: int = 30) -> dict:
         return None
 
 
+def consultar_os(sigla: str, numero_os: str, timeout: int = 30) -> dict:
+    """Chama ConsultarOS no Omie pra UMA OS especifica (nao paginado).
+    Endpoint: /servicos/os/. Retorna dict com 'Cabecalho' + 'InfoCadastro' +
+    'ServicosPrestados' etc. Retorna None se erro/nao-encontrado.
+    """
+    creds = EMPRESAS_OMIE.get(sigla)
+    if not creds:
+        return None
+    payload = {
+        "call": "ConsultarOS",
+        "app_key": creds["app_key"],
+        "app_secret": creds["app_secret"],
+        "param": [{"cNumOS": str(numero_os)}],
+    }
+    url = "https://app.omie.com.br/api/v1/servicos/os/"
+    headers = {"Content-Type": "application/json"}
+    try:
+        body = json.dumps(payload).encode("utf-8")
+        code, resp_body, _ = http_request(url, "POST", headers, body, timeout)
+        if code != 200:
+            return None
+        d = json.loads(resp_body.decode("utf-8"))
+        if isinstance(d, dict) and "faultstring" in d:
+            return None
+        return d
+    except Exception:
+        return None
+
+
 def supa_select_pcs_inconsistentes(schema: str = "orders") -> list:
     """Lista PCs com forma de pagamento inconsistente entre seus items.
     Le da view orders.v_pcs_inconsistentes.
