@@ -70,6 +70,16 @@ const MODULES: NavItem[] = [
     ),
   },
   {
+    href: "/pcs/atribuir-cliente",
+    label: "Atribuir PC → Cliente",
+    tone: "text-rose-600",
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className="w-5 h-5" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M17 3a2.85 2.85 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/>
+      </svg>
+    ),
+  },
+  {
     href: "/relatorios/compras-por-cliente",
     label: "Compras × Cliente",
     tone: "text-amber-600",

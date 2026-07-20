@@ -92,6 +92,37 @@ export async function POST(req: Request) {
     }
   }
 
+  // GUARD OBRIGATÓRIO (2026-07-20+): PC standalone (sem pv_cliente_codigo)
+  // só pode ser aprovado SE tiver atribuição manual de cliente(s) em
+  // platform.pc_cliente_atribuicao com soma_pct=100. Regra vale a partir
+  // de agora; PCs standalone históricos já aprovados não são revalidados.
+  if (becomingApproved && modulo === "pcs") {
+    const admin2 = supaAdmin();
+    const { data: pcInfo } = await admin2
+      .schema("approval").from("v_pc_pcs")
+      .select("pc_numero, pv_cliente_codigo")
+      .eq("empresa", body.empresa)
+      .eq("ncod_ped", body.ncod_ped)
+      .limit(1).maybeSingle();
+    const info = pcInfo as { pc_numero?: string | null; pv_cliente_codigo?: number | null } | null;
+    const isStandalone = info != null && info.pv_cliente_codigo == null;
+    if (isStandalone && info?.pc_numero) {
+      const { data: atrib } = await admin2
+        .schema("platform").from("v_pc_atribuicao_status")
+        .select("soma_ok, qtd_clientes")
+        .eq("empresa", body.empresa).eq("pc_numero", info.pc_numero)
+        .maybeSingle();
+      const st = atrib as { soma_ok?: boolean; qtd_clientes?: number } | null;
+      if (!st || !st.soma_ok) {
+        return NextResponse.json({
+          error: "PC standalone (sem PV origem) precisa ter cliente(s) atribuídos com soma = 100% antes de aprovar. Abra /pcs/atribuir-cliente pra fazer o vínculo.",
+          code: "MISSING_CLIENT_ATTRIBUTION",
+          pc_numero: info.pc_numero,
+        }, { status: 400 });
+      }
+    }
+  }
+
   // UPSERT do status (RLS valida: admin ou aprovador do módulo)
   const patch: Record<string, unknown> = { status: body.status };
   if (becomingApproved) {
