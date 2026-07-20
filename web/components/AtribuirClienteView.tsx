@@ -69,6 +69,9 @@ export default function AtribuirClienteView() {
   // Filtros de localização
   const [projetos, setProjetos] = useState<Set<string>>(new Set());
   const [projetoOpen, setProjetoOpen] = useState(false);
+  const [empresasSel, setEmpresasSel] = useState<Set<string>>(new Set());
+  const [mesesSel, setMesesSel] = useState<Set<string>>(new Set());     // "YYYY-MM"
+  const [faixasSel, setFaixasSel] = useState<Set<string>>(new Set());   // "0-500" etc
   const [datePreset, setDatePreset] = useState<DatePreset>("off");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
@@ -118,6 +121,23 @@ export default function AtribuirClienteView() {
 
   const dateWindow = useMemo(() => computeDateWindow(datePreset, dateFrom, dateTo), [datePreset, dateFrom, dateTo]);
 
+  // Faixas de valor pré-definidas (bater com bucket em facets).
+  const FAIXAS = [
+    { key: "0-500",     label: "≤ R$500",       min: 0,     max: 500 },
+    { key: "500-2k",    label: "R$500-2k",      min: 500,   max: 2000 },
+    { key: "2k-10k",    label: "R$2k-10k",      min: 2000,  max: 10000 },
+    { key: "10k-50k",   label: "R$10k-50k",     min: 10000, max: 50000 },
+    { key: "50k+",      label: "R$50k+",        min: 50000, max: Infinity },
+  ];
+  function faixaOf(v: number): string {
+    for (const f of FAIXAS) if (v >= f.min && v < f.max) return f.key;
+    return FAIXAS[FAIXAS.length - 1].key;
+  }
+  function mesOf(iso: string | null): string {
+    if (!iso) return "(sem data)";
+    return iso.slice(0, 7); // YYYY-MM
+  }
+
   const listVis = useMemo(() => {
     if (!data) return [];
     const list = tab === "backlog" ? data.backlog : data.atribuidos;
@@ -126,16 +146,51 @@ export default function AtribuirClienteView() {
     return list.filter(p => {
       if (filter && !p.pc_numero.includes(filter) && !(p.projeto_nome ?? "").toLowerCase().includes(filter.toLowerCase())) return false;
       if (projetos.size > 0 && !projetos.has(p.projeto_nome ?? "(sem)")) return false;
+      if (empresasSel.size > 0 && !empresasSel.has(p.empresa)) return false;
+      if (mesesSel.size > 0 && !mesesSel.has(mesOf(p._dt_inclusao_d))) return false;
+      const v = Number(p.valor_total) || 0;
+      if (faixasSel.size > 0 && !faixasSel.has(faixaOf(v))) return false;
       if (dateWindow) {
         const d = p._dt_inclusao_d;
         if (!d || d < dateWindow.fromIso || d > dateWindow.toIso) return false;
       }
-      const v = Number(p.valor_total) || 0;
       if (valMin != null && v < valMin) return false;
       if (valMax != null && v > valMax) return false;
       return true;
     });
-  }, [data, tab, filter, projetos, dateWindow, valorMin, valorMax]);
+  }, [data, tab, filter, projetos, empresasSel, mesesSel, faixasSel, dateWindow, valorMin, valorMax]);
+
+  // Distribuições pra facet cards — recomputadas sobre lista da tab (não filtrada
+  // ainda), assim o user vê as contagens totais e escolhe.
+  const facetDist = useMemo(() => {
+    const list = data ? (tab === "backlog" ? data.backlog : data.atribuidos) : [];
+    const projMap = new Map<string, { count: number; total: number }>();
+    const empMap  = new Map<string, { count: number; total: number }>();
+    const mesMap  = new Map<string, { count: number; total: number }>();
+    const faixMap = new Map<string, { count: number; total: number }>();
+    for (const p of list) {
+      const v = Number(p.valor_total) || 0;
+      const bump = (m: Map<string, { count: number; total: number }>, k: string) => {
+        const cur = m.get(k) ?? { count: 0, total: 0 };
+        cur.count++; cur.total += v; m.set(k, cur);
+      };
+      bump(projMap, p.projeto_nome ?? "(sem)");
+      bump(empMap, p.empresa);
+      bump(mesMap, mesOf(p._dt_inclusao_d));
+      bump(faixMap, faixaOf(v));
+    }
+    const asArr = (m: Map<string, { count: number; total: number }>) =>
+      Array.from(m.entries()).map(([k, v]) => ({ key: k, ...v }));
+    return {
+      projetos: asArr(projMap).sort((a, b) => b.count - a.count),
+      empresas: asArr(empMap).sort((a, b) => b.count - a.count),
+      meses:    asArr(mesMap).sort((a, b) => b.key.localeCompare(a.key)),  // recente primeiro
+      faixas:   FAIXAS.map(f => {
+        const v = faixMap.get(f.key) ?? { count: 0, total: 0 };
+        return { key: f.key, label: f.label, ...v };
+      }),
+    };
+  }, [data, tab]);
 
   // Opções de projeto (todos os PCs da tab atual) — com contagem
   const projetoOptions = useMemo(() => {
@@ -175,8 +230,14 @@ export default function AtribuirClienteView() {
     });
   }
   function clearFilters() {
-    setFilter(""); setProjetos(new Set()); setDatePreset("off"); setDateFrom(""); setDateTo(""); setValorMin(""); setValorMax("");
+    setFilter(""); setProjetos(new Set()); setEmpresasSel(new Set()); setMesesSel(new Set()); setFaixasSel(new Set());
+    setDatePreset("off"); setDateFrom(""); setDateTo(""); setValorMin(""); setValorMax("");
   }
+  function toggleInSet(setter: (fn: (prev: Set<string>) => Set<string>) => void, key: string) {
+    setter(prev => { const next = new Set(prev); next.has(key) ? next.delete(key) : next.add(key); return next; });
+  }
+  const anyFilter = filter !== "" || projetos.size > 0 || empresasSel.size > 0 || mesesSel.size > 0 ||
+    faixasSel.size > 0 || datePreset !== "off" || valorMin !== "" || valorMax !== "";
 
   return (
     <div className="space-y-4">
@@ -215,6 +276,36 @@ export default function AtribuirClienteView() {
             {listVis.length} de {tab === "backlog" ? data?.resumo.backlog ?? 0 : data?.resumo.atribuidos ?? 0} · R$ {listVis.reduce((a, p) => a + (Number(p.valor_total) || 0), 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </div>
         </div>
+
+        {/* Facet cards estilo /avulsos — distribuição por Projeto / Empresa / Mês / Faixa */}
+        {data && (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-2">
+            <FacetCard title="Projeto" accent="violet" items={facetDist.projetos.slice(0, 8)}
+                       selected={projetos}
+                       onToggle={(k) => toggleInSet(setProjetos, k)}
+                       onClear={() => setProjetos(new Set())}
+                       moreCount={facetDist.projetos.length > 8 ? facetDist.projetos.length - 8 : 0} />
+            <FacetCard title="Empresa" accent="blue" items={facetDist.empresas}
+                       selected={empresasSel}
+                       onToggle={(k) => toggleInSet(setEmpresasSel, k)}
+                       onClear={() => setEmpresasSel(new Set())} />
+            <FacetCard title="Mês (inclusão)" accent="amber" items={facetDist.meses.slice(0, 8)}
+                       formatKey={(k) => k === "(sem data)" ? "s/data" : (() => {
+                         const [y, m] = k.split("-");
+                         const nomes = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
+                         return `${nomes[Number(m)-1] ?? m}/${y.slice(2)}`;
+                       })()}
+                       selected={mesesSel}
+                       onToggle={(k) => toggleInSet(setMesesSel, k)}
+                       onClear={() => setMesesSel(new Set())}
+                       moreCount={facetDist.meses.length > 8 ? facetDist.meses.length - 8 : 0} />
+            <FacetCard title="Faixa de valor" accent="emerald"
+                       items={facetDist.faixas.map(f => ({ key: f.key, count: f.count, total: f.total, label: f.label }))}
+                       selected={faixasSel}
+                       onToggle={(k) => toggleInSet(setFaixasSel, k)}
+                       onClear={() => setFaixasSel(new Set())} />
+          </div>
+        )}
 
         {/* Linha 2: presets data + custom + valor + projeto */}
         <div className="flex items-center gap-1.5 flex-wrap p-2 bg-ww-panel rounded-lg border border-ww-border">
@@ -377,6 +468,70 @@ export default function AtribuirClienteView() {
       {bulkOpen && selectedList.length > 0 && (
         <BulkAtribuicaoModal pcs={selectedList} onClose={() => setBulkOpen(false)}
           onSaved={() => { setBulkOpen(false); setSelected(new Set()); setTick(t => t+1); }} />
+      )}
+    </div>
+  );
+}
+
+// ─── FacetCard — distribuição estilo /avulsos ─────────────────────
+
+type FacetAccent = "violet" | "blue" | "amber" | "emerald";
+const FACET_TONES: Record<FacetAccent, { border: string; bg: string; dot: string; header: string; sel: string }> = {
+  violet:  { border: "border-violet-200",  bg: "bg-violet-50/40",  dot: "bg-violet-500",  header: "text-violet-900 dark:text-violet-100",  sel: "bg-violet-100 dark:bg-violet-900/40 ring-1 ring-violet-400" },
+  blue:    { border: "border-blue-200",    bg: "bg-blue-50/40",    dot: "bg-blue-500",    header: "text-blue-900 dark:text-blue-100",      sel: "bg-blue-100 dark:bg-blue-900/40 ring-1 ring-blue-400" },
+  amber:   { border: "border-amber-200",   bg: "bg-amber-50/40",   dot: "bg-amber-500",   header: "text-amber-900 dark:text-amber-100",    sel: "bg-amber-100 dark:bg-amber-900/40 ring-1 ring-amber-400" },
+  emerald: { border: "border-emerald-200", bg: "bg-emerald-50/40", dot: "bg-emerald-500", header: "text-emerald-900 dark:text-emerald-100",sel: "bg-emerald-100 dark:bg-emerald-900/40 ring-1 ring-emerald-400" },
+};
+
+function FacetCard({ title, accent, items, selected, onToggle, onClear, moreCount = 0, formatKey }: {
+  title: string;
+  accent: FacetAccent;
+  items: Array<{ key: string; count: number; total: number; label?: string }>;
+  selected: Set<string>;
+  onToggle: (k: string) => void;
+  onClear: () => void;
+  moreCount?: number;
+  formatKey?: (k: string) => string;
+}) {
+  const t = FACET_TONES[accent];
+  const totalCount = items.reduce((a, i) => a + i.count, 0);
+  const maxCount = items.reduce((a, i) => Math.max(a, i.count), 0) || 1;
+  return (
+    <div className={`rounded-lg border ${t.border} ${t.bg} p-2.5`}>
+      <div className="flex items-center gap-1.5 mb-2">
+        <span className={`w-1.5 h-1.5 rounded-full ${t.dot}`} />
+        <span className={`text-[10px] uppercase tracking-[0.5px] font-bold ${t.header}`}>{title}</span>
+        <span className="text-[10px] text-ww-textMuted tabular-nums ml-auto">{items.length}{moreCount > 0 ? `+${moreCount}` : ""}</span>
+        {selected.size > 0 && (
+          <button onClick={onClear} className="text-[10px] px-1 py-px rounded hover:bg-white/50 dark:hover:bg-black/20 text-ww-textMuted" title="Limpar seleção">×</button>
+        )}
+      </div>
+      <div className="space-y-0.5 max-h-40 overflow-y-auto">
+        {items.length === 0 && <div className="text-[10.5px] text-ww-textFaint italic">Vazio</div>}
+        {items.map(i => {
+          const on = selected.has(i.key);
+          const pctBar = Math.round((i.count / maxCount) * 100);
+          return (
+            <button key={i.key} onClick={() => onToggle(i.key)}
+              className={`w-full text-left px-1.5 py-0.5 rounded text-[10.5px] flex items-center gap-1.5 transition ${on ? t.sel : "hover:bg-white/50 dark:hover:bg-black/20"}`}>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center justify-between gap-1">
+                  <span className="truncate text-ww-text font-medium">{i.label ?? (formatKey ? formatKey(i.key) : i.key)}</span>
+                  <span className="tabular-nums text-ww-textMuted shrink-0">{i.count}</span>
+                </div>
+                <div className="h-[3px] rounded bg-white/40 dark:bg-black/20 mt-0.5 overflow-hidden">
+                  <div className={`h-full ${t.dot}`} style={{ width: `${pctBar}%`, opacity: on ? 1 : 0.5 }} />
+                </div>
+              </div>
+            </button>
+          );
+        })}
+      </div>
+      {items.length > 0 && (
+        <div className="mt-1.5 pt-1 border-t border-white/30 dark:border-black/20 text-[9.5px] tabular-nums text-ww-textMuted flex items-center justify-between">
+          <span>Σ {totalCount}</span>
+          <span>{brlCompact(items.reduce((a, i) => a + i.total, 0))}</span>
+        </div>
       )}
     </div>
   );
