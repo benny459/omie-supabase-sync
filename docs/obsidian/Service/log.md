@@ -98,5 +98,53 @@ O Benny estava operando com viés positivo de ~R$ 90k/mês. Break-even real é ~
 - **Layout do dashboard atualizado** — nova seção "Análise por Segmento e Simulação" entre AR/AP aging e Delta Inexplicado.
 - **Próximo passo:** criar Card 9 e Card 10 no Metabase (via script rebuild ou manual) — mesmas queries do spec, testar valores em ambiente antes de commitar.
 
+## [2026-07-17] fix | v_faturamento_diario classificando por codigo_categoria (v1.6.4)
+
+- **Bug:** a view `approval.v_faturamento_diario` usava `numero_contrato <> ''` como sinal de "Contrato" no CASE. Mas esse campo guarda o **OPS interno** (`OPSxxxxxxxxxxx`) em quase toda venda — resultado: 25 linhas caindo em "Contrato" no último mês, Avulsos/Projetos/Revenda praticamente sumidos.
+- **Fix:** view reescrita pra classificar via `public.cat_venda(codigo_categoria)` — mesma função canônica que o Metabase usa. Lê direto de `sales.faturamento_unificado` (que já unifica OS+PV).
+- **Nova taxonomia (5 categorias + fallback):** Contratuais (`1.01.01`) · Projetos (`1.01.02`) · Revenda (`1.01.03`) · Avulsos (`1.01.97`) · BOT/SW (`1.01.98`) · Outras.
+- **UI atualizada:** `FaturamentoView` com 6 KPIs (um por categoria) + stack chart 12 segmentos (6 cats × 2 tipos).
+- Ver [[project_categorias_venda_omie no vault de memória]].
+
+## [2026-07-17] fix | REPORT_COLS avulsos-report faltavam colunas críticas (v1.6.4)
+
+- **Bug:** ao otimizar o SELECT em 2026-07-16 (evitar timeout do `SELECT *`), várias colunas foram esquecidas em `web/lib/avulsos-report.ts:REPORT_COLS`. Sintoma no daily Webex: **sem_projeto=42** (100% dos abertos), quando a realidade era **3**.
+- **Colunas faltando:**
+  - `projeto_nome` → `isSemProjeto()` retornava true pra tudo (`undefined ?? "" === ""`)
+  - `pv_num_nfe`, `pv_etapa_texto` → `isEncerrada` sempre falso, PVs com NF já emitida contavam como abertos
+  - `servicos_os_numero` → `anyOsRaw` falso, inflava `sem_vinculo`
+- **Resultado do fix:** sem_projeto 42→3, total_pvs 42→41 (1 PV já tinha NF).
+
+## [2026-07-17] ux | AvulsosDailyView — skeleton + timeout + prévia Webex renderizada (v1.6.4)
+
+- **Bug:** página `/relatorios/avulsos-daily` ficava em branco por 10-30s enquanto `v_pc_avulsos` carregava, sem feedback. Se o fetch travava, ficava indefinidamente branco ("ora abre ora não").
+- **Fixes:**
+  - Skeleton animado durante loading (nunca mais tela branca)
+  - Timeout de 55s com `AbortController` + mensagem clara
+  - Revalidação automática ao voltar pra aba (`visibilitychange`)
+  - Novo bloco verde **"👀 Assim vai chegar no Webex"** no topo — renderiza o markdown como o Webex mostraria, pra conferir visualmente antes de enviar
+
+## [2026-07-17] feature | "Aguardando Liberação" no painel /avulsos (v1.6.5–v1.6.7)
+
+- **Motivação:** cliente pediu venda avulsa mas ainda não formalizou com pedido de compra. Estado transitório manual, imposto por usuário autorizado.
+- **DB:** nova tabela `platform.pv_liberacao_status` (overlay) + coluna `can_release_pv` em `user_module_roles`. Seed: Benny (admin) + Fernanda (`can_release_pv=true` no módulo avulsos).
+- **API:** `/api/avulsos/liberacao` (GET map + POST toggle). Check explícito de permissão + `supaAdmin` pra mutar. RLS via `.schema()` estava dando 403 pro admin em prod — troca pro padrão idêntico às demais rotas admin.
+- **UI painel /avulsos:**
+  - Novo `AlarmKind = "aguarda_liberacao"` no grupo Vendas
+  - Botão cadeado clicável no header do bucket (só visível pra quem tem permissão)
+  - Overlay 🔒 sobreposto ao dot **PV/OS** do pipeline quando ativo
+  - Comportamento **aditivo**: demais alarmes continuam disparando ao lado (Previsão atrasada, Sem Vínculo etc)
+  - Auto-clear: quando o PV vira Faturado no Omie, o status some sozinho (o `isEncerrada` retorna cedo antes do `liberacaoSet`)
+  - Cross-tab: `BroadcastChannel("pv-liberacao-updated")` propaga mudanças em outras abas
+- **Webex daily:** linha nova em VENDAS `- 🔒 Aguardando Liberação (cliente sem PC): N · R$ X · ver — Fernanda`. Entra no chart 14d (cor âmbar `#d97706`).
+- **Domain pra app /servicos (outro repo):** consumir `platform.pv_liberacao_status` — row com `aguardando_liberacao=true` = estado ativo. `pv_os_label` casa 1:1 com o do painel Avulsos.
+- Ver [[10-Aguardando-Liberacao]]
+
+## [2026-07-20] ux | Toggle liberação simplificado pra cadeado clicável (v1.6.8)
+
+- Antes: botão com texto "🔓 AGUARDAR LIBERAÇÃO" e `confirm()` a cada click. Usuário reportou 3º click não trava — provável cancel acidental no dialog.
+- Agora: **só o ícone de cadeado** (🔓 ↔ 🔒), 1 click alterna sem confirmação.
+- Guard de `pending` state: enquanto request está em voo, botão fica desabilitado com "…" — evita race com o refetch do `BroadcastChannel`.
+
 ## Tags
 #painel-waterworks #meta #log

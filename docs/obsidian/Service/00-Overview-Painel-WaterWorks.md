@@ -1,6 +1,6 @@
 # Painel-WaterWorks — Overview
 
-> **Versão atual (web):** v1.4.3 · **Repo:** github.com/benny459/omie-supabase-sync · **Stack:** Next 16.2.4 + Supabase SSR · **Domain:** [painel.waterworks.com.br](https://painel.waterworks.com.br)
+> **Versão atual (web):** v1.6.8 · **Repo:** github.com/benny459/omie-supabase-sync · **Stack:** Next 16.2.4 + Supabase SSR · **Domain:** [painel.waterworks.com.br](https://painel.waterworks.com.br)
 
 ## Visão Geral
 
@@ -19,7 +19,7 @@ omie-supabase-sync/
 ├── web/              ← Next 16 painel administrativo (Vercel project "web")
 │   ├── src/app/      ← App Router
 │   ├── src/lib/      ← helpers, omieFetch, supabase clients
-│   └── package.json  ← v1.4.3
+│   └── package.json  ← v1.6.8
 ├── scripts/          ← Node scripts pra sync Omie → Supabase
 ├── sql/              ← Migrations + views (approval.*, sales.*, orders.*)
 ├── apps-script/      ← Google Apps Script (relatórios em planilha)
@@ -60,7 +60,11 @@ Geradas/mantidas pelos scripts ETL:
 
 ## Versões Recentes
 
-- web v1.4.3 (atual)
+- **web v1.6.8** (atual, 2026-07-20) — Toggle liberação simplificado (só cadeado)
+- web v1.6.7 (2026-07-17) — Fix permissão check + cadeado overlay no pipeline
+- web v1.6.6 (2026-07-17) — Aguardando Liberação aditivo (não silencia demais)
+- web v1.6.5 (2026-07-17) — Feature completa "Aguardando Liberação" — ver [[10-Aguardando-Liberacao]]
+- web v1.6.4 (2026-07-17) — Fix faturamento categoria + fix Webex sem_projeto + UX AvulsosDaily
 
 ## Próximos passos (Fase B)
 

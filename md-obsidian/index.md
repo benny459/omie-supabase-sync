@@ -2,7 +2,7 @@
 
 > Catálogo content-oriented. **Consultar primeiro** em query. Atualizar a cada página nova.
 
-**Última atualização:** 2026-07-01 · **Status:** Skeleton (Fase A) + análise financeira inicial
+**Última atualização:** 2026-07-20 · **Status:** Skeleton (Fase A) + análise financeira inicial + módulo Aguardando Liberação (Fase B em andamento)
 
 ## Meta
 
@@ -17,7 +17,8 @@
 
 ## Módulos
 
-(a preencher na Fase B — fazer ingest de cada módulo do app)
+- [[10-Aguardando-Liberacao]] — Estado transitório manual em PV/OS avulsa quando cliente sem PC formal (v1.6.5+)
+- (demais módulos a preencher na Fase B — fazer ingest de cada rota do painel)
 
 ## Decisões e Análises
 

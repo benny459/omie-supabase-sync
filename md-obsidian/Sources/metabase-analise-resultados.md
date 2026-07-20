@@ -494,33 +494,252 @@ LIMIT 30;
 
 ---
 
+## Card 9 — Margem de Contribuição por Segmento (histórico)
+
+**Objetivo:** decompor receita e custos variáveis atribuídos por segmento de venda (MRR Contratos, Projetos, Revenda, Avulsos, BOT/SW), calculando margem de contribuição por segmento e ponderada. Base para o Simulador de Break-even (Card 10).
+
+**Visualização:** Table com Bar sparkline ou Combo chart (Bar receita + Line margem %)
+**Filtro:** `janela_meses` (default 6)
+
+### Matriz de atribuição de custos → segmentos
+
+Baseada na análise conjunta com Benny (2026-07-01) — pode ser revisada:
+
+| Driver de custo | MRR | Projetos | Revenda | Avulsos | BOT/SW |
+|---|:-:|:-:|:-:|:-:|:-:|
+| COGS Revenda (Mercadorias) | 0% | 0% | **100%** | 0% | 0% |
+| COGS Matéria Prima | 5% | **85%** | 0% | 10% | 0% |
+| COGS Insumos | **80%** | 15% | 0% | 5% | 0% |
+| Frete + Compras Garantia | 40% | 40% | 15% | 5% | 0% |
+| Custo Serviços Prestados | 60% | 20% | 0% | 20% | 0% |
+| Folha PJ terceiros | 50% | 20% | 5% | 20% | 5% |
+| Cartão CS técnicos | **50%** | 30% | 5% | 15% | 0% |
+| Devoluções | 5% | 15% | 60% | 20% | 0% |
+
+**Racional:** Contratos de manutenção puxam **Insumos, Cartão CS (rota) e Folha PJ**. Projetos puxam **Matéria Prima grande**. Revenda puxa **Mercadorias para Revenda**.
+
+### SQL
+
+```sql
+WITH periodo AS (
+  SELECT (CURRENT_DATE - INTERVAL '{{janela_meses}} months')::date ini,
+         CURRENT_DATE::date fim
+),
+
+-- Custos variáveis totais no período (média mensal)
+custos AS (
+  SELECT
+    (SUM(CASE WHEN des_categoria = 'Mercadorias para Revenda' THEN -valor ELSE 0 END) / GREATEST({{janela_meses}}::numeric, 1))::numeric cogs_revenda,
+    (SUM(CASE WHEN des_categoria = 'Compras de Materia Prima' THEN -valor ELSE 0 END) / GREATEST({{janela_meses}}::numeric, 1))::numeric cogs_mp,
+    (SUM(CASE WHEN des_categoria = 'Insumos' THEN -valor ELSE 0 END) / GREATEST({{janela_meses}}::numeric, 1))::numeric cogs_insumos,
+    (SUM(CASE WHEN des_categoria IN ('Frete','Compras Material em Garantia') THEN -valor ELSE 0 END) / GREATEST({{janela_meses}}::numeric, 1))::numeric frete,
+    (SUM(CASE WHEN des_categoria = 'Custo dos Serviços Prestados' THEN -valor ELSE 0 END) / GREATEST({{janela_meses}}::numeric, 1))::numeric custo_serv,
+    (SUM(CASE WHEN des_categoria IN ('Serviços Prestados PJ','Empréstimo') AND fonte='omie_sync' THEN -valor ELSE 0 END) / GREATEST({{janela_meses}}::numeric, 1))::numeric folha_pj,
+    (SUM(CASE WHEN fonte='cs_import' THEN -valor ELSE 0 END) / GREATEST({{janela_meses}}::numeric, 1))::numeric cartao_cs,
+    (SUM(CASE WHEN des_categoria IN ('Devoluções de Vendas de Mercadoria','Devoluções de Vendas de Serviços Prestados') THEN -valor ELSE 0 END) / GREATEST({{janela_meses}}::numeric, 1))::numeric devolucoes
+  FROM finance.v_extratos_consolidado, periodo
+  WHERE natureza='P' AND situacao='Conciliado'
+    AND data BETWEEN periodo.ini AND periodo.fim
+),
+
+-- Receitas por segmento (média mensal)
+receitas AS (
+  SELECT
+    (SUM(CASE WHEN des_categoria ILIKE '%Serviços Contratuais%' THEN valor ELSE 0 END) / GREATEST({{janela_meses}}::numeric, 1))::numeric mrr,
+    (SUM(CASE WHEN des_categoria ILIKE '%Projetos%' OR des_categoria ILIKE '%Mercantil%' THEN valor ELSE 0 END) / GREATEST({{janela_meses}}::numeric, 1))::numeric projetos,
+    (SUM(CASE WHEN des_categoria ILIKE '%Revenda%' THEN valor ELSE 0 END) / GREATEST({{janela_meses}}::numeric, 1))::numeric revenda,
+    (SUM(CASE WHEN des_categoria ILIKE '%Serviços Prestados%' OR des_categoria ILIKE '%Serviços Avulsos%' THEN valor ELSE 0 END) / GREATEST({{janela_meses}}::numeric, 1))::numeric avulsos,
+    (SUM(CASE WHEN des_categoria = 'Receita BOT e SW' THEN valor ELSE 0 END) / GREATEST({{janela_meses}}::numeric, 1))::numeric bot_sw
+  FROM finance.v_extratos_consolidado, periodo
+  WHERE natureza='R' AND situacao='Conciliado'
+    AND des_categoria NOT ILIKE '%Transfer%'
+    AND data BETWEEN periodo.ini AND periodo.fim
+),
+
+-- Alocação de custos por segmento (matriz aplicada)
+custo_por_segmento AS (
+  SELECT
+    (c.cogs_revenda*0.00 + c.cogs_mp*0.05 + c.cogs_insumos*0.80 + c.frete*0.40 + c.custo_serv*0.60 + c.folha_pj*0.50 + c.cartao_cs*0.50 + c.devolucoes*0.05) cv_mrr,
+    (c.cogs_revenda*0.00 + c.cogs_mp*0.85 + c.cogs_insumos*0.15 + c.frete*0.40 + c.custo_serv*0.20 + c.folha_pj*0.20 + c.cartao_cs*0.30 + c.devolucoes*0.15) cv_projetos,
+    (c.cogs_revenda*1.00 + c.cogs_mp*0.00 + c.cogs_insumos*0.00 + c.frete*0.15 + c.custo_serv*0.00 + c.folha_pj*0.05 + c.cartao_cs*0.05 + c.devolucoes*0.60) cv_revenda,
+    (c.cogs_revenda*0.00 + c.cogs_mp*0.10 + c.cogs_insumos*0.05 + c.frete*0.05 + c.custo_serv*0.20 + c.folha_pj*0.20 + c.cartao_cs*0.15 + c.devolucoes*0.20) cv_avulsos,
+    (c.cogs_revenda*0.00 + c.cogs_mp*0.00 + c.cogs_insumos*0.00 + c.frete*0.00 + c.custo_serv*0.00 + c.folha_pj*0.05 + c.cartao_cs*0.00 + c.devolucoes*0.00) cv_bot_sw
+  FROM custos c
+)
+
+SELECT
+  segmento AS "Segmento",
+  receita::numeric(14,2) AS "Receita/mês médio",
+  custo_variavel::numeric(14,2) AS "Custo Variável",
+  (receita - custo_variavel)::numeric(14,2) AS "Contribuição",
+  CASE WHEN receita > 0 THEN ROUND(((receita - custo_variavel)/receita * 100)::numeric, 1) ELSE 0 END AS "Margem %"
+FROM (
+  SELECT 'MRR Contratos' segmento, r.mrr receita, cs.cv_mrr custo_variavel FROM receitas r, custo_por_segmento cs
+  UNION ALL
+  SELECT 'Projetos', r.projetos, cs.cv_projetos FROM receitas r, custo_por_segmento cs
+  UNION ALL
+  SELECT 'BOT/SW', r.bot_sw, cs.cv_bot_sw FROM receitas r, custo_por_segmento cs
+  UNION ALL
+  SELECT 'Revenda', r.revenda, cs.cv_revenda FROM receitas r, custo_por_segmento cs
+  UNION ALL
+  SELECT 'Serviços Avulsos', r.avulsos, cs.cv_avulsos FROM receitas r, custo_por_segmento cs
+) t
+ORDER BY receita DESC;
+```
+
+**Config Metabase:**
+- Visualization: **Table** com mini-bar em "Margem %"
+- Conditional formatting: Margem % > 60% verde · 30-60% amarelo · < 30% vermelho · < 0 crítico
+- **Text card ao lado** com racional da matriz + link para revisão
+
+### Referência histórica (jun/2026, média 6m)
+
+| Segmento | Receita/mês | Custo Variável | Margem contribuição |
+|---|---:|---:|:-:|
+| **BOT/SW** | R$ 59k | R$ 5k | **92%** ⭐ |
+| **Projetos** | R$ 225k | R$ 89k | **61%** ✅ |
+| **MRR Contratos** | R$ 246k | R$ 97k | **60%** ✅ |
+| Revenda | R$ 71k | R$ 70k | **1%** ⚠️ |
+| Serviços Avulsos | R$ 33k | R$ 33k | **0%** ⚠️ |
+
+---
+
+## Card 10 — Simulador de Break-even por Mix
+
+**Objetivo:** você digita quanto pretende vender de cada segmento no mês → Metabase calcula contribuição total, compara com custo fixo, e mostra quanto de folga (ou déficit) sobra.
+
+**Visualização:** Table 1 linha, com KPI grandes
+**Filtros (parâmetros customizados):**
+- `mrr_esperado` (Number, default 246000)
+- `projetos_esperado` (Number, default 225000)
+- `revenda_esperado` (Number, default 71000)
+- `avulsos_esperado` (Number, default 33000)
+- `bot_sw_esperado` (Number, default 59000)
+- `fixo_mensal` (Number, default 314000)
+
+**Racional das margens usadas:** derivadas do Card 9 (análise histórica 6 meses). Editáveis abaixo se a estrutura de custos mudar.
+
+### SQL
+
+```sql
+WITH mix AS (
+  SELECT
+    {{mrr_esperado}}::numeric      mrr,
+    {{projetos_esperado}}::numeric projetos,
+    {{revenda_esperado}}::numeric  revenda,
+    {{avulsos_esperado}}::numeric  avulsos,
+    {{bot_sw_esperado}}::numeric   bot_sw,
+    {{fixo_mensal}}::numeric       fixo
+),
+margens AS (
+  -- Margens de contribuição por segmento (baseadas em análise histórica)
+  SELECT
+    0.60 marg_mrr,      -- MRR Contratos
+    0.61 marg_projetos, -- Projetos Mercantil
+    0.01 marg_revenda,  -- Revenda (praticamente empatada)
+    0.00 marg_avulsos,  -- Avulsos (empatados)
+    0.92 marg_bot_sw    -- BOT/SW (alta margem, receita recorrente digital)
+),
+calc AS (
+  SELECT
+    m.mrr + m.projetos + m.revenda + m.avulsos + m.bot_sw AS receita_total,
+    m.mrr * mg.marg_mrr AS contrib_mrr,
+    m.projetos * mg.marg_projetos AS contrib_projetos,
+    m.revenda * mg.marg_revenda AS contrib_revenda,
+    m.avulsos * mg.marg_avulsos AS contrib_avulsos,
+    m.bot_sw * mg.marg_bot_sw AS contrib_bot_sw,
+    m.fixo AS fixo
+  FROM mix m, margens mg
+)
+SELECT
+  receita_total::numeric(14,2) AS "Receita Total Projetada",
+  (contrib_mrr + contrib_projetos + contrib_revenda + contrib_avulsos + contrib_bot_sw)::numeric(14,2) AS "Contribuição Total",
+  ROUND((100 * (contrib_mrr + contrib_projetos + contrib_revenda + contrib_avulsos + contrib_bot_sw) / NULLIF(receita_total, 0))::numeric, 1) AS "Margem % Ponderada",
+  fixo::numeric(14,2) AS "Custo Fixo",
+  ((contrib_mrr + contrib_projetos + contrib_revenda + contrib_avulsos + contrib_bot_sw) - fixo)::numeric(14,2) AS "Folga (ou Déficit)",
+  -- Se déficit, quanto de receita adicional em Projetos precisaria (margem 61%)
+  CASE
+    WHEN (contrib_mrr + contrib_projetos + contrib_revenda + contrib_avulsos + contrib_bot_sw) - fixo < 0
+    THEN ROUND((((fixo - (contrib_mrr + contrib_projetos + contrib_revenda + contrib_avulsos + contrib_bot_sw)) / 0.61))::numeric(14,2), 2)
+    ELSE 0
+  END AS "Precisa +R$ em Projetos p/ fechar",
+  -- Break-even (receita mínima considerando o mix atual)
+  CASE
+    WHEN receita_total > 0
+    THEN ROUND((fixo / ((contrib_mrr + contrib_projetos + contrib_revenda + contrib_avulsos + contrib_bot_sw) / NULLIF(receita_total,0)))::numeric(14,2), 2)
+    ELSE 0
+  END AS "Break-even p/ este mix"
+FROM calc;
+```
+
+**Config Metabase:**
+- Visualization: **Number** ou **Table** com KPIs
+- Cores:
+  - **Folga positiva:** verde ✅
+  - **Folga negativa:** vermelho 🚨
+  - **Margem % Ponderada > 55%:** verde
+  - **Margem % Ponderada < 40%:** vermelho
+- **Text card ao lado** com 3 cenários pré-computados:
+
+```markdown
+## Cenários de referência
+
+### Cenário 1 — Mix atual (jun/26)
+MRR 246k · Projetos 225k · Revenda 71k · Avulsos 33k · BOT 59k · Fixo 314k
+→ Contribuição R$ 341k · **Folga +R$ 27k** ✅
+
+### Cenário 2 — Sem projetos (worst case)
+MRR 246k · Projetos 0 · Revenda 71k · Avulsos 33k · BOT 59k · Fixo 314k
+→ Contribuição R$ 205k · **Déficit −R$ 109k** 🚨
+Precisa +R$ 179k em Projetos pra fechar
+
+### Cenário 3 — MRR forte + Projetos médios
+MRR 350k · Projetos 250k · Revenda 71k · Avulsos 33k · BOT 59k · Fixo 314k
+→ Contribuição R$ 417k · **Folga +R$ 103k** ⭐
+```
+
+### Como usar
+
+1. Abra o dashboard e vai no Card 10
+2. Digita valores esperados nos 5 campos (ou ajusta os defaults)
+3. Vê imediatamente: **folga ou déficit** e **quanto precisa a mais em Projetos** pra fechar
+4. Ajusta o mix hipoteticamente pra planejar meta trimestral
+
+---
+
 ## Layout do Dashboard "Análise de Resultados"
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│  FILTRO GLOBAL: mes_ref [Junho 2026 ▼]  janela_meses [12]  │
-├────────────────┬────────────────┬────────────────┬─────────┤
-│  Receita mês   │  Saídas mês    │  Fluxo líq.    │  Saldo  │
-│  Card 1a       │  Card 1b       │  Card 1c       │  Card 1d│
-├────────────────┴────────────────┴────────────────┴─────────┤
-│                                                              │
-│  Card 2 — Cash Flow Mensal (bar stacked, 12 meses)          │
-│                                                              │
-├──────────────────────────────┬──────────────────────────────┤
-│  Card 3 — Break-even         │  Card 5 — Folha % Receita    │
-│  (número + fórmula)          │  (line + goal 40%)           │
-├──────────────────────────────┼──────────────────────────────┤
-│  Card 4 — Aging AR × AP      │  Card 7 — MRR Gap top 30     │
-│  (bar horizontal)            │  (tabela + barras)           │
-├──────────────────────────────┴──────────────────────────────┤
-│                                                              │
-│  Card 6 — Delta Inexplicado Diário (tabela, drill-through)  │
-│                                                              │
-├─────────────────────────────────────────────────────────────┤
-│                                                              │
-│  Card 8 — Pareto "Outras Saídas" (bar horizontal top 30)    │
-│                                                              │
-└─────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────┐
+│  FILTROS: mes_ref [Junho 2026 ▼]  janela_meses [12]                │
+├──────────────┬──────────────┬──────────────┬───────────────────────┤
+│ Receita mês  │ Saídas mês   │ Fluxo líq.   │ Saldo consolidado     │
+│ Card 1a      │ Card 1b      │ Card 1c      │ Card 1d               │
+├──────────────┴──────────────┴──────────────┴───────────────────────┤
+│                                                                     │
+│  Card 2 — Cash Flow Mensal (bar stacked, 12 meses)                 │
+│                                                                     │
+├──────────────────────────────┬──────────────────────────────────────┤
+│  Card 3 — Break-even         │  Card 5 — Folha % Receita           │
+│  (número + fórmula)          │  (line + goal 40%)                  │
+├──────────────────────────────┼──────────────────────────────────────┤
+│  Card 4 — Aging AR × AP      │  Card 7 — MRR Gap top 30            │
+│  (bar horizontal)            │  (tabela + barras)                  │
+├──────────────────────────────┴──────────────────────────────────────┤
+│  ⭐ SEÇÃO ANÁLISE POR SEGMENTO E SIMULAÇÃO                         │
+├──────────────────────────────┬──────────────────────────────────────┤
+│  Card 9 — Margem por         │  Card 10 — SIMULADOR BE por Mix     │
+│  Segmento (Table + Bar)      │  (Number: Folga · Break-even p/ mix)│
+│                              │  Inputs: MRR, Projetos, Revenda…    │
+├──────────────────────────────┴──────────────────────────────────────┤
+│                                                                     │
+│  Card 6 — Delta Inexplicado Diário (tabela, drill-through)         │
+│                                                                     │
+├─────────────────────────────────────────────────────────────────────┤
+│                                                                     │
+│  Card 8 — Pareto "Outras Saídas" (bar horizontal top 30)           │
+│                                                                     │
+└─────────────────────────────────────────────────────────────────────┘
 ```
 
 ## Interpretação de referência (jun/2026)
@@ -534,14 +753,15 @@ Guardar como Text card no rodapé do dashboard, atualização manual:
 - **Delta inexplicado maior:** ±R$ 689k em 11-12 abril = aplicação/resgate financeiro sem categorização
 - **MRR gap top-1:** Fundação Antonio Prudente (contrato 15263), sub-cobra R$ 22k/mês (67% gap)
 
-## Próximas iterações (Fase 2 do dashboard)
+## Próximas iterações (Fase 3 do dashboard)
 
-Cards adicionais que valem quando este estabilizar:
+Cards adicionais que valem quando os 10 primeiros estabilizarem:
 
-- **Card 9 — Fluxo de caixa previsto próximos 90 dias** (AR previsto − AP a vencer)
-- **Card 10 — Concentração de clientes** (Pareto de receita — quem representa 80%)
-- **Card 11 — Ciclo de conversão de caixa** (DSO − DPO)
-- **Card 12 — Comparativo YoY por mês** (2024 vs 2025 vs 2026)
+- **Card 11 — Fluxo de caixa previsto próximos 90 dias** (AR previsto − AP a vencer)
+- **Card 12 — Concentração de clientes** (Pareto de receita — quem representa 80%)
+- **Card 13 — Ciclo de conversão de caixa** (DSO − DPO)
+- **Card 14 — Comparativo YoY por mês** (2024 vs 2025 vs 2026)
+- **Card 15 — Refinamento da matriz de atribuição** (Card 9) via correlação temporal receita↔custo real (auto-ajuste dos %)
 
 ## Automação da criação (opcional)
 
