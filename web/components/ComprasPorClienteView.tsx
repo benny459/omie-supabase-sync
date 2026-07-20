@@ -5,6 +5,14 @@
 
 import { useEffect, useMemo, useState } from "react";
 
+type DetalheAlvo = {
+  cliente: number;
+  cliente_nome: string;
+  tipo?: string | null;
+  from: string; to: string;
+  metric: "compras" | "receita";
+};
+
 type Linha = {
   codigo_cliente: number | null;
   cliente_nome: string;
@@ -65,6 +73,7 @@ export default function ComprasPorClienteView() {
   const [data, setData] = useState<Resp | null>(null);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const [detalhe, setDetalhe] = useState<DetalheAlvo | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -264,8 +273,9 @@ export default function ComprasPorClienteView() {
             <tbody>
               {visiveis.map((c, i) => {
                 const delta = c.receitaTotal - c.comprasTotal;
-                // margem % sobre receita (padrão contábil). Se receita = 0, sem base — não mostra %.
                 const margemPct = c.receitaTotal > 0 ? (delta / c.receitaTotal) * 100 : null;
+                const openDetalhe = (metric: "compras" | "receita", tipo?: string | null) =>
+                  setDetalhe({ cliente: c.codigo_cliente ?? 0, cliente_nome: c.cliente_nome, tipo: tipo ?? null, from, to, metric });
                 return (
                   <tr key={i} className="border-t border-ww-border hover:bg-ww-rowHover">
                     <td className="px-3 py-1.5 font-semibold text-ww-text truncate max-w-[260px]" title={c.cliente_nome}>
@@ -277,14 +287,32 @@ export default function ComprasPorClienteView() {
                     </td>
                     {TIPO_BUCKETS.map(b => (
                       <td key={b} className={`px-3 py-1.5 text-right font-mono tabular-nums text-ww-text ${BUCKET_BG[b]}`}>
-                        {c.byBucket[b] > 0 ? brlCompact(c.byBucket[b]) : "—"}
+                        {c.byBucket[b] > 0 ? (
+                          <button className="inline-flex items-center gap-1 hover:underline decoration-dotted decoration-slate-400 underline-offset-2"
+                            onClick={() => openDetalhe(metric, b)} title={`Ver ${metric === "compras" ? "PCs" : "NFs"} de ${b}`}>
+                            {brlCompact(c.byBucket[b])}
+                            <span className="text-[10px] opacity-50">🔍</span>
+                          </button>
+                        ) : "—"}
                       </td>
                     ))}
                     <td className="px-3 py-1.5 text-right font-mono tabular-nums font-semibold text-ww-text border-l">
-                      {c.comprasTotal > 0 ? brlCompact(c.comprasTotal) : "—"}
+                      {c.comprasTotal > 0 ? (
+                        <button className="inline-flex items-center gap-1 hover:underline decoration-dotted decoration-slate-400 underline-offset-2"
+                          onClick={() => openDetalhe("compras", null)} title="Ver todos os PCs">
+                          {brlCompact(c.comprasTotal)}
+                          <span className="text-[10px] opacity-50">🔍</span>
+                        </button>
+                      ) : "—"}
                     </td>
                     <td className="px-3 py-1.5 text-right font-mono tabular-nums text-ww-text">
-                      {c.receitaTotal > 0 ? brlCompact(c.receitaTotal) : "—"}
+                      {c.receitaTotal > 0 ? (
+                        <button className="inline-flex items-center gap-1 hover:underline decoration-dotted decoration-slate-400 underline-offset-2"
+                          onClick={() => openDetalhe("receita", null)} title="Ver todas as NFs">
+                          {brlCompact(c.receitaTotal)}
+                          <span className="text-[10px] opacity-50">🔍</span>
+                        </button>
+                      ) : "—"}
                     </td>
                     <td className={`px-3 py-1.5 text-right font-mono tabular-nums font-semibold ${
                       delta >= 0 ? "text-emerald-700 dark:text-emerald-300" : "text-rose-700 dark:text-rose-300"
@@ -335,6 +363,168 @@ export default function ComprasPorClienteView() {
         <a href="https://metabase.waterworks.com.br/dashboard/9" target="_blank" rel="noopener" className="underline">
           metabase.waterworks.com.br/dashboard/9
         </a>
+      </div>
+
+      {detalhe && <DetalheModal alvo={detalhe} onClose={() => setDetalhe(null)} />}
+    </div>
+  );
+}
+
+// ─── DetalheModal — memorial de cálculo (lista PCs ou NFs) ───────────
+
+type LinhaCompra = {
+  empresa: string; pc_numero: string; nome_fornecedor: string | null; contato_fornecedor: string | null;
+  projeto_nome: string | null; valor_total: string | number;
+  aprovado_em: string | null; _dt_inclusao_d: string | null;
+  origem: string; pct: number; valor_rateado: number;
+};
+type LinhaReceita = {
+  empresa: string; codigo_projeto: string | number | null; projeto_nome: string | null;
+  codigo_categoria: string | null; dt_fat_d: string;
+  valor_total: string | number; numero_nfse: string | null; numero_pedido: string | null; numero_contrato: string | null;
+};
+
+function DetalheModal({ alvo, onClose }: { alvo: DetalheAlvo; onClose: () => void }) {
+  const [loading, setLoading] = useState(true);
+  const [err, setErr] = useState<string | null>(null);
+  const [payload, setPayload] = useState<{ linhas: (LinhaCompra | LinhaReceita)[]; total: number; qtd: number } | null>(null);
+  const [q, setQ] = useState("");
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      setLoading(true); setErr(null);
+      try {
+        const params = new URLSearchParams({
+          cliente: String(alvo.cliente), metric: alvo.metric,
+          from: alvo.from, to: alvo.to,
+        });
+        if (alvo.tipo) params.set("tipo", alvo.tipo);
+        const r = await fetch(`/api/relatorios/compras-por-cliente/detalhe?${params}`, { cache: "no-store" });
+        const j = await r.json();
+        if (cancelled) return;
+        if (!r.ok) { setErr(j.error ?? r.statusText); return; }
+        setPayload(j);
+      } catch (e) {
+        if (!cancelled) setErr(e instanceof Error ? e.message : String(e));
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [alvo]);
+
+  const linhas = payload?.linhas ?? [];
+  const linhasFiltradas = q
+    ? linhas.filter(l => JSON.stringify(l).toLowerCase().includes(q.toLowerCase()))
+    : linhas;
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" onClick={onClose}>
+      <div className="bg-ww-panel border border-ww-border rounded-lg max-w-[95vw] w-full max-h-[92vh] overflow-hidden flex flex-col"
+           onClick={(e) => e.stopPropagation()}>
+        <div className="px-4 py-3 border-b border-ww-border flex items-center justify-between">
+          <div>
+            <h3 className="text-[15px] font-bold text-ww-text">
+              🔍 Memorial · {alvo.metric === "compras" ? "PCs aprovados" : "NFs faturadas"}
+              {alvo.tipo ? <span className="ml-2 text-[11px] font-normal bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded">{alvo.tipo}</span> : null}
+            </h3>
+            <div className="text-[11.5px] text-ww-textMuted mt-0.5">
+              Cliente: <strong>{alvo.cliente_nome}</strong>
+              {alvo.cliente > 0 && <span className="ml-2 font-mono opacity-70">#{alvo.cliente}</span>}
+              <span className="ml-3">Período: {alvo.from} → {alvo.to}</span>
+            </div>
+          </div>
+          <button onClick={onClose} className="text-ww-textMuted hover:text-ww-text text-2xl leading-none px-2">×</button>
+        </div>
+
+        <div className="px-4 py-2 border-b border-ww-border bg-ww-bg flex items-center gap-2 flex-wrap">
+          <input type="text" value={q} onChange={(e) => setQ(e.target.value)}
+            placeholder="Buscar (fornecedor, PC#, projeto, NF#…)"
+            className="flex-1 min-w-[200px] px-2 py-1 text-[12px] rounded border border-ww-border bg-ww-panel text-ww-text" />
+          {payload && (
+            <div className="text-[11.5px] text-ww-textMuted tabular-nums">
+              {linhasFiltradas.length} de {payload.qtd} linha(s) · Σ {brl(payload.total)}
+            </div>
+          )}
+        </div>
+
+        <div className="flex-1 overflow-auto">
+          {loading ? (
+            <div className="p-8 text-center text-ww-textMuted">Carregando…</div>
+          ) : err ? (
+            <div className="p-4 text-rose-700 bg-rose-50 border border-rose-200 m-3 rounded">{err}</div>
+          ) : linhasFiltradas.length === 0 ? (
+            <div className="p-8 text-center text-ww-textMuted">Nenhuma linha.</div>
+          ) : alvo.metric === "compras" ? (
+            <table className="w-full text-[11.5px]">
+              <thead className="bg-ww-bg border-b border-ww-border sticky top-0">
+                <tr className="text-left uppercase tracking-[0.4px] text-[10px] text-ww-textMuted">
+                  <th className="px-3 py-2">Empresa</th>
+                  <th className="px-3 py-2">PC #</th>
+                  <th className="px-3 py-2">Fornecedor</th>
+                  <th className="px-3 py-2">Projeto</th>
+                  <th className="px-3 py-2">Aprovado</th>
+                  <th className="px-3 py-2 text-right">Valor PC</th>
+                  <th className="px-3 py-2 text-right">Rateio %</th>
+                  <th className="px-3 py-2 text-right">Rateado</th>
+                  <th className="px-3 py-2">Origem</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(linhasFiltradas as LinhaCompra[]).map((r, i) => (
+                  <tr key={i} className="border-t border-ww-border hover:bg-ww-rowHover">
+                    <td className="px-3 py-1.5">{r.empresa}</td>
+                    <td className="px-3 py-1.5 font-mono">#{r.pc_numero}</td>
+                    <td className="px-3 py-1.5 truncate max-w-[220px]" title={r.nome_fornecedor ?? ""}>{r.nome_fornecedor ?? r.contato_fornecedor ?? "—"}</td>
+                    <td className="px-3 py-1.5 text-ww-textMuted">{r.projeto_nome ?? "—"}</td>
+                    <td className="px-3 py-1.5 font-mono">{r.aprovado_em ? r.aprovado_em.slice(0, 10) : (r._dt_inclusao_d ?? "—")}</td>
+                    <td className="px-3 py-1.5 text-right tabular-nums">{brl(Number(r.valor_total))}</td>
+                    <td className="px-3 py-1.5 text-right tabular-nums">{Number(r.pct).toFixed(1)}%</td>
+                    <td className="px-3 py-1.5 text-right tabular-nums font-semibold">{brl(r.valor_rateado)}</td>
+                    <td className="px-3 py-1.5">
+                      <span className={`text-[9.5px] px-1.5 py-0.5 rounded uppercase font-semibold ${
+                        r.origem === "pv_origem"   ? "bg-emerald-100 text-emerald-800" :
+                        r.origem === "manual"      ? "bg-violet-100 text-violet-800" :
+                        r.origem === "projeto_map" ? "bg-sky-100 text-sky-800" :
+                                                     "bg-amber-100 text-amber-800"
+                      }`}>{r.origem}</span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          ) : (
+            <table className="w-full text-[11.5px]">
+              <thead className="bg-ww-bg border-b border-ww-border sticky top-0">
+                <tr className="text-left uppercase tracking-[0.4px] text-[10px] text-ww-textMuted">
+                  <th className="px-3 py-2">Empresa</th>
+                  <th className="px-3 py-2">NF#</th>
+                  <th className="px-3 py-2">Pedido</th>
+                  <th className="px-3 py-2">Contrato</th>
+                  <th className="px-3 py-2">Projeto</th>
+                  <th className="px-3 py-2">Cat</th>
+                  <th className="px-3 py-2">Data</th>
+                  <th className="px-3 py-2 text-right">Valor</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(linhasFiltradas as LinhaReceita[]).map((r, i) => (
+                  <tr key={i} className="border-t border-ww-border hover:bg-ww-rowHover">
+                    <td className="px-3 py-1.5">{r.empresa}</td>
+                    <td className="px-3 py-1.5 font-mono">{r.numero_nfse ?? "—"}</td>
+                    <td className="px-3 py-1.5 font-mono text-ww-textMuted">{r.numero_pedido ?? "—"}</td>
+                    <td className="px-3 py-1.5 font-mono text-ww-textMuted">{r.numero_contrato ?? "—"}</td>
+                    <td className="px-3 py-1.5 text-ww-textMuted truncate max-w-[220px]" title={r.projeto_nome ?? ""}>{r.projeto_nome ?? "—"}</td>
+                    <td className="px-3 py-1.5 font-mono text-[10px]">{r.codigo_categoria ?? "—"}</td>
+                    <td className="px-3 py-1.5 font-mono">{r.dt_fat_d}</td>
+                    <td className="px-3 py-1.5 text-right tabular-nums font-semibold">{brl(Number(r.valor_total))}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
       </div>
     </div>
   );
