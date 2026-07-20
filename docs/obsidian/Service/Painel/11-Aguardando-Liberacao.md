@@ -135,9 +135,11 @@ SELECT pv_os_label
 
 ## Ver Também
 
-- [[00-Overview-Painel-WaterWorks]] — mapa geral
-- [[log]] — cronologia
-- [[project_categorias_venda_omie]] — outra taxonomia canônica do módulo /avulsos
+- [[00-Overview-Painel]] — mapa geral do painel
+- [[10-Avulsos]] — módulo pai
+- [[13-Daily-Avulsos]] — envio ao Webex (linha nova em VENDAS)
+- [[../../log|log]] — cronologia
+- [[../Base-Supabase/Views-Canonicas]] — infra DB
 
 ## Tags
 #painel-waterworks #avulsos #feature #aguarda-liberacao

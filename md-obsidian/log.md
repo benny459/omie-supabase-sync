@@ -1,10 +1,10 @@
-# log.md — Cronologia Painel-WaterWorks
+# log.md — Cronologia (Painel · Metabase · Base)
 
-> Append-only. `## [YYYY-MM-DD] tipo | título`.
+> Append-only. `## [YYYY-MM-DD] [produto] tipo | título` — produto ∈ {`painel`, `metabase`, `base`, `meta`}.
 
 ---
 
-## [2026-06-27] setup | Vault inicializado (Fase A skeleton)
+## [2026-06-27] [meta] setup | Vault inicializado (Fase A skeleton)
 
 - Estrutura criada: `docs/obsidian/Service/` (vault) + `md-obsidian/` (backup) + `scripts/sync-vault.sh`
 - Templates: _schema, index, log, README, 00-Overview
@@ -12,13 +12,13 @@
 - .gitignore atualizado: ignora `Service/.obsidian/`, `.trash/`, `.DS_Store`
 - Próximo (Fase B): aprofundar cada módulo do app
 
-## [2026-07-01] decisao | bi.waterworks.com.br → Plano B (rewrite Next.js sem Metabase em prod)
+## [2026-07-01] [metabase] decisao | bi.waterworks.com.br → Plano B (rewrite Next.js sem Metabase em prod)
 
 - Metabase permanece como ferramenta de modelagem local; produção migra pra `bi.` Next.js quando estabilizar
 - Ver [[Sources/bi-decisao-plano-b]]
 - Arquitetura-alvo: `bi.` lê Supabase direto + agente IA financeiro nativo (Vercel AI SDK + Claude)
 
-## [2026-07-01] analise | Análise financeira profunda WW/SafeWater — 2026 YTD
+## [2026-07-01] [metabase] analise | Análise financeira profunda WW/SafeWater — 2026 YTD
 
 - Correções aplicadas na análise (feedback do Benny): retirada de sócio é fixo obrigatório; categoria 2.03.97 é folha PJ (não empréstimo); transferências intercompany devem ser ignoradas
 - Descobertas-chave:
@@ -29,14 +29,14 @@
   - AP vencido REAL (excluindo legado <2025): R$ 1,05M
 - Regras de ouro: piso receita R$ 700k/mês · folha ≤ 40% receita · reserva ≥ 45 dias saídas
 
-## [2026-07-01] deliverable | Dashboard Metabase "Análise de Resultados" (8 cards)
+## [2026-07-01] [metabase] deliverable | Dashboard "Análise de Resultados" (8 cards)
 
 - Spec completo em [[Sources/metabase-analise-resultados]]
 - 8 cards com SQL testado no Supabase: KPIs · Cash flow mensal · Break-even dinâmico · Aging AR/AP · Folha % receita · Delta inexplicado diário · MRR gap · Pareto outras saídas
 - Filtros globais: mes_ref, janela_meses
 - Layout proposto + próximas iterações (Fase 2)
 
-## [2026-07-02] deliverable | Import Cartão Conta Simples (jan-jun/2026) + view consolidada
+## [2026-07-02] [base] deliverable | Import Cartão Conta Simples (jan-jun/2026) + view consolidada
 
 - **Nova tabela** `finance.despesas_cartao_cs`: 4.125 registros importados (jan-jun/2026, R$ 193.543,10)
 - Fontes combinadas: `Conta Simples.xlsx` (jan → 17/05) + `Transações_cartões...xlsx` (18/05 → 30/06)
@@ -59,7 +59,7 @@ Descoberta chave — antes o Cartão CS tinha só R$ 20 de saídas visíveis em 
 
 O Benny estava operando com viés positivo de ~R$ 90k/mês. Break-even real é ~R$ 130k mais alto que o percebido.
 
-## [2026-07-02] migracao | Downgrade Hetzner Metabase v0.62.3.5 → v0.61.2.9 (mirror do Mac Mini)
+## [2026-07-02] [metabase] migracao | Downgrade Hetzner v0.62.3.5 → v0.61.2.9 (mirror do Mac Mini)
 
 - **Motivo:** telas do v0.62 na Hetzner não bateram com o Mac Mini (sidebar, home, fontes Lato removidas). "Mesmas telas + mesma configuração" só via mesma versão.
 - **Estado antes:** 143 cards + 6 dashboards migrados em jun/2026 via API export/import (v0.61 Mac Mini → v0.62 Hetzner). Trabalho novo v0.62 de 01–02/jul (dashboard "Análise de Resultados" + import CS + view `finance.v_extratos_consolidado`) foi **descartado da UI** — as tabelas Supabase seguem intactas, dashboard será recriado depois em cima do v0.61.
@@ -81,7 +81,7 @@ O Benny estava operando com viés positivo de ~R$ 90k/mês. Break-even real é ~
 - **Scripts versionados:** `scripts/metabase-migration/{export_from_mac_mini,bootstrap_hetzner,import_to_hetzner,fix_dashboard_tabs}.py`. Secrets em `scripts/metabase-migration/secrets/` (gitignored).
 - **Rollback:** dumps em `/root/backups/metabase-v062-defensive-20260702-1610.sql.gz` e `metabase-pre-downgrade-20260702-1511.sql.gz` no allka-01.
 
-## [2026-07-02] plan | Análise de resultados avançada — margem por segmento + simulador BE
+## [2026-07-02] [metabase] plan | Análise de resultados avançada — margem por segmento + simulador BE
 
 - Spec atualizado em [[Sources/metabase-analise-resultados]] com **Card 9** e **Card 10** (novos):
   - **Card 9 — Margem de Contribuição por Segmento**: distribui custos variáveis (COGS, folha PJ, Cartão CS, devoluções) por segmento de receita (MRR, Projetos, Revenda, Avulsos, BOT/SW) usando **matriz de atribuição fixa** (documentada). Calcula margem % por segmento.
@@ -98,7 +98,7 @@ O Benny estava operando com viés positivo de ~R$ 90k/mês. Break-even real é ~
 - **Layout do dashboard atualizado** — nova seção "Análise por Segmento e Simulação" entre AR/AP aging e Delta Inexplicado.
 - **Próximo passo:** criar Card 9 e Card 10 no Metabase (via script rebuild ou manual) — mesmas queries do spec, testar valores em ambiente antes de commitar.
 
-## [2026-07-17] fix | v_faturamento_diario classificando por codigo_categoria (v1.6.4)
+## [2026-07-17] [painel+base] fix | v_faturamento_diario classificando por codigo_categoria (v1.6.4)
 
 - **Bug:** a view `approval.v_faturamento_diario` usava `numero_contrato <> ''` como sinal de "Contrato" no CASE. Mas esse campo guarda o **OPS interno** (`OPSxxxxxxxxxxx`) em quase toda venda — resultado: 25 linhas caindo em "Contrato" no último mês, Avulsos/Projetos/Revenda praticamente sumidos.
 - **Fix:** view reescrita pra classificar via `public.cat_venda(codigo_categoria)` — mesma função canônica que o Metabase usa. Lê direto de `sales.faturamento_unificado` (que já unifica OS+PV).
@@ -106,7 +106,7 @@ O Benny estava operando com viés positivo de ~R$ 90k/mês. Break-even real é ~
 - **UI atualizada:** `FaturamentoView` com 6 KPIs (um por categoria) + stack chart 12 segmentos (6 cats × 2 tipos).
 - Ver [[project_categorias_venda_omie no vault de memória]].
 
-## [2026-07-17] fix | REPORT_COLS avulsos-report faltavam colunas críticas (v1.6.4)
+## [2026-07-17] [painel] fix | REPORT_COLS avulsos-report faltavam colunas críticas (v1.6.4)
 
 - **Bug:** ao otimizar o SELECT em 2026-07-16 (evitar timeout do `SELECT *`), várias colunas foram esquecidas em `web/lib/avulsos-report.ts:REPORT_COLS`. Sintoma no daily Webex: **sem_projeto=42** (100% dos abertos), quando a realidade era **3**.
 - **Colunas faltando:**
@@ -115,7 +115,7 @@ O Benny estava operando com viés positivo de ~R$ 90k/mês. Break-even real é ~
   - `servicos_os_numero` → `anyOsRaw` falso, inflava `sem_vinculo`
 - **Resultado do fix:** sem_projeto 42→3, total_pvs 42→41 (1 PV já tinha NF).
 
-## [2026-07-17] ux | AvulsosDailyView — skeleton + timeout + prévia Webex renderizada (v1.6.4)
+## [2026-07-17] [painel] ux | AvulsosDailyView — skeleton + timeout + prévia Webex renderizada (v1.6.4)
 
 - **Bug:** página `/relatorios/avulsos-daily` ficava em branco por 10-30s enquanto `v_pc_avulsos` carregava, sem feedback. Se o fetch travava, ficava indefinidamente branco ("ora abre ora não").
 - **Fixes:**
@@ -124,7 +124,7 @@ O Benny estava operando com viés positivo de ~R$ 90k/mês. Break-even real é ~
   - Revalidação automática ao voltar pra aba (`visibilitychange`)
   - Novo bloco verde **"👀 Assim vai chegar no Webex"** no topo — renderiza o markdown como o Webex mostraria, pra conferir visualmente antes de enviar
 
-## [2026-07-17] feature | "Aguardando Liberação" no painel /avulsos (v1.6.5–v1.6.7)
+## [2026-07-17] [painel+base] feature | "Aguardando Liberação" no painel /avulsos (v1.6.5–v1.6.7)
 
 - **Motivação:** cliente pediu venda avulsa mas ainda não formalizou com pedido de compra. Estado transitório manual, imposto por usuário autorizado.
 - **DB:** nova tabela `platform.pv_liberacao_status` (overlay) + coluna `can_release_pv` em `user_module_roles`. Seed: Benny (admin) + Fernanda (`can_release_pv=true` no módulo avulsos).
@@ -140,11 +140,23 @@ O Benny estava operando com viés positivo de ~R$ 90k/mês. Break-even real é ~
 - **Domain pra app /servicos (outro repo):** consumir `platform.pv_liberacao_status` — row com `aguardando_liberacao=true` = estado ativo. `pv_os_label` casa 1:1 com o do painel Avulsos.
 - Ver [[10-Aguardando-Liberacao]]
 
-## [2026-07-20] ux | Toggle liberação simplificado pra cadeado clicável (v1.6.8)
+## [2026-07-20] [painel] ux | Toggle liberação simplificado pra cadeado clicável (v1.6.8)
 
 - Antes: botão com texto "🔓 AGUARDAR LIBERAÇÃO" e `confirm()` a cada click. Usuário reportou 3º click não trava — provável cancel acidental no dialog.
 - Agora: **só o ícone de cadeado** (🔓 ↔ 🔒), 1 click alterna sem confirmação.
 - Guard de `pending` state: enquanto request está em voo, botão fica desabilitado com "…" — evita race com o refetch do `BroadcastChannel`.
 
+## [2026-07-20] [meta] reorg | Vault reorganizado — Painel/Metabase/Base-Supabase
+
+- Estrutura antiga: root-level pages misturando painel e metabase, uma única módulo (Aguardando Liberação), Sources/ com specs de Metabase soltos
+- Estrutura nova (3 folders + prefixo `[produto]` no log):
+  - `Painel/` — 7 páginas (overview + 5 rotas + 1 feature overlay)
+  - `Metabase/` — 8 páginas (overview + catálogo + 7 dashboards)
+  - `Base-Supabase/` — 3 páginas (overview + views canônicas + RLS)
+- Rename `00-Overview-Painel-WaterWorks.md` → `00-Overview-Ecossistema.md` (agora cobre painel + metabase + base)
+- `10-Aguardando-Liberacao.md` → `Painel/11-Aguardando-Liberacao.md`
+- Log prefixado com `[painel]`, `[metabase]`, `[base]`, `[meta]` pra filtragem
+- Nenhum arquivo Sources/ deletado (imutáveis — só referenciados a partir dos dashboards Metabase)
+
 ## Tags
-#painel-waterworks #meta #log
+#painel-waterworks #metabase #meta #log
