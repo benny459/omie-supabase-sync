@@ -2579,7 +2579,7 @@ function BucketCard({
           {/* Minitags nomeadas: uma tag por alarme específico, cor do grupo.
               Click filtra a página por aquele alarme (toggle no filtro global).
               Se o filtro já está ativo, tag ganha ring destacado. */}
-          {bucketAlarms.length > 0 && (
+          {(bucketAlarms.length > 0 || (modulo === "pcs" && bucket.groupKind === "pc" && bucket.pc_numero)) && (
             <div className="flex items-center gap-1 mt-1.5 flex-wrap">
               {bucketAlarms.map((kind) => {
                 const g = kindGroup[kind];
@@ -2599,6 +2599,21 @@ function BucketCard({
                   </button>
                 );
               })}
+              {/* /pcs standalones: botão pra atribuir cliente(s) inline via modal
+                  na página /pcs/atribuir-cliente (auto-abre pra este PC). */}
+              {modulo === "pcs" && bucket.groupKind === "pc" && bucket.pc_numero && (() => {
+                const empresa = (bucket.rows[0]?.empresa as string) ?? "SF";
+                const href = `/pcs/atribuir-cliente?empresa=${encodeURIComponent(empresa)}&pc=${encodeURIComponent(bucket.pc_numero)}`;
+                return (
+                  <a href={href}
+                    onClick={(e) => e.stopPropagation()}
+                    title="Atribuir cliente(s) com rateio a este PC standalone"
+                    className="inline-flex items-center gap-1 px-1.5 py-px rounded text-[10px] font-bold uppercase tracking-[0.3px] border transition border-rose-300 bg-rose-50 text-rose-800 hover:bg-rose-100 dark:bg-rose-950/40 dark:border-rose-800 dark:text-rose-200">
+                    <span className="text-[11px] leading-none">👤</span>
+                    Atribuir Cliente
+                  </a>
+                );
+              })()}
             </div>
           )}
         </div>

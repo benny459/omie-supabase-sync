@@ -35,6 +35,8 @@ export default function AtribuirClienteView() {
   const [tab, setTab] = useState<"backlog" | "atribuidos">("backlog");
   const [filter, setFilter] = useState("");
   const [editing, setEditing] = useState<PcRow | null>(null);
+  // Auto-abertura vinda de link /pcs (?empresa=X&pc=Y): dispara 1x quando data chega.
+  const [autoOpened, setAutoOpened] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -53,6 +55,20 @@ export default function AtribuirClienteView() {
     })();
     return () => { cancelled = true; };
   }, [tick]);
+
+  useEffect(() => {
+    if (autoOpened || !data) return;
+    const url = new URL(window.location.href);
+    const empresa = url.searchParams.get("empresa");
+    const pc = url.searchParams.get("pc");
+    if (!empresa || !pc) return;
+    const alvo = [...data.backlog, ...data.atribuidos].find(p => p.empresa === empresa && p.pc_numero === pc);
+    if (alvo) {
+      setEditing(alvo);
+      setTab(data.atribuidos.some(p => p.empresa === empresa && p.pc_numero === pc) ? "atribuidos" : "backlog");
+    }
+    setAutoOpened(true);
+  }, [data, autoOpened]);
 
   const listVis = useMemo(() => {
     if (!data) return [];
@@ -146,7 +162,7 @@ export default function AtribuirClienteView() {
       )}
 
       {editing && (
-        <EditModal pc={editing} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); setTick(t => t+1); }} />
+        <AtribuicaoModal pc={editing} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); setTick(t => t+1); }} />
       )}
     </div>
   );
@@ -172,7 +188,7 @@ function Kpi({ label, value, tone, sub }: { label: string; value: string; tone: 
 
 type Row = { codigo_cliente_omie: number; nome: string; percentual: number };
 
-function EditModal({ pc, onClose, onSaved }: { pc: PcRow; onClose: () => void; onSaved: () => void }) {
+export function AtribuicaoModal({ pc, onClose, onSaved }: { pc: PcRow; onClose: () => void; onSaved: () => void }) {
   const [rows, setRows] = useState<Row[]>(() => {
     if (pc.clientes && pc.clientes.length > 0) {
       return pc.clientes.map(c => ({ codigo_cliente_omie: c.codigo_cliente_omie, nome: `Omie #${c.codigo_cliente_omie}`, percentual: c.percentual }));
@@ -184,9 +200,14 @@ function EditModal({ pc, onClose, onSaved }: { pc: PcRow; onClose: () => void; o
   const [q, setQ] = useState("");
   const [results, setResults] = useState<OmieCli[]>([]);
   const [searching, setSearching] = useState(false);
+  // Modo de entrada: percentual (default) ou valor absoluto (soma = valor_total).
+  const [mode, setMode] = useState<"pct" | "valor">("pct");
+  const valorTotal = Number(pc.valor_total) || 0;
 
   const soma = rows.reduce((a, r) => a + (Number(r.percentual) || 0), 0);
   const somaOK = Math.abs(soma - 100) < 0.01;
+  // Em modo valor: valor rateado por cliente = pct * total / 100
+  const somaValor = valorTotal * soma / 100;
 
   // Autocomplete
   useEffect(() => {
@@ -287,43 +308,83 @@ function EditModal({ pc, onClose, onSaved }: { pc: PcRow; onClose: () => void; o
 
         {/* Lista de clientes atribuídos */}
         <div className="space-y-2">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between gap-2 flex-wrap">
             <h4 className="text-[12px] font-semibold text-ww-text">Clientes atribuídos ({rows.length})</h4>
-            {rows.length > 1 && (
-              <button onClick={distribuirIgual}
-                className="text-[10.5px] px-2 py-0.5 rounded border border-ww-border bg-ww-bg hover:bg-ww-rowHover">
-                Distribuir igual (100/{rows.length})
-              </button>
-            )}
+            <div className="flex items-center gap-2">
+              <div className="inline-flex rounded border border-ww-border overflow-hidden text-[10.5px] font-semibold">
+                <button onClick={() => setMode("pct")}
+                  className={`px-2 py-0.5 ${mode==="pct" ? "bg-slate-900 text-white" : "bg-ww-bg text-ww-text hover:bg-ww-rowHover"}`}>
+                  %
+                </button>
+                <button onClick={() => setMode("valor")}
+                  className={`px-2 py-0.5 ${mode==="valor" ? "bg-slate-900 text-white" : "bg-ww-bg text-ww-text hover:bg-ww-rowHover"}`}>
+                  R$
+                </button>
+              </div>
+              {rows.length > 1 && (
+                <button onClick={distribuirIgual}
+                  className="text-[10.5px] px-2 py-0.5 rounded border border-ww-border bg-ww-bg hover:bg-ww-rowHover">
+                  Distribuir igual (100/{rows.length})
+                </button>
+              )}
+            </div>
           </div>
           {rows.length === 0 && <div className="text-[11.5px] text-ww-textMuted italic">Nenhum cliente atribuído. Busque abaixo pra adicionar.</div>}
-          {rows.map((r, idx) => (
-            <div key={r.codigo_cliente_omie} className="flex items-center gap-2 border border-ww-border rounded p-2 bg-ww-bg">
-              <div className="flex-1 text-[12px]">
-                <div className="font-medium text-ww-text">{r.nome}</div>
-                <div className="text-[10.5px] font-mono text-ww-textMuted">Omie #{r.codigo_cliente_omie}</div>
+          {rows.map((r, idx) => {
+            const valorLinha = valorTotal * (Number(r.percentual) || 0) / 100;
+            return (
+              <div key={r.codigo_cliente_omie} className="flex items-center gap-2 border border-ww-border rounded p-2 bg-ww-bg">
+                <div className="flex-1 text-[12px]">
+                  <div className="font-medium text-ww-text">{r.nome}</div>
+                  <div className="text-[10.5px] font-mono text-ww-textMuted">Omie #{r.codigo_cliente_omie}</div>
+                </div>
+                {mode === "pct" ? (
+                  <>
+                    <div className="flex items-center gap-1">
+                      <input type="number" min="0.01" max="100" step="0.01"
+                        value={r.percentual}
+                        onChange={(e) => updatePct(idx, Number(e.target.value))}
+                        className="w-20 px-2 py-1 text-[12px] text-right rounded border border-ww-border bg-ww-panel text-ww-text tabular-nums" />
+                      <span className="text-[11px] text-ww-textMuted">%</span>
+                    </div>
+                    <div className="w-24 text-right text-[11px] tabular-nums text-ww-textMuted">
+                      {brlCompact(valorLinha)}
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="flex items-center gap-1">
+                      <span className="text-[11px] text-ww-textMuted">R$</span>
+                      <input type="number" min="0.01" step="0.01"
+                        value={valorLinha.toFixed(2)}
+                        onChange={(e) => {
+                          const novoValor = Number(e.target.value) || 0;
+                          const novoPct = valorTotal > 0 ? (novoValor / valorTotal) * 100 : 0;
+                          updatePct(idx, Number(novoPct.toFixed(4)));
+                        }}
+                        className="w-28 px-2 py-1 text-[12px] text-right rounded border border-ww-border bg-ww-panel text-ww-text tabular-nums" />
+                    </div>
+                    <div className="w-16 text-right text-[10.5px] tabular-nums text-ww-textMuted">
+                      {(Number(r.percentual) || 0).toFixed(1)}%
+                    </div>
+                  </>
+                )}
+                <button onClick={() => removeCliente(idx)}
+                  className="text-rose-600 hover:text-rose-800 text-[16px] px-1">×</button>
               </div>
-              <div className="flex items-center gap-1">
-                <input type="number" min="0.01" max="100" step="0.01"
-                  value={r.percentual}
-                  onChange={(e) => updatePct(idx, Number(e.target.value))}
-                  className="w-20 px-2 py-1 text-[12px] text-right rounded border border-ww-border bg-ww-panel text-ww-text tabular-nums" />
-                <span className="text-[11px] text-ww-textMuted">%</span>
-              </div>
-              <div className="w-20 text-right text-[11px] tabular-nums text-ww-textMuted">
-                {brlCompact(Number(pc.valor_total) * r.percentual / 100)}
-              </div>
-              <button onClick={() => removeCliente(idx)}
-                className="text-rose-600 hover:text-rose-800 text-[16px] px-1">×</button>
-            </div>
-          ))}
+            );
+          })}
 
           {rows.length > 0 && (
             <div className={`text-[11.5px] font-semibold flex items-center justify-between p-2 rounded ${
               somaOK ? "bg-emerald-50 text-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-200"
                      : "bg-rose-50 text-rose-800 dark:bg-rose-950/30 dark:text-rose-200"}`}>
-              <span>Soma: <strong className="tabular-nums">{soma.toFixed(2)}%</strong> {somaOK ? "✓ OK" : `⚠️ precisa dar 100`}</span>
-              <span className="tabular-nums">Total rateado: {brl(Number(pc.valor_total))}</span>
+              <span>
+                {mode === "pct"
+                  ? <>Soma: <strong className="tabular-nums">{soma.toFixed(2)}%</strong> {somaOK ? "✓ OK" : `⚠️ precisa dar 100`}</>
+                  : <>Soma: <strong className="tabular-nums">{brl(somaValor)}</strong> de <strong className="tabular-nums">{brl(valorTotal)}</strong> {somaOK ? "✓ OK" : "⚠️ precisa bater o total"}</>}
+              </span>
+              <span className="tabular-nums text-[10.5px] opacity-80">Total PC: {brl(valorTotal)}</span>
             </div>
           )}
         </div>
