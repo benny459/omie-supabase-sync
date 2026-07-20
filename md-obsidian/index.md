@@ -14,6 +14,7 @@
 ## Overview
 
 - [[00-Overview-Ecossistema]] — Mapa macro (painel + metabase + base + fluxo de dados)
+- [[RENTABILIDADE-04-implementacao]] — Rentabilidade por Cliente (2026-07-20) — cross-DB, WW main + omie-data + Metabase
 
 ## Painel (painel.waterworks.com.br)
 

@@ -28,6 +28,7 @@
 | 6 | Contratos CT — SafeWater | 6 | [[Dash-6-Contratos-CT]] |
 | 7 | Margem por Projeto — SafeWater | 4 | [[Dash-7-Margem-por-Projeto]] |
 | **8** | Análise de Resultados | 8 | [[Dash-8-Analise-Resultados]] |
+| **9** | Rentabilidade por Cliente *(novo 2026-07-20)* | 10 | [[../RENTABILIDADE-04-implementacao]] |
 
 Total: 190 cards ativos (excluindo sample). Ver [[01-Catalogo-Cards]] pra catálogo compact.
 

@@ -158,5 +158,17 @@ O Benny estava operando com viés positivo de ~R$ 90k/mês. Break-even real é ~
 - Log prefixado com `[painel]`, `[metabase]`, `[base]`, `[meta]` pra filtragem
 - Nenhum arquivo Sources/ deletado (imutáveis — só referenciados a partir dos dashboards Metabase)
 
+## [2026-07-20] [metabase+base] feature | Rentabilidade por Cliente — consolidação cross-DB (WW main × omie-data)
+
+- Novo dashboard Metabase [[../RENTABILIDADE-04-implementacao|Rentabilidade por Cliente]] (id 9, 10 cards, 5 filtros) consolida Faturamento + Compras + Custo Técnico + Despesas por cliente.
+- **Base omie-data:** 4 objetos novos — `approval.v_compras_por_cliente`, `sales.v_cliente_receita_compras`, `bi.custo_cliente_snapshot`, `bi.v_rentabilidade_cliente`.
+- **Base WW main:** 1 view nova — `bi.v_custo_por_cliente` (agregação cliente × técnico × mês com sentinels overhead: EMPRESA, COMERCIAL, OUTROS, AVULSO_NAO_VINC, NAO_ATRIBUIDO).
+- **Cron:** `/root/apps/sync-custo-cliente/sync.sh` no allka-01 (bash + docker postgres:16, extrai creds direto do Metabase). Roda diário 06:15 SP. Extrai 3.342 linhas hoje (jul/2026, R$ 172k).
+- **Achados críticos:**
+  - 44% dos customers app (58/130) sem `omie_codigo_cliente` cadastrado — motivará tela de vínculo (spec 01 amplificado, pendente)
+  - 100% das compras aprovadas caem no sentinel `-10 COMPARTILHADAS` — hoje nenhum PC é atribuído a cliente direto via PV
+  - 121 nomes distintos em `cliente_avulso_nome`, só 57 batem exato com `customers.nome` (variação de digitação)
+- Views expandidas em [[../Base-Supabase/Views-Canonicas]]. Script `scripts/metabase-migration/rebuild_rentabilidade_cliente.py` idempotente.
+
 ## Tags
-#painel-waterworks #metabase #meta #log
+#painel-waterworks #metabase #base #rentabilidade #meta #log

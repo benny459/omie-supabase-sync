@@ -22,12 +22,21 @@ Views de aprovação — enriched joins de sales + finance + orders.
 | **`v_faturamento_diario`** | Painel [[../Painel/12-Faturamento]] | OS+PV faturados por dia × categoria (via `cat_venda`) |
 | `v_rc_projetos_itens` | Painel /projetos/materiais | RC-Projetos com itens desagregados |
 | `v_rc_projetos_resumo` | Painel /projetos/materiais | Roll-up RC-Projetos |
+| **`v_compras_por_cliente`** *(novo 2026-07-20)* | Metabase [[../RENTABILIDADE-04-implementacao|Rentabilidade]] | Compras (`status='APROVADO'`) por cliente × projeto × tipo_venda × mês. Sentinel `-10 COMPARTILHADAS` pra PCs sem PV origem. |
 
-## Sales (1 view)
+## Schema `bi` (novo 2026-07-20)
+
+| Objeto | Tipo | Descrição |
+|---|---|---|
+| **`bi.custo_cliente_snapshot`** | table | Cópia cross-DB de `bi.v_custo_por_cliente` (WW main). Populada por `/root/apps/sync-custo-cliente/sync.sh` no allka-01 (cron diário 06:15 SP). |
+| **`bi.v_rentabilidade_cliente`** | view | Consolidação FINAL: receita + compras − custo. Fonte principal do dashboard "Rentabilidade por Cliente" no Metabase. |
+
+## Sales (2 views)
 
 | View | Consumidor | Descrição |
 |---|---|---|
 | **`sales.faturamento_unificado`** | Painel [[../Painel/12-Faturamento]] + Metabase [[../Metabase/Dash-3-Faturamento]] | UNION OS+PV faturados. Colunas: origem (OS/PV), empresa, codigo_categoria, codigo_cliente, codigo_projeto, dt_fat_d, valor_total, codigo_doc, numero_doc. |
+| **`sales.v_cliente_receita_compras`** *(novo v1.6+, 2026-07-20)* | Metabase [[../RENTABILIDADE-04-implementacao|Rentabilidade]] | Pré-consolidação receita + compras aprovadas por (cliente × projeto × tipo_venda × mês). Insumo do `bi.v_rentabilidade_cliente`. |
 
 ## Finance (3 views)
 
