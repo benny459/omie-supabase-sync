@@ -256,16 +256,16 @@ export default function ComprasPorClienteView() {
                 {TIPO_BUCKETS.map(b => (
                   <th key={b} className={`px-3 py-2 text-right w-[110px] ${BUCKET_BG[b]}`}>{b}</th>
                 ))}
-                <th className="px-3 py-2 text-right w-[110px] border-l">Total {metric === "compras" ? "compras" : "receita"}</th>
-                <th className="px-3 py-2 text-right w-[110px]">Total oposto</th>
-                <th className="px-3 py-2 text-right w-[110px]">Δ Rec−Compras</th>
+                <th className="px-3 py-2 text-right w-[110px] border-l">Total compras</th>
+                <th className="px-3 py-2 text-right w-[110px]">Total receita</th>
+                <th className="px-3 py-2 text-right w-[130px]">Resultado</th>
               </tr>
             </thead>
             <tbody>
               {visiveis.map((c, i) => {
-                const totalMetric = metric === "compras" ? c.comprasTotal : c.receitaTotal;
-                const totalOposto = metric === "compras" ? c.receitaTotal : c.comprasTotal;
                 const delta = c.receitaTotal - c.comprasTotal;
+                // margem % sobre receita (padrão contábil). Se receita = 0, sem base — não mostra %.
+                const margemPct = c.receitaTotal > 0 ? (delta / c.receitaTotal) * 100 : null;
                 return (
                   <tr key={i} className="border-t border-ww-border hover:bg-ww-rowHover">
                     <td className="px-3 py-1.5 font-semibold text-ww-text truncate max-w-[260px]" title={c.cliente_nome}>
@@ -281,15 +281,20 @@ export default function ComprasPorClienteView() {
                       </td>
                     ))}
                     <td className="px-3 py-1.5 text-right font-mono tabular-nums font-semibold text-ww-text border-l">
-                      {brlCompact(totalMetric)}
+                      {c.comprasTotal > 0 ? brlCompact(c.comprasTotal) : "—"}
                     </td>
-                    <td className="px-3 py-1.5 text-right font-mono tabular-nums text-ww-textMuted">
-                      {totalOposto > 0 ? brlCompact(totalOposto) : "—"}
+                    <td className="px-3 py-1.5 text-right font-mono tabular-nums text-ww-text">
+                      {c.receitaTotal > 0 ? brlCompact(c.receitaTotal) : "—"}
                     </td>
                     <td className={`px-3 py-1.5 text-right font-mono tabular-nums font-semibold ${
                       delta >= 0 ? "text-emerald-700 dark:text-emerald-300" : "text-rose-700 dark:text-rose-300"
                     }`}>
-                      {brlCompact(delta)}
+                      <div>{brlCompact(delta)}</div>
+                      {margemPct != null && (
+                        <div className="text-[10px] opacity-70">
+                          {margemPct >= 0 ? "+" : ""}{margemPct.toFixed(1)}%
+                        </div>
+                      )}
                     </td>
                   </tr>
                 );
@@ -304,15 +309,20 @@ export default function ComprasPorClienteView() {
                   </td>
                 ))}
                 <td className="px-3 py-2 text-right font-mono tabular-nums border-l">
-                  {brlCompact(metric === "compras" ? totaisFiltrados.compras : totaisFiltrados.receita)}
+                  {brlCompact(totaisFiltrados.compras)}
                 </td>
-                <td className="px-3 py-2 text-right font-mono tabular-nums text-ww-textMuted">
-                  {brlCompact(metric === "compras" ? totaisFiltrados.receita : totaisFiltrados.compras)}
+                <td className="px-3 py-2 text-right font-mono tabular-nums text-ww-text">
+                  {brlCompact(totaisFiltrados.receita)}
                 </td>
                 <td className={`px-3 py-2 text-right font-mono tabular-nums ${
                   (totaisFiltrados.receita - totaisFiltrados.compras) >= 0 ? "text-emerald-700 dark:text-emerald-300" : "text-rose-700 dark:text-rose-300"
                 }`}>
-                  {brlCompact(totaisFiltrados.receita - totaisFiltrados.compras)}
+                  <div>{brlCompact(totaisFiltrados.receita - totaisFiltrados.compras)}</div>
+                  {totaisFiltrados.receita > 0 && (
+                    <div className="text-[10px] opacity-70">
+                      {((totaisFiltrados.receita - totaisFiltrados.compras) / totaisFiltrados.receita * 100).toFixed(1)}%
+                    </div>
+                  )}
                 </td>
               </tr>
             </tfoot>
