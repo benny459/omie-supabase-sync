@@ -11,7 +11,7 @@ type PcRow = {
   valor_total: string; projeto_nome: string | null;
   codigo_projeto: number | null; _dt_inclusao_d: string;
   qtd_clientes?: number;
-  clientes?: { codigo_cliente_omie: number; percentual: number }[];
+  clientes?: { codigo_cliente_omie: number; nome?: string; percentual: number }[];
   soma_pct?: number;
 };
 type OmieCli = { codigo_cliente_omie: number; razao_social: string; nome_fantasia: string | null; cnpj_cpf: string | null };
@@ -560,7 +560,7 @@ type Row = { codigo_cliente_omie: number; nome: string; percentual: number };
 export function AtribuicaoModal({ pc, onClose, onSaved }: { pc: PcRow; onClose: () => void; onSaved: () => void }) {
   const [rows, setRows] = useState<Row[]>(() => {
     if (pc.clientes && pc.clientes.length > 0) {
-      return pc.clientes.map(c => ({ codigo_cliente_omie: c.codigo_cliente_omie, nome: `Omie #${c.codigo_cliente_omie}`, percentual: c.percentual }));
+      return pc.clientes.map(c => ({ codigo_cliente_omie: c.codigo_cliente_omie, nome: c.nome ?? `Omie #${c.codigo_cliente_omie}`, percentual: c.percentual }));
     }
     return [];
   });

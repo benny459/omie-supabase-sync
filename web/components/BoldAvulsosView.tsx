@@ -946,12 +946,13 @@ export default function BoldAvulsosView({
   const [optimisticStatus, setOptimisticStatus] = useState<Record<string, string>>({});
   // /pcs standalones: modal de atribuição multi-cliente por PC. Fetch inicial
   // popula atribuicaoMap → cada row sabe se já tem atribuição sem N requests.
-  const [atribuicaoMap, setAtribuicaoMap] = useState<Map<string, { qtd: number; soma_pct: number }>>(new Map());
+  type AtribInfo = { qtd: number; soma_pct: number; clientes: { codigo_cliente_omie: number; nome: string; percentual: number }[] };
+  const [atribuicaoMap, setAtribuicaoMap] = useState<Map<string, AtribInfo>>(new Map());
   const [editingAtribuicao, setEditingAtribuicao] = useState<{
     empresa: string; pc_numero: string; valor_total: string;
     projeto_nome: string | null; _dt_inclusao_d: string;
     codigo_projeto: number | null;
-    clientes?: { codigo_cliente_omie: number; percentual: number }[];
+    clientes?: { codigo_cliente_omie: number; nome?: string; percentual: number }[];
     soma_pct?: number;
   } | null>(null);
   const [atribuicaoTick, setAtribuicaoTick] = useState(0);
@@ -964,9 +965,18 @@ export default function BoldAvulsosView({
         if (!r.ok) return;
         const j = await r.json();
         if (cancelled) return;
-        const m = new Map<string, { qtd: number; soma_pct: number }>();
+        const m = new Map<string, AtribInfo>();
         for (const p of j.atribuidos ?? []) {
-          m.set(`${p.empresa}|${p.pc_numero}`, { qtd: p.qtd_clientes ?? p.clientes?.length ?? 0, soma_pct: Number(p.soma_pct ?? 0) });
+          const clientes = (p.clientes ?? []).map((c: { codigo_cliente_omie: number; nome?: string; percentual: number | string }) => ({
+            codigo_cliente_omie: c.codigo_cliente_omie,
+            nome: c.nome ?? `Omie #${c.codigo_cliente_omie}`,
+            percentual: Number(c.percentual),
+          }));
+          m.set(`${p.empresa}|${p.pc_numero}`, {
+            qtd: p.qtd_clientes ?? clientes.length,
+            soma_pct: Number(p.soma_pct ?? 0),
+            clientes,
+          });
         }
         setAtribuicaoMap(m);
       } catch {}
@@ -2005,13 +2015,18 @@ export default function BoldAvulsosView({
               budgetMap={budgetMap}
               atribuicaoMap={atribuicaoMap}
               onAtribuicaoClick={(row) => {
+                const empresa = String(row.empresa ?? "SF");
+                const pcNum = String(row.pc_numero ?? "");
+                const info = atribuicaoMap.get(`${empresa}|${pcNum}`);
                 setEditingAtribuicao({
-                  empresa: String(row.empresa ?? "SF"),
-                  pc_numero: String(row.pc_numero ?? ""),
+                  empresa,
+                  pc_numero: pcNum,
                   valor_total: String(row.valor_total ?? "0"),
                   projeto_nome: (row.projeto_nome as string | null) ?? null,
                   _dt_inclusao_d: String(row._dt_inclusao_d ?? ""),
                   codigo_projeto: row.codigo_projeto != null ? Number(row.codigo_projeto) : null,
+                  clientes: info?.clientes,
+                  soma_pct: info?.soma_pct,
                 });
               }}
               aguardandoLiberacao={liberacaoSet.has(b.pv_os_label)}
@@ -2166,7 +2181,7 @@ function BucketCard({
   userCanReleasePv?: boolean;
   onToggleLiberacao?: (aguardando: boolean) => void | Promise<void>;
   // /pcs standalones: atribuição multi-cliente por PC (rateio).
-  atribuicaoMap?: Map<string, { qtd: number; soma_pct: number }>;
+  atribuicaoMap?: Map<string, { qtd: number; soma_pct: number; clientes: { codigo_cliente_omie: number; nome: string; percentual: number }[] }>;
   onAtribuicaoClick?: (row: AnyRow) => void;
 }) {
   // Alarmes deste bucket — semântica bucket-level (não row): "Sem PC" só flaga
@@ -3177,7 +3192,7 @@ function Cell({
   canViewValues?: boolean;
   cronogramaMap?: Map<string, CronogramaSummary>;
   todayStartMs?: number;
-  atribuicaoMap?: Map<string, { qtd: number; soma_pct: number }>;
+  atribuicaoMap?: Map<string, { qtd: number; soma_pct: number; clientes: { codigo_cliente_omie: number; nome: string; percentual: number }[] }>;
   onAtribuicaoClick?: (row: AnyRow) => void;
 }) {
   const empresa = String(row.empresa ?? "SF");
@@ -3191,11 +3206,12 @@ function Cell({
     const key = `${empresa}|${pcNum}`;
     const info = atribuicaoMap?.get(key);
     const somaOk = info != null && Math.abs(info.soma_pct - 100) < 0.01;
+    const nomeLista = info?.clientes.map(c => `${c.nome} (${c.percentual}%)`).join("\n") ?? "";
     return (
       <button
         onClick={(e) => { e.stopPropagation(); onAtribuicaoClick?.(row); }}
-        title={info ? `${info.qtd} cliente(s) · soma ${info.soma_pct}%` : "Atribuir cliente(s) com rateio"}
-        className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded border text-[10.5px] font-semibold whitespace-nowrap transition ${
+        title={info ? `${info.qtd} cliente(s) · soma ${info.soma_pct}%\n\n${nomeLista}\n\nClique pra editar` : "Atribuir cliente(s) com rateio"}
+        className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded border text-[10.5px] font-semibold whitespace-nowrap transition max-w-full ${
           info && somaOk
             ? "border-emerald-300 bg-emerald-50 text-emerald-800 hover:bg-emerald-100 dark:bg-emerald-950/40 dark:border-emerald-800 dark:text-emerald-200"
             : info
@@ -3204,8 +3220,10 @@ function Cell({
         }`}
       >
         <span>👤</span>
-        {info
-          ? somaOk ? `${info.qtd} cliente${info.qtd > 1 ? "s" : ""}` : `⚠ ${info.soma_pct}%`
+        {info && info.clientes.length > 0
+          ? (info.clientes.length === 1
+              ? <span className="truncate max-w-[140px]">{info.clientes[0].nome}{!somaOk ? ` ⚠ ${info.soma_pct}%` : ""}</span>
+              : <span className="truncate max-w-[140px]">{info.qtd} clientes: {info.clientes.map(c => c.nome.split(" ")[0]).join(", ")}{!somaOk ? ` ⚠ ${info.soma_pct}%` : ""}</span>)
           : "Atribuir…"}
       </button>
     );

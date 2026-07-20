@@ -46,11 +46,29 @@ export async function GET(req: NextRequest) {
     .schema("platform" as never).from("pc_cliente_atribuicao")
     .select("empresa, pc_numero, codigo_cliente_omie, percentual, criado_por, atualizado_em");
   if (atribErr) return NextResponse.json({ error: atribErr.message }, { status: 500 });
-  const atribsByPc = new Map<string, { codigo_cliente_omie: number; percentual: number; criado_por: string | null; atualizado_em: string }[]>();
+
+  // Nomes dos clientes atribuídos (batch em finance.clientes)
+  const codigosAtrib = Array.from(new Set((atribsData ?? []).map(a => a.codigo_cliente_omie)));
+  const nomeMap = new Map<number, string>();
+  if (codigosAtrib.length > 0) {
+    const svcFin = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!,
+      { auth: { persistSession: false }, db: { schema: "finance" } },
+    );
+    const { data: cliData } = await svcFin.from("clientes")
+      .select("codigo_cliente_omie, razao_social, nome_fantasia")
+      .in("codigo_cliente_omie", codigosAtrib);
+    for (const c of (cliData ?? []) as { codigo_cliente_omie: number; razao_social: string; nome_fantasia: string | null }[]) {
+      nomeMap.set(c.codigo_cliente_omie, c.nome_fantasia || c.razao_social);
+    }
+  }
+
+  const atribsByPc = new Map<string, { codigo_cliente_omie: number; nome: string; percentual: number; criado_por: string | null; atualizado_em: string }[]>();
   for (const a of (atribsData ?? [])) {
     const k = `${a.empresa}::${a.pc_numero}`;
     const arr = atribsByPc.get(k) ?? [];
-    arr.push({ codigo_cliente_omie: a.codigo_cliente_omie, percentual: Number(a.percentual), criado_por: a.criado_por, atualizado_em: a.atualizado_em });
+    arr.push({ codigo_cliente_omie: a.codigo_cliente_omie, nome: nomeMap.get(a.codigo_cliente_omie) ?? `Omie #${a.codigo_cliente_omie}`, percentual: Number(a.percentual), criado_por: a.criado_por, atualizado_em: a.atualizado_em });
     atribsByPc.set(k, arr);
   }
 
@@ -81,14 +99,14 @@ export async function GET(req: NextRequest) {
 
   // Classifica: backlog (sem atrib) vs atribuidos
   const backlog: (PcRow & { qtd_clientes: 0 })[] = [];
-  const atribuidos: (PcRow & { qtd_clientes: number; clientes: { codigo_cliente_omie: number; percentual: number }[]; soma_pct: number })[] = [];
+  const atribuidos: (PcRow & { qtd_clientes: number; clientes: { codigo_cliente_omie: number; nome: string; percentual: number }[]; soma_pct: number })[] = [];
   for (const p of standalone) {
     const k = `${p.empresa}::${p.pc_numero}`;
     const atribs = atribsByPc.get(k);
     if (!atribs || atribs.length === 0) {
       backlog.push({ ...p, qtd_clientes: 0 });
     } else {
-      atribuidos.push({ ...p, qtd_clientes: atribs.length, clientes: atribs.map(a => ({ codigo_cliente_omie: a.codigo_cliente_omie, percentual: a.percentual })), soma_pct: atribs.reduce((a, x) => a + x.percentual, 0) });
+      atribuidos.push({ ...p, qtd_clientes: atribs.length, clientes: atribs.map(a => ({ codigo_cliente_omie: a.codigo_cliente_omie, nome: a.nome, percentual: a.percentual })), soma_pct: atribs.reduce((a, x) => a + x.percentual, 0) });
     }
   }
 
