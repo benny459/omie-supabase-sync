@@ -63,10 +63,11 @@ export async function GET(req: NextRequest) {
   const PAGE = 1000;
   type PcRow = { empresa: string; pc_numero: string; valor_total: string; projeto_nome: string | null; codigo_projeto: number | null; _dt_inclusao_d: string; pv_cliente_codigo: number | null };
   const standalone: PcRow[] = [];
+  // TODOS os standalones (aprovados + pendentes), pra permitir pré-atribuição
+  // antes de aprovar. Guard de aprovação segue exigindo atribuição em set-status.
   for (let offset = 0; ; offset += PAGE) {
     const { data, error } = await svcApproval.from("v_pc_pcs")
       .select("empresa, pc_numero, valor_total, projeto_nome, codigo_projeto, _dt_inclusao_d, pv_cliente_codigo")
-      .eq("status", "APROVADO")
       .is("pv_cliente_codigo", null)
       .not("_dt_inclusao_d", "is", null)
       .order("_dt_inclusao_d", { ascending: false })

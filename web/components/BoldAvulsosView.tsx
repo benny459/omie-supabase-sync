@@ -1802,6 +1802,25 @@ export default function BoldAvulsosView({
       </div>
       )}
 
+      {/* /pcs (standalones): grid próprio de 4 facet cards adaptados — sem PV
+          Status / Etapa Venda / Status Serviços (não fazem sentido pra PCs sem
+          PV origem). Foca no ciclo de aprovação + dimensões de compra. */}
+      {modulo === "pcs" && (
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+        <FacetDistribution facetKey="pc_etapa_texto"         label="Aprovação PC"    accent="emerald"  side="C" canViewValues={userCanViewValues}
+          buckets={pseudoPcAprovBuckets}  selected={pseudoPcAprovSelected}  onToggle={pseudoPcAprovToggle}  onClear={() => setStatusFilter("todos")} />
+        <FacetDistribution facetKey="projeto_nome"           label="Projeto"         accent="violet"   side="C" canViewValues={userCanViewValues}
+          buckets={facetDistributions.projeto_nome}
+          selected={facets.projeto_nome ?? new Set()}              onToggle={(v) => toggleFacet("projeto_nome", v)}           onClear={() => clearFacet("projeto_nome")} />
+        <FacetDistribution facetKey="contato_fornecedor"     label="Fornecedor"      accent="amber"    side="C" canViewValues={userCanViewValues}
+          buckets={facetDistributions.contato_fornecedor}
+          selected={facets.contato_fornecedor ?? new Set()}        onToggle={(v) => toggleFacet("contato_fornecedor", v)}     onClear={() => clearFacet("contato_fornecedor")} />
+        <FacetDistribution facetKey="codigo_categoria"       label="Categoria"       accent="fuchsia"  side="C" canViewValues={userCanViewValues}
+          buckets={facetDistributions.codigo_categoria}
+          selected={facets.codigo_categoria ?? new Set()}          onToggle={(v) => toggleFacet("codigo_categoria", v)}       onClear={() => clearFacet("codigo_categoria")} />
+      </div>
+      )}
+
       {/* ═══ FILTROS SECUNDÁRIOS — 2 linhas ═══
           Linha 1: MOLDURA "ALARMES" — os 5 dropdowns coloridos por grupo.
                     Fonte um pouco maior que os cards Kanban acima.
@@ -1838,23 +1857,19 @@ export default function BoldAvulsosView({
           />
         </div>
         <DateRangeButton range={dateRange} onChange={setDateRange} />
-        {modulo !== "pcs" && (
-          <>
-            <FacetDropdown label="Fornecedor" values={facetValues.contato_fornecedor}
-              selected={facets.contato_fornecedor ?? new Set()}
-              onToggle={(v) => toggleFacet("contato_fornecedor", v)}
-              onClear={() => clearFacet("contato_fornecedor")} />
-            <FacetDropdown label="Projeto" values={facetValues.projeto_nome}
-              selected={facets.projeto_nome ?? new Set()}
-              onToggle={(v) => toggleFacet("projeto_nome", v)}
-              onClear={() => clearFacet("projeto_nome")} />
-            <FacetDropdown label="Categoria" values={facetValues.codigo_categoria}
-              selected={facets.codigo_categoria ?? new Set()}
-              onToggle={(v) => toggleFacet("codigo_categoria", v)}
-              onClear={() => clearFacet("codigo_categoria")} />
-            <RelatorioMenu />
-          </>
-        )}
+        <FacetDropdown label="Fornecedor" values={facetValues.contato_fornecedor}
+          selected={facets.contato_fornecedor ?? new Set()}
+          onToggle={(v) => toggleFacet("contato_fornecedor", v)}
+          onClear={() => clearFacet("contato_fornecedor")} />
+        <FacetDropdown label="Projeto" values={facetValues.projeto_nome}
+          selected={facets.projeto_nome ?? new Set()}
+          onToggle={(v) => toggleFacet("projeto_nome", v)}
+          onClear={() => clearFacet("projeto_nome")} />
+        <FacetDropdown label="Categoria" values={facetValues.codigo_categoria}
+          selected={facets.codigo_categoria ?? new Set()}
+          onToggle={(v) => toggleFacet("codigo_categoria", v)}
+          onClear={() => clearFacet("codigo_categoria")} />
+        {modulo !== "pcs" && <RelatorioMenu />}
         {(() => {
           // Status PV default varia por módulo (ver defaultPvEtapa) — clear
           // volta pra esse default, não sempre "aberto". Assim /projetos limpa
