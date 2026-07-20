@@ -61,11 +61,15 @@ export default function AtribuirClienteView() {
     const url = new URL(window.location.href);
     const empresa = url.searchParams.get("empresa");
     const pc = url.searchParams.get("pc");
-    if (!empresa || !pc) return;
-    const alvo = [...data.backlog, ...data.atribuidos].find(p => p.empresa === empresa && p.pc_numero === pc);
-    if (alvo) {
-      setEditing(alvo);
-      setTab(data.atribuidos.some(p => p.empresa === empresa && p.pc_numero === pc) ? "atribuidos" : "backlog");
+    const projeto = url.searchParams.get("projeto");
+    if (empresa && pc) {
+      const alvo = [...data.backlog, ...data.atribuidos].find(p => p.empresa === empresa && p.pc_numero === pc);
+      if (alvo) {
+        setEditing(alvo);
+        setTab(data.atribuidos.some(p => p.empresa === empresa && p.pc_numero === pc) ? "atribuidos" : "backlog");
+      }
+    } else if (projeto) {
+      setFilter(projeto);
     }
     setAutoOpened(true);
   }, [data, autoOpened]);

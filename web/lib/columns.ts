@@ -230,6 +230,8 @@ export function groupsFor(modulo: "avulsos" | "projetos" | "pcs"): Group[] {
           // qual é o projeto real (43_ESTOQUE, 47_CONTRATUAL, CT*, etc).
           { key: "projeto_nome", label: "Projeto" },
           ...pcStandaloneCols,
+          // Coluna virtual — cell abre modal de atribuição multi-cliente com rateio.
+          { key: "_cliente_atribuicao", label: "Cliente(s)" },
           justificativaCol, // ← justificativa no grupo PC (editável c/ can_edit_pc)
         ]
       },

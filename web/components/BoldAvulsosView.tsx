@@ -21,6 +21,7 @@ import BucketSyncButton from "./BucketSyncButton";
 import SyncNowButton from "./SyncNowButton";
 import AddRowButton from "./AddRowButton";
 import GlobalSearch from "./GlobalSearch";
+import { AtribuicaoModal } from "./AtribuirClienteView";
 
 type AnyRow = Record<string, unknown>;
 type StatusFilter = "todos" | "aprovados" | "nao_aprovados" | "pendentes" | "atrasados";
@@ -305,6 +306,13 @@ function isRowInWindow(r: AnyRow, fromMs: number, toMs: number): boolean {
       const t = Date.parse(`${m[3]}-${m[2]}-${m[1]}`);
       if (!isNaN(t) && t >= fromMs && t < toMs) return true;
     }
+  }
+  // Data de aprovação — essencial pra /pcs standalones (não têm PV nem sempre
+  // batem por inclusão). Bônus pra avulsos: filtrar por quando o PC foi aprovado.
+  const aprov = r.aprovado_em as string | null | undefined;
+  if (aprov) {
+    const t = Date.parse(String(aprov));
+    if (!isNaN(t) && t >= fromMs && t < toMs) return true;
   }
   return false;
 }
@@ -936,6 +944,35 @@ export default function BoldAvulsosView({
   const [statusPopover, setStatusPopover] = useState<{ rowKey: string; row: AnyRow; anchor: DOMRect } | null>(null);
   // Optimistic status updates: muda na UI imediato, antes do server confirmar
   const [optimisticStatus, setOptimisticStatus] = useState<Record<string, string>>({});
+  // /pcs standalones: modal de atribuição multi-cliente por PC. Fetch inicial
+  // popula atribuicaoMap → cada row sabe se já tem atribuição sem N requests.
+  const [atribuicaoMap, setAtribuicaoMap] = useState<Map<string, { qtd: number; soma_pct: number }>>(new Map());
+  const [editingAtribuicao, setEditingAtribuicao] = useState<{
+    empresa: string; pc_numero: string; valor_total: string;
+    projeto_nome: string | null; _dt_inclusao_d: string;
+    codigo_projeto: number | null;
+    clientes?: { codigo_cliente_omie: number; percentual: number }[];
+    soma_pct?: number;
+  } | null>(null);
+  const [atribuicaoTick, setAtribuicaoTick] = useState(0);
+  useEffect(() => {
+    if (modulo !== "pcs") return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const r = await fetch("/api/pcs/atribuicao", { cache: "no-store" });
+        if (!r.ok) return;
+        const j = await r.json();
+        if (cancelled) return;
+        const m = new Map<string, { qtd: number; soma_pct: number }>();
+        for (const p of j.atribuidos ?? []) {
+          m.set(`${p.empresa}|${p.pc_numero}`, { qtd: p.qtd_clientes ?? p.clientes?.length ?? 0, soma_pct: Number(p.soma_pct ?? 0) });
+        }
+        setAtribuicaoMap(m);
+      } catch {}
+    })();
+    return () => { cancelled = true; };
+  }, [modulo, atribuicaoTick]);
 
   // Limpa o override quando o data novo (após router.refresh()) já reflete o status novo
   useEffect(() => {
@@ -1771,24 +1808,23 @@ export default function BoldAvulsosView({
           Linha 2: Search (lupa delimitada) + Data + Fornecedor/Projeto/Categoria
                     + Relatório + Limpar filtros à direita. */}
       <div className="flex items-center gap-2 flex-wrap">
-        {modulo !== "pcs" && (
-          <AlarmesPanel
-            alarmes={alarmes} counts={alarmeCounts}
-            onToggle={toggleAlarme}
-            onClearAll={clearAlarmes}
-            onToggleGroup={(kinds) => {
-              // Toggle inteligente: se algum do grupo ativo, desliga todos.
-              // Senão, liga todos (mais rápido pra explorar).
-              const anyActive = kinds.some((k) => alarmes.has(k));
-              for (const k of kinds) {
-                const on = alarmes.has(k);
-                if (anyActive && on) toggleAlarme(k);
-                else if (!anyActive && !on) toggleAlarme(k);
-              }
-            }}
-            canViewValues={userCanViewValues}
-          />
-        )}
+        <AlarmesPanel
+          alarmes={alarmes} counts={alarmeCounts}
+          onToggle={toggleAlarme}
+          onClearAll={clearAlarmes}
+          onToggleGroup={(kinds) => {
+            // Toggle inteligente: se algum do grupo ativo, desliga todos.
+            // Senão, liga todos (mais rápido pra explorar).
+            const anyActive = kinds.some((k) => alarmes.has(k));
+            for (const k of kinds) {
+              const on = alarmes.has(k);
+              if (anyActive && on) toggleAlarme(k);
+              else if (!anyActive && !on) toggleAlarme(k);
+            }
+          }}
+          canViewValues={userCanViewValues}
+        />
+
         <div className="flex-1 min-w-[260px] flex items-center gap-2 px-3 py-1.5 bg-ww-panel border border-ww-borderStrong rounded-[10px] shadow-sm focus-within:border-ww-accent focus-within:ring-2 focus-within:ring-ww-accent/20 transition">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" className="text-ww-textMuted shrink-0">
             <circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
@@ -1952,6 +1988,17 @@ export default function BoldAvulsosView({
               onToggleAlarme={toggleAlarme}
               cronogramaMap={cronogramaMap}
               budgetMap={budgetMap}
+              atribuicaoMap={atribuicaoMap}
+              onAtribuicaoClick={(row) => {
+                setEditingAtribuicao({
+                  empresa: String(row.empresa ?? "SF"),
+                  pc_numero: String(row.pc_numero ?? ""),
+                  valor_total: String(row.valor_total ?? "0"),
+                  projeto_nome: (row.projeto_nome as string | null) ?? null,
+                  _dt_inclusao_d: String(row._dt_inclusao_d ?? ""),
+                  codigo_projeto: row.codigo_projeto != null ? Number(row.codigo_projeto) : null,
+                });
+              }}
               aguardandoLiberacao={liberacaoSet.has(b.pv_os_label)}
               userCanReleasePv={userCanRelease}
               onToggleLiberacao={async (aguardando) => {
@@ -2017,6 +2064,18 @@ export default function BoldAvulsosView({
       {/* Detail drawer */}
       {drawerItem && <BoldDrawer item={drawerItem} onClose={() => setDrawerItem(null)} />}
 
+      {/* Modal atribuição cliente(s) — só /pcs standalones */}
+      {editingAtribuicao && (
+        <AtribuicaoModal
+          pc={editingAtribuicao}
+          onClose={() => setEditingAtribuicao(null)}
+          onSaved={() => {
+            setEditingAtribuicao(null);
+            setAtribuicaoTick(t => t + 1);
+          }}
+        />
+      )}
+
       {/* Status popover */}
       {statusPopover && (
         <BoldStatusPopover
@@ -2064,6 +2123,7 @@ function Sparkline({ data }: { data: readonly number[] }) {
 function BucketCard({
   bucket, modulo, isAdmin, userCanApprove, userCanEdit, open, onToggle, onRowClick, onStatusClick, selected, toggleSel, visibleGroups, onEnsureOpen, optimisticStatus, canViewValues = true, canViewMargin = true, todayStartMs, alarmesActive, onToggleAlarme, cronogramaMap, budgetMap,
   aguardandoLiberacao = false, userCanReleasePv = false, onToggleLiberacao,
+  atribuicaoMap, onAtribuicaoClick,
 }: {
   bucket: Bucket;
   modulo: "avulsos" | "projetos" | "pcs";
@@ -2090,6 +2150,9 @@ function BucketCard({
   aguardandoLiberacao?: boolean;
   userCanReleasePv?: boolean;
   onToggleLiberacao?: (aguardando: boolean) => void | Promise<void>;
+  // /pcs standalones: atribuição multi-cliente por PC (rateio).
+  atribuicaoMap?: Map<string, { qtd: number; soma_pct: number }>;
+  onAtribuicaoClick?: (row: AnyRow) => void;
 }) {
   // Alarmes deste bucket — semântica bucket-level (não row): "Sem PC" só flaga
   // se o PV inteiro não tem NENHUM PC, "Aprov. pendente" ignora rows RC-only, etc.
@@ -2579,7 +2642,7 @@ function BucketCard({
           {/* Minitags nomeadas: uma tag por alarme específico, cor do grupo.
               Click filtra a página por aquele alarme (toggle no filtro global).
               Se o filtro já está ativo, tag ganha ring destacado. */}
-          {(bucketAlarms.length > 0 || (modulo === "pcs" && bucket.groupKind === "pc" && bucket.pc_numero)) && (
+          {bucketAlarms.length > 0 && (
             <div className="flex items-center gap-1 mt-1.5 flex-wrap">
               {bucketAlarms.map((kind) => {
                 const g = kindGroup[kind];
@@ -2599,21 +2662,6 @@ function BucketCard({
                   </button>
                 );
               })}
-              {/* /pcs standalones: botão pra atribuir cliente(s) inline via modal
-                  na página /pcs/atribuir-cliente (auto-abre pra este PC). */}
-              {modulo === "pcs" && bucket.groupKind === "pc" && bucket.pc_numero && (() => {
-                const empresa = (bucket.rows[0]?.empresa as string) ?? "SF";
-                const href = `/pcs/atribuir-cliente?empresa=${encodeURIComponent(empresa)}&pc=${encodeURIComponent(bucket.pc_numero)}`;
-                return (
-                  <a href={href}
-                    onClick={(e) => e.stopPropagation()}
-                    title="Atribuir cliente(s) com rateio a este PC standalone"
-                    className="inline-flex items-center gap-1 px-1.5 py-px rounded text-[10px] font-bold uppercase tracking-[0.3px] border transition border-rose-300 bg-rose-50 text-rose-800 hover:bg-rose-100 dark:bg-rose-950/40 dark:border-rose-800 dark:text-rose-200">
-                    <span className="text-[11px] leading-none">👤</span>
-                    Atribuir Cliente
-                  </a>
-                );
-              })()}
             </div>
           )}
         </div>
@@ -2759,6 +2807,8 @@ function BucketCard({
                                 canViewValues={canViewValues}
                                 cronogramaMap={cronogramaMap}
                                 todayStartMs={todayStartMs}
+                                atribuicaoMap={atribuicaoMap}
+                                onAtribuicaoClick={onAtribuicaoClick}
                                 onStatusClick={(anchor) => onStatusClick(selKey, r, anchor)} />
                             </td>
                           );
@@ -3102,7 +3152,7 @@ function NovaPrevMateriaisCell({
 }
 
 function Cell({
-  row, col, modulo, onStatusClick, optimisticStatus, canViewValues = true, cronogramaMap, todayStartMs,
+  row, col, modulo, onStatusClick, optimisticStatus, canViewValues = true, cronogramaMap, todayStartMs, atribuicaoMap, onAtribuicaoClick,
 }: {
   row: AnyRow;
   col: import("@/lib/columns").Column;
@@ -3112,10 +3162,39 @@ function Cell({
   canViewValues?: boolean;
   cronogramaMap?: Map<string, CronogramaSummary>;
   todayStartMs?: number;
+  atribuicaoMap?: Map<string, { qtd: number; soma_pct: number }>;
+  onAtribuicaoClick?: (row: AnyRow) => void;
 }) {
   const empresa = String(row.empresa ?? "SF");
   const ncod_ped = Number(row.ncod_ped ?? 0);
   const valorPc = row.valor_total != null ? Number(row.valor_total) : null;
+
+  // Coluna virtual /pcs: cliente(s) atribuído(s) — click abre modal multi-rateio.
+  if (col.key === "_cliente_atribuicao") {
+    const pcNum = String(row.pc_numero ?? "");
+    if (!pcNum) return <span className="text-ww-textFaint text-[11.5px]">—</span>;
+    const key = `${empresa}|${pcNum}`;
+    const info = atribuicaoMap?.get(key);
+    const somaOk = info != null && Math.abs(info.soma_pct - 100) < 0.01;
+    return (
+      <button
+        onClick={(e) => { e.stopPropagation(); onAtribuicaoClick?.(row); }}
+        title={info ? `${info.qtd} cliente(s) · soma ${info.soma_pct}%` : "Atribuir cliente(s) com rateio"}
+        className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded border text-[10.5px] font-semibold whitespace-nowrap transition ${
+          info && somaOk
+            ? "border-emerald-300 bg-emerald-50 text-emerald-800 hover:bg-emerald-100 dark:bg-emerald-950/40 dark:border-emerald-800 dark:text-emerald-200"
+            : info
+            ? "border-amber-300 bg-amber-50 text-amber-800 hover:bg-amber-100 dark:bg-amber-950/40 dark:border-amber-800 dark:text-amber-200"
+            : "border-rose-300 bg-rose-50 text-rose-800 hover:bg-rose-100 dark:bg-rose-950/40 dark:border-rose-800 dark:text-rose-200"
+        }`}
+      >
+        <span>👤</span>
+        {info
+          ? somaOk ? `${info.qtd} cliente${info.qtd > 1 ? "s" : ""}` : `⚠ ${info.soma_pct}%`
+          : "Atribuir…"}
+      </button>
+    );
+  }
 
   // Colunas virtuais do grupo Cronograma (só /projetos). Dado vem de
   // cronogramaMap (fetch batch em BoldAvulsosView), não do row do view.
