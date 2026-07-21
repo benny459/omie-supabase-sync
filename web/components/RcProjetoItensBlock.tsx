@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import { supaBrowser } from "@/lib/supabase";
+import * as XLSX from "xlsx";
 
 type ItemRow = {
   id: string;
@@ -45,6 +46,31 @@ function slug(s: string): string {
   return s.toString().toLowerCase()
     .normalize("NFD").replace(/[̀-ͯ]/g, "")
     .replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 40) || "eq";
+}
+
+// Excel sheet names: max 31 chars, sem \/?*[]: e não pode ser vazio nem repetir.
+function sanitizeSheetName(raw: string, taken: Set<string>): string {
+  let base = (raw ?? "").replace(/[\\/?*[\]:]/g, "").trim().slice(0, 31);
+  if (!base) base = "Sem nome";
+  let candidate = base;
+  let i = 2;
+  while (taken.has(candidate)) {
+    const suffix = ` (${i})`;
+    candidate = base.slice(0, 31 - suffix.length) + suffix;
+    i++;
+  }
+  taken.add(candidate);
+  return candidate;
+}
+
+// Ordena por Fornecedor (nulls no fim) → depois Item alfabético.
+function sortByFornecItem(a: ItemRow, b: ItemRow): number {
+  const fa = (a.nome_fornecedor ?? "").trim();
+  const fb = (b.nome_fornecedor ?? "").trim();
+  if (!fa && fb) return 1;
+  if (fa && !fb) return -1;
+  if (fa !== fb) return fa.localeCompare(fb, "pt-BR", { sensitivity: "base" });
+  return (a.item ?? "").localeCompare(b.item ?? "", "pt-BR", { sensitivity: "base" });
 }
 
 // Colore o Status Fornec (mt_status_fornecimento) por família de valor.
@@ -171,6 +197,68 @@ export default function RcProjetoItensBlock({
     lastCheckedIdxRef.current = null;
   }, [router, pathname, searchParams]);
 
+  // Export Excel — abas: 1 por conjunto (nome literal, ex "Abrandador") +
+  // aba "Completa" (Conjunto no fim) + aba "Resumo". Ordenação: fornecedor
+  // → item alfabético dentro de cada aba.
+  const exportExcel = useCallback(() => {
+    if (rows.length === 0) return;
+    const wb = XLSX.utils.book_new();
+    const taken = new Set<string>();
+
+    // Helper mapper — colunas visíveis. `withConjunto`=true adiciona no FIM.
+    const rowToRecord = (r: ItemRow, withConjunto: boolean) => {
+      const base = {
+        "Item":       r.item ?? "",
+        "Qtd":        r.qtd ?? "",
+        "Modelo":     r.modelo ?? "",
+        "PC #":       r.pc_numero ?? "",
+        "Fornecedor": r.nome_fornecedor ?? "",
+        "Prev. PC":   fmtBR(r.dt_previsao),
+        "Nova Prev.": fmtBR(r.nova_prev_materiais),
+        "Status":     r.pc_etapa_texto ?? r.status_fornec ?? "",
+      };
+      return withConjunto ? { ...base, "Conjunto": r.equipamento ?? "" } : base;
+    };
+
+    // 1) Aba "Resumo" — vem primeiro pro user abrir logo e ver o panorama.
+    const resumoRows = Array.from(groups.entries())
+      .map(([eq, items]) => ({
+        "Conjunto":       eq,
+        "Qtd itens":      items.length,
+        "Qtd fornecidos": items.filter(i => i.pc_numero).length,
+        "Qtd pendentes":  items.filter(i => !i.pc_numero).length,
+        "Fornecedores":   Array.from(new Set(items.map(i => i.nome_fornecedor).filter(Boolean))).length,
+      }))
+      .sort((a, b) => (a.Conjunto as string).localeCompare(b.Conjunto as string, "pt-BR"));
+    resumoRows.push({
+      "Conjunto":       "TOTAL",
+      "Qtd itens":      rows.length,
+      "Qtd fornecidos": rows.filter(i => i.pc_numero).length,
+      "Qtd pendentes":  rows.filter(i => !i.pc_numero).length,
+      "Fornecedores":   Array.from(new Set(rows.map(i => i.nome_fornecedor).filter(Boolean))).length,
+    });
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(resumoRows), sanitizeSheetName("Resumo", taken));
+
+    // 2) Aba "Completa" — todos ordenados por conjunto, depois fornec, depois item.
+    const completa = [...rows].sort((a, b) => {
+      const c = (a.equipamento ?? "").localeCompare(b.equipamento ?? "", "pt-BR");
+      return c !== 0 ? c : sortByFornecItem(a, b);
+    }).map(r => rowToRecord(r, true));
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(completa), sanitizeSheetName("Completa", taken));
+
+    // 3) Uma aba por conjunto (ordem alfabética do nome), ordenada por fornec→item.
+    const equipamentosOrdenados = Array.from(groups.keys())
+      .sort((a, b) => a.localeCompare(b, "pt-BR"));
+    for (const eq of equipamentosOrdenados) {
+      const items = [...(groups.get(eq) ?? [])].sort(sortByFornecItem).map(r => rowToRecord(r, false));
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(items), sanitizeSheetName(eq, taken));
+    }
+
+    const dt = new Date();
+    const stamp = `${dt.getFullYear()}${String(dt.getMonth()+1).padStart(2,"0")}${String(dt.getDate()).padStart(2,"0")}`;
+    XLSX.writeFile(wb, `lista-materiais-PJ${codigoProjeto}-${stamp}.xlsx`);
+  }, [rows, groups, codigoProjeto]);
+
   async function delItem(id: string, label: string) {
     if (!confirm(`Excluir item "${label}"?`)) return;
     const r = await fetch(`/api/rc-projetos/${id}`, { method: "DELETE" });
@@ -270,8 +358,17 @@ export default function RcProjetoItensBlock({
     <div className="border-t border-ww-border bg-violet-50/30 dark:bg-violet-950/20 px-4 py-3">
       {/* HEADER */}
       <div className="flex items-center justify-between flex-wrap gap-2 mb-2">
-        <div className="text-[11px] uppercase tracking-[0.6px] font-bold text-violet-900 dark:text-violet-200">
-          📦 Itens RC · {rows.length} itens em {groups.size} equipamento{groups.size !== 1 ? "s" : ""}
+        <div className="text-[11px] uppercase tracking-[0.6px] font-bold text-violet-900 dark:text-violet-200 flex items-center gap-2">
+          <span>📦 Itens RC · {rows.length} itens em {groups.size} equipamento{groups.size !== 1 ? "s" : ""}</span>
+          {rows.length > 0 && (
+            <button
+              onClick={exportExcel}
+              title={`Exporta ${rows.length} itens em abas (Resumo + Completa + 1 por conjunto)`}
+              className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10.5px] font-semibold border border-emerald-300 bg-emerald-50 text-emerald-800 hover:bg-emerald-100 dark:bg-emerald-950/40 dark:border-emerald-800 dark:text-emerald-200 normal-case tracking-normal transition"
+            >
+              📊 Exportar Excel
+            </button>
+          )}
         </div>
         <div className="flex items-center gap-3 text-[11px] tabular-nums">
           <div className="flex items-center gap-1.5">
