@@ -25,7 +25,7 @@ import { AtribuicaoModal } from "./AtribuirClienteView";
 
 type AnyRow = Record<string, unknown>;
 type StatusFilter = "todos" | "aprovados" | "nao_aprovados" | "pendentes" | "atrasados";
-type PvEtapaGroup = "todos" | "aberto" | "fechado";
+type PvEtapaGroup = "todos" | "aberto" | "aguarda" | "fechado";
 type ServicosFilter = "todos" | "concluidos" | "agendados" | "sem_os";
 
 // Etapas que contam como "Exec./Faturado" — pré-faturamento, já faturado ou cancelado
@@ -907,7 +907,7 @@ export default function BoldAvulsosView({
   const [pvEtapaGroup, setPvEtapaGroup] = useState<PvEtapaGroup>(() => {
     if (typeof window === "undefined") return defaultPvEtapa;
     const raw = new URLSearchParams(window.location.search).get("pv");
-    return raw === "todos" || raw === "fechado" || raw === "aberto" ? raw : defaultPvEtapa;
+    return raw === "todos" || raw === "fechado" || raw === "aberto" || raw === "aguarda" ? raw : defaultPvEtapa;
   });
   const [servicosFilter, setServicosFilter] = useState<ServicosFilter>("todos");
   // Filtro "Status Serviços" (do WW): multi-select por valor humano-friendly
@@ -1173,8 +1173,11 @@ export default function BoldAvulsosView({
     }
     if (modulo !== "pcs" && !opts.skipPvEtapa) {
       const etapa = String(r.pv_etapa_texto ?? "");
-      if (pvEtapaGroup === "aberto" && ETAPAS_FECHADAS.has(etapa)) return false;
-      if (pvEtapaGroup === "fechado" && !ETAPAS_FECHADAS.has(etapa)) return false;
+      const pvLbl = String(r.pv_os_label ?? "");
+      const isAguarda = liberacaoSet.has(pvLbl);
+      if (pvEtapaGroup === "aberto"   && (ETAPAS_FECHADAS.has(etapa) || isAguarda)) return false;
+      if (pvEtapaGroup === "aguarda"  && !isAguarda) return false;
+      if (pvEtapaGroup === "fechado"  && !ETAPAS_FECHADAS.has(etapa)) return false;
     }
     if (!opts.skipStatus) {
       const s = effectiveStatus(r);
@@ -1472,9 +1475,13 @@ export default function BoldAvulsosView({
     if (pvEtapaGroup === "todos") return rowsAfterDateAtraso;
     return rowsAfterDateAtraso.filter((r) => {
       const etapa = String(r.pv_etapa_texto ?? "");
-      return pvEtapaGroup === "aberto" ? !ETAPAS_FECHADAS.has(etapa) : ETAPAS_FECHADAS.has(etapa);
+      const pvLbl = String(r.pv_os_label ?? "");
+      const isAguarda = liberacaoSet.has(pvLbl);
+      if (pvEtapaGroup === "aberto")   return !ETAPAS_FECHADAS.has(etapa) && !isAguarda;
+      if (pvEtapaGroup === "aguarda")  return isAguarda;
+      /* fechado */                    return ETAPAS_FECHADAS.has(etapa);
     });
-  }, [rowsAfterDateAtraso, pvEtapaGroup]);
+  }, [rowsAfterDateAtraso, pvEtapaGroup, liberacaoSet]);
 
   // KPIs agregados (refletem o filtro primário PV - Status)
   const kpis = useMemo(() => {
@@ -1553,8 +1560,9 @@ export default function BoldAvulsosView({
   //     valor_total do PC. Rows sem PC (só PV) são excluídos.
   const pseudoPvStatusBuckets = useMemo(() => {
     const abertoPv   = new Set<string>();
+    const aguardaPv  = new Set<string>();
     const fechadoPv  = new Set<string>();
-    let abertoVal = 0, fechadoVal = 0;
+    let abertoVal = 0, aguardaVal = 0, fechadoVal = 0;
     for (const r of rows) {
       if (!passesFilters(r, { skipPvEtapa: true })) continue;
       const k = String(r.pv_os_label ?? "");
@@ -1563,23 +1571,29 @@ export default function BoldAvulsosView({
       const val = Number(r.pv_valor_total) || 0;
       if (ETAPAS_FECHADAS.has(etapa)) {
         if (!fechadoPv.has(k)) { fechadoPv.add(k); fechadoVal += val; }
+      } else if (liberacaoSet.has(k)) {
+        if (!aguardaPv.has(k)) { aguardaPv.add(k); aguardaVal += val; }
       } else {
         if (!abertoPv.has(k)) { abertoPv.add(k); abertoVal += val; }
       }
     }
     return [
-      { value: "Aberto",   count: abertoPv.size,  val: abertoVal },
-      { value: "Faturado", count: fechadoPv.size, val: fechadoVal },
+      { value: "Aberto",              count: abertoPv.size,  val: abertoVal },
+      { value: "Aguardando Liberação", count: aguardaPv.size, val: aguardaVal },
+      { value: "Faturado",            count: fechadoPv.size, val: fechadoVal },
     ];
-  }, [rows, passesFilters]);
+  }, [rows, passesFilters, liberacaoSet]);
   const pseudoPvStatusSelected = useMemo(() => {
     const s = new Set<string>();
     if (pvEtapaGroup === "aberto")  s.add("Aberto");
+    if (pvEtapaGroup === "aguarda") s.add("Aguardando Liberação");
     if (pvEtapaGroup === "fechado") s.add("Faturado");
     return s;
   }, [pvEtapaGroup]);
   const pseudoPvStatusToggle = useCallback((v: string) => {
-    const target: PvEtapaGroup = v === "Aberto" ? "aberto" : "fechado";
+    const target: PvEtapaGroup =
+      v === "Aberto" ? "aberto" :
+      v === "Aguardando Liberação" ? "aguarda" : "fechado";
     setPvEtapaGroup((cur) => cur === target ? "todos" : target);
   }, []);
 
