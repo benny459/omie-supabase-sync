@@ -31,7 +31,30 @@ import { Virtuoso, type VirtuosoHandle } from "react-virtuoso";
 
 type AnyRow = Record<string, unknown>;
 type StatusFilter = "todos" | "aprovados" | "nao_aprovados" | "pendentes" | "atrasados";
-type PvEtapaGroup = "todos" | "aberto" | "aguarda" | "fechado";
+// Status PV é MULTI-SELECT: Set vazio = "todos" (sem filtro). Antes era um valor
+// único, e isso criava um beco — o report conta como "aberto" tudo que não foi
+// faturado, incluindo os "Aguardando Liberação", mas o painel só deixava ver um
+// grupo por vez. Clicar em "Previsão Vencida: 8" no Webex mostrava 1, porque os
+// outros 7 estavam aguardando liberação e ficavam fora da aba "Aberto".
+type PvEtapaKey = "aberto" | "aguarda" | "fechado";
+
+// Classifica um PV em exatamente UM grupo. A precedência (fechado > aguarda >
+// aberto) é a mesma dos cards de contagem, pra card e filtro nunca discordarem.
+function pvEtapaKeyOf(etapa: string, isAguarda: boolean): PvEtapaKey {
+  if (ETAPAS_FECHADAS.has(etapa)) return "fechado";
+  if (isAguarda) return "aguarda";
+  return "aberto";
+}
+const samePvEtapa = (a: Set<PvEtapaKey>, b: Set<PvEtapaKey>) =>
+  a.size === b.size && [...a].every((k) => b.has(k));
+const parsePvEtapaParam = (raw: string | null, fallback: () => Set<PvEtapaKey>): Set<PvEtapaKey> => {
+  if (!raw) return fallback();
+  if (raw === "todos") return new Set();
+  // aceita "aberto,aguarda" (usado pelos deep-links do report) e valor único
+  const keys = raw.split(",").map((s) => s.trim())
+    .filter((s): s is PvEtapaKey => s === "aberto" || s === "aguarda" || s === "fechado");
+  return keys.length ? new Set(keys) : fallback();
+};
 type ServicosFilter = "todos" | "concluidos" | "agendados" | "sem_os";
 
 // Etapas que contam como "Exec./Faturado" — pré-faturamento, já faturado ou cancelado
@@ -676,11 +699,14 @@ export default function BoldAvulsosView({
   //     buckets ficam incompletos — 30 PCs de um PV faturado somem enquanto
   //     ainda são relevantes pro projeto (custo real, materiais recebidos etc).
   //   • /pcs      → "aberto": mesma lógica de /avulsos.
-  const defaultPvEtapa: PvEtapaGroup = modulo === "projetos" ? "todos" : "aberto";
-  const [pvEtapaGroup, setPvEtapaGroup] = useState<PvEtapaGroup>(() => {
-    if (typeof window === "undefined") return defaultPvEtapa;
-    const raw = new URLSearchParams(window.location.search).get("pv");
-    return raw === "todos" || raw === "fechado" || raw === "aberto" || raw === "aguarda" ? raw : defaultPvEtapa;
+  const mkDefaultPvEtapa = useCallback(
+    (): Set<PvEtapaKey> => (modulo === "projetos" ? new Set() : new Set<PvEtapaKey>(["aberto"])),
+    [modulo],
+  );
+  const [pvEtapaSel, setPvEtapaSel] = useState<Set<PvEtapaKey>>(() => {
+    const fallback = (): Set<PvEtapaKey> => (modulo === "projetos" ? new Set() : new Set<PvEtapaKey>(["aberto"]));
+    if (typeof window === "undefined") return fallback();
+    return parsePvEtapaParam(new URLSearchParams(window.location.search).get("pv"), fallback);
   });
   const [servicosFilter, setServicosFilter] = useState<ServicosFilter>("todos");
   // Filtro "Status Serviços" (do WW): multi-select por valor humano-friendly
@@ -975,9 +1001,8 @@ export default function BoldAvulsosView({
       const etapa = String(r.pv_etapa_texto ?? "");
       const pvLbl = String(r.pv_os_label ?? "");
       const isAguarda = liberacaoSet.has(pvLbl);
-      if (pvEtapaGroup === "aberto"   && (ETAPAS_FECHADAS.has(etapa) || isAguarda)) return false;
-      if (pvEtapaGroup === "aguarda"  && !isAguarda) return false;
-      if (pvEtapaGroup === "fechado"  && !ETAPAS_FECHADAS.has(etapa)) return false;
+      // Set vazio = sem filtro. Com N grupos marcados, passa quem estiver em qualquer um.
+      if (pvEtapaSel.size > 0 && !pvEtapaSel.has(pvEtapaKeyOf(etapa, isAguarda))) return false;
     }
     if (!opts.skipStatus) {
       const s = effectiveStatus(r);
@@ -1025,7 +1050,7 @@ export default function BoldAvulsosView({
     }
     if (!q) return true;
     return (haystackByRow.get(r) ?? "").includes(q);
-  }, [deferredQuery, dateWindow, alarmes, alarmsByBucket, modulo, pvEtapaGroup, statusFilter, servicosFilter, servicosStatusFilter, facets, effectiveStatus, liberacaoSet, haystackByRow]);
+  }, [deferredQuery, dateWindow, alarmes, alarmsByBucket, modulo, pvEtapaSel, statusFilter, servicosFilter, servicosStatusFilter, facets, effectiveStatus, liberacaoSet, haystackByRow]);
 
   const filtered = useMemo(() => rows.filter((r) => passesFilters(r)), [rows, passesFilters]);
 
@@ -1280,16 +1305,11 @@ export default function BoldAvulsosView({
   // Rows após aplicar (Date+Alarmes+pvEtapaGroup), sem statusFilter/facets/query.
   // Usado pra calcular contagens dos KPIs de status com o filtro primário ativo.
   const rowsAfterPvEtapa = useMemo(() => {
-    if (pvEtapaGroup === "todos") return rowsAfterDateAtraso;
-    return rowsAfterDateAtraso.filter((r) => {
-      const etapa = String(r.pv_etapa_texto ?? "");
-      const pvLbl = String(r.pv_os_label ?? "");
-      const isAguarda = liberacaoSet.has(pvLbl);
-      if (pvEtapaGroup === "aberto")   return !ETAPAS_FECHADAS.has(etapa) && !isAguarda;
-      if (pvEtapaGroup === "aguarda")  return isAguarda;
-      /* fechado */                    return ETAPAS_FECHADAS.has(etapa);
-    });
-  }, [rowsAfterDateAtraso, pvEtapaGroup, liberacaoSet]);
+    if (pvEtapaSel.size === 0) return rowsAfterDateAtraso;
+    return rowsAfterDateAtraso.filter((r) => pvEtapaSel.has(
+      pvEtapaKeyOf(String(r.pv_etapa_texto ?? ""), liberacaoSet.has(String(r.pv_os_label ?? ""))),
+    ));
+  }, [rowsAfterDateAtraso, pvEtapaSel, liberacaoSet]);
 
   // KPIs agregados (refletem o filtro primário PV - Status)
   const kpis = useMemo(() => {
@@ -1393,16 +1413,21 @@ export default function BoldAvulsosView({
   }, [rows, passesFilters, liberacaoSet]);
   const pseudoPvStatusSelected = useMemo(() => {
     const s = new Set<string>();
-    if (pvEtapaGroup === "aberto")  s.add("Aberto");
-    if (pvEtapaGroup === "aguarda") s.add("Aguardando Liberação");
-    if (pvEtapaGroup === "fechado") s.add("Faturado");
+    if (pvEtapaSel.has("aberto"))  s.add("Aberto");
+    if (pvEtapaSel.has("aguarda")) s.add("Aguardando Liberação");
+    if (pvEtapaSel.has("fechado")) s.add("Faturado");
     return s;
-  }, [pvEtapaGroup]);
+  }, [pvEtapaSel]);
   const pseudoPvStatusToggle = useCallback((v: string) => {
-    const target: PvEtapaGroup =
+    const target: PvEtapaKey =
       v === "Aberto" ? "aberto" :
       v === "Aguardando Liberação" ? "aguarda" : "fechado";
-    setPvEtapaGroup((cur) => cur === target ? "todos" : target);
+    // Multi-select: liga/desliga o grupo. Todos desmarcados = sem filtro.
+    setPvEtapaSel((cur) => {
+      const next = new Set(cur);
+      if (next.has(target)) next.delete(target); else next.add(target);
+      return next;
+    });
   }, []);
 
   const pseudoPcAprovBuckets = useMemo(() => {
@@ -1700,7 +1725,7 @@ export default function BoldAvulsosView({
       {modulo !== "pcs" && (
       <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-3">
         <FacetDistribution facetKey="pv_etapa_texto"         label="Status PV"       accent="blue"     side="V" canViewValues={userCanViewValues}
-          buckets={pseudoPvStatusBuckets} selected={pseudoPvStatusSelected} onToggle={pseudoPvStatusToggle} onClear={() => setPvEtapaGroup("todos")} />
+          buckets={pseudoPvStatusBuckets} selected={pseudoPvStatusSelected} onToggle={pseudoPvStatusToggle} onClear={() => setPvEtapaSel(new Set())} />
         <FacetDistribution facetKey="pc_etapa_texto"         label="Aprovação PC"    accent="emerald"  side="C" canViewValues={userCanViewValues}
           buckets={pseudoPcAprovBuckets}  selected={pseudoPcAprovSelected}  onToggle={pseudoPcAprovToggle}  onClear={() => setStatusFilter("todos")} />
         <FacetDistribution facetKey="tipo_omie"              label="Tipo Omie"       accent="violet"   side="V" single canViewValues={userCanViewValues}
@@ -1791,7 +1816,7 @@ export default function BoldAvulsosView({
           // pra "todos" e /avulsos limpa pra "aberto".
           const hasFacets   = Object.values(facets).some((s) => s && s.size > 0);
           const hasStatus   = statusFilter !== "todos";
-          const hasPvEtapa  = pvEtapaGroup !== defaultPvEtapa;
+          const hasPvEtapa  = !samePvEtapa(pvEtapaSel, mkDefaultPvEtapa());
           const hasServicos = servicosFilter !== "todos";
           const hasServStat = servicosStatusFilter.size > 0;
           const hasAtraso   = alarmes.size > 0;
@@ -1804,7 +1829,7 @@ export default function BoldAvulsosView({
                 if (!anyFilter) return;
                 setFacets({});
                 setStatusFilter("todos");
-                setPvEtapaGroup(defaultPvEtapa);
+                setPvEtapaSel(mkDefaultPvEtapa());
                 setServicosFilter("todos");
                 setServicosStatusFilter(new Set());
                 clearAlarmes();

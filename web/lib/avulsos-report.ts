@@ -76,7 +76,12 @@ export const ALARM_OWNERS: Record<AlarmKind, string> = {
 // pra abrir direto na vista filtrada.
 export const PANEL_BASE = "https://painel.waterworks.com.br/avulsos";
 export function buildAlarmeLink(kind: AlarmKind): string {
-  const params = new URLSearchParams({ alarme: kind, pv: "aberto" });
+  // pv=aberto,aguarda (multi-select) e NÃO pv=aberto. O report considera aberto
+  // todo PV não faturado, o que inclui os "Aguardando Liberação" — mas no painel
+  // esses são um grupo à parte. Com pv=aberto o link abria a visão que escondia
+  // parte do que a própria linha acabou de contar: "Previsão Vencida: 8" levava
+  // a uma tela com 1, porque os outros 7 aguardavam liberação.
+  const params = new URLSearchParams({ alarme: kind, pv: "aberto,aguarda" });
   return `${PANEL_BASE}?${params.toString()}`;
 }
 
