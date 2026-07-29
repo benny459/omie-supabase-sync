@@ -4,3 +4,11 @@ node_modules/
 .env*.local
 *.log
 .vercel
+
+# storageState do Playwright — guarda a SESSÃO AUTENTICADA (cookies/tokens) de
+# quem rodou o e2e por último. Estava versionado, commitando token de sessão do
+# painel a cada rodada de teste.
+tests/.auth/
+# Artefatos de teste (screenshots, traces) — ruído no diff, regenerados sempre.
+test-results/
+playwright-report/
