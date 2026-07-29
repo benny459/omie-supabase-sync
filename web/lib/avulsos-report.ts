@@ -31,6 +31,7 @@ export const REPORT_SECTIONS: {
     items: [
       { kind: "sem_rc",     label: "Faltam RCs ou incompletos" },
       { kind: "aprov_pend", label: "Aprovações pendentes" },
+      { kind: "aprov_bloq", label: "Aprovações bloqueadas" },
       { kind: "sem_pc",     label: "Faltam PCs ou incompletos" },
       { kind: "compra",     label: "Previsão atrasada" },
       { kind: "defas_omie", label: "Defasagem de Aprovação Omie" },
@@ -61,8 +62,6 @@ export const ALARM_OWNERS: Record<AlarmKind, string> = {
   venda:             "Fernanda",
   sem_rc:            "Fernanda",
   aprov_pend:        "Fernanda",
-  // Calculado por ./alarmes e exibido no painel, mas ainda NÃO listado em
-  // REPORT_SECTIONS — ou seja, não sai no Webex. Incluir é decisão de produto.
   aprov_bloq:        "Fernanda",
   sem_pc:            "Erick",
   compra:            "Erick",
