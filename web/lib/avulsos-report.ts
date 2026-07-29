@@ -4,21 +4,12 @@
 // - Constrói URLs de deep-link pra painel filtrado
 
 import { supaAdmin } from "./supabase-admin";
+import { ALARM_KINDS, computeBucketAlarms, type AlarmKind } from "./alarmes";
 
-export type AlarmKind =
-  | "pvos_incompl"
-  | "sem_projeto"
-  | "aguarda_liberacao"
-  | "venda"
-  | "compra"
-  | "sem_rc"
-  | "sem_pc"
-  | "aprov_pend"
-  | "defas_omie"
-  | "sem_vinculo"
-  | "agend_vazio"
-  | "agend_venc"
-  | "pode_faturar";
+// AlarmKind e as regras de cálculo moram em ./alarmes — fonte única compartilhada
+// com o painel (BoldAvulsosView). Este arquivo cuida só de: buscar as linhas,
+// montar seções/responsáveis e formatar o texto do Webex.
+export type { AlarmKind };
 
 // Ordem de exibição no report + label humano
 export const REPORT_SECTIONS: {
@@ -70,6 +61,9 @@ export const ALARM_OWNERS: Record<AlarmKind, string> = {
   venda:             "Fernanda",
   sem_rc:            "Fernanda",
   aprov_pend:        "Fernanda",
+  // Calculado por ./alarmes e exibido no painel, mas ainda NÃO listado em
+  // REPORT_SECTIONS — ou seja, não sai no Webex. Incluir é decisão de produto.
+  aprov_bloq:        "Fernanda",
   sem_pc:            "Erick",
   compra:            "Erick",
   defas_omie:        "Erick",
@@ -88,63 +82,11 @@ export function buildAlarmeLink(kind: AlarmKind): string {
 }
 
 // ── Cálculo de contadores ───────────────────────────────────────────────
-
-// Parse flexível de data (aceita ISO YYYY-MM-DD ou BR DD/MM/YYYY).
-// IMPORTANTE: retorna meia-noite LOCAL (não UTC) pra bater com Date.setHours(0).
-function parseFlexDate(s: string): number | null {
-  const iso = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
-  if (iso) return new Date(Number(iso[1]), Number(iso[2]) - 1, Number(iso[3])).getTime();
-  const br = s.match(/^(\d{2})\/(\d{2})\/(\d{4})/);
-  if (br)  return new Date(Number(br[3]), Number(br[2]) - 1, Number(br[1])).getTime();
-  return null;
-}
-
-const APPROVED = new Set(["APROVADO", "APROVADO_ATE", "APROVADO_ATRASADO"]);
-const isApproved = (s: string) => APPROVED.has(s);
+// As regras (parseFlexDate, isSemProjeto, isAtrasoVenda, …) vivem em ./alarmes.
+// NÃO recrie cópias locais aqui: foi exatamente isso que fez os números do
+// Webex e do painel divergirem.
 
 type Row = Record<string, unknown>;
-
-// Detectors row-level — replicam matchesAlarme + isAtraso* do BoldAvulsosView.
-function isPvosIncompleto(r: Row): boolean {
-  const tipoOk    = !!String(r.tipo_omie ?? "").trim();
-  const clienteOk = !!String(r.pv_cliente_fantasia ?? "").trim();
-  const dtLimOk   = !!String(r.pv_data_previsao ?? "").trim();
-  return !tipoOk || !clienteOk || !dtLimOk;
-}
-// "Sem Projeto" = vendedor não marcou. Só considera nulo/vazio — projetos
-// contratuais (CT*), avulsos (40_VS/41_VP), projetos (PJ*) são todos VÁLIDOS
-// e não devem alarmar. Bug anterior: regex `!/^(40_VS|41_VP|PJ)/` marcava
-// os 500+ CT* como sem_projeto, inflando o alarme 130x. (2026-07-16)
-function isSemProjeto(r: Row): boolean {
-  return String(r.projeto_nome ?? "").trim() === "";
-}
-function isAtrasoVenda(r: Row, todayMs: number): boolean {
-  const dt = String(r.pv_dt_fat ?? "").trim();
-  if (dt !== "") return false;
-  const s = String(r.pv_data_previsao ?? "").trim();
-  if (!s) return false;
-  const t = parseFlexDate(s);
-  return t != null && t < todayMs;
-}
-function isAtrasoCompra(r: Row, todayMs: number): boolean {
-  // "Previsão atrasada" unificado — nova_prev se existir, senão dt_previsao,
-  // desde que material não tenha sido recebido. Cobre os antigos "compra" +
-  // "prev_mat_atr" (Nova Prev. herda dt_previsao por padrão, ambos casos convergem).
-  if (r.mt_data_recebimento_nf) return false;
-  const novaS = String(r.nova_prev_materiais ?? "").trim();
-  const origS = String(r.dt_previsao ?? "").trim();
-  const efetivaStr = novaS || origS;
-  if (!efetivaStr) return false;
-  const t = parseFlexDate(efetivaStr);
-  return t != null && t < todayMs;
-}
-function isDefasagemOmie(r: Row): boolean {
-  const hasPc = !!r.pc_numero || !!r.pc_numero_manual;
-  if (!hasPc) return false;
-  if (!isApproved(String(r.status ?? ""))) return false;
-  const etapa = String(r.pc_etapa_texto ?? "").trim();
-  return etapa !== "" && etapa !== "Aprovação";
-}
 
 // Agrega alarmes bucket-level (por pv_os_label) — replica computeBucketAlarms.
 // Retorna Map<pv_os_label, { kinds: Set<AlarmKind>; pv_valor: number }>.
@@ -161,118 +103,8 @@ function computeBuckets(rows: Row[], todayMs: number, liberacaoSet: Set<string>)
   const result = new Map<string, BucketInfo>();
   for (const [k, items] of buckets) {
     const head = items[0];
-    const tipoBucket = String(head.tipo_omie ?? "");
-    const hasPurchases = tipoBucket !== "Serviços";
-    const anyRc = items.some((r) => !!r.rc_numero);
-    const anyPc = items.some((r) => !!r.pc_numero || !!r.pc_numero_manual);
-    const kinds = new Set<AlarmKind>();
-
-    // PV encerrada = tem dt_fat OU num_nfe OU etapa em {Faturado, Cancelado}.
-    // Entrega não é encerrada por si só; se foi faturada, dt_fat/num_nfe estão
-    // preenchidos (v_pc_avulsos agora puxa isso de sales.etapas_pedidos via
-    // pv_etapa_atual CTE — fix estrutural em 2026-07-17).
-    const pvDtFatHead  = String(head.pv_dt_fat ?? "").trim();
-    const pvNumNfeHead = String(head.pv_num_nfe ?? "").trim();
-    const pvEtapaHead  = String(head.pv_etapa_texto ?? "").trim();
-    const isEncerrada  = pvDtFatHead !== "" || pvNumNfeHead !== ""
-                      || pvEtapaHead === "Faturado" || pvEtapaHead === "Cancelado";
-    if (isEncerrada) {
-      result.set(k, { kinds, pv_valor: Number(head.pv_valor_total) || 0 });
-      continue;
-    }
-
-    // Aguardando Liberação: cliente pediu venda mas ainda não enviou PC formal.
-    // ADITIVO — os demais alarmes continuam disparando ao lado. Sai automaticamente
-    // quando o PV vira Faturado no Omie (isEncerrada acima retorna cedo).
-    if (liberacaoSet.has(k)) {
-      kinds.add("aguarda_liberacao");
-    }
-
-    // Vendas
-    if (isPvosIncompleto(head))       kinds.add("pvos_incompl");
-    if (isSemProjeto(head))           kinds.add("sem_projeto");
-    if (isAtrasoVenda(head, todayMs)) kinds.add("venda");
-
-    if (hasPurchases) {
-      // Previsão atrasada (unificado)
-      for (const r of items) { if (isAtrasoCompra(r, todayMs))  { kinds.add("compra"); break; } }
-      // sem_rc unificado (nenhum RC OU RC com XOR num/custo)
-      let temRcIncomp = false;
-      if (anyRc) {
-        for (const r of items) {
-          const hasNum  = !!r.rc_numero;
-          const hasCost = r.rc_custo != null && Number(r.rc_custo) !== 0;
-          if (hasNum !== hasCost) { temRcIncomp = true; break; }
-        }
-      }
-      if (!anyRc || temRcIncomp) kinds.add("sem_rc");
-      // sem_pc unificado
-      let temPcIncomp = false;
-      if (anyPc) {
-        for (const r of items) {
-          const hasPc = !!r.pc_numero || !!r.pc_numero_manual;
-          if (!hasPc) continue;
-          const hasForn = !!r.nome_fornecedor || !!r.codigo_fornecedor;
-          const hasVal  = r.valor_total != null && Number(r.valor_total) !== 0;
-          const hasCat  = !!r.codigo_categoria;
-          if (!(hasForn && hasVal && hasCat)) { temPcIncomp = true; break; }
-        }
-      }
-      if (!anyPc || temPcIncomp) kinds.add("sem_pc");
-      // Aprovação pendente
-      for (const r of items) {
-        const hasPc = !!r.pc_numero || !!r.pc_numero_manual;
-        if (!hasPc) continue;
-        const s = String(r.status ?? "");
-        if (s === "PENDENTE" || s === "PRE_SELECAO") { kinds.add("aprov_pend"); break; }
-      }
-      // Defasagem Omie
-      for (const r of items) {
-        if (isDefasagemOmie(r)) { kinds.add("defas_omie"); break; }
-      }
-    }
-
-    // Serviços — só Mix / Serviços
-    if (tipoBucket === "Mix" || tipoBucket === "Serviços") {
-      // Sem Vínculo: sem OS linkada nem status vindo do app de serviços
-      const anyOsRaw = items.some((r) => !!String(r.servicos_os_numero ?? "").trim());
-      const anyOsStatus = items.some((r) => {
-        const cf = (r.custom_fields as Record<string, unknown> | null) || {};
-        return !!cf["ww_os_status"];
-      });
-      if (!anyOsRaw && !anyOsStatus) kinds.add("sem_vinculo");
-      const anyAgend = items.some((r) => !!String(r.nova_prev_servicos ?? "").trim());
-      if (!anyAgend) kinds.add("agend_vazio");
-      if (String(head.pv_dt_fat ?? "").trim() === "") {
-        for (const r of items) {
-          const s = String(r.nova_prev_servicos ?? "").trim();
-          if (!s) continue;
-          const t = parseFlexDate(s);
-          if (t != null && t < todayMs) { kinds.add("agend_venc"); break; }
-        }
-      }
-    }
-
-    // Faturamento
-    const pvNotFaturado = String(head.pv_dt_fat ?? "").trim() === "";
-    if (pvNotFaturado) {
-      const needsServ = tipoBucket === "Mix" || tipoBucket === "Serviços";
-      const servReleased = !needsServ || items.some((r) => {
-        const cf = (r.custom_fields as Record<string, unknown> | null) || {};
-        return cf["ww_pode_faturar"] === true;
-      });
-      const needsLog = tipoBucket !== "Serviços";
-      if (needsLog) {
-        if (anyPc) {
-          const pcRows = items.filter((r) => !!r.pc_numero || !!r.pc_numero_manual);
-          const allReceived = pcRows.length > 0 && pcRows.every((r) => !!r.mt_data_recebimento_nf);
-          if (allReceived && servReleased) kinds.add("pode_faturar");
-        }
-      } else if (servReleased) {
-        kinds.add("pode_faturar");
-      }
-    }
-
+    // Regras vêm de ./alarmes — mesma função que o painel usa.
+    const kinds = computeBucketAlarms(items, todayMs, liberacaoSet);
     const pvValor = Number(head.pv_valor_total ?? 0) || 0;
     result.set(k, { kinds, pv_valor: pvValor });
   }
@@ -326,6 +158,12 @@ export async function computeReportCounts(): Promise<ReportCounts> {
       .schema("approval" as never)
       .from("v_pc_avulsos")
       .select(REPORT_COLS)
+      // ORDER BY é OBRIGATÓRIO ao paginar: sem ordem explícita o Postgres não
+      // garante a mesma sequência entre as queries de cada página, então linhas
+      // podem repetir numa página e sumir de outra. A chave (pv_os_label,
+      // ncod_ped) é única na view, o que torna o range determinístico.
+      .order("pv_os_label", { ascending: true, nullsFirst: false })
+      .order("ncod_ped", { ascending: true })
       .range(offset, offset + PAGE - 1);
     if (error) throw new Error(`v_pc_avulsos: ${error.message}`);
     const batch = (data ?? []) as unknown as Row[];
@@ -356,7 +194,9 @@ export async function computeReportCounts(): Promise<ReportCounts> {
     headByLabel.set(k, r);
   }
 
-  const KINDS: AlarmKind[] = ["pvos_incompl", "sem_projeto", "aguarda_liberacao", "venda", "compra", "sem_rc", "sem_pc", "aprov_pend", "defas_omie", "sem_vinculo", "agend_vazio", "agend_venc", "pode_faturar"];
+  // Vem de ./alarmes pra não dessincronizar quando um alarme novo for criado:
+  // a lista hardcoded aqui já tinha ficado sem "aprov_bloq".
+  const KINDS: AlarmKind[] = ALARM_KINDS;
   const counts = Object.fromEntries(KINDS.map((k) => [k, 0])) as Record<AlarmKind, number>;
   const vals   = Object.fromEntries(KINDS.map((k) => [k, 0])) as Record<AlarmKind, number>;
   const pvs_by_kind = Object.fromEntries(KINDS.map((k) => [k, [] as PvEntry[]])) as Record<AlarmKind, PvEntry[]>;

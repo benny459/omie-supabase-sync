@@ -17,6 +17,7 @@ const CHART_COLORS: Record<AlarmKind, string> = {
   sem_rc:            "#8b5cf6",
   sem_pc:            "#a855f7",
   aprov_pend:        "#f59e0b",
+  aprov_bloq:        "#7c3aed", // violet-600 — calculado, mas fora de REPORT_SECTIONS
   defas_omie:        "#ec4899",
   sem_vinculo:       "#14b8a6",
   agend_vazio:       "#06b6d4",
@@ -29,6 +30,7 @@ const CHART_LABEL: Record<AlarmKind, string> = {
   aguarda_liberacao: "Aguard. Liberação",
   venda: "Vendas atraso", compra: "Previsão atrasada",
   sem_rc: "RC ausente", sem_pc: "PC ausente", aprov_pend: "Aprov pend",
+  aprov_bloq: "Aprov bloq",
   defas_omie: "Defas Omie", sem_vinculo: "Sem Vínculo",
   agend_vazio: "Sem prev.", agend_venc: "Prev vencida",
   pode_faturar: "Faturável",

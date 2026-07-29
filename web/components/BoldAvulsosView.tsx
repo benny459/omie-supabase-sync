@@ -5,6 +5,11 @@ import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { supaBrowser } from "@/lib/supabase";
 import { STATUS_META, STATUS_ORDER, isApproved, groupsFor, formatCell, type Group, type ColumnFormat } from "@/lib/columns";
+import {
+  ALARM_KINDS, computeBucketAlarms, parseFlexDate,
+  isPvosIncompleto, isSemProjeto, isAtrasoVenda, isAtrasoCompra, isDefasagemOmie,
+  type AlarmKind,
+} from "@/lib/alarmes";
 import { useUserPerms } from "./UserPermsProvider";
 import { canApprove, canEdit, canReleasePv, canViewValues, canViewMargin, type BlockKey } from "@/lib/permissions";
 import EditableCell from "./EditableCell";
@@ -321,66 +326,9 @@ function isRowInWindow(r: AnyRow, fromMs: number, toMs: number): boolean {
 // uma condição irregular que precisa de atenção (todos os "reportes" do daily
 // Webex + oportunidades). Multi-select por união (row entra se match ≥ 1 alarme
 // ativo). Todos avaliam a row atual + hoje (todayStartMs).
-type AlarmKind =
-  | "pvos_incompl" | "sem_projeto" | "aguarda_liberacao" | "venda" | "compra"
-  | "sem_rc"
-  | "sem_pc"
-  | "aprov_bloq" | "aprov_pend" | "defas_omie"
-  | "sem_vinculo" | "agend_vazio" | "agend_venc"
-  | "pode_faturar";
-const ALARM_KINDS: AlarmKind[] = [
-  "pvos_incompl", "sem_projeto", "aguarda_liberacao", "venda", "compra",
-  "sem_rc",
-  "sem_pc",
-  "aprov_bloq", "aprov_pend", "defas_omie",
-  "sem_vinculo", "agend_vazio", "agend_venc",
-  "pode_faturar",
-];
-
-// Atraso (Venda): em aberto (sem NF de saída) E previsão passou.
-// Atraso (Compra): em aberto (sem recebimento de NF entrada) E previsão PC passou.
-// "Atraso" aqui é sempre coisa que ainda precisa de ação — não faz sentido flagar
-// venda já faturada nem PC já recebido, mesmo que tenha ocorrido com atraso.
-function isAtrasoVenda(r: AnyRow, todayStartMs: number): boolean {
-  if (String(r.pv_dt_fat ?? "").trim() !== "") return false;
-  const s = String(r.pv_data_previsao ?? "").trim();
-  const m = s.match(/^(\d{2})\/(\d{2})\/(\d{4})/);
-  if (!m) return false;
-  const t = Date.parse(`${m[3]}-${m[2]}-${m[1]}`);
-  return !isNaN(t) && t < todayStartMs;
-}
-function isSemProjeto(r: AnyRow): boolean {
-  // "Sem Projeto" — venda avulsa que não tem projeto marcado ou tem código
-  // incoerente com os padrões (^40_VS venda serviços, ^41_VP venda produtos,
-  // ^PJ projeto formal). Vendedor esqueceu de marcar o projeto no Omie.
-  // PJ* nem aparece aqui (view roteia pra /projetos), mas checa por defesa.
-  const proj = String(r.projeto_nome ?? "").trim();
-  if (!proj) return true;
-  return !/^(40_VS|41_VP|PJ)/.test(proj);
-}
-function isPvosIncompleto(r: AnyRow): boolean {
-  // "PV/OS incompleta" — cadastro do PV/OS falta dado essencial. Espelha a
-  // regra do dot PV/OS que fica vermelho: sem tipo, sem cliente ou sem
-  // data limite (V.Previsão Limite_Omie). Evita "prende" venda no cadastro.
-  const tipoOk    = !!String(r.tipo_omie ?? "").trim();
-  const clienteOk = !!String(r.pv_cliente_fantasia ?? "").trim();
-  const dtLimOk   = !!String(r.pv_data_previsao ?? "").trim();
-  return !tipoOk || !clienteOk || !dtLimOk;
-}
-function isAtrasoCompra(r: AnyRow, todayStartMs: number): boolean {
-  // "Previsão atrasada" — data EFETIVA da previsão vencida (nova_prev_materiais
-  // se existir, senão dt_previsao original) E material ainda não recebido.
-  // Unifica os antigos "compra" e "prev_mat_atr" — a Nova Prev. herda a data
-  // original por padrão, então qualquer atraso na previsão dispara este único
-  // alarme.
-  if (r.mt_data_recebimento_nf) return false;
-  const novaS = String(r.nova_prev_materiais ?? "").trim();
-  const origS = String(r.dt_previsao ?? "").trim();
-  const efetivaStr = novaS || origS;
-  if (!efetivaStr) return false;
-  const t = parseFlexDate(efetivaStr);
-  return t != null && t < todayStartMs;
-}
+// AlarmKind e TODAS as regras de alarme moram em @/lib/alarmes — fonte única
+// compartilhada com o report do Webex (lib/avulsos-report.ts). Este componente
+// não deve ter cópia local de regra: foi isso que fez os dois divergirem.
 // Retorna o "bucket" humano-friendly do status de serviços do row, baseado em
 // custom_fields.ww_os_status + ww_pode_faturar. Usado no card "Status Serviços"
 // e no filtro correspondente. Mercantil não tem serviço → retorna null (skip).
@@ -400,18 +348,6 @@ function bucketServicosStatus(r: AnyRow): string | null {
   // Mix/Serviços sem OS vinculado → deveria ter sido linkado no app de serviços
   return osRaw ? "Aguardando" : "Sem Vínculo";
 }
-function isDefasagemOmie(r: AnyRow): boolean {
-  // "Defasagem Omie (Aprovado)" — PC aprovado no painel mas etapa do PC no
-  // Omie NÃO está em "Aprovação" (deveria ter movido pra lá após aprovarmos).
-  // Indica falha de propagação Painel→Omie.
-  // Requer etapa não-vazia (evita falso-positivo em row com sync pendente).
-  const hasPc = !!r.pc_numero || !!r.pc_numero_manual;
-  if (!hasPc) return false;
-  const s = String(r.status ?? "");
-  if (!isApproved(s)) return false;
-  const etapa = String(r.pc_etapa_texto ?? "").trim();
-  return etapa !== "" && etapa !== "Aprovação";
-}
 // Normaliza tipo_omie da view em 3 buckets canônicos: Mix / Serviço / Mercantil.
 // A view mistura variantes raw ("ordem_servico", "pedido_venda") com os rótulos
 // human-friendly ("Mix", "Serviços", "Mercantil"). Colapsar em 3 alinha com o
@@ -425,170 +361,6 @@ function normalizeTipoOmie(v: unknown): string {
   return "";  // valores inesperados ficam de fora
 }
 
-// Parse de data flexível: aceita ISO YYYY-MM-DD ou BR DD/MM/YYYY (as duas
-// convenções que a view `v_pc_avulsos` mistura entre `nova_prev_*` e demais).
-function parseFlexDate(s: string): number | null {
-  // IMPORTANTE: sempre retorna meia-noite LOCAL, não UTC. Date.parse('2026-07-10')
-  // interpreta ISO como UTC midnight → em fuso GMT-3 (BR) fica 21h do dia anterior,
-  // e a diff com todayStartMs (setHours 0) fica ~0.9 dias a menos → floor errado.
-  const iso = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
-  if (iso) return new Date(Number(iso[1]), Number(iso[2]) - 1, Number(iso[3])).getTime();
-  const br = s.match(/^(\d{2})\/(\d{2})\/(\d{4})/);
-  if (br)  return new Date(Number(br[3]), Number(br[2]) - 1, Number(br[1])).getTime();
-  return null;
-}
-// Agrega alarmes do BUCKET (PV/OS inteiro, N rows). Substitui a lógica row-level
-// pra alarmes que dependem de estado agregado (ex: "Sem PC" só se NENHUMA row tem
-// PC; "Aprov. pendente" só olha rows COM PC — RC-only não gera falso-positivo).
-// Retorna o conjunto de AlarmKind ativos pro bucket.
-function computeBucketAlarms(rows: AnyRow[], todayStartMs: number, liberacaoSet?: Set<string>): Set<AlarmKind> {
-  const set = new Set<AlarmKind>();
-  if (rows.length === 0) return set;
-
-  const head = rows[0]; // window functions repetem valor de PV em todas rows
-
-  // PV faturado → NENHUM alarme dispara. Se a venda foi concluída, qualquer
-  // pendência histórica (previsão vencida, material atrasado, cadastro
-  // incompleto etc) deixa de importar — não há mais o que agir. Regra global
-  // por pedido explícito do usuário. Redundância intencional (dt_fat OR num_nfe
-  // OR etapa) pra imunizar contra sync lag do Omie.
-  const pvDtFatHead  = String(head.pv_dt_fat ?? "").trim();
-  const pvNumNfeHead = String(head.pv_num_nfe ?? "").trim();
-  const pvEtapaHead  = String(head.pv_etapa_texto ?? "").trim();
-  if (pvDtFatHead !== "" || pvNumNfeHead !== "" || pvEtapaHead === "Faturado") {
-    return set;
-  }
-
-  // Aguardando Liberação: cliente pediu venda mas ainda não enviou PC formal.
-  // Estado transitório imposto por usuário autorizado (can_release_pv/is_admin).
-  // ADITIVO — os demais alarmes continuam disparando normalmente; este só
-  // adiciona o status "Aguardando" ao lado. Sai automaticamente quando o PV
-  // vira Faturado no Omie (o check isEncerrada acima retorna cedo).
-  const pvLabel = String(head.pv_os_label ?? "");
-  if (liberacaoSet?.has(pvLabel)) {
-    set.add("aguarda_liberacao");
-  }
-
-  const anyRc = rows.some((r) => !!r.rc_numero);
-  const anyPc = rows.some((r) => !!r.pc_numero || !!r.pc_numero_manual);
-  // Tipo Serviços puro NÃO tem compra envolvida → alarmes de RC/PC/logística
-  // não fazem sentido e viram ruído. Só Mercantil e Mix precisam desses alarmes.
-  const tipoBucket = String(head.tipo_omie ?? "");
-  const hasPurchases = tipoBucket !== "Serviços";
-
-  // Vendas: PV/OS incompleta (cadastro faltando) + sem projeto + atraso.
-  if (isPvosIncompleto(head)) set.add("pvos_incompl");
-  if (isSemProjeto(head))     set.add("sem_projeto");
-  if (isAtrasoVenda(head, todayStartMs)) set.add("venda");
-
-  if (hasPurchases) {
-    // Compras — "Previsão atrasada" (unificado): PC não recebido E previsão
-    // efetiva (nova_prev ou dt_previsao) passou.
-    for (const r of rows) {
-      if (isAtrasoCompra(r, todayStartMs)) { set.add("compra"); break; }
-    }
-
-    // Compras — Sem RC ou RC incompleto: unificado. Dispara se nenhum RC no
-    // bucket OU se alguma row tem RC com apenas 1 dos 2 campos (número/custo).
-    if (!anyRc) {
-      set.add("sem_rc");
-    } else {
-      for (const r of rows) {
-        const hasNum  = !!r.rc_numero;
-        const hasCost = r.rc_custo != null && Number(r.rc_custo) !== 0;
-        if (hasNum !== hasCost) { set.add("sem_rc"); break; }
-      }
-    }
-
-    // Compras — Sem PC ou PC incompleto: unificado. Dispara se nenhum PC no
-    // bucket OU se algum PC tem metadata faltando (fornecedor/valor/categoria).
-    if (!anyPc) {
-      set.add("sem_pc");
-    } else {
-      for (const r of rows) {
-        const hasPc = !!r.pc_numero || !!r.pc_numero_manual;
-        if (!hasPc) continue;
-        const hasForn = !!r.nome_fornecedor || !!r.codigo_fornecedor;
-        const hasVal  = r.valor_total != null && Number(r.valor_total) !== 0;
-        const hasCat  = !!r.codigo_categoria;
-        if (!(hasForn && hasVal && hasCat)) { set.add("sem_pc"); break; }
-      }
-    }
-
-    // Aprovação bloqueada: algum PC (row COM PC) rejeitado
-    for (const r of rows) {
-      const hasPc = !!r.pc_numero || !!r.pc_numero_manual;
-      if (!hasPc) continue;
-      const s = String(r.status ?? "");
-      if (s === "NAO_APROVADO" || s === "REJEITADO_VALIDADE") { set.add("aprov_bloq"); break; }
-    }
-
-    // Aprovação pendente: algum PC (row COM PC) em PENDENTE/PRE_SELECAO.
-    // RC-only sem PC costuma vir com status default PENDENTE — ignora.
-    for (const r of rows) {
-      const hasPc = !!r.pc_numero || !!r.pc_numero_manual;
-      if (!hasPc) continue;
-      const s = String(r.status ?? "");
-      if (s === "PENDENTE" || s === "PRE_SELECAO") { set.add("aprov_pend"); break; }
-    }
-
-    // Defasagem Omie: PC aprovado no painel mas etapa Omie ainda "Aprovação"
-    for (const r of rows) {
-      if (isDefasagemOmie(r)) { set.add("defas_omie"); break; }
-    }
-  }
-
-  // Serviços: só Mix/Serviços
-  const tipo = String(head.tipo_omie ?? "");
-  const isServ = tipo === "Mix" || tipo === "Serviços";
-  if (isServ) {
-    // Sem Vínculo: bucket Mix/Serviços sem OS vinculada nem status do app
-    const anyOsRaw = rows.some((r) => !!String(r.servicos_os_numero ?? "").trim());
-    const anyOsStatus = rows.some((r) => {
-      const cf = (r.custom_fields as Record<string, unknown> | null) || {};
-      return !!cf["ww_os_status"];
-    });
-    if (!anyOsRaw && !anyOsStatus) set.add("sem_vinculo");
-    const anyAgend = rows.some((r) => !!String(r.nova_prev_servicos ?? "").trim());
-    if (!anyAgend) set.add("agend_vazio");
-    // Vencido: em aberto (pv_dt_fat vazio) e alguma prev < hoje
-    if (String(head.pv_dt_fat ?? "").trim() === "") {
-      for (const r of rows) {
-        const s = String(r.nova_prev_servicos ?? "").trim();
-        if (!s) continue;
-        const t = parseFlexDate(s);
-        if (t != null && t < todayStartMs) { set.add("agend_venc"); break; }
-      }
-    }
-  }
-
-  // Faturamento: precondições dependem do tipo do PV/OS —
-  //   • Mercantil → basta logística (todos PCs recebidos)
-  //   • Mix → logística + sinal do app de Serviços (ww_pode_faturar)
-  //   • Serviços → só o sinal do app de Serviços (sem PC/logística envolvidos)
-  // E o PV não pode estar faturado ainda (pv_dt_fat vazio).
-  const pvNotFaturado = String(head.pv_dt_fat ?? "").trim() === "";
-  if (pvNotFaturado) {
-    const needsServiceRelease = tipoBucket === "Mix" || tipoBucket === "Serviços";
-    const serviceReleased = !needsServiceRelease || rows.some((r) => {
-      const cf = (r.custom_fields as Record<string, unknown> | null) || {};
-      return cf["ww_pode_faturar"] === true;
-    });
-    const needsLogistics = tipoBucket !== "Serviços";
-    if (needsLogistics) {
-      if (anyPc) {
-        const pcRows = rows.filter((r) => !!r.pc_numero || !!r.pc_numero_manual);
-        const allReceived = pcRows.length > 0 && pcRows.every((r) => !!r.mt_data_recebimento_nf);
-        if (allReceived && serviceReleased) set.add("pode_faturar");
-      }
-    } else {
-      // Serviços puro: sem materiais → faturável assim que o app libera.
-      if (serviceReleased) set.add("pode_faturar");
-    }
-  }
-
-  return set;
-}
 
 function matchesAlarme(r: AnyRow, kind: AlarmKind, todayStartMs: number, liberacaoSet?: Set<string>): boolean {
   switch (kind) {
