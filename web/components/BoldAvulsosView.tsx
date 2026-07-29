@@ -27,6 +27,7 @@ import SyncNowButton from "./SyncNowButton";
 import AddRowButton from "./AddRowButton";
 import GlobalSearch from "./GlobalSearch";
 import { AtribuicaoModal } from "./AtribuirClienteView";
+import { Virtuoso, type VirtuosoHandle } from "react-virtuoso";
 
 type AnyRow = Record<string, unknown>;
 type StatusFilter = "todos" | "aprovados" | "nao_aprovados" | "pendentes" | "atrasados";
@@ -871,6 +872,15 @@ export default function BoldAvulsosView({
       const isPc = label.startsWith("PC ");
       const pcNum = isPc ? label.slice(3).trim() : "";
       function tryScroll() {
+        // Com virtualização o card alvo pode nem estar montado, e aí nenhum
+        // querySelector acha. Primeiro pedimos ao Virtuoso pra rolar até o
+        // índice; o refinamento via DOM abaixo acontece quando ele montar.
+        if (listaVirtualizada && virtuosoRef.current) {
+          const idx = bucketsRef.current.findIndex((b) =>
+            isPc && b.pc_numero != null ? String(b.pc_numero) === pcNum : b.pv_os_label === label,
+          );
+          if (idx >= 0) virtuosoRef.current.scrollToIndex({ index: idx, align: "start", behavior: "smooth" });
+        }
         let el: Element | null = null;
         if (isPc) {
           el = document.querySelector(`[data-pc="${CSS.escape(pcNum)}"]`);
@@ -1236,6 +1246,16 @@ export default function BoldAvulsosView({
     modulo === "pcs"      ? "pc"      : "pvos";
   const buckets = useMemo(() => buildBuckets(filtered, groupBy), [filtered, groupBy]);
 
+  // Virtualização só onde paga: /pcs (1368 buckets) e /avulsos (1227) montam ~40x
+  // menos componentes. /projetos tem 44 buckets — virtualizar ali não ganharia
+  // nada e ainda traria pulo de scroll ao expandir cards de ~33 linhas.
+  const listaVirtualizada = modulo !== "projetos";
+  const virtuosoRef = useRef<VirtuosoHandle | null>(null);
+  // Ref espelhando buckets: expandBucketAndScroll roda fora do ciclo de render e
+  // precisa do índice atual pra pedir scroll ao Virtuoso.
+  const bucketsRef = useRef<Bucket[]>([]);
+  useEffect(() => { bucketsRef.current = buckets; }, [buckets]);
+
   // Rows base = rows após aplicar Date Range + Alarmes (que afetam TUDO incluindo
   // os contadores dos cards de PV-Status / PC-Aprovação acima). É a primeira
   // camada de filtragem visível pro usuário.
@@ -1521,6 +1541,89 @@ export default function BoldAvulsosView({
     if (typeof window !== "undefined") window.location.reload();
   }
 
+
+  // Card de um bucket — usado pelos DOIS caminhos de render (virtualizado e
+  // normal), pra não duplicar a lista de props.
+  const renderBucketCard = (b: Bucket) => (
+            <BucketCard
+              bucket={b}
+              modulo={modulo}
+              isAdmin={isAdmin}
+              userCanApprove={userCanApprove}
+              userCanEdit={userCanEdit}
+              open={openBuckets.has(b.pv_os_label)}
+              onToggle={() => toggleBucket(b.pv_os_label)}
+              onRowClick={(row) => setDrawerItem({ ...row, _bucket: b })}
+              onStatusClick={(rowKey, row, anchor) => setStatusPopover({ rowKey, row, anchor })}
+              selected={selected}
+              toggleSel={toggleSel}
+              visibleGroups={allGroups}
+              onEnsureOpen={() => expandBucketAndScroll(b.pv_os_label)}
+              optimisticStatus={optimisticStatus}
+              canViewValues={userCanViewValues}
+              canViewMargin={userCanViewMargin}
+              todayStartMs={todayStartMs}
+              alarmesActive={alarmes}
+              onToggleAlarme={toggleAlarme}
+              cronogramaMap={cronogramaMap}
+              budgetMap={budgetMap}
+              atribuicaoMap={atribuicaoMap}
+              onAtribuicaoClick={(row) => {
+                const empresa = String(row.empresa ?? "SF");
+                const pcNum = String(row.pc_numero ?? "");
+                const info = atribuicaoMap.get(`${empresa}|${pcNum}`);
+                setEditingAtribuicao({
+                  empresa,
+                  pc_numero: pcNum,
+                  valor_total: String(row.valor_total ?? "0"),
+                  projeto_nome: (row.projeto_nome as string | null) ?? null,
+                  _dt_inclusao_d: String(row._dt_inclusao_d ?? ""),
+                  codigo_projeto: row.codigo_projeto != null ? Number(row.codigo_projeto) : null,
+                  clientes: info?.clientes,
+                  soma_pct: info?.soma_pct,
+                });
+              }}
+              aguardandoLiberacao={liberacaoSet.has(b.pv_os_label)}
+              userCanReleasePv={userCanRelease}
+              onToggleLiberacao={async (aguardando) => {
+                const empresa = String(b.rows[0]?.empresa ?? "");
+                // Optimistic update
+                setLiberacaoSet((prev) => {
+                  const next = new Set(prev);
+                  if (aguardando) next.add(b.pv_os_label); else next.delete(b.pv_os_label);
+                  return next;
+                });
+                try {
+                  const r = await fetch("/api/avulsos/liberacao", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ pv_os_label: b.pv_os_label, empresa, aguardando }),
+                  });
+                  if (!r.ok) {
+                    const j = await r.json().catch(() => ({}));
+                    // Reverte optimistic + avisa
+                    setLiberacaoSet((prev) => {
+                      const next = new Set(prev);
+                      if (aguardando) next.delete(b.pv_os_label); else next.add(b.pv_os_label);
+                      return next;
+                    });
+                    alert(`Falha: ${j.error ?? r.statusText}`);
+                    return;
+                  }
+                  // Avisa outras abas
+                  try { new BroadcastChannel("pv-liberacao-updated").postMessage({ pv_os_label: b.pv_os_label, aguardando }); } catch { /* ignore */ }
+                } catch (e) {
+                  setLiberacaoSet((prev) => {
+                    const next = new Set(prev);
+                    if (aguardando) next.delete(b.pv_os_label); else next.add(b.pv_os_label);
+                    return next;
+                  });
+                  alert(`Falha: ${e instanceof Error ? e.message : String(e)}`);
+                }
+              }}
+            />
+  );
+
   return (
     <div className="space-y-3">
       {/* Top bar */}
@@ -1785,93 +1888,37 @@ export default function BoldAvulsosView({
       <GrandTotalBar grand={grandTotal} modulo={modulo} count={filtered.length} canViewValues={userCanViewValues} />
 
       {/* Lista de cards */}
-      <div className="space-y-5 pb-20 min-w-0">
-        {buckets.length === 0 && (
+      {/* /pcs (1368 buckets) e /avulsos (1227) são virtualizados: só ~30 cards
+          ficam montados por vez. /projetos NÃO — tem só 44 buckets, então a
+          virtualização não pagaria o custo (remedição de altura ao expandir
+          cards de ~33 linhas causa pulo de scroll). */}
+      <div className="pb-20 min-w-0">
+        {buckets.length === 0 ? (
           <div className="text-center py-16 text-ww-textFaint text-sm">
             Nenhum {modulo === "projetos" ? "projeto" : modulo === "pcs" ? "PC" : "PV/OS"} encontrado.
           </div>
-        )}
-        {buckets.map((b) => (
-          <div key={b.pv_os_label} data-bucket={b.pv_os_label} data-pc={b.pc_numero ?? undefined}>
-            <BucketCard
-              bucket={b}
-              modulo={modulo}
-              isAdmin={isAdmin}
-              userCanApprove={userCanApprove}
-              userCanEdit={userCanEdit}
-              open={openBuckets.has(b.pv_os_label)}
-              onToggle={() => toggleBucket(b.pv_os_label)}
-              onRowClick={(row) => setDrawerItem({ ...row, _bucket: b })}
-              onStatusClick={(rowKey, row, anchor) => setStatusPopover({ rowKey, row, anchor })}
-              selected={selected}
-              toggleSel={toggleSel}
-              visibleGroups={allGroups}
-              onEnsureOpen={() => expandBucketAndScroll(b.pv_os_label)}
-              optimisticStatus={optimisticStatus}
-              canViewValues={userCanViewValues}
-              canViewMargin={userCanViewMargin}
-              todayStartMs={todayStartMs}
-              alarmesActive={alarmes}
-              onToggleAlarme={toggleAlarme}
-              cronogramaMap={cronogramaMap}
-              budgetMap={budgetMap}
-              atribuicaoMap={atribuicaoMap}
-              onAtribuicaoClick={(row) => {
-                const empresa = String(row.empresa ?? "SF");
-                const pcNum = String(row.pc_numero ?? "");
-                const info = atribuicaoMap.get(`${empresa}|${pcNum}`);
-                setEditingAtribuicao({
-                  empresa,
-                  pc_numero: pcNum,
-                  valor_total: String(row.valor_total ?? "0"),
-                  projeto_nome: (row.projeto_nome as string | null) ?? null,
-                  _dt_inclusao_d: String(row._dt_inclusao_d ?? ""),
-                  codigo_projeto: row.codigo_projeto != null ? Number(row.codigo_projeto) : null,
-                  clientes: info?.clientes,
-                  soma_pct: info?.soma_pct,
-                });
-              }}
-              aguardandoLiberacao={liberacaoSet.has(b.pv_os_label)}
-              userCanReleasePv={userCanRelease}
-              onToggleLiberacao={async (aguardando) => {
-                const empresa = String(b.rows[0]?.empresa ?? "");
-                // Optimistic update
-                setLiberacaoSet((prev) => {
-                  const next = new Set(prev);
-                  if (aguardando) next.add(b.pv_os_label); else next.delete(b.pv_os_label);
-                  return next;
-                });
-                try {
-                  const r = await fetch("/api/avulsos/liberacao", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ pv_os_label: b.pv_os_label, empresa, aguardando }),
-                  });
-                  if (!r.ok) {
-                    const j = await r.json().catch(() => ({}));
-                    // Reverte optimistic + avisa
-                    setLiberacaoSet((prev) => {
-                      const next = new Set(prev);
-                      if (aguardando) next.delete(b.pv_os_label); else next.add(b.pv_os_label);
-                      return next;
-                    });
-                    alert(`Falha: ${j.error ?? r.statusText}`);
-                    return;
-                  }
-                  // Avisa outras abas
-                  try { new BroadcastChannel("pv-liberacao-updated").postMessage({ pv_os_label: b.pv_os_label, aguardando }); } catch { /* ignore */ }
-                } catch (e) {
-                  setLiberacaoSet((prev) => {
-                    const next = new Set(prev);
-                    if (aguardando) next.delete(b.pv_os_label); else next.add(b.pv_os_label);
-                    return next;
-                  });
-                  alert(`Falha: ${e instanceof Error ? e.message : String(e)}`);
-                }
-              }}
-            />
+        ) : listaVirtualizada ? (
+          <Virtuoso
+            ref={virtuosoRef}
+            useWindowScroll
+            data={buckets}
+            computeItemKey={(_, b) => b.pv_os_label}
+            increaseViewportBy={{ top: 600, bottom: 600 }}
+            itemContent={(_, b) => (
+              <div data-bucket={b.pv_os_label} data-pc={b.pc_numero ?? undefined} className="mb-5">
+                {renderBucketCard(b)}
+              </div>
+            )}
+          />
+        ) : (
+          <div className="space-y-5">
+            {buckets.map((b) => (
+              <div key={b.pv_os_label} data-bucket={b.pv_os_label} data-pc={b.pc_numero ?? undefined}>
+                {renderBucketCard(b)}
+              </div>
+            ))}
           </div>
-        ))}
+        )}
       </div>
 
       {/* Batch toolbar (flutuante) */}
