@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { supaBrowser } from "@/lib/supabase";
@@ -1146,12 +1146,30 @@ export default function BoldAvulsosView({
     return out;
   }, [rows, todayStartMs, liberacaoSet]);
 
+  // Busca em dataset grande (1776 rows em /avulsos): a digitação era o gargalo.
+  // useDeferredValue marca o re-filtro como low-priority — o input responde na
+  // hora e a lista alcança depois, em vez de travar a cada tecla.
+  const deferredQuery = useDeferredValue(query);
+
+  // "haystack" pré-computado por row: sem isso, cada tecla refazia join+lowercase
+  // sobre todas as rows. Agora o filtro vira só um string.includes.
+  // WeakMap porque a chave é o próprio objeto row — some junto com ele.
+  const haystackByRow = useMemo(() => {
+    const m = new WeakMap<AnyRow, string>();
+    for (const r of rows) {
+      const s = [r.pc_numero, r.pv_os_label, r.projeto_nome, r.pv_cliente_fantasia, r.contato_fornecedor, r.rc_numero, r.rc_descricao]
+        .filter(Boolean).join(" ").toLowerCase();
+      m.set(r, s);
+    }
+    return m;
+  }, [rows]);
+
   // Predicado central de filtros — aceita opções pra pular filtros específicos.
   // skipFacet: usado por facetValues (dropdown mostra opções sem se auto-filtrar).
   // skipAtraso: usado pelas contagens dos botões Atraso pra refletir "quantos PV/OS
   // seriam mostrados se eu ativar esse filtro AGORA, considerando os demais filtros".
   const passesFilters = useCallback((r: AnyRow, opts: { skipFacet?: FacetKey; skipAlarmes?: boolean; skipServicos?: boolean; skipServicosStatus?: boolean; skipPvEtapa?: boolean; skipStatus?: boolean } = {}) => {
-    const q = query.trim().toLowerCase();
+    const q = deferredQuery.trim().toLowerCase();
     if (dateWindow && !isRowInWindow(r, dateWindow.from, dateWindow.to)) return false;
     if (!opts.skipAlarmes && alarmes.size > 0) {
       // "Alarmes Ativos" — só se aplicam a PV/OS em ABERTO. PV faturado/cancelado
@@ -1224,10 +1242,8 @@ export default function BoldAvulsosView({
       if (!set.has(val)) return false;
     }
     if (!q) return true;
-    const hay = [r.pc_numero, r.pv_os_label, r.projeto_nome, r.pv_cliente_fantasia, r.contato_fornecedor, r.rc_numero, r.rc_descricao]
-      .filter(Boolean).join(" ").toLowerCase();
-    return hay.includes(q);
-  }, [query, dateWindow, alarmes, alarmsByBucket, modulo, pvEtapaGroup, statusFilter, servicosFilter, servicosStatusFilter, facets, effectiveStatus]);
+    return (haystackByRow.get(r) ?? "").includes(q);
+  }, [deferredQuery, dateWindow, alarmes, alarmsByBucket, modulo, pvEtapaGroup, statusFilter, servicosFilter, servicosStatusFilter, facets, effectiveStatus, liberacaoSet, haystackByRow]);
 
   const filtered = useMemo(() => rows.filter((r) => passesFilters(r)), [rows, passesFilters]);
 
