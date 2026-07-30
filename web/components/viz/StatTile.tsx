@@ -31,11 +31,18 @@ export default function StatTile({
   const cor = has ? (bom ? STATUS.good : STATUS.critical) : undefined;
 
   return (
-    <section className="bg-ww-panel border border-ww-border rounded-lg p-3 min-w-0">
-      <p className="text-[11px] text-ww-textMuted truncate" title={label}>{label}</p>
+    <section className="viz-panel bg-ww-panel border border-ww-border rounded-xl p-3.5 min-w-0 transition-colors">
+      <div className="flex items-center gap-1.5">
+        {/* Ponto de status ao lado do rótulo — é o que a referência usa pra dar
+            leitura de "indicador vivo" sem depender de ícone por métrica.
+            Cor só reforça: o sinal real é a seta + o rótulo do delta abaixo. */}
+        <span aria-hidden className="w-1.5 h-1.5 rounded-full shrink-0"
+              style={{ background: has ? cor : "rgb(var(--color-ww-textFaint))" }} />
+        <p className="text-[11px] text-ww-textMuted truncate uppercase tracking-wider" title={label}>{label}</p>
+      </div>
       {/* Figura grande em algarismos proporcionais; tabular fica pra coluna que
           precisa alinhar verticalmente. */}
-      <p className="mt-1 text-[26px] leading-none font-bold text-ww-text tracking-[-0.5px]">{value}</p>
+      <p className="mt-1.5 text-[26px] leading-none font-bold text-ww-text tracking-[-0.5px]">{value}</p>
       <div className="mt-1.5 flex items-baseline gap-1.5 min-h-[15px]">
         {has && (
           <span className="inline-flex items-center gap-0.5 text-[11px] font-semibold" style={{ color: cor }}>

@@ -51,8 +51,11 @@ export default function ChartFrame({
   const fmt = valueFormat ?? ((v: unknown) => (v == null ? "—" : String(v)));
 
   return (
-    <section className="bg-ww-panel border border-ww-border rounded-lg p-3 min-w-0">
-      <header className="flex items-start gap-3 mb-2">
+    // viz-panel: no tema escuro ganha fio de luz no topo e brilho interno (ver
+    // globals.css). No claro é um card normal — o efeito só faz sentido sobre
+    // superfície escura.
+    <section className="viz-panel bg-ww-panel border border-ww-border rounded-xl p-3.5 min-w-0 transition-colors">
+      <header className="flex items-start gap-3 mb-2.5">
         <div className="min-w-0 flex-1">
           <h3 className="text-[13px] font-semibold text-ww-text tracking-[-0.2px] truncate">{title}</h3>
           {subtitle && <p className="text-[11px] text-ww-textMuted mt-0.5">{subtitle}</p>}

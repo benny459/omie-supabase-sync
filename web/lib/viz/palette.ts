@@ -104,12 +104,15 @@ export const CHROME = {
     inkMuted: "#5b5b54",
     inkFaint: "#8e8e84",
   },
+  // Tema escuro "tech" azul-marinho. A paleta categórica NÃO mudou — só a
+  // superfície — e foi revalidada contra #152744: contraste ≥3:1 nos 8 slots,
+  // pior par CVD ΔE 8.4 (protan), visão normal ΔE 19.3.
   dark: {
-    surface:  "#141412",
-    gridline: "#2c2c2a",
-    axis:     "#383835",
-    ink:      "#f1f1ea",
-    inkMuted: "#a8a89e",
-    inkFaint: "#6c6c61",
+    surface:  "#152744",
+    gridline: "#24365c",
+    axis:     "#33497a",
+    ink:      "#eaf0fb",
+    inkMuted: "#9db2d4",
+    inkFaint: "#6b82a8",
   },
 } as const;

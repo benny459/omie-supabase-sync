@@ -69,7 +69,10 @@ export default function VisaoGeralTabs() {
         {prontas.length} de {ABAS.length} abas portadas · {cardsProntos} de {cardsTotal} cards
       </p>
 
-      <div className="flex flex-wrap gap-1 mb-3 border-b border-ww-border pb-2">
+      {/* Navegação em abas no estilo da referência: sublinhado de 2px marcando a
+          ativa, em vez de pílula. Sublinhado ancora a aba na régua e deixa o
+          conjunto ler como uma barra só — pílula fragmenta. */}
+      <div className="flex flex-wrap gap-x-1 mb-3 border-b border-ww-border">
         {ABAS.map((a) => {
           const on = a.key === ativa;
           const pronta = !!a.view;
@@ -78,9 +81,10 @@ export default function VisaoGeralTabs() {
               key={a.key}
               type="button"
               onClick={() => setAtiva(a.key)}
-              className={`px-2.5 py-1 text-[11.5px] rounded-md transition inline-flex items-center gap-1.5 ${
-                on ? "bg-ww-accentSoft text-ww-accent font-bold"
-                   : "text-ww-textMuted hover:bg-ww-rowHover"
+              aria-current={on ? "page" : undefined}
+              className={`relative px-3 py-2 text-[11.5px] transition-colors inline-flex items-center gap-1.5 ${
+                on ? "text-ww-accent font-semibold"
+                   : "text-ww-textMuted hover:text-ww-text"
               }`}
             >
               {a.label}
@@ -88,6 +92,10 @@ export default function VisaoGeralTabs() {
                 <span className="text-[9px] px-1 rounded bg-ww-border text-ww-textFaint font-semibold">
                   {a.cards}
                 </span>
+              )}
+              {on && (
+                <span aria-hidden
+                      className="absolute left-2 right-2 -bottom-px h-0.5 rounded-full bg-ww-accent" />
               )}
             </button>
           );
