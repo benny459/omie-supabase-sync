@@ -17,6 +17,7 @@
 
 import { useState } from "react";
 import ContasReceberView from "./ContasReceberView";
+import FaturamentoBiView from "./FaturamentoBiView";
 import ContratosCtView from "./ContratosCtView";
 import DreView from "./DreView";
 import MargemProjetoView from "./MargemProjetoView";
@@ -35,7 +36,7 @@ const ABAS: Aba[] = [
   { key: "contratos",  label: "Contratos CT",     cards: 6,  view: <ContratosCtView /> },
   { key: "margem",     label: "Margem",           cards: 4,  view: <MargemProjetoView /> },
   { key: "geral",      label: "Visão Geral",      cards: 14 },
-  { key: "faturamento",label: "Faturamento",      cards: 21 },
+  { key: "faturamento",label: "Faturamento",      cards: 21, view: <FaturamentoBiView /> },
   { key: "receber",    label: "A Receber",        cards: 25, view: <ContasReceberView /> },
   { key: "pagar",      label: "A Pagar",          cards: 15 },
   { key: "compras",    label: "Compras",          cards: 14 },
