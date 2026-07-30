@@ -21,7 +21,7 @@ export async function GET(req: Request) {
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const perms = await loadPerms();
-  if (!canViewArea(perms, "vendas") && !canViewArea(perms, "bi")) {
+  if (!canViewArea(perms, "bi")) {
     return NextResponse.json({ error: "Sem acesso a Faturamento" }, { status: 403 });
   }
 

@@ -4,7 +4,7 @@ import { requireArea } from "@/lib/require-area";
 export const dynamic = "force-dynamic";
 
 export default async function FaturamentoBiPage() {
-  await requireArea("vendas");
+  await requireArea("bi");
 
   return (
     <div className="space-y-4">

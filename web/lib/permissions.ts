@@ -39,9 +39,23 @@ const AREA_DEFAULT: Record<Area, boolean> = {
   bi:         false,
 };
 
-// Admin vê tudo. Row explícita vence o default. Sem row, cai no AREA_DEFAULT.
+// Áreas que exigem CONCESSÃO EXPLÍCITA — nem admin entra por herança.
+//
+// Por que admin não passa: "is_admin" e "role=admin" hoje valem pra mais de uma
+// conta (benny@ e suporte@), então deixar admin herdar tornaria "só eu" falso
+// sem ninguém perceber. Dado financeiro consolidado (DRE, contas a pagar/receber
+// e os dashboards de BI) só aparece pra quem tem row com can_view=true em
+// platform.user_area_access. Liberar é um INSERT; esquecer não vaza.
+const AREAS_RESTRITAS = new Set<Area>(["financeiro", "bi"]);
+
 export function canViewArea(user: UserPerms | null | undefined, area: Area): boolean {
   if (!user) return false;
+
+  if (AREAS_RESTRITAS.has(area)) {
+    // Só row explícita. Ausência = negado, inclusive pra admin.
+    return user.area_access?.some((a) => a.area === area && a.can_view) === true;
+  }
+
   if (user.is_admin || user.role === "admin") return true;
   const row = user.area_access?.find((a) => a.area === area);
   if (row) return row.can_view;

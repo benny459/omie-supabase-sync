@@ -82,7 +82,7 @@ const MODULES: NavItem[] = [
   },
   {
     href: "/bi/faturamento",
-    area: "vendas",
+    area: "bi",
     label: "Faturamento analítico",
     tone: "text-teal-700",
     icon: (
