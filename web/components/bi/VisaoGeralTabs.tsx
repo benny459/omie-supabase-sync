@@ -16,12 +16,14 @@
 // mais do que ajuda.
 
 import { useState } from "react";
+import ComprasBiView from "./ComprasBiView";
 import ContasPagarView from "./ContasPagarView";
 import ContasReceberView from "./ContasReceberView";
 import FaturamentoBiView from "./FaturamentoBiView";
 import ContratosCtView from "./ContratosCtView";
 import DreView from "./DreView";
 import MargemProjetoView from "./MargemProjetoView";
+import VendasView from "./VendasView";
 
 type Aba = {
   key: string;
@@ -40,8 +42,8 @@ const ABAS: Aba[] = [
   { key: "faturamento",label: "Faturamento",      cards: 21, view: <FaturamentoBiView /> },
   { key: "receber",    label: "A Receber",        cards: 25, view: <ContasReceberView /> },
   { key: "pagar",      label: "A Pagar",          cards: 15, view: <ContasPagarView /> },
-  { key: "compras",    label: "Compras",          cards: 14 },
-  { key: "vendas",     label: "Vendas",           cards: 10 },
+  { key: "compras",    label: "Compras",          cards: 14, view: <ComprasBiView /> },
+  { key: "vendas",     label: "Vendas",           cards: 10, view: <VendasView /> },
   { key: "atraso",     label: "Atraso",           cards: 4 },
   { key: "previsao",   label: "Previsão Receb.",  cards: 6 },
   { key: "aquisicao",  label: "Aquisição vs Rec.",cards: 5 },
