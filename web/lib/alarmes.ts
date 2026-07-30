@@ -76,6 +76,18 @@ export function isServicoCancelado(r: AlarmRow): boolean {
   return osStatus(r) === "Cancelada";
 }
 
+// Quando o serviço foi concluído. Prefere ww_os_concluida_em (checkout_datetime
+// da OS, propagado pelo app de serviços) e cai em servicos_concluidos_em, que é
+// a data da "baixa" dada pelo Agent — conceito diferente e, hoje, null em toda a
+// base. Retorna null quando não há registro: OS concluídas antes de 30/07/2026
+// só têm a data se o backfill as alcançou.
+export function servicoConcluidoEm(r: AlarmRow): string | null {
+  const cf = (r.custom_fields as Record<string, unknown> | null) || {};
+  const doApp = cf["ww_os_concluida_em"];
+  if (doApp) return String(doApp);
+  return (r.servicos_concluidos_em as string | null) ?? null;
+}
+
 // Não há mais execução pendente — concluído OU cancelado. É o equivalente, no
 // lado de serviços, do mt_data_recebimento_nf das compras.
 export function isServicoResolvido(r: AlarmRow): boolean {

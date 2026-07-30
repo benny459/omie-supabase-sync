@@ -8,7 +8,7 @@ import { STATUS_META, STATUS_ORDER, isApproved, groupsFor, formatCell, type Grou
 import {
   ALARM_KINDS, computeBucketAlarms, parseFlexDate,
   isPvosIncompleto, isSemProjeto, isAtrasoVenda, isAtrasoCompra, isDefasagemOmie,
-  isServicoConcluido,
+  isServicoConcluido, servicoConcluidoEm,
   type AlarmKind,
 } from "@/lib/alarmes";
 import { useUserPerms } from "./UserPermsProvider";
@@ -3244,7 +3244,7 @@ function Cell({
     // /ordens-de-servico/[id] aceita UUID ou service_id text exato).
     const osPath = encodeURIComponent(osRaw);
     const concluido = isServicoConcluido(row);
-    const dtRaw = row.servicos_concluidos_em as string | null;
+    const dtRaw = servicoConcluidoEm(row);
     const dtCurta = dtRaw ? new Date(dtRaw).toLocaleDateString("pt-BR", {
       timeZone: "America/Sao_Paulo", day: "2-digit", month: "2-digit", year: "numeric",
     }) : "";
