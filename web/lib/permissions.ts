@@ -7,6 +7,52 @@ export type Role = "admin" | "aprovador" | "comprador" | "viewer";
 export type Modulo = "avulsos" | "projetos" | "pcs";
 export type BlockKey = "pvos" | "rc" | "pc" | "aprovacao" | "log" | "extras";
 
+// ─── Áreas funcionais ────────────────────────────────────────────────────
+// Eixo ORTOGONAL ao de módulos. Modulo responde "pode editar RC do projeto?";
+// Area responde "esse usuário enxerga financeiro?". Existe pra viabilizar a
+// fusão do BI e do Metabase no painel: sem ele, absorver Contas a Pagar e
+// margem por cliente colocaria dados financeiros na frente de todo mundo que
+// loga, porque o menu não sabia filtrar nada.
+export type Area = "operacao" | "compras" | "vendas" | "financeiro" | "bi";
+
+export const AREAS: Area[] = ["operacao", "compras", "vendas", "financeiro", "bi"];
+
+export const AREA_LABELS: Record<Area, { label: string; desc: string }> = {
+  operacao:   { label: "Operação",   desc: "Avulsos, Projetos, PCs — o dia a dia" },
+  compras:    { label: "Compras",    desc: "RC/PC, fornecedores, rateio por cliente" },
+  vendas:     { label: "Vendas",     desc: "Faturamento, pipeline, rentabilidade" },
+  financeiro: { label: "Financeiro", desc: "Contas a pagar/receber, saldo, DRE" },
+  bi:         { label: "BI",         desc: "Dashboards analíticos consolidados" },
+};
+
+// Linha de platform.user_area_access.
+export type AreaAccess = { area: Area; can_view: boolean };
+
+// Default quando o usuário NÃO tem row explícita. Escolhido pra não causar
+// regressão: as áreas cujas páginas já apareciam no menu seguem abertas, e as
+// que chegam com a fusão nascem fechadas. Configurar libera.
+const AREA_DEFAULT: Record<Area, boolean> = {
+  operacao:   true,
+  compras:    true,
+  vendas:     true,
+  financeiro: false,
+  bi:         false,
+};
+
+// Admin vê tudo. Row explícita vence o default. Sem row, cai no AREA_DEFAULT.
+export function canViewArea(user: UserPerms | null | undefined, area: Area): boolean {
+  if (!user) return false;
+  if (user.is_admin || user.role === "admin") return true;
+  const row = user.area_access?.find((a) => a.area === area);
+  if (row) return row.can_view;
+  return AREA_DEFAULT[area];
+}
+
+// Áreas visíveis, na ordem canônica — usado pelo menu.
+export function visibleAreas(user: UserPerms | null | undefined): Area[] {
+  return AREAS.filter((a) => canViewArea(user, a));
+}
+
 export type PermsOverride = Partial<Record<Modulo, Partial<Record<BlockKey, {
   edit?: boolean;
   approve?: boolean;
@@ -35,6 +81,8 @@ export type UserPerms = {
   permissions?: PermsOverride | null;
   // Novo modelo: 0+ rows da platform.user_module_roles
   module_roles?: ModuleRole[];
+  // 0+ rows da platform.user_area_access. Ausência cai no AREA_DEFAULT.
+  area_access?: AreaAccess[];
 };
 
 // Default capability matrix por role

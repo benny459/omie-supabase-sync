@@ -5,7 +5,7 @@ import { UserPermsProvider } from "@/components/UserPermsProvider";
 import VersionWatcher from "@/components/VersionWatcher";
 import SupportWidget from "@/components/SupportWidget";
 import { supaServer } from "@/lib/supabase-server";
-import type { ModuleRole, PermsOverride, Role, UserPerms } from "@/lib/permissions";
+import type { AreaAccess, ModuleRole, PermsOverride, Role, UserPerms } from "@/lib/permissions";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const supa = await supaServer();
@@ -13,12 +13,14 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   let perms: UserPerms | null = null;
   if (user) {
-    const [{ data: profile }, { data: rolesRaw }] = await Promise.all([
+    const [{ data: profile }, { data: rolesRaw }, { data: areasRaw }] = await Promise.all([
       supa.schema("platform" as never).from("user_profiles")
         .select("role, is_admin, permissions").eq("id", user.id).maybeSingle(),
       supa.schema("platform" as never).from("user_module_roles")
         .select("modulo, can_edit_pv, can_edit_rc, can_edit_pc, can_approve, can_edit_log, can_release_pv, approval_ceiling_brl, weekly_budget_brl")
         .eq("user_id", user.id),
+      supa.schema("platform" as never).from("user_area_access")
+        .select("area, can_view").eq("user_id", user.id),
     ]);
     const row = profile as { role?: Role; is_admin?: boolean; permissions?: PermsOverride | null } | null;
     perms = {
@@ -27,6 +29,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       is_admin: !!row?.is_admin,
       permissions: row?.permissions ?? null,
       module_roles: (rolesRaw ?? []) as ModuleRole[],
+      area_access: (areasRaw ?? []) as AreaAccess[],
     };
   }
 

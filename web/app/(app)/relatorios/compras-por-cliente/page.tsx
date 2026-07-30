@@ -1,18 +1,19 @@
+import { requireArea } from "@/lib/require-area";
 import ComprasPorClienteView from "@/components/ComprasPorClienteView";
 
 export const dynamic = "force-dynamic";
 
-export default function ComprasPorClientePage() {
+export default async function ComprasPorClientePage() {
+  // Esconder do menu não basta: sem isto a URL direta continua abrindo.
+  await requireArea("compras");
+
   return (
     <div className="space-y-4">
       <div>
-        <h1 className="text-[18px] font-bold text-ww-text tracking-[-0.3px]">Compras por cliente (prévia)</h1>
+        <h1 className="text-[18px] font-bold text-ww-text tracking-[-0.3px]">Rentabilidade por cliente</h1>
         <p className="text-[12px] text-ww-textMuted mt-0.5">
-          Contribuição do painel pra rentabilidade consolidada: compras aprovadas (PCs) e
-          receita cruzada por cliente. O consolidado (receita − compras − custo) vive no{" "}
-          <a href="https://metabase.waterworks.com.br/dashboard/9" target="_blank" rel="noopener" className="text-blue-600 hover:underline">
-            Metabase
-          </a>.
+          DRE consolidada por cliente: Receita (NFs Omie) − Compras (PCs aprovados) − Despesas op. − Mão de obra = Margem bruta.
+          {" "}Custos operacionais e mão de obra vêm do app.waterworks (<code>bi.v_rentabilidade_cliente</code>).
         </p>
       </div>
       <ComprasPorClienteView />

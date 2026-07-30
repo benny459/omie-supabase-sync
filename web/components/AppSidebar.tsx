@@ -4,17 +4,24 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState, useTransition } from "react";
 import { supaBrowser } from "@/lib/supabase";
+import { useUserPerms } from "./UserPermsProvider";
+import { AREA_LABELS, AREAS, canViewArea, type Area } from "@/lib/permissions";
 
 type NavItem = {
   href: string;
   label: string;
   icon: React.ReactNode;
   tone: string;
+  // Área funcional — define se o item aparece pra este usuário e sob qual
+  // cabeçalho do menu. Ver canViewArea em lib/permissions.ts. Itens de sistema
+  // (seção Sistema) não pertencem a área nenhuma.
+  area?: Area;
 };
 
 const MODULES: NavItem[] = [
   {
     href: "/avulsos",
+    area: "operacao",
     label: "Avulsos",
     tone: "text-sky-600",
     icon: (
@@ -26,6 +33,7 @@ const MODULES: NavItem[] = [
   },
   {
     href: "/projetos",
+    area: "operacao",
     label: "Projetos",
     tone: "text-violet-600",
     icon: (
@@ -36,6 +44,7 @@ const MODULES: NavItem[] = [
   },
   {
     href: "/pcs",
+    area: "operacao",
     label: "PCs Standalone",
     tone: "text-amber-600",
     icon: (
@@ -47,6 +56,7 @@ const MODULES: NavItem[] = [
   },
   {
     href: "/relatorios",
+    area: "vendas",
     label: "Relatórios",
     tone: "text-emerald-600",
     icon: (
@@ -58,6 +68,7 @@ const MODULES: NavItem[] = [
   },
   {
     href: "/relatorios/faturamento",
+    area: "vendas",
     label: "Faturamento",
     tone: "text-teal-600",
     icon: (
@@ -71,6 +82,7 @@ const MODULES: NavItem[] = [
   },
   {
     href: "/pcs/atribuir-cliente",
+    area: "compras",
     label: "Atribuir PC → Cliente",
     tone: "text-rose-600",
     icon: (
@@ -81,6 +93,7 @@ const MODULES: NavItem[] = [
   },
   {
     href: "/relatorios/compras-por-cliente",
+    area: "compras",
     label: "Compras × Cliente",
     tone: "text-amber-600",
     icon: (
@@ -110,6 +123,7 @@ const ADMIN: NavItem[] = [
 export default function AppSidebar({ userEmail }: { userEmail?: string | null }) {
   const pathname = usePathname();
   const router = useRouter();
+  const perms = useUserPerms();
   const [open, setOpen] = useState(false);
   const [pwOpen, setPwOpen] = useState(false);
   const closeTimer = useRef<number | null>(null);
@@ -190,13 +204,25 @@ export default function AppSidebar({ userEmail }: { userEmail?: string | null })
 
         {/* Módulos + Admin */}
         <nav className="flex-1 p-2 space-y-0.5 overflow-y-auto overflow-x-hidden">
-          <SectionLabel text="Módulos" open={open} />
-          {MODULES.map((t) => (
-            <SideLink key={t.href} item={t} active={pathname === t.href} open={open}
-                      pending={pendingHref === t.href} onNavigate={navigate} />
-          ))}
+          {/* Um grupo por área funcional visível. Área sem item ou sem permissão
+              não renderiza cabeçalho — o menu encolhe em vez de mostrar seção
+              vazia. É o que permite absorver BI/Metabase sem expor financeiro
+              pra todo mundo. */}
+          {AREAS.filter((a) => canViewArea(perms, a)).map((area) => {
+            const items = MODULES.filter((m) => m.area === area);
+            if (items.length === 0) return null;
+            return (
+              <div key={area}>
+                <SectionLabel text={AREA_LABELS[area].label} open={open} />
+                {items.map((t) => (
+                  <SideLink key={t.href} item={t} active={pathname === t.href} open={open}
+                            pending={pendingHref === t.href} onNavigate={navigate} />
+                ))}
+                <div className="h-3" />
+              </div>
+            );
+          })}
 
-          <div className="h-3" />
           <SectionLabel text="Sistema" open={open} />
           {ADMIN.map((t) => (
             <SideLink key={t.href} item={t} active={pathname === t.href} open={open}

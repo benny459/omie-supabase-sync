@@ -1,8 +1,12 @@
+import { requireArea } from "@/lib/require-area";
 import AtribuirClienteView from "@/components/AtribuirClienteView";
 
 export const dynamic = "force-dynamic";
 
-export default function AtribuirClientePage() {
+export default async function AtribuirClientePage() {
+  // Esconder do menu não basta: sem isto a URL direta continua abrindo.
+  await requireArea("compras");
+
   return (
     <div className="space-y-4">
       <div>

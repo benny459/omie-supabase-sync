@@ -1,3 +1,4 @@
+import { requireArea } from "@/lib/require-area";
 // Página de faturamento diário — gráfico stacked bar por dia do período,
 // segmentado por tipo (PV/OS) × categoria (Contrato/Projeto/Avulso/Outro).
 // Todas as empresas SF/CD/WW. Só faturados (dt_fat + num_nfe/num_recibo).
@@ -6,7 +7,10 @@ import FaturamentoView from "@/components/FaturamentoView";
 
 export const dynamic = "force-dynamic";
 
-export default function FaturamentoPage() {
+export default async function FaturamentoPage() {
+  // Esconder do menu não basta: sem isto a URL direta continua abrindo.
+  await requireArea("vendas");
+
   return (
     <div className="space-y-4">
       <div>
