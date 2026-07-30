@@ -106,6 +106,22 @@ const MODULES: NavItem[] = [
   },
 ];
 
+// Área BI — preenchida conforme os dashboards do Metabase são portados.
+// Só aparece pra admin ou pra quem tem row em platform.user_area_access.
+const BI: NavItem[] = [
+  {
+    href: "/bi/margem-projeto",
+    area: "bi",
+    label: "Margem por Projeto",
+    tone: "text-indigo-600",
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className="w-5 h-5" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M3 3v18h18"/><path d="M7 16v-5M12 16V7M17 16v-8"/>
+      </svg>
+    ),
+  },
+];
+
 const ADMIN: NavItem[] = [
   {
     href: "/configuracoes",
@@ -137,7 +153,7 @@ export default function AppSidebar({ userEmail }: { userEmail?: string | null })
 
   // Prefetch de todas as rotas de módulo na primeira render — navegação fica instantânea
   useEffect(() => {
-    MODULES.forEach((m) => router.prefetch(m.href));
+    [...MODULES, ...BI].forEach((m) => router.prefetch(m.href));
     ADMIN.forEach((m) => router.prefetch(m.href));
   }, [router]);
 
@@ -209,7 +225,7 @@ export default function AppSidebar({ userEmail }: { userEmail?: string | null })
               vazia. É o que permite absorver BI/Metabase sem expor financeiro
               pra todo mundo. */}
           {AREAS.filter((a) => canViewArea(perms, a)).map((area) => {
-            const items = MODULES.filter((m) => m.area === area);
+            const items = [...MODULES, ...BI].filter((m) => m.area === area);
             if (items.length === 0) return null;
             return (
               <div key={area}>
