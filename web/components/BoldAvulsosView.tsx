@@ -436,7 +436,14 @@ function matchesAlarme(r: AnyRow, kind: AlarmKind, todayStartMs: number, liberac
       return t != null && t < todayStartMs;
     }
     case "pode_faturar":
-      return !!r.mt_data_recebimento_nf && String(r.pv_dt_fat ?? "").trim() === "";
+      return !!r.mt_data_recebimento_nf && String(r.pv_dt_fat ?? "").trim() === ""
+        && !liberacaoSet?.has(String(r.pv_os_label ?? ""));
+    case "retido_cliente":
+      // Mesma precondição de pode_faturar, mas travado no cliente. É um alarme
+      // de bucket por natureza (depende do PV inteiro) — aqui só a aproximação
+      // row-level, igual aos demais casos deste switch.
+      return !!r.mt_data_recebimento_nf && String(r.pv_dt_fat ?? "").trim() === ""
+        && !!liberacaoSet?.has(String(r.pv_os_label ?? ""));
   }
 }
 
@@ -4009,6 +4016,7 @@ const ALARM_SHORT_LABEL: Record<AlarmKind, string> = {
   agend_vazio:  "Sem Previsão",
   agend_venc:   "Prev. vencida",
   pode_faturar: "Faturável",
+  retido_cliente: "Retido cliente",
 };
 const ALARM_CFG: Record<AlarmKind, { label: string; icon: string; hint: string }> = {
   pvos_incompl: { label: "PV/OS incompleta",      icon: ALARM_ICON, hint: "Cadastro do PV/OS falta dado essencial (tipo, cliente ou V.Previsão Limite_Omie). Reflete o dot PV/OS em vermelho — bloqueia o pipeline até corrigir no Omie." },
@@ -4025,6 +4033,7 @@ const ALARM_CFG: Record<AlarmKind, { label: string; icon: string; hint: string }
   agend_vazio:  { label: "Sem Previsão",          icon: ALARM_ICON, hint: "Mix/Serviços sem V.Nova Prev. Serviços" },
   agend_venc:   { label: "Previsão vencida",      icon: ALARM_ICON, hint: "Mix/Serviços com V.Nova Prev. Serviços no passado (em aberto)" },
   pode_faturar: { label: "Pode faturar",          icon: ALARM_ICON, hint: "Material recebido (Recebto NF preenchido) sem NF de saída" },
+  retido_cliente: { label: "Retido no cliente",   icon: ALARM_ICON, hint: "Faturaria agora — só falta o cliente liberar (Aguardando Liberação)" },
 };
 
 // Grupos temáticos dos alarmes — cada grupo pinta seu bloco de cor distinta
@@ -4035,7 +4044,7 @@ const ALARM_GROUPS: { key: string; label: string; accent: AccentKey; kinds: Alar
   { key: "compras",      label: "Compras",      accent: "violet",  kinds: ["compra", "sem_rc", "sem_pc", "defas_omie"] },
   { key: "aprovacoes",   label: "Aprovações",   accent: "amber",   kinds: ["aprov_bloq", "aprov_pend"] },
   { key: "servicos",     label: "Serviços",     accent: "cyan",    kinds: ["sem_vinculo", "agend_vazio", "agend_venc"] },
-  { key: "faturamento",  label: "Faturamento",  accent: "emerald", kinds: ["pode_faturar"] },
+  { key: "faturamento",  label: "Faturamento",  accent: "emerald", kinds: ["pode_faturar", "retido_cliente"] },
 ];
 
 function AlarmePill({

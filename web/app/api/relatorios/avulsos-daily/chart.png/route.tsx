@@ -17,7 +17,8 @@ const CHART_COLORS: Record<AlarmKind, string> = {
   sem_rc:            "#8b5cf6",
   sem_pc:            "#a855f7",
   aprov_pend:        "#f59e0b",
-  aprov_bloq:        "#7c3aed", // violet-600 — calculado, mas fora de REPORT_SECTIONS
+  aprov_bloq:        "#7c3aed", // violet-600
+  retido_cliente:    "#eab308", // yellow-500 — pronto, mas a bola está com o cliente
   defas_omie:        "#ec4899",
   sem_vinculo:       "#14b8a6",
   agend_vazio:       "#06b6d4",
@@ -33,7 +34,7 @@ const CHART_LABEL: Record<AlarmKind, string> = {
   aprov_bloq: "Aprov bloq",
   defas_omie: "Defas Omie", sem_vinculo: "Sem Vínculo",
   agend_vazio: "Sem prev.", agend_venc: "Prev vencida",
-  pode_faturar: "Faturável",
+  pode_faturar: "Faturável", retido_cliente: "Retido cliente",
 };
 
 export async function GET() {

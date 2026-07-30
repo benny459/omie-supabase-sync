@@ -48,7 +48,8 @@ export const REPORT_SECTIONS: {
   {
     title: "FATURAMENTO", emoji: "💵",
     items: [
-      { kind: "pode_faturar", label: "Pronto para faturar" },
+      { kind: "pode_faturar",   label: "Pronto para faturar" },
+      { kind: "retido_cliente", label: "Retido no cliente (tudo pronto, falta liberar)" },
     ],
   },
 ];
@@ -70,6 +71,7 @@ export const ALARM_OWNERS: Record<AlarmKind, string> = {
   agend_vazio:       "Cristina",
   agend_venc:        "Cristina",
   pode_faturar:      "Fernanda",
+  retido_cliente:    "Fernanda",
 };
 
 // Base do painel (produção). Report usa deep-link com ?alarme=X&pv=aberto

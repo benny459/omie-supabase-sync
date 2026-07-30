@@ -39,17 +39,34 @@ export type AlarmKind =
   | "sem_vinculo"
   | "agend_vazio"
   | "agend_venc"
-  | "pode_faturar";
+  | "pode_faturar"
+  | "retido_cliente";
 
 export const ALARM_KINDS: AlarmKind[] = [
   "pvos_incompl", "sem_projeto", "aguarda_liberacao", "venda", "compra",
   "sem_rc", "sem_pc",
   "aprov_bloq", "aprov_pend", "defas_omie",
   "sem_vinculo", "agend_vazio", "agend_venc",
-  "pode_faturar",
+  "pode_faturar", "retido_cliente",
 ];
 
 export type AlarmRow = Record<string, unknown>;
+
+// Status de OS que significam "não há mais serviço a executar". Vem do app de
+// serviços (app.waterworks.com.br) via custom_fields.ww_os_status. Aceita
+// "Concluida" sem acento por defesa — o valor gravado hoje é "Concluída".
+const OS_STATUS_RESOLVIDO = new Set(["Concluída", "Concluida", "Cancelada"]);
+
+export function osStatus(r: AlarmRow): string {
+  const cf = (r.custom_fields as Record<string, unknown> | null) || {};
+  return String(cf["ww_os_status"] ?? "").trim();
+}
+
+// Serviço já entregue (ou cancelado) — não há mais execução pendente. É o
+// equivalente, no lado de serviços, do mt_data_recebimento_nf das compras.
+export function isServicoResolvido(r: AlarmRow): boolean {
+  return OS_STATUS_RESOLVIDO.has(osStatus(r));
+}
 
 // Parse flexível de data: aceita ISO YYYY-MM-DD ou BR DD/MM/YYYY (a view mistura
 // as duas convenções entre nova_prev_* e o resto).
@@ -217,9 +234,15 @@ export function computeBucketAlarms(
 
     if (!rows.some((r) => !!String(r.nova_prev_servicos ?? "").trim())) set.add("agend_vazio");
 
+    // Previsão vencida só conta se AINDA há serviço a executar. Serviço
+    // concluído com previsão no passado não é atraso — é histórico, e alarmaria
+    // para sempre, porque a data nunca deixa de estar atrás. Mesma guarda que
+    // isAtrasoCompra faz com mt_data_recebimento_nf. Sem isso, os 8 PV/OS que o
+    // report acusava em 29/07 eram TODOS de OS já concluída. (2026-07-30)
     for (const r of rows) {
       const s = String(r.nova_prev_servicos ?? "").trim();
       if (!s) continue;
+      if (isServicoResolvido(r)) continue;
       const t = parseFlexDate(s);
       if (t != null && t < todayMs) { set.add("agend_venc"); break; }
     }
@@ -234,14 +257,25 @@ export function computeBucketAlarms(
     const cf = (r.custom_fields as Record<string, unknown> | null) || {};
     return cf["ww_pode_faturar"] === true;
   });
+  let faturavel = false;
   if (hasPurchases) {
     if (anyPc) {
       const pcRows = rows.filter(hasPcRow);
-      const allReceived = pcRows.length > 0 && pcRows.every((r) => !!r.mt_data_recebimento_nf);
-      if (allReceived && serviceReleased) set.add("pode_faturar");
+      faturavel = pcRows.length > 0
+        && pcRows.every((r) => !!r.mt_data_recebimento_nf)
+        && serviceReleased;
     }
-  } else if (serviceReleased) {
-    set.add("pode_faturar");
+  } else {
+    faturavel = serviceReleased;
+  }
+
+  if (faturavel) {
+    // Tudo pronto do NOSSO lado. Se o cliente ainda não liberou, a bola não é
+    // nossa: vira "Retido no cliente" em vez de "Pronto para faturar", senão a
+    // linha do report sugere uma ação que não podemos tomar. Em 29/07, 4 dos 5
+    // "Pronto para faturar" estavam nessa situação. (2026-07-30)
+    if (set.has("aguarda_liberacao")) set.add("retido_cliente");
+    else set.add("pode_faturar");
   }
 
   return set;
