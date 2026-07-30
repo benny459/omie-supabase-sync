@@ -72,8 +72,8 @@ export default function VizCombo({
       <ComposedChart data={data} margin={{ top: 4, right: 8, bottom: 0, left: 0 }} barCategoryGap="26%" barGap={2}>
         <CartesianGrid horizontal vertical={false} stroke={c.gridline} />
         <XAxis dataKey={xKey} tick={axisTick} stroke={c.axis} />
-        {/* UM eixo. Sempre. */}
-        <YAxis tick={axisTick} stroke={c.axis} tickFormatter={(v) => fmt(Number(v))} />
+        {/* UM eixo. Sempre. width explícito pra não cortar valor de 7+ dígitos. */}
+        <YAxis tick={axisTick} stroke={c.axis} width={78} tickFormatter={(v) => fmt(Number(v))} />
         <Tooltip
           cursor={{ fill: vizMode === "dark" ? "#ffffff12" : "#0000000a" }}
           contentStyle={{

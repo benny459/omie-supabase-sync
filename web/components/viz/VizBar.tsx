@@ -80,7 +80,10 @@ export default function VizBar({
         ) : (
           <>
             <XAxis type="category" dataKey={xKey} tick={axisTick} stroke={c.axis} />
-            <YAxis type="number" tick={axisTick} stroke={c.axis} tickFormatter={(v) => fmt(Number(v))} />
+            {/* width explícito: o default (60px) corta valores na casa dos
+                milhões — "R$ 20.000.000" virava "0.000.000" na tela. */}
+            <YAxis type="number" tick={axisTick} stroke={c.axis} width={78}
+                   tickFormatter={(v) => fmt(Number(v))} />
           </>
         )}
 
