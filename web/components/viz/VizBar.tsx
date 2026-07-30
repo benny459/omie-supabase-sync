@@ -42,7 +42,11 @@ export default function VizBar({
   // quebra o rótulo em várias linhas e eles se sobrepõem até virar borrão — foi
   // exatamente o que apareceu na primeira versão em produção. Trunca com
   // reticências; o nome inteiro continua no tooltip e na visão de tabela.
-  const maxChars = Math.max(Math.floor(categoryWidth / 6.4), 8);
+  // 8px por caractere, não 6.4: a 10.5px de fonte, nome de fornecedor em caixa
+  // alta ("SECRETARIA DA RECEITA FEDERAL") tem glifo bem mais largo que a média,
+  // e a estimativa folgada deixava o recharts quebrar em duas linhas sobrepostas
+  // mesmo com o texto já truncado.
+  const maxChars = Math.max(Math.floor(categoryWidth / 8), 8);
   const truncaCategoria = (v: unknown) => {
     const s = String(v ?? "");
     return s.length > maxChars ? `${s.slice(0, maxChars - 1)}…` : s;
@@ -82,7 +86,7 @@ export default function VizBar({
             <XAxis type="category" dataKey={xKey} tick={axisTick} stroke={c.axis} />
             {/* width explícito: o default (60px) corta valores na casa dos
                 milhões — "R$ 20.000.000" virava "0.000.000" na tela. */}
-            <YAxis type="number" tick={axisTick} stroke={c.axis} width={78}
+            <YAxis type="number" tick={axisTick} stroke={c.axis} width={92}
                    tickFormatter={(v) => fmt(Number(v))} />
           </>
         )}

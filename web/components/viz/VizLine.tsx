@@ -38,7 +38,7 @@ export default function VizLine({
         <CartesianGrid horizontal vertical={false} stroke={c.gridline} />
         <XAxis dataKey={xKey} tick={axisTick} stroke={c.axis} />
         {/* Mesmo motivo do VizBar: o width default corta valor de 7+ dígitos. */}
-        <YAxis tick={axisTick} stroke={c.axis} width={78} tickFormatter={(v) => fmt(Number(v))} />
+        <YAxis tick={axisTick} stroke={c.axis} width={92} tickFormatter={(v) => fmt(Number(v))} />
         <Tooltip
           // Crosshair: hairline vertical que acha o X. Recharts já snapa no ponto.
           cursor={{ stroke: c.axis, strokeWidth: 1 }}

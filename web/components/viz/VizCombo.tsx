@@ -73,7 +73,7 @@ export default function VizCombo({
         <CartesianGrid horizontal vertical={false} stroke={c.gridline} />
         <XAxis dataKey={xKey} tick={axisTick} stroke={c.axis} />
         {/* UM eixo. Sempre. width explícito pra não cortar valor de 7+ dígitos. */}
-        <YAxis tick={axisTick} stroke={c.axis} width={78} tickFormatter={(v) => fmt(Number(v))} />
+        <YAxis tick={axisTick} stroke={c.axis} width={92} tickFormatter={(v) => fmt(Number(v))} />
         <Tooltip
           cursor={{ fill: vizMode === "dark" ? "#ffffff12" : "#0000000a" }}
           contentStyle={{
