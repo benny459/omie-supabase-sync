@@ -146,6 +146,21 @@ const BI: NavItem[] = [
   },
 ];
 
+// Área FINANCEIRO — nasce fechada no AREA_DEFAULT.
+const FINANCEIRO: NavItem[] = [
+  {
+    href: "/bi/contas-receber",
+    area: "financeiro",
+    label: "Contas a Receber",
+    tone: "text-emerald-700",
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className="w-5 h-5" strokeLinecap="round" strokeLinejoin="round">
+        <rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/><path d="M6 12h.01M18 12h.01"/>
+      </svg>
+    ),
+  },
+];
+
 const ADMIN: NavItem[] = [
   {
     href: "/configuracoes",
@@ -177,7 +192,7 @@ export default function AppSidebar({ userEmail }: { userEmail?: string | null })
 
   // Prefetch de todas as rotas de módulo na primeira render — navegação fica instantânea
   useEffect(() => {
-    [...MODULES, ...BI].forEach((m) => router.prefetch(m.href));
+    [...MODULES, ...FINANCEIRO, ...BI].forEach((m) => router.prefetch(m.href));
     ADMIN.forEach((m) => router.prefetch(m.href));
   }, [router]);
 
@@ -249,7 +264,7 @@ export default function AppSidebar({ userEmail }: { userEmail?: string | null })
               vazia. É o que permite absorver BI/Metabase sem expor financeiro
               pra todo mundo. */}
           {AREAS.filter((a) => canViewArea(perms, a)).map((area) => {
-            const items = [...MODULES, ...BI].filter((m) => m.area === area);
+            const items = [...MODULES, ...FINANCEIRO, ...BI].filter((m) => m.area === area);
             if (items.length === 0) return null;
             return (
               <div key={area}>
