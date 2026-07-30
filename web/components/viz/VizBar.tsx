@@ -20,6 +20,7 @@ import type { SeriesDef } from "./ChartFrame";
 
 export default function VizBar({
   rows, series, layout = "column", stacked = false, valueFormat, xKey = "x",
+  categoryWidth = 200,
 }: {
   rows: Array<Record<string, unknown>>;
   series: SeriesDef[];
@@ -27,6 +28,8 @@ export default function VizBar({
   stacked?: boolean;
   valueFormat?: (v: number) => string;
   xKey?: string;
+  /** Largura reservada ao rótulo de categoria no layout horizontal. */
+  categoryWidth?: number;
 }) {
   const mode = useVizMode();
   const c = CHROME[mode];
@@ -35,12 +38,22 @@ export default function VizBar({
 
   const axisTick = { fontSize: 10.5, fill: c.inkMuted };
 
+  // Nome de projeto/contrato passa de 60 caracteres. Sem truncar, o recharts
+  // quebra o rótulo em várias linhas e eles se sobrepõem até virar borrão — foi
+  // exatamente o que apareceu na primeira versão em produção. Trunca com
+  // reticências; o nome inteiro continua no tooltip e na visão de tabela.
+  const maxChars = Math.max(Math.floor(categoryWidth / 6.4), 8);
+  const truncaCategoria = (v: unknown) => {
+    const s = String(v ?? "");
+    return s.length > maxChars ? `${s.slice(0, maxChars - 1)}…` : s;
+  };
+
   return (
     <ResponsiveContainer width="100%" height="100%">
       <BarChart
         data={rows}
         layout={horizontal ? "vertical" : "horizontal"}
-        margin={{ top: 4, right: 8, bottom: 0, left: horizontal ? 8 : 0 }}
+        margin={{ top: 4, right: 16, bottom: 0, left: 0 }}
         barCategoryGap={horizontal ? "22%" : "26%"}
         // 2px de superfície entre barras vizinhas do mesmo grupo
         barGap={2}
@@ -55,7 +68,14 @@ export default function VizBar({
         {horizontal ? (
           <>
             <XAxis type="number" tick={axisTick} stroke={c.axis} tickFormatter={(v) => fmt(Number(v))} />
-            <YAxis type="category" dataKey={xKey} tick={axisTick} stroke={c.axis} width={110} />
+            <YAxis
+              type="category" dataKey={xKey} tick={axisTick} stroke={c.axis}
+              width={categoryWidth}
+              // interval=0 força um tick por categoria: sem isso o recharts pula
+              // rótulos quando ficam apertados, e some com barras da leitura.
+              interval={0}
+              tickFormatter={truncaCategoria}
+            />
           </>
         ) : (
           <>
