@@ -80,9 +80,9 @@ export function PanoramaGeralView() {
   const cicloRows = (data?.ciclo ?? []).map((c) => ({ x: c.etapa, dias: c.dias }));
 
   return (
-    <div className="space-y-3 min-w-0">
+    <div className="space-y-4 min-w-0">
       {filtros}{erro}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <StatTile label="Saldo em caixa" value={data ? brl(data.saldo.valor) : "—"}
                   hint={data?.saldo.referencia
                     ? `${data.saldo.origem} · ${String(data.saldo.referencia).split("-").reverse().join("/")}`
@@ -120,9 +120,9 @@ export function AtrasoView() {
     .map((c) => ({ x: c.cliente, valor: c.valor, dias: c.dias, titulos: c.titulos }));
 
   return (
-    <div className="space-y-3 min-w-0">
+    <div className="space-y-4 min-w-0">
       {filtros}{erro}
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-2 gap-4">
         <StatTile label="Total em atraso" value={data ? brl(data.ar.em_atraso) : "—"}
                   higherIsBetter={false} />
         <StatTile label="Clientes em atraso" value={data ? String(data.clientes_atraso.length) : "—"}
@@ -158,9 +158,9 @@ export function PrevisaoRecebView() {
   const total = (data?.previsao ?? []).reduce((a, p) => a + p.valor, 0);
 
   return (
-    <div className="space-y-3 min-w-0">
+    <div className="space-y-4 min-w-0">
       {filtros}{erro}
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-2 gap-4">
         <StatTile label="Previsto nas próximas 12 semanas" value={brl(total)} />
         <StatTile label="Semanas com recebimento"
                   value={String((data?.previsao ?? []).filter((p) => p.valor > 0).length)} />
@@ -184,7 +184,7 @@ export function AquisicaoView() {
     .map((t, i) => ({ key: t, label: t, slot: i, mark: "rect" }));
 
   return (
-    <div className="space-y-3 min-w-0">
+    <div className="space-y-4 min-w-0">
       {filtros}{erro}
       <ChartFrame
         title="Aquisição vs recorrente — 18 meses"
@@ -211,9 +211,9 @@ export function RentabilidadeView() {
   const totalFat = (data?.rentabilidade ?? []).reduce((a, r) => a + r.faturamento, 0);
 
   return (
-    <div className="space-y-3 min-w-0">
+    <div className="space-y-4 min-w-0">
       {filtros}{erro}
-      <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
+      <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
         <StatTile label="Rentabilidade total" value={brl(totalRent)} />
         <StatTile label="Margem média"
                   value={totalFat > 0 ? `${((totalRent / totalFat) * 100).toFixed(1)}%` : "—"} />

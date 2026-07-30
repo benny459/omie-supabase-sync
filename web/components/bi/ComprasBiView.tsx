@@ -61,7 +61,7 @@ export default function ComprasBiView() {
   const fornSeries: SeriesDef[] = [{ key: "valor", label: "Pago", slot: 1, mark: "rect" }];
 
   return (
-    <div className="space-y-3 min-w-0">
+    <div className="space-y-4 min-w-0">
       <VizFilters range={range} onRangeChange={setRange} dims={dims}
                   onDimChange={(_, sel) => setEmpresas(sel)} />
 
@@ -71,7 +71,7 @@ export default function ComprasBiView() {
         </div>
       )}
 
-      <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
+      <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
         <StatTile label="Comprado no período" value={data ? brl(data.total) : "—"}
                   hint={data ? `${data.qtd} títulos em CMV (2.01)` : undefined} />
         <StatTile label="Projetos com compra" value={data ? String(data.projetos.length) : "—"} />
@@ -87,7 +87,7 @@ export default function ComprasBiView() {
         <VizBar rows={data?.mensal ?? []} series={catSeries} stacked valueFormat={brl} />
       </ChartFrame>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <ChartFrame
           title="Compras por projeto"
           series={projSeries}

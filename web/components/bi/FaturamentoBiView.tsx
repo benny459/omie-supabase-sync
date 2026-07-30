@@ -83,7 +83,7 @@ export default function FaturamentoBiView() {
   const qtdSeries: SeriesDef[] = [{ key: "qtd", label: "Notas", slot: 1, mark: "rect" }];
 
   return (
-    <div className="space-y-3 min-w-0">
+    <div className="space-y-4 min-w-0">
       <VizFilters
         range={range}
         onRangeChange={setRange}
@@ -107,7 +107,7 @@ export default function FaturamentoBiView() {
         </div>
       )}
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <StatTile label="Faturado no período" value={data ? brl(data.total_periodo) : "—"}
                   hint={data ? `${data.qtd_notas} notas` : undefined} />
         <StatTile label="Faturado YTD" value={data ? brl(data.total_ytd) : "—"}
@@ -131,7 +131,7 @@ export default function FaturamentoBiView() {
         <VizBar rows={data?.mensal ?? []} series={mixSeries} stacked valueFormat={brl} />
       </ChartFrame>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <ChartFrame
           title="Prazo efetivo (DSO) — distribuição"
           subtitle={data?.dso.media != null ? `média ponderada ${data.dso.media.toFixed(1)} dias` : undefined}
@@ -172,7 +172,7 @@ export default function FaturamentoBiView() {
         </section>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <ChartFrame
           title={`Top ${dim === "cliente" ? "clientes" : "projetos"} — valor faturado`}
           series={topSeries}

@@ -81,7 +81,7 @@ export default function ContasPagarView() {
   const acionavel = h ? h.vencido + h.no_horizonte : 0;
 
   return (
-    <div className="space-y-3 min-w-0">
+    <div className="space-y-4 min-w-0">
       <VizFilters
         range={range}
         onRangeChange={setRange}
@@ -124,7 +124,7 @@ export default function ContasPagarView() {
         </p>
       )}
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <StatTile label="Vencido" value={h ? brl(h.vencido) : "—"}
                   hint={h ? `${h.qtd_vencido} títulos` : undefined} higherIsBetter={false} />
         <StatTile label={`Vence em ${h?.dias ?? 90} dias`} value={h ? brl(h.no_horizonte) : "—"}
@@ -143,7 +143,7 @@ export default function ContasPagarView() {
         <VizBar rows={agingRows} series={agingSeries} valueFormat={brl} />
       </ChartFrame>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <ChartFrame
           title="Emitido vs pago por mês"
           subtitle="Ambos em R$ — um eixo só. No Metabase eram combos de eixo duplo."

@@ -68,7 +68,7 @@ export default function MargemProjetoView() {
   ];
 
   return (
-    <div className="space-y-3 min-w-0">
+    <div className="space-y-4 min-w-0">
       <VizFilters
         range={range}
         onRangeChange={setRange}
@@ -88,7 +88,7 @@ export default function MargemProjetoView() {
         </div>
       )}
 
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <StatTile
           label={media ? "Margem — média mensal" : "Margem total no período"}
           value={data ? brl(data.margem_total) : "—"}

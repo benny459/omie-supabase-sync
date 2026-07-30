@@ -73,7 +73,7 @@ export default function ContasReceberView() {
   ];
 
   return (
-    <div className="space-y-3 min-w-0">
+    <div className="space-y-4 min-w-0">
       <VizFilters
         range={range}
         onRangeChange={setRange}
@@ -111,7 +111,7 @@ export default function ContasReceberView() {
         </p>
       )}
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <StatTile label="Saldo aberto" value={data ? brl(data.saldo_aberto) : "—"}
                   hint={data ? `${data.qtd_titulos} títulos` : undefined} />
         <StatTile label="Em atraso" value={data ? brl(data.em_atraso) : "—"} higherIsBetter={false} />

@@ -75,7 +75,7 @@ export default function VendasView() {
   const mixPv = data ? data.total_pv + data.total_os : 0;
 
   return (
-    <div className="space-y-3 min-w-0">
+    <div className="space-y-4 min-w-0">
       <VizFilters
         range={range} onRangeChange={setRange} dims={dims}
         onDimChange={(k, sel) => (k === "empresa" ? setEmpresas(sel) : setCats(sel))}
@@ -87,7 +87,7 @@ export default function VendasView() {
         </div>
       )}
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <StatTile label="Vendido no período" value={data ? brl(data.total_periodo) : "—"}
                   hint={data ? `${data.qtd_periodo} PV/OS` : undefined} />
         <StatTile label="Vendido YTD" value={data ? brl(data.total_ytd) : "—"}
@@ -109,7 +109,7 @@ export default function VendasView() {
         <VizBar rows={data?.mensal_categoria ?? []} series={catSeries} stacked valueFormat={brl} />
       </ChartFrame>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {/* Desdobramento do combo "PV vs OS — Mensal" */}
         <ChartFrame
           title="PV vs OS por mês"

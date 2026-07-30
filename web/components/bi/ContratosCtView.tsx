@@ -74,7 +74,7 @@ export default function ContratosCtView() {
     : null;
 
   return (
-    <div className="space-y-3 min-w-0">
+    <div className="space-y-4 min-w-0">
       <VizFilters
         range={range}
         onRangeChange={setRange}
@@ -97,7 +97,7 @@ export default function ContratosCtView() {
         </div>
       )}
 
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <StatTile
           label="Faturamento lifetime"
           value={data ? brl(data.faturado_lifetime) : "—"}

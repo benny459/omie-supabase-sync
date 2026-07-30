@@ -72,7 +72,7 @@ export default function DreView() {
   }));
 
   return (
-    <div className="space-y-3 min-w-0">
+    <div className="space-y-4 min-w-0">
       <VizFilters
         range={range}
         onRangeChange={setRange}
@@ -110,7 +110,7 @@ export default function DreView() {
                 const total = l.linha.trimStart().startsWith("(=)");
                 const neg = l.valor < 0;
                 return (
-                  <tr key={l.ord} className={total ? "bg-ww-rowHover" : ""}>
+                  <tr key={l.ord} className={`viz-row ${total ? "bg-ww-rowHover" : ""}`}>
                     <td className={`p-1.5 border-b border-ww-border/60 whitespace-pre text-ww-text ${total ? "font-bold" : ""}`}>
                       {l.linha}
                     </td>
@@ -128,7 +128,7 @@ export default function DreView() {
         </div>
       </section>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <ChartFrame
           title="Saídas por macro grupo"
           subtitle="Custo · Fixo · Variável · Retirada"
