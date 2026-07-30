@@ -113,13 +113,13 @@ export default function ProjetoEscopoButton({
     ? createPortal(
         <div ref={popRef}
           style={{ top: popPos.top, left: popPos.left }}
-          className="fixed z-[60] min-w-[280px] max-w-[320px] bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-md shadow-xl p-2"
+          className="fixed z-[60] min-w-[280px] max-w-[320px] bg-ww-panel border border-ww-border rounded-md shadow-xl p-2"
           onClick={(e) => e.stopPropagation()}>
-          <div className="text-[10px] uppercase tracking-[0.5px] font-bold text-slate-500 dark:text-slate-400 px-1 pb-1 border-b border-slate-100 dark:border-slate-800 mb-1">
+          <div className="text-[10px] uppercase tracking-[0.5px] font-bold text-ww-textMuted px-1 pb-1 border-b border-ww-border mb-1">
             Por nossa conta neste projeto?
           </div>
           {loading ? (
-            <div className="p-2 text-[11px] text-slate-500 italic">Carregando…</div>
+            <div className="p-2 text-[11px] text-ww-textMuted italic">Carregando…</div>
           ) : (
             <ul className="space-y-0.5">
               {LABELS.map((l) => {
@@ -127,17 +127,17 @@ export default function ProjetoEscopoButton({
                 const isSaving = saving === l.key;
                 return (
                   <li key={l.key}>
-                    <label className={`flex items-start gap-2 px-2 py-1.5 rounded cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800 ${isSaving ? "opacity-50" : ""}`}
+                    <label className={`flex items-start gap-2 px-2 py-1.5 rounded cursor-pointer hover:bg-ww-rowHover dark:hover:bg-slate-800 ${isSaving ? "opacity-50" : ""}`}
                       title={l.hint}>
                       <input type="checkbox" checked={on} disabled={isSaving}
                         onChange={() => toggle(l.key)}
                         className="mt-0.5 w-4 h-4 accent-sky-600 cursor-pointer" />
                       <div className="flex-1 min-w-0">
-                        <div className="text-[12px] font-semibold text-slate-800 dark:text-slate-100 flex items-center gap-1">
+                        <div className="text-[12px] font-semibold text-ww-text flex items-center gap-1">
                           <span className="text-[13px]">{l.icon}</span>
                           {l.label}
                         </div>
-                        <div className="text-[10px] text-slate-500 dark:text-slate-400">{l.hint}</div>
+                        <div className="text-[10px] text-ww-textMuted ">{l.hint}</div>
                       </div>
                     </label>
                   </li>
@@ -145,7 +145,7 @@ export default function ProjetoEscopoButton({
               })}
             </ul>
           )}
-          <div className="px-2 pt-1 mt-1 border-t border-slate-100 dark:border-slate-800 text-[10px] text-slate-500 dark:text-slate-400">
+          <div className="px-2 pt-1 mt-1 border-t border-ww-border text-[10px] text-ww-textMuted ">
             Salva automaticamente ao marcar.
           </div>
         </div>,
@@ -160,7 +160,7 @@ export default function ProjetoEscopoButton({
         className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[11.5px] font-semibold border transition ${
           marcadas > 0
             ? "border-sky-400 dark:border-sky-700 bg-sky-50 dark:bg-sky-950/40 text-sky-800 dark:text-sky-200 hover:bg-sky-100 dark:hover:bg-sky-900/50"
-            : "border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800"
+            : "border-ww-border bg-ww-panel text-ww-textMuted hover:bg-ww-rowHover dark:hover:bg-slate-800"
         }`}>
         ⚙ <span>Escopo</span>
         {marcadas > 0 && (

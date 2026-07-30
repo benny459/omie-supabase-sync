@@ -240,8 +240,8 @@ export default function GroupedModuleView({
       {/* Header */}
       <div className="flex items-end justify-between gap-4 flex-wrap">
         <div>
-          <h1 className="text-2xl md:text-3xl font-semibold text-slate-900 tracking-tight">{title}</h1>
-          <p className="text-slate-500 text-sm mt-1">
+          <h1 className="text-2xl md:text-3xl font-semibold text-ww-text tracking-tight">{title}</h1>
+          <p className="text-ww-textMuted text-sm mt-1">
             {filtered.length.toLocaleString("pt-BR")} de {(totalCount ?? rows.length).toLocaleString("pt-BR")} registros
             {groupByPv && ` em ${buckets.length} ${groupBy === "project" ? "projeto(s)" : "PV/OS"}`}
           </p>
@@ -267,8 +267,8 @@ export default function GroupedModuleView({
             onClick={() => setOpenGroups((prev) => ({ ...prev, [g.key]: !prev[g.key] }))}
             className={`px-2.5 py-1 rounded-full text-[11px] font-medium border transition ${
               openGroups[g.key]
-                ? `${g.tint} ${g.border} text-slate-800`
-                : "bg-white border-slate-200 text-slate-500 hover:bg-slate-50"
+                ? `${g.tint} ${g.border} text-ww-text`
+                : "bg-ww-panel border-ww-border text-ww-textMuted hover:bg-ww-rowHover"
             }`}
           >
             {openGroups[g.key] ? "▼" : "▶"} {g.label}
@@ -315,7 +315,7 @@ export default function GroupedModuleView({
               </button>
             )}
           </div>
-          <button onClick={clearSelection} className="text-xs text-slate-300 hover:text-white underline-offset-2 hover:underline">
+          <button onClick={clearSelection} className="text-xs text-ww-textFaint hover:text-white underline-offset-2 hover:underline">
             Limpar seleção
           </button>
         </div>
@@ -393,7 +393,7 @@ function SingleTableView({
 
   if (buckets.length === 0) {
     return (
-      <div className="text-sm text-slate-400 italic p-6 bg-white border border-slate-200 rounded-lg text-center">
+      <div className="text-sm text-ww-textFaint italic p-6 bg-ww-panel border border-ww-border rounded-lg text-center">
         Nenhum registro corresponde ao filtro.
       </div>
     );
@@ -405,18 +405,18 @@ function SingleTableView({
   return (
     <div className="space-y-2">
       <div className="flex items-center gap-1 text-xs">
-        <span className="text-slate-500 mr-1">Visualização global:</span>
+        <span className="text-ww-textMuted mr-1">Visualização global:</span>
         <button onClick={allOpen}
           title="Expandir todos os PV/OS"
-          className="w-7 h-7 rounded border border-slate-300 hover:bg-slate-50 font-bold text-base text-slate-700">+</button>
+          className="w-7 h-7 rounded border border-ww-border hover:bg-ww-rowHover font-bold text-base text-ww-textMuted">+</button>
         <button onClick={allClosed}
           title="Colapsar todos os PV/OS"
-          className="w-7 h-7 rounded border border-slate-300 hover:bg-slate-50 font-bold text-base text-slate-700">−</button>
+          className="w-7 h-7 rounded border border-ww-border hover:bg-ww-rowHover font-bold text-base text-ww-textMuted">−</button>
       </div>
 
-    <div className="rounded-lg border border-slate-200 bg-white shadow-sm overflow-auto max-h-[calc(100vh-260px)]">
+    <div className="rounded-lg border border-ww-border bg-ww-panel shadow-sm overflow-auto max-h-[calc(100vh-260px)]">
       <table className="text-xs w-full border-separate border-spacing-0">
-        <thead className="sticky top-0 z-20 bg-white">
+        <thead className="sticky top-0 z-20 bg-ww-panel">
           {hasGroupBanner && (
             <tr>
               {groups.map((g) =>
@@ -424,7 +424,7 @@ function SingleTableView({
                   <th
                     key={g.key}
                     colSpan={g.columns.length}
-                    className={`${g.tint} ${g.border} border-b border-l text-xs font-semibold text-slate-700 px-3 py-1.5 text-left whitespace-nowrap`}
+                    className={`${g.tint} ${g.border} border-b border-l text-xs font-semibold text-ww-textMuted px-3 py-1.5 text-left whitespace-nowrap`}
                   >
                     {g.label}
                   </th>
@@ -432,15 +432,15 @@ function SingleTableView({
               )}
             </tr>
           )}
-          <tr className="bg-slate-50 text-slate-600 uppercase text-[10px] tracking-wider">
+          <tr className="bg-ww-rowHover text-ww-textMuted uppercase text-[10px] tracking-wider">
             {visibleColumns.map(({ col, group }, idx) => {
               const stickyFirst = idx === 0
-                ? "sticky left-0 z-10 bg-slate-50 shadow-[2px_0_0_#e2e8f0]"
+                ? "sticky left-0 z-10 bg-ww-rowHover shadow-[2px_0_0_#e2e8f0]"
                 : "";
               return (
                 <th
                   key={`${group.key}.${col.key}`}
-                  className={`px-3 py-2 whitespace-nowrap border-b border-slate-200 ${stickyFirst} ${
+                  className={`px-3 py-2 whitespace-nowrap border-b border-ww-border ${stickyFirst} ${
                     col.align === "right" ? "text-right" : col.align === "center" ? "text-center" : "text-left"
                   }`}
                 >
@@ -513,7 +513,7 @@ function BucketSection({
   // Cria separação visual sem depender de borda grossa.
   const gapRow = bucketIndex > 0 ? (
     <tr key={`gap-${bucket.key}`} aria-hidden="true">
-      <td colSpan={totalCols} className="h-3 bg-slate-100/80 p-0 border-0" />
+      <td colSpan={totalCols} className="h-3 bg-ww-bg/80 p-0 border-0" />
     </tr>
   ) : null;
 
@@ -579,7 +579,7 @@ function BucketSection({
       {canAddRc && (
       <tr>
         <td colSpan={totalCols} className="p-0">
-          <div className="flex items-center gap-2 pl-4 py-1.5 border-b border-slate-200 bg-slate-50/50">
+          <div className="flex items-center gap-2 pl-4 py-1.5 border-b border-ww-border bg-ww-rowHover/50">
             <AddRowButton
               empresa={bucket.empresa}
               pv_os_label={
@@ -687,11 +687,11 @@ function DataRow({ row, visibleColumns, defaultModulo: _dm, onClick, showToggle 
   const isSelectable = !!selection && !isSummary;
   const isSelected = !!selection?.selected.has(selKey);
   return (
-    <tr className={`hover:bg-slate-50 cursor-pointer group transition-colors ${
+    <tr className={`hover:bg-ww-rowHover cursor-pointer group transition-colors ${
         // Primeira linha de cada PV/OS (summary ou 1a expandida): fundo sutil + borda fina slate-300 no topo.
         // A separação "caixa" é feita pela gap row neutra acima dela (em BucketSection).
         showToggle
-          ? "bg-slate-50 border-t border-slate-300"
+          ? "bg-ww-rowHover border-t border-ww-border"
           : ""
       }`}
         onClick={onClick}>
@@ -700,14 +700,14 @@ function DataRow({ row, visibleColumns, defaultModulo: _dm, onClick, showToggle 
         const isFirst = idx === 0;
         // bg branco pra sobrepor ao hover com sticky (só na 1a coluna)
         const stickyCls = isFirst
-          ? `sticky left-0 z-[5] ${showToggle ? "bg-slate-50" : "bg-white"} group-hover:bg-slate-50 shadow-[2px_0_0_theme(colors.slate.200)]`
+          ? `sticky left-0 z-[5] ${showToggle ? "bg-ww-rowHover" : "bg-ww-panel"} group-hover:bg-ww-rowHover shadow-[2px_0_0_theme(colors.slate.200)]`
           : "";
 
         // 1ª coluna ganha o toggle ± + contador de PCs (só em linhas summary/primeira expandida)
         const toggleArrow = isFirst && showToggle ? (
           <button
             onClick={(e) => { e.stopPropagation(); onToggleBucket?.(); }}
-            className="mr-1.5 inline-flex items-center justify-center w-5 h-5 rounded border border-slate-300 bg-white hover:bg-slate-100 text-sm font-bold text-slate-700 align-middle"
+            className="mr-1.5 inline-flex items-center justify-center w-5 h-5 rounded border border-ww-border bg-ww-panel hover:bg-ww-bg text-sm font-bold text-ww-textMuted align-middle"
             title={showToggle === "open" ? "Colapsar este PV/OS" : "Expandir este PV/OS"}
           >{showToggle === "open" ? "−" : "+"}</button>
         ) : null;
@@ -716,7 +716,7 @@ function DataRow({ row, visibleColumns, defaultModulo: _dm, onClick, showToggle 
           <button
             onClick={(e) => { e.stopPropagation(); selection!.toggle(selKey); }}
             className={`mr-1.5 inline-flex items-center justify-center w-4 h-4 rounded border align-middle transition ${
-              isSelected ? "bg-sky-600 border-sky-600" : "bg-white border-slate-300 hover:border-sky-400"
+              isSelected ? "bg-sky-600 border-sky-600" : "bg-ww-panel border-ww-border hover:border-sky-400"
             }`}
             title={isSelected ? "Desmarcar" : "Selecionar pra aprovar em lote"}
           >
@@ -728,7 +728,7 @@ function DataRow({ row, visibleColumns, defaultModulo: _dm, onClick, showToggle 
           </button>
         ) : null;
         const bucketBadge = isFirst && bucketInfo ? (
-          <span className="ml-2 inline-flex items-center gap-1.5 text-[10px] text-slate-500">
+          <span className="ml-2 inline-flex items-center gap-1.5 text-[10px] text-ww-textMuted">
             <span>· {bucketInfo.qtd} PC{bucketInfo.qtd !== 1 ? "s" : ""}</span>
             {bucketInfo.aprovados  > 0 && <span className="text-emerald-700">✅ {bucketInfo.aprovados}</span>}
             {bucketInfo.pendentes  > 0 && <span>⏸ {bucketInfo.pendentes}</span>}
@@ -745,7 +745,7 @@ function DataRow({ row, visibleColumns, defaultModulo: _dm, onClick, showToggle 
           return (
             <td key={`${group.key}.${col.key}`}
                 rowSpan={mergedInfo.bucketSize}
-                className={`px-3 py-1.5 whitespace-nowrap border-b border-slate-200 ${isFirst ? stickyCls : group.tint} align-middle text-center font-semibold ring-1 ring-inset ring-amber-200/40`}
+                className={`px-3 py-1.5 whitespace-nowrap border-b border-ww-border ${isFirst ? stickyCls : group.tint} align-middle text-center font-semibold ring-1 ring-inset ring-amber-200/40`}
                 onClick={(e) => { if (isEditable) e.stopPropagation(); }}>
               {isEditable ? (
                 <EditableCell
@@ -757,7 +757,7 @@ function DataRow({ row, visibleColumns, defaultModulo: _dm, onClick, showToggle 
                   initialValue={val}
                 />
               ) : (
-                <div className="bg-white/70 rounded px-2 py-1 inline-block tabular-nums">
+                <div className="bg-ww-panel/70 rounded px-2 py-1 inline-block tabular-nums">
                   {formatCell(val, col.format)}
                 </div>
               )}
@@ -773,7 +773,7 @@ function DataRow({ row, visibleColumns, defaultModulo: _dm, onClick, showToggle 
         ) {
           return (
             <td key={`${group.key}.${col.key}`}
-                className={`px-2 py-1 whitespace-nowrap border-b border-slate-200 ${isFirst ? stickyCls : group.tint}`}
+                className={`px-2 py-1 whitespace-nowrap border-b border-ww-border ${isFirst ? stickyCls : group.tint}`}
                 onClick={(e) => e.stopPropagation()}>
               {selectCheckbox}{toggleArrow}
               <EditableCell
@@ -797,7 +797,7 @@ function DataRow({ row, visibleColumns, defaultModulo: _dm, onClick, showToggle 
           if (col.editable === "status" && !isSummary && canApprove(user, modulo)) {
             return (
               <td key={`${group.key}.${col.key}`}
-                  className={`px-3 py-1.5 border-b border-slate-200 ${isFirst ? stickyCls : group.tint}`}
+                  className={`px-3 py-1.5 border-b border-ww-border ${isFirst ? stickyCls : group.tint}`}
                   onClick={(e) => e.stopPropagation()}>
                 {selectCheckbox}{toggleArrow}
                 <EditableStatusCell
@@ -813,7 +813,7 @@ function DataRow({ row, visibleColumns, defaultModulo: _dm, onClick, showToggle 
           }
           return (
             <td key={`${group.key}.${col.key}`}
-                className={`px-3 py-1.5 border-b border-slate-200 ${isFirst ? stickyCls : group.tint}`}>
+                className={`px-3 py-1.5 border-b border-ww-border ${isFirst ? stickyCls : group.tint}`}>
               {selectCheckbox}{toggleArrow}
               <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold ring-1 whitespace-nowrap ${meta.tone}`}>
                 {meta.emoji} {meta.label}
@@ -836,10 +836,10 @@ function DataRow({ row, visibleColumns, defaultModulo: _dm, onClick, showToggle 
 
         return (
           <td key={`${group.key}.${col.key}`}
-              className={`px-3 py-1.5 whitespace-nowrap border-b border-slate-200 ${isFirst ? stickyCls : group.tint} ${
+              className={`px-3 py-1.5 whitespace-nowrap border-b border-ww-border ${isFirst ? stickyCls : group.tint} ${
                 col.align === "right" ? "text-right tabular-nums" :
                 col.align === "center" ? "text-center" : "text-left"
-              } ${col.format === "mono" ? " text-slate-900" : "text-slate-700"}`}>
+              } ${col.format === "mono" ? " text-ww-text" : "text-ww-textMuted"}`}>
             {selectCheckbox}{toggleArrow}
             {formatCell(val, col.format)}
             {newBullet}
@@ -869,28 +869,28 @@ function PvBucketView_UNUSED({
   const [open, setOpen] = useState(groupByPv ? bucket.rows.length <= 30 : true);
 
   return (
-    <div className="bg-white border border-slate-200 rounded-lg overflow-hidden shadow-sm">
+    <div className="bg-ww-panel border border-ww-border rounded-lg overflow-hidden shadow-sm">
       {groupByPv && (
         <button
           onClick={() => setOpen((o) => !o)}
-          className="w-full flex items-center justify-between px-4 py-2.5 bg-slate-50 hover:bg-slate-100 border-b border-slate-200 text-left transition"
+          className="w-full flex items-center justify-between px-4 py-2.5 bg-ww-rowHover hover:bg-ww-bg border-b border-ww-border text-left transition"
         >
           <div className="flex items-center gap-3">
-            <span className="text-slate-400 text-xs">{open ? "▼" : "▶"}</span>
-            <span className="font-semibold  text-slate-900">{bucket.label}</span>
-            <span className="text-xs text-slate-500">{bucket.rows.length} PC{bucket.rows.length !== 1 ? "s" : ""}</span>
+            <span className="text-ww-textFaint text-xs">{open ? "▼" : "▶"}</span>
+            <span className="font-semibold  text-ww-text">{bucket.label}</span>
+            <span className="text-xs text-ww-textMuted">{bucket.rows.length} PC{bucket.rows.length !== 1 ? "s" : ""}</span>
           </div>
           <div className="flex items-center gap-4 text-xs">
             {bucket.aprovados > 0 && (
               <span className="text-emerald-700 font-medium">✅ {bucket.aprovados}</span>
             )}
             {bucket.pendentes > 0 && (
-              <span className="text-slate-500">⏸ {bucket.pendentes}</span>
+              <span className="text-ww-textMuted">⏸ {bucket.pendentes}</span>
             )}
             {bucket.rejeitados > 0 && (
               <span className="text-rose-700 font-medium">❌ {bucket.rejeitados}</span>
             )}
-            <span className="text-slate-600 tabular-nums">
+            <span className="text-ww-textMuted tabular-nums">
               {bucket.somaValor > 0
                 ? bucket.somaValor.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })
                 : "—"}
@@ -910,7 +910,7 @@ function PvBucketView_UNUSED({
                       <th
                         key={g.key}
                         colSpan={g.columns.length}
-                        className={`${g.tint} ${g.border} border-b border-l text-xs font-semibold text-slate-700 px-3 py-1.5 text-left`}
+                        className={`${g.tint} ${g.border} border-b border-l text-xs font-semibold text-ww-textMuted px-3 py-1.5 text-left`}
                       >
                         {g.label}
                       </th>
@@ -918,11 +918,11 @@ function PvBucketView_UNUSED({
                   )}
                 </tr>
               )}
-              <tr className="bg-slate-50 text-slate-600 uppercase text-[10px] tracking-wider">
+              <tr className="bg-ww-rowHover text-ww-textMuted uppercase text-[10px] tracking-wider">
                 {visibleColumns.map(({ col, group }) => (
                   <th
                     key={`${group.key}.${col.key}`}
-                    className={`px-3 py-2 whitespace-nowrap border-b border-slate-200 ${
+                    className={`px-3 py-2 whitespace-nowrap border-b border-ww-border ${
                       col.align === "right" ? "text-right" : col.align === "center" ? "text-center" : "text-left"
                     }`}
                   >
@@ -935,7 +935,7 @@ function PvBucketView_UNUSED({
               {bucket.rows.map((r, i) => (
                 <tr
                   key={`${r.empresa}-${r.ncod_ped}-${i}`}
-                  className="hover:bg-slate-50/70 cursor-pointer"
+                  className="hover:bg-ww-rowHover/70 cursor-pointer"
                   onClick={() => onRowClick(r)}
                 >
                   {visibleColumns.map(({ col, group }) => {
@@ -976,7 +976,7 @@ function PvBucketView_UNUSED({
                           col.align === "right"
                             ? "text-right tabular-nums"
                             : col.align === "center" ? "text-center" : "text-left"
-                        } ${col.format === "mono" ? " text-slate-900" : "text-slate-700"}`}
+                        } ${col.format === "mono" ? " text-ww-text" : "text-ww-textMuted"}`}
                       >
                         {formatCell(val, col.format as import("@/lib/columns").ColumnFormat | undefined)}
                       </td>

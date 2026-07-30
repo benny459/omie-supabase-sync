@@ -30,9 +30,9 @@ export default async function TabelasPage({
 
   if (!isAdmin) {
     return (
-      <div className="max-w-2xl mx-auto mt-16 bg-white rounded-xl border border-slate-200 shadow-sm p-8 text-center">
-        <h1 className="text-xl font-semibold text-slate-900 mb-1">Acesso restrito</h1>
-        <p className="text-sm text-slate-500">Apenas administradores podem acessar tabelas raw.</p>
+      <div className="max-w-2xl mx-auto mt-16 bg-ww-panel rounded-xl border border-ww-border shadow-sm p-8 text-center">
+        <h1 className="text-xl font-semibold text-ww-text mb-1">Acesso restrito</h1>
+        <p className="text-sm text-ww-textMuted">Apenas administradores podem acessar tabelas raw.</p>
       </div>
     );
   }
@@ -78,10 +78,10 @@ export default async function TabelasPage({
   return (
     <div className="space-y-4 max-w-[1400px]">
       <div>
-        <h1 className="text-2xl md:text-3xl font-semibold text-slate-900 tracking-tight">
+        <h1 className="text-2xl md:text-3xl font-semibold text-ww-text tracking-tight">
           Tabelas do banco
         </h1>
-        <p className="text-slate-500 text-sm mt-1">
+        <p className="text-ww-textMuted text-sm mt-1">
           Browse raw em todas as tabelas sincronizadas. Apenas leitura (admin only).
         </p>
       </div>

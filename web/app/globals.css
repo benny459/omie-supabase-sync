@@ -7,21 +7,34 @@
    Variáveis CSS em RGB tuple pra suportar alpha do Tailwind via
    rgb(var(--x) / <alpha-value>).
    ───────────────────────────────────────────────────────────────────────── */
+/* Tema CLARO — o mesmo produto do escuro, espelhado. Neutros com viés azul
+   (não cinza puro, não warm) pra o par claro/escuro ler como dois modos de uma
+   coisa só. Accent é o mesmo azul de ação, um passo mais escuro pra clarar
+   4.5:1 contra branco. */
 :root {
-  --color-ww-bg:           244 244 240;  /* warm off-white */
+  --color-ww-bg:           238 243 250;  /* #eef3fa — plano de fundo */
   --color-ww-panel:        255 255 255;
-  --color-ww-border:       227 227 220;
-  --color-ww-borderStrong: 200 200 190;
-  --color-ww-text:         14 14 12;
-  --color-ww-textMuted:    91 91 84;
-  --color-ww-textFaint:    142 142 132;
-  --color-ww-accent:       14 110 87;     /* deep teal */
-  --color-ww-accentSoft:   219 238 229;
-  --color-ww-rowHover:     249 249 245;
-  --color-ww-editHi:       254 249 214;
-  --color-ww-editLine:     207 183 66;
+  --color-ww-border:       223 231 242;  /* #dfe7f2 */
+  --color-ww-borderStrong: 194 207 227;  /* #c2cfe3 */
+  --color-ww-text:         15 30 58;     /* #0f1e3a — mesmo hue do fundo escuro */
+  --color-ww-textMuted:    81 99 127;
+  --color-ww-textFaint:    132 150 176;
+  --color-ww-accent:       29 78 162;    /* #1d4ea2 — 6.4:1 no branco */
+  --color-ww-accentSoft:   225 235 250;
+  --color-ww-rowHover:     245 249 254;
+  --color-ww-editHi:       255 249 219;
+  --color-ww-editLine:     201 168 44;
   --color-ww-drawer:       255 255 255;
-  --color-ww-drawerHead:   244 244 240;
+  --color-ww-drawerHead:   238 243 250;
+}
+
+/* No claro o card não precisa de brilho — precisa de elevação. Mesma classe,
+   tratamento oposto: sombra suave em vez de fio de luz. */
+.viz-panel {
+  box-shadow: 0 1px 2px 0 rgb(15 30 58 / 0.05);
+}
+.viz-panel:hover {
+  border-color: rgb(var(--color-ww-borderStrong));
 }
 
 /* Tema escuro — "tech" azul-marinho, referência de dashboard de operações.

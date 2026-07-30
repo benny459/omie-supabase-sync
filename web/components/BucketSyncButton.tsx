@@ -98,7 +98,7 @@ export default function BucketSyncButton({
             : `Sync ${uniquePcs.length} PC(s) do Omie`}
         className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold border transition ${
           sending
-            ? "bg-slate-100 text-slate-400 border-slate-200 cursor-wait"
+            ? "bg-ww-bg text-ww-textFaint border-ww-border cursor-wait"
             : "bg-sky-50 text-sky-700 border-sky-200 hover:bg-sky-100 dark:bg-sky-950/40 dark:text-sky-300 dark:border-sky-800 dark:hover:bg-sky-900/40"
         }`}>
         {sending ? "⏳" : "🔄"}

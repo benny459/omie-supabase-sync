@@ -322,7 +322,7 @@ export default function AvulsosDailyView() {
             {sending ? "Enviando…" : "📤 Enviar ao Webex"}
           </button>
           <button onClick={() => window.print()} disabled={!data}
-            className="px-3 py-1.5 text-[12px] font-semibold rounded-md border border-slate-700 bg-slate-800 dark:bg-slate-700 text-white hover:opacity-90 disabled:opacity-40">
+            className="px-3 py-1.5 text-[12px] font-semibold rounded-md border border-slate-700 bg-slate-800 text-white hover:opacity-90 disabled:opacity-40">
             📄 PDF completo
           </button>
         </div>
@@ -399,7 +399,7 @@ export default function AvulsosDailyView() {
                           <div className={`shrink-0 text-[11px] font-semibold tabular-nums px-1.5 py-0.5 rounded ${
                             it.delta_count > 0 ? "bg-rose-100 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300"
                             : it.delta_count < 0 ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300"
-                            : "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300"
+                            : "bg-ww-bg text-ww-textMuted "
                           }`}>
                             {it.delta_count > 0 ? `+${it.delta_count}` : it.delta_count === 0 ? "=" : it.delta_count}
                           </div>

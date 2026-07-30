@@ -109,19 +109,19 @@ export default function PcInlineAdd({ empresa = "SF" }: { empresa?: "SF" | "CD" 
             Adicionar PC
           </button>
           {hasRows && (
-            <span className="text-[11px] text-slate-500">Digite o número e pressione <kbd className="px-1 py-0.5 bg-slate-100 border border-slate-300 rounded text-[10px] ">Enter</kbd> — o sistema busca no Omie.</span>
+            <span className="text-[11px] text-ww-textMuted">Digite o número e pressione <kbd className="px-1 py-0.5 bg-ww-bg border border-ww-border rounded text-[10px] ">Enter</kbd> — o sistema busca no Omie.</span>
           )}
         </div>
         {hasRows && (
           <div className="flex items-center gap-2">
-            <label className="text-[10px] text-slate-500">Empresa:</label>
-            <div className="flex gap-0.5 bg-slate-100 p-0.5 rounded-md">
+            <label className="text-[10px] text-ww-textMuted">Empresa:</label>
+            <div className="flex gap-0.5 bg-ww-bg p-0.5 rounded-md">
               {(["SF","CD","WW"] as const).map(e => (
                 <button
                   key={e}
                   onClick={() => setSelEmpresa(e)}
                   className={`px-2 py-0.5 text-[11px] font-semibold rounded-sm transition ${
-                    selEmpresa === e ? "bg-white shadow-sm text-slate-900" : "text-slate-600 hover:text-slate-900"
+                    selEmpresa === e ? "bg-ww-panel shadow-sm text-ww-text" : "text-ww-textMuted hover:text-ww-text"
                   }`}
                 >{e}</button>
               ))}
@@ -131,7 +131,7 @@ export default function PcInlineAdd({ empresa = "SF" }: { empresa?: "SF" | "CD" 
       </div>
 
       {hasRows && (
-        <div className="bg-white border border-amber-200 rounded-lg shadow-sm overflow-hidden">
+        <div className="bg-ww-panel border border-amber-200 rounded-lg shadow-sm overflow-hidden">
           {rows.map((r) => (
             <PendingInputRow
               key={r.id}
@@ -156,7 +156,7 @@ function PendingInputRow({
   onRemove: () => void;
 }) {
   const statusColor = {
-    idle:        "text-slate-400",
+    idle:        "text-ww-textFaint",
     searching:   "text-sky-600",
     saving:      "text-sky-600",
     found:       "text-emerald-600",
@@ -208,7 +208,7 @@ function PendingInputRow({
       <button
         onClick={onRemove}
         disabled={isBusy}
-        className="text-slate-400 hover:text-rose-600 transition p-1 disabled:opacity-30"
+        className="text-ww-textFaint hover:text-rose-600 transition p-1 disabled:opacity-30"
         title="Remover linha"
       >
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-4 h-4" strokeLinecap="round">

@@ -120,7 +120,7 @@ export default function EditableStatusCell({
           ref={menuRef}
           style={{ position: "fixed", top: pos.top, left: pos.left, width: 260, zIndex: 9999 }}
           onClick={(e) => e.stopPropagation()}
-          className="p-2 bg-white border border-slate-200 rounded-xl shadow-2xl space-y-1.5"
+          className="p-2 bg-ww-panel border border-ww-border rounded-xl shadow-2xl space-y-1.5"
         >
           {STATUS_ORDER.map((code) => {
             const m = STATUS_META[code];

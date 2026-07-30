@@ -5,12 +5,6 @@ import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { supaBrowser } from "@/lib/supabase";
 import { STATUS_META, STATUS_ORDER, isApproved, groupsFor, formatCell, type Group, type ColumnFormat } from "@/lib/columns";
-import {
-  ALARM_KINDS, computeBucketAlarms, parseFlexDate,
-  isPvosIncompleto, isSemProjeto, isAtrasoVenda, isAtrasoCompra, isDefasagemOmie,
-  isServicoConcluido, servicoConcluidoEm,
-  type AlarmKind,
-} from "@/lib/alarmes";
 import { useUserPerms } from "./UserPermsProvider";
 import { canApprove, canEdit, canReleasePv, canViewValues, canViewMargin, type BlockKey } from "@/lib/permissions";
 import EditableCell from "./EditableCell";
@@ -32,30 +26,7 @@ import { Virtuoso, type VirtuosoHandle } from "react-virtuoso";
 
 type AnyRow = Record<string, unknown>;
 type StatusFilter = "todos" | "aprovados" | "nao_aprovados" | "pendentes" | "atrasados";
-// Status PV é MULTI-SELECT: Set vazio = "todos" (sem filtro). Antes era um valor
-// único, e isso criava um beco — o report conta como "aberto" tudo que não foi
-// faturado, incluindo os "Aguardando Liberação", mas o painel só deixava ver um
-// grupo por vez. Clicar em "Previsão Vencida: 8" no Webex mostrava 1, porque os
-// outros 7 estavam aguardando liberação e ficavam fora da aba "Aberto".
-type PvEtapaKey = "aberto" | "aguarda" | "fechado";
-
-// Classifica um PV em exatamente UM grupo. A precedência (fechado > aguarda >
-// aberto) é a mesma dos cards de contagem, pra card e filtro nunca discordarem.
-function pvEtapaKeyOf(etapa: string, isAguarda: boolean): PvEtapaKey {
-  if (ETAPAS_FECHADAS.has(etapa)) return "fechado";
-  if (isAguarda) return "aguarda";
-  return "aberto";
-}
-const samePvEtapa = (a: Set<PvEtapaKey>, b: Set<PvEtapaKey>) =>
-  a.size === b.size && [...a].every((k) => b.has(k));
-const parsePvEtapaParam = (raw: string | null, fallback: () => Set<PvEtapaKey>): Set<PvEtapaKey> => {
-  if (!raw) return fallback();
-  if (raw === "todos") return new Set();
-  // aceita "aberto,aguarda" (usado pelos deep-links do report) e valor único
-  const keys = raw.split(",").map((s) => s.trim())
-    .filter((s): s is PvEtapaKey => s === "aberto" || s === "aguarda" || s === "fechado");
-  return keys.length ? new Set(keys) : fallback();
-};
+type PvEtapaGroup = "todos" | "aberto" | "aguarda" | "fechado";
 type ServicosFilter = "todos" | "concluidos" | "agendados" | "sem_os";
 
 // Etapas que contam como "Exec./Faturado" — pré-faturamento, já faturado ou cancelado
@@ -351,9 +322,66 @@ function isRowInWindow(r: AnyRow, fromMs: number, toMs: number): boolean {
 // uma condição irregular que precisa de atenção (todos os "reportes" do daily
 // Webex + oportunidades). Multi-select por união (row entra se match ≥ 1 alarme
 // ativo). Todos avaliam a row atual + hoje (todayStartMs).
-// AlarmKind e TODAS as regras de alarme moram em @/lib/alarmes — fonte única
-// compartilhada com o report do Webex (lib/avulsos-report.ts). Este componente
-// não deve ter cópia local de regra: foi isso que fez os dois divergirem.
+type AlarmKind =
+  | "pvos_incompl" | "sem_projeto" | "aguarda_liberacao" | "venda" | "compra"
+  | "sem_rc"
+  | "sem_pc"
+  | "aprov_bloq" | "aprov_pend" | "defas_omie"
+  | "sem_vinculo" | "agend_vazio" | "agend_venc"
+  | "pode_faturar";
+const ALARM_KINDS: AlarmKind[] = [
+  "pvos_incompl", "sem_projeto", "aguarda_liberacao", "venda", "compra",
+  "sem_rc",
+  "sem_pc",
+  "aprov_bloq", "aprov_pend", "defas_omie",
+  "sem_vinculo", "agend_vazio", "agend_venc",
+  "pode_faturar",
+];
+
+// Atraso (Venda): em aberto (sem NF de saída) E previsão passou.
+// Atraso (Compra): em aberto (sem recebimento de NF entrada) E previsão PC passou.
+// "Atraso" aqui é sempre coisa que ainda precisa de ação — não faz sentido flagar
+// venda já faturada nem PC já recebido, mesmo que tenha ocorrido com atraso.
+function isAtrasoVenda(r: AnyRow, todayStartMs: number): boolean {
+  if (String(r.pv_dt_fat ?? "").trim() !== "") return false;
+  const s = String(r.pv_data_previsao ?? "").trim();
+  const m = s.match(/^(\d{2})\/(\d{2})\/(\d{4})/);
+  if (!m) return false;
+  const t = Date.parse(`${m[3]}-${m[2]}-${m[1]}`);
+  return !isNaN(t) && t < todayStartMs;
+}
+function isSemProjeto(r: AnyRow): boolean {
+  // "Sem Projeto" — venda avulsa que não tem projeto marcado ou tem código
+  // incoerente com os padrões (^40_VS venda serviços, ^41_VP venda produtos,
+  // ^PJ projeto formal). Vendedor esqueceu de marcar o projeto no Omie.
+  // PJ* nem aparece aqui (view roteia pra /projetos), mas checa por defesa.
+  const proj = String(r.projeto_nome ?? "").trim();
+  if (!proj) return true;
+  return !/^(40_VS|41_VP|PJ)/.test(proj);
+}
+function isPvosIncompleto(r: AnyRow): boolean {
+  // "PV/OS incompleta" — cadastro do PV/OS falta dado essencial. Espelha a
+  // regra do dot PV/OS que fica vermelho: sem tipo, sem cliente ou sem
+  // data limite (V.Previsão Limite_Omie). Evita "prende" venda no cadastro.
+  const tipoOk    = !!String(r.tipo_omie ?? "").trim();
+  const clienteOk = !!String(r.pv_cliente_fantasia ?? "").trim();
+  const dtLimOk   = !!String(r.pv_data_previsao ?? "").trim();
+  return !tipoOk || !clienteOk || !dtLimOk;
+}
+function isAtrasoCompra(r: AnyRow, todayStartMs: number): boolean {
+  // "Previsão atrasada" — data EFETIVA da previsão vencida (nova_prev_materiais
+  // se existir, senão dt_previsao original) E material ainda não recebido.
+  // Unifica os antigos "compra" e "prev_mat_atr" — a Nova Prev. herda a data
+  // original por padrão, então qualquer atraso na previsão dispara este único
+  // alarme.
+  if (r.mt_data_recebimento_nf) return false;
+  const novaS = String(r.nova_prev_materiais ?? "").trim();
+  const origS = String(r.dt_previsao ?? "").trim();
+  const efetivaStr = novaS || origS;
+  if (!efetivaStr) return false;
+  const t = parseFlexDate(efetivaStr);
+  return t != null && t < todayStartMs;
+}
 // Retorna o "bucket" humano-friendly do status de serviços do row, baseado em
 // custom_fields.ww_os_status + ww_pode_faturar. Usado no card "Status Serviços"
 // e no filtro correspondente. Mercantil não tem serviço → retorna null (skip).
@@ -373,6 +401,18 @@ function bucketServicosStatus(r: AnyRow): string | null {
   // Mix/Serviços sem OS vinculado → deveria ter sido linkado no app de serviços
   return osRaw ? "Aguardando" : "Sem Vínculo";
 }
+function isDefasagemOmie(r: AnyRow): boolean {
+  // "Defasagem Omie (Aprovado)" — PC aprovado no painel mas etapa do PC no
+  // Omie NÃO está em "Aprovação" (deveria ter movido pra lá após aprovarmos).
+  // Indica falha de propagação Painel→Omie.
+  // Requer etapa não-vazia (evita falso-positivo em row com sync pendente).
+  const hasPc = !!r.pc_numero || !!r.pc_numero_manual;
+  if (!hasPc) return false;
+  const s = String(r.status ?? "");
+  if (!isApproved(s)) return false;
+  const etapa = String(r.pc_etapa_texto ?? "").trim();
+  return etapa !== "" && etapa !== "Aprovação";
+}
 // Normaliza tipo_omie da view em 3 buckets canônicos: Mix / Serviço / Mercantil.
 // A view mistura variantes raw ("ordem_servico", "pedido_venda") com os rótulos
 // human-friendly ("Mix", "Serviços", "Mercantil"). Colapsar em 3 alinha com o
@@ -386,6 +426,170 @@ function normalizeTipoOmie(v: unknown): string {
   return "";  // valores inesperados ficam de fora
 }
 
+// Parse de data flexível: aceita ISO YYYY-MM-DD ou BR DD/MM/YYYY (as duas
+// convenções que a view `v_pc_avulsos` mistura entre `nova_prev_*` e demais).
+function parseFlexDate(s: string): number | null {
+  // IMPORTANTE: sempre retorna meia-noite LOCAL, não UTC. Date.parse('2026-07-10')
+  // interpreta ISO como UTC midnight → em fuso GMT-3 (BR) fica 21h do dia anterior,
+  // e a diff com todayStartMs (setHours 0) fica ~0.9 dias a menos → floor errado.
+  const iso = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (iso) return new Date(Number(iso[1]), Number(iso[2]) - 1, Number(iso[3])).getTime();
+  const br = s.match(/^(\d{2})\/(\d{2})\/(\d{4})/);
+  if (br)  return new Date(Number(br[3]), Number(br[2]) - 1, Number(br[1])).getTime();
+  return null;
+}
+// Agrega alarmes do BUCKET (PV/OS inteiro, N rows). Substitui a lógica row-level
+// pra alarmes que dependem de estado agregado (ex: "Sem PC" só se NENHUMA row tem
+// PC; "Aprov. pendente" só olha rows COM PC — RC-only não gera falso-positivo).
+// Retorna o conjunto de AlarmKind ativos pro bucket.
+function computeBucketAlarms(rows: AnyRow[], todayStartMs: number, liberacaoSet?: Set<string>): Set<AlarmKind> {
+  const set = new Set<AlarmKind>();
+  if (rows.length === 0) return set;
+
+  const head = rows[0]; // window functions repetem valor de PV em todas rows
+
+  // PV faturado → NENHUM alarme dispara. Se a venda foi concluída, qualquer
+  // pendência histórica (previsão vencida, material atrasado, cadastro
+  // incompleto etc) deixa de importar — não há mais o que agir. Regra global
+  // por pedido explícito do usuário. Redundância intencional (dt_fat OR num_nfe
+  // OR etapa) pra imunizar contra sync lag do Omie.
+  const pvDtFatHead  = String(head.pv_dt_fat ?? "").trim();
+  const pvNumNfeHead = String(head.pv_num_nfe ?? "").trim();
+  const pvEtapaHead  = String(head.pv_etapa_texto ?? "").trim();
+  if (pvDtFatHead !== "" || pvNumNfeHead !== "" || pvEtapaHead === "Faturado") {
+    return set;
+  }
+
+  // Aguardando Liberação: cliente pediu venda mas ainda não enviou PC formal.
+  // Estado transitório imposto por usuário autorizado (can_release_pv/is_admin).
+  // ADITIVO — os demais alarmes continuam disparando normalmente; este só
+  // adiciona o status "Aguardando" ao lado. Sai automaticamente quando o PV
+  // vira Faturado no Omie (o check isEncerrada acima retorna cedo).
+  const pvLabel = String(head.pv_os_label ?? "");
+  if (liberacaoSet?.has(pvLabel)) {
+    set.add("aguarda_liberacao");
+  }
+
+  const anyRc = rows.some((r) => !!r.rc_numero);
+  const anyPc = rows.some((r) => !!r.pc_numero || !!r.pc_numero_manual);
+  // Tipo Serviços puro NÃO tem compra envolvida → alarmes de RC/PC/logística
+  // não fazem sentido e viram ruído. Só Mercantil e Mix precisam desses alarmes.
+  const tipoBucket = String(head.tipo_omie ?? "");
+  const hasPurchases = tipoBucket !== "Serviços";
+
+  // Vendas: PV/OS incompleta (cadastro faltando) + sem projeto + atraso.
+  if (isPvosIncompleto(head)) set.add("pvos_incompl");
+  if (isSemProjeto(head))     set.add("sem_projeto");
+  if (isAtrasoVenda(head, todayStartMs)) set.add("venda");
+
+  if (hasPurchases) {
+    // Compras — "Previsão atrasada" (unificado): PC não recebido E previsão
+    // efetiva (nova_prev ou dt_previsao) passou.
+    for (const r of rows) {
+      if (isAtrasoCompra(r, todayStartMs)) { set.add("compra"); break; }
+    }
+
+    // Compras — Sem RC ou RC incompleto: unificado. Dispara se nenhum RC no
+    // bucket OU se alguma row tem RC com apenas 1 dos 2 campos (número/custo).
+    if (!anyRc) {
+      set.add("sem_rc");
+    } else {
+      for (const r of rows) {
+        const hasNum  = !!r.rc_numero;
+        const hasCost = r.rc_custo != null && Number(r.rc_custo) !== 0;
+        if (hasNum !== hasCost) { set.add("sem_rc"); break; }
+      }
+    }
+
+    // Compras — Sem PC ou PC incompleto: unificado. Dispara se nenhum PC no
+    // bucket OU se algum PC tem metadata faltando (fornecedor/valor/categoria).
+    if (!anyPc) {
+      set.add("sem_pc");
+    } else {
+      for (const r of rows) {
+        const hasPc = !!r.pc_numero || !!r.pc_numero_manual;
+        if (!hasPc) continue;
+        const hasForn = !!r.nome_fornecedor || !!r.codigo_fornecedor;
+        const hasVal  = r.valor_total != null && Number(r.valor_total) !== 0;
+        const hasCat  = !!r.codigo_categoria;
+        if (!(hasForn && hasVal && hasCat)) { set.add("sem_pc"); break; }
+      }
+    }
+
+    // Aprovação bloqueada: algum PC (row COM PC) rejeitado
+    for (const r of rows) {
+      const hasPc = !!r.pc_numero || !!r.pc_numero_manual;
+      if (!hasPc) continue;
+      const s = String(r.status ?? "");
+      if (s === "NAO_APROVADO" || s === "REJEITADO_VALIDADE") { set.add("aprov_bloq"); break; }
+    }
+
+    // Aprovação pendente: algum PC (row COM PC) em PENDENTE/PRE_SELECAO.
+    // RC-only sem PC costuma vir com status default PENDENTE — ignora.
+    for (const r of rows) {
+      const hasPc = !!r.pc_numero || !!r.pc_numero_manual;
+      if (!hasPc) continue;
+      const s = String(r.status ?? "");
+      if (s === "PENDENTE" || s === "PRE_SELECAO") { set.add("aprov_pend"); break; }
+    }
+
+    // Defasagem Omie: PC aprovado no painel mas etapa Omie ainda "Aprovação"
+    for (const r of rows) {
+      if (isDefasagemOmie(r)) { set.add("defas_omie"); break; }
+    }
+  }
+
+  // Serviços: só Mix/Serviços
+  const tipo = String(head.tipo_omie ?? "");
+  const isServ = tipo === "Mix" || tipo === "Serviços";
+  if (isServ) {
+    // Sem Vínculo: bucket Mix/Serviços sem OS vinculada nem status do app
+    const anyOsRaw = rows.some((r) => !!String(r.servicos_os_numero ?? "").trim());
+    const anyOsStatus = rows.some((r) => {
+      const cf = (r.custom_fields as Record<string, unknown> | null) || {};
+      return !!cf["ww_os_status"];
+    });
+    if (!anyOsRaw && !anyOsStatus) set.add("sem_vinculo");
+    const anyAgend = rows.some((r) => !!String(r.nova_prev_servicos ?? "").trim());
+    if (!anyAgend) set.add("agend_vazio");
+    // Vencido: em aberto (pv_dt_fat vazio) e alguma prev < hoje
+    if (String(head.pv_dt_fat ?? "").trim() === "") {
+      for (const r of rows) {
+        const s = String(r.nova_prev_servicos ?? "").trim();
+        if (!s) continue;
+        const t = parseFlexDate(s);
+        if (t != null && t < todayStartMs) { set.add("agend_venc"); break; }
+      }
+    }
+  }
+
+  // Faturamento: precondições dependem do tipo do PV/OS —
+  //   • Mercantil → basta logística (todos PCs recebidos)
+  //   • Mix → logística + sinal do app de Serviços (ww_pode_faturar)
+  //   • Serviços → só o sinal do app de Serviços (sem PC/logística envolvidos)
+  // E o PV não pode estar faturado ainda (pv_dt_fat vazio).
+  const pvNotFaturado = String(head.pv_dt_fat ?? "").trim() === "";
+  if (pvNotFaturado) {
+    const needsServiceRelease = tipoBucket === "Mix" || tipoBucket === "Serviços";
+    const serviceReleased = !needsServiceRelease || rows.some((r) => {
+      const cf = (r.custom_fields as Record<string, unknown> | null) || {};
+      return cf["ww_pode_faturar"] === true;
+    });
+    const needsLogistics = tipoBucket !== "Serviços";
+    if (needsLogistics) {
+      if (anyPc) {
+        const pcRows = rows.filter((r) => !!r.pc_numero || !!r.pc_numero_manual);
+        const allReceived = pcRows.length > 0 && pcRows.every((r) => !!r.mt_data_recebimento_nf);
+        if (allReceived && serviceReleased) set.add("pode_faturar");
+      }
+    } else {
+      // Serviços puro: sem materiais → faturável assim que o app libera.
+      if (serviceReleased) set.add("pode_faturar");
+    }
+  }
+
+  return set;
+}
 
 function matchesAlarme(r: AnyRow, kind: AlarmKind, todayStartMs: number, liberacaoSet?: Set<string>): boolean {
   switch (kind) {
@@ -437,14 +641,7 @@ function matchesAlarme(r: AnyRow, kind: AlarmKind, todayStartMs: number, liberac
       return t != null && t < todayStartMs;
     }
     case "pode_faturar":
-      return !!r.mt_data_recebimento_nf && String(r.pv_dt_fat ?? "").trim() === ""
-        && !liberacaoSet?.has(String(r.pv_os_label ?? ""));
-    case "retido_cliente":
-      // Mesma precondição de pode_faturar, mas travado no cliente. É um alarme
-      // de bucket por natureza (depende do PV inteiro) — aqui só a aproximação
-      // row-level, igual aos demais casos deste switch.
-      return !!r.mt_data_recebimento_nf && String(r.pv_dt_fat ?? "").trim() === ""
-        && !!liberacaoSet?.has(String(r.pv_os_label ?? ""));
+      return !!r.mt_data_recebimento_nf && String(r.pv_dt_fat ?? "").trim() === "";
   }
 }
 
@@ -707,14 +904,11 @@ export default function BoldAvulsosView({
   //     buckets ficam incompletos — 30 PCs de um PV faturado somem enquanto
   //     ainda são relevantes pro projeto (custo real, materiais recebidos etc).
   //   • /pcs      → "aberto": mesma lógica de /avulsos.
-  const mkDefaultPvEtapa = useCallback(
-    (): Set<PvEtapaKey> => (modulo === "projetos" ? new Set() : new Set<PvEtapaKey>(["aberto"])),
-    [modulo],
-  );
-  const [pvEtapaSel, setPvEtapaSel] = useState<Set<PvEtapaKey>>(() => {
-    const fallback = (): Set<PvEtapaKey> => (modulo === "projetos" ? new Set() : new Set<PvEtapaKey>(["aberto"]));
-    if (typeof window === "undefined") return fallback();
-    return parsePvEtapaParam(new URLSearchParams(window.location.search).get("pv"), fallback);
+  const defaultPvEtapa: PvEtapaGroup = modulo === "projetos" ? "todos" : "aberto";
+  const [pvEtapaGroup, setPvEtapaGroup] = useState<PvEtapaGroup>(() => {
+    if (typeof window === "undefined") return defaultPvEtapa;
+    const raw = new URLSearchParams(window.location.search).get("pv");
+    return raw === "todos" || raw === "fechado" || raw === "aberto" || raw === "aguarda" ? raw : defaultPvEtapa;
   });
   const [servicosFilter, setServicosFilter] = useState<ServicosFilter>("todos");
   // Filtro "Status Serviços" (do WW): multi-select por valor humano-friendly
@@ -751,6 +945,9 @@ export default function BoldAvulsosView({
   const [statusPopover, setStatusPopover] = useState<{ rowKey: string; row: AnyRow; anchor: DOMRect } | null>(null);
   // Optimistic status updates: muda na UI imediato, antes do server confirmar
   const [optimisticStatus, setOptimisticStatus] = useState<Record<string, string>>({});
+  // Virtuoso ref (necessário pra scrollar via index quando o bucket alvo está fora do viewport)
+  const virtuosoRef = useRef<VirtuosoHandle | null>(null);
+  const bucketsRef = useRef<Bucket[]>([]);
   // /pcs standalones: modal de atribuição multi-cliente por PC. Fetch inicial
   // popula atribuicaoMap → cada row sabe se já tem atribuição sem N requests.
   type AtribInfo = { qtd: number; soma_pct: number; clientes: { codigo_cliente_omie: number; nome: string; percentual: number }[] };
@@ -899,33 +1096,27 @@ export default function BoldAvulsosView({
         } catch { /* ignora — fallback é o client-fetch de background */ }
       }
 
-      // Tenta scroll. Em /pcs o data-bucket é chave composta empresa|ncod_ped,
-      // não "PC <num>". Por isso, quando label começa com "PC ", usamos o
-      // atributo auxiliar data-pc pra achar.
+      // Tenta scroll. Com Virtuoso, primeiro pede pro virtuoso rolar até o index
+      // (senão o elemento não existe no DOM ainda). Depois o scrollIntoView refina.
       let tries = 0;
       const isPc = label.startsWith("PC ");
       const pcNum = isPc ? label.slice(3).trim() : "";
       function tryScroll() {
-        // Com virtualização o card alvo pode nem estar montado, e aí nenhum
-        // querySelector acha. Primeiro pedimos ao Virtuoso pra rolar até o
-        // índice; o refinamento via DOM abaixo acontece quando ele montar.
-        if (listaVirtualizada && virtuosoRef.current) {
-          const idx = bucketsRef.current.findIndex((b) =>
-            isPc && b.pc_numero != null ? String(b.pc_numero) === pcNum : b.pv_os_label === label,
-          );
-          if (idx >= 0) virtuosoRef.current.scrollToIndex({ index: idx, align: "start", behavior: "smooth" });
+        // 1) Achar índice no buckets atual e pedir virtuoso rolar
+        const bs = bucketsRef.current;
+        const idx = bs.findIndex((b) => {
+          if (isPc && b.pc_numero != null) return String(b.pc_numero) === pcNum;
+          return b.pv_os_label === label;
+        });
+        if (idx >= 0 && virtuosoRef.current) {
+          virtuosoRef.current.scrollToIndex({ index: idx, align: "start", behavior: "smooth" });
         }
+        // 2) Depois de o virtuoso montar o item, refinar via DOM
         let el: Element | null = null;
-        if (isPc) {
-          el = document.querySelector(`[data-pc="${CSS.escape(pcNum)}"]`);
-        }
-        if (!el) {
-          el = document.querySelector(`[data-bucket="${CSS.escape(label)}"]`);
-        }
+        if (isPc) el = document.querySelector(`[data-pc="${CSS.escape(pcNum)}"]`);
+        if (!el)  el = document.querySelector(`[data-bucket="${CSS.escape(label)}"]`);
         if (el) {
           el.scrollIntoView({ behavior: "smooth", block: "start" });
-          // Pra /pcs precisamos abrir pelo bucket key real (composto), que é
-          // o data-bucket attr do mesmo elemento
           const bucketKey = (el as HTMLElement).getAttribute("data-bucket") ?? label;
           setOpenBuckets((prev) => new Set([...prev, bucketKey]));
           return;
@@ -962,14 +1153,11 @@ export default function BoldAvulsosView({
     return out;
   }, [rows, todayStartMs, liberacaoSet]);
 
-  // Busca em dataset grande (1776 rows em /avulsos): a digitação era o gargalo.
-  // useDeferredValue marca o re-filtro como low-priority — o input responde na
-  // hora e a lista alcança depois, em vez de travar a cada tecla.
+  // Deferred query: React trata mudanças como low-priority, digitação não bloqueia.
   const deferredQuery = useDeferredValue(query);
 
-  // "haystack" pré-computado por row: sem isso, cada tecla refazia join+lowercase
-  // sobre todas as rows. Agora o filtro vira só um string.includes.
-  // WeakMap porque a chave é o próprio objeto row — some junto com ele.
+  // Pré-computa "haystack" (texto concatenado + lower) uma vez por row.
+  // Elimina lower/join a cada keystroke — filter vira só string.includes.
   const haystackByRow = useMemo(() => {
     const m = new WeakMap<AnyRow, string>();
     for (const r of rows) {
@@ -1009,8 +1197,9 @@ export default function BoldAvulsosView({
       const etapa = String(r.pv_etapa_texto ?? "");
       const pvLbl = String(r.pv_os_label ?? "");
       const isAguarda = liberacaoSet.has(pvLbl);
-      // Set vazio = sem filtro. Com N grupos marcados, passa quem estiver em qualquer um.
-      if (pvEtapaSel.size > 0 && !pvEtapaSel.has(pvEtapaKeyOf(etapa, isAguarda))) return false;
+      if (pvEtapaGroup === "aberto"   && (ETAPAS_FECHADAS.has(etapa) || isAguarda)) return false;
+      if (pvEtapaGroup === "aguarda"  && !isAguarda) return false;
+      if (pvEtapaGroup === "fechado"  && !ETAPAS_FECHADAS.has(etapa)) return false;
     }
     if (!opts.skipStatus) {
       const s = effectiveStatus(r);
@@ -1026,7 +1215,7 @@ export default function BoldAvulsosView({
     }
     if (modulo === "avulsos" && !opts.skipServicos) {
       const temOs = !!String(r.servicos_os_numero ?? "").trim();
-      const concluido = isServicoConcluido(r);
+      const concluido = !!r.servicos_concluidos;
       if (servicosFilter === "concluidos" && !concluido) return false;
       if (servicosFilter === "agendados" && !(temOs && !concluido)) return false;
       if (servicosFilter === "sem_os" && temOs) return false;
@@ -1058,7 +1247,7 @@ export default function BoldAvulsosView({
     }
     if (!q) return true;
     return (haystackByRow.get(r) ?? "").includes(q);
-  }, [deferredQuery, dateWindow, alarmes, alarmsByBucket, modulo, pvEtapaSel, statusFilter, servicosFilter, servicosStatusFilter, facets, effectiveStatus, liberacaoSet, haystackByRow]);
+  }, [deferredQuery, dateWindow, alarmes, alarmsByBucket, modulo, pvEtapaGroup, statusFilter, servicosFilter, servicosStatusFilter, facets, effectiveStatus, liberacaoSet, haystackByRow]);
 
   const filtered = useMemo(() => rows.filter((r) => passesFilters(r)), [rows, passesFilters]);
 
@@ -1111,7 +1300,7 @@ export default function BoldAvulsosView({
       if (!k) continue;
       const val = Number(r.pv_valor_total) || 0;
       const temOs = !!String(r.servicos_os_numero ?? "").trim();
-      const concluido = isServicoConcluido(r);
+      const concluido = !!r.servicos_concluidos;
       if (!todos.has(k)) { todos.add(k); todosVal += val; }
       if (concluido) {
         if (!concluidos.has(k)) { concluidos.add(k); concluidosVal += val; }
@@ -1278,15 +1467,7 @@ export default function BoldAvulsosView({
     modulo === "projetos" ? "project" :
     modulo === "pcs"      ? "pc"      : "pvos";
   const buckets = useMemo(() => buildBuckets(filtered, groupBy), [filtered, groupBy]);
-
-  // Virtualização só onde paga: /pcs (1368 buckets) e /avulsos (1227) montam ~40x
-  // menos componentes. /projetos tem 44 buckets — virtualizar ali não ganharia
-  // nada e ainda traria pulo de scroll ao expandir cards de ~33 linhas.
-  const listaVirtualizada = modulo !== "projetos";
-  const virtuosoRef = useRef<VirtuosoHandle | null>(null);
-  // Ref espelhando buckets: expandBucketAndScroll roda fora do ciclo de render e
-  // precisa do índice atual pra pedir scroll ao Virtuoso.
-  const bucketsRef = useRef<Bucket[]>([]);
+  // Mantém ref sincronizada com os buckets pra scroll-via-hash funcionar dentro de useEffect com deps=[]
   useEffect(() => { bucketsRef.current = buckets; }, [buckets]);
 
   // Rows base = rows após aplicar Date Range + Alarmes (que afetam TUDO incluindo
@@ -1313,11 +1494,16 @@ export default function BoldAvulsosView({
   // Rows após aplicar (Date+Alarmes+pvEtapaGroup), sem statusFilter/facets/query.
   // Usado pra calcular contagens dos KPIs de status com o filtro primário ativo.
   const rowsAfterPvEtapa = useMemo(() => {
-    if (pvEtapaSel.size === 0) return rowsAfterDateAtraso;
-    return rowsAfterDateAtraso.filter((r) => pvEtapaSel.has(
-      pvEtapaKeyOf(String(r.pv_etapa_texto ?? ""), liberacaoSet.has(String(r.pv_os_label ?? ""))),
-    ));
-  }, [rowsAfterDateAtraso, pvEtapaSel, liberacaoSet]);
+    if (pvEtapaGroup === "todos") return rowsAfterDateAtraso;
+    return rowsAfterDateAtraso.filter((r) => {
+      const etapa = String(r.pv_etapa_texto ?? "");
+      const pvLbl = String(r.pv_os_label ?? "");
+      const isAguarda = liberacaoSet.has(pvLbl);
+      if (pvEtapaGroup === "aberto")   return !ETAPAS_FECHADAS.has(etapa) && !isAguarda;
+      if (pvEtapaGroup === "aguarda")  return isAguarda;
+      /* fechado */                    return ETAPAS_FECHADAS.has(etapa);
+    });
+  }, [rowsAfterDateAtraso, pvEtapaGroup, liberacaoSet]);
 
   // KPIs agregados (refletem o filtro primário PV - Status)
   const kpis = useMemo(() => {
@@ -1421,21 +1607,16 @@ export default function BoldAvulsosView({
   }, [rows, passesFilters, liberacaoSet]);
   const pseudoPvStatusSelected = useMemo(() => {
     const s = new Set<string>();
-    if (pvEtapaSel.has("aberto"))  s.add("Aberto");
-    if (pvEtapaSel.has("aguarda")) s.add("Aguardando Liberação");
-    if (pvEtapaSel.has("fechado")) s.add("Faturado");
+    if (pvEtapaGroup === "aberto")  s.add("Aberto");
+    if (pvEtapaGroup === "aguarda") s.add("Aguardando Liberação");
+    if (pvEtapaGroup === "fechado") s.add("Faturado");
     return s;
-  }, [pvEtapaSel]);
+  }, [pvEtapaGroup]);
   const pseudoPvStatusToggle = useCallback((v: string) => {
-    const target: PvEtapaKey =
+    const target: PvEtapaGroup =
       v === "Aberto" ? "aberto" :
       v === "Aguardando Liberação" ? "aguarda" : "fechado";
-    // Multi-select: liga/desliga o grupo. Todos desmarcados = sem filtro.
-    setPvEtapaSel((cur) => {
-      const next = new Set(cur);
-      if (next.has(target)) next.delete(target); else next.add(target);
-      return next;
-    });
+    setPvEtapaGroup((cur) => cur === target ? "todos" : target);
   }, []);
 
   const pseudoPcAprovBuckets = useMemo(() => {
@@ -1574,89 +1755,6 @@ export default function BoldAvulsosView({
     if (typeof window !== "undefined") window.location.reload();
   }
 
-
-  // Card de um bucket — usado pelos DOIS caminhos de render (virtualizado e
-  // normal), pra não duplicar a lista de props.
-  const renderBucketCard = (b: Bucket) => (
-            <BucketCard
-              bucket={b}
-              modulo={modulo}
-              isAdmin={isAdmin}
-              userCanApprove={userCanApprove}
-              userCanEdit={userCanEdit}
-              open={openBuckets.has(b.pv_os_label)}
-              onToggle={() => toggleBucket(b.pv_os_label)}
-              onRowClick={(row) => setDrawerItem({ ...row, _bucket: b })}
-              onStatusClick={(rowKey, row, anchor) => setStatusPopover({ rowKey, row, anchor })}
-              selected={selected}
-              toggleSel={toggleSel}
-              visibleGroups={allGroups}
-              onEnsureOpen={() => expandBucketAndScroll(b.pv_os_label)}
-              optimisticStatus={optimisticStatus}
-              canViewValues={userCanViewValues}
-              canViewMargin={userCanViewMargin}
-              todayStartMs={todayStartMs}
-              alarmesActive={alarmes}
-              onToggleAlarme={toggleAlarme}
-              cronogramaMap={cronogramaMap}
-              budgetMap={budgetMap}
-              atribuicaoMap={atribuicaoMap}
-              onAtribuicaoClick={(row) => {
-                const empresa = String(row.empresa ?? "SF");
-                const pcNum = String(row.pc_numero ?? "");
-                const info = atribuicaoMap.get(`${empresa}|${pcNum}`);
-                setEditingAtribuicao({
-                  empresa,
-                  pc_numero: pcNum,
-                  valor_total: String(row.valor_total ?? "0"),
-                  projeto_nome: (row.projeto_nome as string | null) ?? null,
-                  _dt_inclusao_d: String(row._dt_inclusao_d ?? ""),
-                  codigo_projeto: row.codigo_projeto != null ? Number(row.codigo_projeto) : null,
-                  clientes: info?.clientes,
-                  soma_pct: info?.soma_pct,
-                });
-              }}
-              aguardandoLiberacao={liberacaoSet.has(b.pv_os_label)}
-              userCanReleasePv={userCanRelease}
-              onToggleLiberacao={async (aguardando) => {
-                const empresa = String(b.rows[0]?.empresa ?? "");
-                // Optimistic update
-                setLiberacaoSet((prev) => {
-                  const next = new Set(prev);
-                  if (aguardando) next.add(b.pv_os_label); else next.delete(b.pv_os_label);
-                  return next;
-                });
-                try {
-                  const r = await fetch("/api/avulsos/liberacao", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ pv_os_label: b.pv_os_label, empresa, aguardando }),
-                  });
-                  if (!r.ok) {
-                    const j = await r.json().catch(() => ({}));
-                    // Reverte optimistic + avisa
-                    setLiberacaoSet((prev) => {
-                      const next = new Set(prev);
-                      if (aguardando) next.delete(b.pv_os_label); else next.add(b.pv_os_label);
-                      return next;
-                    });
-                    alert(`Falha: ${j.error ?? r.statusText}`);
-                    return;
-                  }
-                  // Avisa outras abas
-                  try { new BroadcastChannel("pv-liberacao-updated").postMessage({ pv_os_label: b.pv_os_label, aguardando }); } catch { /* ignore */ }
-                } catch (e) {
-                  setLiberacaoSet((prev) => {
-                    const next = new Set(prev);
-                    if (aguardando) next.delete(b.pv_os_label); else next.add(b.pv_os_label);
-                    return next;
-                  });
-                  alert(`Falha: ${e instanceof Error ? e.message : String(e)}`);
-                }
-              }}
-            />
-  );
-
   return (
     <div className="space-y-3">
       {/* Top bar */}
@@ -1715,7 +1813,7 @@ export default function BoldAvulsosView({
             {/* Sem Fornecedor */}
             <div className={`rounded-xl border p-3 ${kpis.semFornecedor > 0
               ? "border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/40 text-amber-900 dark:text-amber-100"
-              : "border-ww-border bg-ww-rowHover text-ww-textMuted "}`}>
+              : "border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/40 text-slate-600 dark:text-slate-400"}`}>
               <div className="text-[9px] uppercase tracking-[0.5px] font-semibold opacity-70">Sem Fornecedor</div>
               <div className="text-[18px] font-semibold tabular-nums tracking-[-0.4px] mt-1 flex items-center gap-1">
                 {kpis.semFornecedor > 0 && <span>⚠</span>}
@@ -1733,7 +1831,7 @@ export default function BoldAvulsosView({
       {modulo !== "pcs" && (
       <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-3">
         <FacetDistribution facetKey="pv_etapa_texto"         label="Status PV"       accent="blue"     side="V" canViewValues={userCanViewValues}
-          buckets={pseudoPvStatusBuckets} selected={pseudoPvStatusSelected} onToggle={pseudoPvStatusToggle} onClear={() => setPvEtapaSel(new Set())} />
+          buckets={pseudoPvStatusBuckets} selected={pseudoPvStatusSelected} onToggle={pseudoPvStatusToggle} onClear={() => setPvEtapaGroup("todos")} />
         <FacetDistribution facetKey="pc_etapa_texto"         label="Aprovação PC"    accent="emerald"  side="C" canViewValues={userCanViewValues}
           buckets={pseudoPcAprovBuckets}  selected={pseudoPcAprovSelected}  onToggle={pseudoPcAprovToggle}  onClear={() => setStatusFilter("todos")} />
         <FacetDistribution facetKey="tipo_omie"              label="Tipo Omie"       accent="violet"   side="V" single canViewValues={userCanViewValues}
@@ -1824,7 +1922,7 @@ export default function BoldAvulsosView({
           // pra "todos" e /avulsos limpa pra "aberto".
           const hasFacets   = Object.values(facets).some((s) => s && s.size > 0);
           const hasStatus   = statusFilter !== "todos";
-          const hasPvEtapa  = !samePvEtapa(pvEtapaSel, mkDefaultPvEtapa());
+          const hasPvEtapa  = pvEtapaGroup !== defaultPvEtapa;
           const hasServicos = servicosFilter !== "todos";
           const hasServStat = servicosStatusFilter.size > 0;
           const hasAtraso   = alarmes.size > 0;
@@ -1837,7 +1935,7 @@ export default function BoldAvulsosView({
                 if (!anyFilter) return;
                 setFacets({});
                 setStatusFilter("todos");
-                setPvEtapaSel(mkDefaultPvEtapa());
+                setPvEtapaGroup(defaultPvEtapa);
                 setServicosFilter("todos");
                 setServicosStatusFilter(new Set());
                 clearAlarmes();
@@ -1920,37 +2018,99 @@ export default function BoldAvulsosView({
       {/* Total visível — painel com soma RC/PC/PV reagindo ao filtro atual */}
       <GrandTotalBar grand={grandTotal} modulo={modulo} count={filtered.length} canViewValues={userCanViewValues} />
 
-      {/* Lista de cards */}
-      {/* /pcs (1368 buckets) e /avulsos (1227) são virtualizados: só ~30 cards
-          ficam montados por vez. /projetos NÃO — tem só 44 buckets, então a
-          virtualização não pagaria o custo (remedição de altura ao expandir
-          cards de ~33 linhas causa pulo de scroll). */}
+      {/* Lista de cards — virtualizada via react-virtuoso (só ~30 buckets renderizados por vez) */}
       <div className="pb-20 min-w-0">
         {buckets.length === 0 ? (
           <div className="text-center py-16 text-ww-textFaint text-sm">
             Nenhum {modulo === "projetos" ? "projeto" : modulo === "pcs" ? "PC" : "PV/OS"} encontrado.
           </div>
-        ) : listaVirtualizada ? (
+        ) : (
           <Virtuoso
             ref={virtuosoRef}
             useWindowScroll
             data={buckets}
+            overscan={{ main: 400, reverse: 400 }}
+            increaseViewportBy={{ top: 200, bottom: 200 }}
             computeItemKey={(_, b) => b.pv_os_label}
-            increaseViewportBy={{ top: 600, bottom: 600 }}
             itemContent={(_, b) => (
               <div data-bucket={b.pv_os_label} data-pc={b.pc_numero ?? undefined} className="mb-5">
-                {renderBucketCard(b)}
+                <BucketCard
+                  bucket={b}
+                  modulo={modulo}
+                  isAdmin={isAdmin}
+                  userCanApprove={userCanApprove}
+                  userCanEdit={userCanEdit}
+                  open={openBuckets.has(b.pv_os_label)}
+                  onToggle={() => toggleBucket(b.pv_os_label)}
+                  onRowClick={(row) => setDrawerItem({ ...row, _bucket: b })}
+                  onStatusClick={(rowKey, row, anchor) => setStatusPopover({ rowKey, row, anchor })}
+                  selected={selected}
+                  toggleSel={toggleSel}
+                  visibleGroups={allGroups}
+                  onEnsureOpen={() => expandBucketAndScroll(b.pv_os_label)}
+                  optimisticStatus={optimisticStatus}
+                  canViewValues={userCanViewValues}
+                  canViewMargin={userCanViewMargin}
+                  todayStartMs={todayStartMs}
+                  alarmesActive={alarmes}
+                  onToggleAlarme={toggleAlarme}
+                  cronogramaMap={cronogramaMap}
+                  budgetMap={budgetMap}
+                  atribuicaoMap={atribuicaoMap}
+                  onAtribuicaoClick={(row) => {
+                    const empresa = String(row.empresa ?? "SF");
+                    const pcNum = String(row.pc_numero ?? "");
+                    const info = atribuicaoMap.get(`${empresa}|${pcNum}`);
+                    setEditingAtribuicao({
+                      empresa,
+                      pc_numero: pcNum,
+                      valor_total: String(row.valor_total ?? "0"),
+                      projeto_nome: (row.projeto_nome as string | null) ?? null,
+                      _dt_inclusao_d: String(row._dt_inclusao_d ?? ""),
+                      codigo_projeto: row.codigo_projeto != null ? Number(row.codigo_projeto) : null,
+                      clientes: info?.clientes,
+                      soma_pct: info?.soma_pct,
+                    });
+                  }}
+                  aguardandoLiberacao={liberacaoSet.has(b.pv_os_label)}
+                  userCanReleasePv={userCanRelease}
+                  onToggleLiberacao={async (aguardando) => {
+                    const empresa = String(b.rows[0]?.empresa ?? "");
+                    setLiberacaoSet((prev) => {
+                      const next = new Set(prev);
+                      if (aguardando) next.add(b.pv_os_label); else next.delete(b.pv_os_label);
+                      return next;
+                    });
+                    try {
+                      const r = await fetch("/api/avulsos/liberacao", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ pv_os_label: b.pv_os_label, empresa, aguardando }),
+                      });
+                      if (!r.ok) {
+                        const j = await r.json().catch(() => ({}));
+                        setLiberacaoSet((prev) => {
+                          const next = new Set(prev);
+                          if (aguardando) next.delete(b.pv_os_label); else next.add(b.pv_os_label);
+                          return next;
+                        });
+                        alert(`Falha: ${j.error ?? r.statusText}`);
+                        return;
+                      }
+                      try { new BroadcastChannel("pv-liberacao-updated").postMessage({ pv_os_label: b.pv_os_label, aguardando }); } catch { /* ignore */ }
+                    } catch (e) {
+                      setLiberacaoSet((prev) => {
+                        const next = new Set(prev);
+                        if (aguardando) next.delete(b.pv_os_label); else next.add(b.pv_os_label);
+                        return next;
+                      });
+                      alert(`Falha: ${e instanceof Error ? e.message : String(e)}`);
+                    }
+                  }}
+                />
               </div>
             )}
           />
-        ) : (
-          <div className="space-y-5">
-            {buckets.map((b) => (
-              <div key={b.pv_os_label} data-bucket={b.pv_os_label} data-pc={b.pc_numero ?? undefined}>
-                {renderBucketCard(b)}
-              </div>
-            ))}
-          </div>
         )}
       </div>
 
@@ -1962,8 +2122,8 @@ export default function BoldAvulsosView({
           {userCanApprove && (
             <>
               <button onClick={() => batchApprove("APROVADO")} className="px-2.5 py-1 text-[12px] font-semibold bg-[#0e6e57] dark:bg-[#3eba9a] text-white dark:text-[#0a1812] rounded-md transition hover:opacity-90">✓ Aprovar</button>
-              <button onClick={() => batchApprove("APROVADO_FAT_DIRETO")} className="px-2.5 py-1 text-[12px] font-semibold border border-[#3a3a35] dark:border-[#c8c8be] rounded-md transition hover:bg-ww-panel/10">Fat. Direto</button>
-              <button onClick={() => batchApprove("NAO_APROVADO")} className="px-2.5 py-1 text-[12px] font-semibold border border-[#3a3a35] dark:border-[#c8c8be] rounded-md transition hover:bg-ww-panel/10">✗ Rejeitar</button>
+              <button onClick={() => batchApprove("APROVADO_FAT_DIRETO")} className="px-2.5 py-1 text-[12px] font-semibold border border-[#3a3a35] dark:border-[#c8c8be] rounded-md transition hover:bg-white/10">Fat. Direto</button>
+              <button onClick={() => batchApprove("NAO_APROVADO")} className="px-2.5 py-1 text-[12px] font-semibold border border-[#3a3a35] dark:border-[#c8c8be] rounded-md transition hover:bg-white/10">✗ Rejeitar</button>
             </>
           )}
           {(isAdmin || userCanEdit || userCanApprove) && (
@@ -2291,7 +2451,7 @@ function BucketCard({
     let servicosDev: { value: number; suffix: string; tone: "red" | "amber" | "green" } | null = null;
     if (tipoBucket === "Serviços" || tipoBucket === "Mix") {
       const totalOs = items.length;
-      const concluidosCount = items.filter((r) => isServicoConcluido(r)).length;
+      const concluidosCount = items.filter((r) => r.servicos_concluidos === true).length;
       if (previsaoMs == null) {
         servicosState = "red";
         servicosDetail = "sem previsão";
@@ -2842,9 +3002,9 @@ function NovaPrevServicosCell({
     ? createPortal(
         <div ref={popRef}
              style={{ top: popPos.top, left: popPos.left }}
-             className="fixed z-[60] min-w-[280px] max-w-[380px] bg-ww-panel border border-ww-border rounded-md shadow-xl p-2"
+             className="fixed z-[60] min-w-[280px] max-w-[380px] bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-md shadow-xl p-2"
              onClick={(e) => e.stopPropagation()}>
-          <div className="text-[10px] font-bold uppercase text-ww-textMuted mb-1.5 px-1">
+          <div className="text-[10px] font-bold uppercase text-slate-500 dark:text-slate-400 mb-1.5 px-1">
             Histórico ({historico.length} {historico.length === 1 ? "entrada" : "entradas"})
           </div>
           <ol className="space-y-1 max-h-[280px] overflow-y-auto">
@@ -2857,7 +3017,7 @@ function NovaPrevServicosCell({
                 ? "—"
                 : `${String(emDate.getDate()).padStart(2, "0")}/${String(emDate.getMonth() + 1).padStart(2, "0")} ${String(emDate.getHours()).padStart(2, "0")}:${String(emDate.getMinutes()).padStart(2, "0")}`;
               return (
-                <li key={`${h.em}-${idx}`} className="flex items-start gap-2 px-1 py-1 rounded hover:bg-ww-rowHover dark:hover:bg-slate-800">
+                <li key={`${h.em}-${idx}`} className="flex items-start gap-2 px-1 py-1 rounded hover:bg-slate-50 dark:hover:bg-slate-800">
                   <span className={`shrink-0 w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${
                     isReserva ? "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300"
                     : h.data == null ? "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300"
@@ -2870,7 +3030,7 @@ function NovaPrevServicosCell({
                       {isReserva ? "Reserva · " : h.data == null ? "Desvinc. · " : "Alterada · "}
                       <span className="tabular-nums">{dataBR}</span>
                     </div>
-                    <div className="text-ww-textMuted text-[10px] truncate" title={`${h.em} · ${h.por}`}>
+                    <div className="text-slate-500 dark:text-slate-400 text-[10px] truncate" title={`${h.em} · ${h.por}`}>
                       {emBR} · {h.por}
                     </div>
                   </div>
@@ -3008,13 +3168,13 @@ function NovaPrevMateriaisCell({
     ? createPortal(
         <div ref={popRef}
              style={{ top: popPos.top, left: popPos.left }}
-             className="fixed z-[60] min-w-[260px] max-w-[360px] bg-ww-panel border border-ww-border rounded-md shadow-xl p-2"
+             className="fixed z-[60] min-w-[260px] max-w-[360px] bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-md shadow-xl p-2"
              onClick={(e) => e.stopPropagation()}>
           <div className="flex items-center justify-between mb-1.5 px-1">
-            <div className="text-[10px] font-bold uppercase text-ww-textMuted ">
+            <div className="text-[10px] font-bold uppercase text-slate-500 dark:text-slate-400">
               Histórico Prev. Materiais
             </div>
-            <div className="text-[10px] text-ww-textMuted tabular-nums">
+            <div className="text-[10px] text-slate-500 dark:text-slate-400 tabular-nums">
               {renovacoes} renov.
             </div>
           </div>
@@ -3025,14 +3185,14 @@ function NovaPrevMateriaisCell({
                 e.tone === "orange" ? "bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300" :
                                       "bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-300";
               return (
-                <li key={idx} className="flex items-start gap-2 px-1 py-1 rounded hover:bg-ww-rowHover dark:hover:bg-slate-800">
+                <li key={idx} className="flex items-start gap-2 px-1 py-1 rounded hover:bg-slate-50 dark:hover:bg-slate-800">
                   <span className={`shrink-0 px-1.5 py-0.5 rounded text-[9.5px] font-bold uppercase tabular-nums ${toneCls}`}>
                     {e.tag}
                   </span>
                   <div className="flex-1 min-w-0 text-[11px]">
                     <div className="font-semibold tabular-nums">{e.data}</div>
                     {e.em && (
-                      <div className="text-ww-textMuted text-[10px] truncate">
+                      <div className="text-slate-500 dark:text-slate-400 text-[10px] truncate">
                         alterada em {e.em}
                       </div>
                     )}
@@ -3243,8 +3403,8 @@ function Cell({
     // service_id no waterworks-app preserva o prefixo "OS" (a rota
     // /ordens-de-servico/[id] aceita UUID ou service_id text exato).
     const osPath = encodeURIComponent(osRaw);
-    const concluido = isServicoConcluido(row);
-    const dtRaw = servicoConcluidoEm(row);
+    const concluido = !!row.servicos_concluidos;
+    const dtRaw = row.servicos_concluidos_em as string | null;
     const dtCurta = dtRaw ? new Date(dtRaw).toLocaleDateString("pt-BR", {
       timeZone: "America/Sao_Paulo", day: "2-digit", month: "2-digit", year: "numeric",
     }) : "";
@@ -3253,11 +3413,8 @@ function Cell({
       hour: "2-digit", minute: "2-digit",
     }) : "";
     const por = row.servicos_concluidos_por ? ` por ${row.servicos_concluidos_por}` : "";
-    // servicos_concluidos_em está null em toda a base (o app de serviços não
-    // alimenta essa coluna), então na prática o texto sem data é o caminho
-    // normal, não a exceção.
     const tooltip = concluido
-      ? (dtLonga ? `Concluído em ${dtLonga}${por}` : "Concluído (data não registrada pelo app de serviços)")
+      ? `Concluído em ${dtLonga}${por}`
       : "Agendado (ainda não foi executado)";
     return (
       <span className="inline-flex flex-col items-start gap-0.5 text-[12px] leading-tight" title={tooltip}>
@@ -3289,7 +3446,7 @@ function Cell({
     const novaMs = novaS ? parseFlexDate(novaS) : null;
     let badge: { label: string; tone: string } | null = null;
     if (row.mt_data_recebimento_nf) {
-      badge = { label: "✓ recebido", tone: "bg-ww-border text-ww-textMuted " };
+      badge = { label: "✓ recebido", tone: "bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-200" };
     } else if (origMs != null) {
       const efetivaMs = novaMs ?? origMs;
       if (efetivaMs < today) {
@@ -3323,7 +3480,7 @@ function Cell({
     const osRaw = String(row.servicos_os_numero ?? "").trim();
     if (!osStatus && !osRaw) return <span className="text-ww-textFaint text-[11px]">—</span>;
     let label = osStatus || "Sem OS";
-    let cls = "bg-ww-bg text-ww-textMuted border-ww-border";
+    let cls = "bg-slate-100 text-slate-700 border-slate-200";
     if (osStatus === "Cancelada") {
       cls = "bg-red-100 text-red-700 border-red-200";
     } else if (osStatus === "Concluída") {
@@ -3372,7 +3529,7 @@ const STAGE_STATE_STYLE = {
   red:    { dot: "bg-rose-500 shadow-[0_0_0_3px_rgba(244,63,94,0.25)]",       label: "text-ww-textMuted", line: "bg-rose-400" },
   // "off" — stage não se aplica ao tipo (ex: RC/PC em PV/OS 100% Serviços).
   // Bolinha cinza pequena + linha cinza. Sem badge de desvio.
-  off:    { dot: "bg-slate-300 opacity-70",                 label: "text-ww-textFaint",  line: "bg-slate-300 " },
+  off:    { dot: "bg-slate-300 dark:bg-slate-600 opacity-70",                 label: "text-ww-textFaint",  line: "bg-slate-300 dark:bg-slate-700" },
 } as const;
 
 type StageDev = { value: number; suffix: string; tone: "red" | "amber" | "green" } | null;
@@ -3669,11 +3826,11 @@ function AlarmesPanel({
         <span>Alarmes Ativos</span>
         {totalPending > 0 && (
           <span className={`tabular-nums text-[10.5px] font-bold px-1 rounded ${
-            totalActive > 0 || open ? "bg-ww-panel/25 text-white" : "bg-rose-200/70 dark:bg-rose-800/40 text-rose-900 dark:text-rose-100"
+            totalActive > 0 || open ? "bg-white/25 text-white" : "bg-rose-200/70 dark:bg-rose-800/40 text-rose-900 dark:text-rose-100"
           }`}>{totalPending}</span>
         )}
         {totalActive > 0 && (
-          <span className="bg-ww-panel/90 text-rose-800 rounded-full px-1.5 text-[9.5px] font-black tabular-nums">
+          <span className="bg-white/90 text-rose-800 rounded-full px-1.5 text-[9.5px] font-black tabular-nums">
             {totalActive} sel
           </span>
         )}
@@ -3829,7 +3986,7 @@ function AlarmGroupDropdown({
           <span className="tabular-nums text-[10px] font-bold opacity-80">{groupCount}</span>
         )}
         {activeCount > 0 && (
-          <span className={`ml-0.5 bg-ww-panel/90 text-ww-text rounded-full px-1.5 text-[9px] font-bold tabular-nums`}>
+          <span className={`ml-0.5 bg-white/90 text-slate-900 dark:bg-black/40 dark:text-white rounded-full px-1.5 text-[9px] font-bold tabular-nums`}>
             {activeCount}
           </span>
         )}
@@ -3924,7 +4081,7 @@ function AlarmesDropdown({
         <IconAlert />
         <span>Alarmes Ativos</span>
         {activeCount > 0 && (
-          <span className="bg-ww-panel/25 text-white rounded-full px-1.5 text-[10px] font-bold tabular-nums">
+          <span className="bg-white/25 text-white rounded-full px-1.5 text-[10px] font-bold tabular-nums">
             {activeCount}
           </span>
         )}
@@ -4020,7 +4177,6 @@ const ALARM_SHORT_LABEL: Record<AlarmKind, string> = {
   agend_vazio:  "Sem Previsão",
   agend_venc:   "Prev. vencida",
   pode_faturar: "Faturável",
-  retido_cliente: "Retido cliente",
 };
 const ALARM_CFG: Record<AlarmKind, { label: string; icon: string; hint: string }> = {
   pvos_incompl: { label: "PV/OS incompleta",      icon: ALARM_ICON, hint: "Cadastro do PV/OS falta dado essencial (tipo, cliente ou V.Previsão Limite_Omie). Reflete o dot PV/OS em vermelho — bloqueia o pipeline até corrigir no Omie." },
@@ -4037,7 +4193,6 @@ const ALARM_CFG: Record<AlarmKind, { label: string; icon: string; hint: string }
   agend_vazio:  { label: "Sem Previsão",          icon: ALARM_ICON, hint: "Mix/Serviços sem V.Nova Prev. Serviços" },
   agend_venc:   { label: "Previsão vencida",      icon: ALARM_ICON, hint: "Mix/Serviços com V.Nova Prev. Serviços no passado (em aberto)" },
   pode_faturar: { label: "Pode faturar",          icon: ALARM_ICON, hint: "Material recebido (Recebto NF preenchido) sem NF de saída" },
-  retido_cliente: { label: "Retido no cliente",   icon: ALARM_ICON, hint: "Faturaria agora — só falta o cliente liberar (Aguardando Liberação)" },
 };
 
 // Grupos temáticos dos alarmes — cada grupo pinta seu bloco de cor distinta
@@ -4048,7 +4203,7 @@ const ALARM_GROUPS: { key: string; label: string; accent: AccentKey; kinds: Alar
   { key: "compras",      label: "Compras",      accent: "violet",  kinds: ["compra", "sem_rc", "sem_pc", "defas_omie"] },
   { key: "aprovacoes",   label: "Aprovações",   accent: "amber",   kinds: ["aprov_bloq", "aprov_pend"] },
   { key: "servicos",     label: "Serviços",     accent: "cyan",    kinds: ["sem_vinculo", "agend_vazio", "agend_venc"] },
-  { key: "faturamento",  label: "Faturamento",  accent: "emerald", kinds: ["pode_faturar", "retido_cliente"] },
+  { key: "faturamento",  label: "Faturamento",  accent: "emerald", kinds: ["pode_faturar"] },
 ];
 
 function AlarmePill({
@@ -4062,7 +4217,7 @@ function AlarmePill({
       className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-[11px] font-semibold border transition ${
         active
           ? "bg-rose-600 dark:bg-rose-500 border-rose-800 dark:border-rose-300 text-white shadow-sm"
-          : "bg-ww-panel dark:bg-ww-panel border-rose-200 dark:border-rose-800 text-rose-800 dark:text-rose-200 hover:border-rose-400"
+          : "bg-white dark:bg-ww-panel border-rose-200 dark:border-rose-800 text-rose-800 dark:text-rose-200 hover:border-rose-400"
       }`}>
       <span className="text-[10.5px]">{cfg.icon}</span>
       <span>{cfg.label}</span>
@@ -4088,7 +4243,7 @@ function AtrasoButton({
         text: "text-rose-900 dark:text-rose-100",
         textActive: "text-white",
         iconBg: "bg-rose-200 dark:bg-rose-800 text-rose-800 dark:text-rose-100",
-        iconBgActive: "bg-ww-panel/25 text-white",
+        iconBgActive: "bg-white/25 text-white",
       }
     : {
         label: "Atraso Compra",
@@ -4100,7 +4255,7 @@ function AtrasoButton({
         text: "text-violet-900 dark:text-violet-100",
         textActive: "text-white",
         iconBg: "bg-violet-200 dark:bg-violet-800 text-violet-800 dark:text-violet-100",
-        iconBgActive: "bg-ww-panel/25 text-white",
+        iconBgActive: "bg-white/25 text-white",
       };
   return (
     <button onClick={onToggle} title={cfg.hint}
@@ -4138,31 +4293,31 @@ function ServicoButton({
 }) {
   const cfg = kind === "todos"
     ? { label: "Todos", hint: "Todos os PV/OS", icon: <IconAll />,
-        bg: "bg-ww-bg ", bgActive: "bg-slate-800 ",
-        border: "border-ww-border ", borderActive: "border-slate-900 ",
-        text: "text-ww-text ", textActive: "text-white ",
-        iconBg: "bg-slate-300 text-ww-textMuted ",
-        iconBgActive: "bg-ww-panel/25 text-white " }
+        bg: "bg-slate-100 dark:bg-slate-800/60", bgActive: "bg-slate-800 dark:bg-slate-200",
+        border: "border-slate-300 dark:border-slate-700", borderActive: "border-slate-900 dark:border-slate-50",
+        text: "text-slate-900 dark:text-slate-100", textActive: "text-white dark:text-slate-900",
+        iconBg: "bg-slate-300 dark:bg-slate-700 text-slate-700 dark:text-slate-200",
+        iconBgActive: "bg-white/25 text-white dark:bg-slate-900/30 dark:text-slate-900" }
     : kind === "concluidos"
     ? { label: "Executados", hint: "Serviço concluído (flag app)", icon: <IconCheck />,
         bg: "bg-emerald-50 dark:bg-emerald-950/40", bgActive: "bg-emerald-600 dark:bg-emerald-500",
         border: "border-emerald-200 dark:border-emerald-800", borderActive: "border-emerald-800 dark:border-emerald-300",
         text: "text-emerald-900 dark:text-emerald-100", textActive: "text-white",
         iconBg: "bg-emerald-200 dark:bg-emerald-800 text-emerald-800 dark:text-emerald-100",
-        iconBgActive: "bg-ww-panel/25 text-white" }
+        iconBgActive: "bg-white/25 text-white" }
     : kind === "agendados"
     ? { label: "Agendados", hint: "Tem OS aberta, ainda não concluída", icon: <IconClock />,
         bg: "bg-amber-50 dark:bg-amber-950/40", bgActive: "bg-amber-500 dark:bg-amber-400",
         border: "border-amber-200 dark:border-amber-800", borderActive: "border-amber-700 dark:border-amber-200",
         text: "text-amber-900 dark:text-amber-100", textActive: "text-white dark:text-amber-950",
         iconBg: "bg-amber-200 dark:bg-amber-800 text-amber-800 dark:text-amber-100",
-        iconBgActive: "bg-ww-panel/25 text-white dark:bg-amber-950/30 dark:text-amber-950" }
+        iconBgActive: "bg-white/25 text-white dark:bg-amber-950/30 dark:text-amber-950" }
     : { label: "Sem OS", hint: "Não tem OS criada ainda", icon: <IconOpenBox />,
         bg: "bg-blue-50 dark:bg-blue-950/40", bgActive: "bg-blue-600 dark:bg-blue-500",
         border: "border-blue-200 dark:border-blue-800", borderActive: "border-blue-800 dark:border-blue-300",
         text: "text-blue-900 dark:text-blue-100", textActive: "text-white",
         iconBg: "bg-blue-200 dark:bg-blue-800 text-blue-800 dark:text-blue-100",
-        iconBgActive: "bg-ww-panel/25 text-white" };
+        iconBgActive: "bg-white/25 text-white" };
   return (
     <button onClick={onToggle} title={cfg.hint}
       className={`relative rounded-lg border-2 text-left p-2.5 transition-all hover:-translate-y-0.5 ${
@@ -4337,7 +4492,7 @@ function BucketTotals({
           <div className={`text-[15px] font-bold tabular-nums leading-none ${
             mbTone === "positive" ? "text-emerald-700 dark:text-emerald-300" :
             mbTone === "negative" ? "text-rose-700 dark:text-rose-300" :
-            mbTone === "zero"     ? "text-ww-textMuted " :
+            mbTone === "zero"     ? "text-slate-700 dark:text-slate-300" :
                                     "text-ww-textFaint"
           }`}>
             {mb == null ? "—" : `${(mb * 100).toFixed(1)}%`}
@@ -4459,7 +4614,7 @@ function BudgetTotals({
                 ? (mbEsperadaPct > 0 ? "text-emerald-700 dark:text-emerald-300" : "text-rose-700 dark:text-rose-300")
                 : mbTone === "positive" ? "text-emerald-700 dark:text-emerald-300"
                 : mbTone === "negative" ? "text-rose-700 dark:text-rose-300"
-                : mbTone === "zero"     ? "text-ww-textMuted "
+                : mbTone === "zero"     ? "text-slate-700 dark:text-slate-300"
                 :                         "text-ww-textFaint"
             }`}>
               {mbEsperadaPct != null ? `${(mbEsperadaPct * 100).toFixed(1)}%` : mb == null ? "—" : `${(mb * 100).toFixed(1)}%`}
@@ -4754,7 +4909,7 @@ const ACCENT_MAP = {
   rose:    { dot: "bg-rose-500",    bar: "bg-rose-500",    hover: "hover:bg-rose-200/70 dark:hover:bg-rose-950/50",       border: "border-rose-400 dark:border-rose-600",       panelBg: "bg-rose-50/70 dark:bg-rose-950/20",        headerBg: "bg-rose-200/80 dark:bg-rose-900/50",       selectedBg: "bg-rose-300/80 dark:bg-rose-800/60",       selectedText: "text-rose-950 dark:text-rose-50" },
   fuchsia: { dot: "bg-fuchsia-500", bar: "bg-fuchsia-500", hover: "hover:bg-fuchsia-200/70 dark:hover:bg-fuchsia-950/50", border: "border-fuchsia-400 dark:border-fuchsia-600", panelBg: "bg-fuchsia-50/70 dark:bg-fuchsia-950/20",  headerBg: "bg-fuchsia-200/80 dark:bg-fuchsia-900/50", selectedBg: "bg-fuchsia-300/80 dark:bg-fuchsia-800/60", selectedText: "text-fuchsia-950 dark:text-fuchsia-50" },
   teal:    { dot: "bg-teal-500",    bar: "bg-teal-500",    hover: "hover:bg-teal-200/70 dark:hover:bg-teal-950/50",       border: "border-teal-400 dark:border-teal-600",       panelBg: "bg-teal-50/70 dark:bg-teal-950/20",        headerBg: "bg-teal-200/80 dark:bg-teal-900/50",       selectedBg: "bg-teal-300/80 dark:bg-teal-800/60",       selectedText: "text-teal-950 dark:text-teal-50" },
-  slate:   { dot: "bg-slate-500",   bar: "bg-slate-500",   hover: "hover:bg-ww-border/70 dark:hover:bg-slate-800/50",     border: "border-ww-borderStrong ",     panelBg: "bg-ww-rowHover/70 ",      headerBg: "bg-ww-border/80 ",     selectedBg: "bg-slate-300/80 ",     selectedText: "text-slate-950 " },
+  slate:   { dot: "bg-slate-500",   bar: "bg-slate-500",   hover: "hover:bg-slate-200/70 dark:hover:bg-slate-800/50",     border: "border-slate-400 dark:border-slate-600",     panelBg: "bg-slate-50/70 dark:bg-slate-900/30",      headerBg: "bg-slate-200/80 dark:bg-slate-800/60",     selectedBg: "bg-slate-300/80 dark:bg-slate-700/60",     selectedText: "text-slate-950 dark:text-slate-50" },
 } as const;
 type AccentKey = keyof typeof ACCENT_MAP;
 
@@ -4804,14 +4959,14 @@ function FacetDistribution({
             <span title={side === "V" ? "Valor de VENDA (PV)" : "Valor de COMPRA (PC)"}
               className={`text-[9px] font-black px-1 py-px rounded shrink-0 ${
                 side === "V"
-                  ? "bg-slate-800/80 text-white "
-                  : "bg-ww-panel/90 text-ww-text ring-1 ring-slate-800/40 dark:ring-white/30"
+                  ? "bg-slate-800/80 text-white dark:bg-white/90 dark:text-slate-900"
+                  : "bg-white/90 text-slate-900 ring-1 ring-slate-800/40 dark:bg-slate-900/80 dark:text-white dark:ring-white/30"
               }`}>
               {side}
             </span>
           )}
           {selected.size > 0 && (
-            <span className={`ml-0.5 text-[9px] font-bold px-1 py-px rounded uppercase tracking-wider shrink-0 bg-ww-panel/70 ${cfg.selectedText}`}>
+            <span className={`ml-0.5 text-[9px] font-bold px-1 py-px rounded uppercase tracking-wider shrink-0 bg-white/70 dark:bg-black/40 ${cfg.selectedText}`}>
               {selected.size}
             </span>
           )}

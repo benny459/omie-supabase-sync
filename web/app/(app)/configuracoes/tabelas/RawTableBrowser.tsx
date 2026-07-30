@@ -50,14 +50,14 @@ export default function RawTableBrowser({
   return (
     <div className="grid grid-cols-12 gap-4">
       {/* Sidebar — lista de tabelas agrupadas por schema */}
-      <aside className="col-span-12 md:col-span-3 bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden self-start">
-        <header className="px-4 py-2.5 border-b border-slate-200 bg-slate-50/60">
-          <h2 className="text-xs font-semibold text-slate-700 uppercase tracking-wider">Tabelas</h2>
+      <aside className="col-span-12 md:col-span-3 bg-ww-panel rounded-xl border border-ww-border shadow-sm overflow-hidden self-start">
+        <header className="px-4 py-2.5 border-b border-ww-border bg-ww-rowHover/60">
+          <h2 className="text-xs font-semibold text-ww-textMuted uppercase tracking-wider">Tabelas</h2>
         </header>
         <div className="p-2 max-h-[680px] overflow-y-auto">
           {groups.map((g) => (
             <div key={g.schema} className="mb-3">
-              <div className="text-[10px] uppercase tracking-wider font-semibold text-slate-500 px-2 py-1">
+              <div className="text-[10px] uppercase tracking-wider font-semibold text-ww-textMuted px-2 py-1">
                 {g.schema}
               </div>
               <ul className="space-y-0.5">
@@ -70,7 +70,7 @@ export default function RawTableBrowser({
                         className={`block px-2 py-1.5 text-xs rounded-md transition ${
                           active
                             ? "bg-sky-50 text-sky-900 font-semibold ring-1 ring-sky-200"
-                            : "text-slate-700 hover:bg-slate-50"
+                            : "text-ww-textMuted hover:bg-ww-rowHover"
                         }`}
                       >
                         {t}
@@ -85,9 +85,9 @@ export default function RawTableBrowser({
       </aside>
 
       {/* Main — tabela */}
-      <main className="col-span-12 md:col-span-9 bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+      <main className="col-span-12 md:col-span-9 bg-ww-panel rounded-xl border border-ww-border shadow-sm overflow-hidden">
         {!selectedTable && (
-          <div className="p-8 text-center text-sm text-slate-400">
+          <div className="p-8 text-center text-sm text-ww-textFaint">
             ← Selecione uma tabela à esquerda
           </div>
         )}
@@ -100,12 +100,12 @@ export default function RawTableBrowser({
 
         {selectedTable && result && !result.error && (
           <>
-            <header className="px-5 py-3 border-b border-slate-200 bg-slate-50/60 flex items-center justify-between flex-wrap gap-3">
+            <header className="px-5 py-3 border-b border-ww-border bg-ww-rowHover/60 flex items-center justify-between flex-wrap gap-3">
               <div>
-                <h2 className="text-sm font-semibold text-slate-900">
+                <h2 className="text-sm font-semibold text-ww-text">
                   {selectedSchema}.{selectedTable}
                 </h2>
-                <p className="text-xs text-slate-500">
+                <p className="text-xs text-ww-textMuted">
                   {result.count != null
                     ? `${result.count.toLocaleString("pt-BR")} registros · página ${page + 1}`
                     : `página ${page + 1}`}
@@ -121,8 +121,8 @@ export default function RawTableBrowser({
                   href={buildHref({ page: page - 1 })}
                   className={`px-3 py-1.5 text-xs font-medium rounded-md border ${
                     page <= 0
-                      ? "bg-slate-50 text-slate-300 border-slate-200 pointer-events-none"
-                      : "bg-white text-slate-700 border-slate-200 hover:bg-slate-50"
+                      ? "bg-ww-rowHover text-ww-textFaint border-ww-border pointer-events-none"
+                      : "bg-ww-panel text-ww-textMuted border-ww-border hover:bg-ww-rowHover"
                   }`}
                 >
                   ← Anterior
@@ -131,8 +131,8 @@ export default function RawTableBrowser({
                   href={buildHref({ page: page + 1 })}
                   className={`px-3 py-1.5 text-xs font-medium rounded-md border ${
                     result.rows.length < limit
-                      ? "bg-slate-50 text-slate-300 border-slate-200 pointer-events-none"
-                      : "bg-white text-slate-700 border-slate-200 hover:bg-slate-50"
+                      ? "bg-ww-rowHover text-ww-textFaint border-ww-border pointer-events-none"
+                      : "bg-ww-panel text-ww-textMuted border-ww-border hover:bg-ww-rowHover"
                   }`}
                 >
                   Próxima →
@@ -142,13 +142,13 @@ export default function RawTableBrowser({
 
             <div className="overflow-x-auto max-h-[640px]">
               <table className="w-full text-xs">
-                <thead className="bg-slate-50 sticky top-0 z-10">
+                <thead className="bg-ww-rowHover sticky top-0 z-10">
                   <tr>
                     {result.columns.map((c) => (
                       <th
                         key={c}
                         onClick={() => setOrder(c)}
-                        className="px-3 py-2 text-left text-[10px] uppercase tracking-wider font-semibold text-slate-600 whitespace-nowrap cursor-pointer hover:bg-slate-100 transition"
+                        className="px-3 py-2 text-left text-[10px] uppercase tracking-wider font-semibold text-ww-textMuted whitespace-nowrap cursor-pointer hover:bg-ww-bg transition"
                         title="Clique pra ordenar"
                       >
                         <span className="inline-flex items-center gap-1">
@@ -164,15 +164,15 @@ export default function RawTableBrowser({
                 <tbody className="divide-y divide-slate-100">
                   {result.rows.length === 0 && (
                     <tr>
-                      <td colSpan={result.columns.length || 1} className="px-3 py-8 text-center text-slate-400">
+                      <td colSpan={result.columns.length || 1} className="px-3 py-8 text-center text-ww-textFaint">
                         Nenhum registro nesta página.
                       </td>
                     </tr>
                   )}
                   {result.rows.map((row, i) => (
-                    <tr key={i} className="hover:bg-slate-50/60 transition">
+                    <tr key={i} className="hover:bg-ww-rowHover/60 transition">
                       {result.columns.map((c) => (
-                        <td key={c} className="px-3 py-1.5 text-slate-700 whitespace-nowrap max-w-[260px] truncate" title={fmt(row[c])}>
+                        <td key={c} className="px-3 py-1.5 text-ww-textMuted whitespace-nowrap max-w-[260px] truncate" title={fmt(row[c])}>
                           {fmt(row[c])}
                         </td>
                       ))}
@@ -182,7 +182,7 @@ export default function RawTableBrowser({
               </table>
             </div>
 
-            <footer className="px-5 py-2 border-t border-slate-200 bg-slate-50/40 flex items-center justify-between text-xs text-slate-500">
+            <footer className="px-5 py-2 border-t border-ww-border bg-ww-rowHover/40 flex items-center justify-between text-xs text-ww-textMuted">
               <span>
                 Mostrando {result.rows.length} de {result.count?.toLocaleString("pt-BR") ?? "?"} registros
               </span>

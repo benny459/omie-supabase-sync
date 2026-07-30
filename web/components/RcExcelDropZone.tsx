@@ -228,11 +228,11 @@ export default function RcExcelDropZone({
         <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4"
              onClick={() => { if (!busy) { setParsed(null); setFile(null); } }}>
           <div onClick={(e) => e.stopPropagation()}
-               className="bg-white rounded-xl shadow-2xl max-w-2xl w-full p-5 space-y-4 max-h-[85vh] flex flex-col">
+               className="bg-ww-panel rounded-xl shadow-2xl max-w-2xl w-full p-5 space-y-4 max-h-[85vh] flex flex-col">
             <div className="flex items-start justify-between">
               <div>
-                <h3 className="font-semibold text-slate-900">Prévia — {parsed.fileName}</h3>
-                <p className="text-xs text-slate-500 mt-0.5">
+                <h3 className="font-semibold text-ww-text">Prévia — {parsed.fileName}</h3>
+                <p className="text-xs text-ww-textMuted mt-0.5">
                   RC número: <strong>{parsed.rcNumero ?? "—"}</strong>
                   {parsed.rcNumero == null && (
                     <span className="text-rose-600"> (não detectado — renomeie o arquivo como RC####.xlsx)</span>
@@ -242,13 +242,13 @@ export default function RcExcelDropZone({
                 </p>
               </div>
               <button onClick={() => { setParsed(null); setFile(null); }}
-                className="text-slate-400 hover:text-slate-800 text-lg leading-none">×</button>
+                className="text-ww-textFaint hover:text-ww-text text-lg leading-none">×</button>
             </div>
 
-            <div className="flex-1 overflow-y-auto border border-slate-200 rounded-lg">
+            <div className="flex-1 overflow-y-auto border border-ww-border rounded-lg">
               <table className="w-full text-xs">
-                <thead className="bg-slate-50 sticky top-0">
-                  <tr className="text-left text-[10px] uppercase tracking-wider text-slate-500">
+                <thead className="bg-ww-rowHover sticky top-0">
+                  <tr className="text-left text-[10px] uppercase tracking-wider text-ww-textMuted">
                     <th className="px-3 py-2 font-semibold">Descrição</th>
                     <th className="px-3 py-2 font-semibold text-right">Qtd</th>
                     <th className="px-3 py-2 font-semibold text-right">Custo Unit.</th>
@@ -256,8 +256,8 @@ export default function RcExcelDropZone({
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {parsed.items.map((it, i) => (
-                    <tr key={i} className="hover:bg-slate-50">
-                      <td className="px-3 py-1.5 text-slate-700">{it.descricao}</td>
+                    <tr key={i} className="hover:bg-ww-rowHover">
+                      <td className="px-3 py-1.5 text-ww-textMuted">{it.descricao}</td>
                       <td className="px-3 py-1.5 text-right tabular-nums">{it.quantidade ?? "—"}</td>
                       <td className="px-3 py-1.5 text-right tabular-nums">
                         {it.custoUnit != null ? it.custoUnit.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }) : "—"}
@@ -279,7 +279,7 @@ export default function RcExcelDropZone({
             <div className="flex justify-end gap-2">
               <button onClick={() => { setParsed(null); setFile(null); }}
                 disabled={busy}
-                className="px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-100 rounded-md disabled:opacity-50">
+                className="px-3 py-1.5 text-xs font-medium text-ww-textMuted hover:bg-ww-bg rounded-md disabled:opacity-50">
                 Cancelar
               </button>
               <button onClick={apply}

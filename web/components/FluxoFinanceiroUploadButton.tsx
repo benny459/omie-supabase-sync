@@ -242,32 +242,32 @@ export default function FluxoFinanceiroUploadButton({
         <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4"
              onClick={(e) => { if (e.target === e.currentTarget && !busy) setOpen(false); }}>
           <div onClick={(e) => e.stopPropagation()}
-               className="bg-white rounded-xl shadow-2xl max-w-3xl w-full max-h-[90vh] flex flex-col">
-            <div className="px-5 py-4 border-b border-slate-200 flex items-start justify-between">
+               className="bg-ww-panel rounded-xl shadow-2xl max-w-3xl w-full max-h-[90vh] flex flex-col">
+            <div className="px-5 py-4 border-b border-ww-border flex items-start justify-between">
               <div>
-                <h3 className="font-semibold text-slate-900 text-[15px]">Fluxo Financeiro do Projeto</h3>
-                <p className="text-xs text-slate-500 mt-0.5">
+                <h3 className="font-semibold text-ww-text text-[15px]">Fluxo Financeiro do Projeto</h3>
+                <p className="text-xs text-ww-textMuted mt-0.5">
                   Só a <strong>Planilha1</strong> é usada. Extrai budget (Custos/Despesas/Serviços/Total)
-                  e as etapas da tabela abaixo (colunas <code className="bg-slate-100 px-1 rounded">Data Evento</code>, <code className="bg-slate-100 px-1 rounded">Evento</code>).
+                  e as etapas da tabela abaixo (colunas <code className="bg-ww-bg px-1 rounded">Data Evento</code>, <code className="bg-ww-bg px-1 rounded">Evento</code>).
                 </p>
-                <p className="text-[11px] text-slate-500 mt-1">
+                <p className="text-[11px] text-ww-textMuted mt-1">
                   Re-upload atualiza budget e sincroniza etapas por NOME — preserva <strong>data_conclusao</strong> das etapas já concluídas.
                 </p>
               </div>
-              <button onClick={() => !busy && setOpen(false)} className="text-slate-400 hover:text-slate-800 text-lg leading-none">×</button>
+              <button onClick={() => !busy && setOpen(false)} className="text-ww-textFaint hover:text-ww-text text-lg leading-none">×</button>
             </div>
 
             <div className="px-5 py-4 overflow-y-auto flex-1">
               {!parsed && (
                 <div className="space-y-2">
                   <button onClick={() => inputRef.current?.click()}
-                    className="w-full border-2 border-dashed border-slate-300 hover:border-blue-400 rounded-lg py-12 text-center text-slate-600 hover:text-blue-700 transition">
+                    className="w-full border-2 border-dashed border-ww-border hover:border-blue-400 rounded-lg py-12 text-center text-ww-textMuted hover:text-blue-700 transition">
                     <div className="text-3xl mb-2">📊</div>
                     <div className="text-sm font-medium">Clique pra selecionar o XLSX do Fluxo</div>
-                    <div className="text-[11px] text-slate-400 mt-1">Planilha1 · linhas 7-15 (budget) + tabela Etapa/Evento</div>
+                    <div className="text-[11px] text-ww-textFaint mt-1">Planilha1 · linhas 7-15 (budget) + tabela Etapa/Evento</div>
                   </button>
                   <div className="flex items-center justify-center gap-2 text-[11.5px]">
-                    <span className="text-slate-500">Sem planilha?</span>
+                    <span className="text-ww-textMuted">Sem planilha?</span>
                     <button type="button" onClick={downloadTemplate}
                       className="inline-flex items-center gap-1 px-2 py-1 rounded border border-emerald-300 bg-emerald-50 text-emerald-800 font-semibold hover:bg-emerald-100 transition">
                       📄 Baixar modelo (.xlsx)
@@ -278,9 +278,9 @@ export default function FluxoFinanceiroUploadButton({
 
               {parsed && (
                 <div className="space-y-3">
-                  <div className="text-[11px] text-slate-500 font-mono">📄 {fileName}</div>
+                  <div className="text-[11px] text-ww-textMuted font-mono">📄 {fileName}</div>
                   {parsed.budget.nome_projeto_fluxo && (
-                    <div className="text-[12px] text-slate-700">
+                    <div className="text-[12px] text-ww-textMuted">
                       Projeto no arquivo: <strong>{parsed.budget.nome_projeto_fluxo}</strong>
                     </div>
                   )}
@@ -292,28 +292,28 @@ export default function FluxoFinanceiroUploadButton({
                       { l: "Previsto Serviços", v: parsed.budget.valor_previsto_servicos },
                       { l: "Resultado Bruto Esperado", v: parsed.budget.resultado_bruto_esperado },
                     ].map((k) => (
-                      <div key={k.l} className="flex justify-between border border-slate-200 rounded px-2 py-1.5 bg-slate-50">
-                        <span className="text-slate-600">{k.l}</span>
+                      <div key={k.l} className="flex justify-between border border-ww-border rounded px-2 py-1.5 bg-ww-rowHover">
+                        <span className="text-ww-textMuted">{k.l}</span>
                         <span className="font-mono font-semibold tabular-nums">{fmtBRL(k.v)}</span>
                       </div>
                     ))}
                     {parsed.budget.resultado_bruto_esperado_pct != null && (
-                      <div className="flex justify-between border border-slate-200 rounded px-2 py-1.5 bg-slate-50">
-                        <span className="text-slate-600">Resultado Bruto (%)</span>
+                      <div className="flex justify-between border border-ww-border rounded px-2 py-1.5 bg-ww-rowHover">
+                        <span className="text-ww-textMuted">Resultado Bruto (%)</span>
                         <span className="font-mono font-semibold tabular-nums">{(parsed.budget.resultado_bruto_esperado_pct * 100).toFixed(1)}%</span>
                       </div>
                     )}
                   </div>
 
-                  <div className="border border-slate-200 rounded overflow-hidden">
-                    <div className="px-3 py-2 bg-slate-50 text-[10px] uppercase font-bold text-slate-500 tracking-[0.5px]">
+                  <div className="border border-ww-border rounded overflow-hidden">
+                    <div className="px-3 py-2 bg-ww-rowHover text-[10px] uppercase font-bold text-ww-textMuted tracking-[0.5px]">
                       {parsed.etapas.length} Etapas encontradas
                     </div>
                     {parsed.etapas.length === 0 ? (
                       <div className="p-3 text-[11px] text-amber-700 italic">Nenhuma etapa (tabela &quot;Etapa | ... | Evento&quot; vazia?)</div>
                     ) : (
                       <table className="w-full text-[11px]">
-                        <thead className="bg-slate-100 text-slate-600 text-[10px] uppercase">
+                        <thead className="bg-ww-bg text-ww-textMuted text-[10px] uppercase">
                           <tr>
                             <th className="text-left px-2 py-1 w-8">#</th>
                             <th className="text-left px-2 py-1">Evento</th>
@@ -323,11 +323,11 @@ export default function FluxoFinanceiroUploadButton({
                         </thead>
                         <tbody>
                           {parsed.etapas.map((e, i) => (
-                            <tr key={i} className="border-t border-slate-200">
-                              <td className="px-2 py-1 text-slate-500 tabular-nums">{e.ordem}</td>
+                            <tr key={i} className="border-t border-ww-border">
+                              <td className="px-2 py-1 text-ww-textMuted tabular-nums">{e.ordem}</td>
                               <td className="px-2 py-1">{e.nome}</td>
-                              <td className="px-2 py-1 tabular-nums text-slate-700">{e.data_prevista ?? "—"}</td>
-                              <td className="px-2 py-1 text-right tabular-nums text-slate-500">{e.pct_total != null ? `${(e.pct_total * 100).toFixed(0)}%` : "—"}</td>
+                              <td className="px-2 py-1 tabular-nums text-ww-textMuted">{e.data_prevista ?? "—"}</td>
+                              <td className="px-2 py-1 text-right tabular-nums text-ww-textMuted">{e.pct_total != null ? `${(e.pct_total * 100).toFixed(0)}%` : "—"}</td>
                             </tr>
                           ))}
                         </tbody>
@@ -345,9 +345,9 @@ export default function FluxoFinanceiroUploadButton({
               )}
             </div>
 
-            <div className="px-5 py-3 border-t border-slate-200 flex justify-end gap-2">
+            <div className="px-5 py-3 border-t border-ww-border flex justify-end gap-2">
               <button onClick={() => !busy && setOpen(false)}
-                className="px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-100 rounded-md">Cancelar</button>
+                className="px-3 py-1.5 text-xs font-medium text-ww-textMuted hover:bg-ww-bg rounded-md">Cancelar</button>
               {parsed && (
                 <button onClick={apply} disabled={busy}
                   className="px-4 py-1.5 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-md shadow-sm disabled:opacity-40">

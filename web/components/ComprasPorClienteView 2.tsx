@@ -72,7 +72,7 @@ function faixaOf(pct: number | null): MargemFaixa {
   return "negativa";
 }
 function margemColor(pct: number | null): string {
-  if (pct == null) return "text-ww-textMuted";
+  if (pct == null) return "text-slate-500";
   if (pct >= 30) return "text-emerald-700 dark:text-emerald-300";
   if (pct >= 10) return "text-amber-700 dark:text-amber-300";
   if (pct >= 0)  return "text-orange-700 dark:text-orange-300";
@@ -322,7 +322,7 @@ export default function ComprasPorClienteView() {
               <span className="text-[20px] font-bold tabular-nums text-rose-800 dark:text-rose-200">−{brl(tot.custo)}</span>
             </div>
             {tot.custo > 0 && (
-              <div className="h-1 rounded-full overflow-hidden flex bg-ww-border ">
+              <div className="h-1 rounded-full overflow-hidden flex bg-slate-200 dark:bg-slate-700">
                 <div className="bg-amber-500"  style={{ width: `${(tot.compras / tot.custo) * 100}%` }} />
                 <div className="bg-rose-500"   style={{ width: `${(tot.despesas / tot.custo) * 100}%` }} />
                 <div className="bg-violet-500" style={{ width: `${(tot.mao / tot.custo) * 100}%` }} />
@@ -543,7 +543,7 @@ function Kpi({ tone, label, main, sub, subClass }: {
   const map = {
     emerald: { border: "border-emerald-200 dark:border-emerald-800", bg: "bg-emerald-50/70 dark:bg-emerald-950/30", labelC: "text-emerald-700 dark:text-emerald-300", mainC: "text-emerald-900 dark:text-emerald-50" },
     rose:    { border: "border-rose-200 dark:border-rose-800",       bg: "bg-rose-50/70 dark:bg-rose-950/30",       labelC: "text-rose-700 dark:text-rose-300",       mainC: "text-rose-900 dark:text-rose-50" },
-    slate:   { border: "border-ww-border ",     bg: "bg-ww-rowHover/70 ",     labelC: "text-ww-textMuted ",     mainC: "text-ww-text " },
+    slate:   { border: "border-slate-200 dark:border-slate-700",     bg: "bg-slate-50/70 dark:bg-slate-900/30",     labelC: "text-slate-700 dark:text-slate-300",     mainC: "text-slate-900 dark:text-slate-50" },
   }[tone];
   return (
     <div className={`rounded-xl border ${map.border} ${map.bg} p-4`}>
@@ -610,7 +610,7 @@ function DetalheModal({ alvo, onClose }: { alvo: DetalheAlvo; onClose: () => voi
           <div>
             <h3 className="text-[15px] font-bold text-ww-text">
               🔍 Memorial · {alvo.metric === "compras" ? "PCs aprovados" : "NFs faturadas"}
-              {alvo.tipo ? <span className="ml-2 text-[11px] font-normal bg-ww-bg px-2 py-0.5 rounded">{alvo.tipo}</span> : null}
+              {alvo.tipo ? <span className="ml-2 text-[11px] font-normal bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded">{alvo.tipo}</span> : null}
             </h3>
             <div className="text-[11.5px] text-ww-textMuted mt-0.5">
               Cliente: <strong>{alvo.cliente_nome}</strong>

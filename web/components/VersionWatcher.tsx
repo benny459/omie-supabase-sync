@@ -78,12 +78,12 @@ export default function VersionWatcher() {
               </div>
             </div>
             <button onClick={reload}
-              className="shrink-0 px-4 py-1.5 rounded-md bg-white text-emerald-700 hover:bg-emerald-50 font-bold text-[12px] transition shadow-sm">
+              className="shrink-0 px-4 py-1.5 rounded-md bg-ww-panel text-emerald-700 hover:bg-emerald-50 font-bold text-[12px] transition shadow-sm">
               🔄 Atualizar agora
             </button>
             <button onClick={() => setDismissed(true)}
               title="Fechar (aviso reaparece no próximo check)"
-              className="shrink-0 w-7 h-7 rounded flex items-center justify-center text-white/80 hover:text-white hover:bg-white/10 text-[18px] leading-none">
+              className="shrink-0 w-7 h-7 rounded flex items-center justify-center text-white/80 hover:text-white hover:bg-ww-panel/10 text-[18px] leading-none">
               ×
             </button>
           </div>

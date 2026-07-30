@@ -137,38 +137,38 @@ export default function PvOsComentarios({
     ? createPortal(
         <div ref={popRef}
              style={{ top: popPos.top, left: popPos.left }}
-             className="fixed z-[60] w-[380px] max-h-[420px] flex flex-col bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-md shadow-xl"
+             className="fixed z-[60] w-[380px] max-h-[420px] flex flex-col bg-ww-panel border border-ww-border rounded-md shadow-xl"
              onClick={(e) => e.stopPropagation()}>
-          <div className="px-3 py-2 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
-            <div className="text-[11px] font-bold uppercase tracking-[0.5px] text-slate-600 dark:text-slate-300 flex items-center gap-1.5">
+          <div className="px-3 py-2 border-b border-ww-border flex items-center justify-between">
+            <div className="text-[11px] font-bold uppercase tracking-[0.5px] text-ww-textMuted flex items-center gap-1.5">
               <span>💬</span>
               <span>Comentários da equipe</span>
               {count > 0 && (
-                <span className="text-[10px] font-semibold text-slate-400 tabular-nums">· {count}</span>
+                <span className="text-[10px] font-semibold text-ww-textFaint tabular-nums">· {count}</span>
               )}
             </div>
-            <span className="text-[10px] font-mono text-slate-400">{pvOsLabel}</span>
+            <span className="text-[10px] font-mono text-ww-textFaint">{pvOsLabel}</span>
           </div>
 
           {/* Lista */}
           <div className="flex-1 overflow-y-auto px-3 py-2 min-h-[80px]">
             {loading ? (
-              <div className="text-[11px] italic text-slate-500 text-center py-4">Carregando…</div>
+              <div className="text-[11px] italic text-ww-textMuted text-center py-4">Carregando…</div>
             ) : items.length === 0 ? (
-              <div className="text-[11px] italic text-slate-500 text-center py-4">
+              <div className="text-[11px] italic text-ww-textMuted text-center py-4">
                 Nenhum comentário ainda — seja o primeiro a deixar uma observação.
               </div>
             ) : (
               <ul className="space-y-2">
                 {items.map((c) => (
-                  <li key={c.id} className="rounded border border-slate-100 dark:border-slate-800 px-2.5 py-1.5 bg-slate-50/50 dark:bg-slate-800/30">
-                    <div className="flex items-center justify-between gap-2 text-[10px] text-slate-500 dark:text-slate-400">
-                      <span className="font-semibold text-slate-700 dark:text-slate-200 truncate" title={c.autor_email}>
+                  <li key={c.id} className="rounded border border-ww-border px-2.5 py-1.5 bg-ww-rowHover/50 ">
+                    <div className="flex items-center justify-between gap-2 text-[10px] text-ww-textMuted ">
+                      <span className="font-semibold text-ww-textMuted truncate" title={c.autor_email}>
                         {shortAuthor(c.autor_email)}
                       </span>
                       <span className="tabular-nums whitespace-nowrap">{fmtBRT(c.created_at)} BRT</span>
                     </div>
-                    <div className="text-[12px] text-slate-800 dark:text-slate-100 whitespace-pre-wrap mt-0.5">
+                    <div className="text-[12px] text-ww-text whitespace-pre-wrap mt-0.5">
                       {c.texto}
                     </div>
                   </li>
@@ -178,13 +178,13 @@ export default function PvOsComentarios({
           </div>
 
           {/* Compositor */}
-          <div className="px-3 py-2 border-t border-slate-100 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-950/40">
+          <div className="px-3 py-2 border-t border-ww-border bg-ww-rowHover/70 ">
             <textarea
               value={novoTexto}
               onChange={(e) => setNovoTexto(e.target.value)}
               placeholder="Escreva uma observação…"
               rows={2}
-              className="w-full text-[12px] px-2 py-1.5 rounded border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 focus:outline-none focus:border-sky-400 focus:ring-1 focus:ring-sky-200 dark:focus:ring-sky-900 resize-none"
+              className="w-full text-[12px] px-2 py-1.5 rounded border border-ww-border bg-ww-panel text-ww-text focus:outline-none focus:border-sky-400 focus:ring-1 focus:ring-sky-200 dark:focus:ring-sky-900 resize-none"
               onKeyDown={(e) => {
                 // Cmd/Ctrl+Enter posta
                 if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
@@ -194,12 +194,12 @@ export default function PvOsComentarios({
               }}
             />
             <div className="flex items-center justify-between mt-1.5">
-              <span className="text-[9.5px] text-slate-400">⌘+Enter pra enviar</span>
+              <span className="text-[9.5px] text-ww-textFaint">⌘+Enter pra enviar</span>
               <button type="button" onClick={() => void postar()}
                 disabled={posting || novoTexto.trim() === ""}
                 className={`px-2.5 py-1 rounded text-[11px] font-semibold transition ${
                   posting || novoTexto.trim() === ""
-                    ? "bg-slate-200 text-slate-400 cursor-not-allowed dark:bg-slate-800 dark:text-slate-600"
+                    ? "bg-ww-border text-ww-textFaint cursor-not-allowed "
                     : "bg-sky-600 text-white hover:bg-sky-700"
                 }`}>
                 {posting ? "Enviando…" : "Comentar"}
@@ -219,7 +219,7 @@ export default function PvOsComentarios({
         className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold border transition ${
           hasComments
             ? "border-sky-400 dark:border-sky-700 bg-sky-50 dark:bg-sky-950/40 text-sky-800 dark:text-sky-200 hover:bg-sky-100 dark:hover:bg-sky-900/50"
-            : "border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800"
+            : "border-ww-border bg-ww-panel text-ww-textMuted hover:bg-ww-rowHover dark:hover:bg-slate-800"
         }`}>
         <span className="text-[13px] leading-none">💬</span>
         {hasComments ? (

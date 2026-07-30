@@ -154,13 +154,13 @@ export default function RcExcelImport({ empresa = "SF" }: { empresa?: string }) 
 
       {open && (
         <div className="fixed inset-0 z-40 bg-slate-900/40 flex items-center justify-center p-4">
-          <div className="bg-white rounded-xl shadow-xl max-w-2xl w-full p-6 space-y-4">
+          <div className="bg-ww-panel rounded-xl shadow-xl max-w-2xl w-full p-6 space-y-4">
             <div className="flex justify-between items-center">
-              <h3 className="text-lg font-semibold text-slate-900">Importar RC via Excel</h3>
-              <button onClick={() => setOpen(false)} className="text-slate-400 hover:text-slate-800">×</button>
+              <h3 className="text-lg font-semibold text-ww-text">Importar RC via Excel</h3>
+              <button onClick={() => setOpen(false)} className="text-ww-textFaint hover:text-ww-text">×</button>
             </div>
 
-            <p className="text-sm text-slate-500">
+            <p className="text-sm text-ww-textMuted">
               A planilha precisa ter uma coluna <b>PC.Numero</b> e pelo menos uma das:
               RC.Numero · Descrição · Custo unit. · Custo total. Outras colunas são ignoradas.
             </p>
@@ -168,30 +168,30 @@ export default function RcExcelImport({ empresa = "SF" }: { empresa?: string }) 
             <div>
               <input ref={inputRef} type="file" accept=".xlsx,.xls"
                 onChange={onFile}
-                className="block w-full text-sm border border-slate-200 rounded p-2 file:mr-3 file:py-1 file:px-3 file:rounded file:border-0 file:bg-amber-500 file:text-white file:cursor-pointer hover:file:bg-amber-600" />
+                className="block w-full text-sm border border-ww-border rounded p-2 file:mr-3 file:py-1 file:px-3 file:rounded file:border-0 file:bg-amber-500 file:text-white file:cursor-pointer hover:file:bg-amber-600" />
             </div>
 
             {Object.keys(detected).length > 0 && (
-              <div className="text-xs bg-slate-50 rounded p-3 space-y-1">
-                <div className="font-medium text-slate-700">Colunas detectadas:</div>
+              <div className="text-xs bg-ww-rowHover rounded p-3 space-y-1">
+                <div className="font-medium text-ww-textMuted">Colunas detectadas:</div>
                 {Object.entries(detected).map(([k, v]) => (
-                  <div key={k} className=" text-slate-600">{k} → {v}</div>
+                  <div key={k} className=" text-ww-textMuted">{k} → {v}</div>
                 ))}
               </div>
             )}
 
             {rows.length > 0 && (
-              <div className="text-xs text-slate-500 bg-emerald-50 border border-emerald-200 rounded p-3">
+              <div className="text-xs text-ww-textMuted bg-emerald-50 border border-emerald-200 rounded p-3">
                 {rows.length} linhas prontas. Exemplo primeiro:{" "}
                 <code className="">{JSON.stringify(rows[0])}</code>
               </div>
             )}
 
-            {status && <div className="text-xs text-slate-700 whitespace-pre-wrap">{status}</div>}
+            {status && <div className="text-xs text-ww-textMuted whitespace-pre-wrap">{status}</div>}
 
             <div className="flex justify-end gap-2">
               <button onClick={() => { setRows([]); setDetected({}); setStatus(""); if (inputRef.current) inputRef.current.value=""; }}
-                className="px-3 py-1.5 text-sm rounded-md bg-slate-200 hover:bg-slate-300 text-slate-700">Limpar</button>
+                className="px-3 py-1.5 text-sm rounded-md bg-ww-border hover:bg-slate-300 text-ww-textMuted">Limpar</button>
               <button onClick={applyImport} disabled={busy || !rows.length}
                 className="px-3 py-1.5 text-sm rounded-md bg-amber-600 hover:bg-amber-700 text-white disabled:opacity-40">
                 {busy ? "Processando…" : "Aplicar Import"}

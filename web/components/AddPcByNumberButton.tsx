@@ -101,26 +101,26 @@ export default function AddPcByNumberButton() {
 
       {open && (
         <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4" onClick={close}>
-          <div className="bg-white rounded-xl shadow-2xl max-w-lg w-full p-5 space-y-4" onClick={(e) => e.stopPropagation()}>
+          <div className="bg-ww-panel rounded-xl shadow-2xl max-w-lg w-full p-5 space-y-4" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-start justify-between">
               <div>
-                <h3 className="font-semibold text-slate-900">Adicionar PCs ao módulo Standalone</h3>
-                <p className="text-xs text-slate-500 mt-0.5">
+                <h3 className="font-semibold text-ww-text">Adicionar PCs ao módulo Standalone</h3>
+                <p className="text-xs text-ww-textMuted mt-0.5">
                   Insira um ou mais números de PC. Sistema busca os dados no Omie automaticamente.
                 </p>
               </div>
-              <button onClick={close} className="text-slate-400 hover:text-slate-800 text-lg leading-none">×</button>
+              <button onClick={close} className="text-ww-textFaint hover:text-ww-text text-lg leading-none">×</button>
             </div>
 
             <div className="flex items-center gap-3">
-              <label className="text-xs font-medium text-slate-600">Empresa:</label>
-              <div className="flex gap-1 bg-slate-100 p-0.5 rounded-lg">
+              <label className="text-xs font-medium text-ww-textMuted">Empresa:</label>
+              <div className="flex gap-1 bg-ww-bg p-0.5 rounded-lg">
                 {(["SF","CD","WW"] as const).map(e => (
                   <button
                     key={e}
                     onClick={() => setEmpresa(e)}
                     className={`px-3 py-1 text-xs font-semibold rounded-md transition ${
-                      empresa === e ? "bg-white shadow-sm text-slate-900" : "text-slate-600 hover:text-slate-900"
+                      empresa === e ? "bg-ww-panel shadow-sm text-ww-text" : "text-ww-textMuted hover:text-ww-text"
                     }`}
                   >{e}</button>
                 ))}
@@ -135,28 +135,28 @@ export default function AddPcByNumberButton() {
                 rows={5}
                 placeholder={"4348\n4360\n4372"}
                 disabled={busy}
-                className="w-full p-3 text-sm  border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-400/50 focus:border-amber-400"
+                className="w-full p-3 text-sm  border border-ww-border rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-400/50 focus:border-amber-400"
               />
-              <div className="flex justify-between text-[11px] text-slate-500 mt-1">
+              <div className="flex justify-between text-[11px] text-ww-textMuted mt-1">
                 <span>Separe por linha, vírgula, espaço ou tab.</span>
                 <span className="tabular-nums">{count} número(s)</span>
               </div>
             </div>
 
             {results && (
-              <div className="max-h-[200px] overflow-y-auto border border-slate-200 rounded-lg bg-slate-50">
+              <div className="max-h-[200px] overflow-y-auto border border-ww-border rounded-lg bg-ww-rowHover">
                 {results.map((r, i) => (
-                  <div key={i} className={`flex items-center justify-between px-3 py-1.5 text-xs border-b border-slate-200 last:border-0 ${
+                  <div key={i} className={`flex items-center justify-between px-3 py-1.5 text-xs border-b border-ww-border last:border-0 ${
                     r.created ? "bg-emerald-50" : r.error ? "bg-rose-50" : ""
                   }`}>
-                    <span className=" text-slate-700">{r.input}</span>
+                    <span className=" text-ww-textMuted">{r.input}</span>
                     {r.created && (
                       <span className="text-emerald-700 font-medium">
                         ✓ Adicionado (ncod {r.found?.ncod_ped})
                       </span>
                     )}
                     {r.error && <span className="text-rose-700 font-medium">✗ {r.error}</span>}
-                    {!r.created && !r.error && <span className="text-slate-400">…</span>}
+                    {!r.created && !r.error && <span className="text-ww-textFaint">…</span>}
                   </div>
                 ))}
               </div>
@@ -165,7 +165,7 @@ export default function AddPcByNumberButton() {
             <div className="flex justify-end gap-2 pt-1">
               <button
                 onClick={close}
-                className="px-3 py-1.5 text-xs font-medium text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-md transition"
+                className="px-3 py-1.5 text-xs font-medium text-ww-textMuted hover:text-ww-text hover:bg-ww-bg rounded-md transition"
               >
                 Fechar
               </button>

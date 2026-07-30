@@ -452,7 +452,7 @@ function PremiumKpi({ eyebrow, main, accent, sub, iconGlyph }: {
     emerald: { border: "border-emerald-200 dark:border-emerald-800", bg: "bg-gradient-to-br from-emerald-50 to-white dark:from-emerald-950/40 dark:to-transparent", text: "text-emerald-900 dark:text-emerald-50", icon: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/60 dark:text-emerald-300", ring: "ring-emerald-500/10" },
     rose:    { border: "border-rose-200 dark:border-rose-800",       bg: "bg-gradient-to-br from-rose-50 to-white dark:from-rose-950/40 dark:to-transparent",       text: "text-rose-900 dark:text-rose-50",       icon: "bg-rose-100 text-rose-700 dark:bg-rose-900/60 dark:text-rose-300",       ring: "ring-rose-500/10" },
     amber:   { border: "border-amber-200 dark:border-amber-800",     bg: "bg-gradient-to-br from-amber-50 to-white dark:from-amber-950/40 dark:to-transparent",     text: "text-amber-900 dark:text-amber-50",     icon: "bg-amber-100 text-amber-700 dark:bg-amber-900/60 dark:text-amber-300",     ring: "ring-amber-500/10" },
-    slate:   { border: "border-ww-border ",     bg: "bg-gradient-to-br from-slate-50 to-white dark:from-slate-900/40 dark:to-transparent",     text: "text-ww-text ",     icon: "bg-ww-bg text-ww-textMuted ",     ring: "ring-slate-500/10" },
+    slate:   { border: "border-slate-200 dark:border-slate-700",     bg: "bg-gradient-to-br from-slate-50 to-white dark:from-slate-900/40 dark:to-transparent",     text: "text-slate-900 dark:text-slate-50",     icon: "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300",     ring: "ring-slate-500/10" },
   };
   const a = A[accent];
   return (

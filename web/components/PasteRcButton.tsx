@@ -94,16 +94,16 @@ export default function PasteRcButton({
 
       {open && (
         <div className="fixed inset-0 z-50 bg-slate-900/40 flex items-center justify-center p-4" onClick={() => setOpen(false)}>
-          <div className="bg-white rounded-xl shadow-xl max-w-2xl w-full p-5 space-y-3" onClick={(e) => e.stopPropagation()}>
+          <div className="bg-ww-panel rounded-xl shadow-xl max-w-2xl w-full p-5 space-y-3" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-start justify-between">
               <div>
-                <h3 className="font-semibold text-slate-900">Colar Excel em <span className="">{pv_os_label}</span></h3>
-                <p className="text-xs text-slate-500 mt-0.5">
+                <h3 className="font-semibold text-ww-text">Colar Excel em <span className="">{pv_os_label}</span></h3>
+                <p className="text-xs text-ww-textMuted mt-0.5">
                   Cole do Excel (Ctrl+V). Ordem esperada das colunas:<br/>
                   <code className="text-[11px]">RC.Numero · RC.Descrição · RC.Custo · RC.Custo Total</code>
                 </p>
               </div>
-              <button onClick={() => setOpen(false)} className="text-slate-400 hover:text-slate-800">×</button>
+              <button onClick={() => setOpen(false)} className="text-ww-textFaint hover:text-ww-text">×</button>
             </div>
 
             <textarea
@@ -112,18 +112,18 @@ export default function PasteRcButton({
               onChange={(e) => setText(e.target.value)}
               rows={10}
               placeholder={`6431\tCurva longa 32mm PVC\t303,90\t303,90\n\tTE 32mm PVC\t\t\n\tVálvula esfera\t\t`}
-              className="w-full p-3 text-xs  border border-slate-200 rounded focus:outline-none focus:ring-2 focus:ring-amber-400"
+              className="w-full p-3 text-xs  border border-ww-border rounded focus:outline-none focus:ring-2 focus:ring-amber-400"
             />
 
-            {msg && <div className="text-xs text-slate-700">{msg}</div>}
+            {msg && <div className="text-xs text-ww-textMuted">{msg}</div>}
 
             <div className="flex justify-between items-center">
-              <span className="text-[11px] text-slate-400">
+              <span className="text-[11px] text-ww-textFaint">
                 {text.split(/\r?\n/).filter(l => l.trim()).length} linha(s) detectada(s)
               </span>
               <div className="flex gap-2">
                 <button onClick={() => { setText(""); setMsg(null); }}
-                        className="px-3 py-1.5 text-xs rounded bg-slate-200 hover:bg-slate-300 text-slate-700">Limpar</button>
+                        className="px-3 py-1.5 text-xs rounded bg-ww-border hover:bg-slate-300 text-ww-textMuted">Limpar</button>
                 <button onClick={apply} disabled={busy || !text.trim()}
                         className="px-3 py-1.5 text-xs rounded bg-amber-600 hover:bg-amber-700 text-white disabled:opacity-40">
                   {busy ? "…" : "Criar linhas"}

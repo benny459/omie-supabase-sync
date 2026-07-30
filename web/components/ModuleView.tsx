@@ -84,10 +84,10 @@ export default function ModuleView({
       {/* Header */}
       <div className="flex items-end justify-between gap-4 flex-wrap">
         <div>
-          <h1 className="text-2xl md:text-3xl font-semibold text-slate-900 capitalize">
+          <h1 className="text-2xl md:text-3xl font-semibold text-ww-text capitalize">
             {title}
           </h1>
-          <p className="text-slate-500 text-sm mt-1">
+          <p className="text-ww-textMuted text-sm mt-1">
             Mostrando {rows.length}
             {totalCount != null ? ` de ${totalCount}` : ""} registros
           </p>
@@ -116,8 +116,8 @@ export default function ModuleView({
             }
             className={`px-3 py-1 rounded-full text-xs font-medium border transition ${
               openGroups[g.key]
-                ? `${g.tint} ${g.border} text-slate-800`
-                : "bg-white border-slate-200 text-slate-500 hover:bg-slate-50"
+                ? `${g.tint} ${g.border} text-ww-text`
+                : "bg-ww-panel border-ww-border text-ww-textMuted hover:bg-ww-rowHover"
             }`}
           >
             {openGroups[g.key] ? "▼" : "▶"} {g.label}
@@ -127,7 +127,7 @@ export default function ModuleView({
       </div>
 
       {/* Table */}
-      <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white shadow-sm">
+      <div className="overflow-x-auto rounded-lg border border-ww-border bg-ww-panel shadow-sm">
         <table className="text-xs">
           <thead className="sticky top-0">
             {/* Linha 1: grupos */}
@@ -137,7 +137,7 @@ export default function ModuleView({
                   <th
                     key={g.key}
                     colSpan={g.columns.length}
-                    className={`${g.tint} ${g.border} border-t border-b border-l text-xs font-semibold text-slate-700 px-3 py-1.5 text-left`}
+                    className={`${g.tint} ${g.border} border-t border-b border-l text-xs font-semibold text-ww-textMuted px-3 py-1.5 text-left`}
                   >
                     {g.label}
                   </th>
@@ -145,11 +145,11 @@ export default function ModuleView({
               )}
             </tr>
             {/* Linha 2: colunas */}
-            <tr className="bg-slate-50 text-slate-600 uppercase text-[10px] tracking-wider">
+            <tr className="bg-ww-rowHover text-ww-textMuted uppercase text-[10px] tracking-wider">
               {visibleColumns.map(({ col, group }) => (
                 <th
                   key={`${group.key}.${col.key}`}
-                  className={`px-3 py-2 whitespace-nowrap border-b border-slate-200 ${
+                  className={`px-3 py-2 whitespace-nowrap border-b border-ww-border ${
                     col.align === "right"
                       ? "text-right"
                       : col.align === "center"
@@ -166,7 +166,7 @@ export default function ModuleView({
             {rows.map((r, i) => (
               <tr
                 key={`${(r as { empresa?: string }).empresa}-${(r as { ncod_ped?: number }).ncod_ped}-${i}`}
-                className="hover:bg-slate-50/60 cursor-pointer"
+                className="hover:bg-ww-rowHover/60 cursor-pointer"
                 onClick={() =>
                   setSelected({
                     empresa: (r as { empresa: string }).empresa,
@@ -206,7 +206,7 @@ export default function ModuleView({
                           : col.align === "center"
                             ? "text-center"
                             : "text-left"
-                      } ${col.format === "mono" ? " text-slate-900" : "text-slate-700"}`}
+                      } ${col.format === "mono" ? " text-ww-text" : "text-ww-textMuted"}`}
                     >
                       {formatted}
                     </td>

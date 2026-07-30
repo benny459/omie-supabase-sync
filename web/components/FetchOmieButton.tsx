@@ -62,7 +62,7 @@ export default function FetchOmieButton() {
           <form
             onSubmit={submit}
             onClick={(e) => e.stopPropagation()}
-            className="bg-white dark:bg-ww-panel rounded-xl shadow-2xl max-w-md w-full p-5 space-y-4 border border-ww-border"
+            className="bg-ww-panel dark:bg-ww-panel rounded-xl shadow-2xl max-w-md w-full p-5 space-y-4 border border-ww-border"
           >
             <div className="flex items-start justify-between">
               <div>
@@ -82,7 +82,7 @@ export default function FetchOmieButton() {
                     className={`px-3 py-2 rounded-md text-[12px] font-bold border-2 transition ${
                       empresa === e
                         ? "bg-slate-900 text-white border-slate-900"
-                        : "bg-white text-slate-600 border-slate-200 hover:border-slate-400"
+                        : "bg-ww-panel text-ww-textMuted border-ww-border hover:border-ww-borderStrong"
                     }`}>
                     {e}
                   </button>
@@ -111,11 +111,11 @@ export default function FetchOmieButton() {
               <div className={`text-xs ${resp.cached ? "text-amber-800 bg-amber-50 border-amber-200" : "text-emerald-800 bg-emerald-50 border-emerald-200"} border rounded-md px-3 py-2 space-y-1`}>
                 <div className="font-semibold">{resp.cached ? "ℹ" : "✓"} {resp.message}</div>
                 <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 mt-1 text-[11px]">
-                  <span className="text-slate-500">PC #</span><span className="font-mono">{resp.pc_numero}</span>
-                  <span className="text-slate-500">Fornecedor</span><span>{resp.fornecedor ?? "—"}</span>
-                  <span className="text-slate-500">Valor</span><span className="font-mono">{fmtBRL(resp.valor_total)}</span>
-                  <span className="text-slate-500">Etapa</span><span>{resp.etapa ?? "—"}</span>
-                  {resp.cnum_pedido && (<><span className="text-slate-500">PV/OS</span><span className="font-mono">{resp.cnum_pedido}</span></>)}
+                  <span className="text-ww-textMuted">PC #</span><span className="font-mono">{resp.pc_numero}</span>
+                  <span className="text-ww-textMuted">Fornecedor</span><span>{resp.fornecedor ?? "—"}</span>
+                  <span className="text-ww-textMuted">Valor</span><span className="font-mono">{fmtBRL(resp.valor_total)}</span>
+                  <span className="text-ww-textMuted">Etapa</span><span>{resp.etapa ?? "—"}</span>
+                  {resp.cnum_pedido && (<><span className="text-ww-textMuted">PV/OS</span><span className="font-mono">{resp.cnum_pedido}</span></>)}
                 </div>
               </div>
             )}

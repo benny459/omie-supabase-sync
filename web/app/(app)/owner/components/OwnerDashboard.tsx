@@ -66,14 +66,14 @@ export default function OwnerDashboard() {
       {/* Header */}
       <div className="flex items-end justify-between gap-4 flex-wrap">
         <div>
-          <h1 className="text-2xl md:text-3xl font-semibold text-slate-900 tracking-tight">Owner Dashboard</h1>
-          <p className="text-slate-500 text-sm mt-1">Visão consolidada — Painel WW + CRM + App WW</p>
+          <h1 className="text-2xl md:text-3xl font-semibold text-ww-text tracking-tight">Owner Dashboard</h1>
+          <p className="text-ww-textMuted text-sm mt-1">Visão consolidada — Painel WW + CRM + App WW</p>
         </div>
         <div className="flex items-center gap-1">
           {(["3m", "6m", "12m", "ytd"] as Periodo[]).map((p) => (
             <button key={p} onClick={() => setPeriodo(p)}
               className={`px-3 py-1.5 text-[11px] font-semibold rounded-md border transition ${
-                periodo === p ? "bg-slate-900 text-white border-slate-900" : "bg-white text-slate-600 border-slate-200 hover:border-slate-400"
+                periodo === p ? "bg-slate-900 text-white border-slate-900" : "bg-ww-panel text-ww-textMuted border-ww-border hover:border-ww-borderStrong"
               }`}>{p === "ytd" ? "YTD" : p.toUpperCase()}</button>
           ))}
         </div>
@@ -85,7 +85,7 @@ export default function OwnerDashboard() {
       <KpiCards summary={summary} pipeline={pipeline} loading={loading} />
 
       {/* Tabs */}
-      <div className="border-b border-slate-200 flex items-center gap-1 overflow-x-auto">
+      <div className="border-b border-ww-border flex items-center gap-1 overflow-x-auto">
         {([
           { k: "pl", label: "P&L" },
           { k: "compras", label: "Compras" },
@@ -95,7 +95,7 @@ export default function OwnerDashboard() {
         ] as { k: Tab; label: string }[]).map(({ k, label }) => (
           <button key={k} onClick={() => setTab(k)}
             className={`px-4 py-2 text-sm font-semibold whitespace-nowrap border-b-2 transition ${
-              tab === k ? "border-emerald-600 text-emerald-700" : "border-transparent text-slate-500 hover:text-slate-800"
+              tab === k ? "border-emerald-600 text-emerald-700" : "border-transparent text-ww-textMuted hover:text-ww-text"
             }`}>{label}</button>
         ))}
       </div>
@@ -130,12 +130,12 @@ function KpiCards({ summary, pipeline, loading }: { summary: Summary | null; pip
   );
 }
 
-function Kpi({ label, value, delta, deltaColor = "text-slate-500", loading }: { label: string; value: string; delta?: string; deltaColor?: string; loading?: boolean }) {
+function Kpi({ label, value, delta, deltaColor = "text-ww-textMuted", loading }: { label: string; value: string; delta?: string; deltaColor?: string; loading?: boolean }) {
   return (
-    <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
-      <div className="text-[10px] uppercase tracking-wider font-semibold text-slate-500">{label}</div>
-      <div className="text-[22px] font-semibold tabular-nums tracking-tight text-slate-900 mt-1">
-        {loading ? <span className="text-slate-300">…</span> : value}
+    <div className="bg-ww-panel border border-ww-border rounded-xl p-4 shadow-sm">
+      <div className="text-[10px] uppercase tracking-wider font-semibold text-ww-textMuted">{label}</div>
+      <div className="text-[22px] font-semibold tabular-nums tracking-tight text-ww-text mt-1">
+        {loading ? <span className="text-ww-textFaint">…</span> : value}
       </div>
       {delta && <div className={`text-[11px] mt-0.5 ${deltaColor}`}>{delta}</div>}
     </div>
@@ -143,14 +143,14 @@ function Kpi({ label, value, delta, deltaColor = "text-slate-500", loading }: { 
 }
 
 function PLTab({ summary, loading }: { summary: Summary | null; loading: boolean }) {
-  if (loading) return <div className="text-slate-400 text-sm py-8 text-center">Carregando…</div>;
-  if (!summary || !summary.serie_mensal.length) return <div className="text-slate-500 text-sm py-8 text-center">Sem dados no período.</div>;
+  if (loading) return <div className="text-ww-textFaint text-sm py-8 text-center">Carregando…</div>;
+  if (!summary || !summary.serie_mensal.length) return <div className="text-ww-textMuted text-sm py-8 text-center">Sem dados no período.</div>;
   const max = Math.max(...summary.serie_mensal.map((m) => Math.max(m.receita, m.compras))) || 1;
 
   return (
     <div className="space-y-4">
-      <div className="bg-white border border-slate-200 rounded-xl p-4">
-        <h3 className="text-sm font-semibold text-slate-800 mb-4">Receita × Compras por mês</h3>
+      <div className="bg-ww-panel border border-ww-border rounded-xl p-4">
+        <h3 className="text-sm font-semibold text-ww-text mb-4">Receita × Compras por mês</h3>
         <div className="grid gap-2" style={{ gridTemplateColumns: `repeat(${summary.serie_mensal.length}, minmax(0, 1fr))` }}>
           {summary.serie_mensal.map((m) => (
             <div key={m.mes} className="flex flex-col items-center gap-1">
@@ -158,36 +158,36 @@ function PLTab({ summary, loading }: { summary: Summary | null; loading: boolean
                 <div className="flex-1 bg-emerald-400 rounded-t" style={{ height: `${(m.receita / max) * 100}%` }} title={`Receita ${fmtBRL(m.receita)}`} />
                 <div className="flex-1 bg-rose-400 rounded-t" style={{ height: `${(m.compras / max) * 100}%` }} title={`Compras ${fmtBRL(m.compras)}`} />
               </div>
-              <div className="text-[9px] font-mono text-slate-500">{m.mes.slice(2)}</div>
+              <div className="text-[9px] font-mono text-ww-textMuted">{m.mes.slice(2)}</div>
             </div>
           ))}
         </div>
-        <div className="flex items-center gap-4 text-[11px] mt-3 text-slate-600">
+        <div className="flex items-center gap-4 text-[11px] mt-3 text-ww-textMuted">
           <span className="flex items-center gap-1"><span className="w-3 h-3 bg-emerald-400 rounded inline-block" /> Receita realizada</span>
           <span className="flex items-center gap-1"><span className="w-3 h-3 bg-rose-400 rounded inline-block" /> Compras aprovadas</span>
         </div>
       </div>
 
       <div className="grid grid-cols-2 gap-3">
-        <div className="bg-white border border-slate-200 rounded-xl p-4">
-          <div className="text-[10px] uppercase tracking-wider font-semibold text-slate-500">Receita realizada</div>
+        <div className="bg-ww-panel border border-ww-border rounded-xl p-4">
+          <div className="text-[10px] uppercase tracking-wider font-semibold text-ww-textMuted">Receita realizada</div>
           <div className="text-[18px] font-semibold tabular-nums">{fmtBRL(summary.pl.receita_realizada)}</div>
-          <div className="text-[11px] text-slate-500 mt-1">Receita contratada (PVs no período): {fmtBRL(summary.pl.receita_contratada)}</div>
+          <div className="text-[11px] text-ww-textMuted mt-1">Receita contratada (PVs no período): {fmtBRL(summary.pl.receita_contratada)}</div>
         </div>
-        <div className="bg-white border border-slate-200 rounded-xl p-4">
-          <div className="text-[10px] uppercase tracking-wider font-semibold text-slate-500">Custo de compras</div>
+        <div className="bg-ww-panel border border-ww-border rounded-xl p-4">
+          <div className="text-[10px] uppercase tracking-wider font-semibold text-ww-textMuted">Custo de compras</div>
           <div className="text-[18px] font-semibold tabular-nums">{fmtBRL(summary.pl.custo_compras)}</div>
-          <div className="text-[11px] text-slate-500 mt-1">Margem bruta: {fmtBRL(summary.pl.margem_bruta)} ({fmtPct(summary.pl.margem_pct)})</div>
+          <div className="text-[11px] text-ww-textMuted mt-1">Margem bruta: {fmtBRL(summary.pl.margem_bruta)} ({fmtPct(summary.pl.margem_pct)})</div>
         </div>
       </div>
 
-      <p className="text-[10px] text-slate-400">⚠ Receita estimada usando <code>contas_receber.valor_documento</code> com <code>status_titulo=LIQUIDADO</code>. <code>valor_pago</code> não existe nessa tabela. Pra precisão real, cruzar com extratos.</p>
+      <p className="text-[10px] text-ww-textFaint">⚠ Receita estimada usando <code>contas_receber.valor_documento</code> com <code>status_titulo=LIQUIDADO</code>. <code>valor_pago</code> não existe nessa tabela. Pra precisão real, cruzar com extratos.</p>
     </div>
   );
 }
 
 function ComprasTab({ summary, loading }: { summary: Summary | null; loading: boolean }) {
-  if (loading) return <div className="text-slate-400 text-sm py-8 text-center">Carregando…</div>;
+  if (loading) return <div className="text-ww-textFaint text-sm py-8 text-center">Carregando…</div>;
   if (!summary) return null;
   return (
     <div className="space-y-4">
@@ -208,17 +208,17 @@ function ComprasTab({ summary, loading }: { summary: Summary | null; loading: bo
 function RankingTable({ title, items }: { title: string; items: { nome: string; total: number }[] }) {
   const max = items.reduce((m, x) => Math.max(m, x.total), 0) || 1;
   return (
-    <div className="bg-white border border-slate-200 rounded-xl p-4">
-      <h3 className="text-sm font-semibold text-slate-800 mb-3">{title}</h3>
-      {items.length === 0 ? <p className="text-xs text-slate-400">Sem dados</p> : (
+    <div className="bg-ww-panel border border-ww-border rounded-xl p-4">
+      <h3 className="text-sm font-semibold text-ww-text mb-3">{title}</h3>
+      {items.length === 0 ? <p className="text-xs text-ww-textFaint">Sem dados</p> : (
         <div className="space-y-1.5">
           {items.map((it) => (
             <div key={it.nome} className="text-[11px]">
               <div className="flex justify-between gap-2">
-                <span className="truncate text-slate-700" title={it.nome}>{it.nome}</span>
-                <span className="font-mono tabular-nums text-slate-900 font-semibold">{fmtBRL(it.total)}</span>
+                <span className="truncate text-ww-textMuted" title={it.nome}>{it.nome}</span>
+                <span className="font-mono tabular-nums text-ww-text font-semibold">{fmtBRL(it.total)}</span>
               </div>
-              <div className="h-1 bg-slate-100 rounded mt-0.5 overflow-hidden">
+              <div className="h-1 bg-ww-bg rounded mt-0.5 overflow-hidden">
                 <div className="h-full bg-emerald-400" style={{ width: `${(it.total / max) * 100}%` }} />
               </div>
             </div>
@@ -230,7 +230,7 @@ function RankingTable({ title, items }: { title: string; items: { nome: string; 
 }
 
 function PipelineTab({ pipeline, loading }: { pipeline: Pipeline | null; loading: boolean }) {
-  if (loading) return <div className="text-slate-400 text-sm py-8 text-center">Carregando…</div>;
+  if (loading) return <div className="text-ww-textFaint text-sm py-8 text-center">Carregando…</div>;
   if (!pipeline?.configured) {
     return (
       <div className="bg-amber-50 border border-amber-200 rounded-xl p-6 text-sm text-amber-900">
@@ -254,10 +254,10 @@ function PipelineTab({ pipeline, loading }: { pipeline: Pipeline | null; loading
         <RankingTable title="Por fase" items={(pipeline.por_fase ?? []).map((f) => ({ nome: f.fase, total: f.valor }))} />
         <RankingTable title="Por tipo" items={(pipeline.por_tipo ?? []).map((f) => ({ nome: f.tipo, total: f.valor }))} />
       </div>
-      <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
-        <h3 className="text-sm font-semibold text-slate-800 p-4 border-b border-slate-100">Propostas ativas (top 100)</h3>
+      <div className="bg-ww-panel border border-ww-border rounded-xl overflow-hidden">
+        <h3 className="text-sm font-semibold text-ww-text p-4 border-b border-ww-border">Propostas ativas (top 100)</h3>
         <table className="w-full text-[11.5px]">
-          <thead className="bg-slate-50 text-slate-600 border-b border-slate-200">
+          <thead className="bg-ww-rowHover text-ww-textMuted border-b border-ww-border">
             <tr>
               <th className="text-left px-3 py-2">#</th>
               <th className="text-left px-2 py-2">Empresa</th>
@@ -270,11 +270,11 @@ function PipelineTab({ pipeline, loading }: { pipeline: Pipeline | null; loading
           </thead>
           <tbody>
             {(pipeline.propostas ?? []).map((p, i) => (
-              <tr key={String(p.numero) + i} className="border-b border-slate-100">
+              <tr key={String(p.numero) + i} className="border-b border-ww-border">
                 <td className="px-3 py-1.5 font-mono">{p.numero}</td>
                 <td className="px-2 py-1.5 truncate max-w-[180px]">{p.empresa_nome}</td>
                 <td className="px-2 py-1.5 truncate max-w-[140px]">{p.projeto}</td>
-                <td className="px-2 py-1.5"><span className="px-1.5 py-0.5 text-[10px] bg-slate-100 rounded">{p.status}</span></td>
+                <td className="px-2 py-1.5"><span className="px-1.5 py-0.5 text-[10px] bg-ww-bg rounded">{p.status}</span></td>
                 <td className="px-2 py-1.5 text-right font-mono tabular-nums">{fmtBRL(p.valor)}</td>
                 <td className="px-2 py-1.5 text-right">{p.probabilidade ?? 0}%</td>
                 <td className="px-2 py-1.5 truncate max-w-[120px]">{p.responsavel}</td>
@@ -288,7 +288,7 @@ function PipelineTab({ pipeline, loading }: { pipeline: Pipeline | null; loading
 }
 
 function OperacoesTab({ operacoes, loading }: { operacoes: Operacoes | null; loading: boolean }) {
-  if (loading) return <div className="text-slate-400 text-sm py-8 text-center">Carregando…</div>;
+  if (loading) return <div className="text-ww-textFaint text-sm py-8 text-center">Carregando…</div>;
   if (!operacoes?.configured) {
     return (
       <div className="bg-amber-50 border border-amber-200 rounded-xl p-6 text-sm text-amber-900">
@@ -310,10 +310,10 @@ function OperacoesTab({ operacoes, loading }: { operacoes: Operacoes | null; loa
       </div>
       <div className="grid md:grid-cols-2 gap-3">
         <RankingTable title="OSs por tipo de serviço" items={(operacoes.por_tipo ?? []).map((t) => ({ nome: t.tipo, total: t.qtd }))} />
-        <div className="bg-white border border-slate-200 rounded-xl p-4">
-          <h3 className="text-sm font-semibold text-slate-800 mb-3">Ranking técnicos</h3>
+        <div className="bg-ww-panel border border-ww-border rounded-xl p-4">
+          <h3 className="text-sm font-semibold text-ww-text mb-3">Ranking técnicos</h3>
           <table className="w-full text-[11.5px]">
-            <thead className="text-slate-500 border-b border-slate-200">
+            <thead className="text-ww-textMuted border-b border-ww-border">
               <tr>
                 <th className="text-left py-1.5">Técnico</th>
                 <th className="text-right py-1.5">OSs</th>
@@ -322,7 +322,7 @@ function OperacoesTab({ operacoes, loading }: { operacoes: Operacoes | null; loa
             </thead>
             <tbody>
               {(operacoes.ranking_tecnicos ?? []).slice(0, 15).map((t) => (
-                <tr key={t.id} className="border-b border-slate-100">
+                <tr key={t.id} className="border-b border-ww-border">
                   <td className="py-1.5 truncate">{t.nome}</td>
                   <td className="py-1.5 text-right font-mono">{fmtNum(t.oss)}</td>
                   <td className="py-1.5 text-right font-mono tabular-nums">{fmtBRL(t.despesas)}</td>

@@ -186,9 +186,9 @@ export default function ProjetoEtapasBlock({
                 {openHist === r.id && (
                   <>
                     <div className="fixed inset-0 z-40" onClick={() => setOpenHist(null)} />
-                    <div className="absolute right-16 top-full mt-1 z-50 min-w-[260px] bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-md shadow-lg p-2"
+                    <div className="absolute right-16 top-full mt-1 z-50 min-w-[260px] bg-ww-panel border border-ww-border rounded-md shadow-lg p-2"
                          onClick={(e) => e.stopPropagation()}>
-                      <div className="text-[10px] font-bold uppercase text-slate-500 dark:text-slate-400 mb-1.5 px-1">
+                      <div className="text-[10px] font-bold uppercase text-ww-textMuted mb-1.5 px-1">
                         Histórico ({r.historico.length + 1} datas)
                       </div>
                       <ol className="space-y-1 max-h-[240px] overflow-y-auto">
@@ -198,10 +198,10 @@ export default function ProjetoEtapasBlock({
                         </li>
                         {[...r.historico].reverse().map((h, idx) => (
                           <li key={idx} className="flex items-start gap-2 px-1 py-1 rounded">
-                            <span className="shrink-0 text-[9px] font-bold px-1 py-0.5 rounded bg-slate-200 text-slate-700">v-{idx + 1}</span>
+                            <span className="shrink-0 text-[9px] font-bold px-1 py-0.5 rounded bg-ww-border text-ww-textMuted">v-{idx + 1}</span>
                             <div className="flex-1 text-[11px]">
                               <div className="tabular-nums">{fmtBR(h.data)}</div>
-                              <div className="text-[10px] text-slate-500">{new Date(h.at).toLocaleDateString("pt-BR")} · {h.por}</div>
+                              <div className="text-[10px] text-ww-textMuted">{new Date(h.at).toLocaleDateString("pt-BR")} · {h.por}</div>
                             </div>
                           </li>
                         ))}

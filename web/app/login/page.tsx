@@ -27,8 +27,8 @@ export default function LoginPage() {
   }
 
   return (
-    <main className="min-h-screen flex items-center justify-center bg-slate-50 p-6">
-      <div className="w-full max-w-md bg-white rounded-xl border border-slate-200 p-8 shadow-sm">
+    <main className="min-h-screen flex items-center justify-center bg-ww-rowHover p-6">
+      <div className="w-full max-w-md bg-ww-panel rounded-xl border border-ww-border p-8 shadow-sm">
         <div className="flex flex-col items-center mb-6">
           <img
             src="/logo-waterworks.svg"
@@ -36,8 +36,8 @@ export default function LoginPage() {
             className="h-16 w-auto object-contain mb-3"
             onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
           />
-          <h1 className="text-xl font-semibold text-slate-900">Aprovações · Omie</h1>
-          <p className="text-sm text-slate-500 mt-1">
+          <h1 className="text-xl font-semibold text-ww-text">Aprovações · Omie</h1>
+          <p className="text-sm text-ww-textMuted mt-1">
             Entre com seu email e senha.
           </p>
         </div>
@@ -48,7 +48,7 @@ export default function LoginPage() {
             placeholder="email@waterworks.com.br"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+            className="w-full px-3 py-2 border border-ww-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
           />
           <input
             type="password"
@@ -56,7 +56,7 @@ export default function LoginPage() {
             placeholder="senha"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+            className="w-full px-3 py-2 border border-ww-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
           />
           <button
             type="submit"
@@ -66,7 +66,7 @@ export default function LoginPage() {
             {loading ? "Entrando…" : "Entrar"}
           </button>
           <div className="text-center pt-1">
-            <a href="/recover" className="text-xs text-slate-500 hover:text-slate-800 underline underline-offset-2">
+            <a href="/recover" className="text-xs text-ww-textMuted hover:text-ww-text underline underline-offset-2">
               Esqueci a senha
             </a>
           </div>

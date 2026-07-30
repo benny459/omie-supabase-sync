@@ -386,7 +386,7 @@ export default function AtribuirClienteView() {
               {selected.size} PC(s) selecionado(s) · {brl(selectedTotal)}
             </span>
             <button onClick={() => setSelected(new Set())}
-                    className="text-[11px] px-2 py-0.5 rounded border border-emerald-300 bg-white text-emerald-800 hover:bg-emerald-100">
+                    className="text-[11px] px-2 py-0.5 rounded border border-emerald-300 bg-ww-panel text-emerald-800 hover:bg-emerald-100">
               Limpar sel
             </button>
             <button onClick={() => setBulkOpen(true)}
@@ -503,7 +503,7 @@ function FacetCard({ title, accent, items, selected, onToggle, onClear, moreCoun
         <span className={`text-[10px] uppercase tracking-[0.5px] font-bold ${t.header}`}>{title}</span>
         <span className="text-[10px] text-ww-textMuted tabular-nums ml-auto">{items.length}{moreCount > 0 ? `+${moreCount}` : ""}</span>
         {selected.size > 0 && (
-          <button onClick={onClear} className="text-[10px] px-1 py-px rounded hover:bg-white/50 dark:hover:bg-black/20 text-ww-textMuted" title="Limpar seleção">×</button>
+          <button onClick={onClear} className="text-[10px] px-1 py-px rounded hover:bg-ww-panel/50 dark:hover:bg-black/20 text-ww-textMuted" title="Limpar seleção">×</button>
         )}
       </div>
       <div className="space-y-0.5 max-h-40 overflow-y-auto">
@@ -513,13 +513,13 @@ function FacetCard({ title, accent, items, selected, onToggle, onClear, moreCoun
           const pctBar = Math.round((i.count / maxCount) * 100);
           return (
             <button key={i.key} onClick={() => onToggle(i.key)}
-              className={`w-full text-left px-1.5 py-0.5 rounded text-[10.5px] flex items-center gap-1.5 transition ${on ? t.sel : "hover:bg-white/50 dark:hover:bg-black/20"}`}>
+              className={`w-full text-left px-1.5 py-0.5 rounded text-[10.5px] flex items-center gap-1.5 transition ${on ? t.sel : "hover:bg-ww-panel/50 dark:hover:bg-black/20"}`}>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center justify-between gap-1">
                   <span className="truncate text-ww-text font-medium">{i.label ?? (formatKey ? formatKey(i.key) : i.key)}</span>
                   <span className="tabular-nums text-ww-textMuted shrink-0">{i.count}</span>
                 </div>
-                <div className="h-[3px] rounded bg-white/40 dark:bg-black/20 mt-0.5 overflow-hidden">
+                <div className="h-[3px] rounded bg-ww-panel/40 mt-0.5 overflow-hidden">
                   <div className={`h-full ${t.dot}`} style={{ width: `${pctBar}%`, opacity: on ? 1 : 0.5 }} />
                 </div>
               </div>
@@ -528,7 +528,7 @@ function FacetCard({ title, accent, items, selected, onToggle, onClear, moreCoun
         })}
       </div>
       {items.length > 0 && (
-        <div className="mt-1.5 pt-1 border-t border-white/30 dark:border-black/20 text-[9.5px] tabular-nums text-ww-textMuted flex items-center justify-between">
+        <div className="mt-1.5 pt-1 border-t border-white/30 text-[9.5px] tabular-nums text-ww-textMuted flex items-center justify-between">
           <span>Σ {totalCount}</span>
           <span>{brlCompact(items.reduce((a, i) => a + i.total, 0))}</span>
         </div>

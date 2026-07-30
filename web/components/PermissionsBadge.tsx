@@ -19,41 +19,41 @@ export default function PermissionsBadge({ modulo }: { modulo: Modulo }) {
   const canApprove = summary.blocks.find(b => b.key === "aprovacao")?.approve;
 
   return (
-    <div className="bg-white border border-slate-200 rounded-lg shadow-sm">
+    <div className="bg-ww-panel border border-ww-border rounded-lg shadow-sm">
       <button
         onClick={() => setOpen(o => !o)}
-        className="w-full flex items-center gap-3 px-4 py-2.5 text-left hover:bg-slate-50 transition rounded-lg"
+        className="w-full flex items-center gap-3 px-4 py-2.5 text-left hover:bg-ww-rowHover transition rounded-lg"
       >
         <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold ${meta.tone}`}>
           {meta.label}
         </span>
         <div className="flex-1 min-w-0">
-          <div className="text-xs text-slate-700">
+          <div className="text-xs text-ww-textMuted">
             {editable.length === 0 ? (
-              <span className="text-slate-500">Somente leitura neste módulo.</span>
+              <span className="text-ww-textMuted">Somente leitura neste módulo.</span>
             ) : (
               <>
-                <span className="text-slate-500">Você pode editar: </span>
-                <span className="font-medium text-slate-900">
+                <span className="text-ww-textMuted">Você pode editar: </span>
+                <span className="font-medium text-ww-text">
                   {editable.map(b => b.label).join(" · ")}
                 </span>
                 {canApprove && <span className="ml-2 text-emerald-700 font-medium">✓ pode aprovar</span>}
-                {!canApprove && <span className="ml-2 text-slate-400">sem aprovação</span>}
+                {!canApprove && <span className="ml-2 text-ww-textFaint">sem aprovação</span>}
               </>
             )}
           </div>
         </div>
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className={`w-3.5 h-3.5 text-slate-400 transition-transform ${open ? "rotate-180" : ""}`} strokeLinecap="round">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className={`w-3.5 h-3.5 text-ww-textFaint transition-transform ${open ? "rotate-180" : ""}`} strokeLinecap="round">
           <polyline points="6 9 12 15 18 9"/>
         </svg>
       </button>
 
       {open && (
-        <div className="border-t border-slate-200 px-4 py-3 bg-slate-50/60">
+        <div className="border-t border-ww-border px-4 py-3 bg-ww-rowHover/60">
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2">
             {summary.blocks.map((b) => (
               <div key={b.key} className="text-[11px]">
-                <div className="font-semibold text-slate-700 mb-0.5">{b.label}</div>
+                <div className="font-semibold text-ww-textMuted mb-0.5">{b.label}</div>
                 <div className="flex flex-wrap gap-1">
                   <Tag on={b.edit} label="editar" />
                   {b.key === "aprovacao" && <Tag on={b.approve} label="aprovar" />}
@@ -61,7 +61,7 @@ export default function PermissionsBadge({ modulo }: { modulo: Modulo }) {
               </div>
             ))}
           </div>
-          <p className="text-[10px] text-slate-400 mt-3">
+          <p className="text-[10px] text-ww-textFaint mt-3">
             Default definido pelo role <strong>{meta.label}</strong>. Admin pode customizar overrides por bloco em Configurações.
           </p>
         </div>
@@ -73,7 +73,7 @@ export default function PermissionsBadge({ modulo }: { modulo: Modulo }) {
 function Tag({ on, label }: { on: boolean; label: string }) {
   return (
     <span className={`px-1.5 py-0.5 rounded text-[9px] font-semibold ${
-      on ? "bg-emerald-100 text-emerald-800" : "bg-slate-200 text-slate-500"
+      on ? "bg-emerald-100 text-emerald-800" : "bg-ww-border text-ww-textMuted"
     }`}>
       {on ? "✓" : "✗"} {label}
     </span>

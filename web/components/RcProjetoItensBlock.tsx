@@ -81,8 +81,8 @@ function statusFornecTone(v: string): string {
   if (norm.includes("aguard"))                             return "bg-amber-100 text-amber-800 border-amber-300";
   if (norm.includes("parcial"))                            return "bg-sky-100 text-sky-800 border-sky-300";
   if (norm.includes("cancel"))                             return "bg-rose-100 text-rose-800 border-rose-300";
-  if (norm.includes("cotac"))                              return "bg-slate-100 text-slate-700 border-slate-300";
-  return "bg-slate-100 text-slate-700 border-slate-300";
+  if (norm.includes("cotac"))                              return "bg-ww-bg text-ww-textMuted border-ww-border";
+  return "bg-ww-bg text-ww-textMuted border-ww-border";
 }
 
 // Fallback só quando NÃO há Status Fornec no Omie: mostra flag de atraso
@@ -411,7 +411,7 @@ export default function RcProjetoItensBlock({
       </div>
 
       {tabs.length === 0 && (
-        <div className="text-[12px] text-ww-textMuted italic px-3 py-2 bg-white dark:bg-slate-900 rounded border border-violet-200">
+        <div className="text-[12px] text-ww-textMuted italic px-3 py-2 bg-ww-panel rounded border border-violet-200">
           Nenhum item cadastrado ainda. Use <strong>Lista RC (Projeto)</strong> pra subir o XLSX.
         </div>
       )}
@@ -429,7 +429,7 @@ export default function RcProjetoItensBlock({
                   onClick={() => setActiveTab(t.s)}
                   className={`px-3 py-2 text-[12px] font-semibold rounded-t-md transition border border-b-0 ${
                     isActive
-                      ? "bg-white dark:bg-slate-900 text-violet-900 dark:text-violet-100 border-violet-300 dark:border-violet-800 -mb-px z-10"
+                      ? "bg-ww-panel text-violet-900 dark:text-violet-100 border-violet-300 dark:border-violet-800 -mb-px z-10"
                       : "bg-violet-100/50 dark:bg-violet-950/40 text-violet-700 dark:text-violet-300 border-transparent hover:bg-violet-100 dark:hover:bg-violet-900/50"
                   }`}>
                   <span>{t.eq}</span>
@@ -440,7 +440,7 @@ export default function RcProjetoItensBlock({
           </div>
 
           {/* ACTIVE TAB TABLE — full width */}
-          <div className="bg-white dark:bg-slate-900 rounded-b-md border border-t-0 border-violet-300 dark:border-violet-800 overflow-x-auto">
+          <div className="bg-ww-panel rounded-b-md border border-t-0 border-violet-300 dark:border-violet-800 overflow-x-auto">
             <table className="w-full text-[11.5px]">
               <thead className="bg-violet-50/60 dark:bg-violet-950/30 text-violet-700 dark:text-violet-300">
                 <tr>
@@ -534,7 +534,7 @@ export default function RcProjetoItensBlock({
           </span>
           <div className="w-px h-5 bg-violet-500/60" />
           <button onClick={() => setPicker({ mode: "batch", ids: Array.from(selected) })}
-            className="px-3 py-1 text-[12px] font-bold rounded bg-violet-50 text-violet-900 hover:bg-white transition">
+            className="px-3 py-1 text-[12px] font-bold rounded bg-violet-50 text-violet-900 hover:bg-ww-panel transition">
             🔗 Vincular a PC…
           </button>
           <button onClick={() => setSelected(new Set())}
@@ -591,25 +591,25 @@ function PcPickerModal({
   return (
     <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4"
          onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="bg-white dark:bg-slate-900 rounded-xl shadow-2xl w-full max-w-2xl max-h-[85vh] flex flex-col">
-        <div className="px-5 py-4 border-b border-slate-200 dark:border-slate-700 flex items-start justify-between gap-3">
+      <div className="bg-ww-panel rounded-xl shadow-2xl w-full max-w-2xl max-h-[85vh] flex flex-col">
+        <div className="px-5 py-4 border-b border-ww-border flex items-start justify-between gap-3">
           <div>
-            <h3 className="font-semibold text-slate-900 dark:text-slate-100 text-[15px]">{title}</h3>
-            <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+            <h3 className="font-semibold text-ww-text text-[15px]">{title}</h3>
+            <p className="text-[11px] text-ww-textMuted mt-0.5">
               Escolha um PC existente do Omie para <strong>{empresa}</strong>. Busque por número, fornecedor ou projeto.
             </p>
           </div>
-          <button onClick={onClose} className="text-slate-400 hover:text-slate-800 dark:hover:text-slate-100 text-lg leading-none">×</button>
+          <button onClick={onClose} className="text-ww-textFaint hover:text-ww-text dark:hover:text-slate-100 text-lg leading-none">×</button>
         </div>
-        <div className="px-5 py-3 border-b border-slate-200 dark:border-slate-700">
+        <div className="px-5 py-3 border-b border-ww-border ">
           <input autoFocus type="text" value={q} onChange={(e) => setQ(e.target.value)}
             placeholder="Nº do PC, fornecedor ou projeto…"
-            className="w-full px-3 py-2 text-sm border border-slate-300 dark:border-slate-700 rounded-md bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-violet-400" />
+            className="w-full px-3 py-2 text-sm border border-ww-border rounded-md bg-ww-panel text-ww-text focus:outline-none focus:ring-2 focus:ring-violet-400" />
         </div>
         <div className="flex-1 overflow-y-auto">
-          {loading && <div className="p-4 text-[12px] text-slate-500 italic">Buscando…</div>}
+          {loading && <div className="p-4 text-[12px] text-ww-textMuted italic">Buscando…</div>}
           {!loading && rows.length === 0 && (
-            <div className="p-4 text-[12px] text-slate-500 italic">Nenhum PC encontrado. Ajuste a busca.</div>
+            <div className="p-4 text-[12px] text-ww-textMuted italic">Nenhum PC encontrado. Ajuste a busca.</div>
           )}
           <ul className="divide-y divide-slate-100 dark:divide-slate-800">
             {rows.map((r) => (
@@ -618,24 +618,24 @@ function PcPickerModal({
                   className="w-full text-left px-5 py-2.5 hover:bg-violet-50 dark:hover:bg-violet-950/40 transition flex items-center gap-4">
                   <div className="min-w-[80px]">
                     <div className="font-mono text-[13px] font-bold text-violet-800 dark:text-violet-200">PC {r.pc_numero}</div>
-                    <div className="text-[10px] text-slate-500 tabular-nums">{fmtBR(r.dt_inclusao)}</div>
+                    <div className="text-[10px] text-ww-textMuted tabular-nums">{fmtBR(r.dt_inclusao)}</div>
                   </div>
                   <div className="flex-1 min-w-0">
-                    <div className="text-[12.5px] font-semibold text-slate-800 dark:text-slate-100 truncate">{r.nome_fornecedor ?? "—"}</div>
-                    <div className="text-[10.5px] text-slate-500 truncate">{r.projeto_nome ?? "—"}</div>
+                    <div className="text-[12.5px] font-semibold text-ww-text truncate">{r.nome_fornecedor ?? "—"}</div>
+                    <div className="text-[10.5px] text-ww-textMuted truncate">{r.projeto_nome ?? "—"}</div>
                   </div>
                   <div className="text-right shrink-0">
                     <div className="text-[12px] font-bold tabular-nums text-emerald-800 dark:text-emerald-300 whitespace-nowrap">
                       {r.valor_total != null ? fmtBRL(Number(r.valor_total)) : "—"}
                     </div>
-                    <div className="text-[10px] text-slate-500 tabular-nums">Prev: {fmtBR(r.dt_previsao)}</div>
+                    <div className="text-[10px] text-ww-textMuted tabular-nums">Prev: {fmtBR(r.dt_previsao)}</div>
                   </div>
                 </button>
               </li>
             ))}
           </ul>
         </div>
-        <div className="px-5 py-3 border-t border-slate-200 dark:border-slate-700 text-[10.5px] text-slate-500 dark:text-slate-400">
+        <div className="px-5 py-3 border-t border-ww-border text-[10.5px] text-ww-textMuted ">
           Clique em um PC pra confirmar. Itens que já tinham PC serão sobrescritos.
         </div>
       </div>

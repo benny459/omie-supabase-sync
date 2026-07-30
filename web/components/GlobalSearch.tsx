@@ -31,7 +31,7 @@ const MOD_COLOR: Record<string, string> = {
   avulsos:  "bg-emerald-100 text-emerald-800 border-emerald-200",
   pcs:      "bg-indigo-100 text-indigo-800 border-indigo-200",
   projetos: "bg-fuchsia-100 text-fuchsia-800 border-fuchsia-200",
-  standby:  "bg-slate-100 text-slate-700 border-slate-200",
+  standby:  "bg-ww-bg text-ww-textMuted border-ww-border",
 };
 
 export default function GlobalSearch() {
@@ -114,7 +114,7 @@ export default function GlobalSearch() {
         <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm flex items-start justify-center pt-[10vh] p-4" onClick={() => setOpen(false)}>
           <div
             onClick={(e) => e.stopPropagation()}
-            className="bg-white dark:bg-ww-panel rounded-xl shadow-2xl max-w-2xl w-full border border-ww-border overflow-hidden"
+            className="bg-ww-panel dark:bg-ww-panel rounded-xl shadow-2xl max-w-2xl w-full border border-ww-border overflow-hidden"
           >
             <div className="flex items-center gap-2 px-4 py-3 border-b border-ww-border">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-4 h-4 text-ww-textMuted" strokeLinecap="round" strokeLinejoin="round">
@@ -159,7 +159,7 @@ export default function GlobalSearch() {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 text-sm text-ww-text">
                       <span className="font-mono font-semibold">{h.bucket_label}</span>
-                      {h.empresa && <span className="text-[10px] font-mono text-ww-textMuted px-1 py-0.5 rounded bg-slate-100 dark:bg-slate-800">{h.empresa}</span>}
+                      {h.empresa && <span className="text-[10px] font-mono text-ww-textMuted px-1 py-0.5 rounded bg-ww-bg ">{h.empresa}</span>}
                       {h.etapa && <span className="text-[10px] text-ww-textMuted">· {h.etapa}</span>}
                       {h.matched_field && <span className="text-[9px] text-sky-700 ml-auto">match: {h.matched_field}</span>}
                     </div>

@@ -107,7 +107,7 @@ export default function UsersAdmin({
 
   return (
     <>
-      <div className="px-5 py-2.5 border-b border-slate-200 bg-white flex items-center justify-end">
+      <div className="px-5 py-2.5 border-b border-ww-border bg-ww-panel flex items-center justify-end">
         <button
           onClick={() => setInviteOpen(true)}
           className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold rounded-lg shadow-sm transition"
@@ -122,7 +122,7 @@ export default function UsersAdmin({
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
-            <tr className="text-left text-[10px] uppercase tracking-wider text-slate-500 bg-slate-50/50">
+            <tr className="text-left text-[10px] uppercase tracking-wider text-ww-textMuted bg-ww-rowHover/50">
               <th className="px-5 py-2 font-semibold">Nome</th>
               <th className="px-3 py-2 font-semibold">Email</th>
               <th className="px-3 py-2 font-semibold text-center">Admin</th>
@@ -136,12 +136,12 @@ export default function UsersAdmin({
               const isSelf = u.id === currentUserId;
               const isAdmin = u.is_admin === true;
               return (
-                <tr key={u.id} className="hover:bg-slate-50/60 transition">
-                  <td className="px-5 py-2.5 text-slate-900 font-medium">
-                    {u.nome || <span className="text-slate-400 italic">—</span>}
+                <tr key={u.id} className="hover:bg-ww-rowHover/60 transition">
+                  <td className="px-5 py-2.5 text-ww-text font-medium">
+                    {u.nome || <span className="text-ww-textFaint italic">—</span>}
                     {isSelf && <span className="ml-2 text-[9px] bg-sky-100 text-sky-700 px-1.5 py-0.5 rounded-full">você</span>}
                   </td>
-                  <td className="px-3 py-2.5 text-slate-600 text-[11px]">{u.email ?? "—"}</td>
+                  <td className="px-3 py-2.5 text-ww-textMuted text-[11px]">{u.email ?? "—"}</td>
                   <td className="px-3 py-2.5 text-center">
                     <button
                       onClick={() => updateUser(u.id, { is_admin: !isAdmin })}
@@ -152,7 +152,7 @@ export default function UsersAdmin({
                       className={`inline-flex items-center justify-center w-12 h-6 rounded-full transition disabled:opacity-50 disabled:cursor-not-allowed ${
                         isAdmin
                           ? "bg-slate-900 text-white"
-                          : "bg-slate-100 text-slate-400 hover:bg-slate-200"
+                          : "bg-ww-bg text-ww-textFaint hover:bg-ww-border"
                       }`}
                     >
                       {isAdmin ? "✓ ADM" : "—"}
@@ -166,14 +166,14 @@ export default function UsersAdmin({
                       {isAdmin ? "Bypass total (admin)" : "Configurar por solução"}
                     </button>
                   </td>
-                  <td className="px-3 py-2.5 text-slate-500 text-[11px]">
+                  <td className="px-3 py-2.5 text-ww-textMuted text-[11px]">
                     {u.created_at ? new Date(u.created_at).toLocaleDateString("pt-BR") : "—"}
                   </td>
                   <td className="px-3 py-2.5 text-right pr-5">
                     <div className="inline-flex items-center gap-1">
                       <button
                         onClick={() => resetPassword(u)}
-                        className="text-slate-400 hover:text-amber-600 transition p-1"
+                        className="text-ww-textFaint hover:text-amber-600 transition p-1"
                         title="Gerar nova senha provisória"
                       >
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className="w-4 h-4" strokeLinecap="round" strokeLinejoin="round">
@@ -185,7 +185,7 @@ export default function UsersAdmin({
                       <button
                         onClick={() => deleteUser(u.id)}
                         disabled={isSelf}
-                        className="text-slate-400 hover:text-rose-600 transition p-1 disabled:opacity-30 disabled:cursor-not-allowed"
+                        className="text-ww-textFaint hover:text-rose-600 transition p-1 disabled:opacity-30 disabled:cursor-not-allowed"
                         title={isSelf ? "Não pode deletar a si mesmo" : "Deletar usuário"}
                       >
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className="w-4 h-4" strokeLinecap="round" strokeLinejoin="round">
@@ -200,7 +200,7 @@ export default function UsersAdmin({
             })}
             {users.length === 0 && (
               <tr>
-                <td colSpan={6} className="px-5 py-8 text-center text-slate-400 italic text-sm">
+                <td colSpan={6} className="px-5 py-8 text-center text-ww-textFaint italic text-sm">
                   Nenhum usuário cadastrado. Clique em <strong>Convidar usuário</strong> pra começar.
                 </td>
               </tr>
@@ -268,43 +268,43 @@ function InviteModal({
       <form
         onSubmit={submit}
         onClick={(e) => e.stopPropagation()}
-        className="bg-white rounded-xl shadow-2xl max-w-md w-full p-5 space-y-4"
+        className="bg-ww-panel rounded-xl shadow-2xl max-w-md w-full p-5 space-y-4"
       >
         <div className="flex items-start justify-between">
           <div>
-            <h3 className="font-semibold text-slate-900">Convidar usuário</h3>
-            <p className="text-xs text-slate-500 mt-0.5">O sistema cria a conta e mostra uma senha provisória pra você enviar por email.</p>
+            <h3 className="font-semibold text-ww-text">Convidar usuário</h3>
+            <p className="text-xs text-ww-textMuted mt-0.5">O sistema cria a conta e mostra uma senha provisória pra você enviar por email.</p>
           </div>
-          <button type="button" onClick={onClose} className="text-slate-400 hover:text-slate-800 text-lg leading-none">×</button>
+          <button type="button" onClick={onClose} className="text-ww-textFaint hover:text-ww-text text-lg leading-none">×</button>
         </div>
 
         <div className="space-y-2">
           <div>
-            <label className="block text-[11px] font-medium text-slate-600 mb-1">Email</label>
+            <label className="block text-[11px] font-medium text-ww-textMuted mb-1">Email</label>
             <input
               type="email" required autoFocus
               value={email} onChange={(e) => setEmail(e.target.value)}
               placeholder="usuario@waterworks.com.br"
-              className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-sky-500/40"
+              className="w-full px-3 py-2 border border-ww-border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-sky-500/40"
             />
           </div>
           <div>
-            <label className="block text-[11px] font-medium text-slate-600 mb-1">Nome (opcional)</label>
+            <label className="block text-[11px] font-medium text-ww-textMuted mb-1">Nome (opcional)</label>
             <input
               type="text" value={nome} onChange={(e) => setNome(e.target.value)}
               placeholder="Maria Silva"
-              className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-sky-500/40"
+              className="w-full px-3 py-2 border border-ww-border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-sky-500/40"
             />
           </div>
-          <div className="text-[11px] text-slate-500 bg-slate-50 border border-slate-200 rounded-md px-3 py-2">
-            O usuário será criado <strong className="text-slate-700">sem permissões</strong>. Após criar, clique em <strong className="text-slate-700">Configurar por solução</strong> na lista pra liberar Editar RC / PC / Aprovar / Logística em cada solução. Marque <strong className="text-slate-700">Admin</strong> só pra dar bypass total.
+          <div className="text-[11px] text-ww-textMuted bg-ww-rowHover border border-ww-border rounded-md px-3 py-2">
+            O usuário será criado <strong className="text-ww-textMuted">sem permissões</strong>. Após criar, clique em <strong className="text-ww-textMuted">Configurar por solução</strong> na lista pra liberar Editar RC / PC / Aprovar / Logística em cada solução. Marque <strong className="text-ww-textMuted">Admin</strong> só pra dar bypass total.
           </div>
         </div>
 
         {err && <div className="text-xs text-rose-700 bg-rose-50 border border-rose-200 rounded-md px-3 py-2">{err}</div>}
 
         <div className="flex justify-end gap-2">
-          <button type="button" onClick={onClose} className="px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-100 rounded-md transition">Cancelar</button>
+          <button type="button" onClick={onClose} className="px-3 py-1.5 text-xs font-medium text-ww-textMuted hover:bg-ww-bg rounded-md transition">Cancelar</button>
           <button type="submit" disabled={busy || !email.includes("@")} className="px-4 py-1.5 text-xs font-semibold text-white bg-slate-900 hover:bg-slate-800 rounded-md shadow-sm transition disabled:opacity-40 disabled:cursor-not-allowed">
             {busy ? "Criando…" : "Criar conta"}
           </button>
@@ -324,14 +324,14 @@ function InvitePasswordModal({
   }
   return (
     <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4" onClick={onClose}>
-      <div onClick={(e) => e.stopPropagation()} className="bg-white rounded-xl shadow-2xl max-w-md w-full p-5 space-y-4">
+      <div onClick={(e) => e.stopPropagation()} className="bg-ww-panel rounded-xl shadow-2xl max-w-md w-full p-5 space-y-4">
         <div>
-          <h3 className="font-semibold text-slate-900">✓ Usuário criado</h3>
-          <p className="text-xs text-slate-500 mt-0.5">Copie a senha provisória e envie ao usuário. Ele deve trocá-la no primeiro acesso.</p>
+          <h3 className="font-semibold text-ww-text">✓ Usuário criado</h3>
+          <p className="text-xs text-ww-textMuted mt-0.5">Copie a senha provisória e envie ao usuário. Ele deve trocá-la no primeiro acesso.</p>
         </div>
-        <div className="bg-slate-50 rounded-lg border border-slate-200 p-4 space-y-2  text-xs">
-          <div><span className="text-slate-500">Email: </span><span className="text-slate-900">{email}</span></div>
-          <div><span className="text-slate-500">Senha: </span><span className="text-slate-900 select-all">{password}</span></div>
+        <div className="bg-ww-rowHover rounded-lg border border-ww-border p-4 space-y-2  text-xs">
+          <div><span className="text-ww-textMuted">Email: </span><span className="text-ww-text">{email}</span></div>
+          <div><span className="text-ww-textMuted">Senha: </span><span className="text-ww-text select-all">{password}</span></div>
         </div>
         <div className="flex justify-end gap-2">
           <button onClick={copy} className="px-3 py-1.5 text-xs font-semibold text-sky-700 hover:bg-sky-50 rounded-md transition">
@@ -415,30 +415,30 @@ function PermissionsModal({
 
   return (
     <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4" onClick={onClose}>
-      <div onClick={(e) => e.stopPropagation()} className="bg-white rounded-xl shadow-2xl max-w-4xl w-full p-5 space-y-4 max-h-[90vh] overflow-y-auto">
+      <div onClick={(e) => e.stopPropagation()} className="bg-ww-panel rounded-xl shadow-2xl max-w-4xl w-full p-5 space-y-4 max-h-[90vh] overflow-y-auto">
         <div className="flex items-start justify-between">
           <div>
-            <h3 className="font-semibold text-slate-900">Permissões — {user.nome || user.email}</h3>
-            <p className="text-xs text-slate-500 mt-0.5">
+            <h3 className="font-semibold text-ww-text">Permissões — {user.nome || user.email}</h3>
+            <p className="text-xs text-ww-textMuted mt-0.5">
               Marque o que esse usuário pode fazer em cada solução. Em PCs Standalone, defina alçada e teto semanal pra liberar autonomia controlada.
             </p>
           </div>
-          <button type="button" onClick={onClose} className="text-slate-400 hover:text-slate-800 text-lg leading-none">×</button>
+          <button type="button" onClick={onClose} className="text-ww-textFaint hover:text-ww-text text-lg leading-none">×</button>
         </div>
 
         {loading ? (
-          <div className="py-12 text-center text-sm text-slate-400">Carregando…</div>
+          <div className="py-12 text-center text-sm text-ww-textFaint">Carregando…</div>
         ) : (
           <div className="space-y-3">
             {MODULOS_LIST.map(({ key, label, tone }) => {
               const r = rows[key];
               return (
-                <div key={key} className="border border-slate-200 rounded-lg overflow-hidden">
-                  <div className={`px-4 py-2 text-xs font-bold uppercase tracking-wider border-b border-slate-200 ${tone}`}>
+                <div key={key} className="border border-ww-border rounded-lg overflow-hidden">
+                  <div className={`px-4 py-2 text-xs font-bold uppercase tracking-wider border-b border-ww-border ${tone}`}>
                     {label}
                   </div>
                   <div className="px-4 py-3 space-y-3">
-                    <div className="text-[10px] uppercase tracking-[0.6px] font-bold text-slate-500">Edição</div>
+                    <div className="text-[10px] uppercase tracking-[0.6px] font-bold text-ww-textMuted">Edição</div>
                     <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
                       <Toggle label="Editar PV"      value={r.can_edit_pv}  onChange={(v) => update(key, { can_edit_pv: v })} />
                       <Toggle label="Editar RC"      value={r.can_edit_rc}  onChange={(v) => update(key, { can_edit_rc: v })} />
@@ -446,13 +446,13 @@ function PermissionsModal({
                       <Toggle label="Aprovar"        value={r.can_approve}  onChange={(v) => update(key, { can_approve: v })} />
                       <Toggle label="Editar Logíst." value={r.can_edit_log} onChange={(v) => update(key, { can_edit_log: v })} />
                     </div>
-                    <div className="text-[10px] uppercase tracking-[0.6px] font-bold text-slate-500 pt-1 border-t border-slate-100">Visualização</div>
+                    <div className="text-[10px] uppercase tracking-[0.6px] font-bold text-ww-textMuted pt-1 border-t border-ww-border">Visualização</div>
                     <div className="grid grid-cols-2 gap-2">
                       <Toggle label="Ver valores (R$)"     value={r.can_view_values} onChange={(v) => update(key, { can_view_values: v })} />
                       <Toggle label="Ver Margem Bruta"     value={r.can_view_margin} onChange={(v) => update(key, { can_view_margin: v })} />
                     </div>
                     {key === "pcs" && r.can_approve && (
-                      <div className="grid grid-cols-2 gap-3 pt-2 border-t border-slate-100">
+                      <div className="grid grid-cols-2 gap-3 pt-2 border-t border-ww-border">
                         <BrlInput label="Alçada por aprovação"
                           hint="Valor máximo de UM PC. Acima disso a aprovação é bloqueada."
                           value={r.approval_ceiling_brl}
@@ -473,7 +473,7 @@ function PermissionsModal({
         {err && <div className="text-xs text-rose-700 bg-rose-50 border border-rose-200 rounded-md px-3 py-2">{err}</div>}
 
         <div className="flex justify-end gap-2 pt-1">
-          <button onClick={onClose} className="px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-100 rounded-md transition">Cancelar</button>
+          <button onClick={onClose} className="px-3 py-1.5 text-xs font-medium text-ww-textMuted hover:bg-ww-bg rounded-md transition">Cancelar</button>
           <button onClick={save} disabled={busy || loading} className="px-4 py-1.5 text-xs font-semibold text-white bg-slate-900 hover:bg-slate-800 rounded-md transition disabled:opacity-40">
             {busy ? "Salvando…" : "Salvar"}
           </button>
@@ -489,10 +489,10 @@ function Toggle({ label, value, onChange }: { label: string; value: boolean; onC
       className={`flex items-center justify-between gap-2 px-3 py-2 rounded-lg border-2 text-[12px] font-semibold transition ${
         value
           ? "bg-emerald-50 border-emerald-500 text-emerald-900"
-          : "bg-white border-slate-200 text-slate-500 hover:border-slate-300"
+          : "bg-ww-panel border-ww-border text-ww-textMuted hover:border-ww-border"
       }`}>
       <span>{label}</span>
-      <span className={`text-[14px] ${value ? "text-emerald-600" : "text-slate-300"}`}>{value ? "●" : "○"}</span>
+      <span className={`text-[14px] ${value ? "text-emerald-600" : "text-ww-textFaint"}`}>{value ? "●" : "○"}</span>
     </button>
   );
 }
@@ -502,9 +502,9 @@ function BrlInput({ label, hint, value, onChange }: { label: string; hint?: stri
   useEffect(() => { setStr(value != null ? String(value).replace(".", ",") : ""); }, [value]);
   return (
     <div>
-      <label className="block text-[11px] font-semibold text-slate-700 mb-1">{label}</label>
+      <label className="block text-[11px] font-semibold text-ww-textMuted mb-1">{label}</label>
       <div className="flex items-center gap-2">
-        <span className="text-[11px] font-bold text-slate-400">R$</span>
+        <span className="text-[11px] font-bold text-ww-textFaint">R$</span>
         <input type="text" inputMode="decimal" placeholder="sem limite"
           value={str}
           onChange={(e) => setStr(e.target.value)}
@@ -512,9 +512,9 @@ function BrlInput({ label, hint, value, onChange }: { label: string; hint?: stri
             const n = Number(str.replace(/\./g, "").replace(",", "."));
             onChange(str.trim() === "" ? null : (Number.isFinite(n) ? n : null));
           }}
-          className="flex-1 px-2 py-1.5 text-[12px] border border-slate-300 rounded-md font-mono tabular-nums focus:outline-none focus:ring-2 focus:ring-sky-500/40" />
+          className="flex-1 px-2 py-1.5 text-[12px] border border-ww-border rounded-md font-mono tabular-nums focus:outline-none focus:ring-2 focus:ring-sky-500/40" />
       </div>
-      {hint && <p className="text-[10px] text-slate-400 mt-0.5">{hint}</p>}
+      {hint && <p className="text-[10px] text-ww-textFaint mt-0.5">{hint}</p>}
     </div>
   );
 }

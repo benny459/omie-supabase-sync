@@ -94,7 +94,7 @@ export default function SyncPanel() {
     await loadWorkflows();
   }
 
-  if (loading) return <div className="p-6 text-center text-slate-400 text-sm">Carregando painel de sync…</div>;
+  if (loading) return <div className="p-6 text-center text-ww-textFaint text-sm">Carregando painel de sync…</div>;
 
   if (err && !workflows) {
     return (
@@ -112,7 +112,7 @@ export default function SyncPanel() {
 
   return (
     <div className="p-4 space-y-3">
-      <div className="flex items-center justify-end flex-wrap gap-3 border-b border-slate-200 pb-2">
+      <div className="flex items-center justify-end flex-wrap gap-3 border-b border-ww-border pb-2">
         {actionsUrl && (
           <a href={actionsUrl} target="_blank" rel="noreferrer"
              className="text-[11px] text-sky-700 hover:text-sky-900 hover:underline underline-offset-2">
@@ -129,43 +129,43 @@ export default function SyncPanel() {
         const t = KIND_TONE[wf.kind];
         const p = pending[wf.file];
         return (
-          <div key={wf.file} className="bg-white border border-slate-200 rounded-xl overflow-hidden flex">
+          <div key={wf.file} className="bg-ww-panel border border-ww-border rounded-xl overflow-hidden flex">
             <div className={`w-1 ${t.bar}`} />
             <div className="flex-1 p-4 grid gap-4 md:grid-cols-[minmax(220px,1fr)_minmax(280px,2fr)_auto]">
               {/* Coluna 1: identidade do workflow */}
               <div className="min-w-0">
                 <div className="flex items-center gap-2 mb-1 flex-wrap">
                   <span className={`${t.icon} text-sm`}>{t.emoji}</span>
-                  <h3 className="font-semibold text-slate-900 text-sm">{wf.name}</h3>
+                  <h3 className="font-semibold text-ww-text text-sm">{wf.name}</h3>
                   <StatusBadge status={wf.status} />
                 </div>
-                <p className="text-xs text-slate-500">{wf.description}</p>
-                <p className="text-[10px] text-slate-400 mt-1 font-mono">{wf.file}</p>
+                <p className="text-xs text-ww-textMuted">{wf.description}</p>
+                <p className="text-[10px] text-ww-textFaint mt-1 font-mono">{wf.file}</p>
               </div>
 
               {/* Coluna 2: agenda completa (todos os horários BRT) */}
               <div className="min-w-0">
                 <div className="flex items-center justify-between mb-1.5">
-                  <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+                  <div className="text-[10px] font-semibold uppercase tracking-wider text-ww-textMuted">
                     Agenda (horário BRT)
                   </div>
                   {wf.totalSlots > 0 && (
-                    <div className="text-[10px] font-bold text-slate-700 bg-slate-100 px-1.5 py-0.5 rounded-full tabular-nums">
+                    <div className="text-[10px] font-bold text-ww-textMuted bg-ww-bg px-1.5 py-0.5 rounded-full tabular-nums">
                       {wf.totalSlots} disparo{wf.totalSlots !== 1 ? "s" : ""}/dia útil
                     </div>
                   )}
                 </div>
 
                 {wf.slotGroups.length === 0 ? (
-                  <div className="text-xs text-slate-400 italic">Manual apenas (sem cron ativo)</div>
+                  <div className="text-xs text-ww-textFaint italic">Manual apenas (sem cron ativo)</div>
                 ) : (
                   <div className="space-y-2">
                     {wf.slotGroups.map((g, i) => (
                       <div key={i}>
-                        <div className="text-[10px] font-semibold text-slate-600 mb-1">{g.day}</div>
+                        <div className="text-[10px] font-semibold text-ww-textMuted mb-1">{g.day}</div>
                         <div className="flex flex-wrap gap-1">
                           {g.times.map((tm, j) => (
-                            <span key={j} className="px-1.5 py-0.5 rounded bg-white border border-slate-200 text-[11px] font-bold text-slate-900 tabular-nums">
+                            <span key={j} className="px-1.5 py-0.5 rounded bg-ww-panel border border-ww-border text-[11px] font-bold text-ww-text tabular-nums">
                               {tm}
                             </span>
                           ))}
@@ -176,9 +176,9 @@ export default function SyncPanel() {
                 )}
 
                 {wf.nextRun && (
-                  <div className="mt-2 pt-2 border-t border-slate-100 flex items-baseline gap-2 flex-wrap">
-                    <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Próximo:</span>
-                    <span className="text-xs text-slate-900 font-medium">{wf.nextRun.absolute}</span>
+                  <div className="mt-2 pt-2 border-t border-ww-border flex items-baseline gap-2 flex-wrap">
+                    <span className="text-[10px] font-semibold uppercase tracking-wider text-ww-textMuted">Próximo:</span>
+                    <span className="text-xs text-ww-text font-medium">{wf.nextRun.absolute}</span>
                     <span className="text-[11px] text-emerald-700 font-semibold">({wf.nextRun.relative})</span>
                   </div>
                 )}
@@ -199,7 +199,7 @@ export default function SyncPanel() {
                     className={`inline-flex items-center gap-1 px-3 py-1.5 rounded-md text-xs font-semibold border transition disabled:opacity-50 ${
                       wf.status === "ativo"
                         ? "border-amber-300 bg-amber-50 text-amber-900 hover:bg-amber-100"
-                        : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50"
+                        : "border-ww-border bg-ww-panel text-ww-textMuted hover:bg-ww-rowHover"
                     }`}>
                     {p === "toggle" ? "…" : wf.status === "ativo" ? "🔕 Desativar" : "🔔 Ativar"}
                   </button>
@@ -241,23 +241,23 @@ function SaveConfirmModal({
   };
   return (
     <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4" onClick={onClose}>
-      <div onClick={(e) => e.stopPropagation()} className="bg-white rounded-xl shadow-2xl max-w-md w-full p-5 space-y-4">
+      <div onClick={(e) => e.stopPropagation()} className="bg-ww-panel rounded-xl shadow-2xl max-w-md w-full p-5 space-y-4">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-700">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} className="w-6 h-6" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
           </div>
           <div>
-            <h3 className="font-semibold text-slate-900">Agenda salva</h3>
-            <p className="text-xs text-slate-500">Workflow <strong>{flash.name}</strong> atualizado no GitHub.</p>
+            <h3 className="font-semibold text-ww-text">Agenda salva</h3>
+            <p className="text-xs text-ww-textMuted">Workflow <strong>{flash.name}</strong> atualizado no GitHub.</p>
           </div>
         </div>
 
-        <div className="bg-slate-50 border border-slate-200 rounded-lg p-4 space-y-2">
+        <div className="bg-ww-rowHover border border-ww-border rounded-lg p-4 space-y-2">
           <Row label="Frequência" value={`A cada ${flash.intervalHours} hora${flash.intervalHours !== 1 ? "s" : ""}`} />
           <Row label="Janela" value={windowLabel[flash.windowMode] ?? flash.windowMode} />
           {flash.nextRun && (
             <>
-              <div className="border-t border-slate-200 my-2" />
+              <div className="border-t border-ww-border my-2" />
               <Row label="Próximo disparo" value={flash.nextRun.absolute} strong />
               <div className="text-[11px] text-emerald-700 font-semibold pl-[96px]">{flash.nextRun.relative}</div>
             </>
@@ -277,8 +277,8 @@ function SaveConfirmModal({
 function Row({ label, value, strong }: { label: string; value: string; strong?: boolean }) {
   return (
     <div className="flex gap-2 text-xs">
-      <span className="text-slate-500 font-medium w-[88px] shrink-0">{label}:</span>
-      <span className={strong ? "text-slate-900 font-semibold" : "text-slate-700"}>{value}</span>
+      <span className="text-ww-textMuted font-medium w-[88px] shrink-0">{label}:</span>
+      <span className={strong ? "text-ww-text font-semibold" : "text-ww-textMuted"}>{value}</span>
     </div>
   );
 }
@@ -294,25 +294,25 @@ function WorkflowsSummary({ workflows }: { workflows: Workflow[] }) {
     .sort((a, b) => a.nr.iso.localeCompare(b.nr.iso))[0];
 
   return (
-    <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 flex flex-wrap items-center gap-4 text-xs">
+    <div className="bg-ww-rowHover border border-ww-border rounded-xl p-3 flex flex-wrap items-center gap-4 text-xs">
       <div>
-        <span className="text-slate-500">Workflows: </span>
+        <span className="text-ww-textMuted">Workflows: </span>
         <span className="font-bold text-emerald-700">{ativos} agendados</span>
         {desativados > 0 && <span className="font-bold text-amber-700"> · {desativados} desativados</span>}
       </div>
-      <div className="text-slate-300">|</div>
+      <div className="text-ww-textFaint">|</div>
       <div>
-        <span className="text-slate-500">Disparos automáticos/dia útil: </span>
-        <span className="font-bold text-slate-900 tabular-nums">{totalDisparos}</span>
+        <span className="text-ww-textMuted">Disparos automáticos/dia útil: </span>
+        <span className="font-bold text-ww-text tabular-nums">{totalDisparos}</span>
       </div>
       {proximo && (
         <>
-          <div className="text-slate-300">|</div>
+          <div className="text-ww-textFaint">|</div>
           <div className="ml-auto">
-            <span className="text-slate-500">Próximo: </span>
-            <span className="font-semibold text-slate-900">{proximo.name}</span>
+            <span className="text-ww-textMuted">Próximo: </span>
+            <span className="font-semibold text-ww-text">{proximo.name}</span>
             <span className="text-emerald-700 font-bold"> · {proximo.nr.relative}</span>
-            <span className="text-slate-500"> ({proximo.nr.absolute})</span>
+            <span className="text-ww-textMuted"> ({proximo.nr.absolute})</span>
           </div>
         </>
       )}
@@ -323,22 +323,22 @@ function WorkflowsSummary({ workflows }: { workflows: Workflow[] }) {
 function StatusBadge({ status }: { status: WorkflowStatus }) {
   if (status === "ativo") return <span className="px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-emerald-100 text-emerald-800">AGENDADO</span>;
   if (status === "desativado") return <span className="px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-amber-100 text-amber-800">DESATIVADO</span>;
-  return <span className="px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-slate-100 text-slate-600">SEM AGENDA</span>;
+  return <span className="px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-ww-bg text-ww-textMuted">SEM AGENDA</span>;
 }
 
 // ─── RUNS TAB ─────────────────────────────────────────────────────────────
 function RunsTable({ runs, err, onReload }: { runs: Run[] | null; err: string | null; onReload: () => void }) {
   if (err) return <div className="text-xs text-rose-700 p-3 bg-rose-50 rounded-md">{err}</div>;
-  if (!runs) return <div className="p-4 text-center text-slate-400 text-sm">Carregando runs…</div>;
+  if (!runs) return <div className="p-4 text-center text-ww-textFaint text-sm">Carregando runs…</div>;
   return (
-    <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
-      <div className="flex items-center justify-between px-4 py-2 border-b border-slate-200 bg-slate-50/60">
-        <div className="text-xs font-semibold text-slate-700">Últimos 25 runs</div>
+    <div className="bg-ww-panel border border-ww-border rounded-xl overflow-hidden">
+      <div className="flex items-center justify-between px-4 py-2 border-b border-ww-border bg-ww-rowHover/60">
+        <div className="text-xs font-semibold text-ww-textMuted">Últimos 25 runs</div>
         <button onClick={onReload} className="text-[11px] text-sky-700 hover:underline">🔄 Atualizar</button>
       </div>
       <table className="w-full text-xs">
         <thead>
-          <tr className="text-left text-[10px] uppercase tracking-wider text-slate-500 bg-slate-50/40">
+          <tr className="text-left text-[10px] uppercase tracking-wider text-ww-textMuted bg-ww-rowHover/40">
             <th className="px-4 py-2 font-semibold">Workflow</th>
             <th className="px-3 py-2 font-semibold">Evento</th>
             <th className="px-3 py-2 font-semibold">Status</th>
@@ -348,17 +348,17 @@ function RunsTable({ runs, err, onReload }: { runs: Run[] | null; err: string | 
         </thead>
         <tbody className="divide-y divide-slate-100">
           {runs.length === 0 && (
-            <tr><td colSpan={5} className="px-4 py-8 text-center text-slate-400 italic">Nenhum run.</td></tr>
+            <tr><td colSpan={5} className="px-4 py-8 text-center text-ww-textFaint italic">Nenhum run.</td></tr>
           )}
           {runs.map((r) => (
-            <tr key={r.id} className="hover:bg-slate-50/60">
-              <td className="px-4 py-2 font-medium text-slate-900">
+            <tr key={r.id} className="hover:bg-ww-rowHover/60">
+              <td className="px-4 py-2 font-medium text-ww-text">
                 {r.workflow_name}
-                <div className="text-[10px] text-slate-400 ">#{r.run_number}</div>
+                <div className="text-[10px] text-ww-textFaint ">#{r.run_number}</div>
               </td>
-              <td className="px-3 py-2 text-slate-600 ">{r.event}</td>
+              <td className="px-3 py-2 text-ww-textMuted ">{r.event}</td>
               <td className="px-3 py-2"><RunStatus r={r} /></td>
-              <td className="px-3 py-2 text-slate-500 text-[11px] tabular-nums">
+              <td className="px-3 py-2 text-ww-textMuted text-[11px] tabular-nums">
                 {new Date(r.created_at).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}
               </td>
               <td className="px-3 py-2 text-right pr-4">
@@ -377,12 +377,12 @@ function RunStatus({ r }: { r: Run }) {
   if (r.status === "completed") {
     if (r.conclusion === "success") return <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-100 text-emerald-800">✓ sucesso</span>;
     if (r.conclusion === "failure") return <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-rose-100 text-rose-800">✗ falhou</span>;
-    if (r.conclusion === "cancelled") return <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-slate-200 text-slate-700">cancelado</span>;
-    return <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-slate-200 text-slate-700">{r.conclusion ?? "—"}</span>;
+    if (r.conclusion === "cancelled") return <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-ww-border text-ww-textMuted">cancelado</span>;
+    return <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-ww-border text-ww-textMuted">{r.conclusion ?? "—"}</span>;
   }
   if (r.status === "in_progress") return <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-sky-100 text-sky-800"><span className="w-1.5 h-1.5 rounded-full bg-sky-500 animate-pulse" />rodando</span>;
   if (r.status === "queued") return <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-100 text-amber-800">na fila</span>;
-  return <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-slate-200 text-slate-700">{r.status}</span>;
+  return <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-ww-border text-ww-textMuted">{r.status}</span>;
 }
 
 // ─── EDIT SCHEDULE MODAL ──────────────────────────────────────────────────
@@ -416,51 +416,51 @@ function EditScheduleModal({
 
   return (
     <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4" onClick={onClose}>
-      <div onClick={(e) => e.stopPropagation()} className="bg-white rounded-xl shadow-2xl max-w-lg w-full p-5 space-y-4">
+      <div onClick={(e) => e.stopPropagation()} className="bg-ww-panel rounded-xl shadow-2xl max-w-lg w-full p-5 space-y-4">
         <div className="flex items-start justify-between">
           <div>
-            <h3 className="font-semibold text-slate-900">Editar agenda — {wf.name}</h3>
-            <p className="text-xs text-slate-500 mt-0.5">O sistema reescreve o bloco <code>schedule:</code> do workflow no GitHub.</p>
+            <h3 className="font-semibold text-ww-text">Editar agenda — {wf.name}</h3>
+            <p className="text-xs text-ww-textMuted mt-0.5">O sistema reescreve o bloco <code>schedule:</code> do workflow no GitHub.</p>
           </div>
-          <button type="button" onClick={onClose} className="text-slate-400 hover:text-slate-800 text-lg leading-none">×</button>
+          <button type="button" onClick={onClose} className="text-ww-textFaint hover:text-ww-text text-lg leading-none">×</button>
         </div>
 
         <div>
-          <label className="block text-[11px] font-medium text-slate-600 mb-1">A cada quantas horas?</label>
+          <label className="block text-[11px] font-medium text-ww-textMuted mb-1">A cada quantas horas?</label>
           <div className="flex flex-wrap gap-1">
             {[1,2,3,4,6,8,12].map(h => (
               <button key={h} type="button" onClick={() => setIntervalHours(h)}
                 className={`px-3 py-1.5 rounded-md text-xs font-semibold transition ${
-                  intervalHours === h ? "bg-slate-900 text-white" : "bg-white border border-slate-200 text-slate-700 hover:bg-slate-50"
+                  intervalHours === h ? "bg-slate-900 text-white" : "bg-ww-panel border border-ww-border text-ww-textMuted hover:bg-ww-rowHover"
                 }`}>{h}h</button>
             ))}
           </div>
         </div>
 
         <div>
-          <label className="block text-[11px] font-medium text-slate-600 mb-1">Janela</label>
+          <label className="block text-[11px] font-medium text-ww-textMuted mb-1">Janela</label>
           <div className="space-y-1">
             {Object.entries(windowLabel).map(([k, label]) => (
               <button key={k} type="button" onClick={() => setWindowMode(k)}
                 className={`w-full text-left px-3 py-2 rounded-md text-xs transition border ${
-                  windowMode === k ? "bg-sky-50 border-sky-300 text-sky-900" : "bg-white border-slate-200 text-slate-700 hover:bg-slate-50"
+                  windowMode === k ? "bg-sky-50 border-sky-300 text-sky-900" : "bg-ww-panel border-ww-border text-ww-textMuted hover:bg-ww-rowHover"
                 }`}>{label}</button>
             ))}
           </div>
         </div>
 
-        <div className="bg-slate-50 border border-slate-200 rounded-lg p-3">
-          <div className="text-[10px] uppercase tracking-wider font-semibold text-slate-500 mb-1.5">Preview dos horários (BRT)</div>
+        <div className="bg-ww-rowHover border border-ww-border rounded-lg p-3">
+          <div className="text-[10px] uppercase tracking-wider font-semibold text-ww-textMuted mb-1.5">Preview dos horários (BRT)</div>
           <div className="flex flex-wrap gap-1">
             {preview.map((t, i) => (
-              <span key={i} className="px-2 py-0.5 rounded bg-white border border-slate-200 text-[11px]  font-bold text-slate-900 tabular-nums">{t}</span>
+              <span key={i} className="px-2 py-0.5 rounded bg-ww-panel border border-ww-border text-[11px]  font-bold text-ww-text tabular-nums">{t}</span>
             ))}
           </div>
-          <div className="text-[10px] text-slate-500 mt-2">{preview.length} disparo(s) por dia em dias válidos.</div>
+          <div className="text-[10px] text-ww-textMuted mt-2">{preview.length} disparo(s) por dia em dias válidos.</div>
         </div>
 
         <div className="flex justify-end gap-2">
-          <button onClick={onClose} className="px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-100 rounded-md transition">Cancelar</button>
+          <button onClick={onClose} className="px-3 py-1.5 text-xs font-medium text-ww-textMuted hover:bg-ww-bg rounded-md transition">Cancelar</button>
           <button onClick={() => onSave(intervalHours, windowMode)}
             className="px-4 py-1.5 text-xs font-semibold text-white bg-slate-900 hover:bg-slate-800 rounded-md shadow-sm transition">
             Salvar agenda

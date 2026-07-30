@@ -187,7 +187,7 @@ const ADMIN: NavItem[] = [
   {
     href: "/configuracoes",
     label: "Configurações",
-    tone: "text-slate-600",
+    tone: "text-ww-textMuted",
     icon: (
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className="w-5 h-5" strokeLinecap="round" strokeLinejoin="round">
         <circle cx="12" cy="12" r="3"/>
@@ -328,7 +328,7 @@ export default function AppSidebar({ userEmail }: { userEmail?: string | null })
         </nav>
 
         {/* Footer: user + alterar senha + sair */}
-        <div className="border-t border-slate-200 p-2">
+        <div className="border-t border-ww-border p-2">
           {userEmail && open && (
             <div className="px-2 py-1 text-[10px] text-ww-textFaint truncate" title={userEmail}>
               {userEmail}
@@ -441,7 +441,7 @@ function ChangePasswordModal({ onClose }: { onClose: () => void }) {
   return (
     <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4" onClick={onClose}>
       <form onSubmit={submit} onClick={(e) => e.stopPropagation()}
-        className="bg-white dark:bg-ww-panel rounded-xl shadow-2xl max-w-sm w-full p-5 space-y-4 border border-ww-border">
+        className="bg-ww-panel dark:bg-ww-panel rounded-xl shadow-2xl max-w-sm w-full p-5 space-y-4 border border-ww-border">
         <div className="flex items-start justify-between">
           <div>
             <h3 className="font-semibold text-ww-text">Alterar senha</h3>

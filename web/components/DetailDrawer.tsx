@@ -118,26 +118,26 @@ export default function DetailDrawer({
   return (
     <div className="fixed inset-0 z-30 flex">
       <div className="flex-1 bg-slate-900/30" onClick={onClose} />
-      <aside className="w-full max-w-lg bg-white shadow-xl border-l border-slate-200 flex flex-col">
-        <header className="px-5 py-4 border-b border-slate-200 flex items-center justify-between">
+      <aside className="w-full max-w-lg bg-ww-panel shadow-xl border-l border-ww-border flex flex-col">
+        <header className="px-5 py-4 border-b border-ww-border flex items-center justify-between">
           <div>
-            <div className="text-xs text-slate-400 uppercase">{selected.modulo ?? "—"}</div>
-            <h2 className="font-semibold text-slate-900">
+            <div className="text-xs text-ww-textFaint uppercase">{selected.modulo ?? "—"}</div>
+            <h2 className="font-semibold text-ww-text">
               PC {selected.pc_numero ?? "—"}{" "}
-              <span className="text-slate-400 font-normal text-sm">
+              <span className="text-ww-textFaint font-normal text-sm">
                 · {selected.empresa}/{selected.ncod_ped}
               </span>
             </h2>
           </div>
           <button
             onClick={onClose}
-            className="text-slate-400 hover:text-slate-700 text-xl leading-none"
+            className="text-ww-textFaint hover:text-ww-textMuted text-xl leading-none"
           >
             ×
           </button>
         </header>
 
-        <div className="flex gap-1 px-5 py-2 border-b border-slate-100 text-xs">
+        <div className="flex gap-1 px-5 py-2 border-b border-ww-border text-xs">
           {([
             ["timeline", `Timeline (${comments.length + audit.length})`],
             ["comments", `Comentários (${comments.length})`],
@@ -149,7 +149,7 @@ export default function DetailDrawer({
               className={`px-3 py-1.5 rounded-full font-medium transition ${
                 tab === k
                   ? "bg-slate-900 text-white"
-                  : "text-slate-500 hover:bg-slate-100"
+                  : "text-ww-textMuted hover:bg-ww-bg"
               }`}
             >
               {lbl}
@@ -158,9 +158,9 @@ export default function DetailDrawer({
         </div>
 
         <div className="flex-1 overflow-y-auto px-5 py-4 space-y-3">
-          {loading && <div className="text-slate-400 text-sm">Carregando…</div>}
+          {loading && <div className="text-ww-textFaint text-sm">Carregando…</div>}
           {!loading && source.length === 0 && (
-            <div className="text-slate-400 text-sm italic">Nada ainda.</div>
+            <div className="text-ww-textFaint text-sm italic">Nada ainda.</div>
           )}
           {source.map((item) =>
             item.kind === "comment" ? (
@@ -172,7 +172,7 @@ export default function DetailDrawer({
         </div>
 
         {/* Input de comentário */}
-        <div className="border-t border-slate-200 p-4 space-y-2">
+        <div className="border-t border-ww-border p-4 space-y-2">
           {userEmail ? (
             <>
               <textarea
@@ -180,10 +180,10 @@ export default function DetailDrawer({
                 onChange={(e) => setNewComment(e.target.value)}
                 placeholder="Escrever comentário…"
                 rows={2}
-                className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500 resize-none"
+                className="w-full px-3 py-2 text-sm border border-ww-border rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500 resize-none"
               />
               <div className="flex justify-between items-center">
-                <span className="text-xs text-slate-400">{userEmail}</span>
+                <span className="text-xs text-ww-textFaint">{userEmail}</span>
                 <button
                   onClick={postComment}
                   disabled={posting || !newComment.trim()}
@@ -194,7 +194,7 @@ export default function DetailDrawer({
               </div>
             </>
           ) : (
-            <div className="text-xs text-slate-400">Faça login pra comentar.</div>
+            <div className="text-xs text-ww-textFaint">Faça login pra comentar.</div>
           )}
         </div>
       </aside>
@@ -206,10 +206,10 @@ function CommentBubble({ c }: { c: Comment & { kind?: string; ts?: string } }) {
   return (
     <div className="bg-blue-50/60 border border-blue-100 rounded-lg p-3">
       <div className="flex justify-between items-baseline mb-1">
-        <span className="font-medium text-sm text-slate-800">{c.autor_email}</span>
-        <span className="text-[10px] text-slate-400">{fmtDateTime(c.created_at)}</span>
+        <span className="font-medium text-sm text-ww-text">{c.autor_email}</span>
+        <span className="text-[10px] text-ww-textFaint">{fmtDateTime(c.created_at)}</span>
       </div>
-      <p className="text-sm text-slate-700 whitespace-pre-wrap">{c.texto}</p>
+      <p className="text-sm text-ww-textMuted whitespace-pre-wrap">{c.texto}</p>
     </div>
   );
 }
@@ -229,32 +229,32 @@ function AuditBubble({ a }: { a: AuditEntry & { kind?: string; ts?: string } }) 
   };
 
   return (
-    <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 text-sm">
+    <div className="bg-ww-rowHover border border-ww-border rounded-lg p-3 text-sm">
       <div className="flex justify-between items-baseline mb-1">
-        <span className="font-medium text-slate-700">
+        <span className="font-medium text-ww-textMuted">
           {actionLabels[a.action] ?? a.action}
           {a.user_email ? ` · ${a.user_email}` : ""}
         </span>
-        <span className="text-[10px] text-slate-400">{fmtDateTime(a.created_at)}</span>
+        <span className="text-[10px] text-ww-textFaint">{fmtDateTime(a.created_at)}</span>
       </div>
       {a.action === "insert" && (
-        <p className="text-xs text-slate-500">Registro importado/criado.</p>
+        <p className="text-xs text-ww-textMuted">Registro importado/criado.</p>
       )}
       {a.action !== "insert" && changedFields.length > 0 && (
-        <ul className="text-xs text-slate-600 space-y-0.5 mt-1">
+        <ul className="text-xs text-ww-textMuted space-y-0.5 mt-1">
           {(isBigDiff ? changedFields.slice(0, 6) : changedFields).map((k) => {
             const [oldV, newV] = a.diff![k];
             return (
               <li key={k}>
-                <span className=" text-[10px] text-slate-400">{k}</span>{" "}
-                <span className="line-through text-slate-400">{fmtVal(oldV)}</span>
+                <span className=" text-[10px] text-ww-textFaint">{k}</span>{" "}
+                <span className="line-through text-ww-textFaint">{fmtVal(oldV)}</span>
                 {" → "}
-                <span className="text-slate-800">{fmtVal(newV)}</span>
+                <span className="text-ww-text">{fmtVal(newV)}</span>
               </li>
             );
           })}
           {isBigDiff && (
-            <li className="text-slate-400 italic">
+            <li className="text-ww-textFaint italic">
               … +{changedFields.length - 6} campos
             </li>
           )}

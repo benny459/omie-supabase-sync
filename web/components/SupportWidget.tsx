@@ -247,33 +247,33 @@ function SupportPanel({ user, isAdmin, onMinimize, onClose }: { user: UserLike; 
   const total = drafts.length + (closed === "bug" ? 1 : 0);
 
   return (
-    <div className="fixed bottom-4 right-4 z-[9100] w-[min(100vw-1.5rem,400px)] h-[min(80vh,640px)] bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-2xl shadow-2xl flex flex-col overflow-hidden">
-      <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800/50">
+    <div className="fixed bottom-4 right-4 z-[9100] w-[min(100vw-1.5rem,400px)] h-[min(80vh,640px)] bg-ww-panel border border-ww-border rounded-2xl shadow-2xl flex flex-col overflow-hidden">
+      <div className="flex items-center justify-between px-4 py-3 border-b border-ww-border bg-ww-rowHover ">
         <div className="flex items-center gap-2">
           <div className="w-8 h-8 rounded-lg bg-red-500/15 flex items-center justify-center text-base">🛟</div>
           <div>
             <div className="text-sm font-semibold">Suporte</div>
-            <div className="text-[10px] text-zinc-500">{tab === "chat" ? "Bug ou pergunta — descreva à vontade" : "Acompanhe seus tickets"}</div>
+            <div className="text-[10px] text-ww-textMuted">{tab === "chat" ? "Bug ou pergunta — descreva à vontade" : "Acompanhe seus tickets"}</div>
           </div>
         </div>
         <div className="flex items-center gap-1">
-          <button onClick={onMinimize} title="Minimizar (mantém rascunho)" className="text-zinc-500 hover:text-zinc-700 px-2 py-1 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800">—</button>
-          <button onClick={onClose} title="Fechar (descarta rascunho)" className="text-zinc-500 hover:text-zinc-700 px-2 py-1 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800">✕</button>
+          <button onClick={onMinimize} title="Minimizar (mantém rascunho)" className="text-ww-textMuted hover:text-ww-textMuted px-2 py-1 rounded hover:bg-ww-bg dark:hover:bg-zinc-800">—</button>
+          <button onClick={onClose} title="Fechar (descarta rascunho)" className="text-ww-textMuted hover:text-ww-textMuted px-2 py-1 rounded hover:bg-ww-bg dark:hover:bg-zinc-800">✕</button>
         </div>
       </div>
 
-      <div className="flex border-b border-zinc-200 dark:border-zinc-700">
+      <div className="flex border-b border-ww-border ">
         <button onClick={() => setTab("chat")}
-          className={`flex-1 py-2 text-xs font-medium ${tab === "chat" ? "bg-zinc-100 dark:bg-zinc-800 border-b-2 border-blue-500" : "text-zinc-500 hover:text-zinc-700"}`}>
+          className={`flex-1 py-2 text-xs font-medium ${tab === "chat" ? "bg-ww-bg border-b-2 border-blue-500" : "text-ww-textMuted hover:text-ww-textMuted"}`}>
           💬 Novo {total > 0 && <span className="ml-1 inline-block bg-red-600 text-white px-1.5 py-0 rounded-full text-[9px] font-bold align-middle">{total}</span>}
         </button>
         <button onClick={() => setTab("history")}
-          className={`flex-1 py-2 text-xs font-medium ${tab === "history" ? "bg-zinc-100 dark:bg-zinc-800 border-b-2 border-blue-500" : "text-zinc-500 hover:text-zinc-700"}`}>
+          className={`flex-1 py-2 text-xs font-medium ${tab === "history" ? "bg-ww-bg border-b-2 border-blue-500" : "text-ww-textMuted hover:text-ww-textMuted"}`}>
           📋 Meus tickets
         </button>
         {isAdmin && (
           <button onClick={() => setTab("admin")}
-            className={`flex-1 py-2 text-xs font-medium ${tab === "admin" ? "bg-zinc-100 dark:bg-zinc-800 border-b-2 border-emerald-500" : "text-zinc-500 hover:text-zinc-700"}`}>
+            className={`flex-1 py-2 text-xs font-medium ${tab === "admin" ? "bg-ww-bg border-b-2 border-emerald-500" : "text-ww-textMuted hover:text-ww-textMuted"}`}>
             🛡️ Admin
           </button>
         )}
@@ -286,22 +286,22 @@ function SupportPanel({ user, isAdmin, onMinimize, onClose }: { user: UserLike; 
       ) : (
         <>
           {drafts.length > 0 && (
-            <div className="border-b border-zinc-200 dark:border-zinc-700 bg-amber-50 dark:bg-amber-950/20 px-3 py-2">
+            <div className="border-b border-ww-border bg-amber-50 dark:bg-amber-950/20 px-3 py-2">
               <div className="text-[11px] font-semibold text-amber-900 dark:text-amber-200 mb-1.5">✓ {drafts.length} problema{drafts.length > 1 ? "s" : ""} no conjunto</div>
               {drafts.map((d, i) => (
-                <div key={d.id} className="flex items-center justify-between gap-2 bg-white/60 dark:bg-black/20 rounded px-2 py-1 text-[11px] mb-1">
+                <div key={d.id} className="flex items-center justify-between gap-2 bg-ww-panel/60 rounded px-2 py-1 text-[11px] mb-1">
                   <span className="flex-1 truncate"><b className="mr-1.5">{i + 1}.</b>{d.summary}{d.images.length > 0 && <span className="ml-1 opacity-70">📎{d.images.length}</span>}</span>
-                  <button onClick={() => removeDraft(d.id)} className="text-zinc-500 hover:text-red-600 px-1" title="Remover">✕</button>
+                  <button onClick={() => removeDraft(d.id)} className="text-ww-textMuted hover:text-red-600 px-1" title="Remover">✕</button>
                 </div>
               ))}
             </div>
           )}
 
           {submittedCodes && submittedCodes.length > 0 && (
-            <div className="border-b border-zinc-200 dark:border-zinc-700 bg-emerald-50 dark:bg-emerald-950/20 px-3 py-2">
+            <div className="border-b border-ww-border bg-emerald-50 dark:bg-emerald-950/20 px-3 py-2">
               <div className="text-[11px] font-semibold text-emerald-900 dark:text-emerald-200 mb-1">✓ Conjunto enviado — {submittedCodes.length} ticket{submittedCodes.length > 1 ? "s" : ""}:</div>
               <div className="flex flex-wrap gap-1">
-                {submittedCodes.map(c => <span key={c} className="text-[10px] font-mono bg-white/60 dark:bg-black/20 rounded px-1.5 py-0.5">{c}</span>)}
+                {submittedCodes.map(c => <span key={c} className="text-[10px] font-mono bg-ww-panel/60 rounded px-1.5 py-0.5">{c}</span>)}
               </div>
               <p className="text-[10px] text-emerald-800 dark:text-emerald-300 mt-1">Acompanhe a resolução em &quot;Meus tickets&quot;.</p>
             </div>
@@ -311,7 +311,7 @@ function SupportPanel({ user, isAdmin, onMinimize, onClose }: { user: UserLike; 
             {messages.map(m => (
               <div key={m.id} className={`flex gap-2 ${m.role === "user" ? "flex-row-reverse" : ""}`}>
                 <div className="max-w-[85%] space-y-1">
-                  <div className={`px-3 py-2 rounded-xl text-sm whitespace-pre-wrap ${m.role === "user" ? "bg-blue-500 text-white" : "bg-zinc-100 dark:bg-zinc-800"}`}>{m.content}</div>
+                  <div className={`px-3 py-2 rounded-xl text-sm whitespace-pre-wrap ${m.role === "user" ? "bg-blue-500 text-white" : "bg-ww-bg "}`}>{m.content}</div>
                   {m.images && m.images.length > 0 && (
                     <div className="flex flex-wrap gap-1.5">
                       {m.images.map((img, i) => (
@@ -327,7 +327,7 @@ function SupportPanel({ user, isAdmin, onMinimize, onClose }: { user: UserLike; 
           </div>
 
           {pendingImages.length > 0 && (
-            <div className="px-3 pt-2 border-t border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800/30 flex gap-1.5 flex-wrap">
+            <div className="px-3 pt-2 border-t border-ww-border bg-ww-rowHover flex gap-1.5 flex-wrap">
               {pendingImages.map((img, i) => (
                 <div key={i} className="relative">
                   <img src={img.data_url} alt={img.name} className="h-14 w-14 rounded border object-cover" />
@@ -339,7 +339,7 @@ function SupportPanel({ user, isAdmin, onMinimize, onClose }: { user: UserLike; 
           )}
 
           {closed === "bug" && (
-            <div className="px-3 pt-2 pb-1 border-t border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800/30 flex gap-2">
+            <div className="px-3 pt-2 pb-1 border-t border-ww-border bg-ww-rowHover flex gap-2">
               <button onClick={addToConjunto} className="flex-1 bg-amber-500 hover:bg-amber-600 text-white py-2 rounded-xl text-xs font-bold">+ Adicionar outro problema</button>
               <button onClick={submitConjunto} disabled={submitting} className="flex-1 bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white py-2 rounded-xl text-xs font-bold">
                 {submitting ? "Enviando..." : `Enviar conjunto (${total})`}
@@ -347,22 +347,22 @@ function SupportPanel({ user, isAdmin, onMinimize, onClose }: { user: UserLike; 
             </div>
           )}
           {closed !== "bug" && drafts.length > 0 && (
-            <div className="px-3 pt-2 pb-1 border-t border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800/30">
+            <div className="px-3 pt-2 pb-1 border-t border-ww-border bg-ww-rowHover ">
               <button onClick={submitConjunto} disabled={submitting} className="w-full bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white py-2 rounded-xl text-xs font-bold">
                 {submitting ? "Enviando..." : `Enviar conjunto (${drafts.length})`}
               </button>
             </div>
           )}
 
-          <div className="flex items-end gap-2 p-3 border-t border-zinc-200 dark:border-zinc-700">
+          <div className="flex items-end gap-2 p-3 border-t border-ww-border ">
             <input ref={fileRef} type="file" accept="image/*" multiple className="hidden" onChange={e => handleFiles(e.target.files)} />
             <button onClick={() => fileRef.current?.click()} disabled={busy} title="Anexar print/foto"
-              className="h-10 w-10 rounded-xl border bg-white dark:bg-zinc-800 hover:bg-zinc-100 dark:hover:bg-zinc-700 flex items-center justify-center text-base disabled:opacity-40">📎</button>
+              className="h-10 w-10 rounded-xl border bg-ww-panel hover:bg-ww-bg dark:hover:bg-zinc-700 flex items-center justify-center text-base disabled:opacity-40">📎</button>
             <textarea value={input} onChange={e => setInput(e.target.value)}
               onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }}
               placeholder={drafts.length > 0 ? "Descreva o próximo problema..." : "Descreva o problema ou faça sua pergunta..."}
               rows={2} disabled={busy}
-              className="flex-1 border border-zinc-300 dark:border-zinc-600 rounded-xl px-3 py-2 text-sm resize-none outline-none focus:ring-2 focus:ring-blue-500/30 bg-white dark:bg-zinc-800 disabled:opacity-50" />
+              className="flex-1 border border-ww-border rounded-xl px-3 py-2 text-sm resize-none outline-none focus:ring-2 focus:ring-blue-500/30 bg-ww-panel disabled:opacity-50" />
             <button onClick={send} disabled={busy || (!input.trim() && pendingImages.length === 0)}
               className="h-10 w-10 rounded-xl bg-blue-500 text-white flex items-center justify-center hover:bg-blue-600 disabled:opacity-40 text-base">
               {busy ? "⏳" : "→"}
@@ -501,15 +501,15 @@ function MyTicketsPanel({ user }: { user: UserLike }) {
     try { await bugSupabase.from("bugs").update({ colaboradores: next }).eq("id", id); } catch { /* swallow */ }
   };
 
-  if (loading) return <div className="p-6 text-center text-sm text-zinc-500">Carregando…</div>;
+  if (loading) return <div className="p-6 text-center text-sm text-ww-textMuted">Carregando…</div>;
   if (error) return <div className="p-6 text-sm text-red-600">Erro: {error}</div>;
-  if (tickets.length === 0) return <div className="p-6 text-center text-sm text-zinc-500">Você ainda não reportou nada.</div>;
+  if (tickets.length === 0) return <div className="p-6 text-center text-sm text-ww-textMuted">Você ainda não reportou nada.</div>;
 
   return (
     <div className="flex-1 overflow-y-auto p-3 space-y-2">
       <div className="flex items-center justify-between px-1">
-        <span className="text-[11px] text-zinc-500">{tickets.length} ticket{tickets.length !== 1 ? "s" : ""}</span>
-        <button onClick={refreshAll} disabled={refreshing} className="inline-flex items-center gap-1 text-[11px] text-zinc-500 hover:text-zinc-900 dark:hover:text-white disabled:opacity-40" title="Atualizar">
+        <span className="text-[11px] text-ww-textMuted">{tickets.length} ticket{tickets.length !== 1 ? "s" : ""}</span>
+        <button onClick={refreshAll} disabled={refreshing} className="inline-flex items-center gap-1 text-[11px] text-ww-textMuted hover:text-ww-text dark:hover:text-white disabled:opacity-40" title="Atualizar">
           <span className={refreshing ? "inline-block animate-spin" : "inline-block"}>↻</span>
           {refreshing ? "Atualizando..." : "Atualizar"}
         </button>
@@ -522,25 +522,25 @@ function MyTicketsPanel({ user }: { user: UserLike }) {
         const latest = friendlyMsgs[friendlyMsgs.length - 1];
         const canEdit = t.reporter_email === user.email;
         return (
-          <div key={t.id} className="rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 overflow-hidden">
-            <button onClick={() => { if (!isOpen) loadFullTicket(t.id); setOpenId(isOpen ? null : t.id); }} className="w-full p-3 text-left hover:bg-zinc-50 dark:hover:bg-zinc-800/50">
+          <div key={t.id} className="rounded-lg border border-ww-border bg-ww-panel overflow-hidden">
+            <button onClick={() => { if (!isOpen) loadFullTicket(t.id); setOpenId(isOpen ? null : t.id); }} className="w-full p-3 text-left hover:bg-ww-rowHover dark:hover:bg-zinc-800/50">
               <div className="flex items-start justify-between gap-2">
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-1">
                     <span className="inline-block px-2 py-0.5 rounded-md text-[10px] font-semibold" style={{ background: meta.bg, color: meta.tx }}>{meta.label}</span>
-                    <span className="text-[10px] text-zinc-400 tabular-nums">{t.ticket_code || t.id.slice(0, 8)}</span>
+                    <span className="text-[10px] text-ww-textFaint tabular-nums">{t.ticket_code || t.id.slice(0, 8)}</span>
                   </div>
                   <p className="text-sm line-clamp-2 break-words">{t.descricao || "(sem descrição)"}</p>
-                  {latest && <p className="text-xs text-zinc-500 mt-1 line-clamp-2 italic">↳ {latest}</p>}
+                  {latest && <p className="text-xs text-ww-textMuted mt-1 line-clamp-2 italic">↳ {latest}</p>}
                 </div>
               </div>
             </button>
             {isOpen && (
-              <div className="border-t border-zinc-200 dark:border-zinc-700 p-3 space-y-2 bg-zinc-50 dark:bg-zinc-800/30">
-                <div className="rounded-md border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 p-2 space-y-1.5">
-                  <div className="text-[10px] uppercase tracking-wider text-zinc-500">Colaboradores neste ticket</div>
+              <div className="border-t border-ww-border p-3 space-y-2 bg-ww-rowHover ">
+                <div className="rounded-md border border-ww-border bg-ww-panel p-2 space-y-1.5">
+                  <div className="text-[10px] uppercase tracking-wider text-ww-textMuted">Colaboradores neste ticket</div>
                   <div className="flex flex-wrap gap-1">
-                    {(t.colaboradores || []).length === 0 && <span className="text-[10px] text-zinc-400 italic">Nenhum por enquanto. Adicione abaixo se outra pessoa precisa acompanhar.</span>}
+                    {(t.colaboradores || []).length === 0 && <span className="text-[10px] text-ww-textFaint italic">Nenhum por enquanto. Adicione abaixo se outra pessoa precisa acompanhar.</span>}
                     {(t.colaboradores || []).map(email => (
                       <span key={email} className="inline-flex items-center gap-1 bg-blue-100 dark:bg-blue-950/40 text-blue-800 dark:text-blue-200 rounded-full px-2 py-0.5 text-[10px]">
                         {email}
@@ -552,7 +552,7 @@ function MyTicketsPanel({ user }: { user: UserLike }) {
                     <div className="flex gap-1.5">
                       <input type="email" value={collabInputById[t.id] || ""} onChange={e => setCollabInputById(p => ({ ...p, [t.id]: e.target.value }))}
                         placeholder="email do colaborador@..."
-                        className="flex-1 border border-zinc-300 dark:border-zinc-600 rounded-md px-2 py-1 text-[11px] bg-white dark:bg-zinc-800 outline-none" />
+                        className="flex-1 border border-ww-border rounded-md px-2 py-1 text-[11px] bg-ww-panel outline-none" />
                       <button onClick={() => addCollab(t.id)} className="px-2 py-1 rounded-md text-[11px] font-semibold bg-blue-500 text-white hover:bg-blue-600">+ Adicionar</button>
                     </div>
                   )}
@@ -567,12 +567,12 @@ function MyTicketsPanel({ user }: { user: UserLike }) {
                   </div>
                 )}
 
-                <div className="text-[10px] uppercase tracking-wider text-zinc-500">Histórico</div>
+                <div className="text-[10px] uppercase tracking-wider text-ww-textMuted">Histórico</div>
                 {(t.mensagens || []).map((m, i) => (
                   <div key={i} className={`text-xs rounded-md px-2.5 py-1.5 ${
                     m.role === "user" ? "bg-blue-100 dark:bg-blue-950/40 ml-6" :
                     m.from === "admin" ? "bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-900 mr-6" :
-                    "bg-zinc-100 dark:bg-zinc-800 mr-6"
+                    "bg-ww-bg mr-6"
                   }`}>
                     <div className="text-[9px] uppercase tracking-wider mb-0.5 opacity-60">{m.role === "user" ? "Você" : (m.from === "admin" ? "Admin" : (m.from === "claude-loop" ? "Suporte" : "Assistente"))}</div>
                     <div className="whitespace-pre-wrap break-words">{m.role === "assistant" ? humanize(m.content) : m.content}</div>
@@ -583,7 +583,7 @@ function MyTicketsPanel({ user }: { user: UserLike }) {
                     <textarea value={replyById[t.id] || ""} onChange={e => setReplyById(p => ({ ...p, [t.id]: e.target.value }))}
                       placeholder={t.status === "aguardando_user" ? "Responda a pergunta do suporte..." : "Algo a acrescentar ou perguntar?"}
                       rows={2} disabled={!!sendingById[t.id]}
-                      className="w-full border border-zinc-300 dark:border-zinc-600 rounded-md px-2 py-1.5 text-xs resize-none outline-none focus:ring-2 focus:ring-blue-500/30 bg-white dark:bg-zinc-800 disabled:opacity-50" />
+                      className="w-full border border-ww-border rounded-md px-2 py-1.5 text-xs resize-none outline-none focus:ring-2 focus:ring-blue-500/30 bg-ww-panel disabled:opacity-50" />
                     <div className="flex justify-end">
                       <button onClick={() => sendReply(t.id)} disabled={!(replyById[t.id] || "").trim() || !!sendingById[t.id]}
                         className="px-3 py-1 rounded-md text-xs font-semibold bg-blue-500 text-white hover:bg-blue-600 disabled:opacity-40">
@@ -680,15 +680,15 @@ function AdminTicketsPanel() {
     finally { setSendingById(p => ({ ...p, [id]: false })); }
   };
 
-  if (loading) return <div className="p-6 text-center text-sm text-zinc-500">Carregando…</div>;
+  if (loading) return <div className="p-6 text-center text-sm text-ww-textMuted">Carregando…</div>;
   if (error) return <div className="p-6 text-sm text-red-600">Erro: {error}</div>;
 
   return (
     <div className="flex-1 overflow-y-auto">
-      <div className="sticky top-0 z-10 bg-white dark:bg-zinc-900 border-b border-zinc-200 dark:border-zinc-700 p-3 space-y-1.5">
+      <div className="sticky top-0 z-10 bg-ww-panel border-b border-ww-border p-3 space-y-1.5">
         <input value={search} onChange={e => setSearch(e.target.value)}
           placeholder="Buscar (descrição, email, código...)"
-          className="w-full border border-zinc-300 dark:border-zinc-600 rounded-md px-2 py-1.5 text-xs bg-white dark:bg-zinc-800 outline-none" />
+          className="w-full border border-ww-border rounded-md px-2 py-1.5 text-xs bg-ww-panel outline-none" />
         <div className="flex flex-wrap gap-1">
           {ADMIN_STATUS_OPTIONS.map(o => {
             const m = STATUS_LABEL[o.key];
@@ -696,16 +696,16 @@ function AdminTicketsPanel() {
             return (
               <button key={o.key} onClick={() => toggleStatus(o.key)}
                 style={active && m ? { background: m.bg, color: m.tx } : undefined}
-                className={`px-1.5 py-0.5 rounded-md text-[10px] font-medium border ${active ? "border-transparent" : "bg-white dark:bg-zinc-800 text-zinc-500 border-zinc-300 dark:border-zinc-600 hover:border-zinc-400"}`}>
+                className={`px-1.5 py-0.5 rounded-md text-[10px] font-medium border ${active ? "border-transparent" : "bg-ww-panel text-ww-textMuted border-ww-border hover:border-ww-borderStrong"}`}>
                 {o.label}
               </button>
             );
           })}
           {statusFilter.size > 0 && (
-            <button onClick={() => setStatusFilter(new Set())} className="px-1.5 py-0.5 text-[10px] text-zinc-500 hover:text-zinc-700">limpar</button>
+            <button onClick={() => setStatusFilter(new Set())} className="px-1.5 py-0.5 text-[10px] text-ww-textMuted hover:text-ww-textMuted">limpar</button>
           )}
         </div>
-        <div className="flex items-center justify-between text-[10px] text-zinc-500">
+        <div className="flex items-center justify-between text-[10px] text-ww-textMuted">
           <label className="flex items-center gap-1 cursor-pointer">
             <input type="checkbox" checked={hideTerminal} onChange={e => setHideTerminal(e.target.checked)} className="h-3 w-3" />
             Ocultar finalizados
@@ -716,32 +716,32 @@ function AdminTicketsPanel() {
 
       <div className="p-3 space-y-2">
         {filtered.length === 0 ? (
-          <div className="p-6 text-center text-sm text-zinc-500">Nenhum ticket pra esses filtros.</div>
+          <div className="p-6 text-center text-sm text-ww-textMuted">Nenhum ticket pra esses filtros.</div>
         ) : filtered.map(t => {
           const eff = effectiveStatus(t);
           const meta = STATUS_LABEL[eff] || { label: eff, bg: "#e2e8f0", tx: "#1e293b" };
           const isOpen = openId === t.id;
           const lastMsg = (t.mensagens || []).slice(-1)[0];
           return (
-            <div key={t.id} className="rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 overflow-hidden">
-              <button onClick={() => setOpenId(isOpen ? null : t.id)} className="w-full p-3 text-left hover:bg-zinc-50 dark:hover:bg-zinc-800/50">
+            <div key={t.id} className="rounded-lg border border-ww-border bg-ww-panel overflow-hidden">
+              <button onClick={() => setOpenId(isOpen ? null : t.id)} className="w-full p-3 text-left hover:bg-ww-rowHover dark:hover:bg-zinc-800/50">
                 <div className="flex items-center gap-2 mb-1 flex-wrap">
                   <span className="inline-block px-2 py-0.5 rounded-md text-[10px] font-semibold" style={{ background: meta.bg, color: meta.tx }}>{t.status}</span>
-                  <span className="text-[10px] text-zinc-400 tabular-nums">{t.ticket_code || t.id.slice(0, 8)}</span>
+                  <span className="text-[10px] text-ww-textFaint tabular-nums">{t.ticket_code || t.id.slice(0, 8)}</span>
                   <ModelBadge model={t.fixed_by_model} />
-                  <span className="text-[10px] text-zinc-500 truncate max-w-[180px]">{t.reporter_nome || t.reporter_email}</span>
-                  <span className="text-[10px] text-zinc-400 ml-auto">{new Date(t.created_at).toLocaleDateString("pt-BR")}</span>
+                  <span className="text-[10px] text-ww-textMuted truncate max-w-[180px]">{t.reporter_nome || t.reporter_email}</span>
+                  <span className="text-[10px] text-ww-textFaint ml-auto">{new Date(t.created_at).toLocaleDateString("pt-BR")}</span>
                 </div>
                 <p className="text-sm line-clamp-2 break-words">{t.descricao || "(sem descrição)"}</p>
                 {lastMsg && (
-                  <p className="text-xs text-zinc-500 mt-1 line-clamp-2 italic">
+                  <p className="text-xs text-ww-textMuted mt-1 line-clamp-2 italic">
                     ↳ <span className="opacity-70">[{lastMsg.role}{lastMsg.from ? "/" + lastMsg.from : ""}]</span> {lastMsg.content}
                   </p>
                 )}
               </button>
               {isOpen && (
-                <div className="border-t border-zinc-200 dark:border-zinc-700 p-3 space-y-2 bg-zinc-50 dark:bg-zinc-800/30">
-                  <div className="text-[10px] text-zinc-500 space-y-0.5">
+                <div className="border-t border-ww-border p-3 space-y-2 bg-ww-rowHover ">
+                  <div className="text-[10px] text-ww-textMuted space-y-0.5">
                     <div><span className="opacity-60">Reporter:</span> {t.reporter_email}{t.reporter_nome ? ` (${t.reporter_nome})` : ""}</div>
                     {t.url && <div className="truncate"><span className="opacity-60">URL:</span> {t.url}</div>}
                     <div><span className="opacity-60">Aberto:</span> {new Date(t.created_at).toLocaleString("pt-BR")}</div>
@@ -759,13 +759,13 @@ function AdminTicketsPanel() {
                     </div>
                   )}
 
-                  <div className="text-[10px] uppercase tracking-wider text-zinc-500">Histórico (cru)</div>
+                  <div className="text-[10px] uppercase tracking-wider text-ww-textMuted">Histórico (cru)</div>
                   {(t.mensagens || []).map((m, i) => {
                     const senderLabel = m.role === "user" ? "Usuário" : m.from === "admin" ? "Admin (você)" : m.from === "claude-loop" ? "Bot" : "Assistente";
                     const align =
                       m.role === "user" ? "ml-6 bg-blue-100 dark:bg-blue-950/40" :
                       m.from === "admin" ? "mr-6 bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-900" :
-                      "mr-6 bg-zinc-100 dark:bg-zinc-800";
+                      "mr-6 bg-ww-bg ";
                     return (
                       <div key={i} className={`text-xs rounded-md px-2.5 py-1.5 ${align}`}>
                         <div className="text-[9px] uppercase tracking-wider mb-0.5 opacity-60 flex justify-between gap-2">
@@ -779,7 +779,7 @@ function AdminTicketsPanel() {
                     <textarea value={replyById[t.id] || ""} onChange={e => setReplyById(p => ({ ...p, [t.id]: e.target.value }))}
                       placeholder="Responder como Admin (vai aparecer pro usuário no thread dele)..."
                       rows={2} disabled={!!sendingById[t.id]}
-                      className="w-full border border-zinc-300 dark:border-zinc-600 rounded-md px-2 py-1.5 text-xs resize-none outline-none focus:ring-2 focus:ring-emerald-500/30 bg-white dark:bg-zinc-800 disabled:opacity-50" />
+                      className="w-full border border-ww-border rounded-md px-2 py-1.5 text-xs resize-none outline-none focus:ring-2 focus:ring-emerald-500/30 bg-ww-panel disabled:opacity-50" />
                     <div className="flex justify-end">
                       <button onClick={() => sendAdminReply(t.id)} disabled={!(replyById[t.id] || "").trim() || !!sendingById[t.id]}
                         className="px-3 py-1 rounded-md text-xs font-semibold bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-40">

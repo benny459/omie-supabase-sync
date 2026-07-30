@@ -48,8 +48,8 @@ export default function ResetPage() {
   }
 
   return (
-    <main className="min-h-screen flex items-center justify-center bg-slate-50 p-6">
-      <div className="w-full max-w-md bg-white rounded-xl border border-slate-200 p-8 shadow-sm">
+    <main className="min-h-screen flex items-center justify-center bg-ww-rowHover p-6">
+      <div className="w-full max-w-md bg-ww-panel rounded-xl border border-ww-border p-8 shadow-sm">
         <div className="flex flex-col items-center mb-6">
           <img
             src="/logo-waterworks.svg"
@@ -57,8 +57,8 @@ export default function ResetPage() {
             className="h-16 w-auto object-contain mb-3"
             onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
           />
-          <h1 className="text-xl font-semibold text-slate-900">Nova senha</h1>
-          <p className="text-sm text-slate-500 mt-1">Escolha uma senha forte.</p>
+          <h1 className="text-xl font-semibold text-ww-text">Nova senha</h1>
+          <p className="text-sm text-ww-textMuted mt-1">Escolha uma senha forte.</p>
         </div>
         {ready ? (
           <form onSubmit={onSubmit} className="space-y-3">
@@ -68,7 +68,7 @@ export default function ResetPage() {
               placeholder="Nova senha (mín. 8 caracteres)"
               value={pw1}
               onChange={(e) => setPw1(e.target.value)}
-              className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+              className="w-full px-3 py-2 border border-ww-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
             />
             <input
               type="password"
@@ -76,7 +76,7 @@ export default function ResetPage() {
               placeholder="Confirmar nova senha"
               value={pw2}
               onChange={(e) => setPw2(e.target.value)}
-              className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+              className="w-full px-3 py-2 border border-ww-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
             />
             <button
               type="submit"
@@ -87,7 +87,7 @@ export default function ResetPage() {
             </button>
           </form>
         ) : (
-          <div className="text-center py-6 text-sm text-slate-500">
+          <div className="text-center py-6 text-sm text-ww-textMuted">
             {msg ? null : "Validando link…"}
           </div>
         )}

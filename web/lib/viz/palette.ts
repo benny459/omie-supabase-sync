@@ -30,15 +30,31 @@
 export type VizMode = "light" | "dark";
 
 // Ordem canônica. Índice = slot. NÃO reordenar sem revalidar.
+//
+// Rampa CLARA repassada em 2026-07-30: os 8 hues descem juntos pra uma banda
+// mais escura, de modo que TODOS clarem 3:1 contra branco. Antes, aqua/amarelo/
+// magenta ficavam em 2.17–2.82 — barra fina naquelas cores praticamente sumia
+// no fundo, e a regra de alívio (tabela) era o único remendo.
+//
+// O trade medido: contraste de todos os 8 passa a PASSAR; em troca o pior par
+// adjacente de CVD cai de 9.1 pra 8.0 (topo da faixa 6–8, que a skill permite
+// SÓ com codificação secundária). O ChartFrame entrega essa codificação —
+// legenda sempre presente com 2+ séries, visão de tabela e gap de 2px entre
+// marks. Marca invisível é pior que marca parecida.
+//
+// Tentativas descartadas (todas medidas, todas piores):
+//   escurecer só os 3 problemáticos -> laranja claro converge com aqua escuro
+//     no protan (ΔE 5.9, FAIL)
+//   reordenar pra separar aqua↔amarelo -> verde↔amarelo cai pra ΔE 2.1 (FAIL)
 export const SERIES_LIGHT = [
   "#2a78d6", // 1 azul
-  "#eb6834", // 2 laranja
-  "#1baf7a", // 3 aqua      — contraste 2.82 no claro → exige alívio
-  "#eda100", // 4 amarelo   — contraste 2.17 no claro → exige alívio
-  "#e87ba4", // 5 magenta   — contraste 2.69 no claro → exige alívio
+  "#c4551f", // 2 laranja
+  "#0f8f66", // 3 aqua
+  "#a97a00", // 4 amarelo
+  "#c95480", // 5 magenta
   "#008300", // 6 verde
   "#4a3aa7", // 7 violeta
-  "#e34948", // 8 vermelho
+  "#cf3b3a", // 8 vermelho
 ] as const;
 
 export const SERIES_DARK = [
@@ -46,8 +62,10 @@ export const SERIES_DARK = [
   "#d55181", "#008300", "#9085e9", "#e66767",
 ] as const;
 
-// Slots cujo contraste no claro fica sub-3:1 — quem consome decide o alívio.
-export const LOW_CONTRAST_LIGHT_SLOTS = new Set([2, 3, 4]);
+// Depois do repasse da rampa clara, nenhum slot fica sub-3:1. Mantido vazio (e
+// não removido) porque ChartFrame e futuros consumidores checam por aqui — se
+// alguém clarear um hue de novo, é aqui que se registra.
+export const LOW_CONTRAST_LIGHT_SLOTS = new Set<number>();
 
 export const MAX_SERIES = 8;
 
@@ -96,13 +114,16 @@ export const STATUS = {
 // Cromo do gráfico. Texto usa token de TEXTO, nunca a cor da série — o mark
 // colorido ao lado é que carrega a identidade.
 export const CHROME = {
+  // Claro "tech": mesma família do escuro, espelhada. Tinta e grade ganham um
+  // leve viés azul pra o par claro/escuro parecer o MESMO produto em dois
+  // modos, e não dois temas diferentes colados.
   light: {
     surface:  "#ffffff",
-    gridline: "#e1e0d9",
-    axis:     "#c3c2b7",
-    ink:      "#0e0e0c",
-    inkMuted: "#5b5b54",
-    inkFaint: "#8e8e84",
+    gridline: "#dfe7f2",
+    axis:     "#c2cfe3",
+    ink:      "#0f1e3a",
+    inkMuted: "#51637f",
+    inkFaint: "#8496b0",
   },
   // Tema escuro "tech" azul-marinho. A paleta categórica NÃO mudou — só a
   // superfície — e foi revalidada contra #152744: contraste ≥3:1 nos 8 slots,

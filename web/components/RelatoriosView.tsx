@@ -110,26 +110,26 @@ export default function RelatoriosView() {
       {/* Header */}
       <div className="flex items-end justify-between gap-4 flex-wrap">
         <div>
-          <h1 className="text-[24px] font-bold tracking-tight text-slate-900">Relatório de aprovações</h1>
-          <p className="text-sm text-slate-500 mt-1">Resumo das compras aprovadas no período. Filtra por data de aprovação.</p>
+          <h1 className="text-[24px] font-bold tracking-tight text-ww-text">Relatório de aprovações</h1>
+          <p className="text-sm text-ww-textMuted mt-1">Resumo das compras aprovadas no período. Filtra por data de aprovação.</p>
         </div>
         {report && (
-          <div className="text-[11px] text-slate-500 font-mono">
+          <div className="text-[11px] text-ww-textMuted font-mono">
             {report.range.from} → {report.range.to}
           </div>
         )}
       </div>
 
       {/* Filtros de período */}
-      <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4">
+      <div className="bg-ww-panel rounded-xl border border-ww-border shadow-sm p-4">
         <div className="flex items-center gap-2 flex-wrap">
-          <span className="text-[11px] uppercase tracking-wider font-bold text-slate-500 mr-1">Período:</span>
+          <span className="text-[11px] uppercase tracking-wider font-bold text-ww-textMuted mr-1">Período:</span>
           {PRESETS.map((p) => (
             <button key={p.v} onClick={() => setPreset(p.v)}
               className={`px-3 py-1 rounded-md text-[11.5px] font-semibold border-2 transition ${
                 preset === p.v
                   ? "bg-slate-900 text-white border-slate-900"
-                  : "bg-white text-slate-600 border-slate-200 hover:border-slate-400"
+                  : "bg-ww-panel text-ww-textMuted border-ww-border hover:border-ww-borderStrong"
               }`}>
               {p.label}
             </button>
@@ -137,25 +137,25 @@ export default function RelatoriosView() {
         </div>
         {preset === "custom" && (
           <div className="mt-3 flex items-center gap-2 flex-wrap">
-            <span className="text-[11px] text-slate-500">de</span>
+            <span className="text-[11px] text-ww-textMuted">de</span>
             <input type="date" value={customFrom} onChange={(e) => setCustomFrom(e.target.value)}
-              className="px-2 py-1 border border-slate-300 rounded-md text-sm" />
-            <span className="text-[11px] text-slate-500">até</span>
+              className="px-2 py-1 border border-ww-border rounded-md text-sm" />
+            <span className="text-[11px] text-ww-textMuted">até</span>
             <input type="date" value={customTo} onChange={(e) => setCustomTo(e.target.value)}
-              className="px-2 py-1 border border-slate-300 rounded-md text-sm" />
+              className="px-2 py-1 border border-ww-border rounded-md text-sm" />
           </div>
         )}
       </div>
 
       {error && <div className="text-xs text-rose-700 bg-rose-50 border border-rose-200 rounded-md px-3 py-2">{error}</div>}
-      {loading && <div className="py-12 text-center text-sm text-slate-400">Carregando…</div>}
+      {loading && <div className="py-12 text-center text-sm text-ww-textFaint">Carregando…</div>}
 
       {!loading && report && (
         <>
           {/* KPIs */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             <Kpi label="Total aprovado" value={fmtBRL(report.kpis.totalValor)} accent="text-emerald-600" />
-            <Kpi label="Aprovações" value={report.kpis.totalAprovacoes.toLocaleString("pt-BR")} accent="text-slate-900" />
+            <Kpi label="Aprovações" value={report.kpis.totalAprovacoes.toLocaleString("pt-BR")} accent="text-ww-text" />
             <Kpi label="Ticket médio" value={fmtBRL(report.kpis.ticketMedio)} accent="text-blue-600" />
             <Kpi label="Maior aprovação" value={fmtBRL(report.kpis.maiorAprovacao)} accent="text-amber-600" />
           </div>
@@ -176,7 +176,7 @@ export default function RelatoriosView() {
                     <span className="text-[10px] tabular-nums font-mono opacity-60">{m.count} aprov.</span>
                   </div>
                   <div className="text-[22px] font-bold tabular-nums tracking-[-0.5px]">{fmtBRL(m.valor)}</div>
-                  <div className="mt-2 h-1.5 bg-white/50 rounded overflow-hidden">
+                  <div className="mt-2 h-1.5 bg-ww-panel/50 rounded overflow-hidden">
                     <div className={`h-full ${meta.bar}`} style={{ width: `${pct}%` }} />
                   </div>
                   <div className="text-[10px] mt-1 opacity-70 tabular-nums">{pct.toFixed(1).replace(".", ",")}% do total</div>
@@ -189,24 +189,24 @@ export default function RelatoriosView() {
           <div className="flex items-center gap-3 flex-wrap">
             <input type="text" placeholder="Buscar PC, PV/OS, fornecedor, projeto, aprovador…"
               value={query} onChange={(e) => setQuery(e.target.value)}
-              className="flex-1 min-w-[280px] px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-slate-400/40" />
+              className="flex-1 min-w-[280px] px-3 py-2 border border-ww-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-slate-400/40" />
             {moduloFilter && (
               <button onClick={() => setModuloFilter(null)}
-                className="text-[11.5px] font-semibold text-slate-600 underline-offset-2 hover:underline">
+                className="text-[11.5px] font-semibold text-ww-textMuted underline-offset-2 hover:underline">
                 Limpar filtro de módulo ({MODULO_META[moduloFilter]?.label})
               </button>
             )}
-            <span className="text-[11.5px] text-slate-500 font-mono ml-auto">
-              {filteredRows.length} {filteredRows.length === 1 ? "linha" : "linhas"} · <strong className="text-slate-900">{fmtBRL(filteredTotalValor)}</strong>
+            <span className="text-[11.5px] text-ww-textMuted font-mono ml-auto">
+              {filteredRows.length} {filteredRows.length === 1 ? "linha" : "linhas"} · <strong className="text-ww-text">{fmtBRL(filteredTotalValor)}</strong>
             </span>
           </div>
 
           {/* Tabela */}
-          <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+          <div className="bg-ww-panel rounded-xl border border-ww-border shadow-sm overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="text-left text-[10px] uppercase tracking-wider text-slate-500 bg-slate-50/60">
+                  <tr className="text-left text-[10px] uppercase tracking-wider text-ww-textMuted bg-ww-rowHover/60">
                     <th className="px-4 py-2 font-semibold">Aprovado em</th>
                     <th className="px-3 py-2 font-semibold">Módulo</th>
                     <th className="px-3 py-2 font-semibold">PV/OS</th>
@@ -220,35 +220,35 @@ export default function RelatoriosView() {
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {filteredRows.length === 0 && (
-                    <tr><td colSpan={9} className="px-5 py-12 text-center text-slate-400 italic text-sm">Nenhuma aprovação no período.</td></tr>
+                    <tr><td colSpan={9} className="px-5 py-12 text-center text-ww-textFaint italic text-sm">Nenhuma aprovação no período.</td></tr>
                   )}
                   {filteredRows.map((r, i) => {
                     const meta = MODULO_META[r.modulo] ?? MODULO_META.avulsos;
                     return (
-                      <tr key={`${r.empresa}-${r.ncod_ped}-${i}`} className="hover:bg-slate-50/40 transition">
-                        <td className="px-4 py-2 text-slate-700 text-[11.5px] tabular-nums whitespace-nowrap">{fmtDateTime(r.aprovado_em)}</td>
+                      <tr key={`${r.empresa}-${r.ncod_ped}-${i}`} className="hover:bg-ww-rowHover/40 transition">
+                        <td className="px-4 py-2 text-ww-textMuted text-[11.5px] tabular-nums whitespace-nowrap">{fmtDateTime(r.aprovado_em)}</td>
                         <td className="px-3 py-2">
                           <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${meta.tone}`}>{meta.label}</span>
                         </td>
-                        <td className="px-3 py-2 text-slate-900 font-mono text-[11.5px]">
+                        <td className="px-3 py-2 text-ww-text font-mono text-[11.5px]">
                           {r.pv_os ?? "—"}
-                          {r.pv_os_tipo && <span className="ml-1 text-[9px] text-slate-400">{r.pv_os_tipo}</span>}
+                          {r.pv_os_tipo && <span className="ml-1 text-[9px] text-ww-textFaint">{r.pv_os_tipo}</span>}
                         </td>
-                        <td className="px-3 py-2 text-slate-700 font-mono text-[11.5px]">{r.pc ?? "—"}</td>
-                        <td className="px-3 py-2 text-slate-700 text-[12px] truncate max-w-[180px]" title={r.cliente ?? ""}>{r.cliente ?? "—"}</td>
-                        <td className="px-3 py-2 text-slate-700 text-[12px] truncate max-w-[180px]" title={r.fornecedor ?? ""}>{r.fornecedor ?? "—"}</td>
-                        <td className="px-3 py-2 text-slate-500 font-mono text-[11px] truncate max-w-[120px]" title={r.projeto ?? ""}>{r.projeto ?? "—"}</td>
-                        <td className="px-3 py-2 text-right text-slate-900 font-semibold tabular-nums whitespace-nowrap">{fmtBRL(r.valor)}</td>
-                        <td className="px-3 py-2 text-slate-600 text-[11px] truncate max-w-[160px]" title={r.aprovador ?? ""}>{(r.aprovador ?? "—").split("@")[0]}</td>
+                        <td className="px-3 py-2 text-ww-textMuted font-mono text-[11.5px]">{r.pc ?? "—"}</td>
+                        <td className="px-3 py-2 text-ww-textMuted text-[12px] truncate max-w-[180px]" title={r.cliente ?? ""}>{r.cliente ?? "—"}</td>
+                        <td className="px-3 py-2 text-ww-textMuted text-[12px] truncate max-w-[180px]" title={r.fornecedor ?? ""}>{r.fornecedor ?? "—"}</td>
+                        <td className="px-3 py-2 text-ww-textMuted font-mono text-[11px] truncate max-w-[120px]" title={r.projeto ?? ""}>{r.projeto ?? "—"}</td>
+                        <td className="px-3 py-2 text-right text-ww-text font-semibold tabular-nums whitespace-nowrap">{fmtBRL(r.valor)}</td>
+                        <td className="px-3 py-2 text-ww-textMuted text-[11px] truncate max-w-[160px]" title={r.aprovador ?? ""}>{(r.aprovador ?? "—").split("@")[0]}</td>
                       </tr>
                     );
                   })}
                 </tbody>
                 {filteredRows.length > 0 && (
                   <tfoot>
-                    <tr className="bg-slate-50 border-t-2 border-slate-200">
-                      <td colSpan={7} className="px-4 py-2 text-right text-[11px] uppercase tracking-wider font-bold text-slate-600">Total filtrado</td>
-                      <td className="px-3 py-2 text-right text-slate-900 font-bold tabular-nums">{fmtBRL(filteredTotalValor)}</td>
+                    <tr className="bg-ww-rowHover border-t-2 border-ww-border">
+                      <td colSpan={7} className="px-4 py-2 text-right text-[11px] uppercase tracking-wider font-bold text-ww-textMuted">Total filtrado</td>
+                      <td className="px-3 py-2 text-right text-ww-text font-bold tabular-nums">{fmtBRL(filteredTotalValor)}</td>
                       <td></td>
                     </tr>
                   </tfoot>
@@ -264,8 +264,8 @@ export default function RelatoriosView() {
 
 function Kpi({ label, value, accent }: { label: string; value: string; accent: string }) {
   return (
-    <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4">
-      <div className="text-[10px] uppercase tracking-[0.6px] font-bold text-slate-500 mb-1">{label}</div>
+    <div className="bg-ww-panel rounded-xl border border-ww-border shadow-sm p-4">
+      <div className="text-[10px] uppercase tracking-[0.6px] font-bold text-ww-textMuted mb-1">{label}</div>
       <div className={`text-[22px] font-bold tabular-nums tracking-[-0.5px] ${accent}`}>{value}</div>
     </div>
   );

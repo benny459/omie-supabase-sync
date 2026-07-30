@@ -258,20 +258,20 @@ export default function RcProjetoUploadButton({
                if (e.target === e.currentTarget && !busy) setOpen(false);
              }}>
           <div onClick={(e) => e.stopPropagation()}
-               className="bg-white rounded-xl shadow-2xl max-w-2xl w-full max-h-[90vh] flex flex-col">
-            <div className="px-5 py-4 border-b border-slate-200 flex items-start justify-between">
+               className="bg-ww-panel rounded-xl shadow-2xl max-w-2xl w-full max-h-[90vh] flex flex-col">
+            <div className="px-5 py-4 border-b border-ww-border flex items-start justify-between">
               <div>
-                <h3 className="font-semibold text-slate-900 text-[15px]">Lista RC do Projeto</h3>
-                <p className="text-xs text-slate-500 mt-0.5">
-                  Cada <strong>aba</strong> = 1 equipamento. Colunas: <code className="bg-slate-100 px-1 rounded">B=Item</code>, <code className="bg-slate-100 px-1 rounded">C=Qtd</code>, <code className="bg-slate-100 px-1 rounded">D=Modelo</code>.
+                <h3 className="font-semibold text-ww-text text-[15px]">Lista RC do Projeto</h3>
+                <p className="text-xs text-ww-textMuted mt-0.5">
+                  Cada <strong>aba</strong> = 1 equipamento. Colunas: <code className="bg-ww-bg px-1 rounded">B=Item</code>, <code className="bg-ww-bg px-1 rounded">C=Qtd</code>, <code className="bg-ww-bg px-1 rounded">D=Modelo</code>.
                 </p>
-                <p className="text-[11px] text-slate-500 mt-1">
+                <p className="text-[11px] text-ww-textMuted mt-1">
                   Novo upload <strong>substitui</strong> a lista: itens novos entram, existentes atualizam,
                   <strong> itens que sumiram da planilha são removidos</strong>. Vínculo a PC é preservado se a planilha
                   nova não trouxer PC; se trouxer coluna "PC Associado", o valor é aplicado.
                 </p>
               </div>
-              <button onClick={() => !busy && setOpen(false)} className="text-slate-400 hover:text-slate-800 text-lg leading-none">×</button>
+              <button onClick={() => !busy && setOpen(false)} className="text-ww-textFaint hover:text-ww-text text-lg leading-none">×</button>
             </div>
 
             <div className="px-5 py-4 overflow-y-auto flex-1">
@@ -279,13 +279,13 @@ export default function RcProjetoUploadButton({
                 <div className="space-y-2">
                   <button
                     onClick={() => inputRef.current?.click()}
-                    className="w-full border-2 border-dashed border-slate-300 hover:border-violet-400 rounded-lg py-12 text-center text-slate-600 hover:text-violet-700 transition">
+                    className="w-full border-2 border-dashed border-ww-border hover:border-violet-400 rounded-lg py-12 text-center text-ww-textMuted hover:text-violet-700 transition">
                     <div className="text-3xl mb-2">📥</div>
                     <div className="text-sm font-medium">Clique pra selecionar o XLSX</div>
-                    <div className="text-[11px] text-slate-400 mt-1">Cada aba = 1 equipamento. Colunas: Itens, Qtd, Modelo, PC Associado.</div>
+                    <div className="text-[11px] text-ww-textFaint mt-1">Cada aba = 1 equipamento. Colunas: Itens, Qtd, Modelo, PC Associado.</div>
                   </button>
                   <div className="flex items-center justify-center gap-2 text-[11.5px]">
-                    <span className="text-slate-500">Não tem a planilha?</span>
+                    <span className="text-ww-textMuted">Não tem a planilha?</span>
                     <button type="button" onClick={downloadTemplate}
                       className="inline-flex items-center gap-1 px-2 py-1 rounded border border-emerald-300 bg-emerald-50 text-emerald-800 font-semibold hover:bg-emerald-100 transition">
                       📄 Baixar modelo (.xlsx)
@@ -296,18 +296,18 @@ export default function RcProjetoUploadButton({
 
               {parsed && grupos && (
                 <div className="space-y-3">
-                  <div className="text-[11px] text-slate-500 font-mono">📄 {fileName}</div>
-                  <div className="text-sm text-slate-700">
+                  <div className="text-[11px] text-ww-textMuted font-mono">📄 {fileName}</div>
+                  <div className="text-sm text-ww-textMuted">
                     <strong>{parsed.length}</strong> itens em <strong>{grupos.size}</strong> equipamento{grupos.size !== 1 ? "s" : ""}
                   </div>
 
                   {/* Preflight — diff vs o que já está no DB */}
                   {preflighting && (
-                    <div className="text-[11px] text-slate-500 italic animate-pulse">Comparando com a lista atual…</div>
+                    <div className="text-[11px] text-ww-textMuted italic animate-pulse">Comparando com a lista atual…</div>
                   )}
                   {diff && (
-                    <div className="border border-slate-200 rounded-md p-3 bg-slate-50/70">
-                      <div className="text-[10px] uppercase tracking-[0.4px] font-bold text-slate-500 mb-2">
+                    <div className="border border-ww-border rounded-md p-3 bg-ww-rowHover/70">
+                      <div className="text-[10px] uppercase tracking-[0.4px] font-bold text-ww-textMuted mb-2">
                         Diff (vs {diff.total_atual} atuais)
                       </div>
                       <div className="grid grid-cols-3 gap-2">
@@ -332,15 +332,15 @@ export default function RcProjetoUploadButton({
                     </div>
                   )}
 
-                  <details className="border border-slate-200 rounded-md bg-slate-50">
-                    <summary className="text-[11px] px-2 py-1 cursor-pointer text-slate-600 font-semibold">
+                  <details className="border border-ww-border rounded-md bg-ww-rowHover">
+                    <summary className="text-[11px] px-2 py-1 cursor-pointer text-ww-textMuted font-semibold">
                       Ver por equipamento ({grupos.size})
                     </summary>
                     <div className="space-y-1 max-h-[200px] overflow-y-auto p-2">
                       {[...grupos.entries()].map(([eq, n]) => (
                         <div key={eq} className="flex justify-between text-xs px-2 py-1">
-                          <span className="font-medium text-slate-800">{eq}</span>
-                          <span className="text-slate-500 font-mono">{n} {n === 1 ? "item" : "itens"}</span>
+                          <span className="font-medium text-ww-text">{eq}</span>
+                          <span className="text-ww-textMuted font-mono">{n} {n === 1 ? "item" : "itens"}</span>
                         </div>
                       ))}
                     </div>
@@ -356,9 +356,9 @@ export default function RcProjetoUploadButton({
               )}
             </div>
 
-            <div className="px-5 py-3 border-t border-slate-200 flex justify-end gap-2">
+            <div className="px-5 py-3 border-t border-ww-border flex justify-end gap-2">
               <button onClick={() => !busy && setOpen(false)}
-                className="px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-100 rounded-md">Cancelar</button>
+                className="px-3 py-1.5 text-xs font-medium text-ww-textMuted hover:bg-ww-bg rounded-md">Cancelar</button>
               {parsed && (
                 <button onClick={apply} disabled={busy || preflighting}
                   className={`px-4 py-1.5 text-xs font-semibold text-white rounded-md shadow-sm disabled:opacity-40 ${

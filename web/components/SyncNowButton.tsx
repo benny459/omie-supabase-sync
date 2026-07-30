@@ -90,7 +90,7 @@ export default function SyncNowButton() {
         title="Dispara sync leve (~1-2 min): PVs incrementais + últimas PCs + etapas."
         className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11.5px] font-semibold border transition ${
           running
-            ? "bg-slate-100 text-slate-500 border-slate-200 cursor-wait dark:bg-slate-800 dark:border-slate-700"
+            ? "bg-ww-bg text-ww-textMuted border-ww-border cursor-wait "
             : done
               ? "bg-emerald-50 text-emerald-800 border-emerald-300 dark:bg-emerald-950/40 dark:text-emerald-200 dark:border-emerald-800"
               : error
@@ -102,7 +102,7 @@ export default function SyncNowButton() {
       </button>
       {(running || done || error) && (
         <div className="inline-flex items-center gap-1.5 min-w-[180px]">
-          <div className="h-2 flex-1 min-w-[120px] rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden">
+          <div className="h-2 flex-1 min-w-[120px] rounded-full bg-ww-border overflow-hidden">
             <div className={`h-full transition-all duration-500 ${
               done ? "bg-emerald-500" : error ? "bg-rose-500" : "bg-violet-500"
             }`} style={{ width: `${pct.toFixed(0)}%` }} />
@@ -120,7 +120,7 @@ export default function SyncNowButton() {
             ? "bg-rose-50 text-rose-800 border border-rose-200 dark:bg-rose-950/40 dark:text-rose-300 dark:border-rose-800"
             : done
               ? "bg-emerald-50 text-emerald-800 border border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800"
-              : "bg-slate-50 text-slate-700 border border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700"
+              : "bg-ww-rowHover text-ww-textMuted border border-ww-border "
         }`}>
           {msg}
         </span>

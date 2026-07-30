@@ -20,9 +20,9 @@ export default function AppNav({ userEmail }: { userEmail?: string | null }) {
   }
 
   return (
-    <nav className="bg-white border-b border-slate-200 px-4 md:px-8 h-14 flex items-center justify-between sticky top-0 z-10">
+    <nav className="bg-ww-panel border-b border-ww-border px-4 md:px-8 h-14 flex items-center justify-between sticky top-0 z-10">
       <div className="flex items-center gap-6">
-        <Link href="/" className="font-semibold text-slate-900 tracking-tight">
+        <Link href="/" className="font-semibold text-ww-text tracking-tight">
           Waterworks · Aprovações
         </Link>
         <div className="flex gap-1">
@@ -33,7 +33,7 @@ export default function AppNav({ userEmail }: { userEmail?: string | null }) {
                 key={t.href}
                 href={t.href}
                 data-active={active}
-                className={`px-3 py-1.5 rounded-lg text-sm font-medium text-slate-600 transition ${t.tone}`}
+                className={`px-3 py-1.5 rounded-lg text-sm font-medium text-ww-textMuted transition ${t.tone}`}
               >
                 {t.label}
               </Link>
@@ -43,11 +43,11 @@ export default function AppNav({ userEmail }: { userEmail?: string | null }) {
       </div>
       <div className="flex items-center gap-3">
         {userEmail && (
-          <span className="text-xs text-slate-500 hidden sm:block">{userEmail}</span>
+          <span className="text-xs text-ww-textMuted hidden sm:block">{userEmail}</span>
         )}
         <button
           onClick={signOut}
-          className="text-xs text-slate-500 hover:text-slate-800 underline underline-offset-2"
+          className="text-xs text-ww-textMuted hover:text-ww-text underline underline-offset-2"
         >
           sair
         </button>
