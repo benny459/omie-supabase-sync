@@ -38,18 +38,34 @@ export default function VizBar({
 
   const axisTick = { fontSize: 10.5, fill: c.inkMuted };
 
-  // Nome de projeto/contrato passa de 60 caracteres. Sem truncar, o recharts
-  // quebra o rótulo em várias linhas e eles se sobrepõem até virar borrão — foi
-  // exatamente o que apareceu na primeira versão em produção. Trunca com
-  // reticências; o nome inteiro continua no tooltip e na visão de tabela.
-  // 8px por caractere, não 6.4: a 10.5px de fonte, nome de fornecedor em caixa
-  // alta ("SECRETARIA DA RECEITA FEDERAL") tem glifo bem mais largo que a média,
-  // e a estimativa folgada deixava o recharts quebrar em duas linhas sobrepostas
-  // mesmo com o texto já truncado.
-  const maxChars = Math.max(Math.floor(categoryWidth / 8), 8);
-  const truncaCategoria = (v: unknown) => {
-    const s = String(v ?? "");
-    return s.length > maxChars ? `${s.slice(0, maxChars - 1)}…` : s;
+  // Rótulo de categoria em UMA linha, sempre.
+  //
+  // Estimar largura por caractere não resolve: o recharts quebra o texto por
+  // conta própria quando ele não cabe na largura do eixo, e nome em caixa alta
+  // ("SECRETARIA DA RECEITA FEDERAL") estoura qualquer estimativa média. Duas
+  // tentativas de calibrar o corte (6.4px e 8px por caractere) continuaram
+  // quebrando em duas linhas sobrepostas em produção.
+  //
+  // Aqui o tick é renderizado à mão: um <text> puro, que não quebra, com
+  // textLength+lengthAdjust deixando o próprio SVG comprimir o que passar da
+  // largura. O nome inteiro continua no tooltip e na visão de tabela.
+  const TickCategoria = (props: {
+    x?: number; y?: number; payload?: { value?: unknown };
+  }) => {
+    const { x = 0, y = 0, payload } = props;
+    const texto = String(payload?.value ?? "");
+    const largura = categoryWidth - 12;
+    // Só comprime se realmente passar — comprimir texto curto deforma à toa.
+    const precisaComprimir = texto.length * 5.6 > largura;
+    return (
+      <text
+        x={x - 6} y={y} dy={3.5} textAnchor="end"
+        fill={c.inkMuted} fontSize={10.5}
+        {...(precisaComprimir ? { textLength: largura, lengthAdjust: "spacingAndGlyphs" as const } : {})}
+      >
+        {texto}
+      </text>
+    );
   };
 
   return (
@@ -73,12 +89,12 @@ export default function VizBar({
           <>
             <XAxis type="number" tick={axisTick} stroke={c.axis} tickFormatter={(v) => fmt(Number(v))} />
             <YAxis
-              type="category" dataKey={xKey} tick={axisTick} stroke={c.axis}
+              type="category" dataKey={xKey} stroke={c.axis}
               width={categoryWidth}
               // interval=0 força um tick por categoria: sem isso o recharts pula
               // rótulos quando ficam apertados, e some com barras da leitura.
               interval={0}
-              tickFormatter={truncaCategoria}
+              tick={<TickCategoria />}
             />
           </>
         ) : (
