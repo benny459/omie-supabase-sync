@@ -8,6 +8,7 @@ import { STATUS_META, STATUS_ORDER, isApproved, groupsFor, formatCell, type Grou
 import {
   ALARM_KINDS, computeBucketAlarms, parseFlexDate,
   isPvosIncompleto, isSemProjeto, isAtrasoVenda, isAtrasoCompra, isDefasagemOmie,
+  isServicoConcluido,
   type AlarmKind,
 } from "@/lib/alarmes";
 import { useUserPerms } from "./UserPermsProvider";
@@ -1025,7 +1026,7 @@ export default function BoldAvulsosView({
     }
     if (modulo === "avulsos" && !opts.skipServicos) {
       const temOs = !!String(r.servicos_os_numero ?? "").trim();
-      const concluido = !!r.servicos_concluidos;
+      const concluido = isServicoConcluido(r);
       if (servicosFilter === "concluidos" && !concluido) return false;
       if (servicosFilter === "agendados" && !(temOs && !concluido)) return false;
       if (servicosFilter === "sem_os" && temOs) return false;
@@ -1110,7 +1111,7 @@ export default function BoldAvulsosView({
       if (!k) continue;
       const val = Number(r.pv_valor_total) || 0;
       const temOs = !!String(r.servicos_os_numero ?? "").trim();
-      const concluido = !!r.servicos_concluidos;
+      const concluido = isServicoConcluido(r);
       if (!todos.has(k)) { todos.add(k); todosVal += val; }
       if (concluido) {
         if (!concluidos.has(k)) { concluidos.add(k); concluidosVal += val; }
@@ -2290,7 +2291,7 @@ function BucketCard({
     let servicosDev: { value: number; suffix: string; tone: "red" | "amber" | "green" } | null = null;
     if (tipoBucket === "Serviços" || tipoBucket === "Mix") {
       const totalOs = items.length;
-      const concluidosCount = items.filter((r) => r.servicos_concluidos === true).length;
+      const concluidosCount = items.filter((r) => isServicoConcluido(r)).length;
       if (previsaoMs == null) {
         servicosState = "red";
         servicosDetail = "sem previsão";
@@ -3242,7 +3243,7 @@ function Cell({
     // service_id no waterworks-app preserva o prefixo "OS" (a rota
     // /ordens-de-servico/[id] aceita UUID ou service_id text exato).
     const osPath = encodeURIComponent(osRaw);
-    const concluido = !!row.servicos_concluidos;
+    const concluido = isServicoConcluido(row);
     const dtRaw = row.servicos_concluidos_em as string | null;
     const dtCurta = dtRaw ? new Date(dtRaw).toLocaleDateString("pt-BR", {
       timeZone: "America/Sao_Paulo", day: "2-digit", month: "2-digit", year: "numeric",
@@ -3252,8 +3253,11 @@ function Cell({
       hour: "2-digit", minute: "2-digit",
     }) : "";
     const por = row.servicos_concluidos_por ? ` por ${row.servicos_concluidos_por}` : "";
+    // servicos_concluidos_em está null em toda a base (o app de serviços não
+    // alimenta essa coluna), então na prática o texto sem data é o caminho
+    // normal, não a exceção.
     const tooltip = concluido
-      ? `Concluído em ${dtLonga}${por}`
+      ? (dtLonga ? `Concluído em ${dtLonga}${por}` : "Concluído (data não registrada pelo app de serviços)")
       : "Agendado (ainda não foi executado)";
     return (
       <span className="inline-flex flex-col items-start gap-0.5 text-[12px] leading-tight" title={tooltip}>

@@ -52,20 +52,34 @@ export const ALARM_KINDS: AlarmKind[] = [
 
 export type AlarmRow = Record<string, unknown>;
 
-// Status de OS que significam "não há mais serviço a executar". Vem do app de
-// serviços (app.waterworks.com.br) via custom_fields.ww_os_status. Aceita
-// "Concluida" sem acento por defesa — o valor gravado hoje é "Concluída".
-const OS_STATUS_RESOLVIDO = new Set(["Concluída", "Concluida", "Cancelada"]);
+// Status de OS gravados pelo app de serviços (app.waterworks.com.br) em
+// custom_fields.ww_os_status. Aceita "Concluida" sem acento por defesa — o valor
+// real hoje é "Concluída".
+const OS_STATUS_CONCLUIDO = new Set(["Concluída", "Concluida"]);
 
 export function osStatus(r: AlarmRow): string {
   const cf = (r.custom_fields as Record<string, unknown> | null) || {};
   return String(cf["ww_os_status"] ?? "").trim();
 }
 
-// Serviço já entregue (ou cancelado) — não há mais execução pendente. É o
-// equivalente, no lado de serviços, do mt_data_recebimento_nf das compras.
+// Serviço concluído. Consulta ww_os_status ALÉM da coluna servicos_concluidos,
+// porque essa coluna está `false` em 100% das linhas da base (e
+// servicos_concluidos_em é null em todas): o app de serviços nunca a alimenta,
+// só grava ww_os_status. Depender apenas dela fazia todo serviço parecer
+// pendente — pipeline "0/9 concluído", bolinha amarela e OS rotulada
+// "Agendado" mesmo com a OS Concluída e liberada pra faturar. (2026-07-30)
+export function isServicoConcluido(r: AlarmRow): boolean {
+  return r.servicos_concluidos === true || OS_STATUS_CONCLUIDO.has(osStatus(r));
+}
+
+export function isServicoCancelado(r: AlarmRow): boolean {
+  return osStatus(r) === "Cancelada";
+}
+
+// Não há mais execução pendente — concluído OU cancelado. É o equivalente, no
+// lado de serviços, do mt_data_recebimento_nf das compras.
 export function isServicoResolvido(r: AlarmRow): boolean {
-  return OS_STATUS_RESOLVIDO.has(osStatus(r));
+  return isServicoConcluido(r) || isServicoCancelado(r);
 }
 
 // Parse flexível de data: aceita ISO YYYY-MM-DD ou BR DD/MM/YYYY (a view mistura
