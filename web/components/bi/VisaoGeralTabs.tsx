@@ -17,6 +17,9 @@
 
 import { useState } from "react";
 import ComprasBiView from "./ComprasBiView";
+import {
+  AquisicaoView, AtrasoView, PanoramaGeralView, PrevisaoRecebView, RentabilidadeView,
+} from "./PanoramaViews";
 import ContasPagarView from "./ContasPagarView";
 import ContasReceberView from "./ContasReceberView";
 import FaturamentoBiView from "./FaturamentoBiView";
@@ -38,15 +41,16 @@ const ABAS: Aba[] = [
   { key: "dre",        label: "DRE",              cards: 6,  view: <DreView /> },
   { key: "contratos",  label: "Contratos CT",     cards: 6,  view: <ContratosCtView /> },
   { key: "margem",     label: "Margem",           cards: 4,  view: <MargemProjetoView /> },
-  { key: "geral",      label: "Visão Geral",      cards: 14 },
+  { key: "geral",      label: "Visão Geral",      cards: 14, view: <PanoramaGeralView /> },
   { key: "faturamento",label: "Faturamento",      cards: 21, view: <FaturamentoBiView /> },
   { key: "receber",    label: "A Receber",        cards: 25, view: <ContasReceberView /> },
   { key: "pagar",      label: "A Pagar",          cards: 15, view: <ContasPagarView /> },
   { key: "compras",    label: "Compras",          cards: 14, view: <ComprasBiView /> },
   { key: "vendas",     label: "Vendas",           cards: 10, view: <VendasView /> },
-  { key: "atraso",     label: "Atraso",           cards: 4 },
-  { key: "previsao",   label: "Previsão Receb.",  cards: 6 },
-  { key: "aquisicao",  label: "Aquisição vs Rec.",cards: 5 },
+  { key: "atraso",     label: "Atraso",           cards: 4,  view: <AtrasoView /> },
+  { key: "previsao",   label: "Previsão Receb.",  cards: 6,  view: <PrevisaoRecebView /> },
+  { key: "aquisicao",  label: "Aquisição vs Rec.",cards: 5,  view: <AquisicaoView /> },
+  { key: "rentab",     label: "Rentabilidade",    cards: 10, view: <RentabilidadeView /> },
   { key: "crm",        label: "CRM",              cards: 1 },
 ];
 
@@ -94,8 +98,9 @@ export default function VisaoGeralTabs() {
         <div className="bg-ww-panel border border-ww-border rounded-lg p-6 text-center">
           <p className="text-[13px] font-semibold text-ww-text">Aba ainda não portada</p>
           <p className="text-[11.5px] text-ww-textMuted mt-1">
-            “{aba.label}” tem {aba.cards} cards no Metabase. Enquanto não estiver aqui, use o
-            dashboard equivalente no Metabase — ele segue no ar.
+            {aba.key === "crm"
+              ? "O único card desta aba lê o banco waterworks-crm, que é outro projeto Supabase — o painel ainda não tem conexão com ele. Não é volume de trabalho, é infraestrutura: precisa de credencial e de decisão sobre expor o CRM aqui."
+              : `“${aba.label}” tem ${aba.cards} cards no Metabase. Enquanto não estiver aqui, use o dashboard equivalente no Metabase — ele segue no ar.`}
           </p>
         </div>
       )}
