@@ -43,15 +43,17 @@ export async function GET(req: Request) {
   );
 
   const args = { p_from: from, p_to: to, p_empresas: empresas, p_cat_venda: cat };
-  const [resumo, mensal, prazos, top] = await Promise.all([
+  const [resumo, mensal, prazos, top, detalhe] = await Promise.all([
     adm.rpc("fat_resumo", args),
     adm.rpc("fat_mensal_categoria", args),
     adm.rpc("fat_prazos", args),
     adm.rpc("fat_top", { ...args, p_dim: dim, p_limit: 20 }),
+    adm.rpc("faturamento_detalhe", { p_from: from, p_to: to, p_empresas: empresas, p_limit: 500 }),
   ]);
 
   for (const [n, r] of [["fat_resumo", resumo], ["fat_mensal_categoria", mensal],
-                        ["fat_prazos", prazos], ["fat_top", top]] as const) {
+                        ["fat_prazos", prazos], ["fat_top", top],
+                        ["faturamento_detalhe", detalhe]] as const) {
     if (r.error) return NextResponse.json({ error: `${n}: ${r.error.message}` }, { status: 500 });
   }
 
@@ -100,5 +102,6 @@ export async function GET(req: Request) {
     top: ((top.data ?? []) as Array<{ chave: string; valor: number; qtd: number }>)
       .map((t) => ({ chave: t.chave, valor: Number(t.valor) || 0, qtd: Number(t.qtd) || 0 })),
     dim,
+    detalhe: detalhe.data ?? [],
   });
 }

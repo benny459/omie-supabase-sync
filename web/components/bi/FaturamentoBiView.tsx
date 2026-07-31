@@ -16,6 +16,7 @@ import StatTile from "@/components/viz/StatTile";
 import VizBar from "@/components/viz/VizBar";
 import VizGauge from "@/components/viz/VizGauge";
 import VizPie from "@/components/viz/VizPie";
+import VizTable, { type Col } from "@/components/viz/VizTable";
 import VizFilters, { resolvePreset, type DateRange, type DimFilter } from "@/components/viz/VizFilters";
 
 const EMPRESAS = ["SF", "CD", "WW"];
@@ -25,6 +26,22 @@ const brl = (v: number) =>
   v.toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 });
 
 type Faixa = { label: string; value: number };
+
+type FatRow = {
+  empresa: string; origem: string; documento: string; cliente: string;
+  projeto: string; categoria: string; dt_fat: string | null; valor: number;
+};
+
+const COLS_FAT: Col<FatRow>[] = [
+  { key: "dt_fat",    label: "Data",      tipo: "date", w: 82 },
+  { key: "empresa",   label: "Emp.",      w: 52 },
+  { key: "origem",    label: "Origem",    w: 80 },
+  { key: "documento", label: "Doc.",      w: 96 },
+  { key: "cliente",   label: "CLIENTE",   w: 230 },
+  { key: "projeto",   label: "Projeto",   w: 200 },
+  { key: "categoria", label: "Categoria", w: 110 },
+  { key: "valor",     label: "Valor",     tipo: "money", w: 120 },
+];
 type Payload = {
   total_periodo: number; total_ytd: number; total_mes: number;
   qtd_notas: number; qtd_notas_ytd: number;
@@ -34,6 +51,7 @@ type Payload = {
   concedido: { media: number | null; faixas: Faixa[] };
   top: Array<{ chave: string; valor: number; qtd: number }>;
   dim: string;
+  detalhe: FatRow[];
 };
 
 export default function FaturamentoBiView() {
@@ -171,6 +189,17 @@ export default function FaturamentoBiView() {
                     label="dias" valueFormat={(v) => v.toFixed(1)} />
         </section>
       </div>
+
+      <VizTable
+        title="Detalhe de faturamento"
+        subtitle="Notas emitidas no período — mesma lista do card do Metabase"
+        cols={COLS_FAT}
+        rows={data?.detalhe ?? []}
+        ordemInicial="dt_fat"
+        loading={loading}
+        altura={460}
+        totalizar={["valor"]}
+      />
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <ChartFrame

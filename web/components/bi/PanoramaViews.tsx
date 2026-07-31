@@ -11,6 +11,7 @@ import ChartFrame, { type SeriesDef } from "@/components/viz/ChartFrame";
 import StatTile from "@/components/viz/StatTile";
 import VizBar from "@/components/viz/VizBar";
 import VizFilters, { resolvePreset, type DateRange, type DimFilter } from "@/components/viz/VizFilters";
+import VizTable, { type Col } from "@/components/viz/VizTable";
 
 const EMPRESAS = ["SF", "CD", "WW"];
 
@@ -30,6 +31,29 @@ type Payload = {
   rentabilidade: Array<{ cliente: string; faturamento: number; compras: number; despesas: number;
                          mao_obra: number; rentabilidade: number; margem: number | null }>;
 };
+
+type RentRow = { cliente: string; faturamento: number; compras: number; despesas: number;
+                 mao_obra: number; rentabilidade: number; margem: number | null };
+type AtrasoRow = { cliente: string; cnpj: string; dias: number; valor: number; titulos: number };
+
+const COLS_RENT: Col<RentRow>[] = [
+  { key: "cliente",       label: "CLIENTE",       w: 260 },
+  { key: "faturamento",   label: "Faturamento",   tipo: "money", w: 130 },
+  { key: "compras",       label: "Compras",       tipo: "money", w: 120 },
+  { key: "despesas",      label: "Despesas",      tipo: "money", w: 120 },
+  { key: "mao_obra",      label: "Mão de obra",   tipo: "money", w: 130 },
+  { key: "rentabilidade", label: "Rentabilidade", tipo: "money", w: 130 },
+  { key: "margem",        label: "Margem",        tipo: "num",   w: 90,
+    fmt: (v) => v == null ? "—" : `${Number(v).toLocaleString("pt-BR", { maximumFractionDigits: 1 })}%` },
+];
+
+const COLS_ATRASO: Col<AtrasoRow>[] = [
+  { key: "cliente", label: "CLIENTE", w: 280 },
+  { key: "cnpj",    label: "CNPJ",    w: 150 },
+  { key: "titulos", label: "Títulos", tipo: "num",  w: 84 },
+  { key: "dias",    label: "Atraso",  tipo: "dias", w: 90 },
+  { key: "valor",   label: "Em atraso", tipo: "money", w: 130 },
+];
 
 function usePanorama() {
   const [range, setRange] = useState<DateRange>(() => ({ ...resolvePreset("ytd"), preset: "ytd" }));
@@ -147,6 +171,16 @@ export function AtrasoView() {
       >
         <VizBar rows={clientesRows} series={clientesSeries} layout="row" valueFormat={brl} />
       </ChartFrame>
+
+      <VizTable
+        title="Clientes em atraso — lista"
+        subtitle="Com CNPJ e maior atraso por cliente — mesma lista do card do Metabase"
+        cols={COLS_ATRASO}
+        rows={data?.clientes_atraso ?? []}
+        ordemInicial="valor"
+        loading={loading}
+        totalizar={["titulos", "valor"]}
+      />
     </div>
   );
 }
@@ -234,6 +268,17 @@ export function RentabilidadeView() {
       >
         <VizBar rows={rows.slice(0, 20)} series={series} layout="row" valueFormat={brl} />
       </ChartFrame>
+
+      <VizTable
+        title="Rentabilidade — detalhe por cliente"
+        subtitle="Faturamento, compras, despesas e mão de obra por cliente — mesma lista do card do Metabase"
+        cols={COLS_RENT}
+        rows={data?.rentabilidade ?? []}
+        ordemInicial="rentabilidade"
+        loading={loading}
+        altura={500}
+        totalizar={["faturamento", "compras", "despesas", "mao_obra", "rentabilidade"]}
+      />
     </div>
   );
 }

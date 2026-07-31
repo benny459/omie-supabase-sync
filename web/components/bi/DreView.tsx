@@ -9,6 +9,7 @@ import { useCallback, useEffect, useState } from "react";
 import ChartFrame, { type SeriesDef } from "@/components/viz/ChartFrame";
 import VizBar from "@/components/viz/VizBar";
 import VizPie from "@/components/viz/VizPie";
+import VizTable, { type Col } from "@/components/viz/VizTable";
 import VizFilters, { resolvePreset, type DateRange, type DimFilter } from "@/components/viz/VizFilters";
 
 const EMPRESAS = ["SF", "CD", "WW"];
@@ -17,12 +18,25 @@ const MACROS = ["01 · CUSTO (CMV)", "02 · FIXO", "03 · VARIÁVEL", "04 · RET
 const brl = (v: number) =>
   v.toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 });
 
+type DreDet = { grupo: string; macro: string; categoria: string; qtd: number; valor: number; pct: number };
+
+const COLS_DRE: Col<DreDet>[] = [
+  { key: "macro",     label: "Macro grupo", w: 190 },
+  { key: "grupo",     label: "GRUPO DRE",   w: 210 },
+  { key: "categoria", label: "Categoria",   w: 260 },
+  { key: "qtd",       label: "Lanç.",       tipo: "num",   w: 76 },
+  { key: "valor",     label: "Valor",       tipo: "money", w: 130 },
+  { key: "pct",       label: "% saídas",    tipo: "num",   w: 90,
+    fmt: (v) => `${Number(v ?? 0).toLocaleString("pt-BR", { maximumFractionDigits: 1 })}%` },
+];
+
 type Payload = {
   dre: Array<{ ord: number; linha: string; valor: number; pct: number | null }>;
   macro: Array<{ label: string; value: number }>;
   grupos: Array<{ label: string; value: number; qtd: number }>;
   mensal: Array<Record<string, unknown>>;
   grupos_series: string[];
+  detalhe: DreDet[];
 };
 
 export default function DreView() {
@@ -153,6 +167,17 @@ export default function DreView() {
           <VizPie slices={gruposVisiveis} valueFormat={brl} totalLabel="saídas" />
         </ChartFrame>
       </div>
+
+      <VizTable
+        title="Saídas — detalhe por grupo × categoria"
+        subtitle="Toda saída conciliada do período, agrupada — mesma lista do card do Metabase"
+        cols={COLS_DRE}
+        rows={data?.detalhe ?? []}
+        ordemInicial="valor"
+        loading={loading}
+        altura={440}
+        totalizar={["qtd", "valor"]}
+      />
 
       <ChartFrame
         title="Saídas por grupo — mensal"

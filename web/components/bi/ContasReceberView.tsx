@@ -13,6 +13,7 @@ import ChartFrame, { type SeriesDef } from "@/components/viz/ChartFrame";
 import StatTile from "@/components/viz/StatTile";
 import VizBar from "@/components/viz/VizBar";
 import VizLine from "@/components/viz/VizLine";
+import VizTable, { type Col } from "@/components/viz/VizTable";
 import VizFilters, { resolvePreset, type DateRange, type DimFilter } from "@/components/viz/VizFilters";
 
 const EMPRESAS = ["SF", "CD", "WW"];
@@ -21,11 +22,35 @@ const CATS = ["Contratuais", "Projetos", "Revenda", "Avulsos", "BOT/SW", "Outras
 const brl = (v: number) =>
   v.toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 });
 
+
+type TituloRow = {
+  empresa: string; contraparte: string; num_titulo: string; categoria: string;
+  emissao: string | null; vencimento: string | null; previsao: string | null;
+  pagamento: string | null; valor: number; aberto: number; pago: number;
+  dias_atraso: number | null; situacao: string;
+};
+
+// Colunas do detalhe de títulos — mesmas informações do card do Metabase.
+const COLS_TITULOS: Col<TituloRow>[] = [
+  { key: "empresa",     label: "Emp.",        w: 52 },
+  { key: "contraparte", label: "CONTRAPARTE", w: 240 },
+  { key: "num_titulo",  label: "Título",      w: 90 },
+  { key: "categoria",   label: "Categoria",   w: 110 },
+  { key: "emissao",     label: "Emissão",     tipo: "date", w: 82 },
+  { key: "previsao",    label: "Previsão",    tipo: "date", w: 82 },
+  { key: "dias_atraso", label: "Atraso",      tipo: "dias", w: 72 },
+  { key: "valor",       label: "Valor",       tipo: "money", w: 110 },
+  { key: "aberto",      label: "Aberto",      tipo: "money", w: 110 },
+  { key: "situacao",    label: "Situação",    tipo: "badge", w: 96,
+    tom: (v) => v === "Vencido" ? "critico" : v === "Liquidado" ? "ok" : "neutro" },
+];
+
 type Payload = {
   saldo_aberto: number; qtd_titulos: number; a_vencer: number;
   vence_hoje: number; vence_amanha: number; esta_semana: number; em_atraso: number;
   aging: Array<{ faixa: string; ord: number; qtd: number; valor: number }>;
   mensal: Array<{ x: string; emitido: number; recebido: number }>;
+  detalhe: TituloRow[];
 };
 
 export default function ContasReceberView() {
@@ -131,6 +156,17 @@ export default function ContasReceberView() {
       >
         <VizBar rows={agingRows} series={agingSeries} valueFormat={brl} />
       </ChartFrame>
+
+      <VizTable
+        title="Detalhe de títulos a receber"
+        subtitle="Títulos em aberto, linha a linha — mesma lista do card do Metabase"
+        cols={COLS_TITULOS}
+        rows={data?.detalhe ?? []}
+        ordemInicial="aberto"
+        loading={loading}
+        altura={460}
+        totalizar={["valor", "aberto"]}
+      />
 
       <ChartFrame
         title="Emitido vs recebido por mês"

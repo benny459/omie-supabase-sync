@@ -43,7 +43,7 @@ export async function GET(req: Request) {
     { auth: { persistSession: false }, db: { schema: "bi" } },
   );
 
-  const [dre, agregado, mensal] = await Promise.all([
+  const [dre, agregado, mensal, detalhe] = await Promise.all([
     adm.rpc("dre_resumida", { p_from: from, p_to: to, p_empresas: empresas }),
     adm.rpc("dre_saidas", {
       p_from: from, p_to: to, p_empresas: empresas,
@@ -53,9 +53,11 @@ export async function GET(req: Request) {
       p_from: from, p_to: to, p_empresas: empresas,
       p_macro_grupo: macro, p_media_mensal: false, p_por_mes: true,
     }),
+    adm.rpc("dre_saidas_detalhe", { p_from: from, p_to: to, p_empresas: empresas, p_limit: 300 }),
   ]);
 
-  for (const [n, r] of [["dre_resumida", dre], ["dre_saidas", agregado], ["dre_saidas mensal", mensal]] as const) {
+  for (const [n, r] of [["dre_resumida", dre], ["dre_saidas", agregado], ["dre_saidas mensal", mensal],
+                        ["dre_saidas_detalhe", detalhe]] as const) {
     if (r.error) return NextResponse.json({ error: `${n}: ${r.error.message}` }, { status: 500 });
   }
 
@@ -95,5 +97,6 @@ export async function GET(req: Request) {
               .sort((a, b) => b.value - a.value),
     mensal: mensalRows,
     grupos_series: Array.from(gruposSet).sort(),
+    detalhe: detalhe.data ?? [],
   });
 }

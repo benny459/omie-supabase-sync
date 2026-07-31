@@ -41,13 +41,16 @@ export async function GET(req: Request) {
     { auth: { persistSession: false }, db: { schema: "bi" } },
   );
 
-  const [resumo, aging, mensal] = await Promise.all([
+  const [resumo, aging, mensal, detalhe] = await Promise.all([
     adm.rpc("ar_resumo", { p_empresas: empresas, p_cat_venda: cat, p_so_carteira: carteira, p_base_data: base }),
     adm.rpc("ar_aging",  { p_empresas: empresas, p_cat_venda: cat, p_so_carteira: carteira, p_base_data: base }),
     adm.rpc("ar_mensal", { p_from: from, p_to: to, p_empresas: empresas, p_cat_venda: cat, p_so_carteira: carteira }),
+    adm.rpc("titulos_detalhe", { p_natureza: "R", p_from: null, p_to: null, p_empresas: empresas,
+                                 p_apenas_abertos: true, p_base_data: base, p_limit: 500 }),
   ]);
 
-  for (const [n, r] of [["ar_resumo", resumo], ["ar_aging", aging], ["ar_mensal", mensal]] as const) {
+  for (const [n, r] of [["ar_resumo", resumo], ["ar_aging", aging], ["ar_mensal", mensal],
+                        ["titulos_detalhe", detalhe]] as const) {
     if (r.error) return NextResponse.json({ error: `${n}: ${r.error.message}` }, { status: 500 });
   }
 
@@ -66,6 +69,7 @@ export async function GET(req: Request) {
       .map((a) => ({ faixa: a.faixa, ord: Number(a.ord), qtd: Number(a.qtd) || 0, valor: Number(a.valor) || 0 })),
     mensal: ((mensal.data ?? []) as Array<{ mes: string; emitido: number; recebido: number }>)
       .map((m) => ({ x: m.mes, emitido: Number(m.emitido) || 0, recebido: Number(m.recebido) || 0 })),
+    detalhe: detalhe.data ?? [],
     recorte: { carteira, base },
   });
 }
