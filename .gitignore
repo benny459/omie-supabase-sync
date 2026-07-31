@@ -25,3 +25,9 @@ secrets/
 docs/obsidian/Service/.obsidian/
 docs/obsidian/Service/.trash/
 docs/obsidian/.DS_Store
+
+# Cópias de conflito do iCloud ("arquivo 2.tsx"). Entraram no repo uma vez via
+# `git add -A`; ficam barradas aqui pra não voltarem.
+* [0-9].ts
+* [0-9].tsx
+* [0-9].json
