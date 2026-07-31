@@ -11,6 +11,7 @@ import {
   Area, AreaChart, CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from "recharts";
 import { CHROME, seriesColor } from "@/lib/viz/palette";
+import { VizDefs, gradId, glowId } from "./vizDefs";
 import { useVizMode } from "./useVizMode";
 import type { SeriesDef } from "./ChartFrame";
 
@@ -35,6 +36,9 @@ export default function VizLine({
     <ResponsiveContainer width="100%" height="100%">
       <Chart data={rows} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
         {/* Grid só na horizontal — linha vertical compete com o crosshair. */}
+        {/* comGlow: o traço ganha halo da própria cor, que é o que dá relevo
+            na linha sem engrossar o mark (traço grosso vira mancha). */}
+        <VizDefs slots={series.map((x) => x.slot)} mode={mode} dir="v" comGlow />
         <CartesianGrid horizontal vertical={false} stroke={c.gridline} />
         <XAxis dataKey={xKey} tick={axisTick} stroke={c.axis} />
         {/* Mesmo motivo do VizBar: o width default corta valor de 7+ dígitos. */}
@@ -56,7 +60,7 @@ export default function VizLine({
               key={s.key} dataKey={s.key} name={s.label}
               stackId={stacked ? "s" : undefined}
               stroke={col} strokeWidth={2}
-              fill={col} fillOpacity={0.16}
+              fill={`url(#${gradId(s.slot, mode, "v")})`} fillOpacity={0.30}
               // Anel de 2px da superfície em marks que se sobrepõem.
               activeDot={{ r: 4.5, strokeWidth: 2, stroke: c.surface }}
               dot={false}
@@ -65,7 +69,8 @@ export default function VizLine({
           ) : (
             <Line
               key={s.key} dataKey={s.key} name={s.label}
-              stroke={col} strokeWidth={2}
+              stroke={col} strokeWidth={2.25}
+              filter={`url(#${glowId(s.slot, mode)})`}
               dot={false}
               activeDot={{ r: 4.5, strokeWidth: 2, stroke: c.surface }}
               isAnimationActive={false}

@@ -13,6 +13,7 @@
 
 import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
 import { CHROME, seriesColor, MAX_SERIES } from "@/lib/viz/palette";
+import { shadowId } from "./vizDefs";
 import { useVizMode } from "./useVizMode";
 
 export const PIE_MAX_SLICES = 6;
@@ -59,6 +60,22 @@ export default function VizPie({
     <div className="relative h-full">
       <ResponsiveContainer width="100%" height="100%">
         <PieChart>
+          <defs>
+            {/* Sombra projetada dá relevo à rosca inteira. A fatia continua
+                PLANA de propósito: inclinar a pizza distorce a área aparente e
+                a fatia da frente passa a parecer maior que uma igual atrás. */}
+            <filter id={shadowId(mode)} x="-20%" y="-20%" width="140%" height="140%">
+              <feDropShadow dx="0" dy="3" stdDeviation="4"
+                            floodColor={mode === "dark" ? "#000000" : "#0f1e3a"}
+                            floodOpacity={mode === "dark" ? 0.5 : 0.16} />
+            </filter>
+            {data.map((_, i) => (
+              <radialGradient key={i} id={`wwPie-${i}-${mode}`} cx="50%" cy="50%" r="72%">
+                <stop offset="55%"  stopColor={seriesColor(i, mode)} stopOpacity={0.78} />
+                <stop offset="100%" stopColor={seriesColor(i, mode)} stopOpacity={1} />
+              </radialGradient>
+            ))}
+          </defs>
           <Pie
             data={data}
             dataKey="value"
@@ -68,10 +85,11 @@ export default function VizPie({
             // 2px de superfície entre fatias
             stroke={c.surface}
             strokeWidth={2}
+            filter={`url(#${shadowId(mode)})`}
             isAnimationActive={false}
           >
             {data.map((_, i) => (
-              <Cell key={i} fill={seriesColor(i, mode)} />
+              <Cell key={i} fill={`url(#wwPie-${i}-${mode})`} />
             ))}
           </Pie>
           <Tooltip

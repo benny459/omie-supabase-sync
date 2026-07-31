@@ -15,6 +15,7 @@ import {
   Bar, BarChart, CartesianGrid, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from "recharts";
 import { CHROME, seriesColor } from "@/lib/viz/palette";
+import { VizDefs, gradId, shadowId } from "./vizDefs";
 import { useVizMode } from "./useVizMode";
 import type { SeriesDef } from "./ChartFrame";
 
@@ -78,6 +79,9 @@ export default function VizBar({
         // 2px de superfície entre barras vizinhas do mesmo grupo
         barGap={2}
       >
+        {/* Gradiente + sombra dão volume ao mark sem mexer na geometria: o
+            comprimento da barra continua exatamente proporcional ao valor. */}
+        <VizDefs slots={series.map((x) => x.slot)} mode={mode} dir={horizontal ? "h" : "v"} />
         <CartesianGrid
           // Grid só no eixo do valor — linha no eixo da categoria é ruído.
           horizontal={!horizontal}
@@ -132,7 +136,8 @@ export default function VizBar({
               dataKey={s.key}
               name={s.label}
               stackId={stacked ? "s" : undefined}
-              fill={seriesColor(s.slot, mode)}
+              fill={`url(#${gradId(s.slot, mode, horizontal ? "h" : "v")})`}
+              filter={`url(#${shadowId(mode)})`}
               radius={radius}
               // 2px de superfície entre fatias empilhadas
               stroke={stacked ? c.surface : undefined}
@@ -142,7 +147,7 @@ export default function VizBar({
               {/* Cor por ENTIDADE: um Cell por row garante que reordenar/filtrar
                   não repinta quem sobrou. */}
               {rows.map((_, ri) => (
-                <Cell key={ri} fill={seriesColor(s.slot, mode)} />
+                <Cell key={ri} fill={`url(#${gradId(s.slot, mode, horizontal ? "h" : "v")})`} />
               ))}
             </Bar>
           );
