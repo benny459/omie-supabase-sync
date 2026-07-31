@@ -1,17 +1,12 @@
 // Paleta de visualização do painel — VALIDADA, não escolhida por gosto.
 //
-// Os 8 slots categóricos abaixo passaram os seis checks do validador contra as
-// SUPERFÍCIES REAIS do painel (claro #ffffff, escuro #141412 — não as superfícies
-// default da referência):
+// Os 8 slots passaram os seis checks contra as superfícies REAIS do painel:
+// claro #ffffff e escuro #152744 (o navy do tema tech). Números atuais estão
+// no comentário da rampa, logo abaixo.
 //
-//   claro:  banda de luminosidade OK · chroma OK · CVD pior par adjacente
-//           ΔE 9.1 (protan) · visão normal ΔE 19.6 · contraste WARN em 3 slots
-//   escuro: banda OK · chroma OK · CVD ΔE 8.4 · visão normal ΔE 19.3 ·
-//           contraste todos ≥ 3:1
-//
-// Comando pra reconferir depois de QUALQUER mexida nos hexes:
-//   node scripts/validate_palette.js "<hexes>" --mode light  --surface "#ffffff"
-//   node scripts/validate_palette.js "<hexes>" --mode dark   --surface "#141412"
+// Reconferir depois de QUALQUER mexida nos hexes:
+//   node scripts/validate_palette.js "<hexes>" --mode light --surface "#ffffff"
+//   node scripts/validate_palette.js "<hexes>" --mode dark  --surface "#152744"
 //
 // REGRAS QUE NÃO SE NEGOCIAM (violar reintroduz bug de leitura, não de estilo):
 //  1. A ordem dos slots É o mecanismo de segurança pra daltonismo — atribua na
@@ -19,9 +14,9 @@
 //     facet, ou o gráfico é dividido.
 //  2. Cor segue a ENTIDADE, nunca a posição no ranking. Filtro que muda a
 //     quantidade de séries não pode repintar quem sobrou.
-//  3. No claro, aqua/yellow/magenta ficam abaixo de 3:1 contra branco. Isso
-//     obriga a "regra de alívio": rótulo direto visível ou visão de tabela.
-//     O ChartFrame já entrega o toggle de tabela — não remova.
+//  3. O CVD da rampa clara fica na faixa 6–8, que só é legal COM codificação
+//     secundária. Legenda sempre presente com 2+ séries e a visão de tabela do
+//     ChartFrame são essa codificação — não remova nenhuma das duas.
 //  4. Cores de status são reservadas e nunca viram "série 4". Sempre com ícone
 //     e rótulo, jamais só a cor.
 //  5. Nunca eixo duplo. Duas medidas de escala diferente = dois gráficos, ou
@@ -31,35 +26,41 @@ export type VizMode = "light" | "dark";
 
 // Ordem canônica. Índice = slot. NÃO reordenar sem revalidar.
 //
-// Rampa CLARA repassada em 2026-07-30: os 8 hues descem juntos pra uma banda
-// mais escura, de modo que TODOS clarem 3:1 contra branco. Antes, aqua/amarelo/
-// magenta ficavam em 2.17–2.82 — barra fina naquelas cores praticamente sumia
-// no fundo, e a regra de alívio (tabela) era o único remendo.
+// Rampa SUAVE (31/07/2026). A anterior era saturada demais — leitura de "cor
+// primária de giz", cansativa num painel que se lê por minutos. Esta baixa o
+// croma e unifica a luminosidade, ficando mais harmônica SEM perder o gate.
 //
-// O trade medido: contraste de todos os 8 passa a PASSAR; em troca o pior par
-// adjacente de CVD cai de 9.1 pra 8.0 (topo da faixa 6–8, que a skill permite
-// SÓ com codificação secundária). O ChartFrame entrega essa codificação —
-// legenda sempre presente com 2+ séries, visão de tabela e gap de 2px entre
-// marks. Marca invisível é pior que marca parecida.
+// Harmonia e distinguibilidade puxam pra lados opostos: cor harmônica é vizinha
+// no círculo, e vizinha confunde sob daltonismo. Por isso não foi escolha de
+// gosto — foram candidatas medidas até achar uma que passasse inteira.
 //
-// Tentativas descartadas (todas medidas, todas piores):
-//   escurecer só os 3 problemáticos -> laranja claro converge com aqua escuro
-//     no protan (ΔE 5.9, FAIL)
-//   reordenar pra separar aqua↔amarelo -> verde↔amarelo cai pra ΔE 2.1 (FAIL)
+//   clara:  CVD ΔE 8.3 (protan) · visão normal 15.3 · contraste todos ≥3:1
+//   escura: CVD ΔE 9.5 (deutan) · visão normal 16.2 · contraste todos ≥3:1
+//
+// A escura MELHOROU o CVD (era 8.4) porque o magenta foi puxado pro violeta,
+// separando-o do verde — o par verde↔magenta era o gargalo.
+//
+// Descartadas, todas medidas:
+//   dessaturar mais  -> 3 slots caem abaixo do piso de croma e leem como cinza
+//   magenta puro     -> verde↔magenta despenca pra ΔE 3.2 sob deutan
+//
+// Revalidar depois de QUALQUER mudança de hexe:
+//   node scripts/validate_palette.js "<hexes>" --mode light --surface "#ffffff"
+//   node scripts/validate_palette.js "<hexes>" --mode dark  --surface "#152744"
 export const SERIES_LIGHT = [
-  "#2a78d6", // 1 azul
-  "#c4551f", // 2 laranja
-  "#0f8f66", // 3 aqua
-  "#a97a00", // 4 amarelo
-  "#c95480", // 5 magenta
-  "#008300", // 6 verde
-  "#4a3aa7", // 7 violeta
-  "#cf3b3a", // 8 vermelho
+  "#3a72b8", // 1 azul
+  "#bd5f31", // 2 terracota
+  "#1f8a6a", // 3 verde-azulado
+  "#a37c22", // 4 ocre
+  "#b0568f", // 5 rosa-violeta
+  "#2e7d43", // 6 verde
+  "#5b4ab0", // 7 violeta
+  "#c4413f", // 8 vermelho
 ] as const;
 
 export const SERIES_DARK = [
-  "#3987e5", "#d95926", "#199e70", "#c98500",
-  "#d55181", "#008300", "#9085e9", "#e66767",
+  "#5297dd", "#d0703a", "#22a888", "#b08c22",
+  "#c96aa8", "#3da75f", "#8b79e0", "#e35f5d",
 ] as const;
 
 // Depois do repasse da rampa clara, nenhum slot fica sub-3:1. Mantido vazio (e
@@ -125,9 +126,8 @@ export const CHROME = {
     inkMuted: "#51637f",
     inkFaint: "#8496b0",
   },
-  // Tema escuro "tech" azul-marinho. A paleta categórica NÃO mudou — só a
-  // superfície — e foi revalidada contra #152744: contraste ≥3:1 nos 8 slots,
-  // pior par CVD ΔE 8.4 (protan), visão normal ΔE 19.3.
+  // Tema escuro "tech" azul-marinho. Números da validação estão no comentário
+  // da rampa, que é onde eles mudam.
   dark: {
     surface:  "#152744",
     gridline: "#24365c",

@@ -65,13 +65,13 @@ export default function VizPie({
                 PLANA de propósito: inclinar a pizza distorce a área aparente e
                 a fatia da frente passa a parecer maior que uma igual atrás. */}
             <filter id={shadowId(mode)} x="-20%" y="-20%" width="140%" height="140%">
-              <feDropShadow dx="0" dy="3" stdDeviation="4"
+              <feDropShadow dx="0" dy="2" stdDeviation="2.5"
                             floodColor={mode === "dark" ? "#000000" : "#0f1e3a"}
-                            floodOpacity={mode === "dark" ? 0.5 : 0.16} />
+                            floodOpacity={mode === "dark" ? 0.32 : 0.10} />
             </filter>
             {data.map((_, i) => (
               <radialGradient key={i} id={`wwPie-${i}-${mode}`} cx="50%" cy="50%" r="72%">
-                <stop offset="55%"  stopColor={seriesColor(i, mode)} stopOpacity={0.78} />
+                <stop offset="55%"  stopColor={seriesColor(i, mode)} stopOpacity={0.90} />
                 <stop offset="100%" stopColor={seriesColor(i, mode)} stopOpacity={1} />
               </radialGradient>
             ))}

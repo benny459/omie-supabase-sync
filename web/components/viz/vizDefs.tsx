@@ -49,9 +49,12 @@ export function VizDefs({
           : { x1: "1", y1: "0", x2: "0", y2: "0" };
         return (
           <linearGradient key={slot} id={gradId(slot, mode, dir)} {...coords}>
+            {/* Degradê discreto: 1 -> 0.82. A versão anterior ia a 0.62 e a
+                barra parecia desbotar na base, o que competia com a leitura do
+                próprio mark. Volume tem que ser sugerido, não anunciado. */}
             <stop offset="0%"   stopColor={cor} stopOpacity={1} />
-            <stop offset="55%"  stopColor={cor} stopOpacity={0.88} />
-            <stop offset="100%" stopColor={cor} stopOpacity={0.62} />
+            <stop offset="60%"  stopColor={cor} stopOpacity={0.93} />
+            <stop offset="100%" stopColor={cor} stopOpacity={0.82} />
           </linearGradient>
         );
       })}
@@ -60,17 +63,17 @@ export function VizDefs({
           desfoque curto: sombra longa vira ilustração e come a grade. */}
       <filter id={shadowId(mode)} x="-20%" y="-20%" width="140%" height="140%">
         <feDropShadow
-          dx="0" dy={dir === "v" ? 2 : 0} stdDeviation="2.5"
+          dx="0" dy={dir === "v" ? 1.5 : 0} stdDeviation="1.8"
           floodColor={mode === "dark" ? "#000000" : "#0f1e3a"}
-          floodOpacity={mode === "dark" ? 0.45 : 0.18}
+          floodOpacity={mode === "dark" ? 0.28 : 0.10}
         />
       </filter>
 
       {comGlow && unicos.map((slot) => (
         <filter key={slot} id={glowId(slot, mode)} x="-50%" y="-50%" width="200%" height="200%">
-          <feDropShadow dx="0" dy="0" stdDeviation="3"
+          <feDropShadow dx="0" dy="0" stdDeviation="2"
                         floodColor={seriesColor(slot, mode)}
-                        floodOpacity={mode === "dark" ? 0.55 : 0.28} />
+                        floodOpacity={mode === "dark" ? 0.35 : 0.16} />
         </filter>
       ))}
     </defs>
