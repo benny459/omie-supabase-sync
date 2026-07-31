@@ -181,6 +181,18 @@ const FINANCEIRO: NavItem[] = [
       </svg>
     ),
   },
+  {
+    href: "/bi/conciliacao",
+    area: "financeiro",
+    label: "Conciliação",
+    tone: "text-amber-700",
+    icon: (
+      // Duas metades tentando encaixar — é literalmente o que a tela faz.
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className="w-5 h-5" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M3 7h7v10H3zM14 7h7v10h-7"/><path d="M10 12h4"/>
+      </svg>
+    ),
+  },
 ];
 
 const ADMIN: NavItem[] = [

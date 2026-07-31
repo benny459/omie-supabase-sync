@@ -23,6 +23,7 @@ import {
 import ContasPagarView from "./ContasPagarView";
 import ContasReceberView from "./ContasReceberView";
 import FaturamentoBiView from "./FaturamentoBiView";
+import ConciliacaoView from "./ConciliacaoView";
 import ContratosCtView from "./ContratosCtView";
 import DreView from "./DreView";
 import MargemProjetoView from "./MargemProjetoView";
@@ -52,6 +53,11 @@ const ABAS: Aba[] = [
   { key: "aquisicao",  label: "Aquisição vs Rec.",cards: 5,  view: <AquisicaoView /> },
   { key: "rentab",     label: "Rentabilidade",    cards: 10, view: <RentabilidadeView /> },
   { key: "crm",        label: "CRM",              cards: 1 },
+  // Não é uma das 13 abas do Metabase: os 4 cards de conciliação viviam soltos
+  // no dashboard "Visão Geral — SafeWater", cada um numa ponta. Juntos eles
+  // formam um fluxo (tamanho → baldes → casos → auditoria), então ganham aba
+  // própria em vez de ficarem pendurados numa aba de outro assunto.
+  { key: "concil",     label: "Conciliação",      cards: 4,  view: <ConciliacaoView /> },
 ];
 
 export default function VisaoGeralTabs() {
