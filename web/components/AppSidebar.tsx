@@ -193,6 +193,17 @@ const FINANCEIRO: NavItem[] = [
       </svg>
     ),
   },
+  {
+    href: "/bi/compras-cadeia",
+    area: "financeiro",
+    label: "Cadeia de Compras",
+    tone: "text-sky-700",
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className="w-5 h-5" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M4 7h5l2 5-2 5H4M15 7h5v10h-5"/><path d="M11 12h4"/>
+      </svg>
+    ),
+  },
 ];
 
 const ADMIN: NavItem[] = [

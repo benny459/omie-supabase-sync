@@ -23,6 +23,7 @@ import {
 import ContasPagarView from "./ContasPagarView";
 import ContasReceberView from "./ContasReceberView";
 import FaturamentoBiView from "./FaturamentoBiView";
+import ComprasCadeiaView from "./ComprasCadeiaView";
 import ConciliacaoView from "./ConciliacaoView";
 import ContratosCtView from "./ContratosCtView";
 import DreView from "./DreView";
@@ -58,6 +59,10 @@ const ABAS: Aba[] = [
   // formam um fluxo (tamanho → baldes → casos → auditoria), então ganham aba
   // própria em vez de ficarem pendurados numa aba de outro assunto.
   { key: "concil",     label: "Conciliação",      cards: 4,  view: <ConciliacaoView /> },
+  // Mesma razão da aba acima: os 6 cards da cadeia de compras estavam
+  // espalhados, e só juntos contam a história do dinheiro que sai pro
+  // fornecedor e volta (ou não) como nota pro cliente.
+  { key: "cadeia",     label: "Cadeia Compras",   cards: 6,  view: <ComprasCadeiaView /> },
 ];
 
 export default function VisaoGeralTabs() {
