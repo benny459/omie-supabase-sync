@@ -1,36 +1,34 @@
 "use client";
 
-// Fluxo de caixa projetado, com simulação — cards 100, 151 e 98 do Metabase.
+// Fluxo de caixa projetado — cards 100, 151 e 98 do Metabase.
 //
-// Três coisas que este componente faz e o card original não fazia:
+// ── O que a curva mostra ────────────────────────────────────────────────────
+// Só o que está A VENCER: entrada e saída com data contratada dentro da janela.
+// Atrasado NÃO entra. Ancorá-lo em hoje jogaria R$ 441k de uma vez no dia 1, a
+// curva nasceria em -R$ 300k e ficaria negativa os 60 dias inteiros — um degrau
+// que engole o movimento real dos outros dias sem descrever nada.
 //
-// 1. EIXO ÚNICO POR PAINEL. O card era de eixo duplo: barras de entrada/saída
-//    num eixo e a linha de saldo em outro. Num eixo duplo, onde a linha cruza as
-//    barras depende de qual escala se escolheu pra cada lado — dá pra fazer o
-//    saldo parecer cruzar o zero em qualquer dia. Aqui saem dois painéis com o
-//    mesmo eixo X e zero verdadeiro em cada um.
+// O atrasado entra QUANDO VOCÊ LHE DÁ UMA DATA, no painel de simulação. É a
+// diferença entre "quando está contratado?" (fato → gráfico) e "quando isso vai
+// de fato acontecer?" (hipótese → simulação).
 //
-// 2. SIMULAÇÃO. Toda a curva é recalculada no navegador a partir do saldo de
-//    partida e da lista de títulos. Mudar a previsão de um título refaz a curva
-//    na hora. Nada é gravado: é cenário, não decisão.
+// ── Escopo, que é padrão e não precisa ser mexido ───────────────────────────
+//   ENTRADAS  só Safe  — é quem fatura, e a Omie.CASH que ancora a projeção é
+//                        dela; entrada de CDG/Water cai em outro caixa.
+//   SAÍDAS    as três  — o grupo paga tudo do mesmo bolso.
 //
-// 3. ESCOPO DA EMPRESA. A conta Omie.CASH da projeção é da SF. Sem filtro, a
-//    curva descontava do caixa da Safe os títulos a pagar de CDG e Water — sem
-//    contar nenhuma entrada delas.
-//
-// A curva de BASE e a SIMULADA saem da mesma função (projetar). Se a base viesse
-// do banco e a simulação daqui, as duas divergiriam e a curva pularia ao mexer
-// no primeiro título.
+// ── Um gráfico só ───────────────────────────────────────────────────────────
+// Barras de movimento e linha de saldo convivem no MESMO painel, num eixo só.
+// Isso é possível porque as duas medidas estão na mesma unidade (R$) — não é o
+// eixo duplo do card original, onde a escala de cada lado era escolhida à parte
+// e o cruzamento entre linha e barra virava artefato do desenho.
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import ChartFrame, { type SeriesDef } from "@/components/viz/ChartFrame";
 import StatTile from "@/components/viz/StatTile";
-import VizBar from "@/components/viz/VizBar";
-import VizLine from "@/components/viz/VizLine";
+import VizCombo from "@/components/viz/VizCombo";
 import VizTable, { type Col } from "@/components/viz/VizTable";
 
-const EMPRESAS = ["SF", "CD", "WW"];
-const ROTULO_EMPRESA: Record<string, string> = { SF: "Safe", CD: "CDG", WW: "Water" };
 const JANELAS = [30, 60, 90, 180];
 
 const brl = (v: number) =>
@@ -59,25 +57,36 @@ type ContaRow = {
 };
 type Payload = {
   dias: number;
+  emp_receber: string[];
+  emp_pagar: string[];
+  atraso_max: number;
   saldo_atual: { saldo: number; dt_ref: string | null; origem: string } | null;
   titulos: Titulo[];
+  atrasados: Titulo[];
   contas: ContaRow[];
 };
 
 type Ponto = { dia: string; entradas: number; saidas: number; saldo: number };
 
-/** Saldo de partida + movimento de cada dia, acumulado. É a única definição da
- *  curva no arquivo — base e simulação chamam esta função. */
-function projetar(saldo0: number, titulos: Titulo[], dias: number, datas: Map<number, string>): Ponto[] {
+/** Saldo de partida + movimento de cada dia, acumulado.
+ *  `extras` são os atrasados que ganharam data na simulação — entram no dia que
+ *  o usuário escolheu. Base e simulação chamam ESTA função: se cada uma tivesse
+ *  a sua, divergiriam e a curva pularia ao mexer no primeiro título. */
+function projetar(
+  saldo0: number, titulos: Titulo[], dias: number,
+  extras: Array<{ t: Titulo; dia: string }> = [],
+): Ponto[] {
   const inicio = hojeIso();
   const porDia = new Map<string, { e: number; s: number }>();
-  for (const t of titulos) {
-    const dia = datas.get(t.cod_titulo) ?? t.previsao;
+  const lancar = (dia: string, t: Titulo) => {
     const cel = porDia.get(dia) ?? { e: 0, s: 0 };
     if (t.natureza === "R") cel.e += Number(t.valor) || 0;
     else cel.s += Number(t.valor) || 0;
     porDia.set(dia, cel);
-  }
+  };
+  for (const t of titulos) lancar(t.previsao, t);
+  for (const x of extras) lancar(x.dia, x.t);
+
   const pontos: Ponto[] = [];
   let saldo = saldo0;
   for (let i = 0; i <= dias; i++) {
@@ -98,69 +107,69 @@ const COLS_CONTAS: Col<ContaRow>[] = [
 
 export default function FluxoCaixaView() {
   const [dias, setDias] = useState(60);
-  // Padrão SF: é de quem é a conta Omie.CASH que ancora a projeção.
-  const [empresas, setEmpresas] = useState<Set<string>>(() => new Set(["SF"]));
-  const [incluirAtraso, setIncluirAtraso] = useState(false);
   const [data, setData] = useState<Payload | null>(null);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
-  /** Datas simuladas: cod_titulo → nova previsão. Vazio = curva de base. */
-  const [simulacao, setSimulacao] = useState<Map<number, string>>(new Map());
+  /** Atrasados que ganharam data: cod_titulo → dia. Vazio = curva de base. */
+  const [agenda, setAgenda] = useState<Map<number, string>>(new Map());
   const [buscaSim, setBuscaSim] = useState("");
+  const [tipoSim, setTipoSim] = useState<"todos" | "R" | "P">("todos");
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const qs = new URLSearchParams({ dias: String(dias) });
-      qs.set("empresas", Array.from(empresas).join(",") || "SF");
-      if (incluirAtraso) qs.set("atraso", "1");
-      const r = await fetch(`/api/bi/fluxo-caixa?${qs}`, { cache: "no-store" });
+      // Sem parâmetros de escopo: o padrão da rota já é o escopo certo
+      // (receber Safe, pagar as três, atraso até 60 dias).
+      const r = await fetch(`/api/bi/fluxo-caixa?dias=${dias}`, { cache: "no-store" });
       const j = await r.json();
       if (!r.ok) { setErr(j.error ?? r.statusText); return; }
       setErr(null);
       setData(j as Payload);
-      // Trocar o recorte invalida a simulação: os títulos podem nem estar mais
-      // na lista, e manter datas órfãs faria a curva mentir em silêncio.
-      setSimulacao(new Map());
+      // Trocar a janela invalida a agenda: títulos podem ter saído da lista, e
+      // manter datas órfãs faria a curva mentir em silêncio.
+      setAgenda(new Map());
     } catch (e) {
       setErr(e instanceof Error ? e.message : String(e));
     } finally {
       setLoading(false);
     }
-  }, [dias, empresas, incluirAtraso]);
+  }, [dias]);
 
   useEffect(() => { void load(); }, [load]);
 
   const saldo0 = Number(data?.saldo_atual?.saldo ?? 0);
   const titulos = useMemo(() => data?.titulos ?? [], [data]);
+  const atrasados = useMemo(() => data?.atrasados ?? [], [data]);
 
-  const base = useMemo(
-    () => projetar(saldo0, titulos, dias, new Map()),
-    [saldo0, titulos, dias],
+  const extras = useMemo(() => {
+    const porCod = new Map(atrasados.map((t) => [t.cod_titulo, t]));
+    return Array.from(agenda.entries())
+      .map(([cod, dia]) => ({ t: porCod.get(cod), dia }))
+      .filter((x): x is { t: Titulo; dia: string } => !!x.t);
+  }, [agenda, atrasados]);
+
+  const base = useMemo(() => projetar(saldo0, titulos, dias), [saldo0, titulos, dias]);
+  const comAgenda = useMemo(
+    () => (extras.length ? projetar(saldo0, titulos, dias, extras) : null),
+    [saldo0, titulos, dias, extras],
   );
-  const simulada = useMemo(
-    () => (simulacao.size ? projetar(saldo0, titulos, dias, simulacao) : null),
-    [saldo0, titulos, dias, simulacao],
-  );
-  const curva = simulada ?? base;
+  const curva = comAgenda ?? base;
 
   const rows = curva.map((p, i) => ({
     x: diaBr(p.dia),
     Entradas: p.entradas,
     Saídas: p.saidas,
     Saldo: p.saldo,
-    // A curva de base fica visível ao lado da simulada pra dar a comparação —
-    // sozinha, a simulada não diz se melhorou nem quanto.
-    ...(simulada ? { "Saldo (base)": base[i]?.saldo ?? 0 } : {}),
+    ...(comAgenda ? { "Saldo (sem atrasados)": base[i]?.saldo ?? 0 } : {}),
   }));
 
-  const movSeries: SeriesDef[] = [
+  const barras: SeriesDef[] = [
     { key: "Entradas", label: "Entradas (a receber)", slot: 5 },
     { key: "Saídas",   label: "Saídas (a pagar)",     slot: 7 },
   ];
-  const saldoSeries: SeriesDef[] = simulada
-    ? [{ key: "Saldo", label: "Saldo simulado", slot: 0 },
-       { key: "Saldo (base)", label: "Saldo sem simulação", slot: 4 }]
+  const linhas: SeriesDef[] = comAgenda
+    ? [{ key: "Saldo", label: "Saldo com atrasados agendados", slot: 0 },
+       { key: "Saldo (sem atrasados)", label: "Saldo sem agendar", slot: 4 }]
     : [{ key: "Saldo", label: "Saldo projetado", slot: 0 }];
 
   const resumo = useMemo(() => {
@@ -178,34 +187,30 @@ export default function FluxoCaixaView() {
     };
   }, [curva, base]);
 
-  const toggleEmp = (e: string) => {
-    setEmpresas((prev) => {
-      const n = new Set(prev);
-      if (n.has(e)) n.delete(e); else n.add(e);
-      // Nunca deixa vazio: sem empresa a query cairia pro padrão do servidor e
-      // o botão pareceria não ter feito nada.
-      return n.size ? n : new Set(["SF"]);
-    });
-  };
+  const atrasoTotal = useMemo(() => {
+    const somar = (n: "R" | "P") =>
+      atrasados.filter((t) => t.natureza === n).reduce((a, t) => a + (Number(t.valor) || 0), 0);
+    const agendado = extras.reduce((a, x) => a + (Number(x.t.valor) || 0), 0);
+    return { receber: somar("R"), pagar: somar("P"), agendado, qtd: atrasados.length };
+  }, [atrasados, extras]);
 
-  // Só faz sentido simular o que move a agulha; 900 linhas de R$ 50 não.
-  const simulaveis = useMemo(() => {
+  const listaSim = useMemo(() => {
     const q = buscaSim.trim().toLowerCase();
-    return titulos
+    return atrasados
+      .filter((t) => tipoSim === "todos" || t.natureza === tipoSim)
       .filter((t) => !q || t.contraparte.toLowerCase().includes(q)
                         || t.categoria.toLowerCase().includes(q)
                         || t.documento.toLowerCase().includes(q))
       .slice()
-      .sort((a, b) => Number(b.valor) - Number(a.valor))
-      .slice(0, 60);
-  }, [titulos, buscaSim]);
+      .sort((a, b) => Number(b.valor) - Number(a.valor));
+  }, [atrasados, tipoSim, buscaSim]);
 
   const COLS_DIAS: Col<{ rotulo: string; entradas: number; saidas: number; liquido: number; saldo: number }>[] = [
     { key: "rotulo",   label: "Dia",      w: 80 },
     { key: "entradas", label: "Entradas", tipo: "money", w: 130 },
     { key: "saidas",   label: "Saídas",   tipo: "money", w: 130 },
     { key: "liquido",  label: "Líquido",  tipo: "money", w: 130 },
-    { key: "saldo",    label: simulada ? "Saldo simulado" : "Saldo projetado", tipo: "money", w: 150 },
+    { key: "saldo",    label: comAgenda ? "Saldo c/ agendados" : "Saldo projetado", tipo: "money", w: 150 },
   ];
 
   return (
@@ -222,29 +227,17 @@ export default function FluxoCaixaView() {
             </button>
           ))}
         </div>
-        <div className="flex items-center gap-1">
-          <span className="text-[11px] text-ww-textMuted mr-1">Empresa</span>
-          {EMPRESAS.map((e) => (
-            <button key={e} type="button" onClick={() => toggleEmp(e)}
-              title={e === "SF" ? "Dona da conta Omie.CASH que ancora a projeção" : undefined}
-              className={`px-2 py-0.5 text-[11px] rounded border transition ${
-                empresas.has(e) ? "border-ww-accent text-ww-accent bg-ww-accentSoft font-semibold"
-                                : "border-ww-border text-ww-textMuted hover:text-ww-text"}`}>
-              {ROTULO_EMPRESA[e]}
-            </button>
-          ))}
-        </div>
-        <label className="flex items-center gap-1.5 text-[11px] text-ww-textMuted cursor-pointer"
-               title="Título vencido tem previsão no passado e some da janela. Ligado, ele entra ancorado em hoje.">
-          <input type="checkbox" checked={incluirAtraso}
-                 onChange={(e) => setIncluirAtraso(e.target.checked)}
-                 className="accent-ww-accent" />
-          Trazer atrasados para hoje
-        </label>
-        {simulacao.size > 0 && (
-          <button type="button" onClick={() => setSimulacao(new Map())}
+        {/* Escopo é fixo de propósito — não é um filtro que se mexe, é como o
+            caixa funciona. Fica visível pra não virar regra escondida. */}
+        <p className="text-[11px] text-ww-textFaint">
+          Recebe <strong className="text-ww-textMuted">Safe</strong> · paga{" "}
+          <strong className="text-ww-textMuted">Safe + CDG + Water</strong> · atrasados de até{" "}
+          {data?.atraso_max ?? 60} dias vão pra simulação
+        </p>
+        {agenda.size > 0 && (
+          <button type="button" onClick={() => setAgenda(new Map())}
             className="ml-auto px-2 py-0.5 text-[11px] rounded border border-ww-accent text-ww-accent hover:bg-ww-accentSoft transition font-semibold">
-            Limpar simulação ({simulacao.size})
+            Limpar agendamentos ({agenda.size})
           </button>
         )}
       </div>
@@ -264,104 +257,101 @@ export default function FluxoCaixaView() {
                 data.saldo_atual.dt_ref ? diaBr(data.saldo_atual.dt_ref) : "—"}`
             : "Sem extrato"}
         />
-        <StatTile label={`Entradas previstas (${dias}d)`} value={brl(resumo.entradas)}
-                  hint={`${titulos.filter((t) => t.natureza === "R").length} títulos a receber`} />
-        <StatTile label={`Saídas previstas (${dias}d)`} value={brl(Math.abs(resumo.saidas))}
-                  hint={`${titulos.filter((t) => t.natureza === "P").length} títulos a pagar`}
+        <StatTile label={`Entradas a vencer (${dias}d)`} value={brl(resumo.entradas)}
+                  hint={`${titulos.filter((t) => t.natureza === "R").length} títulos · só Safe`} />
+        <StatTile label={`Saídas a vencer (${dias}d)`} value={brl(Math.abs(resumo.saidas))}
+                  hint={`${titulos.filter((t) => t.natureza === "P").length} títulos · Safe + CDG + Water`}
                   higherIsBetter={false} />
         <StatTile
-          label={simulada ? "Dia mais apertado (simulado)" : "Dia mais apertado"}
+          label={comAgenda ? "Dia mais apertado (c/ agendados)" : "Dia mais apertado"}
           value={brl(resumo.piorSaldo)}
           hint={resumo.piorDia
             ? `${diaBr(resumo.piorDia)}${resumo.negativos ? ` · ${resumo.negativos} dia(s) negativo(s)` : " · nunca negativa"}`
             : "—"}
-          delta={simulada && resumo.piorSaldoBase !== 0
+          delta={comAgenda && resumo.piorSaldoBase !== 0
             ? (resumo.piorSaldo - resumo.piorSaldoBase) / Math.abs(resumo.piorSaldoBase)
             : null}
-          deltaLabel="vs. sem simulação"
+          deltaLabel="vs. sem agendar atrasados"
         />
       </div>
 
-      {resumo.negativos > 0 && (
+      {atrasoTotal.qtd > 0 && (
         <div className="bg-amber-500/10 border border-amber-500/30 text-amber-800 dark:text-amber-200 rounded-xl px-3 py-2 text-[11.5px]">
-          A projeção fura o caixa zero em {resumo.negativos} dia(s), pior ponto em{" "}
-          <strong>{resumo.piorDia ? diaBr(resumo.piorDia) : "—"}</strong> ({brl(resumo.piorSaldo)}).
-          Use a simulação abaixo pra testar antecipar um recebimento ou empurrar um pagamento.
+          Fora da curva: <strong>{brl(atrasoTotal.pagar)}</strong> a pagar e{" "}
+          <strong>{brl(atrasoTotal.receber)}</strong> a receber já vencidos ({atrasoTotal.qtd} títulos).
+          Não têm data de pagamento — só entram no gráfico quando você der uma, na simulação abaixo.
+          {extras.length > 0 && (
+            <> Já agendados: <strong>{brl(atrasoTotal.agendado)}</strong> em {extras.length} título(s).</>
+          )}
         </div>
       )}
 
       <ChartFrame
-        title={simulada ? "Saldo projetado — simulado vs. base" : "Saldo projetado, dia a dia"}
-        subtitle={`Parte de ${brl(saldo0)} (saldo Omie de hoje) e acumula o líquido de cada dia`}
-        series={saldoSeries}
+        title="Fluxo de caixa projetado"
+        subtitle={`Barras = movimento do dia · linha = saldo acumulado, partindo de ${brl(saldo0)}. Mesma unidade, um eixo só`}
+        series={[...barras, ...linhas]}
         rows={rows}
         valueFormat={(v) => brl(Number(v))}
         loading={loading}
-        height={260}
+        height={340}
       >
-        <VizLine rows={rows} series={saldoSeries} valueFormat={(v) => brl(v)} />
+        <VizCombo rows={rows} bars={barras} lines={linhas} valueFormat={(v) => brl(v)} />
       </ChartFrame>
 
-      <ChartFrame
-        title="Entradas e saídas previstas por dia"
-        subtitle="Mesmo eixo X do saldo acima. Saídas crescem pra baixo a partir do zero"
-        series={movSeries}
-        rows={rows}
-        valueFormat={(v) => brl(Number(v))}
-        loading={loading}
-        height={240}
-      >
-        <VizBar rows={rows} series={movSeries} valueFormat={(v) => brl(v)} />
-      </ChartFrame>
-
-      {/* Painel de simulação. Nada aqui é gravado — é cenário. */}
+      {/* Simulação: só atrasados. Título a vencer tem data contratada — não é
+          hipótese a testar, e por isso não aparece aqui. */}
       <section className="viz-panel bg-ww-panel border border-ww-border rounded-xl p-3.5">
         <header className="viz-head flex items-center gap-3 flex-wrap">
           <div className="min-w-0 flex-1">
             <h3 className="text-[12.5px] font-semibold text-ww-text tracking-wide uppercase">
-              Simular novas datas de previsão
+              Agendar atrasados
             </h3>
             <p className="text-[11px] text-ww-textMuted mt-0.5 normal-case">
-              Mude a data de um título e a curva acima recalcula na hora. Nada é gravado no Omie —
-              é cenário. Mostrando os 60 maiores em aberto.
+              Dê uma data a um título vencido e ele entra na curva naquele dia. Nada é gravado no
+              Omie — é cenário. {atrasados.length} títulos vencidos, receber da Safe e pagar das três.
             </p>
+          </div>
+          <div className="flex items-center gap-1">
+            {([["todos", "Todos"], ["R", "A receber"], ["P", "A pagar"]] as const).map(([k, l]) => (
+              <button key={k} type="button" onClick={() => setTipoSim(k)}
+                className={`px-2 py-0.5 text-[11px] rounded border transition ${
+                  tipoSim === k ? "border-ww-accent text-ww-accent bg-ww-accentSoft font-semibold"
+                                : "border-ww-border text-ww-textMuted hover:text-ww-text"}`}>
+                {l}
+              </button>
+            ))}
           </div>
           <input
             value={buscaSim}
             onChange={(e) => setBuscaSim(e.target.value)}
-            placeholder="Filtrar por cliente, categoria…"
-            className="w-[200px] text-[11px] bg-ww-bg border border-ww-border rounded px-2 py-1 text-ww-text placeholder:text-ww-textFaint"
+            placeholder="Filtrar…"
+            className="w-[160px] text-[11px] bg-ww-bg border border-ww-border rounded px-2 py-1 text-ww-text placeholder:text-ww-textFaint"
           />
         </header>
 
-        <div className="overflow-auto" style={{ maxHeight: 380 }}>
+        <div className="overflow-auto" style={{ maxHeight: 400 }}>
           <table className="w-full text-[11.5px] border-collapse">
             <thead className="sticky top-0 z-10 bg-ww-panel">
               <tr className="text-[10px] uppercase tracking-wider text-ww-textMuted">
-                <th className="p-1.5 text-left shadow-[0_1px_0_0_rgb(var(--color-ww-border))]" style={{ width: 64 }}>Tipo</th>
-                <th className="p-1.5 text-left shadow-[0_1px_0_0_rgb(var(--color-ww-border))]" style={{ width: 230 }}>Contraparte</th>
-                <th className="p-1.5 text-left shadow-[0_1px_0_0_rgb(var(--color-ww-border))]" style={{ width: 150 }}>Categoria</th>
-                <th className="p-1.5 text-right shadow-[0_1px_0_0_rgb(var(--color-ww-border))]" style={{ width: 118 }}>Valor</th>
-                <th className="p-1.5 text-left shadow-[0_1px_0_0_rgb(var(--color-ww-border))]" style={{ width: 96 }}>Previsão</th>
-                <th className="p-1.5 text-left shadow-[0_1px_0_0_rgb(var(--color-ww-border))]" style={{ width: 128 }}>Simular para</th>
-                <th className="p-1.5 text-right shadow-[0_1px_0_0_rgb(var(--color-ww-border))]" style={{ width: 76 }}>Δ dias</th>
+                {[["Tipo", 64], ["Emp.", 56], ["Contraparte", 220], ["Categoria", 140],
+                  ["Venceu", 76], ["Atraso", 70]].map(([l, w]) => (
+                  <th key={String(l)} style={{ width: Number(w) }}
+                      className="p-1.5 text-left shadow-[0_1px_0_0_rgb(var(--color-ww-border))]">{l}</th>
+                ))}
+                <th style={{ width: 118 }} className="p-1.5 text-right shadow-[0_1px_0_0_rgb(var(--color-ww-border))]">Valor</th>
+                <th style={{ width: 136 }} className="p-1.5 text-left shadow-[0_1px_0_0_rgb(var(--color-ww-border))]">Agendar para</th>
               </tr>
             </thead>
             <tbody className={loading ? "opacity-40" : ""}>
-              {simulaveis.length === 0 && (
-                <tr><td colSpan={7} className="p-6 text-center text-ww-textFaint">
-                  {loading ? "Carregando…" : "Nenhum título em aberto na janela."}
+              {listaSim.length === 0 && (
+                <tr><td colSpan={8} className="p-6 text-center text-ww-textFaint">
+                  {loading ? "Carregando…" : "Nenhum título vencido no escopo."}
                 </td></tr>
               )}
-              {simulaveis.map((t) => {
-                const nova = simulacao.get(t.cod_titulo);
-                const delta = nova
-                  ? Math.round((new Date(`${nova}T12:00:00`).getTime()
-                              - new Date(`${t.previsao}T12:00:00`).getTime()) / 86_400_000)
-                  : 0;
+              {listaSim.map((t) => {
+                const dia = agenda.get(t.cod_titulo);
                 return (
-                  <tr key={t.cod_titulo}
-                      className={`viz-row ${nova ? "bg-ww-accentSoft/40" : ""}`}>
+                  <tr key={t.cod_titulo} className={`viz-row ${dia ? "bg-ww-accentSoft/40" : ""}`}>
                     <td className="p-1.5 border-b border-ww-border/50">
                       <span className={`inline-flex px-1.5 py-0.5 rounded text-[10px] font-semibold border ${
                         t.natureza === "R"
@@ -370,48 +360,49 @@ export default function FluxoCaixaView() {
                         {t.natureza === "R" ? "Entra" : "Sai"}
                       </span>
                     </td>
+                    <td className="p-1.5 border-b border-ww-border/50 text-ww-textMuted">{t.empresa}</td>
                     <td className="p-1.5 border-b border-ww-border/50 text-ww-text truncate" title={t.contraparte}>
                       {t.contraparte}
-                      {t.esta_vencido && t.dias_atraso != null && (
-                        <span className="ml-1 text-[10px] text-amber-600 dark:text-amber-400">
-                          ({t.dias_atraso}d atraso)
-                        </span>
-                      )}
                     </td>
                     <td className="p-1.5 border-b border-ww-border/50 text-ww-textMuted truncate" title={t.categoria}>
                       {t.categoria}
                     </td>
+                    <td className="p-1.5 border-b border-ww-border/50 text-ww-textMuted tabular-nums">
+                      {t.vencimento ? diaBr(t.vencimento) : "—"}
+                    </td>
+                    <td className="p-1.5 border-b border-ww-border/50 tabular-nums text-amber-600 dark:text-amber-400">
+                      {t.dias_atraso != null ? `${t.dias_atraso}d` : "—"}
+                    </td>
                     <td className="p-1.5 border-b border-ww-border/50 text-right tabular-nums text-ww-text">
                       {brl(Number(t.valor))}
                     </td>
-                    <td className="p-1.5 border-b border-ww-border/50 text-ww-textMuted tabular-nums">
-                      {diaBr(t.previsao)}
-                    </td>
                     <td className="p-1.5 border-b border-ww-border/50">
-                      <input
-                        type="date"
-                        value={nova ?? t.previsao}
-                        min={hojeIso()}
-                        onChange={(e) => {
-                          const v = e.target.value;
-                          setSimulacao((prev) => {
-                            const n = new Map(prev);
-                            // Voltar pra data original tira da simulação, em vez
-                            // de gravar um "override" que não muda nada.
-                            if (!v || v === t.previsao) n.delete(t.cod_titulo);
-                            else n.set(t.cod_titulo, v);
-                            return n;
-                          });
-                        }}
-                        className="text-[11px] bg-ww-bg border border-ww-border rounded px-1.5 py-0.5 text-ww-text"
-                      />
-                    </td>
-                    <td className={`p-1.5 border-b border-ww-border/50 text-right tabular-nums font-semibold ${
-                      delta === 0 ? "text-ww-textFaint"
-                      : (t.natureza === "R" ? delta < 0 : delta > 0)
-                        ? "text-emerald-600 dark:text-emerald-400"
-                        : "text-rose-600 dark:text-rose-400"}`}>
-                      {delta === 0 ? "—" : `${delta > 0 ? "+" : ""}${delta}d`}
+                      <div className="flex items-center gap-1">
+                        <input
+                          type="date"
+                          value={dia ?? ""}
+                          min={hojeIso()}
+                          max={addDias(hojeIso(), dias)}
+                          onChange={(e) => {
+                            const v = e.target.value;
+                            setAgenda((prev) => {
+                              const n = new Map(prev);
+                              if (!v) n.delete(t.cod_titulo); else n.set(t.cod_titulo, v);
+                              return n;
+                            });
+                          }}
+                          className="text-[11px] bg-ww-bg border border-ww-border rounded px-1.5 py-0.5 text-ww-text"
+                        />
+                        {dia && (
+                          <button type="button" title="Tirar da curva"
+                            onClick={() => setAgenda((prev) => {
+                              const n = new Map(prev);
+                              n.delete(t.cod_titulo);
+                              return n;
+                            })}
+                            className="text-ww-textFaint hover:text-ww-text px-1">×</button>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 );
@@ -423,8 +414,8 @@ export default function FluxoCaixaView() {
 
       <VizTable
         title="Projeção dia a dia"
-        subtitle={simulada
-          ? "Já com as datas simuladas aplicadas"
+        subtitle={comAgenda
+          ? "Já com os atrasados agendados aplicados"
           : "A mesma curva em números — pra achar o título que causa o buraco"}
         cols={COLS_DIAS}
         rows={curva.map((p) => ({
@@ -438,13 +429,13 @@ export default function FluxoCaixaView() {
 
       <VizTable
         title="Saldo por conta corrente"
-        subtitle="Último lançamento de cada conta. A projeção acima ancora só na Omie.CASH"
+        subtitle="Todas as contas das três empresas. A projeção acima ancora só na Omie.CASH da Safe"
         cols={COLS_CONTAS}
         rows={data?.contas ?? []}
         ordemInicial="saldo"
         totalizar={["saldo"]}
         loading={loading}
-        altura={240}
+        altura={260}
       />
     </div>
   );
