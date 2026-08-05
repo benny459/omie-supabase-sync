@@ -24,6 +24,8 @@ import ContasPagarView from "./ContasPagarView";
 import ContasReceberView from "./ContasReceberView";
 import FaturamentoBiView from "./FaturamentoBiView";
 import ComprasCadeiaView from "./ComprasCadeiaView";
+import FluxoCaixaView from "./FluxoCaixaView";
+import RecebimentoView from "./RecebimentoView";
 import ConciliacaoView from "./ConciliacaoView";
 import ContratosCtView from "./ContratosCtView";
 import DreView from "./DreView";
@@ -63,6 +65,10 @@ const ABAS: Aba[] = [
   // espalhados, e só juntos contam a história do dinheiro que sai pro
   // fornecedor e volta (ou não) como nota pro cliente.
   { key: "cadeia",     label: "Cadeia Compras",   cards: 6,  view: <ComprasCadeiaView /> },
+  // "Faturei X, quando entra?" — os cards 142 e 130 respondiam metade cada.
+  { key: "receb",      label: "Recebimento",      cards: 2,  view: <RecebimentoView /> },
+  // Cards 100, 151 e 98. O 100 era eixo duplo; aqui vem desdobrado.
+  { key: "caixa",      label: "Fluxo de Caixa",   cards: 3,  view: <FluxoCaixaView /> },
 ];
 
 export default function VisaoGeralTabs() {
