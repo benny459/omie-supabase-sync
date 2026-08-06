@@ -162,6 +162,14 @@ export default function FluxoCaixaView() {
 
   /** Atrasados com data escolhida: cod_titulo → dia. Vazio = curva de base. */
   const [agenda, setAgenda] = useState<Map<number, string>>(new Map());
+  /** O que está sendo DIGITADO, antes de virar agendamento.
+   *
+   *  Existe porque <input type="date"> dispara onChange a cada tecla, com datas
+   *  parcialmente montadas: digitar "01/08/2026" passa por ano 0, 00, 000, 0002…
+   *  e todas são datas válidas pro navegador. Gravar nelas fazia o valor
+   *  controlado voltar quebrado pro campo ("01/08/0002" no print) e travar a
+   *  digitação. Aqui o teclado mexe só no rascunho; o commit é no blur. */
+  const [rascunho, setRascunho] = useState<Map<number, string>>(new Map());
   const [sel, setSel] = useState<Set<number>>(new Set());
   const [dataLote, setDataLote] = useState("");
   const [busca, setBusca] = useState("");
@@ -247,6 +255,11 @@ export default function FluxoCaixaView() {
     };
   }, [curva, base]);
 
+  const agendadosForaDaJanela = useMemo(
+    () => Array.from(agenda.values()).filter((d) => d > addDias(hojeIso(), dias)).length,
+    [agenda, dias],
+  );
+
   const atrasoTot = useMemo(() => {
     const soma = (n: "R" | "P") =>
       atrasados.filter((t) => t.natureza === n).reduce((a, t) => a + (Number(t.valor) || 0), 0);
@@ -268,6 +281,15 @@ export default function FluxoCaixaView() {
       .slice()
       .sort((a, b) => Number(b.valor) - Number(a.valor));
   }, [atrasados, tipo, busca]);
+
+  /** Data aceitável: COMPLETA e não no passado. Não limito ao fim da janela —
+   *  agendar pra depois dela é legítimo, o título só não aparece na curva atual.
+   *  Recusar seria descartar em silêncio o que o usuário acabou de digitar. */
+  const dataUtil = (v: string) =>
+    /^\d{4}-\d{2}-\d{2}$/.test(v) && v >= hojeIso() && v <= "2100-12-31";
+
+  /** Agendado pra depois do fim da janela: gravado, mas fora do gráfico. */
+  const foraDaJanela = (v: string) => dataUtil(v) && v > addDias(hojeIso(), dias);
 
   // Grava no painel (não no Omie). É o que faz o título entrar na curva.
   const gravar = async (alvos: Array<{ cod: number; dia: string }>) => {
@@ -471,10 +493,13 @@ export default function FluxoCaixaView() {
             <span className="text-[11px] font-semibold text-ww-accent">
               {selecionados.length} selecionado(s)
             </span>
-            <input type="date" value={dataLote} min={hojeIso()} max={addDias(hojeIso(), dias)}
+            <input type="date" value={dataLote} min={hojeIso()}
               onChange={(e) => setDataLote(e.target.value)}
               className="text-[11px] bg-ww-bg border border-ww-border rounded px-1.5 py-0.5 text-ww-text" />
-            <button type="button" disabled={!dataLote || salvando}
+            <button type="button" disabled={!dataUtil(dataLote) || salvando}
+              title={dataLote && !dataUtil(dataLote) ? "Informe uma data a partir de hoje"
+                : foraDaJanela(dataLote) ? "Grava, mas cai depois do fim da janela — não aparece na curva"
+                : undefined}
               onClick={() => gravar(selecionados.map((cod) => ({ cod, dia: dataLote })))}
               className="px-2 py-0.5 text-[11px] rounded border border-ww-accent text-ww-accent hover:bg-ww-accent hover:text-white transition font-semibold disabled:opacity-40">
               {salvando ? "Gravando…" : "Aplicar data ao lote"}
@@ -586,10 +611,27 @@ export default function FluxoCaixaView() {
                       {brl(Number(t.valor))}
                     </td>
                     <td className="p-1.5 border-b border-ww-border/50">
-                      <input type="date" value={dia} min={hojeIso()} max={addDias(hojeIso(), dias)}
+                      <input type="date"
+                        value={rascunho.get(t.cod_titulo) ?? dia}
+                        min={hojeIso()}
                         disabled={!podeEditar || salvando}
-                        onChange={(e) => e.target.value
-                          && gravar([{ cod: t.cod_titulo, dia: e.target.value }])}
+                        // Digitação mexe só no rascunho — ver o comentário do estado.
+                        onChange={(e) => setRascunho((prev) =>
+                          new Map(prev).set(t.cod_titulo, e.target.value))}
+                        // Commit ao sair do campo ou no Enter, e só se a data
+                        // estiver completa e dentro da janela.
+                        onBlur={(e) => {
+                          const v = e.target.value;
+                          setRascunho((prev) => {
+                            const n = new Map(prev);
+                            n.delete(t.cod_titulo);
+                            return n;
+                          });
+                          if (dataUtil(v) && v !== dia) {
+                            void gravar([{ cod: t.cod_titulo, dia: v }]);
+                          }
+                        }}
+                        onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); }}
                         className="text-[11px] bg-ww-bg border border-ww-border rounded px-1.5 py-0.5 text-ww-text disabled:opacity-50" />
                     </td>
                     <td className="p-1.5 border-b border-ww-border/50">
