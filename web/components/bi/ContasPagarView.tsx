@@ -46,6 +46,53 @@ const COLS_TITULOS: Col<TituloRow>[] = [
     tom: (v) => v === "Vencido" ? "critico" : v === "Liquidado" ? "ok" : "neutro" },
 ];
 
+type AgendaRow = {
+  previsao: string | null; dia_semana: string; vencimento: string | null;
+  fornecedor: string; titulo: string | null; nf: string | null;
+  categoria: string; grupo: string; projeto: string; pedido: string;
+  aprovacao: string; aprovador: string; pv_os: string;
+  rc: string; rc_descricao: string;
+  rc_custo: number | null; pc_custo: number | null; qtd_pcs: number;
+  rc_vs_pc: string | null; fat_status: string | null;
+  venda: number | null; margem_pct: number | null;
+  dt_aprovacao: string | null; dt_nf_fornec: string | null; dt_lancamento: string | null;
+  atraso_nf: number | null; dt_receb_nf: string | null;
+  prazo_dias: number | null; material: string; valor: number;
+};
+
+// A agenda amarra COMPRA → VENDA → PAGAMENTO na mesma linha: o que vou pagar,
+// de qual pedido veio, se estava aprovado, qual PV/OS vai faturar aquilo e a
+// margem que sobra. É a tela que responde "posso pagar isto?" sem trocar de aba.
+const COLS_AGENDA: Col<AgendaRow>[] = [
+  { key: "previsao",   label: "Previsão",   tipo: "date", w: 80 },
+  { key: "dia_semana", label: "D.Sem",      w: 52 },
+  { key: "vencimento", label: "Vencimento", tipo: "date", w: 84 },
+  { key: "fornecedor", label: "FORNECEDOR", w: 210 },
+  { key: "categoria",  label: "Categoria",  w: 140 },
+  { key: "projeto",    label: "Projeto",    w: 150 },
+  { key: "pedido",     label: "Pedido",     w: 92 },
+  { key: "aprovacao",  label: "Aprovação",  tipo: "badge", w: 110,
+    tom: (v) => v === "Aprovado" ? "ok"
+              : v === "Não aprovado" ? "critico"
+              : v === "Pendente" || v === "Sem aprovação" ? "alerta" : "neutro" },
+  { key: "aprovador",  label: "Aprovador",  w: 100 },
+  { key: "pv_os",      label: "PV/OS",      w: 88 },
+  { key: "rc",         label: "RC",         w: 66 },
+  { key: "rc_descricao", label: "RC — descrição", w: 200 },
+  { key: "rc_custo",   label: "RC orçado",  tipo: "money", w: 112 },
+  { key: "pc_custo",   label: "PC real",    tipo: "money", w: 112 },
+  { key: "rc_vs_pc",   label: "RC × PC",    tipo: "badge", w: 108,
+    tom: (v) => v === "No orçamento" ? "ok" : v === "Acima do RC" ? "critico" : "neutro" },
+  { key: "fat_status", label: "Faturado?",  tipo: "badge", w: 104,
+    tom: (v) => v === "Faturado" ? "ok" : v === "Não faturado" ? "critico" : "neutro" },
+  { key: "venda",      label: "Venda",      tipo: "money", w: 112 },
+  { key: "margem_pct", label: "Margem",     w: 84,
+    fmt: (v) => v == null ? "—" : `${Number(v).toLocaleString("pt-BR", { maximumFractionDigits: 1 })}%` },
+  { key: "material",   label: "Material",   w: 110 },
+  { key: "prazo_dias", label: "Prazo",      tipo: "dias", w: 68 },
+  { key: "valor",      label: "A pagar",    tipo: "money", w: 118 },
+];
+
 type Payload = {
   saldo_aberto: number; qtd_titulos: number; total_pago_ano: number;
   horizonte: {
@@ -57,6 +104,7 @@ type Payload = {
   grupos: Array<{ label: string; value: number; macro: string }>;
   top: Array<{ chave: string; valor: number; qtd: number }>;
   detalhe: TituloRow[];
+  agenda: AgendaRow[];
 };
 
 export default function ContasPagarView() {
@@ -188,6 +236,20 @@ export default function ContasPagarView() {
           <VizPie slices={data?.grupos ?? []} valueFormat={brl} totalLabel="emitido" />
         </ChartFrame>
       </div>
+
+      {/* A agenda vem ANTES do detalhe simples: ela responde "posso pagar isto?",
+          que é a pergunta que se faz primeiro. O detalhe abaixo continua sendo a
+          lista crua de títulos, sem o contexto de compra e venda. */}
+      <VizTable
+        title={`Agenda de pagamento — próximos ${horizonte} dias`}
+        subtitle="Compra → venda → pagamento na mesma linha: pedido, aprovação, PV/OS que vai faturar e a margem que sobra"
+        cols={COLS_AGENDA}
+        rows={data?.agenda ?? []}
+        ordemInicial="previsao"
+        loading={loading}
+        altura={480}
+        totalizar={["valor", "venda", "pc_custo"]}
+      />
 
       <VizTable
         title="Detalhe de títulos a pagar"

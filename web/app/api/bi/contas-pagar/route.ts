@@ -37,7 +37,7 @@ export async function GET(req: Request) {
     { auth: { persistSession: false }, db: { schema: "bi" } },
   );
 
-  const [resumo, horiz, aging, mensal, grupos, top, detalhe] = await Promise.all([
+  const [resumo, horiz, aging, mensal, grupos, top, agenda, detalhe] = await Promise.all([
     adm.rpc("tit_resumo", { p_natureza: "P", p_empresas: empresas, p_cat_venda: null,
                             p_so_carteira: false, p_base_data: base }),
     adm.rpc("tit_horizonte", { p_natureza: "P", p_empresas: empresas,
@@ -49,11 +49,14 @@ export async function GET(req: Request) {
     adm.rpc("ap_por_grupo", { p_from: from, p_to: to, p_empresas: empresas }),
     adm.rpc("tit_top_contraparte", { p_natureza: "P", p_from: from, p_to: to,
                                      p_empresas: empresas, p_limit: 20, p_pagos: true }),
+    // Agenda compra→venda→pagamento (card 56). Usa o mesmo horizonte já
+    // escolhido na tela — um segundo seletor de janela só confundiria.
+    adm.rpc("ap_agenda", { p_dias: horizonte, p_empresas: empresas, p_limit: 800 }),
     adm.rpc("titulos_detalhe", { p_natureza: "P", p_from: null, p_to: null, p_empresas: empresas,
                                  p_apenas_abertos: true, p_base_data: base, p_limit: 500 }),
   ]);
 
-  for (const [n, r] of [["tit_resumo", resumo], ["tit_horizonte", horiz], ["tit_aging", aging],
+  for (const [n, r] of [["ap_agenda", agenda], ["tit_resumo", resumo], ["tit_horizonte", horiz], ["tit_aging", aging],
                         ["tit_mensal", mensal], ["ap_por_grupo", grupos],
                         ["tit_top_contraparte", top], ["titulos_detalhe", detalhe]] as const) {
     if (r.error) return NextResponse.json({ error: `${n}: ${r.error.message}` }, { status: 500 });
@@ -84,6 +87,7 @@ export async function GET(req: Request) {
     grupos: ((grupos.data ?? []) as Array<{ grupo: string; macro: string; qtd: number; valor: number }>)
       .map((g) => ({ label: g.grupo, value: Number(g.valor) || 0, macro: g.macro })),
     detalhe: detalhe.data ?? [],
+    agenda: agenda.data ?? [],
     top: ((top.data ?? []) as Array<{ contraparte: string; valor: number; qtd: number }>)
       .map((t) => ({ chave: t.contraparte, valor: Number(t.valor) || 0, qtd: Number(t.qtd) || 0 })),
   });
