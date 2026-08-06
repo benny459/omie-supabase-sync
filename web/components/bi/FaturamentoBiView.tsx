@@ -9,6 +9,12 @@
 // eram combos com série no eixo direito. Pela sua decisão, viraram gráficos
 // separados: valor em R$ num, contagem de notas noutro. As duas medidas nunca
 // compartilharam escala — o eixo duplo só escondia isso.
+//
+// FUSÃO (06/08/2026): a tela de "Faturamento → Recebimento" foi absorvida aqui.
+// Eram duas páginas sobre o mesmo dinheiro em dois momentos — quanto entrou e em
+// quanto tempo. A tabela de detalhe passou a trazer a NF e o título que ela
+// gerou na MESMA linha, filtrável por situação, no lugar de duas listas que
+// obrigavam a procurar o documento de uma na outra.
 
 import { useCallback, useEffect, useState } from "react";
 import ChartFrame, { type SeriesDef } from "@/components/viz/ChartFrame";
@@ -27,21 +33,50 @@ const brl = (v: number) =>
 
 type Faixa = { label: string; value: number };
 
+// A linha fundida: a nota E o título que ela gerou.
 type FatRow = {
-  empresa: string; origem: string; documento: string; cliente: string;
-  projeto: string; categoria: string; dt_fat: string | null; valor: number;
+  empresa: string; origem: string; documento: string; dt_fat: string | null;
+  cliente: string; projeto: string; categoria: string; valor: number;
+  num_titulo: string | null; parcelas: number | null;
+  vencimento: string | null; pagamento: string | null;
+  recebido: number | null; aberto: number | null;
+  prazo_dias: number | null; dias_atraso: number | null; situacao: string;
 };
 
+const SITUACOES = ["Recebido", "A vencer", "Vencido", "Parcial", "Sem título"];
+
 const COLS_FAT: Col<FatRow>[] = [
-  { key: "dt_fat",    label: "Data",      tipo: "date", w: 82 },
-  { key: "empresa",   label: "Emp.",      w: 52 },
-  { key: "origem",    label: "Origem",    w: 80 },
-  { key: "documento", label: "Doc.",      w: 96 },
-  { key: "cliente",   label: "CLIENTE",   w: 230 },
-  { key: "projeto",   label: "Projeto",   w: 200 },
-  { key: "categoria", label: "Categoria", w: 110 },
-  { key: "valor",     label: "Valor",     tipo: "money", w: 120 },
+  { key: "dt_fat",     label: "Dt. NF",    tipo: "date", w: 80 },
+  { key: "empresa",    label: "Emp.",      w: 50 },
+  { key: "documento",  label: "Doc.",      w: 90 },
+  { key: "cliente",    label: "CLIENTE",   w: 210 },
+  { key: "projeto",    label: "Projeto",   w: 175 },
+  { key: "categoria",  label: "Categoria", w: 100 },
+  { key: "valor",      label: "Faturado",  tipo: "money", w: 115 },
+  { key: "num_titulo", label: "Título",    w: 92 },
+  { key: "vencimento", label: "Vence",     tipo: "date", w: 80 },
+  { key: "prazo_dias", label: "Prazo",     tipo: "dias", w: 70 },
+  { key: "pagamento",  label: "Pago em",   tipo: "date", w: 80 },
+  { key: "recebido",   label: "Recebido",  tipo: "money", w: 115 },
+  { key: "aberto",     label: "Aberto",    tipo: "money", w: 115 },
+  { key: "dias_atraso",label: "Atraso",    tipo: "dias", w: 72 },
+  { key: "situacao",   label: "Situação",  tipo: "badge", w: 92,
+    tom: (v) => v === "Recebido" ? "ok"
+              : v === "Vencido" || v === "Sem título" ? "critico"
+              : v === "Parcial" ? "alerta" : "neutro" },
 ];
+
+type CoorteRow = {
+  mes: string; faturado: number; emitido: number; recebido: number;
+  a_vencer: number; vencido: number; sem_titulo: number; pct_recebido: number | null;
+};
+
+const MESES = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
+const rotuloMes = (iso: string | null) => {
+  if (!iso) return "Sem NF";
+  const [a, m] = iso.slice(0, 7).split("-");
+  return `${MESES[Number(m) - 1]}/${a.slice(2)}`;
+};
 type Payload = {
   total_periodo: number; total_ytd: number; total_mes: number;
   qtd_notas: number; qtd_notas_ytd: number;
@@ -52,12 +87,15 @@ type Payload = {
   top: Array<{ chave: string; valor: number; qtd: number }>;
   dim: string;
   detalhe: FatRow[];
+  coorte: CoorteRow[];
+  calendario: { rows: Array<Record<string, unknown>>; origens: string[]; agrupadas: number };
 };
 
 export default function FaturamentoBiView() {
   const [range, setRange] = useState<DateRange>(() => ({ ...resolvePreset("ytd"), preset: "ytd" }));
   const [empresas, setEmpresas] = useState<Set<string>>(new Set());
   const [cats, setCats] = useState<Set<string>>(new Set());
+  const [situacoes, setSituacoes] = useState<Set<string>>(new Set());
   const [dim, setDim] = useState<"projeto" | "cliente">("projeto");
   const [data, setData] = useState<Payload | null>(null);
   const [loading, setLoading] = useState(true);
@@ -69,6 +107,7 @@ export default function FaturamentoBiView() {
       const qs = new URLSearchParams({ from: range.from, to: range.to, dim });
       if (empresas.size) qs.set("empresas", Array.from(empresas).join(","));
       if (cats.size) qs.set("cat", Array.from(cats).join(","));
+      if (situacoes.size) qs.set("situacao", Array.from(situacoes).join(","));
       const r = await fetch(`/api/bi/faturamento?${qs}`, { cache: "no-store" });
       const j = await r.json();
       if (!r.ok) { setErr(j.error ?? r.statusText); return; }
@@ -79,13 +118,14 @@ export default function FaturamentoBiView() {
     } finally {
       setLoading(false);
     }
-  }, [range.from, range.to, empresas, cats, dim]);
+  }, [range.from, range.to, empresas, cats, situacoes, dim]);
 
   useEffect(() => { void load(); }, [load]);
 
   const dims: DimFilter[] = [
     { key: "empresa", label: "Empresa", options: EMPRESAS, selected: empresas },
     { key: "cat", label: "Categoria de venda", options: CATS, selected: cats },
+    { key: "situacao", label: "Situação do recebimento", options: SITUACOES, selected: situacoes },
   ];
 
   // Mix mensal: no máximo 6 categorias empilhadas (limite do olho, não do código).
@@ -100,13 +140,34 @@ export default function FaturamentoBiView() {
   // gráfico próprio em vez de um segundo eixo.
   const qtdSeries: SeriesDef[] = [{ key: "qtd", label: "Notas", slot: 1, mark: "rect" }];
 
+  // Coorte: ordem = gravidade, do bom pro ruim. A pilha lê de baixo pra cima,
+  // então "recebido" fica na base.
+  const coorteRows = (data?.coorte ?? []).map((c) => ({
+    x: rotuloMes(c.mes),
+    Recebido: Number(c.recebido) || 0,
+    "A vencer": Number(c.a_vencer) || 0,
+    Vencido: Number(c.vencido) || 0,
+    "Sem título": Number(c.sem_titulo) || 0,
+  }));
+  const coorteSeries: SeriesDef[] = [
+    { key: "Recebido",   label: "Recebido",   slot: 5, mark: "rect" },
+    { key: "A vencer",   label: "A vencer",   slot: 0, mark: "rect" },
+    { key: "Vencido",    label: "Vencido",    slot: 3, mark: "rect" },
+    { key: "Sem título", label: "Sem título", slot: 2, mark: "rect" },
+  ];
+  const calSeries: SeriesDef[] = (data?.calendario?.origens ?? [])
+    .map((o, i) => ({ key: o, label: o, slot: i, mark: "rect" as const }));
+
   return (
     <div className="space-y-4 min-w-0">
       <VizFilters
         range={range}
         onRangeChange={setRange}
         dims={dims}
-        onDimChange={(k, sel) => (k === "empresa" ? setEmpresas(sel) : setCats(sel))}
+        onDimChange={(k, sel) =>
+          k === "empresa" ? setEmpresas(sel)
+          : k === "situacao" ? setSituacoes(sel)
+          : setCats(sel)}
         right={
           <select
             value={dim}
@@ -146,7 +207,7 @@ export default function FaturamentoBiView() {
         loading={loading}
         height={300}
       >
-        <VizBar rows={data?.mensal ?? []} series={mixSeries} stacked valueFormat={brl} />
+        <VizBar rows={data?.mensal ?? []} series={mixSeries} stacked valueFormat={brl} totalNoTopo />
       </ChartFrame>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -175,6 +236,34 @@ export default function FaturamentoBiView() {
         </ChartFrame>
       </div>
 
+      {/* Vindos da tela de Recebimento, absorvida aqui: o mesmo faturamento
+          visto pelo que já entrou. A coorte empilha porque as faixas SOMAM o
+          faturado do mês — é composição de um total, não séries independentes. */}
+      <ChartFrame
+        title="Coorte — de cada mês faturado, quanto já entrou"
+        subtitle="A coluna é o faturamento do mês; as faixas dizem em que estágio ele está hoje"
+        series={coorteSeries}
+        rows={coorteRows}
+        valueFormat={(v) => brl(Number(v) || 0)}
+        loading={loading}
+        height={290}
+      >
+        <VizBar rows={coorteRows} series={coorteSeries} stacked totalNoTopo valueFormat={brl} />
+      </ChartFrame>
+
+      <ChartFrame
+        title="Calendário de entrada — quando o que está aberto entra"
+        subtitle={"Altura = o que entra naquele mês; faixas = de qual mês de faturamento veio"
+          + (data?.calendario?.agrupadas ? ` · ${data.calendario.agrupadas} origem(ns) menor(es) em "Outros"` : "")}
+        series={calSeries}
+        rows={data?.calendario?.rows ?? []}
+        valueFormat={(v) => brl(Number(v) || 0)}
+        loading={loading}
+        height={290}
+      >
+        <VizBar rows={data?.calendario?.rows ?? []} series={calSeries} stacked totalNoTopo valueFormat={brl} />
+      </ChartFrame>
+
       {/* Gauges dos prazos: só fazem sentido com meta. Uso 30d como referência
           comercial padrão — se a meta real for outra, é um número só pra mudar. */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -190,15 +279,18 @@ export default function FaturamentoBiView() {
         </section>
       </div>
 
+      {/* A fusão das duas listas que existiam antes: a NF e o título que ela
+          gerou, na mesma linha. "Aberto" e "Recebido" somam no rodapé; "Faturado"
+          também — os três estão no grão da nota, sem repetição de parcela. */}
       <VizTable
-        title="Detalhe de faturamento"
-        subtitle="Notas emitidas no período — mesma lista do card do Metabase"
+        title="Faturamento e recebimento — linha a linha"
+        subtitle="Cada nota com o título que gerou. Filtre por situação na barra acima"
         cols={COLS_FAT}
         rows={data?.detalhe ?? []}
         ordemInicial="dt_fat"
         loading={loading}
-        altura={460}
-        totalizar={["valor"]}
+        altura={480}
+        totalizar={["valor", "recebido", "aberto"]}
       />
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">

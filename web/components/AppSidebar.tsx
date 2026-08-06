@@ -205,17 +205,6 @@ const FINANCEIRO: NavItem[] = [
     ),
   },
   {
-    href: "/bi/recebimento",
-    area: "financeiro",
-    label: "Faturamento → Recebimento",
-    tone: "text-emerald-600",
-    icon: (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className="w-5 h-5" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M3 12h13"/><path d="M12 8l4 4-4 4"/><rect x="18" y="5" width="3" height="14" rx="1"/>
-      </svg>
-    ),
-  },
-  {
     href: "/bi/fluxo-caixa",
     area: "financeiro",
     label: "Fluxo de Caixa",

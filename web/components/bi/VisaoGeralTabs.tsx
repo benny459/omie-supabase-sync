@@ -25,7 +25,6 @@ import ContasReceberView from "./ContasReceberView";
 import FaturamentoBiView from "./FaturamentoBiView";
 import ComprasCadeiaView from "./ComprasCadeiaView";
 import FluxoCaixaView from "./FluxoCaixaView";
-import RecebimentoView from "./RecebimentoView";
 import ConciliacaoView from "./ConciliacaoView";
 import ContratosCtView from "./ContratosCtView";
 import DreView from "./DreView";
@@ -46,7 +45,7 @@ const ABAS: Aba[] = [
   { key: "contratos",  label: "Contratos CT",     cards: 6,  view: <ContratosCtView /> },
   { key: "margem",     label: "Margem",           cards: 4,  view: <MargemProjetoView /> },
   { key: "geral",      label: "Visão Geral",      cards: 14, view: <PanoramaGeralView /> },
-  { key: "faturamento",label: "Faturamento",      cards: 21, view: <FaturamentoBiView /> },
+  { key: "faturamento",label: "Faturamento",      cards: 23, view: <FaturamentoBiView /> },
   { key: "receber",    label: "A Receber",        cards: 25, view: <ContasReceberView /> },
   { key: "pagar",      label: "A Pagar",          cards: 15, view: <ContasPagarView /> },
   { key: "compras",    label: "Compras",          cards: 14, view: <ComprasBiView /> },
@@ -65,8 +64,6 @@ const ABAS: Aba[] = [
   // espalhados, e só juntos contam a história do dinheiro que sai pro
   // fornecedor e volta (ou não) como nota pro cliente.
   { key: "cadeia",     label: "Cadeia Compras",   cards: 6,  view: <ComprasCadeiaView /> },
-  // "Faturei X, quando entra?" — os cards 142 e 130 respondiam metade cada.
-  { key: "receb",      label: "Recebimento",      cards: 2,  view: <RecebimentoView /> },
   // Cards 100, 151 e 98. O 100 era eixo duplo; aqui vem desdobrado.
   { key: "caixa",      label: "Fluxo de Caixa",   cards: 3,  view: <FluxoCaixaView /> },
 ];

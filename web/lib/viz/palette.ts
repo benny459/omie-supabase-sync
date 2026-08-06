@@ -26,41 +26,45 @@ export type VizMode = "light" | "dark";
 
 // Ordem canônica. Índice = slot. NÃO reordenar sem revalidar.
 //
-// Rampa SUAVE (31/07/2026). A anterior era saturada demais — leitura de "cor
-// primária de giz", cansativa num painel que se lê por minutos. Esta baixa o
-// croma e unifica a luminosidade, ficando mais harmônica SEM perder o gate.
+// Rampa FRIA + TERROSA (06/08/2026). Roxo e laranja saíram a pedido — não
+// combinavam com o navy do fundo. O que restou (azul, ciano, verde, amarelo,
+// vermelho, rosa, lima) são hues VIZINHOS entre si, e vizinho confunde sob
+// daltonismo: as primeiras candidatas caíram pra CVD ΔE 7.1, abaixo do gate.
 //
-// Harmonia e distinguibilidade puxam pra lados opostos: cor harmônica é vizinha
-// no círculo, e vizinha confunde sob daltonismo. Por isso não foi escolha de
-// gosto — foram candidatas medidas até achar uma que passasse inteira.
+// A alavanca que resolveu não foi matiz, foi LUMINOSIDADE. Alternando slot
+// claro e slot escuro, o par que o daltônico não distingue por cor passa a se
+// distinguir por brilho. Foi o que levou a escura de 7.1 pra 11.6 — melhor,
+// inclusive, que a rampa anterior, que ainda tinha roxo e laranja disponíveis.
 //
-//   clara:  CVD ΔE 8.3 (protan) · visão normal 15.3 · contraste todos ≥3:1
-//   escura: CVD ΔE 9.5 (deutan) · visão normal 16.2 · contraste todos ≥3:1
+//   clara:  CVD ΔE 7.9 · visão normal 17.2 · contraste todos ≥3:1
+//   escura: CVD ΔE 11.6 · visão normal 18.7 · contraste todos ≥3:1
 //
-// A escura MELHOROU o CVD (era 8.4) porque o magenta foi puxado pro violeta,
-// separando-o do verde — o par verde↔magenta era o gargalo.
+// A CLARA fica na faixa 6–8 de CVD, que é legal SOMENTE com codificação
+// secundária. Ela existe: ChartFrame sempre mostra legenda com 2+ séries e tem
+// visão de tabela. Removê-los quebra a acessibilidade desta rampa — ver regra 3.
 //
 // Descartadas, todas medidas:
-//   dessaturar mais  -> 3 slots caem abaixo do piso de croma e leem como cinza
-//   magenta puro     -> verde↔magenta despenca pra ΔE 3.2 sob deutan
+//   luminosidade uniforme    -> CVD 7.1, abaixo do gate
+//   alternar L sem clarear   -> 2 slots < 3:1 contra o navy
+//   ciano #3aa3b0 no claro   -> 2.98:1, reprovado por 0.02
 //
-// Revalidar depois de QUALQUER mudança de hexe:
+// Revalidar depois de QUALQUER mudança de hexe (o script vive no repo):
 //   node scripts/validate_palette.js "<hexes>" --mode light --surface "#ffffff"
 //   node scripts/validate_palette.js "<hexes>" --mode dark  --surface "#152744"
 export const SERIES_LIGHT = [
-  "#3a72b8", // 1 azul
-  "#bd5f31", // 2 terracota
-  "#1f8a6a", // 3 verde-azulado
-  "#a37c22", // 4 ocre
-  "#b0568f", // 5 rosa-violeta
-  "#2e7d43", // 6 verde
-  "#5b4ab0", // 7 violeta
-  "#c4413f", // 8 vermelho
+  "#3a86c9", // 1 azul
+  "#0f6a50", // 2 verde-azulado escuro
+  "#a8871a", // 3 amarelo-ocre
+  "#c4443f", // 4 vermelho
+  "#2f96a3", // 5 ciano
+  "#1f6b3a", // 6 verde escuro
+  "#c26a86", // 7 rosa
+  "#7d9420", // 8 verde-lima
 ] as const;
 
 export const SERIES_DARK = [
-  "#5297dd", "#d0703a", "#22a888", "#b08c22",
-  "#c96aa8", "#3da75f", "#8b79e0", "#e35f5d",
+  "#5aa9e6", "#22916f", "#e3c94a", "#d15550",
+  "#7ddde0", "#3d9455", "#e08fa8", "#a8c95a",
 ] as const;
 
 // Depois do repasse da rampa clara, nenhum slot fica sub-3:1. Mantido vazio (e

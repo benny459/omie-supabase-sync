@@ -106,7 +106,7 @@ export default function VendasView() {
         series={catSeries} rows={data?.mensal_categoria ?? []}
         valueFormat={(v) => brl(Number(v) || 0)} loading={loading} height={300}
       >
-        <VizBar rows={data?.mensal_categoria ?? []} series={catSeries} stacked valueFormat={brl} />
+        <VizBar rows={data?.mensal_categoria ?? []} series={catSeries} stacked valueFormat={brl} totalNoTopo />
       </ChartFrame>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">

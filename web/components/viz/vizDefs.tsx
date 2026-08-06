@@ -59,13 +59,16 @@ export function VizDefs({
         );
       })}
 
-      {/* Sombra projetada — separa o mark da superfície. Deslocamento pequeno e
-          desfoque curto: sombra longa vira ilustração e come a grade. */}
+      {/* Sombra quase desligada (06/08/2026, a pedido: "degradê pode, efeito 3D
+          não"). Era ela que dava o relevo; o degradê sozinho sugere volume sem
+          simular profundidade. Mantida em opacidade mínima só pra descolar o
+          mark da superfície quando a cor da série é próxima do fundo — zerar de
+          vez faz a barra clara grudar no painel. */}
       <filter id={shadowId(mode)} x="-20%" y="-20%" width="140%" height="140%">
         <feDropShadow
-          dx="0" dy={dir === "v" ? 1.5 : 0} stdDeviation="1.8"
+          dx="0" dy={0} stdDeviation="0.6"
           floodColor={mode === "dark" ? "#000000" : "#0f1e3a"}
-          floodOpacity={mode === "dark" ? 0.28 : 0.10}
+          floodOpacity={mode === "dark" ? 0.12 : 0.05}
         />
       </filter>
 

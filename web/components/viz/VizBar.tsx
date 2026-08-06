@@ -12,7 +12,7 @@
 //  • UM eixo. Duas medidas de escala diferente = dois gráficos.
 
 import {
-  Bar, BarChart, CartesianGrid, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis,
+  Bar, BarChart, CartesianGrid, Cell, LabelList, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from "recharts";
 import { CHROME, seriesColor } from "@/lib/viz/palette";
 import { VizDefs, gradId, shadowId } from "./vizDefs";
@@ -21,7 +21,7 @@ import type { SeriesDef } from "./ChartFrame";
 
 export default function VizBar({
   rows, series, layout = "column", stacked = false, valueFormat, xKey = "x",
-  categoryWidth = 200,
+  categoryWidth = 200, totalNoTopo = false,
 }: {
   rows: Array<Record<string, unknown>>;
   series: SeriesDef[];
@@ -31,6 +31,15 @@ export default function VizBar({
   xKey?: string;
   /** Largura reservada ao rótulo de categoria no layout horizontal. */
   categoryWidth?: number;
+  /** Escreve o total da pilha acima de cada coluna.
+   *
+   *  É exceção deliberada à regra de "rótulo seletivo, nunca em todo ponto": num
+   *  gráfico empilhado a ALTURA TOTAL é justamente o que ninguém consegue ler,
+   *  porque só o segmento da base encosta numa linha de referência. Sem esse
+   *  número, "quanto faturei no mês" exige somar fatias a olho.
+   *
+   *  Só se aplica a pilha vertical — ignorado fora disso. */
+  totalNoTopo?: boolean;
 }) {
   const mode = useVizMode();
   const c = CHROME[mode];
@@ -38,6 +47,13 @@ export default function VizBar({
   const horizontal = layout === "row";
 
   const axisTick = { fontSize: 10.5, fill: c.inkMuted };
+
+  // Total por coluna, calculado uma vez. O LabelList do recharts só enxerga o
+  // valor da própria série, então a soma da pilha tem que vir de fora.
+  const mostraTotal = totalNoTopo && stacked && !horizontal;
+  const totais = mostraTotal
+    ? rows.map((r) => series.reduce((s, d) => s + (Number(r[d.key]) || 0), 0))
+    : [];
 
   // Rótulo de categoria em UMA linha, sempre.
   //
@@ -74,7 +90,9 @@ export default function VizBar({
       <BarChart
         data={rows}
         layout={horizontal ? "vertical" : "horizontal"}
-        margin={{ top: 4, right: 16, bottom: 0, left: 0 }}
+        // 18px no topo quando há rótulo de total: com os 4px de sempre o
+        // número nasce fora da área de plotagem e é cortado.
+        margin={{ top: mostraTotal ? 18 : 4, right: 16, bottom: 0, left: 0 }}
         barCategoryGap={horizontal ? "22%" : "26%"}
         // 2px de superfície entre barras vizinhas do mesmo grupo
         barGap={2}
@@ -149,6 +167,29 @@ export default function VizBar({
               {rows.map((_, ri) => (
                 <Cell key={ri} fill={`url(#${gradId(s.slot, mode, horizontal ? "h" : "v")})`} />
               ))}
+              {/* Total da pilha, na ÚLTIMA série: é a que fecha a coluna, então
+                  o rótulo pousa no topo. Em tinta de texto, nunca na cor da
+                  série — o número é do total, não de nenhum segmento. */}
+              {mostraTotal && last && (
+                <LabelList
+                  dataKey={s.key}
+                  position="top"
+                  offset={7}
+                  content={(props: { x?: number | string; y?: number | string;
+                                     width?: number | string; index?: number }) => {
+                    const i = Number(props.index ?? -1);
+                    if (i < 0 || !totais[i]) return null;
+                    const x = Number(props.x ?? 0) + Number(props.width ?? 0) / 2;
+                    const y = Number(props.y ?? 0) - 6;
+                    return (
+                      <text x={x} y={y} textAnchor="middle"
+                            fill={c.ink} fontSize={10.5} fontWeight={600}>
+                        {fmt(totais[i])}
+                      </text>
+                    );
+                  }}
+                />
+              )}
             </Bar>
           );
         })}

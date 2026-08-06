@@ -1,10 +1,15 @@
-// GET /api/bi/faturamento?from=&to=&empresas=&cat=
+// GET /api/bi/faturamento?from=&to=&empresas=&cat=&situacao=
 //
-// Porte do domínio "Faturamento" (dashboard 3 + aba da Visão Geral) — 23 cards
-// distintos, cobertos por 4 funções.
+// Porte do domínio "Faturamento" (dashboard 3 + aba da Visão Geral) FUNDIDO com
+// o ciclo de recebimento (cards 142 e 130).
+//
+// Eram duas telas: uma respondia "quanto faturei e em quanto tempo recebo" e a
+// outra "do que faturei, quanto já entrou". Como é o mesmo dinheiro visto em
+// dois momentos, ficaram juntas — e a tabela de detalhe passou a trazer a NF e o
+// título que ela gerou na MESMA linha, filtrável por situação.
 //
 // NÃO confundir com /api/relatorios/faturamento, que é o faturamento DIÁRIO
-// operacional. Este é o analítico: totais, prazos (DSO) e mix por categoria.
+// operacional. Este é o analítico.
 
 import { NextResponse } from "next/server";
 import { supaServer } from "@/lib/supabase-server";
@@ -35,6 +40,7 @@ export async function GET(req: Request) {
   };
   const empresas = list("empresas");
   const cat = list("cat");
+  const situacoes = list("situacao");
 
   const adm = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -43,17 +49,23 @@ export async function GET(req: Request) {
   );
 
   const args = { p_from: from, p_to: to, p_empresas: empresas, p_cat_venda: cat };
-  const [resumo, mensal, prazos, top, detalhe] = await Promise.all([
+  const [resumo, mensal, prazos, top, detalhe, coorte, calendario] = await Promise.all([
     adm.rpc("fat_resumo", args),
     adm.rpc("fat_mensal_categoria", args),
     adm.rpc("fat_prazos", args),
     adm.rpc("fat_top", { ...args, p_dim: dim, p_limit: 20 }),
-    adm.rpc("faturamento_detalhe", { p_from: from, p_to: to, p_empresas: empresas, p_limit: 500 }),
+    // Detalhe fundido: a NF e o título que ela gerou na mesma linha.
+    adm.rpc("faturamento_com_titulo", { ...args, p_situacoes: situacoes, p_limit: 1000 }),
+    adm.rpc("fat_coorte", args),
+    // Sem recorte de período: o que está aberto está aberto, tenha nascido neste
+    // mês ou em 2020 — filtrar por data aqui esconderia o mais velho.
+    adm.rpc("fat_calendario", { p_empresas: empresas, p_cat_venda: cat }),
   ]);
 
   for (const [n, r] of [["fat_resumo", resumo], ["fat_mensal_categoria", mensal],
                         ["fat_prazos", prazos], ["fat_top", top],
-                        ["faturamento_detalhe", detalhe]] as const) {
+                        ["faturamento_com_titulo", detalhe],
+                        ["fat_coorte", coorte], ["fat_calendario", calendario]] as const) {
     if (r.error) return NextResponse.json({ error: `${n}: ${r.error.message}` }, { status: 500 });
   }
 
@@ -103,5 +115,50 @@ export async function GET(req: Request) {
       .map((t) => ({ chave: t.chave, valor: Number(t.valor) || 0, qtd: Number(t.qtd) || 0 })),
     dim,
     detalhe: detalhe.data ?? [],
+    coorte: coorte.data ?? [],
+    calendario: pivotarCalendario((calendario.data ?? []) as CalRow[]),
   });
+}
+
+type CalRow = {
+  vence_em: string | null; esta_vencido: boolean; origem_mes: string | null;
+  titulos: number; a_receber: number;
+};
+
+/** Calendário pivotado: uma linha por mês de vencimento, uma coluna por mês de
+ *  faturamento de origem. "Vencido" vai na frente porque é dinheiro que já
+ *  deveria ter entrado — em ordem cronológica ele se esconderia no meio. */
+function pivotarCalendario(cal: CalRow[]) {
+  const MESES = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
+  const rotulo = (iso: string | null) => {
+    if (!iso) return "Sem NF";
+    const [a, m] = iso.slice(0, 7).split("-");
+    return `${MESES[Number(m) - 1]}/${a.slice(2)}`;
+  };
+
+  // Teto de 6 origens: a paleta tem 8 slots e lança erro no 9º, e agrupar é
+  // melhor que ciclar cor (duas séries com a mesma cor é pior que erro).
+  const total = new Map<string, number>();
+  for (const r of cal) {
+    const k = rotulo(r.origem_mes);
+    total.set(k, (total.get(k) ?? 0) + Number(r.a_receber || 0));
+  }
+  const top = Array.from(total.entries()).sort((a, b) => b[1] - a[1]).slice(0, 6).map(([k]) => k);
+  const agrupadas = Array.from(total.keys()).filter((k) => !top.includes(k));
+
+  const buckets = new Map<string, Record<string, unknown> & { ord: number }>();
+  for (const r of cal) {
+    const chave = r.esta_vencido ? "__venc" : (r.vence_em ?? "__sem");
+    const ord = r.esta_vencido ? 0 : Number((r.vence_em ?? "9999-12").slice(0, 7).replace("-", ""));
+    const linha = buckets.get(chave) ?? { x: r.esta_vencido ? "Vencido" : rotulo(r.vence_em), ord };
+    const col = top.includes(rotulo(r.origem_mes)) ? rotulo(r.origem_mes) : "Outros";
+    linha[col] = (Number(linha[col]) || 0) + Number(r.a_receber || 0);
+    buckets.set(chave, linha);
+  }
+
+  return {
+    rows: Array.from(buckets.values()).sort((a, b) => a.ord - b.ord),
+    origens: [...top, ...(agrupadas.length ? ["Outros"] : [])],
+    agrupadas: agrupadas.length,
+  };
 }

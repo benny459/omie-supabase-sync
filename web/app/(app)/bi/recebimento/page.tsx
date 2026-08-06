@@ -1,21 +1,12 @@
-import RecebimentoView from "@/components/bi/RecebimentoView";
-import { requireArea } from "@/lib/require-area";
+import { redirect } from "next/navigation";
 
-export const dynamic = "force-dynamic";
-
-export default async function RecebimentoPage() {
-  await requireArea("financeiro");
-
-  return (
-    <div className="space-y-4">
-      <div>
-        <h1 className="text-[18px] font-bold text-ww-text tracking-[-0.3px]">Faturamento → Recebimento</h1>
-        <p className="text-[12px] text-ww-textMuted mt-0.5">
-          De cada mês faturado: quanto já entrou, quanto ainda vem e quando. Cada título a receber
-          mostra de qual nota veio, e cada nota mostra em que estágio do ciclo está.
-        </p>
-      </div>
-      <RecebimentoView />
-    </div>
-  );
+// A tela de "Faturamento → Recebimento" foi fundida em /bi/faturamento — é o
+// mesmo dinheiro visto em dois momentos, e mantê-las separadas obrigava a
+// procurar o documento de uma lista na outra.
+//
+// O redirect fica no lugar da página: links salvos, abas abertas e a memória
+// muscular de quem já usava continuam funcionando. Remover a rota daria 404 sem
+// explicar pra onde o conteúdo foi.
+export default function RecebimentoPage() {
+  redirect("/bi/faturamento");
 }

@@ -84,7 +84,7 @@ export default function ComprasBiView() {
         series={catSeries} rows={data?.mensal ?? []}
         valueFormat={(v) => brl(Number(v) || 0)} loading={loading} height={300}
       >
-        <VizBar rows={data?.mensal ?? []} series={catSeries} stacked valueFormat={brl} />
+        <VizBar rows={data?.mensal ?? []} series={catSeries} stacked valueFormat={brl} totalNoTopo />
       </ChartFrame>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
