@@ -18,7 +18,7 @@ import {
   Bar, CartesianGrid, ComposedChart, Line, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from "recharts";
 import { CHROME, seriesColor } from "@/lib/viz/palette";
-import { useVizMode } from "./useVizMode";
+import { useVizTema } from "./useVizMode";
 import type { SeriesDef } from "./ChartFrame";
 
 export default function VizCombo({
@@ -34,7 +34,7 @@ export default function VizCombo({
    *  medidas têm unidades diferentes e você quer comparar a FORMA das curvas. */
   mode?: "mesma-unidade" | "indexado";
 }) {
-  const vizMode = useVizMode();
+  const { mode: vizMode, tema } = useVizTema();
   const c = CHROME[vizMode];
   const all = [...bars, ...lines];
   const indexado = scaleMode === "indexado";
@@ -85,11 +85,11 @@ export default function VizCombo({
         />
         {bars.map((s) => (
           <Bar key={s.key} dataKey={s.key} name={s.label}
-               fill={seriesColor(s.slot, vizMode)} radius={[4, 4, 0, 0]} isAnimationActive={false} />
+               fill={seriesColor(s.slot, vizMode, tema)} radius={[4, 4, 0, 0]} isAnimationActive={false} />
         ))}
         {lines.map((s) => (
           <Line key={s.key} dataKey={s.key} name={s.label}
-                stroke={seriesColor(s.slot, vizMode)} strokeWidth={2} dot={false}
+                stroke={seriesColor(s.slot, vizMode, tema)} strokeWidth={2} dot={false}
                 activeDot={{ r: 4.5, strokeWidth: 2, stroke: c.surface }} isAnimationActive={false} />
         ))}
       </ComposedChart>

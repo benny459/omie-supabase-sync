@@ -25,7 +25,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         {/* Aplica .dark ANTES da hidratação se o user preferiu — evita FOUC */}
         <script
           dangerouslySetInnerHTML={{
-            __html: `(function(){try{var t=localStorage.getItem('ww-theme');var sysDark=window.matchMedia('(prefers-color-scheme: dark)').matches;if(t==='dark'||(t==='system'&&sysDark)||(!t&&sysDark)){document.documentElement.classList.add('dark');}}catch(e){}})();`,
+            __html: `(function(){try{var t=localStorage.getItem('ww-theme');var sysDark=window.matchMedia('(prefers-color-scheme: dark)').matches;if(t==='dark'||(t==='system'&&sysDark)||(!t&&sysDark)){document.documentElement.classList.add('dark');}var p=localStorage.getItem('ww-viz-palette');document.documentElement.setAttribute('data-palette',p||'tech');}catch(e){}})();`,
           }}
         />
       </head>

@@ -1,6 +1,7 @@
 import AppSidebar from "@/components/AppSidebar";
 import SyncStatusBar from "@/components/SyncStatusBar";
 import ThemeToggle from "@/components/ThemeToggle";
+import SeletorPaleta from "@/components/viz/SeletorPaleta";
 import { UserPermsProvider } from "@/components/UserPermsProvider";
 import VersionWatcher from "@/components/VersionWatcher";
 import SupportWidget from "@/components/SupportWidget";
@@ -37,10 +38,11 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     <UserPermsProvider user={perms}>
       <AppSidebar userEmail={user?.email} />
       <main className="ml-[54px] min-h-screen bg-ww-bg text-ww-text overflow-x-hidden">
-        {/* Barra superior: versão sempre visível + último sync + theme */}
+        {/* Barra superior: versão sempre visível + último sync + paleta + theme */}
         <div className="border-b border-ww-border bg-ww-panel/70 backdrop-blur px-4 md:px-6 py-1.5 flex items-center justify-end gap-3">
           <VersionWatcher />
           <SyncStatusBar />
+          <SeletorPaleta />
           <ThemeToggle />
         </div>
         <div className="p-4 md:p-6 min-w-0">{children}</div>

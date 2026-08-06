@@ -14,13 +14,17 @@
 //
 // Por isso aqui só existe a primeira família.
 
-import { seriesColor, type VizMode } from "@/lib/viz/palette";
+import { seriesColor, TEMA_PADRAO, type VizMode, type VizTema } from "@/lib/viz/palette";
 
-/** id estável por slot+modo — dois gráficos na mesma página compartilham o def. */
-export const gradId = (slot: number, mode: VizMode, dir: "v" | "h") =>
-  `wwGrad-${dir}-${slot}-${mode}`;
+/** id estável por slot+modo+TEMA — dois gráficos na mesma página compartilham o
+ *  def. O tema entra no id de propósito: sem ele, trocar de paleta manteria o
+ *  mesmo identificador e o SVG reusaria o gradiente já definido — as barras
+ *  continuariam com a cor antiga sem erro nenhum. */
+export const gradId = (slot: number, mode: VizMode, dir: "v" | "h", tema: VizTema = TEMA_PADRAO) =>
+  `wwGrad-${dir}-${slot}-${mode}-${tema}`;
 export const shadowId = (mode: VizMode) => `wwShadow-${mode}`;
-export const glowId = (slot: number, mode: VizMode) => `wwGlow-${slot}-${mode}`;
+export const glowId = (slot: number, mode: VizMode, tema: VizTema = TEMA_PADRAO) =>
+  `wwGlow-${slot}-${mode}-${tema}`;
 
 /**
  * Defs pra um conjunto de slots. `dir` acompanha o sentido do mark: vertical
@@ -32,10 +36,11 @@ export const glowId = (slot: number, mode: VizMode) => `wwGlow-${slot}-${mode}`;
  * de valor a fazer.
  */
 export function VizDefs({
-  slots, mode, dir = "v", comGlow = false,
+  slots, mode, tema = TEMA_PADRAO, dir = "v", comGlow = false,
 }: {
   slots: number[];
   mode: VizMode;
+  tema?: VizTema;
   dir?: "v" | "h";
   comGlow?: boolean;
 }) {
@@ -43,12 +48,12 @@ export function VizDefs({
   return (
     <defs>
       {unicos.map((slot) => {
-        const cor = seriesColor(slot, mode);
+        const cor = seriesColor(slot, mode, tema);
         const coords = dir === "v"
           ? { x1: "0", y1: "0", x2: "0", y2: "1" }
           : { x1: "1", y1: "0", x2: "0", y2: "0" };
         return (
-          <linearGradient key={slot} id={gradId(slot, mode, dir)} {...coords}>
+          <linearGradient key={slot} id={gradId(slot, mode, dir, tema)} {...coords}>
             {/* Degradê discreto: 1 -> 0.82. A versão anterior ia a 0.62 e a
                 barra parecia desbotar na base, o que competia com a leitura do
                 próprio mark. Volume tem que ser sugerido, não anunciado. */}
@@ -73,9 +78,9 @@ export function VizDefs({
       </filter>
 
       {comGlow && unicos.map((slot) => (
-        <filter key={slot} id={glowId(slot, mode)} x="-50%" y="-50%" width="200%" height="200%">
+        <filter key={slot} id={glowId(slot, mode, tema)} x="-50%" y="-50%" width="200%" height="200%">
           <feDropShadow dx="0" dy="0" stdDeviation="2"
-                        floodColor={seriesColor(slot, mode)}
+                        floodColor={seriesColor(slot, mode, tema)}
                         floodOpacity={mode === "dark" ? 0.35 : 0.16} />
         </filter>
       ))}

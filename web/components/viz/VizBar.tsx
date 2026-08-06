@@ -16,7 +16,7 @@ import {
 } from "recharts";
 import { CHROME, seriesColor } from "@/lib/viz/palette";
 import { VizDefs, gradId, shadowId } from "./vizDefs";
-import { useVizMode } from "./useVizMode";
+import { useVizTema } from "./useVizMode";
 import type { SeriesDef } from "./ChartFrame";
 
 export default function VizBar({
@@ -41,7 +41,7 @@ export default function VizBar({
    *  Só se aplica a pilha vertical — ignorado fora disso. */
   totalNoTopo?: boolean;
 }) {
-  const mode = useVizMode();
+  const { mode, tema } = useVizTema();
   const c = CHROME[mode];
   const fmt = valueFormat ?? ((v: number) => v.toLocaleString("pt-BR"));
   const horizontal = layout === "row";
@@ -99,7 +99,7 @@ export default function VizBar({
       >
         {/* Gradiente + sombra dão volume ao mark sem mexer na geometria: o
             comprimento da barra continua exatamente proporcional ao valor. */}
-        <VizDefs slots={series.map((x) => x.slot)} mode={mode} dir={horizontal ? "h" : "v"} />
+        <VizDefs slots={series.map((x) => x.slot)} mode={mode} tema={tema} dir={horizontal ? "h" : "v"} />
         <CartesianGrid
           // Grid só no eixo do valor — linha no eixo da categoria é ruído.
           horizontal={!horizontal}
@@ -154,7 +154,7 @@ export default function VizBar({
               dataKey={s.key}
               name={s.label}
               stackId={stacked ? "s" : undefined}
-              fill={`url(#${gradId(s.slot, mode, horizontal ? "h" : "v")})`}
+              fill={`url(#${gradId(s.slot, mode, horizontal ? "h" : "v", tema)})`}
               filter={`url(#${shadowId(mode)})`}
               radius={radius}
               // 2px de superfície entre fatias empilhadas
@@ -165,7 +165,7 @@ export default function VizBar({
               {/* Cor por ENTIDADE: um Cell por row garante que reordenar/filtrar
                   não repinta quem sobrou. */}
               {rows.map((_, ri) => (
-                <Cell key={ri} fill={`url(#${gradId(s.slot, mode, horizontal ? "h" : "v")})`} />
+                <Cell key={ri} fill={`url(#${gradId(s.slot, mode, horizontal ? "h" : "v", tema)})`} />
               ))}
               {/* Total da pilha, na ÚLTIMA série: é a que fecha a coluna, então
                   o rótulo pousa no topo. Em tinta de texto, nunca na cor da

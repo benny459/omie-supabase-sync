@@ -14,7 +14,7 @@
 import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
 import { CHROME, seriesColor, MAX_SERIES } from "@/lib/viz/palette";
 import { shadowId } from "./vizDefs";
-import { useVizMode } from "./useVizMode";
+import { useVizTema } from "./useVizMode";
 
 export const PIE_MAX_SLICES = 6;
 
@@ -41,7 +41,7 @@ export default function VizPie({
   total?: number;
   totalLabel?: string;
 }) {
-  const mode = useVizMode();
+  const { mode, tema } = useVizTema();
   const c = CHROME[mode];
   const fmt = valueFormat ?? ((v: number) => v.toLocaleString("pt-BR"));
   const { slices: data } = preparePieSlices(slices);
@@ -71,8 +71,8 @@ export default function VizPie({
             </filter>
             {data.map((_, i) => (
               <radialGradient key={i} id={`wwPie-${i}-${mode}`} cx="50%" cy="50%" r="72%">
-                <stop offset="55%"  stopColor={seriesColor(i, mode)} stopOpacity={0.90} />
-                <stop offset="100%" stopColor={seriesColor(i, mode)} stopOpacity={1} />
+                <stop offset="55%"  stopColor={seriesColor(i, mode, tema)} stopOpacity={0.90} />
+                <stop offset="100%" stopColor={seriesColor(i, mode, tema)} stopOpacity={1} />
               </radialGradient>
             ))}
           </defs>

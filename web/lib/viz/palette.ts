@@ -67,6 +67,65 @@ export const SERIES_DARK = [
   "#7ddde0", "#3d9455", "#e08fa8", "#a8c95a",
 ] as const;
 
+// ─────────────────────────────────────────────────────────────────────────────
+// TEMAS — o usuário escolhe, como nos temas de cor do Excel.
+//
+// Só entram aqui rampas que PASSARAM no validador. Oferecer um tema bonito que
+// reprova em daltonismo transformaria uma escolha de gosto num bug de leitura
+// que ninguém rastreia — o usuário troca a cor e a acessibilidade cai junto,
+// sem aviso.
+//
+// Medições (CVD ΔE / visão normal ΔE):
+//   tech      escura 11.6 / 18.7      clara 7.9 / 17.2
+//   classica  escura 10.2 / 16.2      clara 7.8 / 15.3
+//   vibrante  escura  8.6 / 17.5      clara 6.9 / 16.7
+//
+// Todas as rampas CLARAS caem na faixa 6–8 de CVD, que é legal apenas COM
+// codificação secundária — contra branco é intrinsecamente mais difícil separar
+// hues sob dicromacia. A legenda e a visão de tabela do ChartFrame são essa
+// codificação nos três temas; removê-las quebra os três de uma vez.
+//
+// Reprovados, e por quê (ficam registrados pra ninguém tentar de novo):
+//   "oceano" (só azuis/cianos) -> visão normal ΔE 11.5: com 8 slots os hues
+//                                 ficam vizinhos demais. Só funcionaria com 4-5.
+//   "sóbria" (croma baixo)     -> 5 slots abaixo do piso de croma, leem como
+//                                 cinza. Mesma armadilha já registrada acima.
+export type VizTema = "tech" | "classica" | "vibrante";
+
+export const TEMAS: Record<VizTema, { nome: string; descricao: string; light: readonly string[]; dark: readonly string[] }> = {
+  tech: {
+    nome: "Tech",
+    descricao: "Fria e terrosa, sem roxo nem laranja",
+    light: SERIES_LIGHT,
+    dark: SERIES_DARK,
+  },
+  classica: {
+    nome: "Clássica",
+    descricao: "A rampa anterior, com terracota e violeta",
+    light: ["#3a72b8", "#bd5f31", "#1f8a6a", "#a37c22",
+            "#b0568f", "#2e7d43", "#5b4ab0", "#c4413f"],
+    dark:  ["#5297dd", "#d0703a", "#22a888", "#b08c22",
+            "#c96aa8", "#3da75f", "#8b79e0", "#e35f5d"],
+  },
+  vibrante: {
+    nome: "Vibrante",
+    descricao: "Croma alto, mais separação entre séries",
+    light: ["#1a8fd4", "#b8402f", "#12a06a", "#8a6b12",
+            "#d15a96", "#2f3fa8", "#7d9a24", "#c94545"],
+    dark:  ["#4db8ff", "#f0785c", "#3ddc97", "#e8c53d",
+            "#f06bab", "#8a9eff", "#a2cf74", "#f05252"],
+  },
+};
+
+export const TEMA_PADRAO: VizTema = "tech";
+
+/** Aceita qualquer string e devolve um tema válido — o valor vem do
+ *  localStorage, que o usuário pode ter editado ou que pode ter sobrado de uma
+ *  versão anterior com outro nome. */
+export function temaValido(v: string | null | undefined): VizTema {
+  return v && v in TEMAS ? (v as VizTema) : TEMA_PADRAO;
+}
+
 // Depois do repasse da rampa clara, nenhum slot fica sub-3:1. Mantido vazio (e
 // não removido) porque ChartFrame e futuros consumidores checam por aqui — se
 // alguém clarear um hue de novo, é aqui que se registra.
@@ -79,8 +138,9 @@ export const MAX_SERIES = 8;
 // validador em modo --pairs all. Acima disso, agrupe em "Outros" ou facete.
 export const MAX_SERIES_ALL_PAIRS = 3;
 
-export function seriesColor(slot: number, mode: VizMode): string {
-  const ramp = mode === "dark" ? SERIES_DARK : SERIES_LIGHT;
+export function seriesColor(slot: number, mode: VizMode, tema: VizTema = TEMA_PADRAO): string {
+  const t = TEMAS[tema] ?? TEMAS[TEMA_PADRAO];
+  const ramp = mode === "dark" ? t.dark : t.light;
   // Sem ciclo de propósito: estourar o limite é erro de composição do gráfico,
   // não algo pra resolver repetindo cor (duas séries idênticas é pior que erro).
   if (slot < 0 || slot >= ramp.length) {

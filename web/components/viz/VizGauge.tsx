@@ -11,7 +11,7 @@
 // o slot 1 da paleta categórica, porque aí não há juízo de "bom/ruim" a fazer.
 
 import { CHROME, STATUS, seriesColor } from "@/lib/viz/palette";
-import { useVizMode } from "./useVizMode";
+import { useVizTema } from "./useVizMode";
 
 export default function VizGauge({
   value, min = 0, max, label, valueFormat, target, higherIsBetter = true, variant = "arc",
@@ -27,7 +27,7 @@ export default function VizGauge({
   /** "arc" = gauge semicircular · "bar" = barra de progresso (o `progress`). */
   variant?: "arc" | "bar";
 }) {
-  const mode = useVizMode();
+  const { mode, tema } = useVizTema();
   const c = CHROME[mode];
   const fmt = valueFormat ?? ((v: number) => v.toLocaleString("pt-BR"));
 
@@ -35,7 +35,7 @@ export default function VizGauge({
   const pct = Math.min(Math.max((value - min) / span, 0), 1);
 
   // Faixa só quando há meta. 90% da meta = atenção; abaixo disso = crítico.
-  let cor = seriesColor(0, mode);
+  let cor = seriesColor(0, mode, tema);
   let faixa: string | null = null;
   if (target != null && Number.isFinite(target) && target !== 0) {
     const razao = higherIsBetter ? value / target : target / Math.max(value, 1e-9);

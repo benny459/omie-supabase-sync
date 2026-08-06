@@ -17,7 +17,7 @@
 
 import { useId, useState } from "react";
 import { CHROME, seriesColor } from "@/lib/viz/palette";
-import { useVizMode } from "./useVizMode";
+import { useVizTema } from "./useVizMode";
 
 export type SeriesDef = {
   key: string;
@@ -46,7 +46,7 @@ export default function ChartFrame({
   height?: number;
 }) {
   const [asTable, setAsTable] = useState(false);
-  const mode = useVizMode();
+  const { mode, tema } = useVizTema();
   const chrome = CHROME[mode];
   const tableId = useId();
 
@@ -83,10 +83,10 @@ export default function ChartFrame({
             <li key={s.key} className="inline-flex items-center gap-1.5 text-[11px] text-ww-textMuted">
               {s.mark === "line" ? (
                 <span aria-hidden className="inline-block w-3.5 h-0.5 rounded-full"
-                      style={{ background: seriesColor(s.slot, mode) }} />
+                      style={{ background: seriesColor(s.slot, mode, tema) }} />
               ) : (
                 <span aria-hidden className="inline-block w-2.5 h-2.5 rounded-sm"
-                      style={{ background: seriesColor(s.slot, mode) }} />
+                      style={{ background: seriesColor(s.slot, mode, tema) }} />
               )}
               {s.label}
             </li>

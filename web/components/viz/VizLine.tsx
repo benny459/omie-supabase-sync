@@ -12,7 +12,7 @@ import {
 } from "recharts";
 import { CHROME, seriesColor } from "@/lib/viz/palette";
 import { VizDefs, gradId, glowId } from "./vizDefs";
-import { useVizMode } from "./useVizMode";
+import { useVizTema } from "./useVizMode";
 import type { SeriesDef } from "./ChartFrame";
 
 export default function VizLine({
@@ -25,7 +25,7 @@ export default function VizLine({
   area?: boolean;
   stacked?: boolean;
 }) {
-  const mode = useVizMode();
+  const { mode, tema } = useVizTema();
   const c = CHROME[mode];
   const fmt = valueFormat ?? ((v: number) => v.toLocaleString("pt-BR"));
   const axisTick = { fontSize: 10.5, fill: c.inkMuted };
@@ -38,7 +38,7 @@ export default function VizLine({
         {/* Grid só na horizontal — linha vertical compete com o crosshair. */}
         {/* comGlow: o traço ganha halo da própria cor, que é o que dá relevo
             na linha sem engrossar o mark (traço grosso vira mancha). */}
-        <VizDefs slots={series.map((x) => x.slot)} mode={mode} dir="v" comGlow />
+        <VizDefs slots={series.map((x) => x.slot)} mode={mode} tema={tema} dir="v" comGlow />
         <CartesianGrid horizontal vertical={false} stroke={c.gridline} />
         <XAxis dataKey={xKey} tick={axisTick} stroke={c.axis} />
         {/* Mesmo motivo do VizBar: o width default corta valor de 7+ dígitos. */}
@@ -54,13 +54,13 @@ export default function VizLine({
           formatter={(v, name) => [fmt(Number(v)), String(name)]}
         />
         {series.map((s) => {
-          const col = seriesColor(s.slot, mode);
+          const col = seriesColor(s.slot, mode, tema);
           return area ? (
             <Area
               key={s.key} dataKey={s.key} name={s.label}
               stackId={stacked ? "s" : undefined}
               stroke={col} strokeWidth={2}
-              fill={`url(#${gradId(s.slot, mode, "v")})`} fillOpacity={0.30}
+              fill={`url(#${gradId(s.slot, mode, "v", tema)})`} fillOpacity={0.30}
               // Anel de 2px da superfície em marks que se sobrepõem.
               activeDot={{ r: 4.5, strokeWidth: 2, stroke: c.surface }}
               dot={false}
@@ -70,7 +70,7 @@ export default function VizLine({
             <Line
               key={s.key} dataKey={s.key} name={s.label}
               stroke={col} strokeWidth={2.25}
-              filter={`url(#${glowId(s.slot, mode)})`}
+              filter={`url(#${glowId(s.slot, mode, tema)})`}
               dot={false}
               activeDot={{ r: 4.5, strokeWidth: 2, stroke: c.surface }}
               isAnimationActive={false}
