@@ -14,6 +14,14 @@
 //
 // Legenda: presente sempre que houver 2+ séries (identidade nunca só pela cor).
 // Série única não leva legenda — o título já a nomeia.
+//
+// A legenda também LIGA E DESLIGA cada série (06/08/2026). Num gráfico com
+// entrada, saída e duas curvas de saldo, isolar uma delas é a única forma de ler
+// sua forma sem as outras por cima. Série oculta continua na legenda, riscada:
+// sumir da legenda tiraria justamente o botão que a traz de volta.
+//
+// Quem desenha decide o que fazer com a lista filtrada — por isso `children`
+// pode ser uma função que recebe as séries visíveis.
 
 import { useId, useState } from "react";
 import { CHROME, seriesColor } from "@/lib/viz/palette";
@@ -42,15 +50,33 @@ export default function ChartFrame({
   /** Recarregando: mantém o render anterior em opacidade menor. Sem skeleton,
    *  sem salto de layout — a moldura não pisca. */
   loading?: boolean;
-  children: React.ReactNode;
+  /** Nó fixo, ou função que recebe as séries VISÍVEIS (as que sobraram depois
+   *  dos cliques na legenda). Use a função quando o gráfico deve reagir. */
+  children: React.ReactNode | ((visiveis: SeriesDef[]) => React.ReactNode);
   height?: number;
 }) {
   const [asTable, setAsTable] = useState(false);
+  /** Séries desligadas pelo clique na legenda. Guarda as OCULTAS, não as
+   *  visíveis: assim uma série nova nasce visível sem precisar de sincronização. */
+  const [ocultas, setOcultas] = useState<Set<string>>(new Set());
   const { mode, tema } = useVizTema();
   const chrome = CHROME[mode];
   const tableId = useId();
 
   const fmt = valueFormat ?? ((v: unknown) => (v == null ? "—" : String(v)));
+
+  // Nunca deixa esconder a última: um gráfico sem série nenhuma é uma moldura
+  // vazia que parece defeito.
+  const visiveis = series.filter((s) => !ocultas.has(s.key));
+  const podeOcultar = (key: string) => visiveis.length > 1 || ocultas.has(key);
+  const alternar = (key: string) => {
+    if (!podeOcultar(key)) return;
+    setOcultas((prev) => {
+      const n = new Set(prev);
+      if (n.has(key)) n.delete(key); else n.add(key);
+      return n;
+    });
+  };
 
   return (
     // viz-panel: no tema escuro ganha fio de luz no topo e brilho interno (ver
@@ -76,21 +102,46 @@ export default function ChartFrame({
         </button>
       </header>
 
-      {/* Legenda: só com 2+ séries. Marca espelha o tipo do mark no gráfico. */}
+      {/* Legenda: só com 2+ séries. Marca espelha o tipo do mark no gráfico.
+          Cada item é um botão que liga/desliga a própria série. */}
       {series.length >= 2 && !asTable && (
         <ul className="flex flex-wrap items-center gap-x-3 gap-y-1 mb-2">
-          {series.map((s) => (
-            <li key={s.key} className="inline-flex items-center gap-1.5 text-[11px] text-ww-textMuted">
-              {s.mark === "line" ? (
-                <span aria-hidden className="inline-block w-3.5 h-0.5 rounded-full"
-                      style={{ background: seriesColor(s.slot, mode, tema) }} />
-              ) : (
-                <span aria-hidden className="inline-block w-2.5 h-2.5 rounded-sm"
-                      style={{ background: seriesColor(s.slot, mode, tema) }} />
-              )}
-              {s.label}
+          {series.map((s) => {
+            const off = ocultas.has(s.key);
+            const travada = !podeOcultar(s.key);
+            return (
+              <li key={s.key}>
+                <button
+                  type="button"
+                  onClick={() => alternar(s.key)}
+                  aria-pressed={!off}
+                  disabled={travada}
+                  title={travada ? "A última série visível não pode ser ocultada"
+                        : off ? `Mostrar ${s.label}` : `Ocultar ${s.label}`}
+                  className={`inline-flex items-center gap-1.5 text-[11px] rounded px-1 -mx-1 py-0.5 transition ${
+                    off ? "text-ww-textFaint line-through" : "text-ww-textMuted hover:text-ww-text"
+                  } ${travada ? "cursor-default" : "cursor-pointer hover:bg-ww-rowHover"}`}
+                >
+                  {s.mark === "line" ? (
+                    <span aria-hidden className="inline-block w-3.5 h-0.5 rounded-full transition-opacity"
+                          style={{ background: seriesColor(s.slot, mode, tema), opacity: off ? 0.3 : 1 }} />
+                  ) : (
+                    <span aria-hidden className="inline-block w-2.5 h-2.5 rounded-sm transition-opacity"
+                          style={{ background: seriesColor(s.slot, mode, tema), opacity: off ? 0.3 : 1 }} />
+                  )}
+                  {s.label}
+                </button>
+              </li>
+            );
+          })}
+          {ocultas.size > 0 && (
+            <li>
+              <button type="button" onClick={() => setOcultas(new Set())}
+                className="text-[10.5px] text-ww-accent hover:underline">
+                mostrar todas
+              </button>
             </li>
-          ))}
+          )}
         </ul>
       )}
 
@@ -100,7 +151,7 @@ export default function ChartFrame({
             <thead>
               <tr className="text-ww-textMuted">
                 <th className="text-left font-semibold p-1 border-b border-ww-border">—</th>
-                {series.map((s) => (
+                {visiveis.map((s) => (
                   <th key={s.key} className="text-right font-semibold p-1 border-b border-ww-border whitespace-nowrap">
                     {s.label}
                   </th>
@@ -111,7 +162,7 @@ export default function ChartFrame({
               {rows.map((r, i) => (
                 <tr key={i} className="viz-row">
                   <td className="p-1 border-b border-ww-border/60 text-ww-text">{String(r.x ?? r.label ?? i)}</td>
-                  {series.map((s) => (
+                  {visiveis.map((s) => (
                     <td key={s.key} className="p-1 border-b border-ww-border/60 text-right tabular-nums text-ww-text">
                       {fmt(r[s.key])}
                     </td>
@@ -123,7 +174,7 @@ export default function ChartFrame({
         </div>
       ) : (
         <div style={{ height }} className={`transition-opacity duration-150 ${loading ? "opacity-40" : "opacity-100"}`}>
-          {children}
+          {typeof children === "function" ? children(visiveis) : children}
         </div>
       )}
 

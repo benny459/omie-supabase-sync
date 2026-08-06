@@ -221,7 +221,7 @@ export default function FluxoCaixaView() {
     Entradas: p.entradas,
     Saídas: p.saidas,
     Saldo: p.saldo,
-    ...(comAgenda ? { "Saldo (sem agendar)": base[i]?.saldo ?? 0 } : {}),
+    ...(comAgenda ? { "Saldo sem agendar": base[i]?.saldo ?? 0 } : {}),
   }));
 
   // Verde entra, vermelho sai — convenção contábil, e aqui ela é legítima como
@@ -232,13 +232,16 @@ export default function FluxoCaixaView() {
   // codificação secundária, que aqui é forte e estrutural: entrada cresce PRA
   // CIMA do zero e saída PRA BAIXO. A posição já distingue sem depender da cor.
   const barras: SeriesDef[] = [
-    { key: "Entradas", label: "Entradas (a receber)", slot: 5 },   // verde
-    { key: "Saídas",   label: "Saídas (a pagar)",     slot: 3 },   // vermelho
+    { key: "Entradas", label: "Entradas (a receber)", slot: 5, mark: "rect" },  // verde
+    { key: "Saídas",   label: "Saídas (a pagar)",     slot: 3, mark: "rect" },  // vermelho
   ];
+  // Com agendamento existem DUAS curvas: a simulada e a original. Ver as duas
+  // juntas é o que diz se o reagendamento melhorou o caixa e em quanto — a
+  // simulada sozinha não tem contra o quê ser comparada.
   const linhas: SeriesDef[] = comAgenda
-    ? [{ key: "Saldo", label: "Saldo com agendados", slot: 0 },
-       { key: "Saldo (sem agendar)", label: "Saldo sem agendar", slot: 4 }]
-    : [{ key: "Saldo", label: "Saldo projetado", slot: 0 }];
+    ? [{ key: "Saldo", label: "Saldo com agendados", slot: 0, mark: "line" },
+       { key: "Saldo sem agendar", label: "Saldo sem agendar", slot: 4, mark: "line" }]
+    : [{ key: "Saldo", label: "Saldo projetado", slot: 0, mark: "line" }];
 
   const resumo = useMemo(() => {
     const s = curva.map((p) => p.saldo);
@@ -367,13 +370,13 @@ export default function FluxoCaixaView() {
     "Resultado realizado": Number(m.resultado_realizado),
   }));
   const mensalBarras: SeriesDef[] = [
-    { key: "Entrada prevista",  label: "Entrada prevista",  slot: 5 },
-    { key: "Entrada realizada", label: "Entrada realizada", slot: 2 },
-    { key: "Saída prevista",    label: "Saída prevista",    slot: 7 },
-    { key: "Saída realizada",   label: "Saída realizada",   slot: 1 },
+    { key: "Entrada prevista",  label: "Entrada prevista",  slot: 5, mark: "rect" },
+    { key: "Entrada realizada", label: "Entrada realizada", slot: 2, mark: "rect" },
+    { key: "Saída prevista",    label: "Saída prevista",    slot: 7, mark: "rect" },
+    { key: "Saída realizada",   label: "Saída realizada",   slot: 1, mark: "rect" },
   ];
   const mensalLinha: SeriesDef[] = [
-    { key: "Resultado realizado", label: "Resultado realizado", slot: 0 },
+    { key: "Resultado realizado", label: "Resultado realizado", slot: 0, mark: "line" },
   ];
 
   const COLS_DIAS: Col<{ rotulo: string; entradas: number; saidas: number; liquido: number; saldo: number }>[] = [
@@ -457,7 +460,17 @@ export default function FluxoCaixaView() {
         loading={loading}
         height={340}
       >
-        <VizCombo rows={rows} bars={barras} lines={linhas} valueFormat={(v) => brl(v)} />
+        {/* Recebe as séries que sobraram dos cliques na legenda e desenha só
+            elas — clicar em "Saídas" some com as barras vermelhas, clicar numa
+            curva de saldo isola a outra. */}
+        {(visiveis) => (
+          <VizCombo
+            rows={rows}
+            bars={barras.filter((b) => visiveis.some((v) => v.key === b.key))}
+            lines={linhas.filter((l) => visiveis.some((v) => v.key === l.key))}
+            valueFormat={(v) => brl(v)}
+          />
+        )}
       </ChartFrame>
 
       {/* Painel de agendamento — o que era "simular datas", agora com gravação,
@@ -692,8 +705,17 @@ export default function FluxoCaixaView() {
         loading={loading}
         height={320}
       >
-        <VizCombo rows={mensalRows} bars={mensalBarras} lines={mensalLinha}
-                  valueFormat={(v) => brl(v)} />
+        {/* 5 séries no mesmo painel: previsto e realizado de entrada e saída,
+            mais o resultado. Isolar um par (só previsto, ou só entradas) é o que
+            torna a comparação legível. */}
+        {(visiveis) => (
+          <VizCombo
+            rows={mensalRows}
+            bars={mensalBarras.filter((b) => visiveis.some((v) => v.key === b.key))}
+            lines={mensalLinha.filter((l) => visiveis.some((v) => v.key === l.key))}
+            valueFormat={(v) => brl(v)}
+          />
+        )}
       </ChartFrame>
 
       <VizTable
