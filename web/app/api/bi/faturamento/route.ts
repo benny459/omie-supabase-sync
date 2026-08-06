@@ -41,6 +41,8 @@ export async function GET(req: Request) {
   const empresas = list("empresas");
   const cat = list("cat");
   const situacoes = list("situacao");
+  // Grão da tabela: nota (padrão) ou parcela. Uma nota de 12x vira 12 linhas.
+  const porParcela = url.searchParams.get("parcela") === "1";
 
   const adm = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -55,7 +57,7 @@ export async function GET(req: Request) {
     adm.rpc("fat_prazos", args),
     adm.rpc("fat_top", { ...args, p_dim: dim, p_limit: 20 }),
     // Detalhe fundido: a NF e o título que ela gerou na mesma linha.
-    adm.rpc("faturamento_com_titulo", { ...args, p_situacoes: situacoes, p_limit: 1000 }),
+    adm.rpc("faturamento_com_titulo", { ...args, p_situacoes: situacoes, p_por_parcela: porParcela, p_limit: 1500 }),
     adm.rpc("fat_coorte", args),
     // Sem recorte de período: o que está aberto está aberto, tenha nascido neste
     // mês ou em 2020 — filtrar por data aqui esconderia o mais velho.
@@ -114,6 +116,7 @@ export async function GET(req: Request) {
     top: ((top.data ?? []) as Array<{ chave: string; valor: number; qtd: number }>)
       .map((t) => ({ chave: t.chave, valor: Number(t.valor) || 0, qtd: Number(t.qtd) || 0 })),
     dim,
+    por_parcela: porParcela,
     detalhe: detalhe.data ?? [],
     coorte: coorte.data ?? [],
     calendario: pivotarCalendario((calendario.data ?? []) as CalRow[]),

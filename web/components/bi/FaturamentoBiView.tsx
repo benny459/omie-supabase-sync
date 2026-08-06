@@ -36,8 +36,12 @@ type Faixa = { label: string; value: number };
 // A linha fundida: a nota E o título que ela gerou.
 type FatRow = {
   empresa: string; origem: string; documento: string; dt_fat: string | null;
-  cliente: string; projeto: string; categoria: string; valor: number;
-  num_titulo: string | null; parcelas: number | null;
+  cliente: string; projeto: string; categoria: string;
+  /** No grão parcela vem só na PRIMEIRA — senão o rodapé somaria a nota N vezes. */
+  valor_nf: number | null;
+  num_titulo: string | null; parcela: string | null;
+  /** Da parcela no grão parcela; da nota no grão nota. */
+  valor: number;
   vencimento: string | null; pagamento: string | null;
   recebido: number | null; aberto: number | null;
   prazo_dias: number | null; dias_atraso: number | null; situacao: string;
@@ -45,25 +49,46 @@ type FatRow = {
 
 const SITUACOES = ["Recebido", "A vencer", "Vencido", "Parcial", "Sem título"];
 
-const COLS_FAT: Col<FatRow>[] = [
+const tomSituacao = (v: unknown) =>
+  v === "Recebido" ? "ok" as const
+  : v === "Vencido" || v === "Sem título" ? "critico" as const
+  : v === "Parcial" ? "alerta" as const : "neutro" as const;
+
+const COL_BASE: Col<FatRow>[] = [
   { key: "dt_fat",     label: "Dt. NF",    tipo: "date", w: 80 },
   { key: "empresa",    label: "Emp.",      w: 50 },
-  { key: "documento",  label: "Doc.",      w: 90 },
-  { key: "cliente",    label: "CLIENTE",   w: 210 },
-  { key: "projeto",    label: "Projeto",   w: 175 },
-  { key: "categoria",  label: "Categoria", w: 100 },
-  { key: "valor",      label: "Faturado",  tipo: "money", w: 115 },
-  { key: "num_titulo", label: "Título",    w: 92 },
+  { key: "documento",  label: "Doc.",      w: 88 },
+  { key: "cliente",    label: "CLIENTE",   w: 200 },
+  { key: "projeto",    label: "Projeto",   w: 165 },
+  { key: "categoria",  label: "Categoria", w: 96 },
+];
+const COL_FIM: Col<FatRow>[] = [
   { key: "vencimento", label: "Vence",     tipo: "date", w: 80 },
-  { key: "prazo_dias", label: "Prazo",     tipo: "dias", w: 70 },
+  { key: "prazo_dias", label: "Prazo",     tipo: "dias", w: 68 },
   { key: "pagamento",  label: "Pago em",   tipo: "date", w: 80 },
-  { key: "recebido",   label: "Recebido",  tipo: "money", w: 115 },
-  { key: "aberto",     label: "Aberto",    tipo: "money", w: 115 },
-  { key: "dias_atraso",label: "Atraso",    tipo: "dias", w: 72 },
-  { key: "situacao",   label: "Situação",  tipo: "badge", w: 92,
-    tom: (v) => v === "Recebido" ? "ok"
-              : v === "Vencido" || v === "Sem título" ? "critico"
-              : v === "Parcial" ? "alerta" : "neutro" },
+  { key: "recebido",   label: "Recebido",  tipo: "money", w: 112 },
+  { key: "aberto",     label: "Aberto",    tipo: "money", w: 112 },
+  { key: "dias_atraso",label: "Atraso",    tipo: "dias", w: 70 },
+  { key: "situacao",   label: "Situação",  tipo: "badge", w: 90, tom: tomSituacao },
+];
+
+// No grão parcela existem DUAS colunas de dinheiro com significados diferentes:
+// "Faturado NF" (o total da nota, uma vez só) e "Valor parcela". Fundi-las numa
+// coluna só faria uma das duas somas ficar errada no rodapé.
+const COLS_NOTA: Col<FatRow>[] = [
+  ...COL_BASE,
+  { key: "valor_nf",   label: "Faturado",  tipo: "money", w: 115 },
+  { key: "num_titulo", label: "Título",    w: 88 },
+  { key: "parcela",    label: "Parc.",     w: 56 },
+  ...COL_FIM,
+];
+const COLS_PARCELA: Col<FatRow>[] = [
+  ...COL_BASE,
+  { key: "valor_nf",   label: "Faturado NF",   tipo: "money", w: 118 },
+  { key: "num_titulo", label: "Título",        w: 88 },
+  { key: "parcela",    label: "Parc.",         w: 60 },
+  { key: "valor",      label: "Valor parcela", tipo: "money", w: 118 },
+  ...COL_FIM,
 ];
 
 type CoorteRow = {
@@ -86,6 +111,7 @@ type Payload = {
   concedido: { media: number | null; faixas: Faixa[] };
   top: Array<{ chave: string; valor: number; qtd: number }>;
   dim: string;
+  por_parcela: boolean;
   detalhe: FatRow[];
   coorte: CoorteRow[];
   calendario: { rows: Array<Record<string, unknown>>; origens: string[]; agrupadas: number };
@@ -96,6 +122,7 @@ export default function FaturamentoBiView() {
   const [empresas, setEmpresas] = useState<Set<string>>(new Set());
   const [cats, setCats] = useState<Set<string>>(new Set());
   const [situacoes, setSituacoes] = useState<Set<string>>(new Set());
+  const [porParcela, setPorParcela] = useState(false);
   const [dim, setDim] = useState<"projeto" | "cliente">("projeto");
   const [data, setData] = useState<Payload | null>(null);
   const [loading, setLoading] = useState(true);
@@ -108,6 +135,7 @@ export default function FaturamentoBiView() {
       if (empresas.size) qs.set("empresas", Array.from(empresas).join(","));
       if (cats.size) qs.set("cat", Array.from(cats).join(","));
       if (situacoes.size) qs.set("situacao", Array.from(situacoes).join(","));
+      if (porParcela) qs.set("parcela", "1");
       const r = await fetch(`/api/bi/faturamento?${qs}`, { cache: "no-store" });
       const j = await r.json();
       if (!r.ok) { setErr(j.error ?? r.statusText); return; }
@@ -118,7 +146,7 @@ export default function FaturamentoBiView() {
     } finally {
       setLoading(false);
     }
-  }, [range.from, range.to, empresas, cats, situacoes, dim]);
+  }, [range.from, range.to, empresas, cats, situacoes, porParcela, dim]);
 
   useEffect(() => { void load(); }, [load]);
 
@@ -282,15 +310,33 @@ export default function FaturamentoBiView() {
       {/* A fusão das duas listas que existiam antes: a NF e o título que ela
           gerou, na mesma linha. "Aberto" e "Recebido" somam no rodapé; "Faturado"
           também — os três estão no grão da nota, sem repetição de parcela. */}
+      {/* Grão da tabela. No modo parcela uma nota de 3x vira 3 linhas, cada uma
+          com a própria situação — é o que responde "qual parcela falta". */}
+      <div className="flex items-center gap-1 justify-end -mb-1">
+        <span className="text-[11px] text-ww-textMuted mr-1">Detalhar por</span>
+        {([[false, "Nota"], [true, "Parcela"]] as const).map(([v, l]) => (
+          <button key={l} type="button" onClick={() => setPorParcela(v)}
+            className={`px-2 py-0.5 text-[11px] rounded border transition ${
+              porParcela === v ? "border-ww-accent text-ww-accent bg-ww-accentSoft font-semibold"
+                               : "border-ww-border text-ww-textMuted hover:text-ww-text"}`}>
+            {l}
+          </button>
+        ))}
+      </div>
+
       <VizTable
         title="Faturamento e recebimento — linha a linha"
-        subtitle="Cada nota com o título que gerou. Filtre por situação na barra acima"
-        cols={COLS_FAT}
+        subtitle={porParcela
+          ? 'Uma linha por parcela, com a situação de cada uma. "Faturado NF" aparece só na 1ª parcela — repetido, o total somaria a nota várias vezes'
+          : "Cada nota com o título que gerou. Filtre por situação na barra acima"}
+        cols={porParcela ? COLS_PARCELA : COLS_NOTA}
         rows={data?.detalhe ?? []}
         ordemInicial="dt_fat"
         loading={loading}
         altura={480}
-        totalizar={["valor", "recebido", "aberto"]}
+        totalizar={porParcela
+          ? ["valor_nf", "valor", "recebido", "aberto"]
+          : ["valor_nf", "recebido", "aberto"]}
       />
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">

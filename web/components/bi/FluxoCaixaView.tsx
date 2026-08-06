@@ -26,7 +26,24 @@ import VizBar from "@/components/viz/VizBar";
 import VizCombo from "@/components/viz/VizCombo";
 import VizTable, { type Col } from "@/components/viz/VizTable";
 
-const JANELAS = [30, 60, 90, 180];
+// Janelas. "Esta semana" e "Mês atual" são dinâmicas: viram um número de dias
+// calculado na hora, então a curva termina exatamente no domingo / no último dia
+// do mês, em vez de num ponto arbitrário.
+type Janela = { key: string; label: string; dias: () => number };
+const JANELAS: Janela[] = [
+  { key: "semana", label: "Esta semana", dias: () => {
+      const h = new Date();
+      return 7 - (h.getDay() === 0 ? 7 : h.getDay());   // até o próximo domingo
+    } },
+  { key: "mes", label: "Mês atual", dias: () => {
+      const h = new Date();
+      const fim = new Date(h.getFullYear(), h.getMonth() + 1, 0);
+      return Math.round((fim.getTime() - h.getTime()) / 86_400_000);
+    } },
+  { key: "60", label: "60 dias", dias: () => 60 },
+  { key: "90", label: "90 dias", dias: () => 90 },
+  { key: "180", label: "180 dias", dias: () => 180 },
+];
 
 const brl = (v: number) =>
   v.toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 });
@@ -134,7 +151,11 @@ const COLS_CONTAS: Col<ContaRow>[] = [
 ];
 
 export default function FluxoCaixaView() {
-  const [dias, setDias] = useState(60);
+  // Guarda o PRESET, não o número: "esta semana" precisa recalcular os dias a
+  // cada render, senão vira um valor congelado no dia em que foi clicado.
+  const [janela, setJanela] = useState("60");
+  const jan = JANELAS.find((j) => j.key === janela) ?? JANELAS[2];
+  const dias = Math.max(1, jan.dias());
   const [data, setData] = useState<Payload | null>(null);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
@@ -195,9 +216,16 @@ export default function FluxoCaixaView() {
     ...(comAgenda ? { "Saldo (sem agendar)": base[i]?.saldo ?? 0 } : {}),
   }));
 
+  // Verde entra, vermelho sai — convenção contábil, e aqui ela é legítima como
+  // escala: entrada e saída são polos de uma mesma medida com sinal, não duas
+  // categorias quaisquer.
+  //
+  // Verde↔vermelho é justamente o par que o daltônico confunde. O que salva é a
+  // codificação secundária, que aqui é forte e estrutural: entrada cresce PRA
+  // CIMA do zero e saída PRA BAIXO. A posição já distingue sem depender da cor.
   const barras: SeriesDef[] = [
-    { key: "Entradas", label: "Entradas (a receber)", slot: 5 },
-    { key: "Saídas",   label: "Saídas (a pagar)",     slot: 7 },
+    { key: "Entradas", label: "Entradas (a receber)", slot: 5 },   // verde
+    { key: "Saídas",   label: "Saídas (a pagar)",     slot: 3 },   // vermelho
   ];
   const linhas: SeriesDef[] = comAgenda
     ? [{ key: "Saldo", label: "Saldo com agendados", slot: 0 },
@@ -341,12 +369,13 @@ export default function FluxoCaixaView() {
       <div className="flex items-center gap-3 flex-wrap bg-ww-panel border border-ww-border rounded-xl p-2.5">
         <div className="flex items-center gap-1">
           <span className="text-[11px] text-ww-textMuted mr-1">Janela</span>
-          {JANELAS.map((d) => (
-            <button key={d} type="button" onClick={() => setDias(d)}
+          {JANELAS.map((j) => (
+            <button key={j.key} type="button" onClick={() => setJanela(j.key)}
+              title={`${j.dias()} dias a partir de hoje`}
               className={`px-2 py-0.5 text-[11px] rounded border transition ${
-                dias === d ? "border-ww-accent text-ww-accent bg-ww-accentSoft font-semibold"
-                           : "border-ww-border text-ww-textMuted hover:text-ww-text"}`}>
-              {d}d
+                janela === j.key ? "border-ww-accent text-ww-accent bg-ww-accentSoft font-semibold"
+                                 : "border-ww-border text-ww-textMuted hover:text-ww-text"}`}>
+              {j.label}
             </button>
           ))}
         </div>
@@ -375,9 +404,9 @@ export default function FluxoCaixaView() {
             ? `${data.saldo_atual.origem === "manual" ? "Ajuste manual" : "Extrato Omie.CASH"} de ${
                 data.saldo_atual.dt_ref ? diaBr(data.saldo_atual.dt_ref) : "—"}`
             : "Sem extrato"} />
-        <StatTile label={`Entradas a vencer (${dias}d)`} value={brl(resumo.entradas)}
+        <StatTile label={`Entradas a vencer · ${jan.label.toLowerCase()}`} value={brl(resumo.entradas)}
           hint={`${titulos.filter((t) => t.natureza === "R").length} títulos · Safe`} />
-        <StatTile label={`Saídas a vencer (${dias}d)`} value={brl(Math.abs(resumo.saidas))}
+        <StatTile label={`Saídas a vencer · ${jan.label.toLowerCase()}`} value={brl(Math.abs(resumo.saidas))}
           hint={`${titulos.filter((t) => t.natureza === "P").length} títulos · Grupo`}
           higherIsBetter={false} />
         {/* As duas janelas de atraso que faltavam. */}
