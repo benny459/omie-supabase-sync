@@ -56,6 +56,22 @@ export async function POST(req: Request) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(dt)) {
     return NextResponse.json({ error: "dt_previsao_nova deve ser YYYY-MM-DD" }, { status: 400 });
   }
+  // O formato sozinho não basta: "0002-08-01" passa no regex e é uma data
+  // legítima pro Postgres. Foi exatamente o que um <input type="date"> emitiu
+  // enquanto o ano era digitado, e o título gravado com ela sumiu de todas as
+  // telas — a janela de agendamento filtra por previsão no ano corrente.
+  //
+  // A validação do formulário já foi corrigida, mas ela é UMA camada. Esta rota
+  // aceita qualquer cliente, então a faixa é checada aqui também.
+  const hoje = new Date().toISOString().slice(0, 10);
+  if (dt < hoje) {
+    return NextResponse.json(
+      { error: `dt_previsao_nova não pode ser no passado (recebido ${dt})` }, { status: 400 });
+  }
+  if (dt > "2100-12-31") {
+    return NextResponse.json(
+      { error: `dt_previsao_nova fora da faixa aceitável (recebido ${dt})` }, { status: 400 });
+  }
 
   // Quem alterou fica na observação: a tabela não tem coluna de autor, e sem
   // isso o reagendamento fica anônimo no histórico.
