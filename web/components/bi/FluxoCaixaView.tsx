@@ -114,14 +114,26 @@ type SyncResult = {
 
 type Ponto = { dia: string; entradas: number; saidas: number; saldo: number };
 
-/** Saldo de partida + movimento de cada dia, acumulado. `extras` são atrasados
- *  que ganharam data. Base e cenário chamam ESTA função — se cada um tivesse a
- *  sua, divergiriam e a curva pularia ao mexer no primeiro título. */
+/** Saldo de partida + movimento de cada dia, acumulado.
+ *
+ *  `extras` são atrasados reagendados NESTA sessão, ainda não recarregados.
+ *
+ *  `semOverride` projeta o cenário contrafactual: cada título entra pela
+ *  previsão ORIGINAL do Omie, ignorando os reagendamentos já gravados. É o que
+ *  permite comparar "como está" com "como estaria sem os agendamentos", e essa
+ *  comparação precisa sobreviver ao reload — antes ela vivia só na sessão, e
+ *  bastava recarregar pra parecer que o reagendamento não fizera nada.
+ *
+ *  Título cuja previsão ORIGINAL já venceu não entra no contrafactual: sem o
+ *  reagendamento ele estaria no limbo dos atrasados, fora da curva. É
+ *  justamente essa ausência que mostra o efeito de tê-lo agendado. */
 function projetar(
   saldo0: number, titulos: Titulo[], dias: number,
   extras: Array<{ t: Titulo; dia: string }> = [],
+  semOverride = false,
 ): Ponto[] {
   const inicio = hojeIso();
+  const fim = addDias(inicio, dias);
   const porDia = new Map<string, { e: number; s: number }>();
   const lancar = (dia: string, t: Titulo) => {
     const cel = porDia.get(dia) ?? { e: 0, s: 0 };
@@ -129,7 +141,15 @@ function projetar(
     else cel.s += Number(t.valor) || 0;
     porDia.set(dia, cel);
   };
-  for (const t of titulos) lancar(t.previsao, t);
+  for (const t of titulos) {
+    if (semOverride) {
+      const orig = t.previsao_original ?? t.previsao;
+      // Fora da janela (ou já vencida) = não existiria na curva sem o agendamento.
+      if (orig >= inicio && orig <= fim) lancar(orig, t);
+    } else {
+      lancar(t.previsao, t);
+    }
+  }
   for (const x of extras) lancar(x.dia, x.t);
 
   const pontos: Ponto[] = [];
@@ -209,19 +229,33 @@ export default function FluxoCaixaView() {
       .filter((x): x is { t: Titulo; dia: string } => !!x.t);
   }, [agenda, atrasados]);
 
-  const base = useMemo(() => projetar(saldo0, titulos, dias), [saldo0, titulos, dias]);
-  const comAgenda = useMemo(
-    () => (extras.length ? projetar(saldo0, titulos, dias, extras) : null),
+  /** Quantos títulos DA CURVA já carregam um reagendamento gravado. É o que
+   *  decide se a comparação faz sentido — sem nenhum, as duas curvas seriam
+   *  idênticas e a segunda linha só poluiria. */
+  const comOverrideNaCurva = useMemo(
+    () => titulos.filter((t) => t.tem_override).length,
+    [titulos],
+  );
+
+  const curva = useMemo(
+    () => projetar(saldo0, titulos, dias, extras),
     [saldo0, titulos, dias, extras],
   );
-  const curva = comAgenda ?? base;
+  /** O contrafactual: sem nenhum reagendamento, gravado ou desta sessão. */
+  const semAgendar = useMemo(
+    () => (comOverrideNaCurva > 0 || extras.length
+            ? projetar(saldo0, titulos, dias, [], true)
+            : null),
+    [saldo0, titulos, dias, extras.length, comOverrideNaCurva],
+  );
+
 
   const rows = curva.map((p, i) => ({
     x: diaBr(p.dia),
     Entradas: p.entradas,
     Saídas: p.saidas,
     Saldo: p.saldo,
-    ...(comAgenda ? { "Saldo sem agendar": base[i]?.saldo ?? 0 } : {}),
+    ...(semAgendar ? { "Saldo sem agendar": semAgendar[i]?.saldo ?? 0 } : {}),
   }));
 
   // Verde entra, vermelho sai — convenção contábil, e aqui ela é legítima como
@@ -238,7 +272,7 @@ export default function FluxoCaixaView() {
   // Com agendamento existem DUAS curvas: a simulada e a original. Ver as duas
   // juntas é o que diz se o reagendamento melhorou o caixa e em quanto — a
   // simulada sozinha não tem contra o quê ser comparada.
-  const linhas: SeriesDef[] = comAgenda
+  const linhas: SeriesDef[] = semAgendar
     ? [{ key: "Saldo", label: "Saldo com agendados", slot: 0, mark: "line" },
        { key: "Saldo sem agendar", label: "Saldo sem agendar", slot: 4, mark: "line" }]
     : [{ key: "Saldo", label: "Saldo projetado", slot: 0, mark: "line" }];
@@ -247,16 +281,17 @@ export default function FluxoCaixaView() {
     const s = curva.map((p) => p.saldo);
     let pior = 0;
     s.forEach((v, i) => { if (v < s[pior]) pior = i; });
-    const piorBase = base.reduce((acc, p, i) => (p.saldo < base[acc].saldo ? i : acc), 0);
+    const ref = semAgendar ?? curva;
+    const piorRef = ref.reduce((acc, p, i) => (p.saldo < ref[acc].saldo ? i : acc), 0);
     return {
       entradas: curva.reduce((a, p) => a + p.entradas, 0),
       saidas:   curva.reduce((a, p) => a + p.saidas, 0),
       piorDia: curva[pior]?.dia ?? null,
       piorSaldo: s[pior] ?? 0,
       negativos: s.filter((v) => v < 0).length,
-      piorSaldoBase: base[piorBase]?.saldo ?? 0,
+      piorSaldoSemAgendar: ref[piorRef]?.saldo ?? 0,
     };
-  }, [curva, base]);
+  }, [curva, semAgendar]);
 
   const agendadosForaDaJanela = useMemo(
     () => Array.from(agenda.values()).filter((d) => d > addDias(hojeIso(), dias)).length,
@@ -384,7 +419,7 @@ export default function FluxoCaixaView() {
     { key: "entradas", label: "Entradas", tipo: "money", w: 130 },
     { key: "saidas",   label: "Saídas",   tipo: "money", w: 130 },
     { key: "liquido",  label: "Líquido",  tipo: "money", w: 130 },
-    { key: "saldo",    label: comAgenda ? "Saldo c/ agendados" : "Saldo projetado", tipo: "money", w: 150 },
+    { key: "saldo",    label: semAgendar ? "Saldo c/ agendados" : "Saldo projetado", tipo: "money", w: 150 },
   ];
 
   const selecionados = Array.from(sel);
@@ -441,13 +476,14 @@ export default function FluxoCaixaView() {
         <StatTile label="A pagar em atraso (grupo)" value={brl(atrasoTot.pagar)}
           hint={`${atrasoTot.qtdPagar} títulos · previsão ${data?.ano ?? ""}`}
           higherIsBetter={false} />
-        <StatTile label={comAgenda ? "Dia mais apertado (c/ agendados)" : "Dia mais apertado"}
+        <StatTile label={semAgendar ? "Dia mais apertado (c/ agendados)" : "Dia mais apertado"}
           value={brl(resumo.piorSaldo)}
           hint={resumo.piorDia
             ? `${diaBr(resumo.piorDia)}${resumo.negativos ? ` · ${resumo.negativos} dia(s) negativo(s)` : " · nunca negativa"}`
             : "—"}
-          delta={comAgenda && resumo.piorSaldoBase !== 0
-            ? (resumo.piorSaldo - resumo.piorSaldoBase) / Math.abs(resumo.piorSaldoBase) : null}
+          delta={semAgendar && resumo.piorSaldoSemAgendar !== 0
+            ? (resumo.piorSaldo - resumo.piorSaldoSemAgendar) / Math.abs(resumo.piorSaldoSemAgendar)
+            : null}
           deltaLabel="vs. sem agendar" />
       </div>
 
@@ -720,8 +756,8 @@ export default function FluxoCaixaView() {
 
       <VizTable
         title="Projeção dia a dia"
-        subtitle={comAgenda ? "Já com os atrasados agendados aplicados"
-                            : "A mesma curva em números — pra achar o título que causa o buraco"}
+        subtitle={semAgendar ? "Já com os atrasados agendados aplicados"
+                             : "A mesma curva em números — pra achar o título que causa o buraco"}
         cols={COLS_DIAS}
         rows={curva.map((p) => ({
           rotulo: diaBr(p.dia), entradas: p.entradas, saidas: p.saidas,
