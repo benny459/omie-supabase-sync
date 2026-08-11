@@ -414,13 +414,6 @@ export default function FluxoCaixaView() {
     { key: "Resultado realizado", label: "Resultado realizado", slot: 0, mark: "line" },
   ];
 
-  const COLS_DIAS: Col<{ rotulo: string; entradas: number; saidas: number; liquido: number; saldo: number }>[] = [
-    { key: "rotulo",   label: "Dia",      w: 80 },
-    { key: "entradas", label: "Entradas", tipo: "money", w: 130 },
-    { key: "saidas",   label: "Saídas",   tipo: "money", w: 130 },
-    { key: "liquido",  label: "Líquido",  tipo: "money", w: 130 },
-    { key: "saldo",    label: semAgendar ? "Saldo c/ agendados" : "Saldo projetado", tipo: "money", w: 150 },
-  ];
 
   const selecionados = Array.from(sel);
 
@@ -753,20 +746,6 @@ export default function FluxoCaixaView() {
           />
         )}
       </ChartFrame>
-
-      <VizTable
-        title="Projeção dia a dia"
-        subtitle={semAgendar ? "Já com os atrasados agendados aplicados"
-                             : "A mesma curva em números — pra achar o título que causa o buraco"}
-        cols={COLS_DIAS}
-        rows={curva.map((p) => ({
-          rotulo: diaBr(p.dia), entradas: p.entradas, saidas: p.saidas,
-          liquido: p.entradas + p.saidas, saldo: p.saldo,
-        }))}
-        ordemInicial="rotulo"
-        loading={loading}
-        altura={320}
-      />
 
       <VizTable
         title="Saldo por conta corrente"
