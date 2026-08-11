@@ -13,7 +13,6 @@ import { useCallback, useEffect, useState } from "react";
 import ChartFrame, { type SeriesDef } from "@/components/viz/ChartFrame";
 import StatTile from "@/components/viz/StatTile";
 import VizBar from "@/components/viz/VizBar";
-import VizLine from "@/components/viz/VizLine";
 import VizPie from "@/components/viz/VizPie";
 import VizTable, { type Col } from "@/components/viz/VizTable";
 import VizFilters, { resolvePreset, type DateRange, type DimFilter } from "@/components/viz/VizFilters";
@@ -24,30 +23,14 @@ const brl = (v: number) =>
   v.toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 });
 
 
-type TituloRow = {
-  empresa: string; contraparte: string; num_titulo: string; categoria: string;
-  emissao: string | null; vencimento: string | null; previsao: string | null;
-  pagamento: string | null; valor: number; aberto: number; pago: number;
-  dias_atraso: number | null; situacao: string;
-};
 
 // Colunas do detalhe de títulos — mesmas informações do card do Metabase.
-const COLS_TITULOS: Col<TituloRow>[] = [
-  { key: "empresa",     label: "Emp.",        w: 52 },
-  { key: "contraparte", label: "FORNECEDOR", w: 240 },
-  { key: "num_titulo",  label: "Título",      w: 90 },
-  { key: "categoria",   label: "Categoria",   w: 110 },
-  { key: "emissao",     label: "Emissão",     tipo: "date", w: 82 },
-  { key: "previsao",    label: "Previsão",    tipo: "date", w: 82 },
-  { key: "dias_atraso", label: "Atraso",      tipo: "dias", w: 72 },
-  { key: "valor",       label: "Valor",       tipo: "money", w: 110 },
-  { key: "aberto",      label: "Aberto",      tipo: "money", w: 110 },
-  { key: "situacao",    label: "Situação",    tipo: "badge", w: 96,
-    tom: (v) => v === "Vencido" ? "critico" : v === "Liquidado" ? "ok" : "neutro" },
-];
 
 type AgendaRow = {
+  /** 'Vencido' | 'A vencer' — separa os dois blocos da lista única. */
+  lado: string;
   previsao: string | null; dia_semana: string; vencimento: string | null;
+  emissao: string | null; dias_atraso: number | null;
   fornecedor: string; titulo: string | null; nf: string | null;
   categoria: string; grupo: string; projeto: string; pedido: string;
   aprovacao: string; aprovador: string; pv_os: string;
@@ -64,9 +47,14 @@ type AgendaRow = {
 // de qual pedido veio, se estava aprovado, qual PV/OS vai faturar aquilo e a
 // margem que sobra. É a tela que responde "posso pagar isto?" sem trocar de aba.
 const COLS_AGENDA: Col<AgendaRow>[] = [
+  { key: "lado",       label: "Situação",   tipo: "badge", w: 92,
+    tom: (v) => v === "Vencido" ? "critico" : "neutro" },
   { key: "previsao",   label: "Previsão",   tipo: "date", w: 80 },
   { key: "dia_semana", label: "D.Sem",      w: 52 },
   { key: "vencimento", label: "Vencimento", tipo: "date", w: 84 },
+  { key: "dias_atraso",label: "Atraso",     tipo: "dias", w: 72 },
+  { key: "emissao",    label: "Emissão",    tipo: "date", w: 82 },
+  { key: "titulo",     label: "Título",     w: 96 },
   { key: "fornecedor", label: "FORNECEDOR", w: 210 },
   { key: "categoria",  label: "Categoria",  w: 140 },
   { key: "projeto",    label: "Projeto",    w: 150 },
@@ -103,15 +91,26 @@ type Payload = {
   mensal: Array<{ x: string; emitido: number; pago: number }>;
   grupos: Array<{ label: string; value: number; macro: string }>;
   top: Array<{ chave: string; valor: number; qtd: number }>;
-  detalhe: TituloRow[];
   agenda: AgendaRow[];
+  faixas: Array<{ lado: string; faixa: string; ord: number; qtd: number; valor: number }>;
+  horizonte_mes: {
+    vencido: number; qtd_vencido: number;
+    mes_atual: number; qtd_mes_atual: number;
+    mes_proximo: number; qtd_mes_proximo: number;
+    depois: number; qtd_depois: number;
+  } | null;
 };
 
 export default function ContasPagarView() {
   const [range, setRange] = useState<DateRange>(() => ({ ...resolvePreset("ytd"), preset: "ytd" }));
   const [empresas, setEmpresas] = useState<Set<string>>(new Set());
   const [horizonte, setHorizonte] = useState(90);
-  const [base, setBase] = useState<"previsao" | "vencimento">("previsao");
+  // Padrão VENCIMENTO: o tile "Vencido" precisa dizer o que passou da data
+  // contratada. Por previsão, um título repactuado deixa de contar como vencido
+  // e o número perde o sentido de "onde devo focar".
+  const [base, setBase] = useState<"previsao" | "vencimento">("vencimento");
+  /** Recorte da lista única: tudo, só o vencido ou só o que está por vir. */
+  const [lado, setLado] = useState<"todos" | "Vencido" | "A vencer">("todos");
   const [data, setData] = useState<Payload | null>(null);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
@@ -139,8 +138,19 @@ export default function ContasPagarView() {
     { key: "empresa", label: "Empresa", options: EMPRESAS, selected: empresas },
   ];
 
-  const agingSeries: SeriesDef[] = [{ key: "valor", label: "Valor aberto", slot: 0, mark: "rect" }];
-  const agingRows = (data?.aging ?? []).map((a) => ({ x: a.faixa, valor: a.valor, qtd: a.qtd }));
+  // Duas séries independentes: vencido usa vermelho (é dívida furada), a vencer
+  // usa azul (é compromisso normal). Cada uma no próprio painel e no próprio eixo.
+  const faixasDe = (lado: string) =>
+    (data?.faixas ?? []).filter((f) => f.lado === lado)
+      .sort((a, b) => a.ord - b.ord)
+      .map((f) => ({ x: f.faixa, valor: Number(f.valor) || 0, qtd: f.qtd }));
+
+  const vencidoRows = faixasDe("Vencido");
+  const vencidoSeries: SeriesDef[] = [{ key: "valor", label: "Vencido", slot: 3, mark: "rect" }];
+  const aVencerRows = faixasDe("A vencer");
+  const aVencerSeries: SeriesDef[] = [{ key: "valor", label: "A vencer", slot: 0, mark: "rect" }];
+
+  const agendaFiltrada = (data?.agenda ?? []).filter((r) => lado === "todos" || r.lado === lado);
 
   const mensalSeries: SeriesDef[] = [
     { key: "emitido", label: "Emitido", slot: 0, mark: "line" },
@@ -151,7 +161,7 @@ export default function ContasPagarView() {
   const topRows = (data?.top ?? []).map((t) => ({ x: t.chave, valor: t.valor, qtd: t.qtd }));
 
   const h = data?.horizonte;
-  const acionavel = h ? h.vencido + h.no_horizonte : 0;
+  const hm = data?.horizonte_mes;
 
   return (
     <div className="space-y-4 min-w-0">
@@ -188,33 +198,54 @@ export default function ContasPagarView() {
         </div>
       )}
 
-      {/* O aviso existe porque o número equivalente no Metabase somava tudo. */}
-      {h && h.futuro > 0 && (
+      {/* O aviso existe porque o número equivalente no Metabase somava tudo num
+          valor só — incluindo parcela contratada pra 2050, que não cabe em
+          decisão nenhuma. Aqui ele diz explicitamente o que está fora do foco. */}
+      {hm && hm.depois > 0 && (
         <p className="text-[11px] text-ww-textMuted bg-ww-rowHover border border-ww-border rounded-md px-2 py-1.5">
           Saldo aberto total é {brl(data!.saldo_aberto)} em {data!.qtd_titulos} títulos, mas{" "}
-          <strong>{brl(h.futuro)}</strong> ({h.qtd_futuro} títulos) são parcelas contratadas além de{" "}
-          {h.dias} dias. O acionável hoje é {brl(acionavel)}.
+          <strong>{brl(hm.depois)}</strong> ({hm.qtd_depois} parcelas) só vencem depois do mês que
+          vem. O que exige decisão agora é {brl(hm.vencido + hm.mes_atual)} — vencido mais o que
+          vence até o fim do mês.
         </p>
       )}
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatTile label="Vencido" value={h ? brl(h.vencido) : "—"}
-                  hint={h ? `${h.qtd_vencido} títulos` : undefined} higherIsBetter={false} />
-        <StatTile label={`Vence em ${h?.dias ?? 90} dias`} value={h ? brl(h.no_horizonte) : "—"}
-                  hint={h ? `${h.qtd_no_horizonte} títulos` : undefined} />
-        <StatTile label="Futuro contratado" value={h ? brl(h.futuro) : "—"}
-                  hint={h ? `${h.qtd_futuro} parcelas além do horizonte` : undefined} />
+        <StatTile label="Vencido" value={hm ? brl(hm.vencido) : "—"}
+                  hint={hm ? `${hm.qtd_vencido} títulos · por data de vencimento` : undefined}
+                  higherIsBetter={false} />
         <StatTile label="Pago no ano" value={data ? brl(data.total_pago_ano) : "—"} />
+        <StatTile label="Vence este mês" value={hm ? brl(hm.mes_atual) : "—"}
+                  hint={hm ? `${hm.qtd_mes_atual} títulos · de hoje até o fim do mês` : undefined} />
+        <StatTile label="Vence no mês que vem" value={hm ? brl(hm.mes_proximo) : "—"}
+                  hint={hm ? `${hm.qtd_mes_proximo} títulos` : undefined} />
       </div>
 
-      <ChartFrame
-        title="Aging dos títulos a pagar"
-        subtitle={`Referência: ${base === "previsao" ? "data de previsão" : "data de vencimento"}`}
-        series={agingSeries} rows={agingRows}
-        valueFormat={(v) => brl(Number(v) || 0)} loading={loading} height={260}
-      >
-        <VizBar rows={agingRows} series={agingSeries} valueFormat={brl} />
-      </ChartFrame>
+      {/* Duas visões, dois eixos. Juntas numa escala só, a barra do "a vencer"
+          (R$ 17M em parcelas até 2050) achatava TODO o atraso — R$ 287k — numa
+          linha rente ao zero. São perguntas diferentes: há quanto tempo devo, e
+          quando vence o que ainda não venceu.
+          Nenhuma das duas respeita o filtro de período do topo: dívida vencida
+          não deixa de existir porque a tela está em "ano até hoje". */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <ChartFrame
+          title="Vencido — por tempo de atraso"
+          subtitle={`Referência: ${base === "previsao" ? "previsão" : "vencimento"} · sem filtro de período`}
+          series={vencidoSeries} rows={vencidoRows}
+          valueFormat={(v) => brl(Number(v) || 0)} loading={loading} height={260}
+        >
+          <VizBar rows={vencidoRows} series={vencidoSeries} valueFormat={brl} />
+        </ChartFrame>
+
+        <ChartFrame
+          title="A vencer — por horizonte"
+          subtitle="Todo o previsto, inclusive parcelas de anos à frente"
+          series={aVencerSeries} rows={aVencerRows}
+          valueFormat={(v) => brl(Number(v) || 0)} loading={loading} height={260}
+        >
+          <VizBar rows={aVencerRows} series={aVencerSeries} valueFormat={brl} />
+        </ChartFrame>
+      </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <ChartFrame
@@ -223,7 +254,9 @@ export default function ContasPagarView() {
           series={mensalSeries} rows={data?.mensal ?? []}
           valueFormat={(v) => brl(Number(v) || 0)} loading={loading} height={280}
         >
-          <VizLine rows={data?.mensal ?? []} series={mensalSeries} valueFormat={brl} />
+          {/* Barra e não linha: são valores mensais discretos, não uma série
+              contínua. Linha sugere interpolação entre os meses, que não existe. */}
+          <VizBar rows={data?.mensal ?? []} series={mensalSeries} valueFormat={brl} />
         </ChartFrame>
 
         <ChartFrame
@@ -237,29 +270,33 @@ export default function ContasPagarView() {
         </ChartFrame>
       </div>
 
-      {/* A agenda vem ANTES do detalhe simples: ela responde "posso pagar isto?",
-          que é a pergunta que se faz primeiro. O detalhe abaixo continua sendo a
-          lista crua de títulos, sem o contexto de compra e venda. */}
-      <VizTable
-        title={`Agenda de pagamento — próximos ${horizonte} dias`}
-        subtitle="Compra → venda → pagamento na mesma linha: pedido, aprovação, PV/OS que vai faturar e a margem que sobra"
-        cols={COLS_AGENDA}
-        rows={data?.agenda ?? []}
-        ordemInicial="previsao"
-        loading={loading}
-        altura={480}
-        totalizar={["valor", "venda", "pc_custo"]}
-      />
+      {/* Uma lista só. Eram duas — "agenda" e "detalhe de títulos" — mostrando a
+          mesma linha por dois ângulos, e responder "esta conta veio de qual
+          compra?" exigia procurar o fornecedor de uma na outra.
+          Inclui os VENCIDOS: a tela serve pra decidir o que pagar, e a dívida
+          vencida é a primeira coisa dessa decisão. */}
+      <div className="flex items-center gap-1 justify-end -mb-1">
+        <span className="text-[11px] text-ww-textMuted mr-1">Mostrar</span>
+        {([["todos", "Tudo"], ["Vencido", "Só vencido"], ["A vencer", "Só a vencer"]] as const)
+          .map(([k, l]) => (
+          <button key={k} type="button" onClick={() => setLado(k)}
+            className={`px-2 py-0.5 text-[11px] rounded border transition ${
+              lado === k ? "border-ww-accent text-ww-accent bg-ww-accentSoft font-semibold"
+                         : "border-ww-border text-ww-textMuted hover:text-ww-text"}`}>
+            {l}
+          </button>
+        ))}
+      </div>
 
       <VizTable
-        title="Detalhe de títulos a pagar"
-        subtitle="Títulos em aberto, linha a linha — mesma lista do card do Metabase"
-        cols={COLS_TITULOS}
-        rows={data?.detalhe ?? []}
-        ordemInicial="aberto"
+        title="Contas a pagar — vencido e a vencer"
+        subtitle={`Vencido inteiro + a vencer nos próximos ${horizonte} dias. Compra → venda → pagamento na mesma linha`}
+        cols={COLS_AGENDA}
+        rows={agendaFiltrada}
+        ordemInicial="previsao"
         loading={loading}
-        altura={460}
-        totalizar={["valor", "aberto"]}
+        altura={520}
+        totalizar={["valor", "venda", "pc_custo"]}
       />
 
       <ChartFrame
