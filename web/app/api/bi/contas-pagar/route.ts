@@ -9,7 +9,7 @@ import { supaServer } from "@/lib/supabase-server";
 import { canViewArea } from "@/lib/permissions";
 import { loadPerms } from "@/lib/require-area";
 import { createClient } from "@supabase/supabase-js";
-import { rpcPaginado } from "@/lib/rpc-paginado";
+import { rpcPaginado } from "@/lib/supabase-paginado";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;

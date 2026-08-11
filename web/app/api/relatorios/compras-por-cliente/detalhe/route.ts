@@ -10,6 +10,7 @@
 //   metric=receita → lista de NFs (linhas de faturamento_unificado)
 
 import { NextResponse } from "next/server";
+import { selectPaginado } from "@/lib/supabase-paginado";
 import { supaServer } from "@/lib/supabase-server";
 import { createClient } from "@supabase/supabase-js";
 
@@ -44,12 +45,13 @@ export async function GET(req: Request) {
   // ─── RECEITA: linhas de faturamento_unificado do cliente no período ─────
   if (metric === "receita") {
     const svc = admin("sales");
-    const { data, error } = await svc.from("faturamento_unificado")
+    const { data, error } = await selectPaginado<Record<string, unknown> & {
+      projeto_nome?: string | null; codigo_categoria?: string | null;
+    }>(() => svc.from("faturamento_unificado")
       .select("empresa, codigo_cliente, cliente_nome, codigo_projeto, projeto_nome, codigo_categoria, dt_fat_d, valor_total, numero_nfse, numero_pedido, numero_contrato")
       .eq("codigo_cliente", String(cliente))
       .gte("dt_fat_d", from).lte("dt_fat_d", to)
-      .order("dt_fat_d", { ascending: false })
-      .limit(2000);
+      .order("dt_fat_d", { ascending: false }));
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
     let rows = data ?? [];
     // Filtro por tipo via heurística de projeto (bate com cat_venda_projeto SQL).
@@ -92,11 +94,11 @@ export async function GET(req: Request) {
   };
   const allPcs: Pc[] = [];
   for (const view of ["v_pc_avulsos", "v_pc_pcs"] as const) {
-    const { data, error } = await svcAppr.from(view)
+    const { data, error } = await selectPaginado<Omit<Pc, "__fonte">>(() => svcAppr.from(view)
       .select("empresa, pc_numero, nome_fornecedor, contato_fornecedor, projeto_nome, codigo_projeto, valor_total, aprovado_em, _dt_inclusao_d, pv_cliente_codigo, pv_cliente_nome, status")
       .eq("status", "APROVADO")
       .or(rangeFilter)
-      .limit(2000);
+      .order("aprovado_em", { ascending: true }));
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
     const batch = (data ?? []) as Omit<Pc, "__fonte">[];
     for (const b of batch) allPcs.push({ ...b, __fonte: view === "v_pc_avulsos" ? "avulsos" : "pcs" });

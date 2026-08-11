@@ -2,6 +2,7 @@
 // Pipeline (CRM) e Operações (App WW) têm endpoints próprios pra evitar
 // estourar timeout do Vercel quando algum deles está offline.
 import { NextResponse } from "next/server";
+import { selectPaginado } from "@/lib/supabase-paginado";
 import { requireOwner } from "../_guard";
 import { supaAdmin } from "@/lib/supabase-admin";
 
@@ -41,19 +42,28 @@ export async function GET(req: Request) {
     { data: pv, error: pvErr },
     { data: pcs, error: pcsErr },
   ] = await Promise.all([
-    admin.schema("finance" as never).from("contas_receber")
+    // Paginado: .limit(20000) NÃO vence o cap de 1000 do PostgREST — contas_receber
+    // tem 3.030 linhas em 12 meses e chegavam 1.000, então os KPIs desta tela
+    // saíam de um terço do contas a receber. Ver lib/supabase-paginado.ts.
+    selectPaginado<{ data_vencimento?: string | null; valor_documento?: number | null;
+                     status_titulo?: string | null; codigo_cliente_fornecedor?: number | null;
+                     codigo_projeto?: string | null }>(
+      () => admin.schema("finance" as never).from("contas_receber")
       .select("data_vencimento, valor_documento, status_titulo, codigo_cliente_fornecedor, codigo_projeto")
       .gte("synced_at", fromIso)
-      .limit(20000),
-    admin.schema("sales" as never).from("pedidos_venda")
+      .order("data_vencimento", { ascending: true })),
+    selectPaginado<Record<string, unknown>>(
+      () => admin.schema("sales" as never).from("pedidos_venda")
       .select("data_previsao, valor_total, etapa, codigo_cliente, codigo_projeto, d_inc")
       .gte("synced_at", fromIso)
-      .limit(20000),
-    admin.schema("approval" as never).from("approvals")
+      .order("d_inc", { ascending: true })),
+    selectPaginado<{ aprovado_em?: string | null; valor_aprovado?: number | null;
+                     empresa?: string | null; pv_os_label?: string | null }>(
+      () => admin.schema("approval" as never).from("approvals")
       .select("empresa, ncod_ped, status, valor_aprovado, aprovado_em, pv_os_label")
       .eq("status", "APROVADO")
       .gte("aprovado_em", fromIso)
-      .limit(20000),
+      .order("aprovado_em", { ascending: true })),
   ]);
 
   if (crErr || pvErr || pcsErr) {
@@ -111,12 +121,15 @@ export async function GET(req: Request) {
   }
 
   // Top 10 fornecedores e categorias via v_pc_completo_enriched (já tem nome resolvido)
-  const { data: pcEnriched } = await admin
+  const { data: pcEnriched } = await selectPaginado<{
+    nome_fornecedor?: string | null; codigo_categoria?: string | null;
+    projeto_nome?: string | null; valor_total?: number | null;
+  }>(() => admin
     .schema("approval" as never).from("v_pc_completo_enriched")
     .select("nome_fornecedor, codigo_categoria, projeto_nome, valor_total, status, aprovado_em")
     .eq("status", "APROVADO")
     .gte("aprovado_em", fromIso)
-    .limit(10000);
+    .order("aprovado_em", { ascending: true }));
 
   const fornAgg = new Map<string, number>();
   const catAgg = new Map<string, number>();

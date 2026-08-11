@@ -1,5 +1,6 @@
 // Pipeline CRM (Supabase externo via CRM_SUPABASE_URL).
 import { NextResponse } from "next/server";
+import { selectPaginado } from "@/lib/supabase-paginado";
 import { requireOwner } from "../_guard";
 import { crmClient, CRM_EMPRESA_ID } from "@/lib/owner-clients";
 
@@ -31,12 +32,12 @@ export async function GET(req: Request) {
   const periodo = (url.searchParams.get("periodo") ?? "12m") as Periodo;
   const fromIso = periodoStart(periodo).toISOString();
 
-  const { data, error } = await crm
+  const { data, error } = await selectPaginado(() => crm
     .from("propostas")
     .select("numero, tipo, status, valor, probabilidade, prev_fechamento, fase_doc, empresa_nome, projeto, responsavel, owner, updated_at, cliente_id")
     .eq("empresa_id", CRM_EMPRESA_ID)
     .gte("updated_at", fromIso)
-    .limit(2000);
+    .order("updated_at", { ascending: true }));
 
   if (error) return NextResponse.json({ configured: true, error: error.message }, { status: 500 });
 
@@ -62,12 +63,12 @@ export async function GET(req: Request) {
 
   // Taxa conversão últimos 90d
   const d90 = new Date(Date.now() - 90 * 86_400_000).toISOString();
-  const { data: ultimos } = await crm
+  const { data: ultimos } = await selectPaginado(() => crm
     .from("propostas")
     .select("status, updated_at")
     .eq("empresa_id", CRM_EMPRESA_ID)
     .gte("updated_at", d90)
-    .limit(1000);
+    .order("updated_at", { ascending: true }));
   const aprovadas = (ultimos ?? []).filter((p) => /APROVADA|GANHA/i.test(String((p as { status?: string }).status ?? ""))).length;
   const perdidas = (ultimos ?? []).filter((p) => /PERDIDA|CANCELADA/i.test(String((p as { status?: string }).status ?? ""))).length;
   const taxa_conversao = (aprovadas + perdidas) > 0 ? (aprovadas / (aprovadas + perdidas)) * 100 : 0;

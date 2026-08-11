@@ -1,5 +1,6 @@
 // Operações (App WW field service) — Supabase externo via WW_SUPABASE_URL.
 import { NextResponse } from "next/server";
+import { selectPaginado } from "@/lib/supabase-paginado";
 import { requireOwner } from "../_guard";
 import { wwClient } from "@/lib/owner-clients";
 
@@ -32,14 +33,15 @@ export async function GET(req: Request) {
   const fromIso = periodoStart(periodo).toISOString();
 
   const [{ data: oss, error: ossErr }, { data: expenses, error: expErr }] = await Promise.all([
-    ww.from("service_orders")
+    // .limit(5000) não vence o cap de 1000 do PostgREST — ver lib/supabase-paginado.ts.
+    selectPaginado(() => ww.from("service_orders")
       .select("id, status, service_type, created_at, checkin_at, checkout_at, customer_id, lider_id")
       .gte("created_at", fromIso)
-      .limit(5000),
-    ww.from("expenses")
+      .order("created_at", { ascending: true })),
+    selectPaginado(() => ww.from("expenses")
       .select("id, valor, data, tipo_despesa, employee_id, aprovada")
       .gte("data", fromIso.slice(0, 10))
-      .limit(5000),
+      .order("data", { ascending: true })),
   ]);
   if (ossErr || expErr) {
     return NextResponse.json({
