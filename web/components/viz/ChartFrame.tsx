@@ -35,6 +35,14 @@ export type SeriesDef = {
   slot: number;
   /** Marca na legenda: linha pra série de linha, retângulo pra barra/área. */
   mark?: "rect" | "line";
+  /** Preenchimento do mark. "vazada" = mesma cor, translúcida e contornada.
+   *
+   *  Serve pro caso "mesma medida em dois estados" — previsto × realizado,
+   *  meta × atingido. Aí a COR tem que continuar dizendo de que medida se
+   *  trata, e o estado vira outro canal. Dar uma quarta cor ao segundo estado
+   *  quebra a regra de que cor segue a entidade: o leitor passa a procurar
+   *  quatro coisas onde existem duas. */
+  variante?: "solida" | "vazada";
 };
 
 export default function ChartFrame({
@@ -126,8 +134,18 @@ export default function ChartFrame({
                     <span aria-hidden className="inline-block w-3.5 h-0.5 rounded-full transition-opacity"
                           style={{ background: seriesColor(s.slot, mode, tema), opacity: off ? 0.3 : 1 }} />
                   ) : (
+                    // A marca espelha o preenchimento real do gráfico: cheia pra
+                    // série sólida, contornada pra vazada. Sem isso o vazado na
+                    // legenda vira só "a mesma cor mais fraca", que se confunde
+                    // com o esmaecido de série desligada.
                     <span aria-hidden className="inline-block w-2.5 h-2.5 rounded-sm transition-opacity"
-                          style={{ background: seriesColor(s.slot, mode, tema), opacity: off ? 0.3 : 1 }} />
+                          style={{
+                            background: seriesColor(s.slot, mode, tema),
+                            opacity: off ? 0.3 : (s.variante === "vazada" ? 0.28 : 1),
+                            border: s.variante === "vazada"
+                              ? `1.5px solid ${seriesColor(s.slot, mode, tema)}` : undefined,
+                            boxSizing: "border-box",
+                          }} />
                   )}
                   {s.label}
                 </button>

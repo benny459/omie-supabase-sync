@@ -50,6 +50,7 @@ export default function VizBar({
 
   // Total por coluna, calculado uma vez. O LabelList do recharts só enxerga o
   // valor da própria série, então a soma da pilha tem que vir de fora.
+  const vazada = (s: SeriesDef) => s.variante === "vazada";
   const mostraTotal = totalNoTopo && stacked && !horizontal;
   const totais = mostraTotal
     ? rows.map((r) => series.reduce((s, d) => s + (Number(r[d.key]) || 0), 0))
@@ -154,18 +155,26 @@ export default function VizBar({
               dataKey={s.key}
               name={s.label}
               stackId={stacked ? "s" : undefined}
-              fill={`url(#${gradId(s.slot, mode, horizontal ? "h" : "v", tema)})`}
+              fill={vazada(s)
+                ? seriesColor(s.slot, mode, tema)
+                : `url(#${gradId(s.slot, mode, horizontal ? "h" : "v", tema)})`}
+              fillOpacity={vazada(s) ? 0.28 : 1}
               filter={`url(#${shadowId(mode)})`}
               radius={radius}
-              // 2px de superfície entre fatias empilhadas
-              stroke={stacked ? c.surface : undefined}
-              strokeWidth={stacked ? 2 : 0}
+              // Empilhada precisa de 2px de SUPERFÍCIE entre fatias; vazada
+              // precisa do contorno na própria cor. Empilhar vence: a separação
+              // é estrutural, sem ela as fatias grudam.
+              stroke={stacked ? c.surface : vazada(s) ? seriesColor(s.slot, mode, tema) : undefined}
+              strokeWidth={stacked ? 2 : vazada(s) ? 1.5 : 0}
               isAnimationActive={false}
             >
               {/* Cor por ENTIDADE: um Cell por row garante que reordenar/filtrar
                   não repinta quem sobrou. */}
               {rows.map((_, ri) => (
-                <Cell key={ri} fill={`url(#${gradId(s.slot, mode, horizontal ? "h" : "v", tema)})`} />
+                <Cell key={ri}
+                      fill={vazada(s)
+                        ? seriesColor(s.slot, mode, tema)
+                        : `url(#${gradId(s.slot, mode, horizontal ? "h" : "v", tema)})`} />
               ))}
               {/* Total da pilha, na ÚLTIMA série: é a que fecha a coluna, então
                   o rótulo pousa no topo. Em tinta de texto, nunca na cor da

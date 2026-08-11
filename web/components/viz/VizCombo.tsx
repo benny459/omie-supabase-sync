@@ -83,10 +83,20 @@ export default function VizCombo({
           labelStyle={{ color: c.inkMuted, fontSize: 10.5, marginBottom: 2 }}
           formatter={(v, name) => [indexado ? `${fmt(Number(v))} (base 100)` : fmt(Number(v)), String(name)]}
         />
-        {bars.map((s) => (
-          <Bar key={s.key} dataKey={s.key} name={s.label}
-               fill={seriesColor(s.slot, vizMode, tema)} radius={[4, 4, 0, 0]} isAnimationActive={false} />
-        ))}
+        {bars.map((s) => {
+          const cor = seriesColor(s.slot, vizMode, tema);
+          const vazada = s.variante === "vazada";
+          return (
+            <Bar key={s.key} dataKey={s.key} name={s.label}
+                 // Vazada: mesma cor com pouca opacidade e contorno cheio. O hue
+                 // segue dizendo a medida; a densidade diz o estado.
+                 fill={cor}
+                 fillOpacity={vazada ? 0.28 : 1}
+                 stroke={vazada ? cor : undefined}
+                 strokeWidth={vazada ? 1.5 : 0}
+                 radius={[4, 4, 0, 0]} isAnimationActive={false} />
+          );
+        })}
         {lines.map((s) => (
           <Line key={s.key} dataKey={s.key} name={s.label}
                 stroke={seriesColor(s.slot, vizMode, tema)} strokeWidth={2} dot={false}

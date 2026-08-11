@@ -404,11 +404,29 @@ export default function FluxoCaixaView() {
     "Saída realizada":   Number(m.saida_realizada),
     "Resultado realizado": Number(m.resultado_realizado),
   }));
+  // Duas medidas, dois estados — não quatro coisas.
+  //
+  // Antes cada uma das quatro séries tinha um hue próprio (verde, amarelo, lima,
+  // verde-azulado). O leitor precisava decorar quatro cores sem relação com o
+  // significado, e entrada não se distinguia de saída pela cor.
+  //
+  // Agora o HUE diz a medida — verde entra, vermelho sai, os mesmos do fluxo
+  // diário — e o PREENCHIMENTO diz o estado: vazado é previsto, sólido é
+  // realizado. Lê-se "quanto do previsto virou realizado" comparando a barra
+  // cheia com a vazada ao lado, que é a pergunta do gráfico.
+  //
+  // Sobre o par verde↔vermelho: ele mede CVD ΔE 3.3, muito abaixo do gate de 8 —
+  // é o par que o daltônico não separa. Fica assim de propósito, porque a
+  // codificação secundária aqui é estrutural e não depende de cor nenhuma:
+  // entrada cresce PRA CIMA do zero e saída PRA BAIXO. Em visão normal os dois
+  // medem ΔE 25.3, então a convenção contábil se mantém para quem enxerga cor.
+  // Trocar por dois hues distinguíveis (azul/laranja) passaria no validador e
+  // perderia a leitura imediata de "entra/sai", que é o que se lê primeiro.
   const mensalBarras: SeriesDef[] = [
-    { key: "Entrada prevista",  label: "Entrada prevista",  slot: 5, mark: "rect" },
-    { key: "Entrada realizada", label: "Entrada realizada", slot: 2, mark: "rect" },
-    { key: "Saída prevista",    label: "Saída prevista",    slot: 7, mark: "rect" },
-    { key: "Saída realizada",   label: "Saída realizada",   slot: 1, mark: "rect" },
+    { key: "Entrada prevista",  label: "Entrada prevista",  slot: 5, mark: "rect", variante: "vazada" },
+    { key: "Entrada realizada", label: "Entrada realizada", slot: 5, mark: "rect" },
+    { key: "Saída prevista",    label: "Saída prevista",    slot: 3, mark: "rect", variante: "vazada" },
+    { key: "Saída realizada",   label: "Saída realizada",   slot: 3, mark: "rect" },
   ];
   const mensalLinha: SeriesDef[] = [
     { key: "Resultado realizado", label: "Resultado realizado", slot: 0, mark: "line" },
