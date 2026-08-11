@@ -56,7 +56,10 @@ export async function GET(req: Request) {
                            p_base_data: base, p_limit: 1200 }),
     // Faixas e horizonte de calendário NÃO recebem período: dívida vencida não
     // some porque o usuário escolheu "ano até hoje" no filtro de cima.
-    adm.rpc("ap_faixas", { p_natureza: "P", p_empresas: empresas, p_base_data: base }),
+    // Cortes: atraso até 120 dias, futuro até 12 meses. O que passa disso volta
+    // no lado "Além do corte" — a tela informa, não esconde.
+    adm.rpc("ap_faixas", { p_natureza: "P", p_empresas: empresas, p_base_data: base,
+                           p_atraso_max: 120, p_futuro_max: 365 }),
     adm.rpc("ap_horizonte_mes", { p_empresas: empresas, p_base_data: base }),
   ]);
 

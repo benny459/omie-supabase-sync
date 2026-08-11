@@ -110,7 +110,7 @@ export default function ContasPagarView() {
   // e o número perde o sentido de "onde devo focar".
   const [base, setBase] = useState<"previsao" | "vencimento">("vencimento");
   /** Recorte da lista única: tudo, só o vencido ou só o que está por vir. */
-  const [lado, setLado] = useState<"todos" | "Vencido" | "A vencer">("todos");
+  const [lado, setLado] = useState<"todos" | "Vencido" | "hoje" | "A vencer">("todos");
   const [data, setData] = useState<Payload | null>(null);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
@@ -145,12 +145,17 @@ export default function ContasPagarView() {
       .sort((a, b) => a.ord - b.ord)
       .map((f) => ({ x: f.faixa, valor: Number(f.valor) || 0, qtd: f.qtd }));
 
+  const foraDoCorte = (data?.faixas ?? []).filter((f) => f.lado === "Além do corte");
   const vencidoRows = faixasDe("Vencido");
   const vencidoSeries: SeriesDef[] = [{ key: "valor", label: "Vencido", slot: 3, mark: "rect" }];
   const aVencerRows = faixasDe("A vencer");
   const aVencerSeries: SeriesDef[] = [{ key: "valor", label: "A vencer", slot: 0, mark: "rect" }];
 
-  const agendaFiltrada = (data?.agenda ?? []).filter((r) => lado === "todos" || r.lado === lado);
+  const hojeIso = new Date().toISOString().slice(0, 10);
+  const agendaFiltrada = (data?.agenda ?? []).filter((r) =>
+    lado === "todos" ? true
+    : lado === "hoje" ? (r.previsao ?? "").slice(0, 10) === hojeIso
+    : r.lado === lado);
 
   const mensalSeries: SeriesDef[] = [
     { key: "emitido", label: "Emitido", slot: 0, mark: "line" },
@@ -227,10 +232,24 @@ export default function ContasPagarView() {
           quando vence o que ainda não venceu.
           Nenhuma das duas respeita o filtro de período do topo: dívida vencida
           não deixa de existir porque a tela está em "ano até hoje". */}
+      {foraDoCorte.length > 0 && (
+        <p className="text-[11px] text-ww-textMuted bg-ww-rowHover border border-ww-border rounded-md px-2 py-1.5">
+          Fora dos dois gráficos abaixo:{" "}
+          {foraDoCorte.map((f, i) => (
+            <span key={f.faixa}>
+              {i > 0 && " · "}
+              <strong>{brl(Number(f.valor))}</strong> {f.faixa.toLowerCase()} ({f.qtd} títulos)
+            </span>
+          ))}
+          . Ficam de fora porque a escala deles esconde tudo o que é acionável — seguem na lista
+          abaixo.
+        </p>
+      )}
+
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <ChartFrame
           title="Vencido — por tempo de atraso"
-          subtitle={`Referência: ${base === "previsao" ? "previsão" : "vencimento"} · sem filtro de período`}
+          subtitle={`Até 120 dias de atraso · referência: ${base === "previsao" ? "previsão" : "vencimento"} · sem filtro de período`}
           series={vencidoSeries} rows={vencidoRows}
           valueFormat={(v) => brl(Number(v) || 0)} loading={loading} height={260}
         >
@@ -239,7 +258,7 @@ export default function ContasPagarView() {
 
         <ChartFrame
           title="A vencer — por horizonte"
-          subtitle="Todo o previsto, inclusive parcelas de anos à frente"
+          subtitle="Até 12 meses à frente — o que passa disso está no aviso acima"
           series={aVencerSeries} rows={aVencerRows}
           valueFormat={(v) => brl(Number(v) || 0)} loading={loading} height={260}
         >
@@ -277,7 +296,8 @@ export default function ContasPagarView() {
           vencida é a primeira coisa dessa decisão. */}
       <div className="flex items-center gap-1 justify-end -mb-1">
         <span className="text-[11px] text-ww-textMuted mr-1">Mostrar</span>
-        {([["todos", "Tudo"], ["Vencido", "Só vencido"], ["A vencer", "Só a vencer"]] as const)
+        {([["todos", "Tudo"], ["Vencido", "Só vencido"], ["hoje", "Vence hoje"],
+           ["A vencer", "Só a vencer"]] as const)
           .map(([k, l]) => (
           <button key={k} type="button" onClick={() => setLado(k)}
             className={`px-2 py-0.5 text-[11px] rounded border transition ${
