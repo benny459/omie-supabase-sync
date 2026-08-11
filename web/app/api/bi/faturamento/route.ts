@@ -16,6 +16,7 @@ import { supaServer } from "@/lib/supabase-server";
 import { canViewArea } from "@/lib/permissions";
 import { loadPerms } from "@/lib/require-area";
 import { createClient } from "@supabase/supabase-js";
+import { rpcPaginado } from "@/lib/rpc-paginado";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -57,7 +58,10 @@ export async function GET(req: Request) {
     adm.rpc("fat_prazos", args),
     adm.rpc("fat_top", { ...args, p_dim: dim, p_limit: 20 }),
     // Detalhe fundido: a NF e o título que ela gerou na mesma linha.
-    adm.rpc("faturamento_com_titulo", { ...args, p_situacoes: situacoes, p_por_parcela: porParcela, p_limit: 1500 }),
+    // Paginado: no grão parcela a lista passa de 1000 linhas com facilidade, e o
+    // PostgREST corta aí sem avisar. Ver lib/rpc-paginado.ts.
+    rpcPaginado(adm, "faturamento_com_titulo",
+                { ...args, p_situacoes: situacoes, p_por_parcela: porParcela, p_limit: 6000 }),
     adm.rpc("fat_coorte", args),
     // Sem recorte de período: o que está aberto está aberto, tenha nascido neste
     // mês ou em 2020 — filtrar por data aqui esconderia o mais velho.

@@ -9,9 +9,11 @@ import { supaServer } from "@/lib/supabase-server";
 import { canViewArea } from "@/lib/permissions";
 import { loadPerms } from "@/lib/require-area";
 import { createClient } from "@supabase/supabase-js";
+import { rpcPaginado } from "@/lib/rpc-paginado";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
+
 
 export async function GET(req: Request) {
   const supa = await supaServer();
@@ -52,8 +54,8 @@ export async function GET(req: Request) {
     // Agenda compra→venda→pagamento (card 56). Usa o mesmo horizonte já
     // escolhido na tela — um segundo seletor de janela só confundiria.
     // Agenda ÚNICA: absorve o antigo "detalhe de títulos" e inclui os vencidos.
-    adm.rpc("ap_agenda", { p_dias: horizonte, p_empresas: empresas,
-                           p_base_data: base, p_limit: 1200 }),
+    rpcPaginado(adm, "ap_agenda", { p_dias: horizonte, p_empresas: empresas,
+                                    p_base_data: base, p_limit: 6000 }),
     // Faixas e horizonte de calendário NÃO recebem período: dívida vencida não
     // some porque o usuário escolheu "ano até hoje" no filtro de cima.
     // Cortes: atraso até 120 dias, futuro até 12 meses. O que passa disso volta
