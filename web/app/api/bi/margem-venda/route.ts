@@ -1,7 +1,13 @@
 // GET /api/bi/margem-venda?from=&to=&cat=Avulsos&base=emissao|faturamento&tipo=&faixa=
 //
-// Monitor de margem por venda: cada NF confrontada com o custo de compra ligado
-// àquele PV/OS pela cadeia de aprovação.
+// Monitor de margem por venda: cada NF confrontada com o custo de compra do seu
+// PV/OS.
+//
+// A população é o MÓDULO de avulsos (sales.mv_pc_avulsos), não a categoria de
+// venda do Omie. Tudo que passa pelo fluxo de avulsos é avulso, qualquer que
+// seja a categoria da nota: dos 392 PV/OS de 2026, só 76 são da categoria
+// "Avulsos" — o resto é Revenda (171), Contratuais (99), Projetos e BOT/SW.
+// Filtrar por categoria jogava fora 282 vendas que a operação considera avulsas.
 //
 // Faixas: Negativa · 0–15% · 15–25% · 25–35% · > 35%. Os rótulos vêm de
 // lib/margem.ts e são os mesmos da tela /avulsos — uma régua só.
@@ -48,7 +54,10 @@ export async function GET(req: Request) {
   const url = new URL(req.url);
   const from = url.searchParams.get("from");
   const to   = url.searchParams.get("to");
-  const catRaw = (url.searchParams.get("cat") ?? "Avulsos").trim();
+  // Sem "cat" = TODAS as categorias do módulo. O default não pode ser
+  // "Avulsos": essa é a categoria de venda do Omie, e a tela mede o PROCESSO
+  // de avulsos — onde Revenda e Contratuais também entram.
+  const catRaw = (url.searchParams.get("cat") ?? "").trim();
   const cat = catRaw ? catRaw.split(",").map((s) => s.trim()).filter(Boolean) : null;
   // Whitelist: o valor vai direto pro CASE do SQL.
   const base = url.searchParams.get("base") === "emissao" ? "emissao" : "faturamento";

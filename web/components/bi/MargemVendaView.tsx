@@ -102,7 +102,9 @@ const COLS: Col<Linha>[] = [
 
 export default function MargemVendaView() {
   const [range, setRange] = useState<DateRange>(() => ({ ...resolvePreset("ytd"), preset: "ytd" }));
-  const [cats, setCats] = useState<Set<string>>(() => new Set(["Avulsos"]));
+  // Vazio = todas as categorias do módulo. Ver o comentário da rota: a tela
+  // mede o processo de avulsos, e Revenda/Contratuais também passam por ele.
+  const [cats, setCats] = useState<Set<string>>(() => new Set());
   const [faixaSel, setFaixaSel] = useState<string | null>(null);
   /** Eixo do tempo: emissão do PV/OS (ciclo comercial) ou data da NF. */
   const [base, setBase] = useState<"emissao" | "faturamento">("emissao");
@@ -115,7 +117,7 @@ export default function MargemVendaView() {
     setLoading(true);
     try {
       const qs = new URLSearchParams({ from: range.from, to: range.to });
-      qs.set("cat", Array.from(cats).join(",") || "Avulsos");
+      if (cats.size) qs.set("cat", Array.from(cats).join(","));
       qs.set("base", base);
       const r = await fetch(`/api/bi/margem-venda?${qs}`, { cache: "no-store" });
       const j = (await r.json()) as Payload;
@@ -196,7 +198,7 @@ export default function MargemVendaView() {
       <VizFilters
         range={range} onRangeChange={setRange} dims={dims}
         onDimChange={(k, sel) =>
-          k === "cat" ? setCats(sel.size ? sel : new Set(["Avulsos"])) : setTiposSel(sel)}
+          k === "cat" ? setCats(sel) : setTiposSel(sel)}
         right={
           <div className="flex items-center gap-1 text-[11px]">
             <span className="text-ww-textMuted">Data por</span>
