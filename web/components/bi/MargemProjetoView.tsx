@@ -16,12 +16,20 @@ const EMPRESAS = ["SF", "CD", "WW"];
 const brl = (v: number) =>
   v.toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 });
 
-type Proj = { projeto: string; receita: number; custo: number; margem: number; margem_pct: number | null };
+type Proj = {
+  projeto: string; receita: number; custo: number; margem: number;
+  margem_pct: number | null; tem_custo: boolean;
+};
 type Payload = {
   margem_total: number;
-  projetos: Proj[];
+  projetos: Proj[];          // só quem tem custo vinculado — os gráficos vivem daqui
   prejuizo: Proj[];
   total_projetos: number;
+  sem_custo: { projetos: Proj[]; total: number; receita: number };
+  cobertura: {
+    titulos: number; titulos_com_projeto: number;
+    valor: number; valor_com_projeto: number; pct_valor: number | null;
+  } | null;
 };
 
 export default function MargemProjetoView() {
@@ -61,6 +69,11 @@ export default function MargemProjetoView() {
   const rankRows = (data?.projetos ?? []).slice(0, 15).map((p) => ({ x: p.projeto, margem: p.margem }));
   const rankSeries: SeriesDef[] = [{ key: "margem", label: "Margem", slot: 0, mark: "rect" }];
 
+  // Slot 3 (âmbar) e não o verde da margem: é alerta de cadastro, não resultado.
+  const semCustoRows = (data?.sem_custo.projetos ?? []).slice(0, 15)
+    .map((p) => ({ x: p.projeto, receita: p.receita }));
+  const semCustoSeries: SeriesDef[] = [{ key: "receita", label: "Receita sem custo", slot: 3, mark: "rect" }];
+
   const tabSeries: SeriesDef[] = [
     { key: "receita", label: "Receita", slot: 0, mark: "rect" },
     { key: "custo",   label: "Custo",   slot: 1, mark: "rect" },
@@ -88,15 +101,38 @@ export default function MargemProjetoView() {
         </div>
       )}
 
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      {/* O aviso vem ANTES dos números. Com 30% de cobertura, ler a margem por
+          projeto sem saber disso é pior do que não ler. */}
+      {data && data.sem_custo.total > 0 && (
+        <div className="p-3 rounded-lg border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/40 text-[12px] text-amber-900 dark:text-amber-100">
+          <strong>{data.sem_custo.total} projetos sem custo vinculado</strong>
+          {" "}({brl(data.sem_custo.receita)} de receita) estão fora dos gráficos abaixo.
+          {data.cobertura?.pct_valor != null && (
+            <> Apenas <strong>{data.cobertura.pct_valor.toString().replace(".", ",")}%</strong> do
+            valor a pagar do período carrega código de projeto
+            {" "}({brl(data.cobertura.valor_com_projeto)} de {brl(data.cobertura.valor)}).</>
+          )}
+          {" "}Sem título a pagar apontando pro projeto, a margem dele seria a receita
+          inteira — resultado de cadastro faltando, não de lucro.
+        </div>
+      )}
+
+      <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
         <StatTile
           label={media ? "Margem — média mensal" : "Margem total no período"}
           value={data ? brl(data.margem_total) : "—"}
-          hint="Receita (itens vendidos + OS faturadas) − títulos a pagar"
+          hint="Receita (itens vendidos + OS faturadas) − títulos a pagar, no total da empresa"
         />
         <StatTile
-          label="Projetos com receita"
+          label="Projetos com custo vinculado"
           value={data ? String(data.total_projetos) : "—"}
+          hint="os únicos em que a margem é calculável"
+        />
+        <StatTile
+          label="Sem custo vinculado"
+          value={data ? String(data.sem_custo.total) : "—"}
+          hint={data ? `${brl(data.sem_custo.receita)} de receita sem contrapartida` : undefined}
+          higherIsBetter={false}
         />
         <StatTile
           label="Projetos no prejuízo"
@@ -108,7 +144,7 @@ export default function MargemProjetoView() {
 
       <ChartFrame
         title="Margem por projeto — 15 maiores"
-        subtitle="Barra horizontal porque nome de projeto é longo. A lista completa está na tabela."
+        subtitle="Só projetos com custo vinculado. Barra horizontal porque nome de projeto é longo; a lista completa está na tabela."
         series={rankSeries}
         rows={rankRows}
         valueFormat={(v) => brl(Number(v) || 0)}
@@ -120,7 +156,7 @@ export default function MargemProjetoView() {
 
       <ChartFrame
         title="Receita, custo e margem por projeto"
-        subtitle={`${data?.projetos.length ?? 0} projetos no período`}
+        subtitle={`${data?.projetos.length ?? 0} projetos com custo vinculado`}
         series={tabSeries}
         rows={(data?.projetos ?? []).map((p) => ({ x: p.projeto, ...p }))}
         valueFormat={(v) => brl(Number(v) || 0)}
@@ -134,6 +170,22 @@ export default function MargemProjetoView() {
           valueFormat={(v) => brl(v)}
         />
       </ChartFrame>
+
+      {/* A lista acionável: onde ligar custo renderia mais informação. Ordenada
+          por receita, porque é ali que a margem desconhecida custa mais caro. */}
+      {data && data.sem_custo.total > 0 && (
+        <ChartFrame
+          title="Projetos sem custo vinculado — 15 maiores por receita"
+          subtitle="Receita sem nenhum título a pagar apontando pro projeto. Não é margem: é margem desconhecida."
+          series={semCustoSeries}
+          rows={semCustoRows}
+          valueFormat={(v) => brl(Number(v) || 0)}
+          loading={loading}
+          height={360}
+        >
+          <VizBar rows={semCustoRows} series={semCustoSeries} layout="row" valueFormat={(v) => brl(v)} />
+        </ChartFrame>
+      )}
     </div>
   );
 }

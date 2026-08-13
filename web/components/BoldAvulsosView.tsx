@@ -11,6 +11,7 @@ import {
   isServicoConcluido, servicoConcluidoEm,
   type AlarmKind,
 } from "@/lib/alarmes";
+import { FAIXAS_MARGEM, faixaDeValores, type FaixaMargem } from "@/lib/margem";
 import { useUserPerms } from "./UserPermsProvider";
 import { canApprove, canEdit, canReleasePv, canViewValues, canViewMargin, type BlockKey } from "@/lib/permissions";
 import EditableCell from "./EditableCell";
@@ -118,41 +119,10 @@ const DATE_RANGE_LABELS: Record<DateRangeKind, string> = {
   custom: "Personalizado",
 };
 
-// Faixas de margem bruta, iguais às do monitor de Margem por Venda. A régua é
-// uma só: se mudar aqui, muda lá — foi duplicar regra que já fez telas
-// divergirem neste projeto.
-// Ordem = gravidade, não tamanho. O que dói fica no topo do card, onde o olho
-// cai primeiro; as duas faixas neutras caem pro "ver todos".
-const FAIXAS_MARGEM = [
-  "Negativa", "Sem custo lançado", "0–15%", "15–25%", "25–35%", "> 35%",
-  "Serviço (sem compra)", "Sem PV",
-] as const;
-type FaixaMargem = typeof FAIXAS_MARGEM[number];
-
-/** Faixa de margem bruta = (PV − PC) / PV.
- *
- *  Só existe margem quando há PV e há custo medido. Sem PC lançado a conta daria
- *  100%, o que empurraria a venda pra "> 35%" e esconderia justamente o caso que
- *  interessa vigiar — foi o que fez 387 de 398 vendas aparecerem como margem alta.
- *
- *  `exigeCusto` vem da regra do negócio: em avulsos só se aprova compra do que é
- *  Mix ou Mercantil. Serviço puro não gera pedido de compra, então não ter custo
- *  nele é o esperado e não pode virar alarme — vira faixa neutra. Tipo
- *  desconhecido conta como exigente: o silencioso é o que esconde problema. */
-function faixaDeValores(pv: number, pc: number, exigeCusto: boolean): FaixaMargem {
-  if (!(pv > 0)) return "Sem PV";
-  if (!(pc > 0)) return exigeCusto ? "Sem custo lançado" : "Serviço (sem compra)";
-  const pct = ((pv - pc) / pv) * 100;
-  if (pct < 0)  return "Negativa";
-  if (pct < 15) return "0–15%";
-  if (pct < 25) return "15–25%";
-  if (pct < 35) return "25–35%";
-  return "> 35%";
-}
-
 /** PV e PC são propriedades do PV/OS, repetidas em todas as linhas dele — então
  *  classificar por linha nunca parte um PV ao meio, e a margem pode filtrar no
- *  mesmo nível das outras facetas. */
+ *  mesmo nível das outras facetas. A régua vive em lib/margem.ts, compartilhada
+ *  com /bi/margem-venda e com a função SQL que alimenta aquela tela. */
 function faixaDaRow(r: AnyRow): FaixaMargem {
   return faixaDeValores(
     Number(r.pv_valor_total) || 0,
@@ -1188,6 +1158,12 @@ export default function BoldAvulsosView({
   // Estratégia coerente com BucketTotals: soma RC/PC/PV únicos por PV/OS.
   const grandTotal = useMemo(() => {
     let rc = 0, pc = 0, pv = 0;
+    // M.B. do visível: só entra na conta o PV/OS que TEM custo lançado. Somar
+    // PV sem PC e dividir daria a margem inflada de sempre (74% no ano inteiro,
+    // porque Serviço e compras não lançadas contam como custo zero). `pvMedido`
+    // guarda o quanto do PV visível está de fato coberto — sem esse número a
+    // porcentagem não é auditável.
+    let pvMedido = 0, pcMedido = 0, pvosMedidos = 0, pvosTotal = 0;
     if (modulo === "pcs") {
       // PCs Standalone: 1 row = 1 PC. Sem RC nem PV próprios.
       for (const r of filtered) pc += Number(r.valor_total ?? 0);
@@ -1197,12 +1173,19 @@ export default function BoldAvulsosView({
         const k = String(r.pv_os_label ?? "—");
         if (seen.has(k)) continue;
         seen.add(k);
+        const rPv = Number(r.pv_valor_total ?? 0);
+        const rPc = Number(r.pc_custo_total_calc ?? 0);
         rc += Number(r.rc_custo_total_calc ?? 0);
-        pc += Number(r.pc_custo_total_calc ?? 0);
-        pv += Number(r.pv_valor_total ?? 0);
+        pc += rPc;
+        pv += rPv;
+        pvosTotal += 1;
+        if (rPv > 0 && rPc > 0) { pvMedido += rPv; pcMedido += rPc; pvosMedidos += 1; }
       }
     }
-    return { rc, pc, pv };
+    return {
+      rc, pc, pv, pvMedido, pcMedido, pvosMedidos, pvosTotal,
+      mb: pvMedido > 0 ? (pvMedido - pcMedido) / pvMedido : null,
+    };
   }, [filtered, modulo]);
 
   // Contagem de PV/OS únicos + valor R$ por grupo de etapa. Antes contava rows
@@ -4285,12 +4268,28 @@ function ServicoButton({
 function GrandTotalBar({
   grand, modulo, count, canViewValues = true,
 }: {
-  grand: { rc: number; pc: number; pv: number };
+  grand: {
+    rc: number; pc: number; pv: number;
+    pvMedido: number; pcMedido: number; pvosMedidos: number; pvosTotal: number;
+    mb: number | null;
+  };
   modulo: "avulsos" | "projetos" | "pcs";
   count: number;
   canViewValues?: boolean;
 }) {
   const showRcPv = modulo !== "pcs";
+  // Cobertura = quanto do PV visível tem custo lançado. É o que separa "margem
+  // de 30%" de "margem de 30% sobre um terço da venda".
+  const cobertura = grand.pv > 0 ? (grand.pvMedido / grand.pv) * 100 : 0;
+  const mbPct = grand.mb == null ? null : grand.mb * 100;
+  const tom =
+    mbPct == null ? "text-ww-textMuted"
+    : mbPct < 0   ? "text-rose-500"
+    : mbPct < 15  ? "text-rose-400"
+    : mbPct < 25  ? "text-amber-400"
+    : mbPct < 35  ? "text-amber-300"
+    :               "text-emerald-400";
+
   return (
     <div className="bg-ww-panel border-2 border-ww-borderStrong rounded-[12px] px-5 py-3 shadow-md">
       <div className="flex items-center gap-4 flex-wrap">
@@ -4308,6 +4307,33 @@ function GrandTotalBar({
           {showRcPv && <span className="h-6 w-px bg-ww-border" />}
           {showRcPv && <GrandTotalCell label="PV" value={grand.pv} canView={canViewValues} />}
         </div>
+
+        {/* M.B. da seleção — o número que responde "qual a margem deste cliente"
+            depois de digitar o nome dele na busca. Calculada só sobre PV/OS com
+            custo lançado, e a cobertura fica visível ao lado justamente pra
+            impedir a leitura errada quando a base medida é pequena. */}
+        {showRcPv && canViewValues && (
+          <>
+            <div className="h-9 w-px bg-ww-border" />
+            <div className="flex flex-col" title={
+              grand.mb == null
+                ? "Nenhum PV/OS visível tem custo lançado — sem custo não há margem a calcular."
+                : `M.B. = (PV − PC) / PV sobre ${grand.pvosMedidos} de ${grand.pvosTotal} PV/OS com custo lançado.\n`
+                  + `PV medido ${fmtBRL(grand.pvMedido)} · PC medido ${fmtBRL(grand.pcMedido)}\n`
+                  + `Os ${grand.pvosTotal - grand.pvosMedidos} PV/OS sem custo ficam fora: incluí-los daria margem de 100% neles.`
+            }>
+              <span className="text-[10px] uppercase tracking-[0.6px] font-bold text-ww-textMuted">M.B.</span>
+              <span className={`text-[17px] font-bold tabular-nums leading-none mt-0.5 ${tom}`}>
+                {mbPct == null ? "—" : `${mbPct.toFixed(1).replace(".", ",")}%`}
+              </span>
+              <span className="text-[9.5px] text-ww-textFaint mt-0.5 tabular-nums">
+                {grand.mb == null
+                  ? "sem custo lançado"
+                  : `sobre ${cobertura.toFixed(0)}% do PV · ${grand.pvosMedidos}/${grand.pvosTotal}`}
+              </span>
+            </div>
+          </>
+        )}
       </div>
     </div>
   );

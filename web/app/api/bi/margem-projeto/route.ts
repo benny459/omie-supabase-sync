@@ -43,34 +43,63 @@ export async function GET(req: Request) {
     { auth: { persistSession: false }, db: { schema: "bi" } },
   );
 
-  const [totalRes, projRes] = await Promise.all([
+  const [totalRes, projRes, cobRes] = await Promise.all([
     adm.rpc("margem_total", {
       p_from: from, p_to: to, p_empresas: empresas, p_media_mensal: media,
     }),
     adm.rpc("margem_por_projeto", { p_from: from, p_to: to, p_empresas: empresas }),
+    adm.rpc("cobertura_custo_projeto", { p_from: from, p_to: to, p_empresas: empresas }),
   ]);
 
   if (totalRes.error) return NextResponse.json({ error: `margem_total: ${totalRes.error.message}` }, { status: 500 });
   if (projRes.error)  return NextResponse.json({ error: `margem_por_projeto: ${projRes.error.message}` }, { status: 500 });
+  if (cobRes.error)   return NextResponse.json({ error: `cobertura_custo_projeto: ${cobRes.error.message}` }, { status: 500 });
 
-  type Proj = { projeto: string; receita: number; custo: number; margem: number; margem_pct: number | null };
-  const projetos = ((projRes.data ?? []) as Proj[]).map((p) => ({
+  type Proj = {
+    projeto: string; receita: number; custo: number; margem: number;
+    margem_pct: number | null; tem_custo: boolean;
+  };
+  const todos = ((projRes.data ?? []) as Proj[]).map((p) => ({
     projeto: p.projeto,
     receita: Number(p.receita) || 0,
     custo:   Number(p.custo)   || 0,
     margem:  Number(p.margem)  || 0,
     margem_pct: p.margem_pct == null ? null : Number(p.margem_pct),
+    tem_custo: !!p.tem_custo,
   }));
 
-  // A função já devolve por margem desc. Top 50 e prejuízo são recortes disso.
-  const top      = projetos.slice(0, 50);
-  const prejuizo = projetos.filter((p) => p.margem < 0).sort((a, b) => a.margem - b.margem).slice(0, 20);
+  // Projeto sem custo vinculado não entra em ranking de margem: sem custo, a
+  // "margem" é a receita inteira, e ele lidera o gráfico por falta de dado, não
+  // por resultado. Vai numa lista à parte, com o total que representa.
+  const comCusto = todos.filter((p) => p.tem_custo);
+  const semCusto = todos.filter((p) => !p.tem_custo)
+    .sort((a, b) => b.receita - a.receita);
+
+  const prejuizo = comCusto.filter((p) => p.margem < 0)
+    .sort((a, b) => a.margem - b.margem).slice(0, 20);
+
+  const cob = (cobRes.data ?? [])[0] as
+    | { titulos: number; titulos_com_projeto: number; valor: number; valor_com_projeto: number; pct_valor: number | null }
+    | undefined;
 
   return NextResponse.json({
     margem_total: Number(totalRes.data) || 0,
     media_mensal: media,
-    projetos: top,
+    projetos: comCusto.slice(0, 50),
     prejuizo,
-    total_projetos: projetos.length,
+    total_projetos: comCusto.length,
+    sem_custo: {
+      projetos: semCusto.slice(0, 50),
+      total: semCusto.length,
+      receita: semCusto.reduce((s, p) => s + p.receita, 0),
+    },
+    // Teto de confiança do número: quanto do custo do período sequer tem projeto.
+    cobertura: cob ? {
+      titulos: Number(cob.titulos) || 0,
+      titulos_com_projeto: Number(cob.titulos_com_projeto) || 0,
+      valor: Number(cob.valor) || 0,
+      valor_com_projeto: Number(cob.valor_com_projeto) || 0,
+      pct_valor: cob.pct_valor == null ? null : Number(cob.pct_valor),
+    } : null,
   });
 }

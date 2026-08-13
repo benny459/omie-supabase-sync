@@ -10,9 +10,9 @@
 // ── A regra do negócio que comanda o alarme ─────────────────────────────────
 // Em avulsos só se aprova compra do que é MIX ou MERCANTIL. Serviço puro não
 // gera pedido de compra, então não ter custo nele é o esperado — vira a faixa
-// neutra "Serviço (não gera compra)", fora do alarme.
+// neutra "Serviço (sem compra)", fora do alarme.
 //
-// O alarme de verdade é "Sem custo — deveria ter": Mix ou Mercantil sem compra
+// O alarme de verdade é "Sem custo lançado": Mix ou Mercantil sem compra
 // ligada. Sem essa distinção o monitor gritava por 57 vendas quando o problema
 // real eram 15.
 //
@@ -21,6 +21,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import ChartFrame, { type SeriesDef } from "@/components/viz/ChartFrame";
+import { FAIXAS_SEM_MARGEM } from "@/lib/margem";
 import StatTile from "@/components/viz/StatTile";
 import VizBar from "@/components/viz/VizBar";
 import VizTable, { type Col } from "@/components/viz/VizTable";
@@ -58,14 +59,14 @@ type Payload = {
 // é bom nem ruim — é desconhecido, e pintá-lo de verde ou vermelho mentiria.
 const TOM: Record<string, "ok" | "alerta" | "critico" | "neutro"> = {
   "Negativa": "critico",
-  "Sem custo — deveria ter": "critico",   // Mix/Mercantil sem compra: é falha
-  "Muito baixa": "critico",
-  "Baixa": "alerta",
-  "Média": "alerta",
-  "Alta": "ok",
+  "Sem custo lançado": "critico",   // Mix/Mercantil sem compra: é falha
+  "0–15%": "critico",
+  "15–25%": "alerta",
+  "25–35%": "alerta",
+  "> 35%": "ok",
   // Serviço sem compra é a regra funcionando, não um problema. Neutro de
   // propósito: pintar de vermelho treinaria a ignorar o vermelho.
-  "Serviço (não gera compra)": "neutro",
+  "Serviço (sem compra)": "neutro",
   "Sem receita": "neutro",
 };
 
@@ -123,9 +124,9 @@ export default function MargemVendaView() {
   const t = data?.total;
   const faixas = data?.faixas ?? [];
   const negativa = faixas.find((f) => f.faixa === "Negativa");
-  const muitoBaixa = faixas.find((f) => f.faixa === "Muito baixa");
-  const faltaCusto = faixas.find((f) => f.faixa === "Sem custo — deveria ter");
-  const servico = faixas.find((f) => f.faixa === "Serviço (não gera compra)");
+  const muitoBaixa = faixas.find((f) => f.faixa === "0–15%");
+  const faltaCusto = faixas.find((f) => f.faixa === "Sem custo lançado");
+  const servico = faixas.find((f) => f.faixa === "Serviço (sem compra)");
 
   const linhas = (data?.linhas ?? [])
     .filter((l) => !faixaSel || l.faixa === faixaSel)
@@ -181,14 +182,14 @@ export default function MargemVendaView() {
             )}
             {muitoBaixa && (
               <li>
-                <button type="button" onClick={() => setFaixaSel("Muito baixa")} className="hover:underline text-left">
+                <button type="button" onClick={() => setFaixaSel("0–15%")} className="hover:underline text-left">
                   {muitoBaixa.vendas} com margem abaixo de 15%
                 </button>
               </li>
             )}
             {faltaCusto && (
               <li>
-                <button type="button" onClick={() => setFaixaSel("Sem custo — deveria ter")} className="hover:underline text-left">
+                <button type="button" onClick={() => setFaixaSel("Sem custo lançado")} className="hover:underline text-left">
                   {faltaCusto.vendas} Mix/Mercantil sem compra ligada — {brl(faltaCusto.receita)} sem custo apurado
                 </button>
               </li>
@@ -238,7 +239,10 @@ export default function MargemVendaView() {
               className={`px-2.5 py-1 text-[11px] rounded-full border transition ${cor} ${
                 on ? "font-semibold ring-1 ring-ww-accent bg-ww-accentSoft" : "hover:bg-ww-rowHover"}`}>
               {f.faixa}: <strong>{f.vendas}</strong>
-              {f.faixa !== "Sem custo ligado" && ` · ${brl(f.margem)}`}
+              {/* Faixa sem margem não mostra R$ de margem: somar ali seria somar
+                  o desconhecido. A condição antiga comparava contra um rótulo que
+                  não existia, então nunca era verdadeira. */}
+              {!FAIXAS_SEM_MARGEM.has(f.faixa) && ` · ${brl(f.margem)}`}
             </button>
           );
         })}
@@ -246,7 +250,7 @@ export default function MargemVendaView() {
 
       <ChartFrame
         title="Vendas por faixa de margem"
-        subtitle='Negativa · até 15% · 15–25% · 25–35% · acima de 35%. "Sem custo ligado" fica fora da escala — é desconhecido, não bom'
+        subtitle='Negativa · 0–15% · 15–25% · 25–35% · > 35%. "Sem custo lançado" e "Serviço (sem compra)" não são margem: são estados, e ficam fora da escala'
         series={[{ key: "vendas", label: "Vendas", slot: 0, mark: "rect" }]}
         rows={faixas.map((f) => ({ x: f.faixa, vendas: f.vendas }))}
         valueFormat={(v) => `${Number(v) || 0}`}

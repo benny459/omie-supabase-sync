@@ -3,12 +3,12 @@
 // Monitor de margem por venda: cada NF confrontada com o custo de compra ligado
 // àquele PV/OS pela cadeia de aprovação.
 //
-// Faixas: Negativa · Muito baixa (0-15%) · Baixa (15-25%) · Média (25-35%) ·
-// Alta (>35%).
+// Faixas: Negativa · 0–15% · 15–25% · 25–35% · > 35%. Os rótulos vêm de
+// lib/margem.ts e são os mesmos da tela /avulsos — uma régua só.
 //
 // A REGRA DE NEGÓCIO QUE COMANDA O ALARME: em avulsos, só se aprova compra do
 // que é MIX ou MERCANTIL. Serviço puro não gera pedido de compra, então não ter
-// custo nele é o esperado — e vira a faixa neutra "Serviço (não gera compra)".
+// custo nele é o esperado — e vira a faixa neutra "Serviço (sem compra)".
 //
 // Sem essa distinção o monitor mentia: das 78 avulsas de 2026, 57 apareciam como
 // "sem custo", mas 42 eram Serviço, comportamento normal. O alarme real são as
@@ -23,6 +23,7 @@ import { canViewArea } from "@/lib/permissions";
 import { loadPerms } from "@/lib/require-area";
 import { createClient } from "@supabase/supabase-js";
 import { rpcPaginado } from "@/lib/supabase-paginado";
+import { FAIXAS_MARGEM } from "@/lib/margem";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -102,10 +103,9 @@ export async function GET(req: Request) {
       receita: faltando.reduce((s, l) => s + num(l.receita), 0),
       de: exigentes.length,
     },
-    // Ordem = gravidade. A tela desenha os chips nesta sequência.
-    faixas: ["Negativa", "Sem custo — deveria ter", "Muito baixa", "Baixa", "Média",
-             "Alta", "Serviço (não gera compra)", "Sem receita"]
-      .map(resumo).filter((f) => f.vendas > 0),
+    // Ordem = gravidade. A tela desenha os chips nesta sequência. A lista vem de
+    // lib/margem.ts para não divergir de /avulsos nem da função SQL.
+    faixas: FAIXAS_MARGEM.map(resumo).filter((f) => f.vendas > 0),
     tipos: Array.from(new Set(linhas.map((l) => l.tipo_omie))).sort(),
     linhas,
   });
