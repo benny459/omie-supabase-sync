@@ -47,6 +47,10 @@ const TOM_CLASSE: Record<string, string> = {
   neutro:  "bg-ww-border/60 text-ww-textMuted border-ww-border",
 };
 
+/** Minúsculas e sem diacríticos, pra busca não depender de acentuação. */
+const normaliza = (v: string) =>
+  v.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+
 export default function VizTable<T extends Record<string, unknown>>({
   title, subtitle, cols, rows, ordemInicial, loading, altura = 420, totalizar,
   onLinhaClick, podeClicar,
@@ -75,9 +79,15 @@ export default function VizTable<T extends Record<string, unknown>>({
   );
 
   const filtradas = useMemo(() => {
-    const q = busca.trim().toLowerCase();
-    const base = q
-      ? rows.filter((r) => cols.some((c) => String(r[c.key] ?? "").toLowerCase().includes(q)))
+    // Busca sem acento e por termos soltos. Comparar texto cru fazia "sirio" não
+    // achar "SÍRIO" e "campinas hapvida" não achar "HAPVIDA CAMPINAS" — quem
+    // digita o nome de um cliente não acerta a acentuação nem a ordem.
+    const termos = normaliza(busca).split(/\s+/).filter(Boolean);
+    const base = termos.length
+      ? rows.filter((r) => {
+          const alvo = cols.map((c) => normaliza(String(r[c.key] ?? ""))).join(" ");
+          return termos.every((t) => alvo.includes(t));
+        })
       : rows;
     const col = cols.find((c) => c.key === ordem.key);
     const numerica = col?.tipo === "money" || col?.tipo === "num" || col?.tipo === "dias";

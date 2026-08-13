@@ -21,9 +21,10 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import ChartFrame, { type SeriesDef } from "@/components/viz/ChartFrame";
-import { FAIXAS_SEM_MARGEM } from "@/lib/margem";
+import { FAIXAS_SEM_MARGEM, faixaDeValores } from "@/lib/margem";
 import StatTile from "@/components/viz/StatTile";
 import VizBar from "@/components/viz/VizBar";
+import VizPie from "@/components/viz/VizPie";
 import VizTable, { type Col } from "@/components/viz/VizTable";
 import VizFilters, { resolvePreset, type DateRange, type DimFilter } from "@/components/viz/VizFilters";
 
@@ -36,7 +37,7 @@ const brl = (v: number) =>
 // ranking já está ordenado — pintar cada barra de um tom seria cor sem
 // informação nova.
 const DIST_SERIES: SeriesDef[] = [{ key: "vendas", label: "Vendas", slot: 0, mark: "rect" }];
-const RANK_SERIES: SeriesDef[] = [{ key: "margem", label: "Margem", slot: 0, mark: "rect" }];
+const RANK_SERIES: SeriesDef[] = [{ key: "pct", label: "Margem %", slot: 0, mark: "rect" }];
 
 type Linha = {
   pv_os: string; dt_fat: string | null; documento: string; cliente: string;
@@ -156,14 +157,13 @@ export default function MargemVendaView() {
     }));
   }, [faixas]);
 
-  // Ranking de clientes. Só entra quem tem custo medido — sem isso o cliente
-  // apareceria com 100% de margem e lideraria por falta de dado, que é o mesmo
-  // erro que este monitor existe pra evitar.
+  // Ranking de clientes pela FAIXA de margem em que caem. Só entra quem tem
+  // custo medido — sem isso o cliente apareceria com 100% e lideraria por falta
+  // de dado, o erro que este monitor existe pra evitar.
   //
-  // Ordena por margem em R$, não por %: 97% sobre uma venda de R$ 300 não diz
-  // nada sobre o negócio, e ordenar por % encheria o topo de cliente miúdo. Os
-  // 15 de maior impacto em MÓDULO, para que os piores apareçam junto dos
-  // melhores — o gráfico serve pros dois lados.
+  // A barra é a margem %, e não R$, porque a pergunta aqui é "em que range este
+  // cliente está", não "quanto ele rendeu". A cor repete a faixa, então dá pra
+  // ler o range sem consultar o eixo.
   const rankingClientes = useMemo(() => {
     const acc = new Map<string, { receita: number; custo: number; margem: number }>();
     for (const l of data?.linhas ?? []) {
@@ -177,13 +177,13 @@ export default function MargemVendaView() {
       acc.set(k, a);
     }
     return Array.from(acc.entries())
-      .map(([cliente, a]) => ({
-        x: cliente, ...a,
-        pct: a.receita > 0 ? (a.margem / a.receita) * 100 : null,
-      }))
-      .sort((p, q) => Math.abs(q.margem) - Math.abs(p.margem))
-      .slice(0, 15)
-      .sort((p, q) => q.margem - p.margem);
+      .filter(([, a]) => a.receita > 0)
+      .map(([cliente, a]) => {
+        const pct = (a.margem / a.receita) * 100;
+        return { x: cliente, ...a, pct: Number(pct.toFixed(1)), faixa: faixaDeValores(a.receita, a.custo, true) };
+      })
+      .sort((p, q) => q.pct - p.pct)
+      .slice(0, 15);
   }, [data?.linhas, tiposSel]);
 
   const dims: DimFilter[] = [
@@ -302,35 +302,44 @@ export default function MargemVendaView() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
         <ChartFrame
           title="Distribuição das margens"
-          subtitle='Quantas vendas caem em cada faixa, da pior pra melhor. "Sem custo lançado" e "Serviço (sem compra)" ficam fora: são estados, não posições numa escala de margem'
+          subtitle='Composição das vendas com custo medido. "Sem custo lançado" e "Serviço (sem compra)" ficam fora: são estados, não posições numa escala de margem'
           series={DIST_SERIES}
           rows={distribuicao}
           valueFormat={(v) => `${Number(v) || 0}`}
           loading={loading}
           height={280}
         >
-          <VizBar rows={distribuicao} series={DIST_SERIES} valueFormat={(v) => `${v}`} />
+          <VizPie
+            slices={distribuicao.filter((d) => d.vendas > 0).map((d) => ({ label: d.x, value: d.vendas }))}
+            valueFormat={(v) => `${v} venda${v === 1 ? "" : "s"}`}
+            totalLabel="vendas medidas"
+          />
         </ChartFrame>
 
         <ChartFrame
-          title="Clientes por margem"
-          subtitle="Os 15 de maior impacto, do melhor pro pior. Só clientes com custo medido — sem custo, a margem seria 100% e o ranking premiaria a falta de dado"
+          title="Clientes por faixa de margem"
+          subtitle="Margem de cada cliente, da melhor pra pior, com a cor da faixa em que ele cai. Só clientes com custo medido — sem custo, a margem seria 100% e o ranking premiaria a falta de dado"
           series={RANK_SERIES}
           rows={rankingClientes}
-          valueFormat={(v) => brl(Number(v) || 0)}
+          valueFormat={(v) => `${Number(v) || 0}%`}
           loading={loading}
           height={280}
         >
-          {/* Cor pelo SINAL: um cliente a −R$ 59 mil pintado igual aos lucrativos
-              faz a cor dizer o contrário do número.
-              Azul (0) e não verde (1) para o positivo porque verde×vermelho mede
-              ΔE 7.4 em deuteranopia — abaixo do alvo 8, quase a mesma cor. O par
-              azul×vermelho dá ΔE 22, medido com scripts/validate_palette.js. A
-              direção da barra em relação ao zero já carrega o sinal de qualquer
-              forma; a cor só reforça. */}
+          {/* A cor repete a FAIXA, então o range se lê sem consultar o eixo.
+              Três tons e não cinco: vermelho abaixo de 15%, âmbar de 15 a 35%,
+              azul acima — agrupar por semântica em vez de dar uma cor a cada
+              faixa mantém os pares distinguíveis em daltonismo.
+              Azul e não verde no bom: verde×vermelho mede ΔE 7.4 em
+              deuteranopia, quase a mesma cor. Medido com
+              scripts/validate_palette.js, não estimado no olho. O par âmbar×
+              vermelho fica em 7.9 no tema claro, no piso — aceitável porque o
+              comprimento da barra e a ordenação já carregam a margem. */}
           <VizBar rows={rankingClientes} series={RANK_SERIES}
-                  layout="row" categoryWidth={190} valueFormat={(v) => brl(v)}
-                  slotDaLinha={(r) => (Number(r.margem) < 0 ? 3 : 0)} />
+                  layout="row" categoryWidth={190} valueFormat={(v) => `${v}%`}
+                  slotDaLinha={(r) => {
+                    const p = Number(r.pct);
+                    return p < 15 ? 3 : p < 35 ? 2 : 0;
+                  }} />
         </ChartFrame>
       </div>
 
