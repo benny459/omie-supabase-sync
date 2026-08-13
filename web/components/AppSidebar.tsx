@@ -205,6 +205,18 @@ const FINANCEIRO: NavItem[] = [
     ),
   },
   {
+    href: "/bi/custo-cliente",
+    area: "financeiro",
+    label: "Custo por Cliente",
+    tone: "text-orange-700",
+    icon: (
+      // Gota + cifrão: o custo de ir até o cliente.
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className="w-5 h-5" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M12 3s5 5.5 5 9a5 5 0 0 1-10 0c0-3.5 5-9 5-9z"/><path d="M12 9v6M10.5 11h3M10.5 13h3"/>
+      </svg>
+    ),
+  },
+  {
     href: "/bi/fluxo-caixa",
     area: "financeiro",
     label: "Fluxo de Caixa",
