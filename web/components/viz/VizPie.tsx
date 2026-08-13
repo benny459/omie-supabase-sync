@@ -57,7 +57,8 @@ export default function VizPie({
   }
 
   return (
-    <div className="relative h-full">
+    <div className="h-full flex items-center gap-4 min-w-0">
+    <div className="relative h-full flex-1 min-w-0">
       <ResponsiveContainer width="100%" height="100%">
         <PieChart>
           <defs>
@@ -110,6 +111,27 @@ export default function VizPie({
         <span className="text-[17px] font-bold text-ww-text leading-none">{fmt(soma)}</span>
         {totalLabel && <span className="text-[10px] text-ww-textFaint mt-0.5">{totalLabel}</span>}
       </div>
+    </div>
+
+    {/* Legenda com a porcentagem ao lado do nome. Numa rosca com fatia de 1%, o
+        ângulo é ilegível e a cor sozinha não diz qual é qual — sem isso o
+        gráfico só funciona no hover, e no papel não funciona nada. A ordem é a
+        das fatias, então legenda e desenho se leem juntos. */}
+    <ul className="shrink-0 max-w-[46%] space-y-1 text-[11px] leading-tight">
+      {data.map((s, i) => {
+        const pct = soma > 0 ? (s.value / soma) * 100 : 0;
+        return (
+          <li key={s.label} className="flex items-baseline gap-1.5">
+            <span aria-hidden className="w-2 h-2 rounded-sm shrink-0 translate-y-px"
+                  style={{ background: seriesColor(i, mode, tema) }} />
+            <span className="text-ww-textMuted truncate">{s.label}</span>
+            <span className="text-ww-text font-semibold tabular-nums ml-auto pl-1.5">
+              {pct >= 0.1 ? pct.toFixed(1).replace(".", ",") : "<0,1"}%
+            </span>
+          </li>
+        );
+      })}
+    </ul>
     </div>
   );
 }

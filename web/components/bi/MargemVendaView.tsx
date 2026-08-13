@@ -109,6 +109,9 @@ export default function MargemVendaView() {
   /** Eixo do tempo: emissão do PV/OS (ciclo comercial) ou data da NF. */
   const [base, setBase] = useState<"emissao" | "faturamento">("emissao");
   const [tiposSel, setTiposSel] = useState<Set<string>>(new Set());
+  /** Clientes selecionados. Vazio = todos. Filtra tabela E gráfico juntos: um
+   *  gráfico que ignora o filtro da tela vira contradição visual. */
+  const [clientesSel, setClientesSel] = useState<Set<string>>(new Set());
   const [data, setData] = useState<Payload | null>(null);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
@@ -139,7 +142,30 @@ export default function MargemVendaView() {
 
   const linhas = (data?.linhas ?? [])
     .filter((l) => !faixaSel || l.faixa === faixaSel)
-    .filter((l) => !tiposSel.size || tiposSel.has(l.tipo_omie));
+    .filter((l) => !tiposSel.size || tiposSel.has(l.tipo_omie))
+    .filter((l) => !clientesSel.size || clientesSel.has(l.cliente));
+
+  // Opções do filtro de cliente: quem tem venda no período, em ordem
+  // alfabética — numa lista de cem nomes, procurar é mais comum que rankear.
+  const clientesOpcoes = useMemo(
+    () => Array.from(new Set((data?.linhas ?? []).map((l) => l.cliente).filter(Boolean)))
+            .sort((a, b) => a.localeCompare(b, "pt-BR")),
+    [data?.linhas],
+  );
+
+  // Resumo da seleção. A margem média é PONDERADA pela receita, não a média das
+  // porcentagens: uma venda de R$ 300 a 90% não pode pesar igual a uma de
+  // R$ 90 mil a 30%.
+  const resumoSelecao = useMemo(() => {
+    if (!clientesSel.size) return null;
+    const medidas = linhas.filter((l) => l.tem_custo);
+    const receita = medidas.reduce((s, l) => s + (Number(l.receita) || 0), 0);
+    const margem  = medidas.reduce((s, l) => s + (Number(l.margem) || 0), 0);
+    return {
+      vendas: linhas.length, medidas: medidas.length, receita, margem,
+      pct: receita > 0 ? (margem / receita) * 100 : null,
+    };
+  }, [clientesSel, linhas]);
 
   const margemMediaPct = t && t.receita_medida > 0
     ? (t.margem_medida / t.receita_medida) * 100 : null;
@@ -171,6 +197,9 @@ export default function MargemVendaView() {
     for (const l of data?.linhas ?? []) {
       if (!l.tem_custo) continue;
       if (tiposSel.size && !tiposSel.has(l.tipo_omie)) continue;
+      // Selecionar cliente marca o gráfico: ficam só os escolhidos, e o ranking
+      // passa a comparar entre eles em vez de escondê-los atrás dos 15 maiores.
+      if (clientesSel.size && !clientesSel.has(l.cliente)) continue;
       const k = l.cliente || "(sem cliente)";
       const a = acc.get(k) ?? { receita: 0, custo: 0, margem: 0 };
       a.receita += Number(l.receita) || 0;
@@ -186,11 +215,12 @@ export default function MargemVendaView() {
       })
       .sort((p, q) => q.pct - p.pct)
       .slice(0, 15);
-  }, [data?.linhas, tiposSel]);
+  }, [data?.linhas, tiposSel, clientesSel]);
 
   const dims: DimFilter[] = [
     { key: "cat", label: "Categoria de venda", options: CATS, selected: cats },
     { key: "tipo", label: "Tipo Omie", options: data?.tipos ?? [], selected: tiposSel },
+    { key: "cliente", label: "Cliente", options: clientesOpcoes, selected: clientesSel },
   ];
 
   return (
@@ -198,7 +228,7 @@ export default function MargemVendaView() {
       <VizFilters
         range={range} onRangeChange={setRange} dims={dims}
         onDimChange={(k, sel) =>
-          k === "cat" ? setCats(sel) : setTiposSel(sel)}
+          k === "cat" ? setCats(sel) : k === "cliente" ? setClientesSel(sel) : setTiposSel(sel)}
         right={
           <div className="flex items-center gap-1 text-[11px]">
             <span className="text-ww-textMuted">Data por</span>
@@ -336,7 +366,7 @@ export default function MargemVendaView() {
               scripts/validate_palette.js, não estimado no olho. O par âmbar×
               vermelho fica em 7.9 no tema claro, no piso — aceitável porque o
               comprimento da barra e a ordenação já carregam a margem. */}
-          <VizBar rows={rankingClientes} series={RANK_SERIES}
+          <VizBar rows={rankingClientes} series={RANK_SERIES} rotuloNaPonta
                   layout="row" categoryWidth={190} valueFormat={(v) => `${v}%`}
                   slotDaLinha={(r) => {
                     const p = Number(r.pct);
@@ -345,8 +375,42 @@ export default function MargemVendaView() {
         </ChartFrame>
       </div>
 
+      {/* Resumo da seleção de clientes. A margem média fica AQUI, colada na
+          tabela que a produziu, e não num KPI lá no topo — o número e as linhas
+          que o explicam têm que caber no mesmo olhar. */}
+      {resumoSelecao && (
+        <div className="flex items-center gap-4 flex-wrap px-3.5 py-2.5 rounded-xl border border-ww-accent/40 bg-ww-accentSoft">
+          <div className="flex items-baseline gap-1.5 min-w-0">
+            <span className="text-[10px] uppercase tracking-[0.6px] font-bold text-ww-textMuted">
+              {clientesSel.size === 1 ? "Cliente" : `${clientesSel.size} clientes`}
+            </span>
+            <span className="text-[12px] font-semibold text-ww-text truncate max-w-[320px]"
+                  title={Array.from(clientesSel).join(", ")}>
+              {Array.from(clientesSel).join(", ")}
+            </span>
+          </div>
+          <span className="h-6 w-px bg-ww-border" />
+          <Resumo rot="Vendas" val={String(resumoSelecao.vendas)}
+                  hint={`${resumoSelecao.medidas} com custo medido`} />
+          <Resumo rot="Receita medida" val={brl(resumoSelecao.receita)} />
+          <Resumo rot="Margem" val={brl(resumoSelecao.margem)} />
+          <Resumo rot="Margem média" hint="ponderada pela receita"
+                  val={resumoSelecao.pct == null ? "—"
+                       : `${resumoSelecao.pct.toFixed(1).replace(".", ",")}%`} />
+          <button type="button" onClick={() => setClientesSel(new Set())}
+            className="ml-auto text-[11px] font-semibold text-ww-accent hover:underline">
+            limpar seleção
+          </button>
+        </div>
+      )}
+
       <VizTable
-        title={faixaSel ? `Vendas — ${faixaSel}` : "Vendas do período"}
+        title={
+          clientesSel.size === 1 ? `Vendas — ${Array.from(clientesSel)[0]}`
+          : clientesSel.size      ? `Vendas — ${clientesSel.size} clientes`
+          : faixaSel              ? `Vendas — ${faixaSel}`
+          :                         "Vendas do período"
+        }
         subtitle="Ordenado pela pior margem. O custo é o dos pedidos de compra ligados àquele PV/OS"
         cols={COLS}
         rows={linhas}
@@ -361,6 +425,17 @@ export default function MargemVendaView() {
         combustível e mão de obra existem por cliente e mês, não por venda — ratear por NF inventaria
         precisão que o dado não tem. Esses custos estão em Custo por Cliente.
       </p>
+    </div>
+  );
+}
+
+/** Célula do resumo de seleção. Rótulo pequeno em cima, número em destaque. */
+function Resumo({ rot, val, hint }: { rot: string; val: string; hint?: string }) {
+  return (
+    <div className="flex flex-col">
+      <span className="text-[10px] uppercase tracking-[0.6px] font-bold text-ww-textMuted">{rot}</span>
+      <span className="text-[15px] font-bold tabular-nums text-ww-text leading-none mt-0.5">{val}</span>
+      {hint && <span className="text-[9.5px] text-ww-textFaint mt-0.5">{hint}</span>}
     </div>
   );
 }

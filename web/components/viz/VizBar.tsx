@@ -21,7 +21,7 @@ import type { SeriesDef } from "./ChartFrame";
 
 export default function VizBar({
   rows, series, layout = "column", stacked = false, valueFormat, xKey = "x",
-  categoryWidth = 200, totalNoTopo = false, slotDaLinha,
+  categoryWidth = 200, totalNoTopo = false, slotDaLinha, rotuloNaPonta = false,
 }: {
   rows: Array<Record<string, unknown>>;
   series: SeriesDef[];
@@ -38,6 +38,9 @@ export default function VizBar({
    *  Só faz sentido com UMA série; com várias, a cor já é da série e sobrepor
    *  aqui tornaria a legenda mentirosa. Ignorado nesse caso. */
   slotDaLinha?: (row: Record<string, unknown>, i: number) => number;
+  /** Escreve o valor na ponta de cada barra. Só em layout horizontal e série
+   *  única — com séries lado a lado os rótulos colidem. */
+  rotuloNaPonta?: boolean;
   /** Escreve o total da pilha acima de cada coluna.
    *
    *  É exceção deliberada à regra de "rótulo seletivo, nunca em todo ponto": num
@@ -196,6 +199,19 @@ export default function VizBar({
                           : `url(#${gradId(slot, mode, horizontal ? "h" : "v", tema)})`} />
                 );
               })}
+              {/* Valor na ponta da barra horizontal. Exceção deliberada ao
+                  "rótulo seletivo": num ranking, o número de CADA linha é a
+                  informação — ler 15 barras contra o eixo é trabalho que o
+                  rótulo faz de graça. Em tinta de texto, nunca na cor da série. */}
+              {rotuloNaPonta && horizontal && series.length === 1 && (
+                <LabelList
+                  dataKey={s.key}
+                  position="right"
+                  offset={6}
+                  style={{ fill: c.ink, fontSize: 10.5, fontWeight: 600 }}
+                  formatter={(v: unknown) => fmt(Number(v) || 0)}
+                />
+              )}
               {/* Total da pilha, na ÚLTIMA série: é a que fecha a coluna, então
                   o rótulo pousa no topo. Em tinta de texto, nunca na cor da
                   série — o número é do total, não de nenhum segmento. */}
