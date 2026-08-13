@@ -49,6 +49,7 @@ const TOM_CLASSE: Record<string, string> = {
 
 export default function VizTable<T extends Record<string, unknown>>({
   title, subtitle, cols, rows, ordemInicial, loading, altura = 420, totalizar,
+  onLinhaClick, podeClicar,
 }: {
   title: string;
   subtitle?: string;
@@ -61,6 +62,12 @@ export default function VizTable<T extends Record<string, unknown>>({
   altura?: number;
   /** Colunas que ganham total no rodapé. */
   totalizar?: Array<keyof T & string>;
+  /** Abre o detalhe daquela linha. A linha inteira vira alvo, não um ícone de
+   *  4px — e o cursor muda pra avisar que há o que clicar. */
+  onLinhaClick?: (linha: T) => void;
+  /** Nem toda linha tem detalhe. Quando devolve false, a linha não fica
+   *  clicável: prometer um detalhe que abre vazio é pior que não oferecer. */
+  podeClicar?: (linha: T) => boolean;
 }) {
   const [busca, setBusca] = useState("");
   const [ordem, setOrdem] = useState<{ key: string; desc: boolean }>(
@@ -174,8 +181,13 @@ export default function VizTable<T extends Record<string, unknown>>({
                 {loading ? "Carregando…" : "Nenhuma linha."}
               </td></tr>
             )}
-            {filtradas.map((r, i) => (
-              <tr key={i} className="viz-row">
+            {filtradas.map((r, i) => {
+              const clicavel = !!onLinhaClick && (podeClicar?.(r) ?? true);
+              return (
+              <tr key={i}
+                  className={`viz-row ${clicavel ? "cursor-pointer" : ""}`}
+                  onClick={clicavel ? () => onLinhaClick!(r) : undefined}
+                  title={clicavel ? "Clique pra ver a memória de cálculo" : undefined}>
                 {cols.map((c) => {
                   const texto = valorFormatado(c, r);
                   if (c.tipo === "badge") {
@@ -198,7 +210,8 @@ export default function VizTable<T extends Record<string, unknown>>({
                   );
                 })}
               </tr>
-            ))}
+              );
+            })}
           </tbody>
           {totais && (
             <tfoot className="sticky bottom-0 bg-ww-panel">

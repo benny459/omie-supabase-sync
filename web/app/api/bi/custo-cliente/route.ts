@@ -126,6 +126,9 @@ export async function GET(req: Request) {
     receita: number; compras: number;
     tecnicos: Set<string>;
     por_tipo: Record<string, number>;
+    /** Um código Omie pode ter VÁRIOS clientes do app vinculados. O memorial
+     *  precisa de todos, senão mostraria só parte do custo da linha. */
+    customer_ids: Set<string>;
   };
   const mapa = new Map<string, Linha>();
   const chave = (r: CustoRow) =>
@@ -144,6 +147,7 @@ export async function GET(req: Request) {
       sem_link: cod == null,
       diretas: 0, combustivel: 0, pedagio: 0, mao_obra: 0, custo_total: 0, qtd_os: 0,
       receita: 0, compras: 0, tecnicos: new Set<string>(), por_tipo: {},
+      customer_ids: new Set<string>(),
     };
     linha.diretas     += num(r.despesas_diretas_alocadas);
     linha.combustivel += num(r.combustivel_km_alocado);
@@ -152,6 +156,7 @@ export async function GET(req: Request) {
     linha.custo_total += num(r.custo_total);
     linha.qtd_os      += num(r.qtd_os);
     if (r.technician_nome) linha.tecnicos.add(r.technician_nome);
+    if (r.customer_id) linha.customer_ids.add(r.customer_id);
     const t = r.tipo_venda ?? "(sem tipo)";
     linha.por_tipo[t] = (linha.por_tipo[t] ?? 0) + num(r.custo_total);
     mapa.set(k, linha);
@@ -181,6 +186,7 @@ export async function GET(req: Request) {
       custo_total: l.custo_total,
       qtd_os: l.qtd_os,
       tecnicos: l.tecnicos.size,
+      customer_ids: Array.from(l.customer_ids),
       receita: l.receita,
       compras: l.compras,
       // Margem só faz sentido com receita: em bucket de overhead ela seria

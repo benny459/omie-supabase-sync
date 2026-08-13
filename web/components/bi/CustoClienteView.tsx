@@ -20,6 +20,7 @@ import VizBar from "@/components/viz/VizBar";
 import VizPie from "@/components/viz/VizPie";
 import VizTable, { type Col } from "@/components/viz/VizTable";
 import VizFilters, { resolvePreset, type DateRange, type DimFilter } from "@/components/viz/VizFilters";
+import MemorialCusto from "./MemorialCusto";
 
 const brl = (v: number) =>
   v.toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 });
@@ -28,6 +29,7 @@ const brlExato = (v: number) =>
 
 type LinhaCusto = {
   codigo: number | null; nome: string; is_bucket: boolean; sem_link: boolean;
+  customer_ids: string[];
   diretas: number; combustivel: number; pedagio: number; mao_obra: number;
   custo_total: number; qtd_os: number; tecnicos: number;
   receita: number; compras: number;
@@ -73,6 +75,8 @@ export default function CustoClienteView() {
   const [tipos, setTipos] = useState<Set<string>>(new Set());
   const [soComReceita, setSoComReceita] = useState(false);
   const [data, setData] = useState<Payload | null>(null);
+  /** Linha aberta na memória de cálculo. null = modal fechado. */
+  const [memorial, setMemorial] = useState<{ nome: string; ids: string[] } | null>(null);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
 
@@ -230,14 +234,28 @@ export default function CustoClienteView() {
 
       <VizTable
         title="Custo por cliente — linha a linha"
-        subtitle="Cada cliente com as quatro parcelas de custo e, quando há receita casada, a margem que sobra"
+        subtitle="Cada cliente com as quatro parcelas de custo e, quando há receita casada, a margem que sobra. Clique na lupa pra ver como o número foi montado"
         cols={COLS}
         rows={linhas}
         ordemInicial="custo_total"
         loading={loading}
         altura={520}
         totalizar={["qtd_os", "diretas", "combustivel", "pedagio", "mao_obra", "custo_total", "receita", "margem"]}
+        // Só linha com cadastro do app tem o que abrir: bucket de overhead não
+        // tem OS nem despesa individual, e uma lupa que abre vazio irrita.
+        podeClicar={(l) => l.customer_ids.length > 0}
+        onLinhaClick={(l) => setMemorial({ nome: l.nome, ids: l.customer_ids })}
       />
+
+      {memorial && (
+        <MemorialCusto
+          cliente={memorial.nome}
+          customerIds={memorial.ids}
+          from={range.from}
+          to={range.to}
+          onFechar={() => setMemorial(null)}
+        />
+      )}
 
       <p className="text-[10.5px] text-ww-textFaint px-1">
         Custo vem do app de serviços em tempo real ({data?.fonte === "app-direto" ? "leitura direta" : data?.fonte}).
