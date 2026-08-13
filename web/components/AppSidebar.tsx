@@ -205,6 +205,18 @@ const FINANCEIRO: NavItem[] = [
     ),
   },
   {
+    href: "/bi/margem-venda",
+    area: "financeiro",
+    label: "Margem por Venda",
+    tone: "text-lime-700",
+    icon: (
+      // Balança: o que entra contra o que custou.
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className="w-5 h-5" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M12 3v18M7 7h10M5 11l2-4 2 4a2 2 0 0 1-4 0zM15 11l2-4 2 4a2 2 0 0 1-4 0z"/>
+      </svg>
+    ),
+  },
+  {
     href: "/bi/custo-cliente",
     area: "financeiro",
     label: "Custo por Cliente",
