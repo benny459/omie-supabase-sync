@@ -104,7 +104,7 @@ type GroupBy = "pvos" | "project" | "etapa" | "pc";
 
 // Filtro de período aplicado a _dt_inclusao_d (PC criado no Omie) ou pv_emissao
 // (avulsos/projetos). "off" = todos os pedidos; presets ou range custom.
-type DateRangeKind = "off" | "today" | "3d" | "7d" | "30d" | "custom";
+type DateRangeKind = "off" | "today" | "3d" | "7d" | "30d" | "mtd" | "ytd" | "custom";
 type DateRange = { kind: DateRangeKind; from?: string; to?: string };
 
 const DATE_RANGE_LABELS: Record<DateRangeKind, string> = {
@@ -113,8 +113,135 @@ const DATE_RANGE_LABELS: Record<DateRangeKind, string> = {
   "3d": "Últimos 3 dias",
   "7d": "Últimos 7 dias",
   "30d": "Últimos 30 dias",
+  mtd: "Este mês",
+  ytd: "Este ano",
   custom: "Personalizado",
 };
+
+// Faixas de margem bruta, iguais às do monitor de Margem por Venda. A régua é
+// uma só: se mudar aqui, muda lá — foi duplicar regra que já fez telas
+// divergirem neste projeto.
+type FaixaMargem = "negativa" | "muito_baixa" | "baixa" | "media" | "alta" | "sem_pv";
+
+const FAIXAS_MARGEM: { key: FaixaMargem; label: string; tone: string }[] = [
+  { key: "negativa",    label: "Negativa",   tone: "rose" },
+  { key: "muito_baixa", label: "0–15%",      tone: "rose" },
+  { key: "baixa",       label: "15–25%",     tone: "amber" },
+  { key: "media",       label: "25–35%",     tone: "amber" },
+  { key: "alta",        label: "> 35%",      tone: "emerald" },
+  { key: "sem_pv",      label: "Sem PV",     tone: "slate" },
+];
+
+/** Margem bruta do bucket = (PV − PC) / PV. Mesma conta que o card M.B. mostra;
+ *  null quando não há PV registrado — aí não há margem a calcular, e tratar como
+ *  zero jogaria a venda em "Negativa" sem motivo. */
+function margemDoBucket(b: Bucket): number | null {
+  const rows = b.rows ?? [];
+  if (b.groupKind === "pc") return null;   // PC standalone não tem PV próprio
+  if (b.groupKind === "project") {
+    const seen = new Map<string, { pc: number; pv: number }>();
+    for (const r of rows) {
+      const k = String(r.pv_os_label ?? "—");
+      if (!seen.has(k)) seen.set(k, {
+        pc: Number(r.pc_custo_total_calc ?? 0),
+        pv: Number(r.pv_valor_total ?? 0),
+      });
+    }
+    let pc = 0, pv = 0;
+    for (const v of seen.values()) { pc += v.pc; pv += v.pv; }
+    return pv > 0 ? (pv - pc) / pv : null;
+  }
+  const r = rows[0] ?? {};
+  const pv = Number(r.pv_valor_total ?? 0);
+  const pc = Number(r.pc_custo_total_calc ?? 0);
+  return pv > 0 ? (pv - pc) / pv : null;
+}
+
+function faixaDaMargem(mb: number | null): FaixaMargem {
+  if (mb == null) return "sem_pv";
+  const pct = mb * 100;
+  if (pct < 0)  return "negativa";
+  if (pct < 15) return "muito_baixa";
+  if (pct < 25) return "baixa";
+  if (pct < 35) return "media";
+  return "alta";
+}
+
+/** Dropdown de faixa de margem. Espelha o visual do FacetDropdown pra não
+ *  introduzir um terceiro jeito de filtrar na mesma barra. */
+function MargemDropdown({
+  selected, counts, onToggle, onClear,
+}: {
+  selected: Set<FaixaMargem>;
+  counts: Map<FaixaMargem, number>;
+  onToggle: (k: FaixaMargem) => void;
+  onClear: () => void;
+}) {
+  const [aberto, setAberto] = useState(false);
+  const caixa = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!aberto) return;
+    const fora = (e: MouseEvent) => {
+      if (caixa.current && !caixa.current.contains(e.target as Node)) setAberto(false);
+    };
+    document.addEventListener("mousedown", fora);
+    return () => document.removeEventListener("mousedown", fora);
+  }, [aberto]);
+
+  const n = selected.size;
+  const TONE: Record<string, string> = {
+    rose:     "text-rose-700 dark:text-rose-300",
+    amber:    "text-amber-700 dark:text-amber-300",
+    emerald:  "text-emerald-700 dark:text-emerald-300",
+    slate:    "text-ww-textMuted",
+  };
+
+  return (
+    <div className="relative" ref={caixa}>
+      <button
+        type="button"
+        onClick={() => setAberto((v) => !v)}
+        className={`inline-flex items-center gap-1.5 px-3 py-1 text-[11.5px] font-semibold rounded-md border transition shadow-sm ${
+          n > 0
+            ? "bg-ww-accentSoft text-ww-accent border-ww-accent"
+            : "bg-ww-panel text-ww-textMuted border-ww-border hover:text-ww-text hover:bg-ww-rowHover"
+        }`}>
+        + Margem{n > 0 && <span className="px-1 rounded bg-ww-accent text-white text-[10px]">{n}</span>}
+      </button>
+
+      {aberto && (
+        <div className="absolute left-0 mt-1 z-50 w-[220px] rounded-lg border border-ww-border bg-ww-drawer shadow-xl p-1 animate-in fade-in-0 slide-in-from-top-1">
+          <p className="px-2 py-1 text-[10px] uppercase tracking-wider text-ww-textFaint">
+            Margem bruta (PV − PC) / PV
+          </p>
+          {FAIXAS_MARGEM.map((f) => {
+            const on = selected.has(f.key);
+            const c = counts.get(f.key) ?? 0;
+            return (
+              <button
+                key={f.key}
+                type="button"
+                onClick={() => onToggle(f.key)}
+                className={`w-full flex items-center justify-between gap-2 px-2 py-1.5 rounded-md text-[11.5px] transition ${
+                  on ? "bg-ww-accentSoft font-semibold" : "hover:bg-ww-rowHover"
+                }`}>
+                <span className={TONE[f.tone] ?? ""}>{f.label}</span>
+                <span className="text-[10px] text-ww-textFaint tabular-nums">{c}</span>
+              </button>
+            );
+          })}
+          {n > 0 && (
+            <button type="button" onClick={onClear}
+              className="w-full mt-0.5 px-2 py-1 text-[10.5px] text-ww-accent hover:underline text-left border-t border-ww-border">
+              limpar
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
 
 function computeDateWindow(range: DateRange): { from: number; to: number } | null {
   if (range.kind === "off") return null;
@@ -126,6 +253,11 @@ function computeDateWindow(range: DateRange): { from: number; to: number } | nul
     case "3d":    return { from: todayStart - 2 * 86_400_000, to: tomorrowStart };
     case "7d":    return { from: todayStart - 6 * 86_400_000, to: tomorrowStart };
     case "30d":   return { from: todayStart - 29 * 86_400_000, to: tomorrowStart };
+    // Mês e ano CORRENTES, do dia 1 até amanhã — não "últimos 30/365 dias".
+    // É o recorte que casa com fechamento contábil e com o jeito de perguntar
+    // "quanto vendi este mês".
+    case "mtd":   return { from: new Date(now.getFullYear(), now.getMonth(), 1).getTime(), to: tomorrowStart };
+    case "ytd":   return { from: new Date(now.getFullYear(), 0, 1).getTime(), to: tomorrowStart };
     case "custom": {
       const f = range.from ? Date.parse(range.from) : 0;
       const t = range.to   ? Date.parse(range.to) + 86_400_000 : Number.MAX_SAFE_INTEGER;
@@ -745,6 +877,8 @@ export default function BoldAvulsosView({
   }, []);
   const clearAlarmes = useCallback(() => setAlarmes(new Set()), []);
   const [facets, setFacets] = useState<FacetState>({});
+  /** Faixas de margem selecionadas. Vazio = todas. */
+  const [margens, setMargens] = useState<Set<FaixaMargem>>(new Set());
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [openBuckets, setOpenBuckets] = useState<Set<string>>(new Set());
   const [drawerItem, setDrawerItem] = useState<(AnyRow & { _bucket?: Bucket }) | null>(null);
@@ -1277,7 +1411,26 @@ export default function BoldAvulsosView({
   const groupBy: GroupBy =
     modulo === "projetos" ? "project" :
     modulo === "pcs"      ? "pc"      : "pvos";
-  const buckets = useMemo(() => buildBuckets(filtered, groupBy), [filtered, groupBy]);
+  const bucketsAll = useMemo(() => buildBuckets(filtered, groupBy), [filtered, groupBy]);
+
+  // Margem filtra BUCKET, não linha: ela é do PV/OS inteiro, e esconder itens
+  // soltos deixaria o card com um total que não bate com o que se vê.
+  const buckets = useMemo(() => {
+    if (!margens.size) return bucketsAll;
+    return bucketsAll.filter((b) => margens.has(faixaDaMargem(margemDoBucket(b))));
+  }, [bucketsAll, margens]);
+
+  // Contagem por faixa — sempre sobre TODOS os buckets, não sobre os filtrados,
+  // senão selecionar uma faixa zeraria as outras e o usuário não teria como
+  // voltar sem limpar.
+  const contagemMargem = useMemo(() => {
+    const m = new Map<FaixaMargem, number>();
+    for (const b of bucketsAll) {
+      const f = faixaDaMargem(margemDoBucket(b));
+      m.set(f, (m.get(f) ?? 0) + 1);
+    }
+    return m;
+  }, [bucketsAll]);
 
   // Virtualização só onde paga: /pcs (1368 buckets) e /avulsos (1227) montam ~40x
   // menos componentes. /projetos tem 44 buckets — virtualizar ali não ganharia
@@ -1817,11 +1970,27 @@ export default function BoldAvulsosView({
           selected={facets.codigo_categoria ?? new Set()}
           onToggle={(v) => toggleFacet("codigo_categoria", v)}
           onClear={() => clearFacet("codigo_categoria")} />
+        {/* Margem bruta: filtra por FAIXA, nas mesmas réguas do monitor de Margem
+            por Venda. Fica ao lado dos outros filtros e não encosta nos alarmes —
+            aqueles valem só pro que está em aberto e seguem como estavam. */}
+        {modulo !== "pcs" && (
+          <MargemDropdown
+            selected={margens}
+            counts={contagemMargem}
+            onToggle={(k) => setMargens((prev) => {
+              const n = new Set(prev);
+              n.has(k) ? n.delete(k) : n.add(k);
+              return n;
+            })}
+            onClear={() => setMargens(new Set())}
+          />
+        )}
         {modulo !== "pcs" && <RelatorioMenu />}
         {(() => {
           // Status PV default varia por módulo (ver defaultPvEtapa) — clear
           // volta pra esse default, não sempre "aberto". Assim /projetos limpa
           // pra "todos" e /avulsos limpa pra "aberto".
+          const hasMargem   = margens.size > 0;
           const hasFacets   = Object.values(facets).some((s) => s && s.size > 0);
           const hasStatus   = statusFilter !== "todos";
           const hasPvEtapa  = !samePvEtapa(pvEtapaSel, mkDefaultPvEtapa());
@@ -1830,7 +1999,7 @@ export default function BoldAvulsosView({
           const hasAtraso   = alarmes.size > 0;
           const hasDate     = dateRange.kind !== "off";
           const hasQuery    = query.trim() !== "";
-          const anyFilter   = hasFacets || hasStatus || hasPvEtapa || hasServicos || hasServStat || hasAtraso || hasDate || hasQuery;
+          const anyFilter   = hasFacets || hasStatus || hasPvEtapa || hasServicos || hasServStat || hasAtraso || hasDate || hasQuery || hasMargem;
           return (
             <button
               onClick={() => {
@@ -1841,6 +2010,7 @@ export default function BoldAvulsosView({
                 setServicosFilter("todos");
                 setServicosStatusFilter(new Set());
                 clearAlarmes();
+                setMargens(new Set());
                 setDateRange({ kind: "off" });
                 setQuery("");
               }}
@@ -3580,7 +3750,7 @@ function DateRangeButton({ range, onChange }: { range: DateRange; onChange: (r: 
       {open && (
         <div className="absolute z-40 mt-1 right-0 w-[260px] bg-ww-panel border border-ww-border rounded-lg shadow-xl overflow-hidden">
           <div className="py-1">
-            {(["off", "today", "3d", "7d", "30d"] as DateRangeKind[]).map((k) => (
+            {(["off", "today", "3d", "7d", "30d", "mtd", "ytd"] as DateRangeKind[]).map((k) => (
               <button key={k} onClick={() => pick(k)}
                 className={`w-full text-left px-3 py-1.5 text-[12px] flex items-center justify-between transition ${
                   range.kind === k ? "bg-ww-accentSoft text-ww-accent font-semibold" : "text-ww-text hover:bg-ww-rowHover"

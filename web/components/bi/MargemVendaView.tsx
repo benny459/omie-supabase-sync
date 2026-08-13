@@ -7,11 +7,17 @@
 // abaixo do custo? Por isso o pior caso vem primeiro, em tudo — nos chips, na
 // ordenação da tabela e na cor.
 //
-// ── O aviso que não pode sumir ──────────────────────────────────────────────
-// "Sem custo ligado" NÃO é margem alta. É venda cujo custo não foi identificado,
-// e ela fica fora da escala de propósito: se entrasse como custo zero, cairia em
-// "Alta" e o painel diria que está tudo ótimo justamente onde não se sabe nada.
-// O tile de cobertura mostra que fração das vendas tem custo medido.
+// ── A regra do negócio que comanda o alarme ─────────────────────────────────
+// Em avulsos só se aprova compra do que é MIX ou MERCANTIL. Serviço puro não
+// gera pedido de compra, então não ter custo nele é o esperado — vira a faixa
+// neutra "Serviço (não gera compra)", fora do alarme.
+//
+// O alarme de verdade é "Sem custo — deveria ter": Mix ou Mercantil sem compra
+// ligada. Sem essa distinção o monitor gritava por 57 vendas quando o problema
+// real eram 15.
+//
+// O filtro de data alterna entre EMISSÃO do PV/OS (o ciclo comercial) e
+// FATURAMENTO da NF. São perguntas diferentes: "o que vendi" e "o que faturei".
 
 import { useCallback, useEffect, useState } from "react";
 import ChartFrame, { type SeriesDef } from "@/components/viz/ChartFrame";
@@ -30,11 +36,14 @@ type Linha = {
   categoria: string; projeto: string;
   receita: number; custo_compra: number | null;
   margem: number | null; margem_pct: number | null;
-  tem_custo: boolean; qtd_pcs: number; fornecedores: string;
-  faixa: string; faixa_ord: number;
+  tem_custo: boolean; exige_custo: boolean; qtd_pcs: number; fornecedores: string;
+  faixa: string; faixa_ord: number; tipo_omie: string; dt_emissao: string | null;
 };
 
 type Payload = {
+  base: string;
+  falta_custo: { vendas: number; receita: number; de: number };
+  tipos: string[];
   total: {
     vendas: number; receita: number;
     receita_medida: number; custo_medido: number; margem_medida: number;
@@ -49,25 +58,28 @@ type Payload = {
 // é bom nem ruim — é desconhecido, e pintá-lo de verde ou vermelho mentiria.
 const TOM: Record<string, "ok" | "alerta" | "critico" | "neutro"> = {
   "Negativa": "critico",
+  "Sem custo — deveria ter": "critico",   // Mix/Mercantil sem compra: é falha
   "Muito baixa": "critico",
   "Baixa": "alerta",
   "Média": "alerta",
   "Alta": "ok",
-  "Sem custo ligado": "neutro",
+  // Serviço sem compra é a regra funcionando, não um problema. Neutro de
+  // propósito: pintar de vermelho treinaria a ignorar o vermelho.
+  "Serviço (não gera compra)": "neutro",
   "Sem receita": "neutro",
 };
 
 // Slot da paleta por faixa — vermelho no pior, verde no melhor, cinza no
 // desconhecido. A cor segue a ENTIDADE (a faixa), não a posição no ranking.
-const SLOT: Record<string, number> = {
-  "Negativa": 3, "Muito baixa": 3, "Baixa": 2, "Média": 0, "Alta": 5,
-  "Sem custo ligado": 6, "Sem receita": 6,
-};
+
 
 const COLS: Col<Linha>[] = [
   { key: "faixa",        label: "Margem",     tipo: "badge", w: 128, tom: (v) => TOM[String(v)] ?? "neutro" },
+  { key: "dt_emissao",   label: "Emissão",    tipo: "date",  w: 82 },
   { key: "dt_fat",       label: "Dt. NF",     tipo: "date",  w: 82 },
   { key: "pv_os",        label: "PV/OS",      w: 92 },
+  { key: "tipo_omie",    label: "Tipo",       tipo: "badge", w: 92,
+    tom: (v) => v === "Serviço" ? "neutro" : v === "(sem tipo)" ? "alerta" : "ok" },
   { key: "cliente",      label: "Cliente",    w: 230 },
   { key: "projeto",      label: "Projeto",    w: 170 },
   { key: "receita",      label: "Receita",    tipo: "money", w: 118 },
@@ -84,6 +96,9 @@ export default function MargemVendaView() {
   const [range, setRange] = useState<DateRange>(() => ({ ...resolvePreset("ytd"), preset: "ytd" }));
   const [cats, setCats] = useState<Set<string>>(() => new Set(["Avulsos"]));
   const [faixaSel, setFaixaSel] = useState<string | null>(null);
+  /** Eixo do tempo: emissão do PV/OS (ciclo comercial) ou data da NF. */
+  const [base, setBase] = useState<"emissao" | "faturamento">("emissao");
+  const [tiposSel, setTiposSel] = useState<Set<string>>(new Set());
   const [data, setData] = useState<Payload | null>(null);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
@@ -93,6 +108,7 @@ export default function MargemVendaView() {
     try {
       const qs = new URLSearchParams({ from: range.from, to: range.to });
       qs.set("cat", Array.from(cats).join(",") || "Avulsos");
+      qs.set("base", base);
       const r = await fetch(`/api/bi/margem-venda?${qs}`, { cache: "no-store" });
       const j = (await r.json()) as Payload;
       if (!r.ok) { setErr(j.error ?? r.statusText); return; }
@@ -100,7 +116,7 @@ export default function MargemVendaView() {
     } catch (e) {
       setErr(e instanceof Error ? e.message : String(e));
     } finally { setLoading(false); }
-  }, [range.from, range.to, cats]);
+  }, [range.from, range.to, cats, base]);
 
   useEffect(() => { void load(); }, [load]);
 
@@ -108,21 +124,42 @@ export default function MargemVendaView() {
   const faixas = data?.faixas ?? [];
   const negativa = faixas.find((f) => f.faixa === "Negativa");
   const muitoBaixa = faixas.find((f) => f.faixa === "Muito baixa");
-  const semCusto = faixas.find((f) => f.faixa === "Sem custo ligado");
+  const faltaCusto = faixas.find((f) => f.faixa === "Sem custo — deveria ter");
+  const servico = faixas.find((f) => f.faixa === "Serviço (não gera compra)");
 
-  const linhas = faixaSel ? (data?.linhas ?? []).filter((l) => l.faixa === faixaSel) : (data?.linhas ?? []);
+  const linhas = (data?.linhas ?? [])
+    .filter((l) => !faixaSel || l.faixa === faixaSel)
+    .filter((l) => !tiposSel.size || tiposSel.has(l.tipo_omie));
 
   const margemMediaPct = t && t.receita_medida > 0
     ? (t.margem_medida / t.receita_medida) * 100 : null;
 
   const dims: DimFilter[] = [
     { key: "cat", label: "Categoria de venda", options: CATS, selected: cats },
+    { key: "tipo", label: "Tipo Omie", options: data?.tipos ?? [], selected: tiposSel },
   ];
 
   return (
     <div className="space-y-3">
-      <VizFilters range={range} onRangeChange={setRange} dims={dims}
-                  onDimChange={(_, sel) => setCats(sel.size ? sel : new Set(["Avulsos"]))} />
+      <VizFilters
+        range={range} onRangeChange={setRange} dims={dims}
+        onDimChange={(k, sel) =>
+          k === "cat" ? setCats(sel.size ? sel : new Set(["Avulsos"])) : setTiposSel(sel)}
+        right={
+          <div className="flex items-center gap-1 text-[11px]">
+            <span className="text-ww-textMuted">Data por</span>
+            {([["emissao", "Emissão PV/OS"], ["faturamento", "Faturamento"]] as const).map(([k, l]) => (
+              <button key={k} type="button" onClick={() => setBase(k)}
+                title={k === "emissao" ? "Quando a venda foi criada no Omie" : "Quando a NF saiu"}
+                className={`px-2 py-0.5 rounded border transition ${
+                  base === k ? "border-ww-accent text-ww-accent bg-ww-accentSoft font-semibold"
+                             : "border-ww-border text-ww-textMuted hover:text-ww-text"}`}>
+                {l}
+              </button>
+            ))}
+          </div>
+        }
+      />
 
       {err && (
         <div className="bg-rose-500/10 border border-rose-500/30 text-rose-700 dark:text-rose-300 rounded-xl p-3 text-[12px]">
@@ -132,15 +169,34 @@ export default function MargemVendaView() {
 
       {/* O alarme. Só aparece quando há o que alarmar — banner permanente vira
           paisagem e para de ser lido. */}
-      {(negativa || muitoBaixa) && (
+      {(negativa || muitoBaixa || faltaCusto) && (
         <div className="bg-rose-500/10 border border-rose-500/40 rounded-xl px-3 py-2.5">
-          <p className="text-[12px] font-semibold text-rose-800 dark:text-rose-200">
-            {negativa && `${negativa.vendas} venda(s) abaixo do custo — prejuízo de ${brl(Math.abs(negativa.margem))}`}
-            {negativa && muitoBaixa && " · "}
-            {muitoBaixa && `${muitoBaixa.vendas} com margem abaixo de 15%`}
-          </p>
-          <p className="text-[11px] text-ww-textMuted mt-0.5">
-            Clique na faixa abaixo pra ver quais. O custo considerado é o de compra ligada ao PV/OS.
+          <ul className="text-[12px] font-semibold text-rose-800 dark:text-rose-200 space-y-0.5">
+            {negativa && (
+              <li>
+                <button type="button" onClick={() => setFaixaSel("Negativa")} className="hover:underline text-left">
+                  {negativa.vendas} venda(s) abaixo do custo — prejuízo de {brl(Math.abs(negativa.margem))}
+                </button>
+              </li>
+            )}
+            {muitoBaixa && (
+              <li>
+                <button type="button" onClick={() => setFaixaSel("Muito baixa")} className="hover:underline text-left">
+                  {muitoBaixa.vendas} com margem abaixo de 15%
+                </button>
+              </li>
+            )}
+            {faltaCusto && (
+              <li>
+                <button type="button" onClick={() => setFaixaSel("Sem custo — deveria ter")} className="hover:underline text-left">
+                  {faltaCusto.vendas} Mix/Mercantil sem compra ligada — {brl(faltaCusto.receita)} sem custo apurado
+                </button>
+              </li>
+            )}
+          </ul>
+          <p className="text-[11px] text-ww-textMuted mt-1">
+            Clique num alarme pra filtrar a lista.
+            {servico && ` As ${servico.vendas} de Serviço puro ficam fora: pela regra, não geram compra.`}
           </p>
         </div>
       )}
@@ -153,10 +209,12 @@ export default function MargemVendaView() {
                   hint="Só das vendas com custo medido" />
         <StatTile label="Resultado medido" value={t ? brl(t.margem_medida) : "—"}
                   hint={t ? `${brl(t.receita_medida)} de receita − ${brl(t.custo_medido)} de custo` : undefined} />
-        <StatTile label="Cobertura do custo"
-                  value={t ? `${t.cobertura_pct.toLocaleString("pt-BR", { maximumFractionDigits: 0 })}%` : "—"}
-                  hint={semCusto ? `${semCusto.vendas} venda(s) sem compra ligada` : "todas medidas"}
-                  higherIsBetter />
+        <StatTile label="Falta custo"
+                  value={data ? String(data.falta_custo.vendas) : "—"}
+                  hint={data
+                    ? `de ${data.falta_custo.de} que exigem compra · ${brl(data.falta_custo.receita)}`
+                    : undefined}
+                  higherIsBetter={false} />
       </div>
 
       {/* Chips clicáveis: são o filtro e o resumo ao mesmo tempo. */}
