@@ -36,7 +36,7 @@ const brl = (v: number) =>
 // ranking já está ordenado — pintar cada barra de um tom seria cor sem
 // informação nova.
 const DIST_SERIES: SeriesDef[] = [{ key: "vendas", label: "Vendas", slot: 0, mark: "rect" }];
-const RANK_SERIES: SeriesDef[] = [{ key: "margem", label: "Margem", slot: 1, mark: "rect" }];
+const RANK_SERIES: SeriesDef[] = [{ key: "margem", label: "Margem", slot: 0, mark: "rect" }];
 
 type Linha = {
   pv_os: string; dt_fat: string | null; documento: string; cliente: string;
@@ -321,8 +321,16 @@ export default function MargemVendaView() {
           loading={loading}
           height={280}
         >
+          {/* Cor pelo SINAL: um cliente a −R$ 59 mil pintado igual aos lucrativos
+              faz a cor dizer o contrário do número.
+              Azul (0) e não verde (1) para o positivo porque verde×vermelho mede
+              ΔE 7.4 em deuteranopia — abaixo do alvo 8, quase a mesma cor. O par
+              azul×vermelho dá ΔE 22, medido com scripts/validate_palette.js. A
+              direção da barra em relação ao zero já carrega o sinal de qualquer
+              forma; a cor só reforça. */}
           <VizBar rows={rankingClientes} series={RANK_SERIES}
-                  layout="row" categoryWidth={190} valueFormat={(v) => brl(v)} />
+                  layout="row" categoryWidth={190} valueFormat={(v) => brl(v)}
+                  slotDaLinha={(r) => (Number(r.margem) < 0 ? 3 : 0)} />
         </ChartFrame>
       </div>
 

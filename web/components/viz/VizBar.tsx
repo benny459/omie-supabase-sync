@@ -21,7 +21,7 @@ import type { SeriesDef } from "./ChartFrame";
 
 export default function VizBar({
   rows, series, layout = "column", stacked = false, valueFormat, xKey = "x",
-  categoryWidth = 200, totalNoTopo = false,
+  categoryWidth = 200, totalNoTopo = false, slotDaLinha,
 }: {
   rows: Array<Record<string, unknown>>;
   series: SeriesDef[];
@@ -31,6 +31,13 @@ export default function VizBar({
   xKey?: string;
   /** Largura reservada ao rótulo de categoria no layout horizontal. */
   categoryWidth?: number;
+  /** Cor por linha, para quando o SINAL do valor é o que importa: lucro em
+   *  verde, prejuízo em vermelho. É codificação divergente por polaridade, não
+   *  por posição no ranking — a mesma entidade mantém a cor se a ordem mudar.
+   *
+   *  Só faz sentido com UMA série; com várias, a cor já é da série e sobrepor
+   *  aqui tornaria a legenda mentirosa. Ignorado nesse caso. */
+  slotDaLinha?: (row: Record<string, unknown>, i: number) => number;
   /** Escreve o total da pilha acima de cada coluna.
    *
    *  É exceção deliberada à regra de "rótulo seletivo, nunca em todo ponto": num
@@ -45,6 +52,9 @@ export default function VizBar({
   const c = CHROME[mode];
   const fmt = valueFormat ?? ((v: number) => v.toLocaleString("pt-BR"));
   const horizontal = layout === "row";
+  // Com mais de uma série a cor pertence à série (e à legenda). Cor por linha
+  // ali criaria duas fontes de verdade pra mesma barra.
+  const porLinha = series.length === 1 ? slotDaLinha : undefined;
 
   const axisTick = { fontSize: 10.5, fill: c.inkMuted };
 
@@ -100,7 +110,14 @@ export default function VizBar({
       >
         {/* Gradiente + sombra dão volume ao mark sem mexer na geometria: o
             comprimento da barra continua exatamente proporcional ao valor. */}
-        <VizDefs slots={series.map((x) => x.slot)} mode={mode} tema={tema} dir={horizontal ? "h" : "v"} />
+        {/* Os slots usados por linha também precisam de gradiente definido —
+            senão a barra referencia um id inexistente e some, sem erro. */}
+        <VizDefs
+          slots={[
+            ...series.map((x) => x.slot),
+            ...(porLinha ? rows.map((r, i) => porLinha(r, i)) : []),
+          ]}
+          mode={mode} tema={tema} dir={horizontal ? "h" : "v"} />
         <CartesianGrid
           // Grid só no eixo do valor — linha no eixo da categoria é ruído.
           horizontal={!horizontal}
@@ -170,12 +187,15 @@ export default function VizBar({
             >
               {/* Cor por ENTIDADE: um Cell por row garante que reordenar/filtrar
                   não repinta quem sobrou. */}
-              {rows.map((_, ri) => (
-                <Cell key={ri}
-                      fill={vazada(s)
-                        ? seriesColor(s.slot, mode, tema)
-                        : `url(#${gradId(s.slot, mode, horizontal ? "h" : "v", tema)})`} />
-              ))}
+              {rows.map((row, ri) => {
+                const slot = porLinha ? porLinha(row, ri) : s.slot;
+                return (
+                  <Cell key={ri}
+                        fill={vazada(s)
+                          ? seriesColor(slot, mode, tema)
+                          : `url(#${gradId(slot, mode, horizontal ? "h" : "v", tema)})`} />
+                );
+              })}
               {/* Total da pilha, na ÚLTIMA série: é a que fecha a coluna, então
                   o rótulo pousa no topo. Em tinta de texto, nunca na cor da
                   série — o número é do total, não de nenhum segmento. */}
