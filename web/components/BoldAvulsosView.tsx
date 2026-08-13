@@ -121,125 +121,43 @@ const DATE_RANGE_LABELS: Record<DateRangeKind, string> = {
 // Faixas de margem bruta, iguais às do monitor de Margem por Venda. A régua é
 // uma só: se mudar aqui, muda lá — foi duplicar regra que já fez telas
 // divergirem neste projeto.
-type FaixaMargem = "negativa" | "muito_baixa" | "baixa" | "media" | "alta" | "sem_pv";
+// Ordem = gravidade, não tamanho. O que dói fica no topo do card, onde o olho
+// cai primeiro; as duas faixas neutras caem pro "ver todos".
+const FAIXAS_MARGEM = [
+  "Negativa", "Sem custo lançado", "0–15%", "15–25%", "25–35%", "> 35%",
+  "Serviço (sem compra)", "Sem PV",
+] as const;
+type FaixaMargem = typeof FAIXAS_MARGEM[number];
 
-const FAIXAS_MARGEM: { key: FaixaMargem; label: string; tone: string }[] = [
-  { key: "negativa",    label: "Negativa",   tone: "rose" },
-  { key: "muito_baixa", label: "0–15%",      tone: "rose" },
-  { key: "baixa",       label: "15–25%",     tone: "amber" },
-  { key: "media",       label: "25–35%",     tone: "amber" },
-  { key: "alta",        label: "> 35%",      tone: "emerald" },
-  { key: "sem_pv",      label: "Sem PV",     tone: "slate" },
-];
-
-/** Margem bruta do bucket = (PV − PC) / PV. Mesma conta que o card M.B. mostra;
- *  null quando não há PV registrado — aí não há margem a calcular, e tratar como
- *  zero jogaria a venda em "Negativa" sem motivo. */
-function margemDoBucket(b: Bucket): number | null {
-  const rows = b.rows ?? [];
-  if (b.groupKind === "pc") return null;   // PC standalone não tem PV próprio
-  if (b.groupKind === "project") {
-    const seen = new Map<string, { pc: number; pv: number }>();
-    for (const r of rows) {
-      const k = String(r.pv_os_label ?? "—");
-      if (!seen.has(k)) seen.set(k, {
-        pc: Number(r.pc_custo_total_calc ?? 0),
-        pv: Number(r.pv_valor_total ?? 0),
-      });
-    }
-    let pc = 0, pv = 0;
-    for (const v of seen.values()) { pc += v.pc; pv += v.pv; }
-    return pv > 0 ? (pv - pc) / pv : null;
-  }
-  const r = rows[0] ?? {};
-  const pv = Number(r.pv_valor_total ?? 0);
-  const pc = Number(r.pc_custo_total_calc ?? 0);
-  return pv > 0 ? (pv - pc) / pv : null;
+/** Faixa de margem bruta = (PV − PC) / PV.
+ *
+ *  Só existe margem quando há PV e há custo medido. Sem PC lançado a conta daria
+ *  100%, o que empurraria a venda pra "> 35%" e esconderia justamente o caso que
+ *  interessa vigiar — foi o que fez 387 de 398 vendas aparecerem como margem alta.
+ *
+ *  `exigeCusto` vem da regra do negócio: em avulsos só se aprova compra do que é
+ *  Mix ou Mercantil. Serviço puro não gera pedido de compra, então não ter custo
+ *  nele é o esperado e não pode virar alarme — vira faixa neutra. Tipo
+ *  desconhecido conta como exigente: o silencioso é o que esconde problema. */
+function faixaDeValores(pv: number, pc: number, exigeCusto: boolean): FaixaMargem {
+  if (!(pv > 0)) return "Sem PV";
+  if (!(pc > 0)) return exigeCusto ? "Sem custo lançado" : "Serviço (sem compra)";
+  const pct = ((pv - pc) / pv) * 100;
+  if (pct < 0)  return "Negativa";
+  if (pct < 15) return "0–15%";
+  if (pct < 25) return "15–25%";
+  if (pct < 35) return "25–35%";
+  return "> 35%";
 }
 
-function faixaDaMargem(mb: number | null): FaixaMargem {
-  if (mb == null) return "sem_pv";
-  const pct = mb * 100;
-  if (pct < 0)  return "negativa";
-  if (pct < 15) return "muito_baixa";
-  if (pct < 25) return "baixa";
-  if (pct < 35) return "media";
-  return "alta";
-}
-
-/** Dropdown de faixa de margem. Espelha o visual do FacetDropdown pra não
- *  introduzir um terceiro jeito de filtrar na mesma barra. */
-function MargemDropdown({
-  selected, counts, onToggle, onClear,
-}: {
-  selected: Set<FaixaMargem>;
-  counts: Map<FaixaMargem, number>;
-  onToggle: (k: FaixaMargem) => void;
-  onClear: () => void;
-}) {
-  const [aberto, setAberto] = useState(false);
-  const caixa = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!aberto) return;
-    const fora = (e: MouseEvent) => {
-      if (caixa.current && !caixa.current.contains(e.target as Node)) setAberto(false);
-    };
-    document.addEventListener("mousedown", fora);
-    return () => document.removeEventListener("mousedown", fora);
-  }, [aberto]);
-
-  const n = selected.size;
-  const TONE: Record<string, string> = {
-    rose:     "text-rose-700 dark:text-rose-300",
-    amber:    "text-amber-700 dark:text-amber-300",
-    emerald:  "text-emerald-700 dark:text-emerald-300",
-    slate:    "text-ww-textMuted",
-  };
-
-  return (
-    <div className="relative" ref={caixa}>
-      <button
-        type="button"
-        onClick={() => setAberto((v) => !v)}
-        className={`inline-flex items-center gap-1.5 px-3 py-1 text-[11.5px] font-semibold rounded-md border transition shadow-sm ${
-          n > 0
-            ? "bg-ww-accentSoft text-ww-accent border-ww-accent"
-            : "bg-ww-panel text-ww-textMuted border-ww-border hover:text-ww-text hover:bg-ww-rowHover"
-        }`}>
-        + Margem{n > 0 && <span className="px-1 rounded bg-ww-accent text-white text-[10px]">{n}</span>}
-      </button>
-
-      {aberto && (
-        <div className="absolute left-0 mt-1 z-50 w-[220px] rounded-lg border border-ww-border bg-ww-drawer shadow-xl p-1 animate-in fade-in-0 slide-in-from-top-1">
-          <p className="px-2 py-1 text-[10px] uppercase tracking-wider text-ww-textFaint">
-            Margem bruta (PV − PC) / PV
-          </p>
-          {FAIXAS_MARGEM.map((f) => {
-            const on = selected.has(f.key);
-            const c = counts.get(f.key) ?? 0;
-            return (
-              <button
-                key={f.key}
-                type="button"
-                onClick={() => onToggle(f.key)}
-                className={`w-full flex items-center justify-between gap-2 px-2 py-1.5 rounded-md text-[11.5px] transition ${
-                  on ? "bg-ww-accentSoft font-semibold" : "hover:bg-ww-rowHover"
-                }`}>
-                <span className={TONE[f.tone] ?? ""}>{f.label}</span>
-                <span className="text-[10px] text-ww-textFaint tabular-nums">{c}</span>
-              </button>
-            );
-          })}
-          {n > 0 && (
-            <button type="button" onClick={onClear}
-              className="w-full mt-0.5 px-2 py-1 text-[10.5px] text-ww-accent hover:underline text-left border-t border-ww-border">
-              limpar
-            </button>
-          )}
-        </div>
-      )}
-    </div>
+/** PV e PC são propriedades do PV/OS, repetidas em todas as linhas dele — então
+ *  classificar por linha nunca parte um PV ao meio, e a margem pode filtrar no
+ *  mesmo nível das outras facetas. */
+function faixaDaRow(r: AnyRow): FaixaMargem {
+  return faixaDeValores(
+    Number(r.pv_valor_total) || 0,
+    Number(r.pc_custo_total_calc) || 0,
+    normalizeTipoOmie(r.tipo_omie) !== "Serviço",
   );
 }
 
@@ -1118,7 +1036,7 @@ export default function BoldAvulsosView({
   // skipFacet: usado por facetValues (dropdown mostra opções sem se auto-filtrar).
   // skipAtraso: usado pelas contagens dos botões Atraso pra refletir "quantos PV/OS
   // seriam mostrados se eu ativar esse filtro AGORA, considerando os demais filtros".
-  const passesFilters = useCallback((r: AnyRow, opts: { skipFacet?: FacetKey; skipAlarmes?: boolean; skipServicos?: boolean; skipServicosStatus?: boolean; skipPvEtapa?: boolean; skipStatus?: boolean } = {}) => {
+  const passesFilters = useCallback((r: AnyRow, opts: { skipFacet?: FacetKey; skipAlarmes?: boolean; skipServicos?: boolean; skipServicosStatus?: boolean; skipPvEtapa?: boolean; skipStatus?: boolean; skipMargem?: boolean } = {}) => {
     const q = deferredQuery.trim().toLowerCase();
     if (dateWindow && !isRowInWindow(r, dateWindow.from, dateWindow.to)) return false;
     if (!opts.skipAlarmes && alarmes.size > 0) {
@@ -1172,6 +1090,9 @@ export default function BoldAvulsosView({
       // Mercantil (b=null) nunca aparece nesse card → nunca casa filtro daqui
       if (b == null || !servicosStatusFilter.has(b)) return false;
     }
+    // Faixa de margem: mesma mecânica das facetas. PV e PC são do PV/OS e vêm
+    // repetidos em toda linha dele, então filtrar aqui nunca parte um PV ao meio.
+    if (!opts.skipMargem && margens.size > 0 && !margens.has(faixaDaRow(r))) return false;
     for (const [key, set] of Object.entries(facets)) {
       if (opts.skipFacet === key) continue;  // ignora o próprio facet ao calcular suas opções
       if (!set || set.size === 0) continue;
@@ -1192,7 +1113,7 @@ export default function BoldAvulsosView({
     }
     if (!q) return true;
     return (haystackByRow.get(r) ?? "").includes(q);
-  }, [deferredQuery, dateWindow, alarmes, alarmsByBucket, modulo, pvEtapaSel, statusFilter, servicosFilter, servicosStatusFilter, facets, effectiveStatus, liberacaoSet, haystackByRow]);
+  }, [deferredQuery, dateWindow, alarmes, alarmsByBucket, modulo, pvEtapaSel, statusFilter, servicosFilter, servicosStatusFilter, facets, margens, effectiveStatus, liberacaoSet, haystackByRow]);
 
   const filtered = useMemo(() => rows.filter((r) => passesFilters(r)), [rows, passesFilters]);
 
@@ -1411,26 +1332,7 @@ export default function BoldAvulsosView({
   const groupBy: GroupBy =
     modulo === "projetos" ? "project" :
     modulo === "pcs"      ? "pc"      : "pvos";
-  const bucketsAll = useMemo(() => buildBuckets(filtered, groupBy), [filtered, groupBy]);
-
-  // Margem filtra BUCKET, não linha: ela é do PV/OS inteiro, e esconder itens
-  // soltos deixaria o card com um total que não bate com o que se vê.
-  const buckets = useMemo(() => {
-    if (!margens.size) return bucketsAll;
-    return bucketsAll.filter((b) => margens.has(faixaDaMargem(margemDoBucket(b))));
-  }, [bucketsAll, margens]);
-
-  // Contagem por faixa — sempre sobre TODOS os buckets, não sobre os filtrados,
-  // senão selecionar uma faixa zeraria as outras e o usuário não teria como
-  // voltar sem limpar.
-  const contagemMargem = useMemo(() => {
-    const m = new Map<FaixaMargem, number>();
-    for (const b of bucketsAll) {
-      const f = faixaDaMargem(margemDoBucket(b));
-      m.set(f, (m.get(f) ?? 0) + 1);
-    }
-    return m;
-  }, [bucketsAll]);
+  const buckets = useMemo(() => buildBuckets(filtered, groupBy), [filtered, groupBy]);
 
   // Virtualização só onde paga: /pcs (1368 buckets) e /avulsos (1227) montam ~40x
   // menos componentes. /projetos tem 44 buckets — virtualizar ali não ganharia
@@ -1664,6 +1566,36 @@ export default function BoldAvulsosView({
     });
   }, []);
   const pseudoServicosStatusClear = useCallback(() => setServicosStatusFilter(new Set()), []);
+
+  // Distribuição por faixa de margem. Dinâmica como os outros cards: conta sobre
+  // as linhas que passam em TODOS os demais filtros, ignorando só o próprio
+  // (skipMargem) — senão escolher uma faixa zeraria as outras e não haveria como
+  // voltar sem limpar tudo. Dedupe por PV/OS: 1 venda conta 1 vez, e o valor é o
+  // PV (lado "V"), não a soma das linhas.
+  const pseudoMargemBuckets = useMemo(() => {
+    const counts: Record<string, number> = Object.fromEntries(FAIXAS_MARGEM.map((k) => [k, 0]));
+    const vals:   Record<string, number> = Object.fromEntries(FAIXAS_MARGEM.map((k) => [k, 0]));
+    const seen = new Set<string>();
+    for (const r of rows) {
+      if (!passesFilters(r, { skipMargem: true })) continue;
+      const k = String(r.pv_os_label ?? "");
+      if (!k || seen.has(k)) continue;
+      seen.add(k);
+      const f = faixaDaRow(r);
+      counts[f] += 1;
+      vals[f]   += Number(r.pv_valor_total) || 0;
+    }
+    return FAIXAS_MARGEM.map((v) => ({ value: v, count: counts[v], val: vals[v] }));
+  }, [rows, passesFilters]);
+  const margemToggle = useCallback((v: string) => {
+    setMargens((prev) => {
+      const next = new Set(prev);
+      const f = v as FaixaMargem;
+      if (next.has(f)) next.delete(f); else next.add(f);
+      return next;
+    });
+  }, []);
+  const margemClear = useCallback(() => setMargens(new Set()), []);
   const pseudoServicoSelected = useMemo(() => {
     const s = new Set<string>();
     if (servicosFilter === "concluidos") s.add("Executados");
@@ -1884,7 +1816,7 @@ export default function BoldAvulsosView({
           hue distinto pra facilitar leitura visual. Alarmes ficam separados
           na filter bar embaixo. */}
       {modulo !== "pcs" && (
-      <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-3">
+      <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7 gap-3">
         <FacetDistribution facetKey="pv_etapa_texto"         label="Status PV"       accent="blue"     side="V" canViewValues={userCanViewValues}
           buckets={pseudoPvStatusBuckets} selected={pseudoPvStatusSelected} onToggle={pseudoPvStatusToggle} onClear={() => setPvEtapaSel(new Set())} />
         <FacetDistribution facetKey="pc_etapa_texto"         label="Aprovação PC"    accent="emerald"  side="C" canViewValues={userCanViewValues}
@@ -1900,6 +1832,8 @@ export default function BoldAvulsosView({
         <FacetDistribution facetKey="mt_status_fornecimento" label="Entrega"         accent="fuchsia"  side="C" single canViewValues={userCanViewValues}
           buckets={facetDistributions.mt_status_fornecimento}
           selected={facets.mt_status_fornecimento ?? new Set()}    onToggle={(v) => toggleFacet("mt_status_fornecimento", v)} onClear={() => clearFacet("mt_status_fornecimento")} />
+        <FacetDistribution facetKey="tipo_omie"              label="Margem"          accent="rose"     side="V" canViewValues={userCanViewValues}
+          buckets={pseudoMargemBuckets} selected={margens} onToggle={margemToggle} onClear={margemClear} />
       </div>
       )}
 
@@ -1970,21 +1904,8 @@ export default function BoldAvulsosView({
           selected={facets.codigo_categoria ?? new Set()}
           onToggle={(v) => toggleFacet("codigo_categoria", v)}
           onClear={() => clearFacet("codigo_categoria")} />
-        {/* Margem bruta: filtra por FAIXA, nas mesmas réguas do monitor de Margem
-            por Venda. Fica ao lado dos outros filtros e não encosta nos alarmes —
-            aqueles valem só pro que está em aberto e seguem como estavam. */}
-        {modulo !== "pcs" && (
-          <MargemDropdown
-            selected={margens}
-            counts={contagemMargem}
-            onToggle={(k) => setMargens((prev) => {
-              const n = new Set(prev);
-              n.has(k) ? n.delete(k) : n.add(k);
-              return n;
-            })}
-            onClear={() => setMargens(new Set())}
-          />
-        )}
+        {/* Margem saiu daqui: virou card "Por Margem" na grade de métricas, no
+            mesmo padrão dos outros — com contagem, valor e barra proporcional. */}
         {modulo !== "pcs" && <RelatorioMenu />}
         {(() => {
           // Status PV default varia por módulo (ver defaultPvEtapa) — clear
