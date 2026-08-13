@@ -19,7 +19,7 @@
 // O filtro de data alterna entre EMISSÃO do PV/OS (o ciclo comercial) e
 // FATURAMENTO da NF. São perguntas diferentes: "o que vendi" e "o que faturei".
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import ChartFrame, { type SeriesDef } from "@/components/viz/ChartFrame";
 import { FAIXAS_SEM_MARGEM } from "@/lib/margem";
 import StatTile from "@/components/viz/StatTile";
@@ -31,6 +31,12 @@ const CATS = ["Avulsos", "Contratuais", "Projetos", "Revenda", "BOT/SW", "Outras
 
 const brl = (v: number) =>
   v.toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 });
+
+// Uma cor por gráfico. A ordem no eixo já carrega a escala da margem, e o
+// ranking já está ordenado — pintar cada barra de um tom seria cor sem
+// informação nova.
+const DIST_SERIES: SeriesDef[] = [{ key: "vendas", label: "Vendas", slot: 0, mark: "rect" }];
+const RANK_SERIES: SeriesDef[] = [{ key: "margem", label: "Margem", slot: 1, mark: "rect" }];
 
 type Linha = {
   pv_os: string; dt_fat: string | null; documento: string; cliente: string;
@@ -134,6 +140,51 @@ export default function MargemVendaView() {
 
   const margemMediaPct = t && t.receita_medida > 0
     ? (t.margem_medida / t.receita_medida) * 100 : null;
+
+  // Distribuição = só as faixas que SÃO margem, na ordem da escala (pior →
+  // melhor). "Sem custo lançado" e "Serviço (sem compra)" saem do gráfico: são
+  // estados, não posições numa escala, e com 42 vendas o Serviço virava a maior
+  // barra de um gráfico de margem — dominando com justamente o que não tem
+  // margem. Eles continuam nos chips e nos KPIs acima, que é o lugar deles.
+  const ESCALA = ["Negativa", "0–15%", "15–25%", "25–35%", "> 35%"] as const;
+  const distribuicao = useMemo(() => {
+    const porFaixa = new Map(faixas.map((f) => [f.faixa, f]));
+    return ESCALA.map((f) => ({
+      x: f,
+      vendas: porFaixa.get(f)?.vendas ?? 0,
+      receita: porFaixa.get(f)?.receita ?? 0,
+    }));
+  }, [faixas]);
+
+  // Ranking de clientes. Só entra quem tem custo medido — sem isso o cliente
+  // apareceria com 100% de margem e lideraria por falta de dado, que é o mesmo
+  // erro que este monitor existe pra evitar.
+  //
+  // Ordena por margem em R$, não por %: 97% sobre uma venda de R$ 300 não diz
+  // nada sobre o negócio, e ordenar por % encheria o topo de cliente miúdo. Os
+  // 15 de maior impacto em MÓDULO, para que os piores apareçam junto dos
+  // melhores — o gráfico serve pros dois lados.
+  const rankingClientes = useMemo(() => {
+    const acc = new Map<string, { receita: number; custo: number; margem: number }>();
+    for (const l of data?.linhas ?? []) {
+      if (!l.tem_custo) continue;
+      if (tiposSel.size && !tiposSel.has(l.tipo_omie)) continue;
+      const k = l.cliente || "(sem cliente)";
+      const a = acc.get(k) ?? { receita: 0, custo: 0, margem: 0 };
+      a.receita += Number(l.receita) || 0;
+      a.custo   += Number(l.custo_compra) || 0;
+      a.margem  += Number(l.margem) || 0;
+      acc.set(k, a);
+    }
+    return Array.from(acc.entries())
+      .map(([cliente, a]) => ({
+        x: cliente, ...a,
+        pct: a.receita > 0 ? (a.margem / a.receita) * 100 : null,
+      }))
+      .sort((p, q) => Math.abs(q.margem) - Math.abs(p.margem))
+      .slice(0, 15)
+      .sort((p, q) => q.margem - p.margem);
+  }, [data?.linhas, tiposSel]);
 
   const dims: DimFilter[] = [
     { key: "cat", label: "Categoria de venda", options: CATS, selected: cats },
@@ -248,19 +299,32 @@ export default function MargemVendaView() {
         })}
       </div>
 
-      <ChartFrame
-        title="Vendas por faixa de margem"
-        subtitle='Negativa · 0–15% · 15–25% · 25–35% · > 35%. "Sem custo lançado" e "Serviço (sem compra)" não são margem: são estados, e ficam fora da escala'
-        series={[{ key: "vendas", label: "Vendas", slot: 0, mark: "rect" }]}
-        rows={faixas.map((f) => ({ x: f.faixa, vendas: f.vendas }))}
-        valueFormat={(v) => `${Number(v) || 0}`}
-        loading={loading}
-        height={250}
-      >
-        <VizBar rows={faixas.map((f) => ({ x: f.faixa, vendas: f.vendas }))}
-                series={[{ key: "vendas", label: "Vendas", slot: 0, mark: "rect" }]}
-                layout="row" categoryWidth={140} valueFormat={(v) => `${v}`} />
-      </ChartFrame>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+        <ChartFrame
+          title="Distribuição das margens"
+          subtitle='Quantas vendas caem em cada faixa, da pior pra melhor. "Sem custo lançado" e "Serviço (sem compra)" ficam fora: são estados, não posições numa escala de margem'
+          series={DIST_SERIES}
+          rows={distribuicao}
+          valueFormat={(v) => `${Number(v) || 0}`}
+          loading={loading}
+          height={280}
+        >
+          <VizBar rows={distribuicao} series={DIST_SERIES} valueFormat={(v) => `${v}`} />
+        </ChartFrame>
+
+        <ChartFrame
+          title="Clientes por margem"
+          subtitle="Os 15 de maior impacto, do melhor pro pior. Só clientes com custo medido — sem custo, a margem seria 100% e o ranking premiaria a falta de dado"
+          series={RANK_SERIES}
+          rows={rankingClientes}
+          valueFormat={(v) => brl(Number(v) || 0)}
+          loading={loading}
+          height={280}
+        >
+          <VizBar rows={rankingClientes} series={RANK_SERIES}
+                  layout="row" categoryWidth={190} valueFormat={(v) => brl(v)} />
+        </ChartFrame>
+      </div>
 
       <VizTable
         title={faixaSel ? `Vendas — ${faixaSel}` : "Vendas do período"}
