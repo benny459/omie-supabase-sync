@@ -19,7 +19,7 @@
 // explícito, com simulação antes. Portado do waterworks-bi, onde rodou em
 // produção (23 envios OK em junho/2026).
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import ChartFrame, { type SeriesDef } from "@/components/viz/ChartFrame";
 import StatTile from "@/components/viz/StatTile";
 import VizBar from "@/components/viz/VizBar";
@@ -74,6 +74,43 @@ const FAIXA_TOM: Record<string, string> = {
   "61-90d": "bg-rose-500/15 text-rose-700 dark:text-rose-300 border-rose-500/30",
   "90d+":   "bg-rose-600/25 text-rose-800 dark:text-rose-200 border-rose-600/50 font-bold",
 };
+
+/** Empurra para o próximo dia útil. Sábado → segunda, domingo → segunda.
+ *
+ *  Existe porque o Omie NÃO grava esse deslocamento: no campo de previsão que a
+ *  API devolve, sábado continua sábado — ele aplica o ajuste só na hora de
+ *  desenhar o fluxo dele. Sem empurrar aqui, a curva antecipa dinheiro: mostra
+ *  saída no sábado que só sai na segunda. Nos próximos 90 dias são 59 títulos e
+ *  R$ 186.693 previstos para fim de semana.
+ *
+ *  Vale só para a CURVA e os totais dela. A mesa de reagendamento continua
+ *  mostrando a data crua do título — quem opera precisa ver o dado verdadeiro,
+ *  e é essa data que vai pro Omie.
+ *
+ *  NÃO cobre feriados: nacional dá pra embutir, mas municipal e estadual variam
+ *  por onde o cliente paga e não temos essa lista. Então 07/09 e 12/10, que caem
+ *  em dia de semana, seguem na data original. */
+function proximoDiaUtil(iso: string): string {
+  const d = new Date(`${iso}T12:00:00`);
+  const dow = d.getDay();               // 0 = domingo, 6 = sábado
+  if (dow === 6) return addDias(iso, 2);
+  if (dow === 0) return addDias(iso, 1);
+  return iso;
+}
+
+/** Dias de hoje até a data. Negativo = passado. */
+const diasAte = (iso: string | null) => {
+  if (!iso) return null;
+  const ms = new Date(`${iso}T12:00:00`).getTime() - new Date(`${hojeIso()}T12:00:00`).getTime();
+  return Math.round(ms / 86_400_000);
+};
+
+/** Colunas ordenáveis da mesa de reagendamento. */
+type OrdemCol = "valor" | "previsao" | "vencimento" | "contraparte" | "categoria";
+
+/** Minúsculas sem acento: quem digita "sirio" tem que achar "SÍRIO". */
+const normaliza = (v: string) =>
+  v.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
 
 type Titulo = {
   cod_titulo: number; empresa: string; natureza: "R" | "P";
@@ -141,16 +178,18 @@ function projetar(
     else cel.s += Number(t.valor) || 0;
     porDia.set(dia, cel);
   };
+  // Toda entrada na curva passa pelo dia útil: o dinheiro não se move no fim de
+  // semana, e o Omie não grava esse ajuste no campo de previsão.
   for (const t of titulos) {
     if (semOverride) {
       const orig = t.previsao_original ?? t.previsao;
       // Fora da janela (ou já vencida) = não existiria na curva sem o agendamento.
-      if (orig >= inicio && orig <= fim) lancar(orig, t);
+      if (orig >= inicio && orig <= fim) lancar(proximoDiaUtil(orig), t);
     } else {
-      lancar(t.previsao, t);
+      lancar(proximoDiaUtil(t.previsao), t);
     }
   }
-  for (const x of extras) lancar(x.dia, x.t);
+  for (const x of extras) lancar(proximoDiaUtil(x.dia), x.t);
 
   const pontos: Ponto[] = [];
   let saldo = saldo0;
@@ -194,6 +233,21 @@ export default function FluxoCaixaView() {
   const [dataLote, setDataLote] = useState("");
   const [busca, setBusca] = useState("");
   const [tipo, setTipo] = useState<"todos" | "R" | "P">("todos");
+  /** Escopo da mesa de reagendamento. Antes só existia "atrasados" — mas
+   *  reprogramar um título A VENCER é operação igualmente comum, e era a única
+   *  que exigia sair do painel e ir no Omie. "A vencer" inclui hoje: a função
+   *  devolve prev_efetiva >= current_date. */
+  const [escopo, setEscopo] = useState<"atrasados" | "a_vencer" | "todos">("atrasados");
+  /** Categorias selecionadas. Vazio = todas. */
+  const [catsSel, setCatsSel] = useState<Set<string>>(new Set());
+  /** Recorte por data de previsão — o eixo em que o reagendamento opera. */
+  const [prevDe, setPrevDe] = useState("");
+  const [prevAte, setPrevAte] = useState("");
+  /** Ordenação da mesa. Padrão: maior valor primeiro, que é onde mexer move a
+   *  curva. */
+  const [ordem, setOrdem] = useState<{ col: OrdemCol; desc: boolean }>(
+    { col: "valor", desc: true },
+  );
   const [salvando, setSalvando] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [syncResult, setSyncResult] = useState<SyncResult | null>(null);
@@ -228,6 +282,24 @@ export default function FluxoCaixaView() {
       .map(([cod, dia]) => ({ t: porCod.get(cod), dia }))
       .filter((x): x is { t: Titulo; dia: string } => !!x.t);
   }, [agenda, atrasados]);
+
+  /** Efeito do empurrão pra dia útil, para a tela poder declará-lo.
+   *
+   *  `foraDaJanela` é o caso de borda: previsão no último fim de semana da
+   *  janela vira segunda, que já está fora — o título sai da curva. Silenciar
+   *  isso faria o gráfico não fechar com o card de "a vencer", que é contado no
+   *  servidor pela data crua. Poucos títulos, mas some sem avisar se eu deixar. */
+  const empurrao = useMemo(() => {
+    const fim = addDias(hojeIso(), dias);
+    let qtd = 0, valor = 0, foraQtd = 0, foraValor = 0;
+    for (const t of titulos) {
+      const novo = proximoDiaUtil(t.previsao);
+      if (novo === t.previsao) continue;
+      qtd += 1; valor += Number(t.valor) || 0;
+      if (novo > fim) { foraQtd += 1; foraValor += Number(t.valor) || 0; }
+    }
+    return { qtd, valor, foraQtd, foraValor };
+  }, [titulos, dias]);
 
   /** Quantos títulos DA CURVA já carregam um reagendamento gravado. É o que
    *  decide se a comparação faz sentido — sem nenhum, as duas curvas seriam
@@ -309,16 +381,53 @@ export default function FluxoCaixaView() {
     };
   }, [atrasados]);
 
+  /** Universo da mesa conforme o escopo. `atrasados` e `titulos` já vêm
+   *  separados do servidor (duas chamadas de fluxo_caixa_titulos), então "todos"
+   *  é só a união — sem consulta nova e sem risco de contar duas vezes, porque
+   *  vencido e a-vencer são mutuamente exclusivos por construção. */
+  const universo = useMemo(() => {
+    if (escopo === "atrasados") return atrasados;
+    if (escopo === "a_vencer")  return titulos;
+    return [...atrasados, ...titulos];
+  }, [escopo, atrasados, titulos]);
+
+  /** Categorias presentes no universo atual, com valor — quem reagenda escolhe
+   *  pelo peso, não pelo nome. */
+  const catsOpcoes = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const t of universo) m.set(t.categoria, (m.get(t.categoria) ?? 0) + Number(t.valor || 0));
+    return Array.from(m.entries()).sort((a, b) => b[1] - a[1]);
+  }, [universo]);
+
   const lista = useMemo(() => {
-    const q = busca.trim().toLowerCase();
-    return atrasados
+    const q = normaliza(busca);
+    const arr = universo
       .filter((t) => tipo === "todos" || t.natureza === tipo)
-      .filter((t) => !q || t.contraparte.toLowerCase().includes(q)
-                        || t.categoria.toLowerCase().includes(q)
-                        || t.documento.toLowerCase().includes(q))
-      .slice()
-      .sort((a, b) => Number(b.valor) - Number(a.valor));
-  }, [atrasados, tipo, busca]);
+      .filter((t) => !catsSel.size || catsSel.has(t.categoria))
+      // Recorte pela previsão EFETIVA, que é a data que a curva usa.
+      .filter((t) => !prevDe  || (t.previsao && t.previsao >= prevDe))
+      .filter((t) => !prevAte || (t.previsao && t.previsao <= prevAte))
+      .filter((t) => !q || normaliza(
+        `${t.contraparte} ${t.categoria} ${t.documento} ${t.num_titulo ?? ""}`).includes(q));
+
+    const sinal = ordem.desc ? -1 : 1;
+    return arr.slice().sort((a, b) => {
+      switch (ordem.col) {
+        case "valor":       return sinal * (Number(a.valor) - Number(b.valor));
+        case "previsao":    return sinal * String(a.previsao ?? "").localeCompare(String(b.previsao ?? ""));
+        case "vencimento":  return sinal * String(a.vencimento ?? "").localeCompare(String(b.vencimento ?? ""));
+        case "contraparte": return sinal * a.contraparte.localeCompare(b.contraparte, "pt-BR");
+        case "categoria":   return sinal * a.categoria.localeCompare(b.categoria, "pt-BR");
+        default:            return 0;
+      }
+    });
+  }, [universo, tipo, catsSel, prevDe, prevAte, busca, ordem]);
+
+  const totalLista = useMemo(() => {
+    const soma = (n: "R" | "P") =>
+      lista.filter((t) => t.natureza === n).reduce((a, t) => a + (Number(t.valor) || 0), 0);
+    return { receber: soma("R"), pagar: soma("P") };
+  }, [lista]);
 
   /** Data aceitável: COMPLETA e não no passado. Não limito ao fim da janela —
    *  agendar pra depois dela é legítimo, o título só não aparece na curva atual.
@@ -352,6 +461,13 @@ export default function FluxoCaixaView() {
         return n;
       });
       setErr(null);
+      // Recarrega: `extras` só ponteia atrasados reagendados na sessão, então um
+      // título A VENCER remarcado gravaria no banco e a curva não se moveria —
+      // ele continuaria em `titulos` na data antiga. Com o reload, o servidor
+      // devolve a previsão efetiva já nova e os dois escopos se comportam igual.
+      // O título também migra de escopo quando deixa de estar vencido, que é o
+      // certo: ele não é mais um atrasado.
+      await load();
     } finally {
       setSalvando(false);
     }
@@ -500,7 +616,18 @@ export default function FluxoCaixaView() {
 
       <ChartFrame
         title="Fluxo de caixa projetado"
-        subtitle={`Barras = movimento do dia · linha = saldo acumulado, partindo de ${brl(saldo0)}. Só o que está a vencer; atrasado entra ao ganhar data`}
+        subtitle={
+          `Barras = movimento do dia · linha = saldo acumulado, partindo de ${brl(saldo0)}. `
+          + `Só o que está a vencer; atrasado entra ao ganhar data. `
+          + `Previsão em fim de semana é lida no próximo dia útil — o Omie não grava esse ajuste no campo`
+          + (empurrao.qtd
+              ? `: ${empurrao.qtd} título(s), ${brl(empurrao.valor)}`
+              : "")
+          + (empurrao.foraQtd
+              ? `, dos quais ${empurrao.foraQtd} (${brl(empurrao.foraValor)}) caem depois do fim da janela e saem da curva`
+              : "")
+          + `. Feriados não entram no ajuste.`
+        }
         series={[...barras, ...linhas]}
         rows={rows}
         valueFormat={(v) => brl(Number(v))}
@@ -526,13 +653,34 @@ export default function FluxoCaixaView() {
         <header className="viz-head flex items-center gap-3 flex-wrap">
           <div className="min-w-0 flex-1">
             <h3 className="text-[12.5px] font-semibold text-ww-text tracking-wide uppercase">
-              Agendar atrasados
+              Reagendar títulos
             </h3>
             <p className="text-[11px] text-ww-textMuted mt-0.5 normal-case">
-              {atrasados.length} títulos vencidos com previsão em {data?.ano}. Dar uma data grava no
-              painel e coloca na curva; enviar pro Omie é o passo separado ao lado.
+              {lista.length} de {universo.length} títulos ·{" "}
+              <span className="text-emerald-600 dark:text-emerald-400 tabular-nums">
+                {brl(totalLista.receber)} a receber
+              </span>{" · "}
+              <span className="text-rose-600 dark:text-rose-400 tabular-nums">
+                {brl(totalLista.pagar)} a pagar
+              </span>
+              . Dar uma data grava no painel e move a curva; enviar pro Omie é o passo ao lado.
             </p>
           </div>
+          {/* Escopo primeiro: define o universo. Os outros filtros recortam dentro
+              dele, então mudá-lo depois seria reordenar a leitura. */}
+          <div className="flex items-center gap-1">
+            {([["atrasados", `Atrasados (${atrasados.length})`],
+               ["a_vencer",  `A vencer (${titulos.length})`],
+               ["todos",     "Todos"]] as const).map(([k, l]) => (
+              <button key={k} type="button" onClick={() => { setEscopo(k); setSel(new Set()); }}
+                className={`px-2 py-0.5 text-[11px] rounded border transition ${
+                  escopo === k ? "border-ww-accent text-ww-accent bg-ww-accentSoft font-semibold"
+                               : "border-ww-border text-ww-textMuted hover:text-ww-text"}`}>
+                {l}
+              </button>
+            ))}
+          </div>
+          <span className="h-5 w-px bg-ww-border" />
           <div className="flex items-center gap-1">
             {([["todos", "Todos"], ["R", "A receber"], ["P", "A pagar"]] as const).map(([k, l]) => (
               <button key={k} type="button" onClick={() => setTipo(k)}
@@ -542,6 +690,28 @@ export default function FluxoCaixaView() {
                 {l}
               </button>
             ))}
+          </div>
+          <CategoriaFiltro opcoes={catsOpcoes} selected={catsSel}
+            onToggle={(v) => setCatsSel((prev) => {
+              const n = new Set(prev);
+              if (n.has(v)) n.delete(v); else n.add(v);
+              return n;
+            })}
+            onClear={() => setCatsSel(new Set())} />
+          {/* Recorte por previsão: o eixo em que o reagendamento opera. */}
+          <div className="flex items-center gap-1 text-[10.5px] text-ww-textMuted">
+            <span className="uppercase tracking-wider">Previsão</span>
+            <input type="date" value={prevDe} onChange={(e) => setPrevDe(e.target.value)}
+              title="Previsão a partir de"
+              className="text-[11px] bg-ww-bg border border-ww-border rounded px-1.5 py-0.5 text-ww-text" />
+            <span>→</span>
+            <input type="date" value={prevAte} onChange={(e) => setPrevAte(e.target.value)}
+              title="Previsão até"
+              className="text-[11px] bg-ww-bg border border-ww-border rounded px-1.5 py-0.5 text-ww-text" />
+            {(prevDe || prevAte) && (
+              <button type="button" onClick={() => { setPrevDe(""); setPrevAte(""); }}
+                className="text-ww-accent hover:underline">limpar</button>
+            )}
           </div>
           <input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Filtrar…"
             className="w-[150px] text-[11px] bg-ww-bg border border-ww-border rounded px-2 py-1 text-ww-text placeholder:text-ww-textFaint" />
@@ -609,20 +779,24 @@ export default function FluxoCaixaView() {
                       className="accent-ww-accent" />
                   </th>
                 )}
-                {[["Tipo", 58], ["Emp.", 52], ["Contraparte", 210], ["Categoria", 130],
-                  ["Venceu", 74], ["Atraso", 84]].map(([l, w]) => (
-                  <th key={String(l)} style={{ width: Number(w) }}
-                      className="p-1.5 text-left shadow-[0_1px_0_0_rgb(var(--color-ww-border))]">{l}</th>
-                ))}
-                <th style={{ width: 112 }} className="p-1.5 text-right shadow-[0_1px_0_0_rgb(var(--color-ww-border))]">Valor</th>
+                <th style={{ width: 58 }} className="p-1.5 text-left shadow-[0_1px_0_0_rgb(var(--color-ww-border))]">Tipo</th>
+                <th style={{ width: 52 }} className="p-1.5 text-left shadow-[0_1px_0_0_rgb(var(--color-ww-border))]">Emp.</th>
+                <Th col="contraparte" w={196} ordem={ordem} setOrdem={setOrdem}>Contraparte</Th>
+                <Th col="categoria"   w={130} ordem={ordem} setOrdem={setOrdem}>Categoria</Th>
+                <Th col="vencimento"  w={74}  ordem={ordem} setOrdem={setOrdem}>Vencto</Th>
+                {/* Previsão vigente: é a data que a curva usa hoje, e o ponto de
+                    partida de qualquer reagendamento. Faltava na tela. */}
+                <Th col="previsao"    w={78}  ordem={ordem} setOrdem={setOrdem}>Previsão</Th>
+                <th style={{ width: 78 }} className="p-1.5 text-left shadow-[0_1px_0_0_rgb(var(--color-ww-border))]">Situação</th>
+                <Th col="valor" w={112} alinhaDireita ordem={ordem} setOrdem={setOrdem}>Valor</Th>
                 <th style={{ width: 128 }} className="p-1.5 text-left shadow-[0_1px_0_0_rgb(var(--color-ww-border))]">Nova previsão</th>
                 <th style={{ width: 96 }} className="p-1.5 text-left shadow-[0_1px_0_0_rgb(var(--color-ww-border))]">Omie</th>
               </tr>
             </thead>
             <tbody className={loading ? "opacity-40" : ""}>
               {lista.length === 0 && (
-                <tr><td colSpan={podeEditar ? 10 : 9} className="p-6 text-center text-ww-textFaint">
-                  {loading ? "Carregando…" : `Nenhum título vencido com previsão em ${data?.ano}.`}
+                <tr><td colSpan={podeEditar ? 12 : 11} className="p-6 text-center text-ww-textFaint">
+                  {loading ? "Carregando…" : "Nenhum título com os filtros atuais."}
                 </td></tr>
               )}
               {lista.map((t) => {
@@ -659,13 +833,36 @@ export default function FluxoCaixaView() {
                     <td className="p-1.5 border-b border-ww-border/50 text-ww-textMuted tabular-nums">
                       {t.vencimento ? diaBr(t.vencimento) : "—"}
                     </td>
-                    <td className="p-1.5 border-b border-ww-border/50">
-                      {t.faixa_atraso && (
-                        <span className={`inline-flex px-1.5 py-0.5 rounded text-[10px] border tabular-nums ${
-                          FAIXA_TOM[t.faixa_atraso] ?? ""}`}>
-                          {t.dias_atraso}d
-                        </span>
+                    <td className="p-1.5 border-b border-ww-border/50 text-ww-text tabular-nums">
+                      {t.previsao ? diaBr(t.previsao) : "—"}
+                      {t.tem_override && (
+                        <span title={`Reagendado no painel. Previsão original do Omie: ${
+                          t.previsao_original ? diaBr(t.previsao_original) : "—"}`}
+                          className="ml-1 text-[9px] text-ww-accent">↻</span>
                       )}
+                    </td>
+                    {/* Situação: atrasado mostra há quanto tempo; a vencer mostra
+                        em quantos dias. Com os dois escopos na mesma tabela, uma
+                        coluna só de "atraso" ficaria vazia em metade das linhas. */}
+                    <td className="p-1.5 border-b border-ww-border/50">
+                      {t.faixa_atraso ? (
+                        <span className={`inline-flex px-1.5 py-0.5 rounded text-[10px] border tabular-nums ${
+                          FAIXA_TOM[t.faixa_atraso] ?? ""}`}
+                          title={`Vencido há ${t.dias_atraso} dia(s)`}>
+                          {t.dias_atraso}d atraso
+                        </span>
+                      ) : (() => {
+                        const d = diasAte(t.previsao);
+                        if (d == null) return null;
+                        return (
+                          <span className={`inline-flex px-1.5 py-0.5 rounded text-[10px] border tabular-nums ${
+                            d === 0 ? "bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-500/30"
+                                    : "bg-ww-border/50 text-ww-textMuted border-ww-border"}`}
+                            title={d === 0 ? "Vence hoje" : `Vence em ${d} dia(s)`}>
+                            {d === 0 ? "hoje" : `em ${d}d`}
+                          </span>
+                        );
+                      })()}
                     </td>
                     <td className="p-1.5 border-b border-ww-border/50 text-right tabular-nums text-ww-text">
                       {brl(Number(t.valor))}
@@ -775,6 +972,93 @@ export default function FluxoCaixaView() {
         loading={loading}
         altura={240}
       />
+    </div>
+  );
+}
+
+/** Cabeçalho de coluna ordenável. Clique alterna a direção; clique em outra
+ *  coluna começa descendente, que é o que se quer em quase todo caso. */
+function Th({
+  col, w, children, ordem, setOrdem, alinhaDireita = false,
+}: {
+  col: OrdemCol; w: number; children: React.ReactNode;
+  ordem: { col: OrdemCol; desc: boolean };
+  setOrdem: (o: { col: OrdemCol; desc: boolean }) => void;
+  alinhaDireita?: boolean;
+}) {
+  const ativa = ordem.col === col;
+  return (
+    <th style={{ width: w }}
+        className={`p-1.5 shadow-[0_1px_0_0_rgb(var(--color-ww-border))] ${
+          alinhaDireita ? "text-right" : "text-left"}`}>
+      <button type="button"
+        onClick={() => setOrdem(ativa ? { col, desc: !ordem.desc } : { col, desc: true })}
+        className={`inline-flex items-center gap-0.5 uppercase tracking-wider transition ${
+          ativa ? "text-ww-accent font-semibold" : "hover:text-ww-text"}`}>
+        {children}
+        <span className="text-[8px] opacity-70">{ativa ? (ordem.desc ? "▼" : "▲") : ""}</span>
+      </button>
+    </th>
+  );
+}
+
+/** Filtro de categoria multi-seleção, ordenado por VALOR — quem reagenda escolhe
+ *  pelo peso no fluxo, não pela ordem alfabética. */
+function CategoriaFiltro({
+  opcoes, selected, onToggle, onClear,
+}: {
+  opcoes: Array<[string, number]>;
+  selected: Set<string>;
+  onToggle: (v: string) => void;
+  onClear: () => void;
+}) {
+  const [aberto, setAberto] = useState(false);
+  const caixa = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!aberto) return;
+    const fora = (e: MouseEvent) => {
+      if (caixa.current && !caixa.current.contains(e.target as Node)) setAberto(false);
+    };
+    document.addEventListener("mousedown", fora);
+    return () => document.removeEventListener("mousedown", fora);
+  }, [aberto]);
+
+  return (
+    <div className="relative" ref={caixa}>
+      <button type="button" onClick={() => setAberto((v) => !v)}
+        className={`inline-flex items-center gap-1 px-2 py-0.5 text-[11px] rounded border transition ${
+          selected.size
+            ? "border-ww-accent text-ww-accent bg-ww-accentSoft font-semibold"
+            : "border-ww-border text-ww-textMuted hover:text-ww-text"}`}>
+        Categoria
+        {selected.size > 0 && (
+          <span className="px-1 rounded bg-ww-accent text-white text-[9.5px]">{selected.size}</span>
+        )}
+      </button>
+      {aberto && (
+        <div className="absolute right-0 mt-1 z-50 w-[300px] max-h-[320px] overflow-auto rounded-lg border border-ww-border bg-ww-drawer shadow-xl p-1 animate-in fade-in-0 slide-in-from-top-1">
+          {opcoes.length === 0 && (
+            <p className="px-2 py-2 text-[11px] text-ww-textFaint">Nada no escopo atual.</p>
+          )}
+          {opcoes.map(([cat, val]) => {
+            const on = selected.has(cat);
+            return (
+              <button key={cat} type="button" onClick={() => onToggle(cat)}
+                className={`w-full flex items-center justify-between gap-2 px-2 py-1 rounded-md text-[11px] transition text-left ${
+                  on ? "bg-ww-accentSoft font-semibold" : "hover:bg-ww-rowHover"}`}>
+                <span className="truncate text-ww-text" title={cat}>{cat}</span>
+                <span className="shrink-0 text-[10px] text-ww-textFaint tabular-nums">{brl(val)}</span>
+              </button>
+            );
+          })}
+          {selected.size > 0 && (
+            <button type="button" onClick={onClear}
+              className="w-full mt-0.5 px-2 py-1 text-[10.5px] text-ww-accent hover:underline text-left border-t border-ww-border">
+              limpar
+            </button>
+          )}
+        </div>
+      )}
     </div>
   );
 }
