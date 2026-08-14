@@ -247,6 +247,9 @@ export default function FluxoCaixaView() {
   /** Recorte por data de previsão — o eixo em que o reagendamento opera. */
   const [prevDe, setPrevDe] = useState("");
   const [prevAte, setPrevAte] = useState("");
+  /** Só os que EU reprogramei. Ortogonal ao escopo: um reprogramado pode estar
+   *  atrasado ou a vencer, então não cabe como quarta aba de escopo. */
+  const [soReprog, setSoReprog] = useState(false);
   /** Ordenação da mesa. Padrão: maior valor primeiro, que é onde mexer move a
    *  curva. */
   const [ordem, setOrdem] = useState<{ col: OrdemCol; desc: boolean }>(
@@ -395,6 +398,12 @@ export default function FluxoCaixaView() {
     return [...atrasados, ...titulos];
   }, [escopo, atrasados, titulos]);
 
+  /** Quantos reprogramados existem no universo atual — o número do chip. */
+  const qtdReprog = useMemo(
+    () => universo.filter((t) => t.tem_override).length,
+    [universo],
+  );
+
   /** Categorias presentes no universo atual, com valor — quem reagenda escolhe
    *  pelo peso, não pelo nome. */
   const catsOpcoes = useMemo(() => {
@@ -407,6 +416,7 @@ export default function FluxoCaixaView() {
     const q = normaliza(busca);
     const arr = universo
       .filter((t) => tipo === "todos" || t.natureza === tipo)
+      .filter((t) => !soReprog || t.tem_override)
       .filter((t) => !catsSel.size || catsSel.has(t.categoria))
       // Recorte pela previsão EFETIVA, que é a data que a curva usa.
       .filter((t) => !prevDe  || (t.previsao && t.previsao >= prevDe))
@@ -428,7 +438,7 @@ export default function FluxoCaixaView() {
         default:            return 0;
       }
     });
-  }, [universo, tipo, catsSel, prevDe, prevAte, busca, ordem]);
+  }, [universo, tipo, soReprog, catsSel, prevDe, prevAte, busca, ordem]);
 
   /** Teto de linhas DESENHADAS.
    *
@@ -443,6 +453,82 @@ export default function FluxoCaixaView() {
   const TETO_LINHAS = 150;
   const linhasNaMesa = useMemo(() => lista.slice(0, TETO_LINHAS), [lista]);
   const linhasOcultas = lista.length - linhasNaMesa.length;
+
+  const selecionados = Array.from(sel);
+
+  /** Códigos que vão pro relatório: a seleção, se houver; senão a lista
+   *  filtrada INTEIRA — não o que está desenhado. O teto de 150 é limite de
+   *  render, não de conteúdo, e um relatório truncado em silêncio seria pior que
+   *  não ter relatório. */
+  const codsRelatorio = useMemo(() => {
+    if (selecionados.length) return selecionados;
+    return lista.filter((t) => t.tem_override).map((t) => t.cod_titulo);
+  }, [selecionados, lista]);
+
+  const [exportando, setExportando] = useState(false);
+
+  /** Excel: uma aba, uma linha por título, com o antes e o depois. Busca do
+   *  servidor em vez de montar do estado da tela — o relatório tem que refletir
+   *  o banco, não o que o navegador tem em memória. */
+  const baixarExcel = async () => {
+    if (!codsRelatorio.length) return;
+    setExportando(true);
+    try {
+      const r = await fetch(`/api/relatorios/reprogramados?cods=${codsRelatorio.join(",")}`,
+                            { cache: "no-store" });
+      const j = await r.json();
+      if (!r.ok) { setErr(j.error ?? "falha ao gerar Excel"); return; }
+      const XLSX = await import("xlsx");
+      type L = {
+        tipo: string; empresa: string; contraparte: string; categoria: string;
+        num_titulo: string; documento: string; vencimento: string | null;
+        previsao_original: string | null; previsao_nova: string;
+        dias_movidos: number | null; valor: number; dias_atraso: number | null;
+        enviado_omie: boolean; reprogramado_em: string | null; observacao: string | null;
+      };
+      const br = (v: string | null) => {
+        if (!v) return "";
+        const [a, m, d] = v.slice(0, 10).split("-");
+        return `${d}/${m}/${a}`;
+      };
+      const rows = (j.linhas as L[]).map((l) => ({
+        "Tipo": l.tipo,
+        "Empresa": l.empresa,
+        "Contraparte": l.contraparte,
+        "Categoria": l.categoria,
+        "Nº título": l.num_titulo,
+        "Documento": l.documento,
+        "Vencimento": br(l.vencimento),
+        "Previsão original (Omie)": br(l.previsao_original),
+        "Nova previsão": br(l.previsao_nova),
+        "Dias movidos": l.dias_movidos ?? "",
+        "Dias de atraso": l.dias_atraso ?? "",
+        "Valor": Number(l.valor) || 0,
+        "Enviado ao Omie": l.enviado_omie ? "Sim" : "Não",
+        "Reprogramado em": l.reprogramado_em
+          ? new Date(l.reprogramado_em).toLocaleString("pt-BR") : "",
+        "Observação": l.observacao ?? "",
+      }));
+      const ws = XLSX.utils.json_to_sheet(rows);
+      // Larguras explícitas: sem isso as datas viram ##### e o nome trunca.
+      ws["!cols"] = [
+        { wch: 9 }, { wch: 8 }, { wch: 34 }, { wch: 28 }, { wch: 11 }, { wch: 14 },
+        { wch: 12 }, { wch: 22 }, { wch: 14 }, { wch: 12 }, { wch: 13 }, { wch: 14 },
+        { wch: 15 }, { wch: 18 }, { wch: 30 },
+      ];
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "Reprogramados");
+      XLSX.writeFile(wb, `titulos-reprogramados-${hojeIso()}.xlsx`);
+      setErr(null);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e));
+    } finally { setExportando(false); }
+  };
+
+  const baixarPdf = () => {
+    if (!codsRelatorio.length) return;
+    window.open(`/api/relatorios/reprogramados/pdf?cods=${codsRelatorio.join(",")}`, "_blank");
+  };
 
   const totalLista = useMemo(() => {
     const soma = (n: "R" | "P") =>
@@ -570,7 +656,6 @@ export default function FluxoCaixaView() {
   ];
 
 
-  const selecionados = Array.from(sel);
 
   return (
     <div className="space-y-3">
@@ -712,6 +797,22 @@ export default function FluxoCaixaView() {
               </button>
             ))}
           </div>
+          {/* Reprogramados: destaque e recorte. A linha já vem com fundo de
+              acento e o ↻ na coluna de previsão; isto isola só eles, que é o
+              recorte do relatório. */}
+          <button type="button" onClick={() => setSoReprog((v) => !v)}
+            title="Só títulos cuja previsão eu alterei no painel"
+            className={`inline-flex items-center gap-1 px-2 py-0.5 text-[11px] rounded border transition ${
+              soReprog ? "border-ww-accent text-ww-accent bg-ww-accentSoft font-semibold"
+                       : "border-ww-border text-ww-textMuted hover:text-ww-text"}`}>
+            ↻ Reprogramados
+            {qtdReprog > 0 && (
+              <span className={`px-1 rounded text-[9.5px] ${
+                soReprog ? "bg-ww-accent text-white" : "bg-ww-border/70 text-ww-textMuted"}`}>
+                {qtdReprog}
+              </span>
+            )}
+          </button>
           <CategoriaFiltro opcoes={catsOpcoes} selected={catsSel}
             onToggle={(v) => setCatsSel((prev) => {
               const n = new Set(prev);
@@ -736,6 +837,27 @@ export default function FluxoCaixaView() {
           </div>
           <input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Filtrar…"
             className="w-[150px] text-[11px] bg-ww-bg border border-ww-border rounded px-2 py-1 text-ww-text placeholder:text-ww-textFaint" />
+
+          {/* Relatório dos reprogramados. Cobre a seleção, se houver; senão todos
+              os reprogramados do filtro atual — inclusive os que o teto de linhas
+              não desenha, porque teto é limite de render, não de conteúdo. */}
+          <div className="flex items-center gap-1">
+            <span className="text-[10px] uppercase tracking-wider text-ww-textFaint">Report</span>
+            <button type="button" onClick={baixarPdf} disabled={!codsRelatorio.length}
+              title={codsRelatorio.length
+                ? `PDF de ${codsRelatorio.length} título(s) reprogramado(s)`
+                : "Nenhum título reprogramado no filtro atual"}
+              className="px-2 py-0.5 text-[11px] rounded border border-ww-border text-ww-textMuted hover:text-ww-text hover:bg-ww-rowHover transition disabled:opacity-40">
+              📄 PDF
+            </button>
+            <button type="button" onClick={baixarExcel} disabled={!codsRelatorio.length || exportando}
+              title={codsRelatorio.length
+                ? `Excel de ${codsRelatorio.length} título(s) reprogramado(s)`
+                : "Nenhum título reprogramado no filtro atual"}
+              className="px-2 py-0.5 text-[11px] rounded border border-ww-border text-ww-textMuted hover:text-ww-text hover:bg-ww-rowHover transition disabled:opacity-40">
+              {exportando ? "Gerando…" : "📊 Excel"}
+            </button>
+          </div>
         </header>
 
         {/* Barra de lote — só aparece com seleção, pra não ocupar espaço à toa. */}
