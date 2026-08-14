@@ -106,6 +106,10 @@ const diasAte = (iso: string | null) => {
 };
 
 /** Colunas ordenáveis da mesa de reagendamento. */
+const ORDEM_ROTULO: Record<string, string> = {
+  valor: "valor", previsao: "previsão", vencimento: "vencimento",
+  contraparte: "contraparte", categoria: "categoria",
+};
 type OrdemCol = "valor" | "previsao" | "vencimento" | "contraparte" | "categoria";
 
 /** Minúsculas sem acento: quem digita "sirio" tem que achar "SÍRIO". */
@@ -411,17 +415,34 @@ export default function FluxoCaixaView() {
         `${t.contraparte} ${t.categoria} ${t.documento} ${t.num_titulo ?? ""}`).includes(q));
 
     const sinal = ordem.desc ? -1 : 1;
+    // String(...) em tudo: contraparte e categoria vêm de left join e podem ser
+    // nulas. localeCompare em null lança, e a exceção acontece DENTRO do sort,
+    // no meio do render.
     return arr.slice().sort((a, b) => {
       switch (ordem.col) {
         case "valor":       return sinal * (Number(a.valor) - Number(b.valor));
         case "previsao":    return sinal * String(a.previsao ?? "").localeCompare(String(b.previsao ?? ""));
         case "vencimento":  return sinal * String(a.vencimento ?? "").localeCompare(String(b.vencimento ?? ""));
-        case "contraparte": return sinal * a.contraparte.localeCompare(b.contraparte, "pt-BR");
-        case "categoria":   return sinal * a.categoria.localeCompare(b.categoria, "pt-BR");
+        case "contraparte": return sinal * String(a.contraparte ?? "").localeCompare(String(b.contraparte ?? ""), "pt-BR");
+        case "categoria":   return sinal * String(a.categoria ?? "").localeCompare(String(b.categoria ?? ""), "pt-BR");
         default:            return 0;
       }
     });
   }, [universo, tipo, catsSel, prevDe, prevAte, busca, ordem]);
+
+  /** Teto de linhas DESENHADAS.
+   *
+   *  Cada linha carrega um <input type="date"> nativo, que é caro. Com o escopo
+   *  "Todos" a mesa passou de 151 pra 723 linhas e o renderizador do navegador
+   *  caiu ao reordenar. O teto resolve sem esconder nada: a contagem real fica
+   *  no cabeçalho e um aviso no rodapé diz quantas ficaram de fora.
+   *
+   *  A ordenação acontece ANTES do corte, então o topo é sempre o que importa
+   *  pela ordem escolhida — por padrão, os maiores valores, que são os que movem
+   *  a curva. Cortar antes de ordenar mostraria 150 linhas arbitrárias. */
+  const TETO_LINHAS = 150;
+  const linhasNaMesa = useMemo(() => lista.slice(0, TETO_LINHAS), [lista]);
+  const linhasOcultas = lista.length - linhasNaMesa.length;
 
   const totalLista = useMemo(() => {
     const soma = (n: "R" | "P") =>
@@ -773,9 +794,10 @@ export default function FluxoCaixaView() {
                 {podeEditar && (
                   <th style={{ width: 34 }} className="p-1.5 shadow-[0_1px_0_0_rgb(var(--color-ww-border))]">
                     <input type="checkbox"
-                      checked={lista.length > 0 && lista.every((t) => sel.has(t.cod_titulo))}
+                      checked={linhasNaMesa.length > 0 && linhasNaMesa.every((t) => sel.has(t.cod_titulo))}
+                      title={linhasOcultas > 0 ? `Marca as ${linhasNaMesa.length} linhas na tela` : undefined}
                       onChange={(e) => setSel(e.target.checked
-                        ? new Set(lista.map((t) => t.cod_titulo)) : new Set())}
+                        ? new Set(linhasNaMesa.map((t) => t.cod_titulo)) : new Set())}
                       className="accent-ww-accent" />
                   </th>
                 )}
@@ -794,12 +816,12 @@ export default function FluxoCaixaView() {
               </tr>
             </thead>
             <tbody className={loading ? "opacity-40" : ""}>
-              {lista.length === 0 && (
+              {linhasNaMesa.length === 0 && (
                 <tr><td colSpan={podeEditar ? 12 : 11} className="p-6 text-center text-ww-textFaint">
                   {loading ? "Carregando…" : "Nenhum título com os filtros atuais."}
                 </td></tr>
               )}
-              {lista.map((t) => {
+              {linhasNaMesa.map((t) => {
                 const dia = agenda.get(t.cod_titulo) ?? (t.tem_override ? t.previsao : "");
                 const pendente = t.tem_override && !t.sincronizado_omie;
                 return (
@@ -913,6 +935,18 @@ export default function FluxoCaixaView() {
             </tbody>
           </table>
         </div>
+
+        {/* Corte declarado. Um teto silencioso leria como "é só isso" — e aqui
+            "é só isso" seria uma conclusão errada sobre o próprio caixa. */}
+        {linhasOcultas > 0 && (
+          <p className="mt-2 px-1 text-[10.5px] text-ww-textFaint">
+            Mostrando as {linhasNaMesa.length} primeiras de {lista.length} pela ordem atual
+            ({ORDEM_ROTULO[ordem.col]} {ordem.desc ? "↓" : "↑"}).
+            Outras {linhasOcultas} não estão na tela — use categoria, previsão ou a busca pra
+            chegar nelas. O teto existe porque cada linha traz um campo de data, e desenhar
+            centenas ao mesmo tempo derrubava o navegador.
+          </p>
+        )}
       </section>
 
       {cen && (
