@@ -264,6 +264,12 @@ export default function FluxoCaixaView() {
   const [prevAte, setPrevAte] = useState("");
   /** Só os que EU reprogramei. Ortogonal ao escopo: um reprogramado pode estar
    *  atrasado ou a vencer, então não cabe como quarta aba de escopo. */
+  /** Simula o recebimento dos atrasados da Safe: soma-os ao saldo de partida.
+   *
+   *  Responde "e se eu cobrar o que está vencido?" sem inventar data pra cada
+   *  título. Entra como saldo INICIAL e não como entrada num dia qualquer —
+   *  escolher um dia seria fabricar informação que ninguém tem. */
+  const [comAtrasoRecebido, setComAtrasoRecebido] = useState(false);
   const [soReprog, setSoReprog] = useState(false);
   /** Última linha clicada, âncora do shift. Ref e não state: muda a cada clique
    *  e não deve provocar re-render da tabela inteira. */
@@ -296,10 +302,26 @@ export default function FluxoCaixaView() {
 
   useEffect(() => { void load(); }, [load]);
 
-  const saldo0 = Number(data?.saldo_atual?.saldo ?? 0);
+  const saldoOmie = Number(data?.saldo_atual?.saldo ?? 0);
   const titulos = useMemo(() => data?.titulos ?? [], [data]);
   const atrasados = useMemo(() => data?.atrasados ?? [], [data]);
   const podeEditar = data?.pode_editar ?? false;
+
+  const atrasoTot = useMemo(() => {
+    const soma = (n: "R" | "P") =>
+      atrasados.filter((t) => t.natureza === n).reduce((a, t) => a + (Number(t.valor) || 0), 0);
+    const qtd = (n: "R" | "P") => atrasados.filter((t) => t.natureza === n).length;
+    return {
+      receber: soma("R"), pagar: soma("P"),
+      qtdReceber: qtd("R"), qtdPagar: qtd("P"),
+      pendentesOmie: atrasados.filter((t) => t.tem_override && !t.sincronizado_omie).length,
+    };
+  }, [atrasados]);
+
+  /** Saldo de partida da curva. Com a simulação ligada, entra o Omie MAIS os
+   *  atrasados a receber da Safe. */
+  const saldo0 = comAtrasoRecebido ? saldoOmie + atrasoTot.receber : saldoOmie;
+
 
   const extras = useMemo(() => {
     const porCod = new Map(atrasados.map((t) => [t.cod_titulo, t]));
@@ -427,16 +449,6 @@ export default function FluxoCaixaView() {
     [agenda, dias],
   );
 
-  const atrasoTot = useMemo(() => {
-    const soma = (n: "R" | "P") =>
-      atrasados.filter((t) => t.natureza === n).reduce((a, t) => a + (Number(t.valor) || 0), 0);
-    const qtd = (n: "R" | "P") => atrasados.filter((t) => t.natureza === n).length;
-    return {
-      receber: soma("R"), pagar: soma("P"),
-      qtdReceber: qtd("R"), qtdPagar: qtd("P"),
-      pendentesOmie: atrasados.filter((t) => t.tem_override && !t.sincronizado_omie).length,
-    };
-  }, [atrasados]);
 
   /** Universo da mesa conforme o escopo. `atrasados` e `titulos` já vêm
    *  separados do servidor (duas chamadas de fluxo_caixa_titulos), então "todos"
@@ -783,6 +795,24 @@ export default function FluxoCaixaView() {
           <strong className="text-ww-textMuted">Safe + CDG + Water</strong> · atrasados com previsão
           em <strong className="text-ww-textMuted">{data?.ano ?? "—"}</strong>
         </p>
+
+        {/* "E se eu cobrar o que está vencido?" — soma os atrasados a receber da
+            Safe ao saldo de PARTIDA. Entra como saldo inicial e não como entrada
+            num dia qualquer: escolher um dia seria fabricar informação que
+            ninguém tem, e a curva ganharia um degrau falso. */}
+        <label className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-md border text-[11px] cursor-pointer transition ${
+          comAtrasoRecebido
+            ? "border-emerald-500/50 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 font-semibold"
+            : "border-ww-border text-ww-textMuted hover:text-ww-text"}`}
+          title="Simula receber hoje tudo que está vencido a receber da Safe. Não altera nada — é só a curva.">
+          <input type="checkbox" checked={comAtrasoRecebido}
+            onChange={(e) => setComAtrasoRecebido(e.target.checked)}
+            className="accent-emerald-500" />
+          Simular recebimento dos atrasos
+          <span className="tabular-nums">
+            (+{brl(atrasoTot.receber)})
+          </span>
+        </label>
         {agenda.size > 0 && (
           <button type="button" onClick={() => { setAgenda(new Map()); void load(); }}
             className="ml-auto px-2 py-0.5 text-[11px] rounded border border-ww-accent text-ww-accent hover:bg-ww-accentSoft transition font-semibold">
@@ -798,7 +828,8 @@ export default function FluxoCaixaView() {
       )}
 
       <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3">
-        <StatTile label="Saldo de partida (Omie)" value={brl(saldo0)}
+        <StatTile label={comAtrasoRecebido ? "Saldo de partida + atrasos (simulado)" : "Saldo de partida (Omie)"}
+          value={brl(saldo0)}
           hint={data?.saldo_atual
             ? `${data.saldo_atual.origem === "manual" ? "Ajuste manual" : "Extrato Omie.CASH"} de ${
                 data.saldo_atual.dt_ref ? diaBr(data.saldo_atual.dt_ref) : "—"}`
@@ -829,7 +860,10 @@ export default function FluxoCaixaView() {
       <ChartFrame
         title="Fluxo de caixa projetado"
         subtitle={
-          `Barras = movimento do dia · linha = saldo acumulado, partindo de ${brl(saldo0)}. `
+          `Barras = movimento do dia · linha = saldo acumulado, partindo de ${brl(saldo0)}`
+          + (comAtrasoRecebido
+              ? ` — SIMULADO: ${brl(saldoOmie)} do Omie mais ${brl(atrasoTot.receber)} de atrasos a receber da Safe, como se entrassem hoje. `
+              : `. `)
           + `Só o que está a vencer; atrasado entra ao ganhar data. `
           + `Previsão em fim de semana é lida no próximo dia útil — o Omie não grava esse ajuste no campo`
           + (empurrao.qtd
