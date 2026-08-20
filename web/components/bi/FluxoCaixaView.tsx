@@ -862,8 +862,10 @@ export default function FluxoCaixaView() {
       {/* Painel de agendamento — o que era "simular datas", agora com gravação,
           lote e envio pro Omie. */}
       <section className="viz-panel bg-ww-panel border border-ww-border rounded-xl p-3.5">
-        <header className="viz-head flex items-center gap-3 flex-wrap">
-          <div className="min-w-0 flex-1">
+        {/* Duas fileiras: título/resumo em cima, filtros embaixo. Numa linha só,
+            os seis grupos espremiam o texto até uma palavra por linha. */}
+        <header className="viz-head flex flex-col gap-2.5">
+          <div className="min-w-0">
             <h3 className="text-[12.5px] font-semibold text-ww-text tracking-wide uppercase">
               Reagendar títulos
             </h3>
@@ -884,6 +886,7 @@ export default function FluxoCaixaView() {
               "Todos" lado a lado significando coisas diferentes — um de prazo,
               outro de natureza. Com rótulo em cima, cada segmento diz do que
               trata e o nome duplicado deixa de ser ambíguo. */}
+          <div className="flex items-end gap-x-4 gap-y-2 flex-wrap">
           <Grupo rot="Prazo">
             {([["atrasados", `Atrasados ${atrasados.length}`],
                ["a_vencer",  `A vencer ${titulos.length}`],
@@ -1000,6 +1003,7 @@ export default function FluxoCaixaView() {
               {exportando ? "Gerando…" : "📊 Excel"}
             </button>
           </Grupo>
+          </div>
         </header>
 
         {/* Barra de lote — só aparece com seleção, pra não ocupar espaço à toa. */}
