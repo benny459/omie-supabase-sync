@@ -108,9 +108,9 @@ const diasAte = (iso: string | null) => {
 /** Colunas ordenáveis da mesa de reagendamento. */
 const ORDEM_ROTULO: Record<string, string> = {
   valor: "valor", previsao: "previsão", vencimento: "vencimento",
-  contraparte: "contraparte", categoria: "categoria",
+  contraparte: "contraparte", categoria: "categoria", reprogramado_em: "reprogramado em",
 };
-type OrdemCol = "valor" | "previsao" | "vencimento" | "contraparte" | "categoria";
+type OrdemCol = "valor" | "previsao" | "vencimento" | "contraparte" | "categoria" | "reprogramado_em";
 
 /** Minúsculas sem acento: quem digita "sirio" tem que achar "SÍRIO". */
 const normaliza = (v: string) =>
@@ -123,6 +123,8 @@ type Titulo = {
   tem_override: boolean; sincronizado_omie: boolean;
   esta_vencido: boolean; dias_atraso: number | null; faixa_atraso: string | null;
   valor: number;
+  /** Quando eu reprogramei. Null se nunca mexi no título. */
+  reprogramado_em: string | null;
 };
 type ContaRow = {
   empresa: string; cod_conta: number; conta: string; saldo: number; dt_ultimo: string | null;
@@ -255,6 +257,9 @@ export default function FluxoCaixaView() {
   /** Categorias selecionadas. Vazio = todas. */
   const [catsSel, setCatsSel] = useState<Set<string>>(new Set());
   /** Recorte por data de previsão — o eixo em que o reagendamento opera. */
+  /** Recorte por QUANDO reprogramei — responde "o que mexi hoje?". */
+  const [reprogDe, setReprogDe] = useState("");
+  const [reprogAte, setReprogAte] = useState("");
   const [prevDe, setPrevDe] = useState("");
   const [prevAte, setPrevAte] = useState("");
   /** Só os que EU reprogramei. Ortogonal ao escopo: um reprogramado pode estar
@@ -462,6 +467,10 @@ export default function FluxoCaixaView() {
     const arr = universo
       .filter((t) => tipo === "todos" || t.natureza === tipo)
       .filter((t) => !soReprog || t.tem_override)
+      // Data de reprogramação: compara só a parte YYYY-MM-DD do timestamp.
+      .filter((t) => !reprogDe  || (t.reprogramado_em ?? "").slice(0, 10) >= reprogDe)
+      .filter((t) => !reprogAte || ((t.reprogramado_em ?? "").slice(0, 10) <= reprogAte
+                                    && !!t.reprogramado_em))
       .filter((t) => !catsSel.size || catsSel.has(t.categoria))
       // Recorte pela previsão EFETIVA, que é a data que a curva usa.
       .filter((t) => !prevDe  || (t.previsao && t.previsao >= prevDe))
@@ -480,10 +489,12 @@ export default function FluxoCaixaView() {
         case "vencimento":  return sinal * String(a.vencimento ?? "").localeCompare(String(b.vencimento ?? ""));
         case "contraparte": return sinal * String(a.contraparte ?? "").localeCompare(String(b.contraparte ?? ""), "pt-BR");
         case "categoria":   return sinal * String(a.categoria ?? "").localeCompare(String(b.categoria ?? ""), "pt-BR");
+        case "reprogramado_em":
+          return sinal * String(a.reprogramado_em ?? "").localeCompare(String(b.reprogramado_em ?? ""));
         default:            return 0;
       }
     });
-  }, [universo, tipo, soReprog, catsSel, prevDe, prevAte, busca, ordem]);
+  }, [universo, tipo, soReprog, reprogDe, reprogAte, catsSel, prevDe, prevAte, busca, ordem]);
 
   /** Teto de linhas DESENHADAS.
    *
@@ -519,14 +530,34 @@ export default function FluxoCaixaView() {
     return { receber, pagar };
   }, [sel, universo]);
 
-  /** Códigos que vão pro relatório: a seleção, se houver; senão a lista
-   *  filtrada INTEIRA — não o que está desenhado. O teto de 150 é limite de
-   *  render, não de conteúdo, e um relatório truncado em silêncio seria pior que
-   *  não ter relatório. */
+  /** Códigos que vão pro relatório.
+   *
+   *  BUG QUE ISTO CORRIGE: antes a seleção ia crua pro relatório. Marcar linhas
+   *  NÃO reprogramadas e clicar em Excel gerava planilha VAZIA sem erro nenhum —
+   *  bi.titulos_reprogramados só tem linha pra quem tem override, então os
+   *  códigos não casavam com nada e o arquivo saía em branco.
+   *
+   *  Agora a seleção é INTERSECTADA com os reprogramados. Se a seleção não tem
+   *  nenhum, cai na lista filtrada inteira em vez de exportar vazio.
+   *
+   *  A lista é a filtrada INTEIRA, não o que está desenhado: o teto de 150 é
+   *  limite de render, não de conteúdo. */
   const codsRelatorio = useMemo(() => {
-    if (selecionados.length) return selecionados;
-    return lista.filter((t) => t.tem_override).map((t) => t.cod_titulo);
+    const reprogDaLista = lista.filter((t) => t.tem_override);
+    if (selecionados.length) {
+      const escolhidos = new Set(selecionados);
+      const intersecao = reprogDaLista.filter((t) => escolhidos.has(t.cod_titulo));
+      if (intersecao.length) return intersecao.map((t) => t.cod_titulo);
+    }
+    return reprogDaLista.map((t) => t.cod_titulo);
   }, [selecionados, lista]);
+
+  /** Seleção que NÃO entra no relatório, pra avisar em vez de exportar calado. */
+  const selecaoForaDoRelatorio = useMemo(() => {
+    if (!selecionados.length) return 0;
+    const nosCods = new Set(codsRelatorio);
+    return selecionados.filter((c) => !nosCods.has(c)).length;
+  }, [selecionados, codsRelatorio]);
 
   const [exportando, setExportando] = useState(false);
 
@@ -554,6 +585,10 @@ export default function FluxoCaixaView() {
         const [a, m, d] = v.slice(0, 10).split("-");
         return `${d}/${m}/${a}`;
       };
+      if (!j.linhas?.length) {
+        setErr("Nenhum título reprogramado no recorte atual — não há o que exportar.");
+        return;
+      }
       const rows = (j.linhas as L[]).map((l) => ({
         "Tipo": l.tipo,
         "Empresa": l.empresa,
@@ -590,7 +625,15 @@ export default function FluxoCaixaView() {
 
   const baixarPdf = () => {
     if (!codsRelatorio.length) return;
-    window.open(`/api/relatorios/reprogramados/pdf?cods=${codsRelatorio.join(",")}`, "_blank");
+    // Âncora e não window.open: bloqueador de pop-up mata o open sem avisar, e o
+    // usuário fica achando que o botão não funciona.
+    const a = document.createElement("a");
+    a.href = `/api/relatorios/reprogramados/pdf?cods=${codsRelatorio.join(",")}`;
+    a.target = "_blank";
+    a.rel = "noopener";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
   };
 
   const totalLista = useMemo(() => {
@@ -877,6 +920,36 @@ export default function FluxoCaixaView() {
             </Chip>
           </Grupo>
 
+          {/* Quando reprogramei. Grupo próprio e não junto de "Previsão": são
+              duas datas diferentes do mesmo título e misturá-las num intervalo
+              só produziria filtro que ninguém consegue explicar. */}
+          <Grupo rot="Reprog. em">
+            <Chip on={reprogDe === hojeIso() && reprogAte === hojeIso()}
+                  titulo="O que eu reprogramei hoje"
+                  onClick={() => {
+                    const h = hojeIso();
+                    const jaEra = reprogDe === h && reprogAte === h;
+                    setReprogDe(jaEra ? "" : h); setReprogAte(jaEra ? "" : h);
+                  }}>Hoje</Chip>
+            <Chip on={reprogDe === addDias(hojeIso(), -7) && reprogAte === hojeIso()}
+                  titulo="Reprogramados nos últimos 7 dias"
+                  onClick={() => {
+                    const h = hojeIso(), d = addDias(h, -7);
+                    const jaEra = reprogDe === d && reprogAte === h;
+                    setReprogDe(jaEra ? "" : d); setReprogAte(jaEra ? "" : h);
+                  }}>7 dias</Chip>
+            <input type="date" value={reprogDe} onChange={(e) => setReprogDe(e.target.value)}
+              title="Reprogramado a partir de"
+              className="text-[11px] bg-ww-bg border border-ww-border rounded px-1 py-0.5 text-ww-text" />
+            <input type="date" value={reprogAte} onChange={(e) => setReprogAte(e.target.value)}
+              title="Reprogramado até"
+              className="text-[11px] bg-ww-bg border border-ww-border rounded px-1 py-0.5 text-ww-text" />
+            {(reprogDe || reprogAte) && (
+              <button type="button" onClick={() => { setReprogDe(""); setReprogAte(""); }}
+                className="text-[10.5px] text-ww-accent hover:underline">limpar</button>
+            )}
+          </Grupo>
+
           <Grupo rot="Recorte">
             <CategoriaFiltro opcoes={catsOpcoes} selected={catsSel}
               onToggle={(v) => setCatsSel((prev) => {
@@ -909,6 +982,9 @@ export default function FluxoCaixaView() {
             <button type="button" onClick={baixarPdf} disabled={!codsRelatorio.length}
               title={codsRelatorio.length
                 ? `PDF de ${codsRelatorio.length} título(s) reprogramado(s)`
+                  + (selecaoForaDoRelatorio
+                      ? ` · ${selecaoForaDoRelatorio} da seleção ficam de fora: não foram reprogramados`
+                      : "")
                 : "Nenhum título reprogramado no filtro atual"}
               className="px-2 py-0.5 text-[11px] rounded border border-ww-border text-ww-textMuted hover:text-ww-text hover:bg-ww-rowHover transition disabled:opacity-40">
               📄 PDF
@@ -916,6 +992,9 @@ export default function FluxoCaixaView() {
             <button type="button" onClick={baixarExcel} disabled={!codsRelatorio.length || exportando}
               title={codsRelatorio.length
                 ? `Excel de ${codsRelatorio.length} título(s) reprogramado(s)`
+                  + (selecaoForaDoRelatorio
+                      ? ` · ${selecaoForaDoRelatorio} da seleção ficam de fora: não foram reprogramados`
+                      : "")
                 : "Nenhum título reprogramado no filtro atual"}
               className="px-2 py-0.5 text-[11px] rounded border border-ww-border text-ww-textMuted hover:text-ww-text hover:bg-ww-rowHover transition disabled:opacity-40">
               {exportando ? "Gerando…" : "📊 Excel"}
@@ -1043,14 +1122,17 @@ export default function FluxoCaixaView() {
                     partida de qualquer reagendamento. Faltava na tela. */}
                 <Th col="previsao"    w={78}  ordem={ordem} setOrdem={setOrdem} onReordenar={() => { ancoraRef.current = null; }}>Previsão</Th>
                 <th style={{ width: 78 }} className="p-1.5 text-left shadow-[0_1px_0_0_rgb(var(--color-ww-border))]">Situação</th>
-                <Th col="valor" w={112} alinhaDireita ordem={ordem} setOrdem={setOrdem} onReordenar={() => { ancoraRef.current = null; }}>Valor</Th>
+                <Th col="valor" w={104} alinhaDireita ordem={ordem} setOrdem={setOrdem} onReordenar={() => { ancoraRef.current = null; }}>Valor</Th>
+                {/* Quando eu mexi. Só faz sentido pra reprogramado, mas a coluna
+                    fica sempre — some e volta conforme o filtro seria pior. */}
+                <Th col="reprogramado_em" w={86} ordem={ordem} setOrdem={setOrdem} onReordenar={() => { ancoraRef.current = null; }}>Reprog.</Th>
                 <th style={{ width: 128 }} className="p-1.5 text-left shadow-[0_1px_0_0_rgb(var(--color-ww-border))]">Nova previsão</th>
                 <th style={{ width: 96 }} className="p-1.5 text-left shadow-[0_1px_0_0_rgb(var(--color-ww-border))]">Omie</th>
               </tr>
             </thead>
             <tbody className={loading ? "opacity-40" : ""}>
               {linhasNaMesa.length === 0 && (
-                <tr><td colSpan={podeEditar ? 12 : 11} className="p-6 text-center text-ww-textFaint">
+                <tr><td colSpan={podeEditar ? 13 : 12} className="p-6 text-center text-ww-textFaint">
                   {loading ? "Carregando…" : "Nenhum título com os filtros atuais."}
                 </td></tr>
               )}
@@ -1140,6 +1222,13 @@ export default function FluxoCaixaView() {
                     </td>
                     <td className="p-1.5 border-b border-ww-border/50 text-right tabular-nums text-ww-text">
                       {brl(Number(t.valor))}
+                    </td>
+                    <td className="p-1.5 border-b border-ww-border/50 text-ww-textMuted tabular-nums text-[10.5px]">
+                      {t.reprogramado_em ? (
+                        <span title={`Reprogramado em ${new Date(t.reprogramado_em).toLocaleString("pt-BR")}`}>
+                          {diaBr(t.reprogramado_em.slice(0, 10))}
+                        </span>
+                      ) : "—"}
                     </td>
                     <td className="p-1.5 border-b border-ww-border/50">
                       <input type="date"
