@@ -260,6 +260,9 @@ export default function FluxoCaixaView() {
   /** Só os que EU reprogramei. Ortogonal ao escopo: um reprogramado pode estar
    *  atrasado ou a vencer, então não cabe como quarta aba de escopo. */
   const [soReprog, setSoReprog] = useState(false);
+  /** Última linha clicada, âncora do shift. Ref e não state: muda a cada clique
+   *  e não deve provocar re-render da tabela inteira. */
+  const ancoraRef = useRef<number | null>(null);
   /** Ordenação da mesa. Padrão: maior valor primeiro, que é onde mexer move a
    *  curva. */
   const [ordem, setOrdem] = useState<{ col: OrdemCol; desc: boolean }>(
@@ -843,13 +846,13 @@ export default function FluxoCaixaView() {
                ["a_vencer",  `A vencer ${titulos.length}`],
                ["todos",     "Tudo"]] as const).map(([k, l]) => (
               <Chip key={k} on={escopo === k}
-                    onClick={() => { setEscopo(k); setSel(new Set()); }}>{l}</Chip>
+                    onClick={() => { setEscopo(k); setSel(new Set()); ancoraRef.current = null; }}>{l}</Chip>
             ))}
           </Grupo>
 
           <Grupo rot="Fluxo">
             {([["todos", "Ambos"], ["R", "Entra"], ["P", "Sai"]] as const).map(([k, l]) => (
-              <Chip key={k} on={tipo === k} onClick={() => setTipo(k)}>{l}</Chip>
+              <Chip key={k} on={tipo === k} onClick={() => { setTipo(k); ancoraRef.current = null; }}>{l}</Chip>
             ))}
           </Grupo>
 
@@ -1033,14 +1036,14 @@ export default function FluxoCaixaView() {
                 )}
                 <th style={{ width: 58 }} className="p-1.5 text-left shadow-[0_1px_0_0_rgb(var(--color-ww-border))]">Tipo</th>
                 <th style={{ width: 52 }} className="p-1.5 text-left shadow-[0_1px_0_0_rgb(var(--color-ww-border))]">Emp.</th>
-                <Th col="contraparte" w={196} ordem={ordem} setOrdem={setOrdem}>Contraparte</Th>
-                <Th col="categoria"   w={130} ordem={ordem} setOrdem={setOrdem}>Categoria</Th>
-                <Th col="vencimento"  w={74}  ordem={ordem} setOrdem={setOrdem}>Vencto</Th>
+                <Th col="contraparte" w={196} ordem={ordem} setOrdem={setOrdem} onReordenar={() => { ancoraRef.current = null; }}>Contraparte</Th>
+                <Th col="categoria"   w={130} ordem={ordem} setOrdem={setOrdem} onReordenar={() => { ancoraRef.current = null; }}>Categoria</Th>
+                <Th col="vencimento"  w={74}  ordem={ordem} setOrdem={setOrdem} onReordenar={() => { ancoraRef.current = null; }}>Vencto</Th>
                 {/* Previsão vigente: é a data que a curva usa hoje, e o ponto de
                     partida de qualquer reagendamento. Faltava na tela. */}
-                <Th col="previsao"    w={78}  ordem={ordem} setOrdem={setOrdem}>Previsão</Th>
+                <Th col="previsao"    w={78}  ordem={ordem} setOrdem={setOrdem} onReordenar={() => { ancoraRef.current = null; }}>Previsão</Th>
                 <th style={{ width: 78 }} className="p-1.5 text-left shadow-[0_1px_0_0_rgb(var(--color-ww-border))]">Situação</th>
-                <Th col="valor" w={112} alinhaDireita ordem={ordem} setOrdem={setOrdem}>Valor</Th>
+                <Th col="valor" w={112} alinhaDireita ordem={ordem} setOrdem={setOrdem} onReordenar={() => { ancoraRef.current = null; }}>Valor</Th>
                 <th style={{ width: 128 }} className="p-1.5 text-left shadow-[0_1px_0_0_rgb(var(--color-ww-border))]">Nova previsão</th>
                 <th style={{ width: 96 }} className="p-1.5 text-left shadow-[0_1px_0_0_rgb(var(--color-ww-border))]">Omie</th>
               </tr>
@@ -1051,20 +1054,39 @@ export default function FluxoCaixaView() {
                   {loading ? "Carregando…" : "Nenhum título com os filtros atuais."}
                 </td></tr>
               )}
-              {linhasNaMesa.map((t) => {
+              {linhasNaMesa.map((t, idx) => {
                 const dia = agenda.get(t.cod_titulo) ?? (t.tem_override ? t.previsao : "");
                 const pendente = t.tem_override && !t.sincronizado_omie;
                 return (
                   <tr key={t.cod_titulo} className={`viz-row ${dia ? "bg-ww-accentSoft/40" : ""}`}>
                     {podeEditar && (
                       <td className="p-1.5 border-b border-ww-border/50">
+                        {/* Shift marca o intervalo desde a última linha clicada,
+                            como em planilha. Sem isso, escolher 30 títulos
+                            seguidos são 30 cliques.
+                            Vai no onClick e não no onChange: só o evento de mouse
+                            carrega shiftKey. */}
                         <input type="checkbox" checked={sel.has(t.cod_titulo)}
-                          onChange={(e) => setSel((prev) => {
-                            const n = new Set(prev);
-                            if (e.target.checked) n.add(t.cod_titulo); else n.delete(t.cod_titulo);
-                            return n;
-                          })}
-                          className="accent-ww-accent" />
+                          onClick={(e) => {
+                            const marcar = e.currentTarget.checked;
+                            const anterior = ancoraRef.current;
+                            ancoraRef.current = idx;
+                            setSel((prev) => {
+                              const n = new Set(prev);
+                              // Intervalo inteiro assume o estado do clique — é o
+                              // que o usuário acabou de pedir explicitamente.
+                              const de = e.shiftKey && anterior != null ? Math.min(anterior, idx) : idx;
+                              const ate = e.shiftKey && anterior != null ? Math.max(anterior, idx) : idx;
+                              for (let i = de; i <= ate; i++) {
+                                const cod = linhasNaMesa[i]?.cod_titulo;
+                                if (cod == null) continue;
+                                if (marcar) n.add(cod); else n.delete(cod);
+                              }
+                              return n;
+                            });
+                          }}
+                          onChange={() => { /* estado vem do onClick */ }}
+                          className="accent-ww-accent cursor-pointer" />
                       </td>
                     )}
                     <td className="p-1.5 border-b border-ww-border/50">
@@ -1243,12 +1265,15 @@ export default function FluxoCaixaView() {
 /** Cabeçalho de coluna ordenável. Clique alterna a direção; clique em outra
  *  coluna começa descendente, que é o que se quer em quase todo caso. */
 function Th({
-  col, w, children, ordem, setOrdem, alinhaDireita = false,
+  col, w, children, ordem, setOrdem, alinhaDireita = false, onReordenar,
 }: {
   col: OrdemCol; w: number; children: React.ReactNode;
   ordem: { col: OrdemCol; desc: boolean };
   setOrdem: (o: { col: OrdemCol; desc: boolean }) => void;
   alinhaDireita?: boolean;
+  /** Reordenar troca os índices das linhas, então a âncora do shift precisa
+   *  cair — senão o intervalo seguinte marcaria linhas que o usuário não viu. */
+  onReordenar?: () => void;
 }) {
   const ativa = ordem.col === col;
   return (
@@ -1256,7 +1281,7 @@ function Th({
         className={`p-1.5 shadow-[0_1px_0_0_rgb(var(--color-ww-border))] ${
           alinhaDireita ? "text-right" : "text-left"}`}>
       <button type="button"
-        onClick={() => setOrdem(ativa ? { col, desc: !ordem.desc } : { col, desc: true })}
+        onClick={() => { setOrdem(ativa ? { col, desc: !ordem.desc } : { col, desc: true }); onReordenar?.(); }}
         className={`inline-flex items-center gap-0.5 uppercase tracking-wider transition ${
           ativa ? "text-ww-accent font-semibold" : "hover:text-ww-text"}`}>
         {children}
