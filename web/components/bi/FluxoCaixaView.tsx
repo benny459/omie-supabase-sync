@@ -172,6 +172,10 @@ function projetar(
   saldo0: number, titulos: Titulo[], dias: number,
   extras: Array<{ t: Titulo; dia: string }> = [],
   semOverride = false,
+  /** Prévia: título nesse mapa entra na data simulada, não na atual. Diferente
+   *  de `extras`, que ACRESCENTA — aqui a data é SUBSTITUÍDA, senão o título
+   *  contaria duas vezes, na data velha e na nova. */
+  simulacao?: Map<number, string>,
 ): Ponto[] {
   const inicio = hojeIso();
   const fim = addDias(inicio, dias);
@@ -190,10 +194,16 @@ function projetar(
       // Fora da janela (ou já vencida) = não existiria na curva sem o agendamento.
       if (orig >= inicio && orig <= fim) lancar(proximoDiaUtil(orig), t);
     } else {
-      lancar(proximoDiaUtil(t.previsao), t);
+      const dia = simulacao?.get(t.cod_titulo) ?? t.previsao;
+      // A simulação pode jogar pra fora da janela — aí ele some da curva, que é
+      // o efeito real de empurrar pra depois do horizonte.
+      if (dia >= inicio && dia <= fim) lancar(proximoDiaUtil(dia), t);
     }
   }
-  for (const x of extras) lancar(proximoDiaUtil(x.dia), x.t);
+  for (const x of extras) {
+    const dia = simulacao?.get(x.t.cod_titulo) ?? x.dia;
+    if (dia >= inicio && dia <= fim) lancar(proximoDiaUtil(dia), x.t);
+  }
 
   const pontos: Ponto[] = [];
   let saldo = saldo0;
@@ -329,12 +339,29 @@ export default function FluxoCaixaView() {
   );
 
 
+  /** Prévia do lote: como a curva ficaria SE a data selecionada fosse aplicada.
+   *
+   *  Existe porque "Simular no Omie" só testa se a API aceitaria a chamada — não
+   *  mostra o efeito no caixa, que é a pergunta de quem está reagendando. Sem
+   *  isso, a decisão de mover R$ 60 mil de dia era tomada às cegas e só se via o
+   *  resultado depois de gravar.
+   *
+   *  Só existe com data válida e seleção — desenhar uma terceira linha idêntica
+   *  às outras seria ruído. */
+  const previa = useMemo(() => {
+    if (!sel.size || !/^\d{4}-\d{2}-\d{2}$/.test(dataLote) || dataLote < hojeIso()) return null;
+    const mapa = new Map<number, string>();
+    for (const cod of sel) mapa.set(cod, dataLote);
+    return projetar(saldo0, titulos, dias, extras, false, mapa);
+  }, [sel, dataLote, saldo0, titulos, dias, extras]);
+
   const rows = curva.map((p, i) => ({
     x: diaBr(p.dia),
     Entradas: p.entradas,
     Saídas: p.saidas,
     Saldo: p.saldo,
     ...(semAgendar ? { "Saldo sem agendar": semAgendar[i]?.saldo ?? 0 } : {}),
+    ...(previa ? { "Saldo simulado": previa[i]?.saldo ?? 0 } : {}),
   }));
 
   // Verde entra, vermelho sai — convenção contábil, e aqui ela é legítima como
@@ -351,10 +378,25 @@ export default function FluxoCaixaView() {
   // Com agendamento existem DUAS curvas: a simulada e a original. Ver as duas
   // juntas é o que diz se o reagendamento melhorou o caixa e em quanto — a
   // simulada sozinha não tem contra o quê ser comparada.
-  const linhas: SeriesDef[] = semAgendar
-    ? [{ key: "Saldo", label: "Saldo com agendados", slot: 0, mark: "line" },
-       { key: "Saldo sem agendar", label: "Saldo sem agendar", slot: 4, mark: "line" }]
-    : [{ key: "Saldo", label: "Saldo projetado", slot: 0, mark: "line" }];
+  const linhas: SeriesDef[] = [
+    ...(semAgendar
+      ? [{ key: "Saldo", label: "Saldo com agendados", slot: 0, mark: "line" } as SeriesDef,
+         { key: "Saldo sem agendar", label: "Saldo sem agendar", slot: 4, mark: "line" } as SeriesDef]
+      : [{ key: "Saldo", label: "Saldo projetado", slot: 0, mark: "line" } as SeriesDef]),
+    // A simulada entra por último pra desenhar por cima, e em âmbar: é hipótese,
+    // não estado — não pode ter a mesma cor de nada que já aconteceu.
+    ...(previa ? [{ key: "Saldo simulado", label: "▸ Se aplicar o lote", slot: 2, mark: "line" } as SeriesDef] : []),
+  ];
+
+  /** O que o lote faria com o pior dia da janela. É o número que decide se vale
+   *  aplicar: mover data só importa se o fundo do poço melhora. */
+  const impactoPrevia = useMemo(() => {
+    if (!previa) return null;
+    const min = (ps: Ponto[]) => ps.reduce((m, p) => Math.min(m, p.saldo), Infinity);
+    const antes = min(curva);
+    const depois = min(previa);
+    return { antes, depois, delta: depois - antes };
+  }, [previa, curva]);
 
   const resumo = useMemo(() => {
     const s = curva.map((p) => p.saldo);
@@ -772,57 +814,55 @@ export default function FluxoCaixaView() {
               . Dar uma data grava no painel e move a curva; enviar pro Omie é o passo ao lado.
             </p>
           </div>
-          {/* Escopo primeiro: define o universo. Os outros filtros recortam dentro
-              dele, então mudá-lo depois seria reordenar a leitura. */}
-          <div className="flex items-center gap-1">
-            {([["atrasados", `Atrasados (${atrasados.length})`],
-               ["a_vencer",  `A vencer (${titulos.length})`],
-               ["todos",     "Todos"]] as const).map(([k, l]) => (
-              <button key={k} type="button" onClick={() => { setEscopo(k); setSel(new Set()); }}
-                className={`px-2 py-0.5 text-[11px] rounded border transition ${
-                  escopo === k ? "border-ww-accent text-ww-accent bg-ww-accentSoft font-semibold"
-                               : "border-ww-border text-ww-textMuted hover:text-ww-text"}`}>
-                {l}
-              </button>
+          {/* Grupos ROTULADOS. Antes tudo vinha numa fila só e havia dois botões
+              "Todos" lado a lado significando coisas diferentes — um de prazo,
+              outro de natureza. Com rótulo em cima, cada segmento diz do que
+              trata e o nome duplicado deixa de ser ambíguo. */}
+          <Grupo rot="Prazo">
+            {([["atrasados", `Atrasados ${atrasados.length}`],
+               ["a_vencer",  `A vencer ${titulos.length}`],
+               ["todos",     "Tudo"]] as const).map(([k, l]) => (
+              <Chip key={k} on={escopo === k}
+                    onClick={() => { setEscopo(k); setSel(new Set()); }}>{l}</Chip>
             ))}
-          </div>
-          <span className="h-5 w-px bg-ww-border" />
-          <div className="flex items-center gap-1">
-            {([["todos", "Todos"], ["R", "A receber"], ["P", "A pagar"]] as const).map(([k, l]) => (
-              <button key={k} type="button" onClick={() => setTipo(k)}
-                className={`px-2 py-0.5 text-[11px] rounded border transition ${
-                  tipo === k ? "border-ww-accent text-ww-accent bg-ww-accentSoft font-semibold"
-                             : "border-ww-border text-ww-textMuted hover:text-ww-text"}`}>
-                {l}
-              </button>
+          </Grupo>
+
+          <Grupo rot="Fluxo">
+            {([["todos", "Ambos"], ["R", "Entra"], ["P", "Sai"]] as const).map(([k, l]) => (
+              <Chip key={k} on={tipo === k} onClick={() => setTipo(k)}>{l}</Chip>
             ))}
-          </div>
-          {/* Reprogramados: destaque e recorte. A linha já vem com fundo de
-              acento e o ↻ na coluna de previsão; isto isola só eles, que é o
-              recorte do relatório. */}
-          <button type="button" onClick={() => setSoReprog((v) => !v)}
-            title="Só títulos cuja previsão eu alterei no painel"
-            className={`inline-flex items-center gap-1 px-2 py-0.5 text-[11px] rounded border transition ${
-              soReprog ? "border-ww-accent text-ww-accent bg-ww-accentSoft font-semibold"
-                       : "border-ww-border text-ww-textMuted hover:text-ww-text"}`}>
-            ↻ Reprogramados
-            {qtdReprog > 0 && (
-              <span className={`px-1 rounded text-[9.5px] ${
-                soReprog ? "bg-ww-accent text-white" : "bg-ww-border/70 text-ww-textMuted"}`}>
-                {qtdReprog}
-              </span>
-            )}
-          </button>
-          <CategoriaFiltro opcoes={catsOpcoes} selected={catsSel}
-            onToggle={(v) => setCatsSel((prev) => {
-              const n = new Set(prev);
-              if (n.has(v)) n.delete(v); else n.add(v);
-              return n;
-            })}
-            onClear={() => setCatsSel(new Set())} />
-          {/* Recorte por previsão: o eixo em que o reagendamento opera. */}
+          </Grupo>
+
+          {/* Previsão: atalhos antes do intervalo. "Vence hoje" é a pergunta mais
+              frequente da mesa e exigia digitar a mesma data nos dois campos. */}
+          <Grupo rot="Previsão">
+            <Chip on={prevDe === hojeIso() && prevAte === hojeIso()}
+                  onClick={() => {
+                    const h = hojeIso();
+                    const jaEra = prevDe === h && prevAte === h;
+                    setPrevDe(jaEra ? "" : h); setPrevAte(jaEra ? "" : h);
+                  }}>Hoje</Chip>
+            <Chip on={prevDe === hojeIso() && prevAte === addDias(hojeIso(), 7)}
+                  onClick={() => {
+                    const h = hojeIso(), f = addDias(h, 7);
+                    const jaEra = prevDe === h && prevAte === f;
+                    setPrevDe(jaEra ? "" : h); setPrevAte(jaEra ? "" : f);
+                  }}>7 dias</Chip>
+            <Chip on={soReprog} onClick={() => setSoReprog((v) => !v)}
+                  titulo="Só títulos cuja previsão eu alterei no painel">
+              ↻ {qtdReprog}
+            </Chip>
+          </Grupo>
+
+          <Grupo rot="Recorte">
+            <CategoriaFiltro opcoes={catsOpcoes} selected={catsSel}
+              onToggle={(v) => setCatsSel((prev) => {
+                const n = new Set(prev);
+                if (n.has(v)) n.delete(v); else n.add(v);
+                return n;
+              })}
+              onClear={() => setCatsSel(new Set())} />
           <div className="flex items-center gap-1 text-[10.5px] text-ww-textMuted">
-            <span className="uppercase tracking-wider">Previsão</span>
             <input type="date" value={prevDe} onChange={(e) => setPrevDe(e.target.value)}
               title="Previsão a partir de"
               className="text-[11px] bg-ww-bg border border-ww-border rounded px-1.5 py-0.5 text-ww-text" />
@@ -835,14 +875,14 @@ export default function FluxoCaixaView() {
                 className="text-ww-accent hover:underline">limpar</button>
             )}
           </div>
-          <input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Filtrar…"
-            className="w-[150px] text-[11px] bg-ww-bg border border-ww-border rounded px-2 py-1 text-ww-text placeholder:text-ww-textFaint" />
+          <input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Buscar…"
+            className="w-[140px] text-[11px] bg-ww-bg border border-ww-border rounded px-2 py-1 text-ww-text placeholder:text-ww-textFaint" />
+          </Grupo>
 
           {/* Relatório dos reprogramados. Cobre a seleção, se houver; senão todos
               os reprogramados do filtro atual — inclusive os que o teto de linhas
               não desenha, porque teto é limite de render, não de conteúdo. */}
-          <div className="flex items-center gap-1">
-            <span className="text-[10px] uppercase tracking-wider text-ww-textFaint">Report</span>
+          <Grupo rot="Report">
             <button type="button" onClick={baixarPdf} disabled={!codsRelatorio.length}
               title={codsRelatorio.length
                 ? `PDF de ${codsRelatorio.length} título(s) reprogramado(s)`
@@ -857,7 +897,7 @@ export default function FluxoCaixaView() {
               className="px-2 py-0.5 text-[11px] rounded border border-ww-border text-ww-textMuted hover:text-ww-text hover:bg-ww-rowHover transition disabled:opacity-40">
               {exportando ? "Gerando…" : "📊 Excel"}
             </button>
-          </div>
+          </Grupo>
         </header>
 
         {/* Barra de lote — só aparece com seleção, pra não ocupar espaço à toa. */}
@@ -869,6 +909,30 @@ export default function FluxoCaixaView() {
             <input type="date" value={dataLote} min={hojeIso()}
               onChange={(e) => setDataLote(e.target.value)}
               className="text-[11px] bg-ww-bg border border-ww-border rounded px-1.5 py-0.5 text-ww-text" />
+            {/* Atalhos: reagendar quase sempre é "joga pra semana que vem" ou
+                "joga pro mês que vem". Digitar a data pra isso é atrito puro. */}
+            {([["hoje", 0], ["+7d", 7], ["+15d", 15], ["+30d", 30]] as const).map(([l, n]) => (
+              <button key={l} type="button" onClick={() => setDataLote(addDias(hojeIso(), n))}
+                className="px-1.5 py-0.5 text-[10.5px] rounded border border-ww-border text-ww-textMuted hover:text-ww-text hover:bg-ww-rowHover transition">
+                {l}
+              </button>
+            ))}
+            {/* O efeito no caixa ANTES de gravar. "Simular no Omie" só testa se a
+                API aceitaria; isto responde se vale a pena. */}
+            {impactoPrevia && (
+              <span className={`text-[11px] tabular-nums px-2 py-0.5 rounded border ${
+                impactoPrevia.delta > 0
+                  ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
+                  : impactoPrevia.delta < 0
+                    ? "border-rose-500/40 bg-rose-500/10 text-rose-700 dark:text-rose-300"
+                    : "border-ww-border text-ww-textMuted"}`}
+                title="Menor saldo da janela, hoje e com o lote aplicado. A linha âmbar no gráfico mostra a curva simulada.">
+                pior dia: {brl(impactoPrevia.antes)} → <strong>{brl(impactoPrevia.depois)}</strong>
+                {impactoPrevia.delta !== 0 && (
+                  <> ({impactoPrevia.delta > 0 ? "+" : ""}{brl(impactoPrevia.delta)})</>
+                )}
+              </span>
+            )}
             <button type="button" disabled={!dataUtil(dataLote) || salvando}
               title={dataLote && !dataUtil(dataLote) ? "Informe uma data a partir de hoje"
                 : foraDaJanela(dataLote) ? "Grava, mas cai depois do fim da janela — não aparece na curva"
@@ -1216,5 +1280,34 @@ function CategoriaFiltro({
         </div>
       )}
     </div>
+  );
+}
+
+/** Grupo rotulado de filtros. O rótulo em cima é o que resolve a ambiguidade:
+ *  "Tudo" em Prazo e "Ambos" em Fluxo deixam de competir pela mesma leitura
+ *  quando cada um está debaixo do seu próprio título. */
+function Grupo({ rot, children }: { rot: string; children: React.ReactNode }) {
+  return (
+    <div className="flex flex-col gap-0.5">
+      <span className="text-[9px] uppercase tracking-[0.7px] font-bold text-ww-textFaint px-0.5">
+        {rot}
+      </span>
+      <div className="flex items-center gap-1">{children}</div>
+    </div>
+  );
+}
+
+/** Chip de filtro. Um só componente pra todos os segmentos — antes cada grupo
+ *  repetia a mesma string de classes, e divergir era questão de tempo. */
+function Chip({
+  on, onClick, children, titulo,
+}: { on: boolean; onClick: () => void; children: React.ReactNode; titulo?: string }) {
+  return (
+    <button type="button" onClick={onClick} title={titulo}
+      className={`px-2 py-0.5 text-[11px] rounded border transition whitespace-nowrap ${
+        on ? "border-ww-accent text-ww-accent bg-ww-accentSoft font-semibold"
+           : "border-ww-border text-ww-textMuted hover:text-ww-text hover:bg-ww-rowHover"}`}>
+      {children}
+    </button>
   );
 }
