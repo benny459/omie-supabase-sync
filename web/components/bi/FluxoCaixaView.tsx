@@ -385,7 +385,7 @@ export default function FluxoCaixaView() {
       : [{ key: "Saldo", label: "Saldo projetado", slot: 0, mark: "line" } as SeriesDef]),
     // A simulada entra por último pra desenhar por cima, e em âmbar: é hipótese,
     // não estado — não pode ter a mesma cor de nada que já aconteceu.
-    ...(previa ? [{ key: "Saldo simulado", label: "▸ Se aplicar o lote", slot: 2, mark: "line" } as SeriesDef] : []),
+    ...(previa ? [{ key: "Saldo simulado", label: "▸ Caixa se aplicar o lote", slot: 2, mark: "line" } as SeriesDef] : []),
   ];
 
   /** O que o lote faria com o pior dia da janela. É o número que decide se vale
@@ -497,6 +497,24 @@ export default function FluxoCaixaView() {
   const linhasOcultas = lista.length - linhasNaMesa.length;
 
   const selecionados = Array.from(sel);
+
+  /** Quanto a seleção move, separado por lado. Selecionar sem ver o total é
+   *  operar às cegas — e entra e sai NÃO viram um número só: mover R$ 50 mil de
+   *  entrada é o oposto de mover R$ 50 mil de saída.
+   *
+   *  Soma sobre o UNIVERSO, não sobre a lista filtrada: a seleção sobrevive à
+   *  troca de filtro, e somar só o visível daria um total menor que o que o
+   *  botão vai de fato aplicar. */
+  const totalSelecao = useMemo(() => {
+    if (!sel.size) return null;
+    let receber = 0, pagar = 0;
+    for (const t of universo) {
+      if (!sel.has(t.cod_titulo)) continue;
+      if (t.natureza === "R") receber += Number(t.valor) || 0;
+      else pagar += Number(t.valor) || 0;
+    }
+    return { receber, pagar };
+  }, [sel, universo]);
 
   /** Códigos que vão pro relatório: a seleção, se houver; senão a lista
    *  filtrada INTEIRA — não o que está desenhado. O teto de 150 é limite de
@@ -811,7 +829,9 @@ export default function FluxoCaixaView() {
               <span className="text-rose-600 dark:text-rose-400 tabular-nums">
                 {brl(totalLista.pagar)} a pagar
               </span>
-              . Dar uma data grava no painel e move a curva; enviar pro Omie é o passo ao lado.
+              . Marque, escolha a data e veja a linha âmbar no gráfico: é o efeito no caixa.
+              "Aplicar data ao lote" grava no painel e move a curva de verdade; enviar pro Omie
+              é o passo final e separado.
             </p>
           </div>
           {/* Grupos ROTULADOS. Antes tudo vinha numa fila só e havia dois botões
@@ -903,9 +923,28 @@ export default function FluxoCaixaView() {
         {/* Barra de lote — só aparece com seleção, pra não ocupar espaço à toa. */}
         {podeEditar && selecionados.length > 0 && (
           <div className="flex items-center gap-2 flex-wrap mb-2 p-2 rounded-lg bg-ww-accentSoft border border-ww-accent/40">
-            <span className="text-[11px] font-semibold text-ww-accent">
+            <span className="text-[11px] font-semibold text-ww-accent whitespace-nowrap">
               {selecionados.length} selecionado(s)
             </span>
+            {/* O quanto da seleção, por lado. Dois números e não um: somar entrada
+                com saída esconderia justamente o que importa na hora de mover. */}
+            {totalSelecao && (
+              <span className="text-[11px] tabular-nums whitespace-nowrap">
+                {totalSelecao.receber > 0 && (
+                  <span className="text-emerald-600 dark:text-emerald-400">
+                    +{brl(totalSelecao.receber)}
+                  </span>
+                )}
+                {totalSelecao.receber > 0 && totalSelecao.pagar > 0 && (
+                  <span className="text-ww-textFaint"> · </span>
+                )}
+                {totalSelecao.pagar > 0 && (
+                  <span className="text-rose-600 dark:text-rose-400">
+                    −{brl(totalSelecao.pagar)}
+                  </span>
+                )}
+              </span>
+            )}
             <input type="date" value={dataLote} min={hojeIso()}
               onChange={(e) => setDataLote(e.target.value)}
               className="text-[11px] bg-ww-bg border border-ww-border rounded px-1.5 py-0.5 text-ww-text" />
@@ -941,10 +980,15 @@ export default function FluxoCaixaView() {
               className="px-2 py-0.5 text-[11px] rounded border border-ww-accent text-ww-accent hover:bg-ww-accent hover:text-white transition font-semibold disabled:opacity-40">
               {salvando ? "Gravando…" : "Aplicar data ao lote"}
             </button>
+            {/* Chamava-se "Simular no Omie" e induzia ao erro: não chama o Omie
+                nem simula caixa. Percorre a lista e devolve o que SERIA enviado —
+                é conferência do pacote. Quem simula o caixa é a linha âmbar do
+                gráfico; quem envia é o botão ao lado. */}
             <button type="button" disabled={syncing}
               onClick={() => enviarOmie(true, selecionados)}
+              title="Lista o que seria enviado, sem chamar o Omie e sem alterar nada"
               className="px-2 py-0.5 text-[11px] rounded border border-ww-border text-ww-textMuted hover:text-ww-text transition disabled:opacity-40">
-              Simular no Omie
+              Conferir envio
             </button>
             <button type="button" disabled={syncing}
               onClick={() => enviarOmie(false, selecionados)}
