@@ -143,6 +143,9 @@ type Titulo = {
   valor: number;
   /** Quando eu reprogramei. Null se nunca mexi no título. */
   reprogramado_em: string | null;
+  /** Fora da curva: pagamento a repactuar ou cancelar, sem data confiável. */
+  em_renegociacao: boolean;
+  motivo_renegociacao: string | null;
 };
 type ContaRow = {
   empresa: string; cod_conta: number; conta: string; saldo: number; dt_ultimo: string | null;
@@ -334,6 +337,8 @@ export default function FluxoCaixaView() {
    *  escolher um dia seria fabricar informação que ninguém tem. */
   const [comAtrasoRecebido, setComAtrasoRecebido] = useState(false);
   const [soReprog, setSoReprog] = useState(false);
+  /** Isola os que estão fora do fluxo — é aqui que se volta pra definir data. */
+  const [soReneg, setSoReneg] = useState(false);
   /** Última linha clicada, âncora do shift. Ref e não state: muda a cada clique
    *  e não deve provocar re-render da tabela inteira. */
   const ancoraRef = useRef<number | null>(null);
@@ -373,6 +378,21 @@ export default function FluxoCaixaView() {
   const atrasados = useMemo(() => data?.atrasados ?? [], [data]);
   const podeEditar = data?.pode_editar ?? false;
 
+  /** Títulos que a curva NÃO enxerga, e quanto isso representa. Tirar dinheiro
+   *  da projeção deixa o gráfico mais bonito; sem esse número visível na tela,
+   *  vira autoengano. */
+  const foraDoFluxo = useMemo(() => {
+    const fora = titulos.filter((t) => t.em_renegociacao);
+    return {
+      qtd: fora.length,
+      pagar:   fora.filter((t) => t.natureza === "P").reduce((a, t) => a + (Number(t.valor) || 0), 0),
+      receber: fora.filter((t) => t.natureza === "R").reduce((a, t) => a + (Number(t.valor) || 0), 0),
+    };
+  }, [titulos]);
+
+  /** A curva só vê quem tem data confiável. */
+  const titulosNaCurva = useMemo(() => titulos.filter((t) => !t.em_renegociacao), [titulos]);
+
   const atrasoTot = useMemo(() => {
     const soma = (n: "R" | "P") =>
       atrasados.filter((t) => t.natureza === n).reduce((a, t) => a + (Number(t.valor) || 0), 0);
@@ -405,21 +425,21 @@ export default function FluxoCaixaView() {
   const empurrao = useMemo(() => {
     const fim = addDias(hojeIso(), dias);
     let qtd = 0, valor = 0, foraQtd = 0, foraValor = 0;
-    for (const t of titulos) {
+    for (const t of titulosNaCurva) {
       const novo = proximoDiaUtil(t.previsao);
       if (novo === t.previsao) continue;
       qtd += 1; valor += Number(t.valor) || 0;
       if (novo > fim) { foraQtd += 1; foraValor += Number(t.valor) || 0; }
     }
     return { qtd, valor, foraQtd, foraValor };
-  }, [titulos, dias]);
+  }, [titulosNaCurva, dias]);
 
   /** Quantos títulos DA CURVA já carregam um reagendamento gravado. É o que
    *  decide se a comparação faz sentido — sem nenhum, as duas curvas seriam
    *  idênticas e a segunda linha só poluiria. */
   const comOverrideNaCurva = useMemo(
-    () => titulos.filter((t) => t.tem_override).length,
-    [titulos],
+    () => titulosNaCurva.filter((t) => t.tem_override).length,
+    [titulosNaCurva],
   );
 
   /** Data aceitável: COMPLETA e não no passado. Não limito ao fim da janela —
@@ -440,6 +460,12 @@ export default function FluxoCaixaView() {
     if (escopo === "a_vencer")  return titulos;
     return [...atrasados, ...titulos];
   }, [escopo, atrasados, titulos]);
+
+  /** Quantos estão fora do fluxo no universo atual — o número do chip ⚖. */
+  const qtdReneg = useMemo(
+    () => universo.filter((t) => t.em_renegociacao).length,
+    [universo],
+  );
 
   /** Quantos reprogramados existem no universo atual — o número do chip. */
   const qtdReprog = useMemo(
@@ -474,16 +500,17 @@ export default function FluxoCaixaView() {
   }, [rateioOn, distribuicaoRateio, dataLote, sel]);
 
 
+
   const curva = useMemo(
-    () => projetar(saldo0, titulos, dias, extras),
-    [saldo0, titulos, dias, extras],
+    () => projetar(saldo0, titulosNaCurva, dias, extras),
+    [saldo0, titulosNaCurva, dias, extras],
   );
   /** O contrafactual: sem nenhum reagendamento, gravado ou desta sessão. */
   const semAgendar = useMemo(
     () => (comOverrideNaCurva > 0 || extras.length
-            ? projetar(saldo0, titulos, dias, [], true)
+            ? projetar(saldo0, titulosNaCurva, dias, [], true)
             : null),
-    [saldo0, titulos, dias, extras.length, comOverrideNaCurva],
+    [saldo0, titulosNaCurva, dias, extras.length, comOverrideNaCurva],
   );
 
 
@@ -498,8 +525,8 @@ export default function FluxoCaixaView() {
    *  às outras seria ruído. */
   const previa = useMemo(() => {
     if (!destinos.size) return null;
-    return projetar(saldo0, titulos, dias, extras, false, destinos);
-  }, [destinos, saldo0, titulos, dias, extras]);
+    return projetar(saldo0, titulosNaCurva, dias, extras, false, destinos);
+  }, [destinos, saldo0, titulosNaCurva, dias, extras]);
 
   const rows = curva.map((p, i) => ({
     x: diaBr(p.dia),
@@ -579,6 +606,7 @@ export default function FluxoCaixaView() {
     const arr = universo
       .filter((t) => tipo === "todos" || t.natureza === tipo)
       .filter((t) => !soReprog || t.tem_override)
+      .filter((t) => !soReneg || t.em_renegociacao)
       // Data de reprogramação: compara só a parte YYYY-MM-DD do timestamp.
       .filter((t) => !reprogDe  || (t.reprogramado_em ? diaLocalDe(t.reprogramado_em) >= reprogDe : false))
       .filter((t) => !reprogAte || (t.reprogramado_em ? diaLocalDe(t.reprogramado_em) <= reprogAte : false))
@@ -605,7 +633,7 @@ export default function FluxoCaixaView() {
         default:            return 0;
       }
     });
-  }, [universo, tipo, soReprog, reprogDe, reprogAte, catsSel, prevDe, prevAte, busca, ordem]);
+  }, [universo, tipo, soReprog, soReneg, reprogDe, reprogAte, catsSel, prevDe, prevAte, busca, ordem]);
 
   /** Teto de linhas DESENHADAS.
    *
@@ -662,6 +690,12 @@ export default function FluxoCaixaView() {
     }
     return reprogDaLista.map((t) => t.cod_titulo);
   }, [selecionados, lista]);
+
+  /** Quantos da seleção já estão fora do fluxo — decide qual botão aparece. */
+  const selRenegociando = useMemo(
+    () => universo.filter((t) => sel.has(t.cod_titulo) && t.em_renegociacao).length,
+    [sel, universo],
+  );
 
   /** Da seleção, quantos já têm reprogramação pendente de envio. É o número que
    *  o botão de enviar deveria ter mostrado desde sempre: sem ele, "Enviar lote
@@ -788,6 +822,19 @@ export default function FluxoCaixaView() {
         return n;
       });
       setErr(null);
+      // Definir data RESOLVE a renegociação: se o título estava fora do fluxo,
+      // ele volta. Deixar fora depois de ter data seria esconder movimento que
+      // agora é conhecido.
+      const voltando = alvos
+        .map((a) => a.cod)
+        .filter((cod) => universo.some((t) => t.cod_titulo === cod && t.em_renegociacao));
+      if (voltando.length) {
+        await fetch("/api/renegociacao", {
+          method: "DELETE",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ cods: voltando }),
+        }).catch(() => { /* a data já gravou; o retorno ao fluxo é o bônus */ });
+      }
       {
         const datas = Array.from(new Set(alvos.map((a) => a.dia))).sort();
         setAviso(datas.length === 1
@@ -804,6 +851,30 @@ export default function FluxoCaixaView() {
     } finally {
       setSalvando(false);
     }
+  };
+
+  /** Tira da curva (ou devolve). Não toca no Omie e não apaga nada — o título
+   *  continua na mesa, some do gráfico, e o valor sai declarado na tela. */
+  const marcarRenegociacao = async (cods: number[], entrar: boolean, motivo?: string) => {
+    if (!cods.length) return;
+    setSalvando(true);
+    try {
+      const r = await fetch("/api/renegociacao", {
+        method: entrar ? "POST" : "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ cods, motivo }),
+      });
+      if (!r.ok) {
+        const j = await r.json().catch(() => ({}));
+        setErr(j.error ?? "falha ao marcar renegociação");
+        return;
+      }
+      setErr(null);
+      setAviso(entrar
+        ? `${cods.length} título(s) fora do fluxo — a curva não os considera mais. Volte pelo filtro "⚖ Renegociação" quando tiver a data.`
+        : `${cods.length} título(s) de volta ao fluxo, na previsão atual.`);
+      await load();
+    } finally { setSalvando(false); }
   };
 
   const enviarOmie = async (dryRun: boolean, only?: number[]) => {
@@ -944,8 +1015,11 @@ export default function FluxoCaixaView() {
             : "Sem extrato"} />
         <StatTile label={`Entradas a vencer · ${jan.label.toLowerCase()}`} value={brl(resumo.entradas)}
           hint={`${titulos.filter((t) => t.natureza === "R").length} títulos · Safe`} />
+        {/* O hint declara o que ficou de fora. Sem isso o card diria "R$ X a
+            pagar" enquanto existe mais a pagar que a curva não conta. */}
         <StatTile label={`Saídas a vencer · ${jan.label.toLowerCase()}`} value={brl(Math.abs(resumo.saidas))}
-          hint={`${titulos.filter((t) => t.natureza === "P").length} títulos · Grupo`}
+          hint={`${titulosNaCurva.filter((t) => t.natureza === "P").length} títulos · Grupo`
+            + (foraDoFluxo.pagar ? ` · ⚖ ${brl(foraDoFluxo.pagar)} fora da curva` : "")}
           higherIsBetter={false} />
         {/* As duas janelas de atraso que faltavam. */}
         <StatTile label="Recebíveis em atraso" value={brl(atrasoTot.receber)}
@@ -981,6 +1055,12 @@ export default function FluxoCaixaView() {
               ? `, dos quais ${empurrao.foraQtd} (${brl(empurrao.foraValor)}) caem depois do fim da janela e saem da curva`
               : "")
           + `. Feriados não entram no ajuste.`
+          + (foraDoFluxo.qtd
+              ? ` ⚖ ${foraDoFluxo.qtd} título(s) FORA da curva por renegociação`
+                + (foraDoFluxo.pagar ? `, ${brl(foraDoFluxo.pagar)} a pagar` : "")
+                + (foraDoFluxo.receber ? ` e ${brl(foraDoFluxo.receber)} a receber` : "")
+                + ` — a curva está melhor do que a realidade nesse montante.`
+              : "")
         }
         series={[...barras, ...linhas]}
         rows={rows}
@@ -1062,6 +1142,11 @@ export default function FluxoCaixaView() {
             <Chip on={soReprog} onClick={() => setSoReprog((v) => !v)}
                   titulo="Só títulos cuja previsão eu alterei no painel">
               ↻ {qtdReprog}
+            </Chip>
+            {/* O caminho de volta. Aqui se retoma o que ficou pendente de data. */}
+            <Chip on={soReneg} onClick={() => setSoReneg((v) => !v)}
+                  titulo="Só os que estão fora da curva, esperando repactuação ou cancelamento">
+              ⚖ {qtdReneg}
             </Chip>
           </Grupo>
 
@@ -1247,6 +1332,37 @@ export default function FluxoCaixaView() {
               className="px-2 py-0.5 text-[11px] rounded border border-amber-500/70 text-amber-700 dark:text-amber-300 hover:bg-amber-500/20 transition disabled:opacity-30 disabled:border-ww-border disabled:text-ww-textFaint">
               {syncing ? "Enviando…" : `2 · Enviar pro Omie (${selPendenteOmie})`}
             </button>
+            {/* Fora do fluxo. Separado dos passos 1 e 2 por uma barra: é outra
+                natureza de ação — não reagenda nem envia, tira da conta. */}
+            <span className="h-5 w-px bg-ww-border" />
+            {selRenegociando < selecionados.length && (
+              <button type="button" disabled={salvando}
+                onClick={() => {
+                  const motivo = window.prompt(
+                    `Tirar ${selecionados.length - selRenegociando} título(s) da curva.\n\n`
+                    + "Motivo (opcional) — ex.: 'repactuar com fornecedor', 'a cancelar':", "");
+                  if (motivo === null) return;   // cancelou o prompt
+                  void marcarRenegociacao(
+                    selecionados.filter((cod) =>
+                      !universo.some((t) => t.cod_titulo === cod && t.em_renegociacao)),
+                    true, motivo || undefined);
+                }}
+                title="Tira da projeção de caixa. Não altera o Omie — o título continua aqui e volta quando tiver data."
+                className="px-2 py-0.5 text-[11px] rounded border border-violet-500/70 text-violet-700 dark:text-violet-300 hover:bg-violet-500/20 transition disabled:opacity-30">
+                ⚖ Renegociar ({selecionados.length - selRenegociando})
+              </button>
+            )}
+            {selRenegociando > 0 && (
+              <button type="button" disabled={salvando}
+                onClick={() => void marcarRenegociacao(
+                  selecionados.filter((cod) =>
+                    universo.some((t) => t.cod_titulo === cod && t.em_renegociacao)),
+                  false)}
+                title="Devolve à curva, na previsão atual do título"
+                className="px-2 py-0.5 text-[11px] rounded border border-emerald-500/70 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-500/20 transition disabled:opacity-30">
+                ↩ Voltar ao fluxo ({selRenegociando})
+              </button>
+            )}
             <button type="button" onClick={() => { setSel(new Set()); setRateioOn(false); }}
               className="text-[10.5px] text-ww-textFaint hover:text-ww-text underline ml-auto">
               limpar seleção
@@ -1385,7 +1501,10 @@ export default function FluxoCaixaView() {
                 const dia = agenda.get(t.cod_titulo) ?? (t.tem_override ? t.previsao : "");
                 const pendente = t.tem_override && !t.sincronizado_omie;
                 return (
-                  <tr key={t.cod_titulo} className={`viz-row ${dia ? "bg-ww-accentSoft/40" : ""}`}>
+                  <tr key={t.cod_titulo}
+                      className={`viz-row ${
+                        t.em_renegociacao ? "bg-violet-500/10 opacity-75"
+                        : dia ? "bg-ww-accentSoft/40" : ""}`}>
                     {podeEditar && (
                       <td className="p-1.5 border-b border-ww-border/50">
                         {/* Shift marca o intervalo desde a última linha clicada,
@@ -1446,7 +1565,14 @@ export default function FluxoCaixaView() {
                         em quantos dias. Com os dois escopos na mesma tabela, uma
                         coluna só de "atraso" ficaria vazia em metade das linhas. */}
                     <td className="p-1.5 border-b border-ww-border/50">
-                      {t.faixa_atraso ? (
+                      {t.em_renegociacao ? (
+                        <span title={t.motivo_renegociacao
+                          ? `Fora da curva — ${t.motivo_renegociacao}`
+                          : "Fora da curva por renegociação"}
+                          className="inline-flex px-1.5 py-0.5 rounded text-[10px] border bg-violet-500/15 text-violet-700 dark:text-violet-300 border-violet-500/30">
+                          ⚖ fora
+                        </span>
+                      ) : t.faixa_atraso ? (
                         <span className={`inline-flex px-1.5 py-0.5 rounded text-[10px] border tabular-nums ${
                           FAIXA_TOM[t.faixa_atraso] ?? ""}`}
                           title={`Vencido há ${t.dias_atraso} dia(s)`}>
