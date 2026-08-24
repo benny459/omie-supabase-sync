@@ -173,6 +173,46 @@ type SyncResult = {
   results: Array<{ cod_titulo: number; contraparte: string; status: string; erro?: string }>;
 };
 
+
+/** Uma fatia do rateio: data destino e quanto do total deve cair nela. */
+type Fatia = { data: string; pct: number };
+
+/** Distribui títulos INTEIROS entre as fatias, chegando o mais perto possível da
+ *  proporção pedida.
+ *
+ *  Título é indivisível: não dá pra pagar metade numa data e metade em outra sem
+ *  quebrar a parcela no Omie. Então o rateio é uma APROXIMAÇÃO por itens
+ *  inteiros, e a tela mostra o que saiu de fato ao lado do que foi pedido — a
+ *  diferença é real e esconder seria mentir sobre o caixa.
+ *
+ *  Heurística: do maior valor pro menor, cada título vai pra fatia com a maior
+ *  falta absoluta. É o guloso clássico de particionamento — não é ótimo, mas
+ *  erra pouco e é previsível, que aqui vale mais que perfeição: quem confere
+ *  precisa entender por que aquele título caiu naquela data. */
+function ratear(titulos: Titulo[], fatias: Fatia[]) {
+  const validas = fatias.filter((f) => f.data && f.pct > 0);
+  if (!validas.length || !titulos.length) return null;
+
+  const total = titulos.reduce((a, t) => a + (Number(t.valor) || 0), 0);
+  const somaPct = validas.reduce((a, f) => a + f.pct, 0) || 1;
+  const baldes = validas.map((f) => ({
+    data: f.data,
+    pct: f.pct,
+    // Normaliza: se as porcentagens não somam 100, respeita a proporção entre
+    // elas em vez de recusar. Quem digita 30/30/30 quer três partes iguais.
+    meta: total * (f.pct / somaPct),
+    valor: 0,
+    itens: [] as Titulo[],
+  }));
+
+  for (const t of [...titulos].sort((a, b) => Number(b.valor) - Number(a.valor))) {
+    const alvo = baldes.reduce((m, b) => (b.meta - b.valor > m.meta - m.valor ? b : m));
+    alvo.valor += Number(t.valor) || 0;
+    alvo.itens.push(t);
+  }
+  return { total, baldes };
+}
+
 type Ponto = { dia: string; entradas: number; saidas: number; saldo: number };
 
 /** Saldo de partida + movimento de cada dia, acumulado.
@@ -265,6 +305,11 @@ export default function FluxoCaixaView() {
   const [rascunho, setRascunho] = useState<Map<number, string>>(new Map());
   const [sel, setSel] = useState<Set<number>>(new Set());
   const [dataLote, setDataLote] = useState("");
+  /** Rateio em até 3 datas. Desligado = uma data só, o comportamento antigo. */
+  const [rateioOn, setRateioOn] = useState(false);
+  const [fatias, setFatias] = useState<Fatia[]>([
+    { data: "", pct: 40 }, { data: "", pct: 30 }, { data: "", pct: 30 },
+  ]);
   const [busca, setBusca] = useState("");
   const [tipo, setTipo] = useState<"todos" | "R" | "P">("todos");
   /** Escopo da mesa de reagendamento. Antes só existia "atrasados" — mas
@@ -377,6 +422,58 @@ export default function FluxoCaixaView() {
     [titulos],
   );
 
+  /** Data aceitável: COMPLETA e não no passado. Não limito ao fim da janela —
+   *  agendar pra depois dela é legítimo, o título só não aparece na curva atual.
+   *  Recusar seria descartar em silêncio o que o usuário acabou de digitar.
+   *  Função DECLARADA e não const: `destinos` a usa antes desta posição.
+   */
+  function dataUtil(v: string) {
+    return /^\d{4}-\d{2}-\d{2}$/.test(v) && v >= hojeIso() && v <= "2100-12-31";
+  }
+
+  /** Universo da mesa conforme o escopo. `atrasados` e `titulos` já vêm
+   *  separados do servidor (duas chamadas de fluxo_caixa_titulos), então "todos"
+   *  é só a união — sem consulta nova e sem risco de contar duas vezes, porque
+   *  vencido e a-vencer são mutuamente exclusivos por construção. */
+  const universo = useMemo(() => {
+    if (escopo === "atrasados") return atrasados;
+    if (escopo === "a_vencer")  return titulos;
+    return [...atrasados, ...titulos];
+  }, [escopo, atrasados, titulos]);
+
+  /** Quantos reprogramados existem no universo atual — o número do chip. */
+  const qtdReprog = useMemo(
+    () => universo.filter((t) => t.tem_override).length,
+    [universo],
+  );
+
+  /** Os títulos da seleção, não só os códigos — o rateio precisa dos valores. */
+  const titulosSelecionados = useMemo(
+    () => universo.filter((t) => sel.has(t.cod_titulo)),
+    [sel, universo],
+  );
+
+  const distribuicaoRateio = useMemo(
+    () => (rateioOn ? ratear(titulosSelecionados, fatias) : null),
+    [rateioOn, titulosSelecionados, fatias],
+  );
+
+  /** Título → data destino. Uma data só, ou o rateio quando ligado. É este mapa
+   *  que alimenta tanto a prévia da curva quanto a gravação, então prévia e
+   *  resultado não podem divergir. */
+  const destinos = useMemo(() => {
+    const m = new Map<number, string>();
+    if (rateioOn) {
+      for (const b of distribuicaoRateio?.baldes ?? []) {
+        for (const t of b.itens) m.set(t.cod_titulo, b.data);
+      }
+    } else if (dataUtil(dataLote)) {
+      for (const cod of sel) m.set(cod, dataLote);
+    }
+    return m;
+  }, [rateioOn, distribuicaoRateio, dataLote, sel]);
+
+
   const curva = useMemo(
     () => projetar(saldo0, titulos, dias, extras),
     [saldo0, titulos, dias, extras],
@@ -400,11 +497,9 @@ export default function FluxoCaixaView() {
    *  Só existe com data válida e seleção — desenhar uma terceira linha idêntica
    *  às outras seria ruído. */
   const previa = useMemo(() => {
-    if (!sel.size || !/^\d{4}-\d{2}-\d{2}$/.test(dataLote) || dataLote < hojeIso()) return null;
-    const mapa = new Map<number, string>();
-    for (const cod of sel) mapa.set(cod, dataLote);
-    return projetar(saldo0, titulos, dias, extras, false, mapa);
-  }, [sel, dataLote, saldo0, titulos, dias, extras]);
+    if (!destinos.size) return null;
+    return projetar(saldo0, titulos, dias, extras, false, destinos);
+  }, [destinos, saldo0, titulos, dias, extras]);
 
   const rows = curva.map((p, i) => ({
     x: diaBr(p.dia),
@@ -470,22 +565,6 @@ export default function FluxoCaixaView() {
     [agenda, dias],
   );
 
-
-  /** Universo da mesa conforme o escopo. `atrasados` e `titulos` já vêm
-   *  separados do servidor (duas chamadas de fluxo_caixa_titulos), então "todos"
-   *  é só a união — sem consulta nova e sem risco de contar duas vezes, porque
-   *  vencido e a-vencer são mutuamente exclusivos por construção. */
-  const universo = useMemo(() => {
-    if (escopo === "atrasados") return atrasados;
-    if (escopo === "a_vencer")  return titulos;
-    return [...atrasados, ...titulos];
-  }, [escopo, atrasados, titulos]);
-
-  /** Quantos reprogramados existem no universo atual — o número do chip. */
-  const qtdReprog = useMemo(
-    () => universo.filter((t) => t.tem_override).length,
-    [universo],
-  );
 
   /** Categorias presentes no universo atual, com valor — quem reagenda escolhe
    *  pelo peso, não pelo nome. */
@@ -682,11 +761,6 @@ export default function FluxoCaixaView() {
     return { receber: soma("R"), pagar: soma("P") };
   }, [lista]);
 
-  /** Data aceitável: COMPLETA e não no passado. Não limito ao fim da janela —
-   *  agendar pra depois dela é legítimo, o título só não aparece na curva atual.
-   *  Recusar seria descartar em silêncio o que o usuário acabou de digitar. */
-  const dataUtil = (v: string) =>
-    /^\d{4}-\d{2}-\d{2}$/.test(v) && v >= hojeIso() && v <= "2100-12-31";
 
   /** Agendado pra depois do fim da janela: gravado, mas fora do gráfico. */
   const foraDaJanela = (v: string) => dataUtil(v) && v > addDias(hojeIso(), dias);
@@ -714,7 +788,12 @@ export default function FluxoCaixaView() {
         return n;
       });
       setErr(null);
-      setAviso(`${alvos.length} título(s) reprogramado(s) para ${diaBr(alvos[0].dia)}`);
+      {
+        const datas = Array.from(new Set(alvos.map((a) => a.dia))).sort();
+        setAviso(datas.length === 1
+          ? `${alvos.length} título(s) reprogramado(s) para ${diaBr(datas[0])}`
+          : `${alvos.length} título(s) rateados em ${datas.length} datas: ${datas.map(diaBr).join(" · ")}`);
+      }
       // Recarrega: `extras` só ponteia atrasados reagendados na sessão, então um
       // título A VENCER remarcado gravaria no banco e a curva não se moveria —
       // ele continuaria em `titulos` na data antiga. Com o reload, o servidor
@@ -1105,6 +1184,14 @@ export default function FluxoCaixaView() {
                 {l}
               </button>
             ))}
+            <span className="h-5 w-px bg-ww-border" />
+            <button type="button" onClick={() => setRateioOn((v) => !v)}
+              title="Divide a seleção em até 3 datas, por proporção de valor"
+              className={`px-2 py-0.5 text-[11px] rounded border transition ${
+                rateioOn ? "border-ww-accent text-ww-accent bg-ww-accentSoft font-semibold"
+                         : "border-ww-border text-ww-textMuted hover:text-ww-text"}`}>
+              ⑃ Ratear em datas
+            </button>
             {/* O efeito no caixa ANTES de gravar. "Simular no Omie" só testa se a
                 API aceitaria; isto responde se vale a pena. */}
             {impactoPrevia && (
@@ -1121,15 +1208,22 @@ export default function FluxoCaixaView() {
                 )}
               </span>
             )}
-            <button type="button" disabled={!dataUtil(dataLote) || salvando}
-              title={dataLote && !dataUtil(dataLote) ? "Informe uma data a partir de hoje"
+            {/* Grava pelo mapa `destinos`, que é o MESMO que alimenta a prévia da
+                curva — com rateio ou sem. Se fossem dois caminhos, a linha âmbar
+                mostraria uma coisa e o gravado seria outra. */}
+            <button type="button" disabled={destinos.size === 0 || salvando}
+              title={rateioOn
+                ? (destinos.size ? `Grava ${destinos.size} título(s) nas datas do rateio`
+                                 : "Preencha ao menos uma data no rateio")
+                : dataLote && !dataUtil(dataLote) ? "Informe uma data a partir de hoje"
                 : foraDaJanela(dataLote) ? "Grava, mas cai depois do fim da janela — não aparece na curva"
                 : undefined}
-              onClick={() => gravar(selecionados.map((cod) => ({ cod, dia: dataLote })))}
+              onClick={() => gravar(Array.from(destinos, ([cod, dia]) => ({ cod, dia })))}
               className="px-3 py-1 text-[11.5px] rounded-md border-2 border-ww-accent bg-ww-accent text-white hover:brightness-110 transition font-bold disabled:opacity-30 disabled:bg-transparent disabled:text-ww-textFaint disabled:border-ww-border">
               {salvando ? "Gravando…"
-                : !dataUtil(dataLote) ? "1 · Escolha a data ↑"
-                : `1 · Reprogramar ${selecionados.length}`}
+                : destinos.size === 0
+                  ? (rateioOn ? "1 · Preencha o rateio ↓" : "1 · Escolha a data ↑")
+                  : `1 · Reprogramar ${destinos.size}`}
             </button>
             {/* Chamava-se "Simular no Omie" e induzia ao erro: não chama o Omie
                 nem simula caixa. Percorre a lista e devolve o que SERIA enviado —
@@ -1153,10 +1247,74 @@ export default function FluxoCaixaView() {
               className="px-2 py-0.5 text-[11px] rounded border border-amber-500/70 text-amber-700 dark:text-amber-300 hover:bg-amber-500/20 transition disabled:opacity-30 disabled:border-ww-border disabled:text-ww-textFaint">
               {syncing ? "Enviando…" : `2 · Enviar pro Omie (${selPendenteOmie})`}
             </button>
-            <button type="button" onClick={() => setSel(new Set())}
+            <button type="button" onClick={() => { setSel(new Set()); setRateioOn(false); }}
               className="text-[10.5px] text-ww-textFaint hover:text-ww-text underline ml-auto">
               limpar seleção
             </button>
+          </div>
+        )}
+
+        {/* Painel do rateio. Só aparece ligado, e mostra o PEDIDO ao lado do
+            OBTIDO: título é indivisível, então a proporção real quase nunca bate
+            exatamente com a pedida. Esconder essa diferença seria mentir sobre
+            quanto vai sair em cada data. */}
+        {podeEditar && selecionados.length > 0 && rateioOn && (
+          <div className="mb-2 p-2.5 rounded-lg bg-ww-panel border border-ww-accent/30">
+            <p className="text-[10.5px] text-ww-textMuted mb-2">
+              Divide os {selecionados.length} títulos em até 3 datas, aproximando a proporção.
+              Título não se parte: cada um vai inteiro pra uma data, e o valor obtido pode
+              diferir do pedido.
+            </p>
+            <div className="flex items-start gap-3 flex-wrap">
+              {fatias.map((f, i) => {
+                const b = distribuicaoRateio?.baldes.find((x) => x.data === f.data && f.data);
+                const pedido = distribuicaoRateio
+                  ? distribuicaoRateio.total * (f.pct / (fatias.filter((y) => y.data && y.pct > 0)
+                      .reduce((a, y) => a + y.pct, 0) || 1))
+                  : 0;
+                return (
+                  <div key={i} className="flex flex-col gap-1 p-2 rounded-md border border-ww-border min-w-[190px]">
+                    <span className="text-[9px] uppercase tracking-[0.7px] font-bold text-ww-textFaint">
+                      Parte {i + 1}
+                    </span>
+                    <div className="flex items-center gap-1">
+                      <input type="date" value={f.data} min={hojeIso()}
+                        onChange={(e) => setFatias((prev) =>
+                          prev.map((x, j) => (j === i ? { ...x, data: e.target.value } : x)))}
+                        className="text-[11px] bg-ww-bg border border-ww-border rounded px-1.5 py-0.5 text-ww-text" />
+                      <input type="number" min={0} max={100} value={f.pct}
+                        onChange={(e) => setFatias((prev) =>
+                          prev.map((x, j) => (j === i ? { ...x, pct: Number(e.target.value) || 0 } : x)))}
+                        className="w-[52px] text-[11px] bg-ww-bg border border-ww-border rounded px-1.5 py-0.5 text-ww-text tabular-nums" />
+                      <span className="text-[10.5px] text-ww-textFaint">%</span>
+                    </div>
+                    {b ? (
+                      <span className="text-[10.5px] tabular-nums text-ww-text">
+                        {b.itens.length} título(s) · <strong>{brl(b.valor)}</strong>
+                        <span className="text-ww-textFaint"> (pedido {brl(pedido)})</span>
+                      </span>
+                    ) : (
+                      <span className="text-[10.5px] text-ww-textFaint">
+                        {f.data ? "sem título nesta parte" : "escolha a data"}
+                      </span>
+                    )}
+                  </div>
+                );
+              })}
+              {distribuicaoRateio && (
+                <div className="flex flex-col gap-1 p-2 rounded-md border border-ww-border bg-ww-rowHover">
+                  <span className="text-[9px] uppercase tracking-[0.7px] font-bold text-ww-textFaint">
+                    Total distribuído
+                  </span>
+                  <span className="text-[13px] font-bold tabular-nums text-ww-text">
+                    {brl(distribuicaoRateio.baldes.reduce((a, b) => a + b.valor, 0))}
+                  </span>
+                  <span className="text-[10px] text-ww-textFaint">
+                    de {brl(distribuicaoRateio.total)} selecionados
+                  </span>
+                </div>
+              )}
+            </div>
           </div>
         )}
 
