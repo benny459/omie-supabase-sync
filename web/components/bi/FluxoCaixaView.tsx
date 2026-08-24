@@ -691,6 +691,14 @@ export default function FluxoCaixaView() {
     return reprogDaLista.map((t) => t.cod_titulo);
   }, [selecionados, lista]);
 
+  /** Tudo que está reprogramado e ainda NÃO foi pro Omie, no universo inteiro.
+   *  É a resposta pra "como envio depois de validar": antes só dava pra enviar a
+   *  seleção, então quem validasse e limpasse a seleção perdia o caminho. */
+  const pendentesOmieGeral = useMemo(
+    () => universo.filter((t) => t.tem_override && !t.sincronizado_omie),
+    [universo],
+  );
+
   /** Quantos da seleção já estão fora do fluxo — decide qual botão aparece. */
   const selRenegociando = useMemo(
     () => universo.filter((t) => sel.has(t.cod_titulo) && t.em_renegociacao).length,
@@ -1099,9 +1107,15 @@ export default function FluxoCaixaView() {
               <span className="text-rose-600 dark:text-rose-400 tabular-nums">
                 {brl(totalLista.pagar)} a pagar
               </span>
-              . Marque, escolha a data e veja a linha âmbar no gráfico: é o efeito no caixa.
-              "Aplicar data ao lote" grava no painel e move a curva de verdade; enviar pro Omie
-              é o passo final e separado.
+              .
+            </p>
+            <p className="text-[10.5px] text-ww-textFaint mt-1 normal-case leading-relaxed">
+              <strong className="text-ww-textMuted">Reprogramar</strong> = sei a data nova → grava
+              no painel e move a curva.{" "}
+              <strong className="text-ww-textMuted">Tirar da curva</strong> = ainda vou repactuar
+              ou cancelar, não sei a data → sai do gráfico e volta pelo filtro ⚖.{" "}
+              <strong className="text-ww-textMuted">Enviar ao Omie</strong> = leva as datas já
+              reprogramadas pro ERP. Nada vai pro Omie sozinho.
             </p>
           </div>
           {/* Grupos ROTULADOS. Antes tudo vinha numa fila só e havia dois botões
@@ -1235,7 +1249,7 @@ export default function FluxoCaixaView() {
 
         {/* Barra de lote — só aparece com seleção, pra não ocupar espaço à toa. */}
         {podeEditar && selecionados.length > 0 && (
-          <div className="flex items-center gap-2 flex-wrap mb-2 p-2 rounded-lg bg-ww-accentSoft border border-ww-accent/40">
+          <div className="flex items-end gap-x-3 gap-y-2 flex-wrap mb-2 p-2.5 rounded-lg bg-ww-accentSoft border border-ww-accent/40">
             <span className="text-[11px] font-semibold text-ww-accent whitespace-nowrap">
               {selecionados.length} selecionado(s)
             </span>
@@ -1258,6 +1272,7 @@ export default function FluxoCaixaView() {
                 )}
               </span>
             )}
+            <Grupo rot="Tenho a data — reprogramar">
             <input type="date" value={dataLote} min={hojeIso()}
               onChange={(e) => setDataLote(e.target.value)}
               className="text-[11px] bg-ww-bg border border-ww-border rounded px-1.5 py-0.5 text-ww-text" />
@@ -1269,14 +1284,19 @@ export default function FluxoCaixaView() {
                 {l}
               </button>
             ))}
-            <span className="h-5 w-px bg-ww-border" />
+            </Grupo>
+
+            <Grupo rot="⑃ Dividir">
             <button type="button" onClick={() => setRateioOn((v) => !v)}
               title="Divide a seleção em até 3 datas, por proporção de valor"
               className={`px-2 py-0.5 text-[11px] rounded border transition ${
                 rateioOn ? "border-ww-accent text-ww-accent bg-ww-accentSoft font-semibold"
                          : "border-ww-border text-ww-textMuted hover:text-ww-text"}`}>
-              ⑃ Ratear em datas
+              ⑃ Em até 3 datas
             </button>
+            </Grupo>
+
+            <Grupo rot="Efeito no caixa">
             {/* O efeito no caixa ANTES de gravar. "Simular no Omie" só testa se a
                 API aceitaria; isto responde se vale a pena. */}
             {impactoPrevia && (
@@ -1293,6 +1313,9 @@ export default function FluxoCaixaView() {
                 )}
               </span>
             )}
+            </Grupo>
+
+            <Grupo rot="Passo 1 — grava aqui">
             {/* Grava pelo mapa `destinos`, que é o MESMO que alimenta a prévia da
                 curva — com rateio ou sem. Se fossem dois caminhos, a linha âmbar
                 mostraria uma coisa e o gravado seria outra. */}
@@ -1320,6 +1343,9 @@ export default function FluxoCaixaView() {
               className="px-2 py-0.5 text-[11px] rounded border border-ww-border text-ww-textMuted hover:text-ww-text transition disabled:opacity-40">
               Conferir envio
             </button>
+            </Grupo>
+
+            <Grupo rot="Passo 2 — manda pro Omie">
             {/* Segundo passo, e SECUNDÁRIO no visual. Antes era o botão mais
                 chamativo da barra enquanto "Aplicar data" ficava apagado — o olho
                 ia no lugar errado e dava pra achar que enviar era reprogramar.
@@ -1330,11 +1356,14 @@ export default function FluxoCaixaView() {
                 ? "Nenhum da seleção tem reprogramação pendente. Reprograme primeiro (passo 1)."
                 : `Envia ao Omie ${selPendenteOmie} reprogramação(ões) ainda não sincronizada(s)`}
               className="px-2 py-0.5 text-[11px] rounded border border-amber-500/70 text-amber-700 dark:text-amber-300 hover:bg-amber-500/20 transition disabled:opacity-30 disabled:border-ww-border disabled:text-ww-textFaint">
-              {syncing ? "Enviando…" : `2 · Enviar pro Omie (${selPendenteOmie})`}
+              {syncing ? "Enviando…"
+                : selPendenteOmie === 0 ? "2 · nada a enviar"
+                : `2 · Enviar pro Omie (${selPendenteOmie})`}
             </button>
-            {/* Fora do fluxo. Separado dos passos 1 e 2 por uma barra: é outra
-                natureza de ação — não reagenda nem envia, tira da conta. */}
-            <span className="h-5 w-px bg-ww-border" />
+            </Grupo>
+
+            {/* Outra natureza de ação: não reagenda nem envia, tira da conta. */}
+            <Grupo rot="Não tenho a data">
             {selRenegociando < selecionados.length && (
               <button type="button" disabled={salvando}
                 onClick={() => {
@@ -1349,7 +1378,7 @@ export default function FluxoCaixaView() {
                 }}
                 title="Tira da projeção de caixa. Não altera o Omie — o título continua aqui e volta quando tiver data."
                 className="px-2 py-0.5 text-[11px] rounded border border-violet-500/70 text-violet-700 dark:text-violet-300 hover:bg-violet-500/20 transition disabled:opacity-30">
-                ⚖ Renegociar ({selecionados.length - selRenegociando})
+                ⚖ Tirar da curva ({selecionados.length - selRenegociando})
               </button>
             )}
             {selRenegociando > 0 && (
@@ -1363,8 +1392,10 @@ export default function FluxoCaixaView() {
                 ↩ Voltar ao fluxo ({selRenegociando})
               </button>
             )}
+            </Grupo>
+
             <button type="button" onClick={() => { setSel(new Set()); setRateioOn(false); }}
-              className="text-[10.5px] text-ww-textFaint hover:text-ww-text underline ml-auto">
+              className="text-[10.5px] text-ww-textFaint hover:text-ww-text underline ml-auto self-end pb-1">
               limpar seleção
             </button>
           </div>
@@ -1431,6 +1462,32 @@ export default function FluxoCaixaView() {
                 </div>
               )}
             </div>
+          </div>
+        )}
+
+        {/* Envio geral. Antes só dava pra enviar a SELEÇÃO — quem reprogramava,
+            conferia e limpava a seleção ficava sem caminho pro Omie, e o
+            contador do passo 2 aparecia zerado sem explicar por quê. */}
+        {podeEditar && pendentesOmieGeral.length > 0 && (
+          <div className="flex items-center gap-3 flex-wrap mb-2 px-3 py-2 rounded-lg border border-amber-500/40 bg-amber-500/10">
+            <span className="text-[11.5px] text-amber-800 dark:text-amber-200">
+              <strong>{pendentesOmieGeral.length} reprogramação(ões)</strong> gravadas no painel e
+              ainda <strong>não enviadas ao Omie</strong> ·{" "}
+              <span className="tabular-nums">
+                {brl(pendentesOmieGeral.reduce((a, t) => a + (Number(t.valor) || 0), 0))}
+              </span>
+              <span className="text-ww-textFaint"> — lá o título segue com a data antiga.</span>
+            </span>
+            <button type="button" disabled={syncing}
+              onClick={() => { setSoReprog(true); setSel(new Set(pendentesOmieGeral.map((t) => t.cod_titulo))); }}
+              className="px-2 py-0.5 text-[11px] rounded border border-ww-border text-ww-textMuted hover:text-ww-text transition">
+              Ver quais
+            </button>
+            <button type="button" disabled={syncing}
+              onClick={() => enviarOmie(false, pendentesOmieGeral.map((t) => t.cod_titulo))}
+              className="ml-auto px-3 py-1 text-[11.5px] rounded-md border-2 border-amber-500 bg-amber-500 text-white hover:brightness-110 transition font-bold disabled:opacity-40">
+              {syncing ? "Enviando…" : `Enviar todas ao Omie (${pendentesOmieGeral.length})`}
+            </button>
           </div>
         )}
 
