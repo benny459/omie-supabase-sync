@@ -48,7 +48,25 @@ const JANELAS: Janela[] = [
 const brl = (v: number) =>
   v.toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 });
 
-const hojeIso = () => new Date().toISOString().slice(0, 10);
+/** Data de HOJE no fuso do usuário, não em UTC.
+ *
+ *  toISOString() devolve UTC: às 22h de Brasília ele já diz que é o dia
+ *  seguinte. Como a gravação recusa data anterior a "hoje", digitar a data de
+ *  hoje à noite era RECUSADO EM SILÊNCIO — o onBlur não chamava a API e nada
+ *  aparecia na tela. Os atalhos "Hoje" também apontavam pro dia errado. */
+const hojeIso = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+};
+
+/** Timestamp do banco (UTC) para data local YYYY-MM-DD. Comparar a fatia crua do
+ *  ISO compararia o dia em UTC, e um reagendamento feito às 22h cairia no dia
+ *  seguinte no filtro. */
+const diaLocalDe = (ts: string | null) => {
+  if (!ts) return "";
+  const d = new Date(ts);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+};
 const diaBr = (iso: string) => {
   const [, m, d] = iso.slice(0, 10).split("-");
   return `${d}/${m}`;
@@ -280,6 +298,9 @@ export default function FluxoCaixaView() {
     { col: "valor", desc: true },
   );
   const [salvando, setSalvando] = useState(false);
+  /** Confirmação da gravação. Antes não havia nenhuma: aplicava e a tela não
+   *  dizia se deu certo, então dava pra achar que reprogramou sem ter. */
+  const [aviso, setAviso] = useState<string | null>(null);
   const [syncing, setSyncing] = useState(false);
   const [syncResult, setSyncResult] = useState<SyncResult | null>(null);
 
@@ -480,9 +501,8 @@ export default function FluxoCaixaView() {
       .filter((t) => tipo === "todos" || t.natureza === tipo)
       .filter((t) => !soReprog || t.tem_override)
       // Data de reprogramação: compara só a parte YYYY-MM-DD do timestamp.
-      .filter((t) => !reprogDe  || (t.reprogramado_em ?? "").slice(0, 10) >= reprogDe)
-      .filter((t) => !reprogAte || ((t.reprogramado_em ?? "").slice(0, 10) <= reprogAte
-                                    && !!t.reprogramado_em))
+      .filter((t) => !reprogDe  || (t.reprogramado_em ? diaLocalDe(t.reprogramado_em) >= reprogDe : false))
+      .filter((t) => !reprogAte || (t.reprogramado_em ? diaLocalDe(t.reprogramado_em) <= reprogAte : false))
       .filter((t) => !catsSel.size || catsSel.has(t.categoria))
       // Recorte pela previsão EFETIVA, que é a data que a curva usa.
       .filter((t) => !prevDe  || (t.previsao && t.previsao >= prevDe))
@@ -563,6 +583,14 @@ export default function FluxoCaixaView() {
     }
     return reprogDaLista.map((t) => t.cod_titulo);
   }, [selecionados, lista]);
+
+  /** Da seleção, quantos já têm reprogramação pendente de envio. É o número que
+   *  o botão de enviar deveria ter mostrado desde sempre: sem ele, "Enviar lote
+   *  pro Omie" parece o botão que reprograma. */
+  const selPendenteOmie = useMemo(() => {
+    if (!sel.size) return 0;
+    return universo.filter((t) => sel.has(t.cod_titulo) && t.tem_override && !t.sincronizado_omie).length;
+  }, [sel, universo]);
 
   /** Seleção que NÃO entra no relatório, pra avisar em vez de exportar calado. */
   const selecaoForaDoRelatorio = useMemo(() => {
@@ -686,6 +714,7 @@ export default function FluxoCaixaView() {
         return n;
       });
       setErr(null);
+      setAviso(`${alvos.length} título(s) reprogramado(s) para ${diaBr(alvos[0].dia)}`);
       // Recarrega: `extras` só ponteia atrasados reagendados na sessão, então um
       // título A VENCER remarcado gravaria no banco e a curva não se moveria —
       // ele continuaria em `titulos` na data antiga. Com o reload, o servidor
@@ -926,7 +955,7 @@ export default function FluxoCaixaView() {
                ["a_vencer",  `A vencer ${titulos.length}`],
                ["todos",     "Tudo"]] as const).map(([k, l]) => (
               <Chip key={k} on={escopo === k}
-                    onClick={() => { setEscopo(k); setSel(new Set()); ancoraRef.current = null; }}>{l}</Chip>
+                    onClick={() => { setEscopo(k); setSel(new Set()); setAviso(null); ancoraRef.current = null; }}>{l}</Chip>
             ))}
           </Grupo>
 
@@ -1097,8 +1126,10 @@ export default function FluxoCaixaView() {
                 : foraDaJanela(dataLote) ? "Grava, mas cai depois do fim da janela — não aparece na curva"
                 : undefined}
               onClick={() => gravar(selecionados.map((cod) => ({ cod, dia: dataLote })))}
-              className="px-2 py-0.5 text-[11px] rounded border border-ww-accent text-ww-accent hover:bg-ww-accent hover:text-white transition font-semibold disabled:opacity-40">
-              {salvando ? "Gravando…" : "Aplicar data ao lote"}
+              className="px-3 py-1 text-[11.5px] rounded-md border-2 border-ww-accent bg-ww-accent text-white hover:brightness-110 transition font-bold disabled:opacity-30 disabled:bg-transparent disabled:text-ww-textFaint disabled:border-ww-border">
+              {salvando ? "Gravando…"
+                : !dataUtil(dataLote) ? "1 · Escolha a data ↑"
+                : `1 · Reprogramar ${selecionados.length}`}
             </button>
             {/* Chamava-se "Simular no Omie" e induzia ao erro: não chama o Omie
                 nem simula caixa. Percorre a lista e devolve o que SERIA enviado —
@@ -1110,15 +1141,33 @@ export default function FluxoCaixaView() {
               className="px-2 py-0.5 text-[11px] rounded border border-ww-border text-ww-textMuted hover:text-ww-text transition disabled:opacity-40">
               Conferir envio
             </button>
-            <button type="button" disabled={syncing}
+            {/* Segundo passo, e SECUNDÁRIO no visual. Antes era o botão mais
+                chamativo da barra enquanto "Aplicar data" ficava apagado — o olho
+                ia no lugar errado e dava pra achar que enviar era reprogramar.
+                O contador diz quantos da seleção realmente têm o que enviar. */}
+            <button type="button" disabled={syncing || selPendenteOmie === 0}
               onClick={() => enviarOmie(false, selecionados)}
-              className="px-2 py-0.5 text-[11px] rounded border border-amber-500 text-amber-700 dark:text-amber-300 hover:bg-amber-500/20 transition font-semibold disabled:opacity-40">
-              {syncing ? "Enviando…" : "Enviar lote pro Omie"}
+              title={selPendenteOmie === 0
+                ? "Nenhum da seleção tem reprogramação pendente. Reprograme primeiro (passo 1)."
+                : `Envia ao Omie ${selPendenteOmie} reprogramação(ões) ainda não sincronizada(s)`}
+              className="px-2 py-0.5 text-[11px] rounded border border-amber-500/70 text-amber-700 dark:text-amber-300 hover:bg-amber-500/20 transition disabled:opacity-30 disabled:border-ww-border disabled:text-ww-textFaint">
+              {syncing ? "Enviando…" : `2 · Enviar pro Omie (${selPendenteOmie})`}
             </button>
             <button type="button" onClick={() => setSel(new Set())}
               className="text-[10.5px] text-ww-textFaint hover:text-ww-text underline ml-auto">
               limpar seleção
             </button>
+          </div>
+        )}
+
+        {aviso && (
+          <div className="mb-2 px-3 py-2 rounded-lg text-[11.5px] border bg-emerald-500/10 border-emerald-500/30 text-emerald-800 dark:text-emerald-200 flex items-center gap-2">
+            <span>✓ {aviso}</span>
+            <span className="text-ww-textFaint">
+              — já está na curva. Para o Omie receber, use o passo 2.
+            </span>
+            <button type="button" onClick={() => setAviso(null)}
+              className="ml-auto text-ww-textFaint hover:text-ww-text">✕</button>
           </div>
         )}
 
@@ -1264,7 +1313,7 @@ export default function FluxoCaixaView() {
                     <td className="p-1.5 border-b border-ww-border/50 text-ww-textMuted tabular-nums text-[10.5px]">
                       {t.reprogramado_em ? (
                         <span title={`Reprogramado em ${new Date(t.reprogramado_em).toLocaleString("pt-BR")}`}>
-                          {diaBr(t.reprogramado_em.slice(0, 10))}
+                          {diaBr(diaLocalDe(t.reprogramado_em))}
                         </span>
                       ) : "—"}
                     </td>
