@@ -32,6 +32,10 @@ def map_produto_to_row(p: dict, sigla: str):
         "descricao": p.get("descricao") or None,
         "valor_unitario": to_float(p.get("valor_unitario")),
         "ncm": p.get("ncm") or None,
+        # Obrigatória no item do pedido de venda. O ListarProdutos sempre devolve
+        # ("UN", "KG", "L"...); ficava de fora só porque ninguém mapeava, e o
+        # histórico de vendas — a outra fonte possível — cobre 3,4% do catálogo.
+        "unidade": (p.get("unidade") or "").strip().upper() or None,
         "ean": p.get("ean") or None,
     }
 
