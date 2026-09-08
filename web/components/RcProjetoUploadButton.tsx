@@ -13,6 +13,12 @@ import * as XLSX from "xlsx";
  *   - Hierárquico (equipamento → itens) — aba vira agrupador
  *   - Vinculo a PC é feito DEPOIS no painel, item-por-item (não vem na planilha)
  */
+/** Minúsculas, sem acento, sem espaço nas pontas. Cabeçalho de planilha do mundo
+ *  real vem com acento, plural e barra — comparar a string crua é o que fazia
+ *  "Descrição" e "Qtde" não casarem. */
+const norm = (v: unknown) =>
+  String(v ?? "").trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+
 type ParsedItem = {
   equipamento: string;
   item: string;
@@ -58,45 +64,57 @@ export default function RcProjetoUploadButton({
         const wb = XLSX.read(ab, { type: "array" });
         const all: ParsedItem[] = [];
 
+        // Abas que existem pra consulta, não pra importar. Sem isto, "Base WW"
+        // (2.688 linhas de catálogo) entraria como se fosse um equipamento.
+        const IGNORAR = /^(base ww|base|como usar|instrucoes|instrucao|leia-me|modelo)$/;
+        const puladas: string[] = [];
+
         for (const sheetName of wb.SheetNames) {
+          if (IGNORAR.test(norm(sheetName))) continue;
           const sheet = wb.Sheets[sheetName];
           const aoa = XLSX.utils.sheet_to_json<(string | number | null)[]>(sheet, { header: 1, defval: null });
 
-          // Detecta header + mapa de colunas dinâmico (aceita variações do modelo:
-          // "Qtd | UNID | ITEM | Itens | Marca | Modelo | Prazo | Info" ou o novo
-          // "ITEM | Qtd | UNID | Itens | Marca | Modelo | TIPO | CATEGORIA | PC Associado").
+          // Detecta header + mapa de colunas por NOME, não por posição.
+          //
+          // O modelo do painel não é o único que chega aqui: planilhas de compra
+          // trazem "Nível | Qtde | Descrição | Marca | Modelo / Referência | ...".
+          // A versão anterior exigia a palavra "item" na linha e comparava
+          // "qtd"/"modelo" por igualdade exata, então "Qtde", "Descrição" e
+          // "Modelo / Referência" não casavam e a aba inteira era pulada em
+          // silêncio — o erro final dizia "nenhum item válido" sem dizer qual aba
+          // nem qual coluna faltou.
           const cols: { item: number; qtd: number; modelo: number; pc: number } =
             { item: -1, qtd: -1, modelo: -1, pc: -1 };
           let headerIdx = -1;
           for (let i = 0; i < Math.min(aoa.length, 12); i++) {
             const row = aoa[i];
             if (!row) continue;
-            const cellsLc = row.map(v => String(v ?? "").trim().toLowerCase());
-            const joined = cellsLc.join("|");
-            if (!(joined.includes("item") && (joined.includes("qtd") || joined.includes("quantidade")))) continue;
-            // Mapeia cada coluna pelo texto do header
-            cellsLc.forEach((s, idx) => {
+            const cels = row.map((v) => norm(v));
+
+            cols.item = cols.qtd = cols.modelo = cols.pc = -1;
+            cels.forEach((s, idx) => {
               if (!s) return;
-              // "itens" (plural — nome do material) tem prioridade
-              if (cols.item === -1 && s === "itens") cols.item = idx;
-              // qtd
-              if (cols.qtd === -1 && (s === "qtd" || s === "quantidade")) cols.qtd = idx;
-              // modelo
-              if (cols.modelo === -1 && s === "modelo") cols.modelo = idx;
-              // PC Associado
-              if (cols.pc === -1 && (s === "pc associado" || s === "pc" || s.startsWith("pc "))) cols.pc = idx;
+              // Nome do material. "itens" (plural) tem prioridade sobre "item",
+              // que em algumas planilhas é o NÚMERO da linha, não o nome.
+              if (cols.item === -1 && (s === "itens" || s.startsWith("descricao") || s.startsWith("descrizione"))) cols.item = idx;
+              // Aceita qtd, qtde, qtd., quant., quantidade
+              if (cols.qtd === -1 && /^(qtd|qtde|quant)/.test(s)) cols.qtd = idx;
+              // "modelo", "modelo / referencia", "modelo/ref"
+              if (cols.modelo === -1 && s.startsWith("modelo")) cols.modelo = idx;
+              if (cols.pc === -1 && (s === "pc" || s.startsWith("pc associado") || s.startsWith("pedido de compra"))) cols.pc = idx;
             });
-            // Fallback pra "item" (singular) caso não tenha "itens" — pode ser o nome
+            // Só então "item" singular, pra não roubar a coluna de "itens".
             if (cols.item === -1) {
-              cellsLc.forEach((s, idx) => {
-                if (cols.item !== -1) return;
-                if (s === "item" || s === "descrição" || s === "descricao") cols.item = idx;
+              cels.forEach((s, idx) => {
+                if (cols.item === -1 && s === "item") cols.item = idx;
               });
             }
-            // Se achou pelo menos item + qtd, fixa header
             if (cols.item !== -1 && cols.qtd !== -1) { headerIdx = i; break; }
-            // Reset e tenta próxima linha
-            cols.item = -1; cols.qtd = -1; cols.modelo = -1; cols.pc = -1;
+          }
+          if (headerIdx < 0) {
+            // Guarda o motivo por ABA: "nenhum item válido" sozinho não diz onde
+            // olhar numa planilha de várias abas.
+            puladas.push(sheetName.trim());
           }
           if (headerIdx < 0) continue; // aba sem header reconhecível — pula
 
@@ -116,7 +134,11 @@ export default function RcProjetoUploadButton({
         }
 
         if (all.length === 0) {
-          setMsg({ kind: "err", text: "Nenhum item válido encontrado. Verifique se cada aba tem cabeçalho 'Item / Qtd / Modelo'." });
+          setMsg({ kind: "err", text: puladas.length
+            ? `Cabeçalho não reconhecido em: ${puladas.join(", ")}. `
+              + "Cada aba precisa de uma coluna de NOME (Itens, Item ou Descrição) e uma de "
+              + "QUANTIDADE (Qtd, Qtde ou Quantidade). Modelo e PC são opcionais."
+            : "Nenhum item válido encontrado — as abas têm cabeçalho, mas nenhuma linha com nome preenchido." });
           setParsed(null); setDiff(null);
         } else {
           setParsed(all);
@@ -263,7 +285,10 @@ export default function RcProjetoUploadButton({
               <div>
                 <h3 className="font-semibold text-ww-text text-[15px]">Lista RC do Projeto</h3>
                 <p className="text-xs text-ww-textMuted mt-0.5">
-                  Cada <strong>aba</strong> = 1 equipamento. Colunas: <code className="bg-ww-bg px-1 rounded">B=Item</code>, <code className="bg-ww-bg px-1 rounded">C=Qtd</code>, <code className="bg-ww-bg px-1 rounded">D=Modelo</code>.
+                  Cada <strong>aba</strong> = 1 equipamento. As colunas são achadas pelo <strong>nome no cabeçalho</strong>, em qualquer posição:{" "}
+                  <code className="bg-ww-bg px-1 rounded">Itens</code>/<code className="bg-ww-bg px-1 rounded">Item</code>/<code className="bg-ww-bg px-1 rounded">Descrição</code>,{" "}
+                  <code className="bg-ww-bg px-1 rounded">Qtd</code>/<code className="bg-ww-bg px-1 rounded">Qtde</code>/<code className="bg-ww-bg px-1 rounded">Quantidade</code>, e opcionalmente{" "}
+                  <code className="bg-ww-bg px-1 rounded">Modelo</code> e <code className="bg-ww-bg px-1 rounded">PC</code>. Abas de catálogo (Base WW, Como usar) são ignoradas.
                 </p>
                 <p className="text-[11px] text-ww-textMuted mt-1">
                   Novo upload <strong>substitui</strong> a lista: itens novos entram, existentes atualizam,
@@ -282,7 +307,7 @@ export default function RcProjetoUploadButton({
                     className="w-full border-2 border-dashed border-ww-border hover:border-violet-400 rounded-lg py-12 text-center text-ww-textMuted hover:text-violet-700 transition">
                     <div className="text-3xl mb-2">📥</div>
                     <div className="text-sm font-medium">Clique pra selecionar o XLSX</div>
-                    <div className="text-[11px] text-ww-textFaint mt-1">Cada aba = 1 equipamento. Colunas: Itens, Qtd, Modelo, PC Associado.</div>
+                    <div className="text-[11px] text-ww-textFaint mt-1">Cada aba = 1 equipamento. Cabeçalho com nome e quantidade; modelo e PC opcionais.</div>
                   </button>
                   <div className="flex items-center justify-center gap-2 text-[11.5px]">
                     <span className="text-ww-textMuted">Não tem a planilha?</span>
