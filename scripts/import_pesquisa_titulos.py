@@ -124,7 +124,22 @@ def main():
         print(f"\n   Modo: {modo_label} | Filtro: {data_filtro or 'sem filtro'}")
         extra = {"lDadosCad": True}
         if data_filtro:
-            extra["dDtIncDe"] = data_filtro  # PesquisarLancamentos usa dDtIncDe
+            # dDtAltDe (ALTERAÇÃO) e não dDtIncDe (INCLUSÃO).
+            #
+            # Com dDtIncDe o incremental só reencontrava títulos CRIADOS na
+            # janela. Um título criado em abril e alterado ontem no Omie nunca
+            # voltava — a previsão mudava lá e o painel seguia com a antiga.
+            # Foi assim que o RPS 58 da REDE DOR ficou com previsão de 31/08 no
+            # painel enquanto o Omie já marcava 21/09, e com ele outros 10.822
+            # títulos em aberto (R$ 23,9M) parados há mais de 90 dias.
+            #
+            # Alterar previsão é justamente o tipo de mudança que NÃO cria
+            # título — então era invisível pro sync por construção.
+            #
+            # Uma passada só resolve: nos 11.603 títulos em aberto, todos têm
+            # dAlt preenchido (0 com inclusão e sem alteração), ou seja, o
+            # filtro por alteração também alcança os recém-criados.
+            extra["dDtAltDe"] = data_filtro
         try:
             total, completed, pages = fetch_and_upsert_streaming(
                 url=OMIE_URL, call="PesquisarLancamentos", sigla=sigla,

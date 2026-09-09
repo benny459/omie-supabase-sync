@@ -146,6 +146,11 @@ type Titulo = {
   /** Fora da curva: pagamento a repactuar ou cancelar, sem data confiável. */
   em_renegociacao: boolean;
   motivo_renegociacao: string | null;
+  /** Alguém mudou a previsão no Omie DEPOIS do meu reagendamento, e com data
+   *  diferente. O Omie venceu e a curva usa a data dele. */
+  previsao_conflito: boolean;
+  alterado_no_omie_em: string | null;
+  alterado_no_omie_por: string | null;
 };
 type ContaRow = {
   empresa: string; cod_conta: number; conta: string; saldo: number; dt_ultimo: string | null;
@@ -690,6 +695,13 @@ export default function FluxoCaixaView() {
     }
     return reprogDaLista.map((t) => t.cod_titulo);
   }, [selecionados, lista]);
+
+  /** Reagendamentos meus que o Omie sobrescreveu depois. Avisar é obrigatório:
+   *  a data mudou embaixo de quem reagendou, e ele decidiu com a antiga. */
+  const conflitos = useMemo(
+    () => universo.filter((t) => t.previsao_conflito),
+    [universo],
+  );
 
   /** Tudo que está reprogramado e ainda NÃO foi pro Omie, no universo inteiro.
    *  É a resposta pra "como envio depois de validar": antes só dava pra enviar a
@@ -1465,6 +1477,23 @@ export default function FluxoCaixaView() {
           </div>
         )}
 
+        {/* Conflito: o Omie mandou. A curva já usa a data de lá — este aviso
+            existe pra quem reagendou não continuar decidindo com a data velha. */}
+        {conflitos.length > 0 && (
+          <div className="flex items-center gap-3 flex-wrap mb-2 px-3 py-2 rounded-lg border border-violet-500/40 bg-violet-500/10">
+            <span className="text-[11.5px] text-violet-800 dark:text-violet-200">
+              <strong>{conflitos.length} título(s)</strong> tiveram a previsão alterada
+              <strong> no Omie depois</strong> do seu reagendamento. A curva usa a data do Omie —
+              ele é a origem.
+            </span>
+            <button type="button"
+              onClick={() => { setSoReprog(true); setSel(new Set(conflitos.map((t) => t.cod_titulo))); }}
+              className="ml-auto px-2 py-0.5 text-[11px] rounded border border-violet-500/60 text-violet-700 dark:text-violet-300 hover:bg-violet-500/20 transition">
+              Ver quais
+            </button>
+          </div>
+        )}
+
         {/* Envio geral. Antes só dava pra enviar a SELEÇÃO — quem reprogramava,
             conferia e limpava a seleção ficava sem caminho pro Omie, e o
             contador do passo 2 aparecia zerado sem explicar por quê. */}
@@ -1612,7 +1641,13 @@ export default function FluxoCaixaView() {
                     </td>
                     <td className="p-1.5 border-b border-ww-border/50 text-ww-text tabular-nums">
                       {t.previsao ? diaBr(t.previsao) : "—"}
-                      {t.tem_override && (
+                      {t.previsao_conflito ? (
+                        <span title={`Alterado no Omie em ${
+                          t.alterado_no_omie_em ? new Date(t.alterado_no_omie_em).toLocaleString("pt-BR") : "—"}`
+                          + `${t.alterado_no_omie_por ? ` por ${t.alterado_no_omie_por}` : ""}`
+                          + ` — depois do seu reagendamento. A curva usa a data do Omie.`}
+                          className="ml-1 text-[9px] text-violet-500 font-bold">⚠</span>
+                      ) : t.tem_override && (
                         <span title={`Reagendado no painel. Previsão original do Omie: ${
                           t.previsao_original ? diaBr(t.previsao_original) : "—"}`}
                           className="ml-1 text-[9px] text-ww-accent">↻</span>
