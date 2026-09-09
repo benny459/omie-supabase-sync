@@ -4,7 +4,11 @@ __pycache__/
 *.pyo
 .venv/
 venv/
+# Qualquer .env, inclusive sufixados (.env.omie, .env.local...).
+# Só ".env" deixava .env.omie exposto a um `git add -A`.
 .env
+.env.*
+!.env.example
 *.env
 
 # OS

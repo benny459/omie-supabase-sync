@@ -1,7 +1,11 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
-const PUBLIC_PATHS = ["/login", "/auth/callback", "/recover", "/reset", "/api/cron"];
+// "/mockup" é público APENAS em desenvolvimento: é a tela de aprovação de
+// desenho, sem dado real. Em produção ela cai no login como qualquer outra —
+// deixar aberta em prod seria expor layout interno sem motivo.
+const PUBLIC_PATHS = ["/login", "/auth/callback", "/recover", "/reset", "/api/cron",
+  ...(process.env.NODE_ENV === "development" ? ["/mockup"] : [])];
 
 export async function middleware(request: NextRequest) {
   let response = NextResponse.next({ request });
