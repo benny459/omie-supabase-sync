@@ -120,3 +120,44 @@ code, kbd, samp, pre, .font-mono {
   font-family: var(--font-mono, "JetBrains Mono", ui-monospace, "SF Mono", "Menlo", "Consolas", monospace);
   font-feature-settings: "kern", "liga", "calt";
 }
+
+/* ── Respostas do Cesar ────────────────────────────────────────────────────
+   Markdown do modelo dentro de um painel estreito. As regras aqui existem por
+   causa da largura: tabela financeira tem coluna de valor, e sem alinhamento à
+   direita e tabular-nums os dígitos não alinham verticalmente — que é a única
+   coisa que torna uma coluna de dinheiro comparável de bater o olho. */
+.cesar-md > * + *        { margin-top: .6rem; }
+.cesar-md p              { line-height: 1.55; }
+.cesar-md strong         { font-weight: 600; color: rgb(var(--color-ww-text)); }
+.cesar-md h1,
+.cesar-md h2,
+.cesar-md h3             { font-size: 12.5px; font-weight: 600; letter-spacing: .02em;
+                           text-transform: uppercase; color: rgb(var(--color-ww-textMuted));
+                           margin-top: 1rem; }
+.cesar-md ul,
+.cesar-md ol             { padding-left: 1.1rem; }
+.cesar-md ul             { list-style: disc; }
+.cesar-md ol             { list-style: decimal; }
+.cesar-md li + li        { margin-top: .2rem; }
+.cesar-md code           { font-family: var(--font-mono), monospace; font-size: 11px;
+                           background: rgb(var(--color-ww-border) / .45);
+                           padding: .05rem .25rem; border-radius: 3px; }
+.cesar-md pre            { overflow-x: auto; }
+
+/* Tabela: rola dentro da própria caixa. Sem isto uma tabela de 6 colunas
+   empurra a largura do painel e o texto ao redor passa a rolar junto. */
+.cesar-md table          { display: block; overflow-x: auto; width: 100%;
+                           border-collapse: collapse; font-size: 11.5px; }
+.cesar-md th,
+.cesar-md td             { padding: .28rem .5rem; white-space: nowrap;
+                           border-bottom: 1px solid rgb(var(--color-ww-border) / .5); }
+.cesar-md th             { font-size: 10px; text-transform: uppercase; letter-spacing: .04em;
+                           font-weight: 600; color: rgb(var(--color-ww-textMuted));
+                           text-align: left; }
+/* Coluna de valor: o gerador de markdown marca o alinhamento com :---: / ---:,
+   e é isso que o react-markdown traduz em text-align inline. */
+.cesar-md th[align="right"],
+.cesar-md td[align="right"] { text-align: right; font-variant-numeric: tabular-nums; }
+.cesar-md blockquote     { border-left: 2px solid rgb(var(--color-ww-border));
+                           padding-left: .6rem; color: rgb(var(--color-ww-textMuted)); }
+.cesar-md a              { color: rgb(var(--color-ww-accent)); text-decoration: underline; }

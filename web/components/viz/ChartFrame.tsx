@@ -26,6 +26,7 @@
 import { useId, useState } from "react";
 import { CHROME, seriesColor } from "@/lib/viz/palette";
 import { useVizTema } from "./useVizMode";
+import { useCesar, contextoDeGrafico } from "@/components/cesar/CesarProvider";
 
 export type SeriesDef = {
   key: string;
@@ -70,6 +71,7 @@ export default function ChartFrame({
   height?: number;
 }) {
   const [asTable, setAsTable] = useState(false);
+  const cesar = useCesar();
   /** Séries desligadas pelo clique na legenda. Guarda as OCULTAS, não as
    *  visíveis: assim uma série nova nasce visível sem precisar de sincronização. */
   const [ocultas, setOcultas] = useState<Set<string>>(new Set());
@@ -104,6 +106,20 @@ export default function ChartFrame({
           <h3 className="text-[12.5px] font-semibold text-ww-text tracking-wide uppercase truncate">{title}</h3>
           {subtitle && <p className="text-[11px] text-ww-textMuted mt-0.5 normal-case">{subtitle}</p>}
         </div>
+        {/* Pergunta SOBRE este gráfico. Leva o recorte que está na tela junto,
+            para o Cesar não começar perguntando "de que período você fala". */}
+        <button
+          type="button"
+          onClick={() => cesar.abrir({
+            origem: title,
+            contexto: contextoDeGrafico(title, subtitle, rows, series),
+          })}
+          className="shrink-0 inline-flex items-center gap-1 px-2 py-0.5 text-[10.5px] font-semibold rounded border border-ww-border text-ww-textMuted hover:text-ww-text hover:border-ww-accent/50 hover:bg-ww-rowHover transition"
+          title="Perguntar ao Cesar sobre este gráfico"
+        >
+          <span aria-hidden className="w-3.5 h-3.5 rounded-full bg-gradient-to-br from-sky-500 to-violet-500 text-white text-[8px] font-bold grid place-items-center">C</span>
+          Cesar
+        </button>
         <button
           type="button"
           onClick={() => setAsTable((v) => !v)}

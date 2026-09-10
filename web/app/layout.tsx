@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 import UpdateBanner from "@/components/UpdateBanner";
+import CesarProvider from "@/components/cesar/CesarProvider";
 
 // Fonte UI: San Francisco (sistema, no macOS) via stack — sem fonte web
 // pra preservar o feel "nativo" Apple. JetBrains Mono pra códigos/valores.
@@ -31,7 +32,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       </head>
       <body>
         <UpdateBanner />
-        {children}
+        {/* Envolve tudo: o Cesar é alcançável do botão de qualquer gráfico e do
+            lançador flutuante, e as duas portas têm que cair na MESMA conversa —
+            senão "e comparado com julho?" recomeça do zero. */}
+        <CesarProvider>{children}</CesarProvider>
       </body>
     </html>
   );

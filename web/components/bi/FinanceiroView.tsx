@@ -579,24 +579,34 @@ function DrillDetalhe({
     return () => { vivo = false; };
   }, [categoria, bucket, from, to]);
 
-  // A coluna do bucket só existe quando acrescenta algo: em "faturado" ela
-  // repetiria a coluna Faturado, e coluna duplicada faz duvidar de qual é a boa.
+  // Cada parcela do faturamento já TEM coluna própria. A coluna `valor` do
+  // bucket repetia uma delas — clicar em "Vencido" mostrava R$ 20.450 duas
+  // vezes, lado a lado, e a segunda parecia outro número. Só entra quando o
+  // bucket não tem coluna nomeada, que é o caso de "sem título".
+  const colBucket = bucket === "sem_titulo" ? "sem_titulo" : bucket;
   const cols: Col<Record<string, unknown>>[] = [
-    { key: "cliente",     label: "Cliente",     w: 300 },
-    { key: "numero_doc",  label: "Doc",         w: 92 },
-    { key: "dt_fat",      label: "Faturado em", tipo: "date",  w: 106 },
-    ...(bucket === "faturado" ? [] : [
-      { key: "valor", label: BUCKETS[bucket], tipo: "money" as const, w: 130 }]),
-    { key: "faturado",    label: "Faturado",    tipo: "money", w: 122 },
-    { key: "recebido",    label: "Recebido",    tipo: "money", w: 122 },
-    { key: "a_vencer",    label: "A vencer",    tipo: "money", w: 122 },
-    { key: "vencido",     label: "Vencido",     tipo: "money", w: 122 },
-    { key: "atraso_dias", label: "Atraso",      tipo: "dias",  w: 84 },
-    { key: "pct_recebido", label: "% recebido", w: 100, fmt: pctFmt },
+    { key: "cliente",    label: "Cliente", w: 260 },
+    // Os DOIS identificadores. São campos diferentes do Omie e divergem: OS/PV
+    // é o número do faturamento, Título é o que aparece no Contas a Receber.
+    // Mostrar só um manda conferir por um número que a outra tela não tem.
+    { key: "num_os",     label: "OS/PV",   w: 78 },
+    { key: "num_titulo", label: "Título",  w: 92 },
+    { key: "parcelas",   label: "Parc.",   tipo: "num",  w: 58 },
+    { key: "dt_fat",     label: "Faturado em", tipo: "date", w: 100 },
+    { key: "vencimento", label: "Vencimento",  tipo: "date", w: 100 },
+    { key: "previsao",   label: "Previsão",    tipo: "date", w: 100 },
+    { key: "faturado",   label: "Faturado", tipo: "money", w: 118 },
+    { key: "recebido",   label: "Recebido", tipo: "money", w: 118 },
+    { key: "a_vencer",   label: "A vencer", tipo: "money", w: 118 },
+    { key: "vencido",    label: "Vencido",  tipo: "money", w: 118 },
+    ...(bucket === "sem_titulo"
+      ? [{ key: "sem_titulo", label: "Sem título", tipo: "money" as const, w: 118 }]
+      : []),
+    { key: "atraso_dias", label: "Atraso",     tipo: "dias", w: 78 },
+    { key: "pct_recebido", label: "% receb.",  w: 86, fmt: pctFmt },
   ];
 
-  const somado = (linhas ?? []).reduce(
-    (a, l) => a + (Number(l[bucket === "faturado" ? "faturado" : "valor"]) || 0), 0);
+  const somado = (linhas ?? []).reduce((a, l) => a + (Number(l[colBucket]) || 0), 0);
   const bate = Math.abs(somado - valorEsperado) < 0.5;
 
   return (
@@ -614,7 +624,10 @@ function DrillDetalhe({
               {BUCKETS[bucket]} — {categoria ?? "todos os tipos de venda"}
             </h2>
             <p className="text-[11px] text-ww-textMuted mt-0.5">
-              Cada linha é um documento faturado. Período {from.slice(0, 10)} a {to.slice(0, 10)}.
+              Uma linha por documento faturado, período {from.slice(0, 10)} a {to.slice(0, 10)}.
+              {" "}<strong className="text-ww-textMuted">OS/PV</strong> é o número do faturamento;{" "}
+              <strong className="text-ww-textMuted">Título</strong> é o que o Omie mostra no Contas a Receber
+              {" "}— são campos diferentes e não coincidem.
             </p>
           </div>
           <div className="ml-auto text-right shrink-0">
@@ -646,7 +659,7 @@ function DrillDetalhe({
             subtitle="Ordenado pelo valor da parcela. Busque por cliente ou número do documento; o CSV baixa o que está filtrado."
             cols={cols}
             rows={linhas ?? []}
-            ordemInicial={bucket === "faturado" ? "faturado" : "valor"}
+            ordemInicial={colBucket}
             loading={linhas == null}
             altura={alturaLista}
             totalizar={["faturado", "recebido", "a_vencer", "vencido"]}
