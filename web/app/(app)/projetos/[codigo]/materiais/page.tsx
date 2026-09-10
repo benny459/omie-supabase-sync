@@ -4,12 +4,12 @@
 
 import Link from "next/link";
 import { supaServer } from "@/lib/supabase-server";
-import MateriaisProjetoView from "@/components/MateriaisProjetoView";
+import ProjetoWorkspace from "@/components/projeto/ProjetoWorkspace";
 
 export const dynamic = "force-dynamic";
 
 type Params = { codigo: string };
-type SearchParams = { empresa?: string };
+type SearchParams = { empresa?: string; aba?: string };
 
 export default async function ProjetoMateriaisPage({
   params, searchParams,
@@ -18,7 +18,7 @@ export default async function ProjetoMateriaisPage({
   searchParams: Promise<SearchParams>;
 }) {
   const { codigo } = await params;
-  const { empresa: empresaParam } = await searchParams;
+  const { empresa: empresaParam, aba } = await searchParams;
   const codigoProjeto = Number(codigo);
   if (!Number.isFinite(codigoProjeto) || codigoProjeto <= 0) {
     return (
@@ -73,11 +73,12 @@ export default async function ProjetoMateriaisPage({
             <span className="font-mono text-[11px]">PJ{codigoProjeto}</span>
           </div>
           <h1 className="text-[22px] font-bold text-ww-text tracking-[-0.4px] mt-1 truncate">
-            🧱 Lista de Materiais
+            Projeto
             {projetoNome && <span className="ml-2 text-ww-textMuted font-normal">— {projetoNome}</span>}
           </h1>
           <p className="text-[12px] text-ww-textMuted mt-0.5">
-            Itens agrupados em abas por equipamento; PC vinculado herda status (previsão, logística, recebimento).
+            Fluxo de caixa previsto e lista de materiais na mesma tela. Aprovar o fluxo é o que
+            libera a aprovação dos pedidos de compra deste projeto.
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -88,7 +89,12 @@ export default async function ProjetoMateriaisPage({
         </div>
       </div>
 
-      <MateriaisProjetoView empresa={empresa} codigoProjeto={codigoProjeto} />
+      <ProjetoWorkspace
+        empresa={empresa}
+        codigoProjeto={codigoProjeto}
+        nomeProjeto={projetoNome || undefined}
+        abaInicial={aba === "materiais" ? "materiais" : "fluxo"}
+      />
     </div>
   );
 }

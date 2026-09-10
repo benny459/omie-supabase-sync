@@ -123,6 +123,47 @@ export async function POST(req: Request) {
     }
   }
 
+  // GUARD DO FLUXO DO PROJETO (2026-09-10+): PC de projeto só é aprovável
+  // depois que o FLUXO DE CAIXA previsto daquele projeto foi aprovado.
+  //
+  // É essa aprovação que dá ao Marcelo a prerrogativa de aprovar as compras do
+  // projeto: sem plano aprovado, aprovar compra é comprometer caixa contra um
+  // número que ninguém validou.
+  //
+  // A trava só age em projeto que JÁ TEM plano começado (existe linha de fluxo
+  // lançada). Projeto sem nenhuma linha segue como antes — ligar isto para todo
+  // o histórico travaria de uma vez a compra de projetos que nunca tiveram
+  // fluxo. Para tornar obrigatório, basta remover a condição `if (f && …)`.
+  if (becomingApproved) {
+    const admin3 = supaAdmin();
+    const { data: ped } = await admin3
+      .schema("orders").from("pedidos_compra")
+      .select("ncod_proj")
+      .eq("empresa", body.empresa).eq("ncod_ped", body.ncod_ped)
+      .limit(1).maybeSingle();
+    const codProj = (ped as { ncod_proj?: number | null } | null)?.ncod_proj ?? null;
+
+    if (codProj) {
+      const { data: fl } = await admin3
+        .schema("approval").from("projeto_fluxo")
+        .select("status, versao")
+        .eq("empresa", body.empresa).eq("codigo_projeto", codProj)
+        .maybeSingle();
+      const f = fl as { status?: string; versao?: number } | null;
+      if (f && f.status !== "aprovado") {
+        const comoEsta = f.status === "pendente" ? "está aguardando aprovação"
+                       : f.status === "rejeitado" ? "foi rejeitado"
+                       : "ainda está em rascunho";
+        return NextResponse.json({
+          error: `O fluxo de caixa deste projeto ${comoEsta} — aprove o fluxo antes de aprovar as compras dele.`,
+          code: "FLUXO_PROJETO_NAO_APROVADO",
+          codigo_projeto: codProj,
+          fluxo_status: f.status,
+        }, { status: 400 });
+      }
+    }
+  }
+
   // UPSERT do status (RLS valida: admin ou aprovador do módulo)
   const patch: Record<string, unknown> = { status: body.status };
   if (becomingApproved) {

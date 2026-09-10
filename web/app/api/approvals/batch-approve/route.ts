@@ -54,8 +54,52 @@ export async function POST(req: Request) {
     patchBase.valor_aprovado  = null;
   }
 
+  // GUARD DO FLUXO DO PROJETO — mesma regra do set-status, aplicada ao lote.
+  //
+  // Resolvido em UMA consulta para o lote inteiro: pedir o fluxo PC a PC faria
+  // 200 idas ao banco. E o bloqueio é POR LINHA, não do lote todo: aprovar 40
+  // PCs e recusar os 40 porque 2 são de um projeto sem plano seria pior que o
+  // problema que a trava resolve.
+  const bloqueados = new Map<string, string>();   // "empresa|ncod_ped" → motivo
+  if (becomingApproved) {
+    const admin0 = supaAdmin();
+    const { data: peds } = await admin0
+      .schema("orders").from("pedidos_compra")
+      .select("empresa, ncod_ped, ncod_proj")
+      .in("ncod_ped", body.rows.map((r) => r.ncod_ped));
+    const projDe = new Map<string, number>();
+    for (const p of (peds ?? []) as Array<{ empresa: string; ncod_ped: number; ncod_proj: number | null }>) {
+      if (p.ncod_proj) projDe.set(`${p.empresa}|${p.ncod_ped}`, p.ncod_proj);
+    }
+    const projetos = Array.from(new Set(projDe.values()));
+    if (projetos.length) {
+      const { data: fluxos } = await admin0
+        .schema("approval").from("projeto_fluxo")
+        .select("empresa, codigo_projeto, status")
+        .in("codigo_projeto", projetos);
+      const statusDe = new Map<string, string>();
+      for (const f of (fluxos ?? []) as Array<{ empresa: string; codigo_projeto: number; status: string }>) {
+        statusDe.set(`${f.empresa}|${f.codigo_projeto}`, f.status);
+      }
+      for (const r of body.rows) {
+        const k = `${r.empresa}|${r.ncod_ped}`;
+        const proj = projDe.get(k);
+        if (!proj) continue;
+        const st = statusDe.get(`${r.empresa}|${proj}`);
+        // Sem registro de fluxo = projeto que nunca teve plano: segue como antes.
+        if (st && st !== "aprovado") {
+          bloqueados.set(k, `fluxo do projeto ${proj} ${
+            st === "pendente" ? "aguarda aprovação" : st === "rejeitado" ? "foi rejeitado" : "está em rascunho"}`);
+        }
+      }
+    }
+  }
+
   // Upserts em paralelo (RLS valida cada um — admin/aprovador)
   const results = await Promise.all(body.rows.map(async (r) => {
+    const trava = bloqueados.get(`${r.empresa}|${r.ncod_ped}`);
+    if (trava) return { empresa: r.empresa, ncod_ped: r.ncod_ped, ok: false, error: trava };
+
     const patch = becomingApproved
       ? { ...patchBase, valor_aprovado: r.valorPc ?? null }
       : patchBase;
