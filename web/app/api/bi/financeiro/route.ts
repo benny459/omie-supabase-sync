@@ -52,6 +52,7 @@ export async function GET(req: Request) {
   const [
     agingP, agingR, horizP, horizR, mensalP, mensalR,
     resumoP, resumoR, coorte, coorteCat, topForn, topCli,
+    atrasoP, atrasoR,
   ] = await Promise.all([
     adm.rpc("tit_aging",     { p_natureza: "P", p_empresas: EMP_PAGAR }),
     adm.rpc("tit_aging",     { p_natureza: "R", p_empresas: EMP_RECEBER }),
@@ -65,6 +66,8 @@ export async function GET(req: Request) {
     adm.rpc("fat_coorte_categoria", { p_from: from, p_to: to }),
     adm.rpc("tit_top_contraparte", { p_natureza: "P", p_from: from, p_to: to, p_empresas: EMP_PAGAR, p_limit: 12 }),
     adm.rpc("tit_top_contraparte", { p_natureza: "R", p_from: from, p_to: to, p_empresas: EMP_RECEBER, p_limit: 12 }),
+    adm.rpc("contrapartes_em_atraso", { p_natureza: "P", p_empresas: EMP_PAGAR,   p_limit: 25 }),
+    adm.rpc("contrapartes_em_atraso", { p_natureza: "R", p_empresas: EMP_RECEBER, p_limit: 25 }),
   ]);
 
   // Erro de QUALQUER uma derruba a resposta inteira, com o nome da função. Uma
@@ -77,6 +80,7 @@ export async function GET(req: Request) {
     ["tit_resumo(P)", resumoP], ["tit_resumo(R)", resumoR],
     ["fat_coorte", coorte], ["fat_coorte_categoria", coorteCat],
     ["tit_top_contraparte(P)", topForn], ["tit_top_contraparte(R)", topCli],
+    ["contrapartes_em_atraso(P)", atrasoP], ["contrapartes_em_atraso(R)", atrasoR],
   ] as const).find(([, r]) => r.error);
   if (falha) {
     return NextResponse.json(
@@ -93,5 +97,8 @@ export async function GET(req: Request) {
     coorte:    coorte.data ?? [],
     coorte_categoria: coorteCat.data ?? [],
     top:       { sai: topForn.data ?? [], entra: topCli.data ?? [] },
+    // Quem concentra o vencido, dos dois lados. Mesma função com p_natureza
+    // diferente — a simetria é o que permite um painel só na tela.
+    atraso:    { sai: atrasoP.data ?? [], entra: atrasoR.data ?? [] },
   });
 }

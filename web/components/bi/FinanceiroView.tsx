@@ -52,6 +52,10 @@ type Coorte  = { mes: string; faturado: number; recebido: number; a_vencer: numb
                  vencido: number; sem_titulo: number; pct_recebido: number | null };
 type CoorteCat = Coorte & { categoria: string };
 type Top     = { contraparte: string; valor: number; qtd: number };
+type Atraso  = { contraparte: string; cnpj: string | null; titulos: number; valor: number;
+                 atraso_max: number; atraso_medio: number;
+                 ate_30: number; de_31_90: number; mais_90: number;
+                 vencimento_mais_antigo: string | null };
 
 type Payload = {
   periodo: { from: string; to: string };
@@ -62,6 +66,7 @@ type Payload = {
   coorte: Coorte[];
   coorte_categoria: CoorteCat[];
   top: { sai: Top[]; entra: Top[] };
+  atraso: { sai: Atraso[]; entra: Atraso[] };
   error?: string;
 };
 
@@ -346,6 +351,111 @@ function Analise({ data, lado, loading }: { data: Payload | null; lado: Lado; lo
             series={[{ key: "valor", label: "Valor", slot: lado === "receber" ? 5 : 3, mark: "rect" }]}
             layout="row" categoryWidth={190} valueFormat={(v) => brlK(v)} />
         </ChartFrame>
+      </div>
+
+      <EmAtraso data={data} lado={lado} loading={loading} />
+    </div>
+  );
+}
+
+const COLS_ATRASO: Col<Record<string, unknown>>[] = [
+  { key: "contraparte", label: "Contraparte", w: 260 },
+  { key: "titulos",     label: "Títulos",     tipo: "num",   w: 74 },
+  { key: "valor",       label: "Em atraso",   tipo: "money", w: 128 },
+  { key: "ate_30",      label: "Até 30d",     tipo: "money", w: 118 },
+  { key: "de_31_90",    label: "31–90d",      tipo: "money", w: 118 },
+  { key: "mais_90",     label: "90d+",        tipo: "money", w: 128 },
+  { key: "atraso_max",  label: "Pior atraso", tipo: "dias",  w: 96 },
+  { key: "vencimento_mais_antigo", label: "Mais antigo", tipo: "date", w: 100 },
+];
+
+/** Quem concentra o vencido, dos dois lados.
+ *
+ *  Gráfico e lista juntos de propósito: o gráfico mostra a CONCENTRAÇÃO (dois ou
+ *  três nomes costumam responder pela maior parte) e a lista mostra a IDADE, que
+ *  é o que separa atraso operacional de passivo morto. Um sem o outro engana. */
+function EmAtraso({ data, lado, loading }: { data: Payload | null; lado: Lado; loading: boolean }) {
+  const linhas = useMemo(() => {
+    if (!data) return [];
+    const r = lado === "pagar" ? [] : data.atraso.entra;
+    const p = lado === "receber" ? [] : data.atraso.sai;
+    // Em "ambos", os dois lados na mesma lista ficariam somados sem sentido —
+    // cliente que deve e fornecedor a quem devo não se compensam num ranking.
+    // Então a lista mostra o lado com mais dinheiro parado e diz qual é.
+    const somaR = r.reduce((a, x) => a + Number(x.valor || 0), 0);
+    const somaP = p.reduce((a, x) => a + Number(x.valor || 0), 0);
+    return (lado === "ambos" ? (somaP >= somaR ? p : r) : (lado === "receber" ? r : p))
+      .map((x) => ({ ...x, valor: Number(x.valor) || 0 }));
+  }, [data, lado]);
+
+  const ehPagar = useMemo(() => {
+    if (lado === "pagar") return true;
+    if (lado === "receber") return false;
+    const somaR = (data?.atraso.entra ?? []).reduce((a, x) => a + Number(x.valor || 0), 0);
+    const somaP = (data?.atraso.sai ?? []).reduce((a, x) => a + Number(x.valor || 0), 0);
+    return somaP >= somaR;
+  }, [data, lado]);
+
+  const topN = linhas.slice(0, 12).map((x) => ({
+    x: x.contraparte,
+    "Até 30d": Number(x.ate_30) || 0,
+    "31–90d": Number(x.de_31_90) || 0,
+    "90d+":   Number(x.mais_90) || 0,
+  }));
+
+  // Empilhado por idade: a altura é o total daquele nome, e a composição diz se
+  // é atraso recente ou dívida antiga.
+  const serie: SeriesDef[] = [
+    { key: "Até 30d", label: "Até 30d", slot: 2, mark: "rect" },
+    { key: "31–90d",  label: "31–90d",  slot: 0, mark: "rect" },
+    { key: "90d+",    label: "90d+",    slot: 3, mark: "rect" },
+  ];
+
+  const total = linhas.reduce((a, x) => a + x.valor, 0);
+  const velho = linhas.reduce((a, x) => a + (Number(x.mais_90) || 0), 0);
+
+  return (
+    <div className="space-y-3">
+      <div className={`flex items-center gap-3 flex-wrap px-3.5 py-2.5 rounded-xl border text-[11.5px] ${
+        ehPagar ? "border-rose-500/25 bg-rose-500/[0.06] text-rose-800 dark:text-rose-200"
+                : "border-emerald-500/25 bg-emerald-500/[0.06] text-emerald-800 dark:text-emerald-200"}`}>
+        <strong>{ehPagar ? "Fornecedores a quem devo" : "Clientes que me devem"}</strong>
+        <span className="tabular-nums">{brl(total)} em atraso · {linhas.length} contrapartes</span>
+        {velho > 0 && (
+          <span className="ml-auto tabular-nums">
+            <strong>{brl(velho)}</strong> com mais de 90 dias
+            {total > 0 && ` (${Math.round((velho / total) * 100)}%)`}
+          </span>
+        )}
+        {lado === "ambos" && (
+          <span className="text-ww-textFaint">— use o seletor para ver o outro lado</span>
+        )}
+      </div>
+
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-3.5">
+        <ChartFrame
+          title={`Concentração do vencido — ${ehPagar ? "fornecedores" : "clientes"}`}
+          subtitle="Empilhado por idade do atraso: a altura é o total do nome, e a composição diz se é atraso recente ou dívida antiga."
+          series={serie} rows={topN} valueFormat={(v) => brl(Number(v))}
+          loading={loading} height={300}
+        >
+          {(vis) => (
+            <VizBar rows={topN} stacked layout="row" categoryWidth={200}
+              series={serie.filter((sr) => vis.some((v) => v.key === sr.key))}
+              valueFormat={(v) => brlK(v)} />
+          )}
+        </ChartFrame>
+
+        <VizTable
+          title={`${ehPagar ? "Fornecedores" : "Clientes"} em atraso — detalhe`}
+          subtitle="Ordenado pelo valor parado. A coluna 90d+ separa o que é operacional do que virou passivo."
+          cols={COLS_ATRASO}
+          rows={linhas as unknown as Record<string, unknown>[]}
+          ordemInicial="valor"
+          loading={loading}
+          altura={300}
+          totalizar={["valor", "ate_30", "de_31_90", "mais_90"]}
+        />
       </div>
     </div>
   );
