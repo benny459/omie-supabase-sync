@@ -25,6 +25,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import GradeEditavel, {
   brl, linhaVazia, num, type ColunaGrade, type LinhaGrade,
 } from "./GradeEditavel";
+import TabelaPrevisto, { type LinhaPrevisto } from "./TabelaPrevisto";
 import ChartFrame, { type SeriesDef } from "@/components/viz/ChartFrame";
 import VizBar from "@/components/viz/VizBar";
 
@@ -53,7 +54,7 @@ type Evento = {
   motivo: string | null; total_entradas: number | null; total_saidas: number | null; linhas: number | null;
 };
 type Payload = {
-  linhas: LinhaApi[]; cabecalho: Cabecalho; realizado: RealizadoRow[];
+  linhas: LinhaApi[]; previsto: LinhaPrevisto[]; cabecalho: Cabecalho; realizado: RealizadoRow[];
   cobertura: Cobertura | null; eventos: Evento[];
   pode_editar: boolean; pode_aprovar: boolean; eu: string;
   error?: string;
@@ -135,9 +136,32 @@ export default function FluxoProjetoView({
   const preenchidas = (ls: LinhaGrade[]) =>
     ls.filter((l) => l.descricao?.trim() || l.valor?.trim());
 
-  const totEnt = preenchidas(entradas).reduce((a, l) => a + num(l.valor), 0);
-  const totSai = preenchidas(saidas).reduce((a, l) => a + num(l.valor), 0);
+  // O previsto do projeto é a soma de DUAS origens: o que o Omie já sabe
+  // (PV a faturar, títulos, pedidos de compra) e o que foi acrescentado à mão.
+  // Mostrar só o manual faria o plano parecer vazio num projeto que já tem
+  // R$ 36 mil de compra lançada.
+  const previsto = useMemo(() => data?.previsto ?? [], [data]);
+  const somaPrev = (lado: "entrada" | "saida") =>
+    previsto.filter((l) => l.lado === lado).reduce((a, l) => a + Number(l.valor || 0), 0);
+
+  const manEnt = preenchidas(entradas).reduce((a, l) => a + num(l.valor), 0);
+  const manSai = preenchidas(saidas).reduce((a, l) => a + num(l.valor), 0);
+  const omiEnt = somaPrev("entrada");
+  const omiSai = somaPrev("saida");
+  const totEnt = manEnt + omiEnt;
+  const totSai = manSai + omiSai;
   const margem = totEnt > 0 ? ((totEnt - totSai) / totEnt) * 100 : null;
+
+  /** Quanto escorregou desde a aprovação. Só existe com plano aprovado —
+   *  sem foto congelada não há contra o que medir. */
+  const desvio = useMemo(() => {
+    const com = previsto.filter((l) => l.desvio_dias != null && l.desvio_dias !== 0);
+    if (!com.length) return null;
+    const pior = com.reduce((m, l) => ((l.desvio_dias ?? 0) > (m.desvio_dias ?? 0) ? l : m));
+    return { linhas: com.length, pior: pior.desvio_dias ?? 0,
+             valor: com.filter((l) => (l.desvio_dias ?? 0) > 0)
+                       .reduce((a, l) => a + Number(l.valor || 0), 0) };
+  }, [previsto]);
 
   const salvar = useCallback(async () => {
     setSalvando(true); setErro(null); setAviso(null);
@@ -201,6 +225,16 @@ export default function FluxoProjetoView({
       const m = l.data.slice(0, 7);
       const c = pega(m); c.ps += num(l.valor); acc.set(m, c);
     }
+    // Previsto do Omie entra pela data EFETIVA — é o ponto do cronograma:
+    // corrigir a emissão move a barra de mês, e é isso que se quer enxergar.
+    for (const l of previsto) {
+      if (!l.data_efetiva) continue;
+      const m = l.data_efetiva.slice(0, 7);
+      const c = pega(m);
+      if (l.lado === "entrada") c.pe += Number(l.valor) || 0;
+      else                      c.ps += Number(l.valor) || 0;
+      acc.set(m, c);
+    }
     for (const r of data?.realizado ?? []) {
       const m = r.mes.slice(0, 7);
       const c = pega(m);
@@ -216,7 +250,7 @@ export default function FluxoProjetoView({
         "Saída prevista":    v.ps,
         "Saída realizada":   v.rs,
       }));
-  }, [entradas, saidas, data]);
+  }, [entradas, saidas, data, previsto]);
 
   // Previsto vazado, realizado sólido: é a MESMA medida em dois estados, então
   // a cor continua dizendo de que medida se trata e o preenchimento diz o
@@ -313,6 +347,16 @@ export default function FluxoProjetoView({
           {aviso}
         </div>
       )}
+      {/* O desvio contra o plano aprovado. Fica junto dos avisos e não escondido
+          numa coluna: escorregar 30 dias no recebimento é notícia, não detalhe. */}
+      {desvio && (
+        <div className="p-2.5 rounded-lg border border-rose-500/40 bg-rose-500/[0.08] text-[12px] text-rose-800 dark:text-rose-200">
+          <strong>{desvio.linhas} linha(s) mudaram de data desde a aprovação.</strong>{" "}
+          A pior escorregou <strong>{desvio.pior > 0 ? `${desvio.pior} dias para frente` : `${-desvio.pior} dias para trás`}</strong>
+          {desvio.valor > 0 && <> · {brl(desvio.valor)} adiado</>}. O gráfico já usa as datas novas.
+        </div>
+      )}
+
       {sujo && (
         <div className="p-2.5 rounded-lg border border-amber-500/40 bg-amber-500/10 text-[12px] text-amber-800 dark:text-amber-200">
           Há alterações não gravadas. O gráfico já mostra o que você digitou; o painel só passa a
@@ -323,8 +367,10 @@ export default function FluxoProjetoView({
       {/* Números-âncora. Um plano sem total é uma lista; com total é uma decisão. */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         {[
-          { rot: "Entradas previstas", val: brl(totEnt), sub: `${preenchidas(entradas).length} lançamento(s)`, tom: "receber" },
-          { rot: "Saídas previstas",   val: brl(totSai), sub: `${preenchidas(saidas).length} lançamento(s)`,   tom: "pagar" },
+          { rot: "Entradas previstas", val: brl(totEnt),
+            sub: `${brl(omiEnt)} do Omie${manEnt ? ` + ${brl(manEnt)} à mão` : ""}`, tom: "receber" },
+          { rot: "Saídas previstas",   val: brl(totSai),
+            sub: `${brl(omiSai)} do Omie${manSai ? ` + ${brl(manSai)} à mão` : ""}`,   tom: "pagar" },
           { rot: "Resultado previsto", val: brl(totEnt - totSai),
             sub: margem == null ? "sem entrada lançada" : `margem de ${margem.toFixed(1).replace(".", ",")}%`,
             tom: totEnt - totSai >= 0 ? "receber" : "pagar" },
@@ -367,17 +413,61 @@ export default function FluxoProjetoView({
           recebia ~600px e a coluna VALOR — a mais importante das quatro — ficava
           cortada fora da vista. Grade é para digitar; digitar num campo que não
           se enxerga não é uma opção de layout. */}
+      {/* ── O que veio do Omie ──────────────────────────────────────────────
+          Vem primeiro porque é o grosso do plano na maioria dos projetos, e
+          porque a coluna de emissão é onde o cronograma entra. Não é apagável:
+          é recalculado do ERP a cada leitura. */}
+      <section className="viz-panel bg-ww-panel border border-ww-border rounded-xl p-3.5 min-w-0 space-y-3">
+        <header>
+          <h3 className="text-[12.5px] font-semibold text-ww-text tracking-wide uppercase">
+            Do Omie — pedido de venda, títulos e compras
+          </h3>
+          <p className="text-[11px] text-ww-textMuted mt-0.5">
+            Isto já existe no ERP e entra no plano sem ninguém digitar. Ajuste a
+            <strong className="text-ww-text"> emissão da NF</strong> pelo cronograma e a
+            <strong className="text-ww-text"> nova previsão</strong> sai sozinha, somando o prazo do
+            pedido de venda. Nada aqui é apagado pelo painel.
+          </p>
+        </header>
+
+        <div>
+          <div className="flex items-baseline gap-2 mb-1.5">
+            <span className="text-[11px] font-semibold uppercase tracking-wide text-emerald-600 dark:text-emerald-300">
+              A receber
+            </span>
+            <span className="ml-auto text-[13px] font-bold tabular-nums text-emerald-600 dark:text-emerald-300">
+              {brl(omiEnt)}
+            </span>
+          </div>
+          <TabelaPrevisto linhas={previsto} lado="entrada" empresa={empresa}
+            codigoProjeto={codigoProjeto} podeEditar={podeEditar} onMudou={() => void carregar()} />
+        </div>
+
+        <div>
+          <div className="flex items-baseline gap-2 mb-1.5">
+            <span className="text-[11px] font-semibold uppercase tracking-wide text-rose-600 dark:text-rose-300">
+              A pagar
+            </span>
+            <span className="ml-auto text-[13px] font-bold tabular-nums text-rose-600 dark:text-rose-300">
+              {brl(omiSai)}
+            </span>
+          </div>
+          <TabelaPrevisto linhas={previsto} lado="saida" empresa={empresa}
+            codigoProjeto={codigoProjeto} podeEditar={podeEditar} onMudou={() => void carregar()} />
+        </div>
+      </section>
+
       <Secao
-        titulo="Entradas previstas"
-        dica="O que você espera receber: parcelas do PV, medições. Digite, ou cole do Excel as colunas Descrição · Categoria · Data · Valor."
-        total={totEnt} tom="receber"
+        titulo="Acrescentado à mão"
+        dica="O que o Omie ainda não tem: parcela que não virou título, despesa prevista, serviço a contratar. Digite, ou cole do Excel as colunas Descrição · Categoria · Data · Valor."
+        total={manEnt} tom="receber"
         linhas={entradas} onChange={(l) => { setEntradas(l); setSujo(true); }}
         somenteLeitura={!podeEditar}
       />
       <Secao
-        titulo="Saídas previstas"
-        dica="O que você espera pagar: compras, serviços, despesas do projeto."
-        total={totSai} tom="pagar"
+        titulo="Saídas acrescentadas à mão"
+        dica="Despesas do projeto que ainda não viraram pedido de compra."
+        total={manSai} tom="pagar"
         linhas={saidas} onChange={(l) => { setSaidas(l); setSujo(true); }}
         somenteLeitura={!podeEditar}
       />

@@ -60,7 +60,7 @@ export async function GET(req: Request) {
 
   // Tudo de uma vez: a tela mostra as quatro coisas juntas e buscar em série
   // somaria quatro idas ao banco antes do primeiro pixel.
-  const [linhas, cab, realizado, cobertura, eventos] = await Promise.all([
+  const [linhas, cab, realizado, cobertura, eventos, previsto] = await Promise.all([
     admin.schema("approval").from("projeto_fluxo_linha")
       .select("id, tipo, descricao, categoria, data_prevista, valor, observacao, origem, ordem")
       .eq("empresa", empresa).eq("codigo_projeto", codigo)
@@ -73,10 +73,15 @@ export async function GET(req: Request) {
       .select("versao, acao, por, em, motivo, total_entradas, total_saidas, linhas")
       .eq("empresa", empresa).eq("codigo_projeto", codigo)
       .order("em", { ascending: false }).limit(20),
+    // O fluxo que o Omie já sabe, com o ajuste de cronograma e o desvio.
+    // É o que faz a tela não abrir vazia.
+    admin.schema("bi").rpc("projeto_fluxo_previsto", {
+      p_codigo_projeto: codigo, p_empresa: empresa,
+    }),
   ]);
 
   const falha = [["linhas", linhas], ["cabecalho", cab], ["realizado", realizado],
-                 ["cobertura", cobertura], ["eventos", eventos]]
+                 ["cobertura", cobertura], ["eventos", eventos], ["previsto", previsto]]
     .find(([, r]) => (r as { error?: unknown }).error);
   if (falha) {
     return NextResponse.json(
@@ -91,7 +96,10 @@ export async function GET(req: Request) {
     // rascunho vazio em vez de exigir um "criar fluxo" antes de digitar.
     cabecalho: cab.data ?? { status: "rascunho", versao: 1 },
     realizado: realizado.data ?? [],
-    cobertura: (realizado.error ? null : (cobertura.data as unknown[])?.[0]) ?? null,
+    cobertura: ((cobertura.data as unknown[]) ?? [])[0] ?? null,
+    // Linhas derivadas do Omie + cronograma + desvio. A tela soma isto com as
+    // manuais; nada aqui é apagável pelo usuário.
+    previsto: previsto.data ?? [],
     eventos: eventos.data ?? [],
     pode_editar: canEdit(perms, "projetos", "pvos"),
     pode_aprovar: canApprove(perms, "projetos"),
@@ -241,6 +249,29 @@ export async function POST(req: Request) {
   const up = await admin.schema("approval").from("projeto_fluxo")
     .upsert(patch, { onConflict: "empresa,codigo_projeto" });
   if (up.error) return NextResponse.json({ error: up.error.message }, { status: 500 });
+
+  // ── Congela a foto do que foi aprovado ─────────────────────────────────────
+  // O desvio é "quanto escorregou desde que foi aprovado". Sem congelar a
+  // previsão de cada linha AGORA, o desvio seria medido contra uma data que
+  // muda junto com a linha — e nunca acusaria nada.
+  if (acao === "aprovar") {
+    const { data: prev } = await admin.schema("bi")
+      .rpc("projeto_fluxo_previsto", { p_codigo_projeto: codigo, p_empresa: empresa });
+    const fotos = ((prev ?? []) as Array<{
+      fonte: string; referencia: string; data_efetiva: string | null; valor: number;
+    }>).map((r) => ({
+      empresa, codigo_projeto: codigo, versao,
+      fonte: r.fonte, referencia: r.referencia,
+      data_prevista: r.data_efetiva, valor: r.valor,
+    }));
+    if (fotos.length) {
+      // Reaprovar a MESMA versão substitui a foto: a última aprovação é a que
+      // vale, e duas fotos da mesma versão dariam dois desvios para a linha.
+      await admin.schema("approval").from("projeto_fluxo_baseline")
+        .delete().eq("empresa", empresa).eq("codigo_projeto", codigo).eq("versao", versao);
+      await admin.schema("approval").from("projeto_fluxo_baseline").insert(fotos);
+    }
+  }
 
   await admin.schema("approval").from("projeto_fluxo_evento").insert({
     empresa, codigo_projeto: codigo, versao,
