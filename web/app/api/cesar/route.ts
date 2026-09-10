@@ -49,7 +49,41 @@ export async function POST(req: Request) {
   const body = await req.json().catch(() => ({}));
   const historico = (Array.isArray(body.mensagens) ? body.mensagens : []) as Msg[];
   const contexto = typeof body.contexto === "string" ? body.contexto.slice(0, 12000) : undefined;
+  const origem   = typeof body.origem === "string" ? body.origem.slice(0, 120) : null;
   if (!historico.length) return Response.json({ error: "sem mensagem" }, { status: 400 });
+
+  // ── Persistência ──────────────────────────────────────────────────────────
+  // Grava pelo cliente do USUÁRIO: a RLS de public.cesar_conversa é quem impede
+  // um usuário de escrever na conversa de outro. Com service_role essa garantia
+  // viraria um `eq("user_id", …)` repetido em cada consulta.
+  //
+  // A pergunta é gravada ANTES da resposta. Se o modelo falhar no meio, o
+  // histórico mostra o que foi perguntado — uma conversa que some porque a
+  // resposta deu erro é a pior hora de perder o rastro.
+  const supaUser = await supaServer("public");
+  const pergunta = historico[historico.length - 1]?.content ?? "";
+  let conversaId: string | null =
+    typeof body.conversa_id === "string" ? body.conversa_id : null;
+
+  if (!conversaId) {
+    const { data: nova } = await supaUser
+      .from("cesar_conversa")
+      .insert({
+        user_id: user.id,
+        // Título = a primeira pergunta, cortada. Pedir um título ao modelo
+        // custaria uma chamada inteira antes da resposta aparecer, e a pergunta
+        // do próprio Benny é o melhor rótulo que existe para reencontrá-la.
+        titulo: pergunta.slice(0, 90) || "Conversa",
+        origem,
+      })
+      .select("id")
+      .single();
+    conversaId = nova?.id ?? null;
+  }
+  if (conversaId) {
+    await supaUser.from("cesar_mensagem")
+      .insert({ conversa_id: conversaId, papel: "user", conteudo: pergunta });
+  }
 
   const anthropic = new Anthropic({ apiKey: chave });
   const adm = createClient(
@@ -71,6 +105,10 @@ export async function POST(req: Request) {
     async start(ctrl) {
       const envia = (o: unknown) => ctrl.enqueue(enc.encode(`data: ${JSON.stringify(o)}\n\n`));
 
+      // Avisa o id logo de cara: se a aba fechar no meio da resposta, o cliente
+      // já sabe em qual conversa reentrar.
+      envia({ t: "conversa", id: conversaId });
+
       try {
         const msgs: Anthropic.MessageParam[] = historico.map((m) => ({
           role: m.role, content: m.content,
@@ -78,6 +116,11 @@ export async function POST(req: Request) {
 
         let rodada = 0;
         let entradaTot = 0, saidaTot = 0;
+        /** O que vai pro banco no fim: a resposta e as consultas que a
+         *  sustentam. Sem os passos, a conversa relida vira afirmação sem
+         *  procedência. */
+        let resposta = "";
+        const passos: Array<Record<string, unknown>> = [];
 
         while (rodada++ < MAX_RODADAS) {
           const resp = await anthropic.messages.create({
@@ -115,6 +158,7 @@ export async function POST(req: Request) {
               const b = blocos[ev.index];
               if (ev.delta.type === "text_delta") {
                 envia({ t: "texto", v: ev.delta.text });
+                resposta += ev.delta.text;
                 if (b?.type === "text") b.text += ev.delta.text;
               } else if (ev.delta.type === "input_json_delta") {
                 parciais.set(ev.index, (parciais.get(ev.index) ?? "") + ev.delta.partial_json);
@@ -158,9 +202,11 @@ export async function POST(req: Request) {
           // independentes, e serializar só somaria latência.
           const resultados = await Promise.all(usos.map(async (u) => {
             const out = await executar(adm, u.name, (u.input ?? {}) as Record<string, unknown>);
-            envia({ t: "resultado", nome: u.name,
-                    linhas: Number(out.total_linhas) || 0, truncado: !!out.truncado,
-                    erro: out.erro ?? null });
+            const passo = { nome: u.name,
+                           linhas: Number(out.total_linhas) || 0,
+                           truncado: !!out.truncado, erro: out.erro ?? null };
+            passos.push(passo);
+            envia({ t: "resultado", ...passo });
             return {
               type: "tool_result" as const,
               tool_use_id: u.id,
@@ -175,6 +221,19 @@ export async function POST(req: Request) {
         if (rodada > MAX_RODADAS) {
           envia({ t: "texto", v: "\n\n_(parei aqui: bati o limite de consultas para uma pergunta só. Refaça mais específica.)_" });
         }
+        // Grava a resposta E carimba a conversa como ativa, para ela subir ao
+        // topo da lista. Ordenar por data de criação faria uma conversa retomada
+        // hoje continuar enterrada onde nasceu.
+        if (conversaId && resposta.trim()) {
+          await supaUser.from("cesar_mensagem").insert({
+            conversa_id: conversaId, papel: "assistant",
+            conteudo: resposta, passos: passos.length ? passos : null,
+          });
+          await supaUser.from("cesar_conversa")
+            .update({ atualizada_em: new Date().toISOString() })
+            .eq("id", conversaId);
+        }
+
         envia({ t: "fim", uso: { entrada: entradaTot, saida: saidaTot, modelo } });
       } catch (e) {
         envia({ t: "erro", v: e instanceof Error ? e.message : String(e) });

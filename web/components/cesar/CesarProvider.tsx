@@ -21,6 +21,10 @@ type Msg = { role: "user" | "assistant"; content: string };
 /** Uma consulta que o Cesar fez enquanto pensava. Fica visível: uma resposta
  *  financeira sem dizer de onde veio é uma opinião. */
 type Passo = { nome: string; linhas?: number; truncado?: boolean; erro?: string | null };
+type Conversa = {
+  id: string; titulo: string; origem: string | null;
+  criada_em: string; atualizada_em: string;
+};
 
 type Ctx = {
   abrir: (opts?: { contexto?: string; pergunta?: string; origem?: string }) => void;
@@ -58,7 +62,12 @@ export default function CesarProvider({ children }: { children: React.ReactNode 
   const [pensando, setPensando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const [origem, setOrigem] = useState<string | null>(null);
+  /** Painel do histórico aberto por cima da conversa. */
+  const [verHistorico, setVerHistorico] = useState(false);
+  const [conversas, setConversas] = useState<Conversa[] | null>(null);
   const contextoRef = useRef<string | undefined>(undefined);
+  /** Em qual conversa estamos gravando. Null = a próxima pergunta cria uma. */
+  const conversaRef = useRef<string | null>(null);
   const fimRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -94,7 +103,10 @@ export default function CesarProvider({ children }: { children: React.ReactNode 
       const r = await fetch("/api/cesar", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ mensagens: novas, contexto: contextoRef.current }),
+        body: JSON.stringify({
+          mensagens: novas, contexto: contextoRef.current,
+          conversa_id: conversaRef.current, origem,
+        }),
       });
       if (!r.ok || !r.body) {
         const j = await r.json().catch(() => ({}));
@@ -121,7 +133,12 @@ export default function CesarProvider({ children }: { children: React.ReactNode 
           let ev: Record<string, unknown>;
           try { ev = JSON.parse(linha.slice(6)); } catch { continue; }
 
-          if (ev.t === "texto") {
+          if (ev.t === "conversa") {
+            // Chega antes da primeira palavra: a partir daqui a próxima
+            // pergunta continua ESTA conversa em vez de abrir outra.
+            conversaRef.current = (ev.id as string) ?? null;
+            setConversas(null);        // a lista ficou velha
+          } else if (ev.t === "texto") {
             setMsgs((m) => {
               const c = [...m];
               const u = c[c.length - 1];
@@ -150,7 +167,57 @@ export default function CesarProvider({ children }: { children: React.ReactNode 
     }
   }, [msgs, pensando]);
 
-  const limpar = () => { setMsgs([]); setPassos([]); setErro(null); contextoRef.current = undefined; setOrigem(null); };
+  const limpar = () => {
+    setMsgs([]); setPassos([]); setErro(null);
+    contextoRef.current = undefined; conversaRef.current = null;
+    setOrigem(null); setVerHistorico(false);
+  };
+
+  /** Busca a lista só quando o histórico é aberto, e só se estiver velha —
+   *  carregá-la no mount custaria uma consulta em toda visita ao painel para
+   *  um recurso que se usa de vez em quando. */
+  const abrirHistorico = useCallback(async () => {
+    setVerHistorico(true);
+    if (conversas) return;
+    try {
+      const r = await fetch("/api/cesar/conversas", { cache: "no-store" });
+      const j = await r.json();
+      setConversas(r.ok ? (j.conversas ?? []) : []);
+      if (!r.ok) setErro(j.error ?? r.statusText);
+    } catch (e) {
+      setConversas([]);
+      setErro(e instanceof Error ? e.message : String(e));
+    }
+  }, [conversas]);
+
+  const retomar = useCallback(async (c: Conversa) => {
+    setVerHistorico(false);
+    setErro(null); setPassos([]);
+    setMsgs([{ role: "assistant", content: "" }]);   // segura o layout
+    try {
+      const r = await fetch(`/api/cesar/conversas?id=${c.id}`, { cache: "no-store" });
+      const j = await r.json();
+      if (!r.ok) { setErro(j.error ?? r.statusText); setMsgs([]); return; }
+      setMsgs((j.mensagens as Array<{ papel: string; conteudo: string }>)
+        .map((m) => ({ role: m.papel as "user" | "assistant", content: m.conteudo })));
+      conversaRef.current = c.id;
+      setOrigem(c.origem);
+      // O contexto do gráfico NÃO volta: aquele recorte era o da tela naquele
+      // dia e hoje os números são outros. Reanexar levaria o Cesar a raciocinar
+      // sobre um retrato vencido sem ninguém perceber.
+      contextoRef.current = undefined;
+      setTimeout(() => inputRef.current?.focus(), 80);
+    } catch (e) {
+      setErro(e instanceof Error ? e.message : String(e));
+      setMsgs([]);
+    }
+  }, []);
+
+  const apagar = useCallback(async (id: string) => {
+    setConversas((cs) => (cs ?? []).filter((c) => c.id !== id));
+    if (conversaRef.current === id) { conversaRef.current = null; setMsgs([]); }
+    await fetch(`/api/cesar/conversas?id=${id}`, { method: "DELETE" });
+  }, []);
 
   return (
     <CesarCtx.Provider value={{ abrir, aberto }}>
@@ -183,19 +250,41 @@ export default function CesarProvider({ children }: { children: React.ReactNode 
                 {origem ? `a partir de: ${origem}` : "analista financeiro · lê o seu Omie"}
               </div>
             </div>
+            {/* Relógio = histórico. Fica sempre visível, inclusive na conversa
+                vazia: é justamente aí que se quer voltar a uma antiga. */}
+            <button type="button"
+              onClick={() => (verHistorico ? setVerHistorico(false) : void abrirHistorico())}
+              aria-pressed={verHistorico}
+              title="Conversas anteriores"
+              className={`ml-auto w-7 h-7 shrink-0 grid place-items-center rounded-lg border transition ${
+                verHistorico
+                  ? "border-ww-accent/70 text-ww-accent bg-ww-accent/15"
+                  : "border-ww-border text-ww-textMuted hover:text-ww-text hover:bg-ww-rowHover"}`}>
+              <Relogio />
+            </button>
             {msgs.length > 0 && (
               <button type="button" onClick={limpar} disabled={pensando}
-                className="ml-auto px-2 py-0.5 text-[10.5px] rounded border border-ww-border text-ww-textMuted
+                className="px-2 py-0.5 text-[10.5px] shrink-0 rounded border border-ww-border text-ww-textMuted
                            hover:text-ww-text hover:bg-ww-rowHover transition disabled:opacity-40">
-                Nova conversa
+                Nova
               </button>
             )}
             <button type="button" onClick={() => setAberto(false)} aria-label="Fechar"
-              className={`${msgs.length ? "" : "ml-auto"} w-7 h-7 shrink-0 rounded-lg border border-ww-border
-                          text-ww-textMuted hover:text-ww-text hover:bg-ww-rowHover transition`}>
+              className="w-7 h-7 shrink-0 rounded-lg border border-ww-border
+                         text-ww-textMuted hover:text-ww-text hover:bg-ww-rowHover transition">
               ✕
             </button>
           </header>
+
+          {verHistorico && (
+            <Historico
+              conversas={conversas}
+              atual={conversaRef.current}
+              onAbrir={(c) => void retomar(c)}
+              onApagar={(id) => void apagar(id)}
+              onNova={limpar}
+            />
+          )}
 
           <div className="flex-1 overflow-y-auto px-3.5 py-3 space-y-3">
             {msgs.length === 0 && <Vazio onEscolher={(q) => void perguntar(q)} temContexto={!!contextoRef.current} />}
@@ -261,6 +350,90 @@ export default function CesarProvider({ children }: { children: React.ReactNode 
         </aside>
       )}
     </CesarCtx.Provider>
+  );
+}
+
+/** Relógio com a seta de retorno — o desenho universal de "voltar no tempo".
+ *  Um relógio liso diria "agendar"; a seta é o que muda o verbo. */
+const Relogio = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+       strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+    <path d="M3 3v5h5" />
+    <path d="M3.05 13A9 9 0 1 0 6 5.3L3 8" />
+    <path d="M12 7v5l3 2" />
+  </svg>
+);
+
+/** Quanto tempo faz, em português curto. Data absoluta obriga a calcular; "há
+ *  2 h" responde "foi hoje?" na hora, que é a pergunta de quem procura. */
+function quando(iso: string) {
+  const min = Math.round((Date.now() - new Date(iso).getTime()) / 60000);
+  if (min < 1)     return "agora";
+  if (min < 60)    return `há ${min} min`;
+  if (min < 24*60) return `há ${Math.round(min/60)} h`;
+  const d = Math.round(min / (24*60));
+  if (d === 1)  return "ontem";
+  if (d < 30)   return `há ${d} dias`;
+  return new Date(iso).toLocaleDateString("pt-BR", { day: "2-digit", month: "short" });
+}
+
+function Historico({
+  conversas, atual, onAbrir, onApagar, onNova,
+}: {
+  conversas: Conversa[] | null;
+  atual: string | null;
+  onAbrir: (c: Conversa) => void;
+  onApagar: (id: string) => void;
+  onNova: () => void;
+}) {
+  return (
+    <div className="border-b border-ww-border bg-ww-panel/60 max-h-[46vh] overflow-y-auto">
+      <div className="flex items-center gap-2 px-3.5 pt-2.5 pb-1">
+        <span className="text-[9.5px] uppercase tracking-[0.7px] font-bold text-ww-textFaint">
+          Conversas anteriores
+        </span>
+        <button type="button" onClick={onNova}
+          className="ml-auto text-[10.5px] text-ww-accent hover:underline">
+          + começar do zero
+        </button>
+      </div>
+
+      {conversas == null && (
+        <p className="px-3.5 py-3 text-[11.5px] text-ww-textFaint">carregando…</p>
+      )}
+      {conversas?.length === 0 && (
+        <p className="px-3.5 py-3 text-[11.5px] text-ww-textFaint">
+          Nenhuma conversa ainda. A primeira pergunta já fica guardada aqui.
+        </p>
+      )}
+
+      <ul className="pb-2">
+        {(conversas ?? []).map((c) => (
+          <li key={c.id} className="group/conv flex items-start gap-2 px-3.5 py-1.5 hover:bg-ww-rowHover transition-colors">
+            <button type="button" onClick={() => onAbrir(c)}
+              className="min-w-0 flex-1 text-left">
+              <div className={`text-[12px] truncate ${
+                c.id === atual ? "text-ww-accent font-semibold" : "text-ww-text"}`}>
+                {c.titulo}
+              </div>
+              <div className="text-[10px] text-ww-textFaint truncate">
+                {quando(c.atualizada_em)}
+                {c.origem ? ` · ${c.origem}` : ""}
+                {c.id === atual ? " · aberta" : ""}
+              </div>
+            </button>
+            {/* Aparece no hover: apagar não pode ser um alvo permanente ao lado
+                de cada linha que se quer clicar pra abrir. */}
+            <button type="button" onClick={() => onApagar(c.id)}
+              title="Apagar esta conversa"
+              className="shrink-0 mt-0.5 px-1.5 text-[11px] rounded text-ww-textFaint opacity-0
+                         group-hover/conv:opacity-100 hover:text-rose-500 hover:bg-rose-500/10 transition">
+              ✕
+            </button>
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }
 
