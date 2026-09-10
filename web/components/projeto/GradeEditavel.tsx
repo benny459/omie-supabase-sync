@@ -121,11 +121,20 @@ export default function GradeEditavel({
       const texto = e.clipboardData?.getData("text/plain") ?? "";
       if (!texto.includes("\t") && !texto.includes("\n")) return;  // 1 valor: comportamento normal
       e.preventDefault();
-      colar(texto, foco?.l ?? 0, foco?.c ?? 0);
+      // Sem célula focada, cola no FIM — nunca na linha 1.
+      //
+      // O padrão antigo era (0,0): quem tinha 12 itens na lista, copiava mais
+      // dois do Excel e colava sem clicar em nada perdia os dois primeiros
+      // itens, sobrescritos em silêncio. Colar sem foco é "acrescentar isto
+      // aqui", não "substituir o começo".
+      const primeiraVazia = linhas.findIndex((l) =>
+        cols.every((c) => c.calculada || !String(l[c.key] ?? "").trim()));
+      const li = foco?.l ?? (primeiraVazia >= 0 ? primeiraVazia : linhas.length);
+      colar(texto, li, foco?.c ?? 0);
     };
     el.addEventListener("paste", onPaste);
     return () => el.removeEventListener("paste", onPaste);
-  }, [colar, foco]);
+  }, [colar, foco, linhas, cols]);
 
   const irPara = (l: number, c: number) => {
     const alvo = wrapRef.current?.querySelector<HTMLInputElement>(`[data-cel="${l}-${c}"]`);
