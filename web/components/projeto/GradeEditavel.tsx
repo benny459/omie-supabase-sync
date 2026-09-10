@@ -26,6 +26,11 @@ export type ColunaGrade = {
   tipo?: "texto" | "num" | "moeda" | "data";
   /** Só leitura: calculada a partir de outras (ex.: total = qtd × unitário). */
   calculada?: (linha: Record<string, string>) => string;
+  /** Só leitura, com marcação própria — para status em pílula, link, badge.
+   *  Vence `calculada`. Existe porque um status vindo do ERP perde sentido
+   *  virando texto puro: "31d atraso" e "Conferido" precisam se distinguir de
+   *  relance, não depois de ler. */
+  render?: (linha: Record<string, string>) => React.ReactNode;
   alinhaDireita?: boolean;
 };
 
@@ -61,18 +66,28 @@ export const brl = (v: number) =>
 
 export default function GradeEditavel({
   cols, linhas, onChange, altura = 340, vazioMsg = "Digite, cole do Excel ou suba a planilha.",
+  selecao,
 }: {
   cols: ColunaGrade[];
   linhas: LinhaGrade[];
   onChange: (linhas: LinhaGrade[]) => void;
   altura?: number;
   vazioMsg?: string;
+  /** Ativa a coluna de caixinhas. Só faz sentido em linha que já existe no
+   *  banco — marcar uma linha em branco pra vincular a um PC não significaria
+   *  nada, então `podeMarcar` decide quais aceitam marca. */
+  selecao?: {
+    marcadas: Set<string>;
+    podeMarcar: (linha: LinhaGrade) => boolean;
+    onAlternar: (id: string, indice: number, comShift: boolean) => void;
+    onTodas: (marcar: boolean) => void;
+  };
 }) {
   /** Célula com foco, para navegação por teclado. */
   const [foco, setFoco] = useState<{ l: number; c: number } | null>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
 
-  const editaveis = cols.filter((c) => !c.calculada);
+  const editaveis = cols.filter((c) => !c.calculada && !c.render);
 
   const setCel = useCallback((li: number, key: string, valor: string) => {
     const novas = linhas.map((l, i) => (i === li ? { ...l, [key]: valor } : l));
@@ -128,7 +143,7 @@ export default function GradeEditavel({
       // itens, sobrescritos em silêncio. Colar sem foco é "acrescentar isto
       // aqui", não "substituir o começo".
       const primeiraVazia = linhas.findIndex((l) =>
-        cols.every((c) => c.calculada || !String(l[c.key] ?? "").trim()));
+        cols.every((c) => c.calculada || c.render || !String(l[c.key] ?? "").trim()));
       const li = foco?.l ?? (primeiraVazia >= 0 ? primeiraVazia : linhas.length);
       colar(texto, li, foco?.c ?? 0);
     };
@@ -166,6 +181,16 @@ export default function GradeEditavel({
         <table className="w-full text-[11.5px] border-collapse">
           <thead className="sticky top-0 z-10 bg-ww-panel">
             <tr>
+              {selecao && (
+                <th style={{ width: 30 }}
+                    className="p-1.5 shadow-[0_1px_0_0_rgb(var(--color-ww-border))]">
+                  <input type="checkbox" aria-label="Marcar todas"
+                    checked={linhas.filter(selecao.podeMarcar).length > 0
+                             && linhas.filter(selecao.podeMarcar).every((l) => selecao.marcadas.has(l._id))}
+                    onChange={(e) => selecao.onTodas(e.target.checked)}
+                    className="cursor-pointer" />
+                </th>
+              )}
               <th style={{ width: 34 }}
                   className="p-1.5 text-[10px] text-ww-textFaint shadow-[0_1px_0_0_rgb(var(--color-ww-border))]">#</th>
               {cols.map((c) => (
@@ -181,10 +206,29 @@ export default function GradeEditavel({
           <tbody>
             {linhas.map((linha, li) => (
               <tr key={linha._id} className="viz-row group">
+                {selecao && (
+                  <td className="p-1 text-center border-b border-ww-border/40">
+                    {selecao.podeMarcar(linha) && (
+                      <input type="checkbox" checked={selecao.marcadas.has(linha._id)}
+                        onChange={() => { /* controlado no onClick, pra ler o shift */ }}
+                        onClick={(e) => selecao.onAlternar(linha._id, li, e.shiftKey)}
+                        className="cursor-pointer" />
+                    )}
+                  </td>
+                )}
                 <td className="p-1 text-center text-[10px] text-ww-textFaint tabular-nums border-b border-ww-border/40">
                   {li + 1}
                 </td>
                 {cols.map((c) => {
+                  if (c.render) {
+                    return (
+                      <td key={c.key}
+                          className={`p-1.5 border-b border-ww-border/40 bg-ww-rowHover/40 ${
+                            c.alinhaDireita ? "text-right tabular-nums" : ""}`}>
+                        {c.render(linha)}
+                      </td>
+                    );
+                  }
                   if (c.calculada) {
                     return (
                       <td key={c.key}
@@ -229,7 +273,7 @@ export default function GradeEditavel({
           + linha
         </button>
         <span className="text-[10.5px] text-ww-textFaint">
-          {linhas.filter((l) => cols.some((c) => !c.calculada && l[c.key]?.trim())).length} preenchida(s)
+          {linhas.filter((l) => cols.some((c) => !c.calculada && !c.render && l[c.key]?.trim())).length} preenchida(s)
           · Tab/Enter navega · <strong>Ctrl+V cola do Excel</strong> a partir da célula selecionada
         </span>
         {linhas.length <= 1 && (

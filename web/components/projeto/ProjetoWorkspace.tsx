@@ -13,7 +13,8 @@
 // das pessoas aqui.
 
 import { useCallback, useState } from "react";
-import RcProjetoItensBlock from "@/components/RcProjetoItensBlock";
+// RcProjetoItensBlock não é mais montado — a lista virou uma tabela só.
+// O arquivo continua no repositório caso falte alguma função dele.
 import RcProjetoUploadButton from "@/components/RcProjetoUploadButton";
 import FluxoFinanceiroUploadButton from "@/components/FluxoFinanceiroUploadButton";
 import FluxoProjetoView from "./FluxoProjetoView";
@@ -83,14 +84,15 @@ export default function ProjetoWorkspace({
         <FluxoProjetoView empresa={empresa} codigoProjeto={codigoProjeto} nomeProjeto={nomeProjeto} />
       )}
 
+      {/* UMA tabela. Antes havia duas com os mesmos itens — a grade para
+          escrever e um bloco abaixo para acompanhar — e o leitor tinha que
+          descobrir qual mandava. O acompanhamento (fornecedor, previsão,
+          status) virou coluna na própria linha do item, junto com o budget, a
+          exportação e o vínculo em lote que só existiam no bloco antigo.
+          RcProjetoItensBlock continua no repositório, sem uso, caso falte algo. */}
       {aba === "materiais" && (
-        <div className="space-y-3.5">
-          <MateriaisGrade empresa={empresa} codigoProjeto={codigoProjeto} onGravado={aposGravar} />
-          {/* O bloco antigo continua: é ele que traz status de recebimento,
-              agrupamento por equipamento e o vínculo em lote. A grade é para
-              ESCREVER; ele é para ACOMPANHAR. */}
-          <RcProjetoItensBlock key={`rc-${chave}`} empresa={empresa} codigoProjeto={codigoProjeto} />
-        </div>
+        <MateriaisGrade key={`mat-${chave}`} empresa={empresa}
+          codigoProjeto={codigoProjeto} onGravado={aposGravar} />
       )}
     </div>
   );
