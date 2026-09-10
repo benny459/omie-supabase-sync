@@ -1280,33 +1280,20 @@ export default function FluxoCaixaView() {
               </span>
               .
             </p>
-            <p className="text-[10.5px] text-ww-textFaint mt-1 normal-case leading-relaxed">
-              <strong className="text-ww-textMuted">Reprogramar</strong> = sei a data nova → grava
-              no painel e move a curva.{" "}
-              <strong className="text-ww-textMuted">Tirar da curva</strong> = ainda vou repactuar
-              ou cancelar, não sei a data → sai do gráfico e volta pelo filtro ⚖.{" "}
-              <strong className="text-ww-textMuted">Enviar ao Omie</strong> = leva as datas já
-              reprogramadas pro ERP. Nada vai pro Omie sozinho.
-            </p>
           </div>
-          {/* Grupos ROTULADOS. Antes tudo vinha numa fila só e havia dois botões
-              "Todos" lado a lado significando coisas diferentes — um de prazo,
-              outro de natureza. Com rótulo em cima, cada segmento diz do que
-              trata e o nome duplicado deixa de ser ambíguo. */}
-          <div className="flex items-end gap-x-4 gap-y-2 flex-wrap">
-          <Grupo rot="Prazo">
+          {/* UMA linha de controles (Benny, 10/09 — "muito botão, interface não
+              está limpa"). O que se usa toda hora fica à vista: prazo, natureza
+              e os dois modos (↻ reprogramados, ⚖ fora da curva). Previsão,
+              reprog. em e categorias moram no popover "Filtros", com badge do
+              que está ativo. A explicação dos três verbos virou o "?" ao lado. */}
+          <div className="flex items-center gap-1.5 flex-wrap">
             {([["atrasados", `Atrasados ${atrasados.length}`],
                ["a_vencer",  `A vencer ${titulos.length}`],
                ["todos",     "Tudo"]] as const).map(([k, l]) => (
               <Chip key={k} on={escopo === k}
                     onClick={() => { setEscopo(k); setSel(new Set()); setAviso(null); ancoraRef.current = null; }}>{l}</Chip>
             ))}
-          </Grupo>
-
-          {/* "Receber"/"Pagar" e não "Entra"/"Sai": é o vocabulário do financeiro,
-              e o mesmo das telas que esta consolidou. A cor translúcida por
-              natureza deixa mirar sem ler — verde recebe, vermelho paga. */}
-          <Grupo rot="Natureza">
+            <span className="w-px h-4 bg-ww-border mx-0.5" />
             <Chip on={tipo === "todos"} onClick={() => { setTipo("todos"); ancoraRef.current = null; }}>
               Ambos
             </Chip>
@@ -1314,268 +1301,287 @@ export default function FluxoCaixaView() {
               onClick={() => { setTipo("R"); ancoraRef.current = null; }}>Receber</ChipTom>
             <ChipTom on={tipo === "P"} tom="pagar"
               onClick={() => { setTipo("P"); ancoraRef.current = null; }}>Pagar</ChipTom>
-          </Grupo>
-
-          {/* Previsão: atalhos antes do intervalo. "Vence hoje" é a pergunta mais
-              frequente da mesa e exigia digitar a mesma data nos dois campos. */}
-          <Grupo rot="Previsão">
-            <Chip on={prevDe === hojeIso() && prevAte === hojeIso()}
-                  onClick={() => {
-                    const h = hojeIso();
-                    const jaEra = prevDe === h && prevAte === h;
-                    setPrevDe(jaEra ? "" : h); setPrevAte(jaEra ? "" : h);
-                  }}>Hoje</Chip>
-            <Chip on={prevDe === hojeIso() && prevAte === addDias(hojeIso(), 7)}
-                  onClick={() => {
-                    const h = hojeIso(), f = addDias(h, 7);
-                    const jaEra = prevDe === h && prevAte === f;
-                    setPrevDe(jaEra ? "" : h); setPrevAte(jaEra ? "" : f);
-                  }}>7 dias</Chip>
+            <span className="w-px h-4 bg-ww-border mx-0.5" />
             <Chip on={soReprog} onClick={() => setSoReprog((v) => !v)}
                   titulo="Só títulos cuja previsão eu alterei no painel">
-              ↻ {qtdReprog}
+              ↻ Reprogramados {qtdReprog}
             </Chip>
-            {/* O caminho de volta. Aqui se retoma o que ficou pendente de data. */}
             <Chip on={soReneg} onClick={() => setSoReneg((v) => !v)}
                   titulo="Só os que estão fora da curva, esperando repactuação ou cancelamento">
-              ⚖ {qtdReneg}
+              ⚖ Fora da curva {qtdReneg}
             </Chip>
-          </Grupo>
-
-          {/* Quando reprogramei. Grupo próprio e não junto de "Previsão": são
-              duas datas diferentes do mesmo título e misturá-las num intervalo
-              só produziria filtro que ninguém consegue explicar. */}
-          <Grupo rot="Reprog. em">
-            <Chip on={reprogDe === hojeIso() && reprogAte === hojeIso()}
-                  titulo="O que eu reprogramei hoje"
-                  onClick={() => {
-                    const h = hojeIso();
-                    const jaEra = reprogDe === h && reprogAte === h;
-                    setReprogDe(jaEra ? "" : h); setReprogAte(jaEra ? "" : h);
-                  }}>Hoje</Chip>
-            <Chip on={reprogDe === addDias(hojeIso(), -7) && reprogAte === hojeIso()}
-                  titulo="Reprogramados nos últimos 7 dias"
-                  onClick={() => {
-                    const h = hojeIso(), d = addDias(h, -7);
-                    const jaEra = reprogDe === d && reprogAte === h;
-                    setReprogDe(jaEra ? "" : d); setReprogAte(jaEra ? "" : h);
-                  }}>7 dias</Chip>
-            <input type="date" value={reprogDe} onChange={(e) => setReprogDe(e.target.value)}
-              title="Reprogramado a partir de"
-              className="text-[11px] bg-ww-bg border border-ww-border rounded px-1 py-0.5 text-ww-text" />
-            <input type="date" value={reprogAte} onChange={(e) => setReprogAte(e.target.value)}
-              title="Reprogramado até"
-              className="text-[11px] bg-ww-bg border border-ww-border rounded px-1 py-0.5 text-ww-text" />
-            {(reprogDe || reprogAte) && (
-              <button type="button" onClick={() => { setReprogDe(""); setReprogAte(""); }}
-                className="text-[10.5px] text-ww-accent hover:underline">limpar</button>
-            )}
-          </Grupo>
-
-          <Grupo rot="Recorte">
-            <CategoriaFiltro opcoes={catsOpcoes} selected={catsSel}
-              onToggle={(v) => setCatsSel((prev) => {
-                const n = new Set(prev);
-                if (n.has(v)) n.delete(v); else n.add(v);
-                return n;
-              })}
-              onClear={() => setCatsSel(new Set())} />
-          <div className="flex items-center gap-1 text-[10.5px] text-ww-textMuted">
-            <input type="date" value={prevDe} onChange={(e) => setPrevDe(e.target.value)}
-              title="Previsão a partir de"
-              className="text-[11px] bg-ww-bg border border-ww-border rounded px-1.5 py-0.5 text-ww-text" />
-            <span>→</span>
-            <input type="date" value={prevAte} onChange={(e) => setPrevAte(e.target.value)}
-              title="Previsão até"
-              className="text-[11px] bg-ww-bg border border-ww-border rounded px-1.5 py-0.5 text-ww-text" />
-            {(prevDe || prevAte) && (
-              <button type="button" onClick={() => { setPrevDe(""); setPrevAte(""); }}
-                className="text-ww-accent hover:underline">limpar</button>
-            )}
-          </div>
-          <input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Buscar…"
-            className="w-[140px] text-[11px] bg-ww-bg border border-ww-border rounded px-2 py-1 text-ww-text placeholder:text-ww-textFaint" />
-          </Grupo>
-
-          {/* Relatório dos reprogramados. Cobre a seleção, se houver; senão todos
-              os reprogramados do filtro atual — inclusive os que o teto de linhas
-              não desenha, porque teto é limite de render, não de conteúdo. */}
-          <Grupo rot="Report">
-            <button type="button" onClick={baixarPdf} disabled={!codsRelatorio.length}
-              title={codsRelatorio.length
-                ? `PDF de ${codsRelatorio.length} título(s) reprogramado(s)`
-                  + (selecaoForaDoRelatorio
-                      ? ` · ${selecaoForaDoRelatorio} da seleção ficam de fora: não foram reprogramados`
-                      : "")
-                : "Nenhum título reprogramado no filtro atual"}
-              className="px-2 py-0.5 text-[11px] rounded border border-ww-border text-ww-textMuted hover:text-ww-text hover:bg-ww-rowHover transition disabled:opacity-40">
-              📄 PDF
-            </button>
-            <button type="button" onClick={baixarExcel} disabled={!codsRelatorio.length || exportando}
-              title={codsRelatorio.length
-                ? `Excel de ${codsRelatorio.length} título(s) reprogramado(s)`
-                  + (selecaoForaDoRelatorio
-                      ? ` · ${selecaoForaDoRelatorio} da seleção ficam de fora: não foram reprogramados`
-                      : "")
-                : "Nenhum título reprogramado no filtro atual"}
-              className="px-2 py-0.5 text-[11px] rounded border border-ww-border text-ww-textMuted hover:text-ww-text hover:bg-ww-rowHover transition disabled:opacity-40">
-              {exportando ? "Gerando…" : "📊 Excel"}
-            </button>
-          </Grupo>
+            <span className="w-px h-4 bg-ww-border mx-0.5" />
+            <Pop largura={340} gatilho={(aberto, toggle) => {
+              const ativos = (prevDe || prevAte ? 1 : 0) + (reprogDe || reprogAte ? 1 : 0) + (catsSel.size ? 1 : 0);
+              return (
+                <button type="button" onClick={toggle}
+                  className={`inline-flex items-center gap-1 px-2 py-0.5 text-[11px] rounded border transition ${
+                    ativos || aberto
+                      ? "border-ww-accent text-ww-accent bg-ww-accentSoft font-semibold"
+                      : "border-ww-border text-ww-textMuted hover:text-ww-text hover:bg-ww-rowHover"}`}>
+                  Filtros {ativos > 0 && <span className="px-1 rounded bg-ww-accent text-white text-[9.5px]">{ativos}</span>} ▾
+                </button>
+              );
+            }}>
+              <div className="space-y-3">
+                <div>
+                  <p className="text-[9px] uppercase tracking-[0.7px] font-bold text-ww-textFaint mb-1">Previsão</p>
+                  <div className="flex items-center gap-1 flex-wrap">
+                    <Chip on={prevDe === hojeIso() && prevAte === hojeIso()}
+                          onClick={() => {
+                            const h = hojeIso();
+                            const jaEra = prevDe === h && prevAte === h;
+                            setPrevDe(jaEra ? "" : h); setPrevAte(jaEra ? "" : h);
+                          }}>Hoje</Chip>
+                    <Chip on={prevDe === hojeIso() && prevAte === addDias(hojeIso(), 7)}
+                          onClick={() => {
+                            const h = hojeIso(), f = addDias(h, 7);
+                            const jaEra = prevDe === h && prevAte === f;
+                            setPrevDe(jaEra ? "" : h); setPrevAte(jaEra ? "" : f);
+                          }}>7 dias</Chip>
+                    <input type="date" value={prevDe} onChange={(e) => setPrevDe(e.target.value)}
+                      title="Previsão a partir de"
+                      className="text-[11px] bg-ww-bg border border-ww-border rounded px-1.5 py-0.5 text-ww-text" />
+                    <span className="text-[10px] text-ww-textFaint">→</span>
+                    <input type="date" value={prevAte} onChange={(e) => setPrevAte(e.target.value)}
+                      title="Previsão até"
+                      className="text-[11px] bg-ww-bg border border-ww-border rounded px-1.5 py-0.5 text-ww-text" />
+                    {(prevDe || prevAte) && (
+                      <button type="button" onClick={() => { setPrevDe(""); setPrevAte(""); }}
+                        className="text-[10.5px] text-ww-accent hover:underline">limpar</button>
+                    )}
+                  </div>
+                </div>
+                <div>
+                  <p className="text-[9px] uppercase tracking-[0.7px] font-bold text-ww-textFaint mb-1"
+                     title="Quando EU reprogramei — outra data, não a previsão">Reprogramado em</p>
+                  <div className="flex items-center gap-1 flex-wrap">
+                    <Chip on={reprogDe === hojeIso() && reprogAte === hojeIso()}
+                          titulo="O que eu reprogramei hoje"
+                          onClick={() => {
+                            const h = hojeIso();
+                            const jaEra = reprogDe === h && reprogAte === h;
+                            setReprogDe(jaEra ? "" : h); setReprogAte(jaEra ? "" : h);
+                          }}>Hoje</Chip>
+                    <Chip on={reprogDe === addDias(hojeIso(), -7) && reprogAte === hojeIso()}
+                          titulo="Reprogramados nos últimos 7 dias"
+                          onClick={() => {
+                            const h = hojeIso(), d = addDias(h, -7);
+                            const jaEra = reprogDe === d && reprogAte === h;
+                            setReprogDe(jaEra ? "" : d); setReprogAte(jaEra ? "" : h);
+                          }}>7 dias</Chip>
+                    <input type="date" value={reprogDe} onChange={(e) => setReprogDe(e.target.value)}
+                      title="Reprogramado a partir de"
+                      className="text-[11px] bg-ww-bg border border-ww-border rounded px-1 py-0.5 text-ww-text" />
+                    <span className="text-[10px] text-ww-textFaint">→</span>
+                    <input type="date" value={reprogAte} onChange={(e) => setReprogAte(e.target.value)}
+                      title="Reprogramado até"
+                      className="text-[11px] bg-ww-bg border border-ww-border rounded px-1 py-0.5 text-ww-text" />
+                    {(reprogDe || reprogAte) && (
+                      <button type="button" onClick={() => { setReprogDe(""); setReprogAte(""); }}
+                        className="text-[10.5px] text-ww-accent hover:underline">limpar</button>
+                    )}
+                  </div>
+                </div>
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <p className="text-[9px] uppercase tracking-[0.7px] font-bold text-ww-textFaint">Categorias</p>
+                    {catsSel.size > 0 && (
+                      <button type="button" onClick={() => setCatsSel(new Set())}
+                        className="text-[10.5px] text-ww-accent hover:underline">limpar ({catsSel.size})</button>
+                    )}
+                  </div>
+                  <div className="max-h-[180px] overflow-auto -mx-1 px-1">
+                    {catsOpcoes.length === 0 && (
+                      <p className="text-[11px] text-ww-textFaint">Nada no escopo atual.</p>
+                    )}
+                    {catsOpcoes.map(([cat, val]) => {
+                      const on = catsSel.has(cat);
+                      return (
+                        <button key={cat} type="button"
+                          onClick={() => setCatsSel((prev) => {
+                            const n = new Set(prev);
+                            if (n.has(cat)) n.delete(cat); else n.add(cat);
+                            return n;
+                          })}
+                          className={`w-full flex items-center justify-between gap-2 px-2 py-1 rounded-md text-[11px] transition text-left ${
+                            on ? "bg-ww-accentSoft text-ww-accent font-semibold" : "text-ww-text hover:bg-ww-rowHover"}`}>
+                          <span className="truncate">{cat}</span>
+                          <span className="tabular-nums text-ww-textFaint">{brl(val)}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            </Pop>
+            <input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Buscar…"
+              className="w-[130px] text-[11px] bg-ww-bg border border-ww-border rounded px-2 py-1 text-ww-text placeholder:text-ww-textFaint" />
+            <div className="ml-auto flex items-center gap-1">
+              <button type="button" onClick={baixarPdf} disabled={!codsRelatorio.length}
+                title={codsRelatorio.length
+                  ? `PDF de ${codsRelatorio.length} título(s) reprogramado(s)`
+                    + (selecaoForaDoRelatorio
+                        ? ` · ${selecaoForaDoRelatorio} da seleção ficam de fora: não foram reprogramados`
+                        : "")
+                  : "Nenhum título reprogramado no filtro atual"}
+                className="px-2 py-0.5 text-[11px] rounded border border-ww-border text-ww-textMuted hover:text-ww-text hover:bg-ww-rowHover transition disabled:opacity-40">
+                📄 PDF
+              </button>
+              <button type="button" onClick={baixarExcel} disabled={!codsRelatorio.length || exportando}
+                title={codsRelatorio.length
+                  ? `Excel de ${codsRelatorio.length} título(s) reprogramado(s)`
+                    + (selecaoForaDoRelatorio
+                        ? ` · ${selecaoForaDoRelatorio} da seleção ficam de fora: não foram reprogramados`
+                        : "")
+                  : "Nenhum título reprogramado no filtro atual"}
+                className="px-2 py-0.5 text-[11px] rounded border border-ww-border text-ww-textMuted hover:text-ww-text hover:bg-ww-rowHover transition disabled:opacity-40">
+                {exportando ? "Gerando…" : "📊 Excel"}
+              </button>
+              <Pop largura={330} gatilho={(aberto, toggle) => (
+                <button type="button" onClick={toggle} aria-label="Como funciona"
+                  className={`inline-flex items-center justify-center w-5 h-5 text-[11px] rounded-full border transition ${
+                    aberto ? "border-ww-accent text-ww-accent" : "border-ww-border text-ww-textFaint hover:text-ww-text"}`}>
+                  ?
+                </button>
+              )}>
+                <div className="text-[11px] text-ww-textMuted leading-relaxed space-y-1.5">
+                  <p><strong className="text-ww-text">Reprogramar</strong> — sei a data nova → grava no painel e move a curva.</p>
+                  <p><strong className="text-ww-text">Tirar da curva</strong> — ainda vou repactuar ou cancelar, não sei a data → sai do gráfico e volta pelo filtro ⚖.</p>
+                  <p><strong className="text-ww-text">Enviar ao Omie</strong> — leva as datas já reprogramadas pro ERP. Nada vai pro Omie sozinho.</p>
+                </div>
+              </Pop>
+            </div>
           </div>
         </header>
 
-        {/* Barra de lote — só aparece com seleção, pra não ocupar espaço à toa. */}
+        {/* Barra de seleção — UMA linha (Benny, 10/09). O caminho feliz tem um
+            único botão forte: Reprogramar. Dividir, conferir, enviar a seleção
+            e tirar da curva moram no "⋯ Mais". O envio ao Omie tem seu caminho
+            canônico na faixa âmbar de pendências, logo abaixo — o "passo 2"
+            deixou de ser um segundo botão disputando atenção. */}
         {podeEditar && selecionados.length > 0 && (
-          <div className="flex items-end gap-x-3 gap-y-2 flex-wrap mb-2 p-2.5 rounded-lg bg-ww-accentSoft border border-ww-accent/40">
-            <span className="text-[11px] font-semibold text-ww-accent whitespace-nowrap">
-              {selecionados.length} selecionado(s)
-            </span>
-            {/* O quanto da seleção, por lado. Dois números e não um: somar entrada
-                com saída esconderia justamente o que importa na hora de mover. */}
-            {totalSelecao && (
-              <span className="text-[11px] tabular-nums whitespace-nowrap">
-                {totalSelecao.receber > 0 && (
-                  <span className="text-emerald-600 dark:text-emerald-400">
-                    +{brl(totalSelecao.receber)}
-                  </span>
-                )}
-                {totalSelecao.receber > 0 && totalSelecao.pagar > 0 && (
-                  <span className="text-ww-textFaint"> · </span>
-                )}
-                {totalSelecao.pagar > 0 && (
-                  <span className="text-rose-600 dark:text-rose-400">
-                    −{brl(totalSelecao.pagar)}
-                  </span>
-                )}
+          <div className="mb-2 p-2.5 rounded-lg bg-ww-accentSoft border border-ww-accent/40">
+            <div className="flex items-center gap-2.5 flex-wrap">
+              <span className="text-[11px] font-semibold text-ww-accent whitespace-nowrap">
+                {selecionados.length} selecionado(s)
               </span>
-            )}
-            <Grupo rot="Tenho a data — reprogramar">
-            <input type="date" value={dataLote} min={hojeIso()}
-              onChange={(e) => setDataLote(e.target.value)}
-              className="text-[11px] bg-ww-bg border border-ww-border rounded px-1.5 py-0.5 text-ww-text" />
-            {/* Atalhos: reagendar quase sempre é "joga pra semana que vem" ou
-                "joga pro mês que vem". Digitar a data pra isso é atrito puro. */}
-            {([["hoje", 0], ["+7d", 7], ["+15d", 15], ["+30d", 30]] as const).map(([l, n]) => (
-              <button key={l} type="button" onClick={() => setDataLote(addDias(hojeIso(), n))}
-                className="px-1.5 py-0.5 text-[10.5px] rounded border border-ww-border text-ww-textMuted hover:text-ww-text hover:bg-ww-rowHover transition">
-                {l}
+              {totalSelecao && (
+                <span className="text-[11px] tabular-nums whitespace-nowrap">
+                  {totalSelecao.receber > 0 && (
+                    <span className="text-emerald-600 dark:text-emerald-400">+{brl(totalSelecao.receber)}</span>
+                  )}
+                  {totalSelecao.receber > 0 && totalSelecao.pagar > 0 && (
+                    <span className="text-ww-textFaint"> · </span>
+                  )}
+                  {totalSelecao.pagar > 0 && (
+                    <span className="text-rose-600 dark:text-rose-400">−{brl(totalSelecao.pagar)}</span>
+                  )}
+                </span>
+              )}
+              <button type="button" onClick={() => { setSel(new Set()); setRateioOn(false); }}
+                title="Limpar seleção"
+                className="text-[11px] text-ww-textFaint hover:text-ww-text px-1">✕</button>
+
+              <span className="w-px h-5 bg-ww-accent/30" />
+
+              <span className="text-[10.5px] text-ww-textMuted whitespace-nowrap">Nova data:</span>
+              <input type="date" value={dataLote} min={hojeIso()}
+                onChange={(e) => setDataLote(e.target.value)}
+                className="text-[11px] bg-ww-bg border border-ww-border rounded px-1.5 py-0.5 text-ww-text" />
+              {([["hoje", 0], ["+7d", 7], ["+15d", 15], ["+30d", 30]] as const).map(([l, n]) => (
+                <button key={l} type="button" onClick={() => setDataLote(addDias(hojeIso(), n))}
+                  className="px-1.5 py-0.5 text-[10.5px] rounded border border-ww-border text-ww-textMuted hover:text-ww-text hover:bg-ww-rowHover transition">
+                  {l}
+                </button>
+              ))}
+
+              <button type="button" disabled={destinos.size === 0 || salvando}
+                title={rateioOn
+                  ? (destinos.size ? `Grava ${destinos.size} título(s) nas datas do rateio`
+                                   : "Preencha ao menos uma data no rateio")
+                  : dataLote && !dataUtil(dataLote) ? "Informe uma data a partir de hoje"
+                  : foraDaJanela(dataLote) ? "Grava, mas cai depois do fim da janela — não aparece na curva"
+                  : "Grava a data nova no painel e move a curva. O envio ao Omie fica pendente na faixa abaixo."}
+                onClick={() => gravar(Array.from(destinos, ([cod, dia]) => ({ cod, dia })))}
+                className="px-3.5 py-1 text-[11.5px] rounded-md border-2 border-ww-accent bg-ww-accent text-white hover:brightness-110 transition font-bold disabled:opacity-30 disabled:bg-transparent disabled:text-ww-textFaint disabled:border-ww-border">
+                {salvando ? "Gravando…"
+                  : destinos.size === 0
+                    ? (rateioOn ? "Preencha o rateio ↓" : "Reprogramar")
+                    : `Reprogramar ${destinos.size}`}
               </button>
-            ))}
-            </Grupo>
 
-            <Grupo rot="⑃ Dividir">
-            <button type="button" onClick={() => setRateioOn((v) => !v)}
-              title="Divide a seleção em até 3 datas, por proporção de valor"
-              className={`px-2 py-0.5 text-[11px] rounded border transition ${
-                rateioOn ? "border-ww-accent text-ww-accent bg-ww-accentSoft font-semibold"
-                         : "border-ww-border text-ww-textMuted hover:text-ww-text"}`}>
-              ⑃ Em até 3 datas
-            </button>
-            </Grupo>
-
-            <Grupo rot="Efeito no caixa">
-            {/* O efeito no caixa ANTES de gravar. "Simular no Omie" só testa se a
-                API aceitaria; isto responde se vale a pena. */}
+              <div className="ml-auto">
+                <Pop largura={280} gatilho={(aberto, toggle) => (
+                  <button type="button" onClick={toggle}
+                    className={`px-2.5 py-1 text-[11.5px] rounded-md border transition ${
+                      aberto ? "border-ww-accent text-ww-accent bg-ww-bg"
+                             : "border-ww-border text-ww-textMuted hover:text-ww-text hover:bg-ww-rowHover"}`}>
+                    Mais ações ▾
+                  </button>
+                )}>
+                  <div className="space-y-0.5">
+                    <ItemMenu onClick={() => setRateioOn((v) => !v)}
+                      titulo="Divide a seleção em até 3 datas, por proporção de valor">
+                      ⑃ Dividir em até 3 datas {rateioOn ? "· ligado" : ""}
+                    </ItemMenu>
+                    <ItemMenu onClick={() => enviarOmie(true, selecionados)} disabled={syncing}
+                      titulo="Lista o que seria enviado, sem chamar o Omie e sem alterar nada">
+                      Conferir envio (não altera nada)
+                    </ItemMenu>
+                    <ItemMenu onClick={() => enviarOmie(false, selecionados)}
+                      disabled={syncing || selPendenteOmie === 0} tom="ambar"
+                      titulo={selPendenteOmie === 0
+                        ? "Nenhum da seleção tem reprogramação pendente — reprograme primeiro"
+                        : `Envia ao Omie ${selPendenteOmie} reprogramação(ões) desta seleção`}>
+                      {syncing ? "Enviando…" : `Enviar seleção ao Omie (${selPendenteOmie})`}
+                    </ItemMenu>
+                    <div className="h-px bg-ww-border my-1" />
+                    {selRenegociando < selecionados.length && (
+                      <ItemMenu disabled={salvando} tom="violeta"
+                        titulo="Tira da projeção de caixa. Não altera o Omie — o título volta quando tiver data."
+                        onClick={() => {
+                          const motivo = window.prompt(
+                            `Tirar ${selecionados.length - selRenegociando} título(s) da curva.\n\n`
+                            + "Motivo (opcional) — ex.: 'repactuar com fornecedor', 'a cancelar':", "");
+                          if (motivo === null) return;
+                          void marcarRenegociacao(
+                            selecionados.filter((cod) =>
+                              !universo.some((t) => t.cod_titulo === cod && t.em_renegociacao)),
+                            true, motivo || undefined);
+                        }}>
+                        ⚖ Tirar da curva ({selecionados.length - selRenegociando}) — sem data ainda
+                      </ItemMenu>
+                    )}
+                    {selRenegociando > 0 && (
+                      <ItemMenu disabled={salvando} tom="verde"
+                        titulo="Devolve à curva, na previsão atual do título"
+                        onClick={() => void marcarRenegociacao(
+                          selecionados.filter((cod) =>
+                            universo.some((t) => t.cod_titulo === cod && t.em_renegociacao)),
+                          false)}>
+                        ↩ Voltar ao fluxo ({selRenegociando})
+                      </ItemMenu>
+                    )}
+                  </div>
+                </Pop>
+              </div>
+            </div>
+            {/* Efeito no caixa: linha fina, só quando há data — informação, não botão. */}
             {impactoPrevia && (
-              <span className={`text-[11px] tabular-nums px-2 py-0.5 rounded border ${
-                impactoPrevia.delta > 0
-                  ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
-                  : impactoPrevia.delta < 0
-                    ? "border-rose-500/40 bg-rose-500/10 text-rose-700 dark:text-rose-300"
-                    : "border-ww-border text-ww-textMuted"}`}
-                title="Menor saldo da janela, hoje e com o lote aplicado. A linha âmbar no gráfico mostra a curva simulada.">
-                pior dia: {brl(impactoPrevia.antes)} → <strong>{brl(impactoPrevia.depois)}</strong>
+              <p className="mt-1.5 text-[10.5px] tabular-nums text-ww-textMuted"
+                 title="Menor saldo da janela, hoje e com o lote aplicado. A linha âmbar no gráfico mostra a curva simulada.">
+                Efeito no caixa — pior dia: {brl(impactoPrevia.antes)} →{" "}
+                <strong className={impactoPrevia.delta > 0
+                  ? "text-emerald-600 dark:text-emerald-400"
+                  : impactoPrevia.delta < 0 ? "text-rose-600 dark:text-rose-400" : "text-ww-text"}>
+                  {brl(impactoPrevia.depois)}
+                </strong>
                 {impactoPrevia.delta !== 0 && (
                   <> ({impactoPrevia.delta > 0 ? "+" : ""}{brl(impactoPrevia.delta)})</>
                 )}
-              </span>
+              </p>
             )}
-            </Grupo>
-
-            <Grupo rot="Passo 1 — grava aqui">
-            {/* Grava pelo mapa `destinos`, que é o MESMO que alimenta a prévia da
-                curva — com rateio ou sem. Se fossem dois caminhos, a linha âmbar
-                mostraria uma coisa e o gravado seria outra. */}
-            <button type="button" disabled={destinos.size === 0 || salvando}
-              title={rateioOn
-                ? (destinos.size ? `Grava ${destinos.size} título(s) nas datas do rateio`
-                                 : "Preencha ao menos uma data no rateio")
-                : dataLote && !dataUtil(dataLote) ? "Informe uma data a partir de hoje"
-                : foraDaJanela(dataLote) ? "Grava, mas cai depois do fim da janela — não aparece na curva"
-                : undefined}
-              onClick={() => gravar(Array.from(destinos, ([cod, dia]) => ({ cod, dia })))}
-              className="px-3 py-1 text-[11.5px] rounded-md border-2 border-ww-accent bg-ww-accent text-white hover:brightness-110 transition font-bold disabled:opacity-30 disabled:bg-transparent disabled:text-ww-textFaint disabled:border-ww-border">
-              {salvando ? "Gravando…"
-                : destinos.size === 0
-                  ? (rateioOn ? "1 · Preencha o rateio ↓" : "1 · Escolha a data ↑")
-                  : `1 · Reprogramar ${destinos.size}`}
-            </button>
-            {/* Chamava-se "Simular no Omie" e induzia ao erro: não chama o Omie
-                nem simula caixa. Percorre a lista e devolve o que SERIA enviado —
-                é conferência do pacote. Quem simula o caixa é a linha âmbar do
-                gráfico; quem envia é o botão ao lado. */}
-            <button type="button" disabled={syncing}
-              onClick={() => enviarOmie(true, selecionados)}
-              title="Lista o que seria enviado, sem chamar o Omie e sem alterar nada"
-              className="px-2 py-0.5 text-[11px] rounded border border-ww-border text-ww-textMuted hover:text-ww-text transition disabled:opacity-40">
-              Conferir envio
-            </button>
-            </Grupo>
-
-            <Grupo rot="Passo 2 — manda pro Omie">
-            {/* Segundo passo, e SECUNDÁRIO no visual. Antes era o botão mais
-                chamativo da barra enquanto "Aplicar data" ficava apagado — o olho
-                ia no lugar errado e dava pra achar que enviar era reprogramar.
-                O contador diz quantos da seleção realmente têm o que enviar. */}
-            <button type="button" disabled={syncing || selPendenteOmie === 0}
-              onClick={() => enviarOmie(false, selecionados)}
-              title={selPendenteOmie === 0
-                ? "Nenhum da seleção tem reprogramação pendente. Reprograme primeiro (passo 1)."
-                : `Envia ao Omie ${selPendenteOmie} reprogramação(ões) ainda não sincronizada(s)`}
-              className="px-2 py-0.5 text-[11px] rounded border border-amber-500/70 text-amber-700 dark:text-amber-300 hover:bg-amber-500/20 transition disabled:opacity-30 disabled:border-ww-border disabled:text-ww-textFaint">
-              {syncing ? "Enviando…"
-                : selPendenteOmie === 0 ? "2 · nada a enviar"
-                : `2 · Enviar pro Omie (${selPendenteOmie})`}
-            </button>
-            </Grupo>
-
-            {/* Outra natureza de ação: não reagenda nem envia, tira da conta. */}
-            <Grupo rot="Não tenho a data">
-            {selRenegociando < selecionados.length && (
-              <button type="button" disabled={salvando}
-                onClick={() => {
-                  const motivo = window.prompt(
-                    `Tirar ${selecionados.length - selRenegociando} título(s) da curva.\n\n`
-                    + "Motivo (opcional) — ex.: 'repactuar com fornecedor', 'a cancelar':", "");
-                  if (motivo === null) return;   // cancelou o prompt
-                  void marcarRenegociacao(
-                    selecionados.filter((cod) =>
-                      !universo.some((t) => t.cod_titulo === cod && t.em_renegociacao)),
-                    true, motivo || undefined);
-                }}
-                title="Tira da projeção de caixa. Não altera o Omie — o título continua aqui e volta quando tiver data."
-                className="px-2 py-0.5 text-[11px] rounded border border-violet-500/70 text-violet-700 dark:text-violet-300 hover:bg-violet-500/20 transition disabled:opacity-30">
-                ⚖ Tirar da curva ({selecionados.length - selRenegociando})
-              </button>
-            )}
-            {selRenegociando > 0 && (
-              <button type="button" disabled={salvando}
-                onClick={() => void marcarRenegociacao(
-                  selecionados.filter((cod) =>
-                    universo.some((t) => t.cod_titulo === cod && t.em_renegociacao)),
-                  false)}
-                title="Devolve à curva, na previsão atual do título"
-                className="px-2 py-0.5 text-[11px] rounded border border-emerald-500/70 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-500/20 transition disabled:opacity-30">
-                ↩ Voltar ao fluxo ({selRenegociando})
-              </button>
-            )}
-            </Grupo>
-
-            <button type="button" onClick={() => { setSel(new Set()); setRateioOn(false); }}
-              className="text-[10.5px] text-ww-textFaint hover:text-ww-text underline ml-auto self-end pb-1">
-              limpar seleção
-            </button>
           </div>
         )}
 
@@ -2114,6 +2120,52 @@ function Chip({
       className={`px-2 py-0.5 text-[11px] rounded border transition whitespace-nowrap ${
         on ? "border-ww-accent text-ww-accent bg-ww-accentSoft font-semibold"
            : "border-ww-border text-ww-textMuted hover:text-ww-text hover:bg-ww-rowHover"}`}>
+      {children}
+    </button>
+  );
+}
+
+/** Dropdown genérico no padrão do CategoriaFiltro — fecha no clique fora. */
+function Pop({ gatilho, children, largura = 320 }: {
+  gatilho: (aberto: boolean, toggle: () => void) => React.ReactNode;
+  children: React.ReactNode;
+  largura?: number;
+}) {
+  const [aberto, setAberto] = useState(false);
+  const caixa = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!aberto) return;
+    const fora = (e: MouseEvent) => {
+      if (caixa.current && !caixa.current.contains(e.target as Node)) setAberto(false);
+    };
+    document.addEventListener("mousedown", fora);
+    return () => document.removeEventListener("mousedown", fora);
+  }, [aberto]);
+  return (
+    <div className="relative" ref={caixa}>
+      {gatilho(aberto, () => setAberto((v) => !v))}
+      {aberto && (
+        <div style={{ width: largura }}
+          className="absolute right-0 mt-1 z-50 max-h-[420px] overflow-auto rounded-lg border border-ww-border bg-ww-drawer shadow-xl p-2.5 animate-in fade-in-0 slide-in-from-top-1">
+          {children}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Item de menu do "⋯ Mais ações". */
+function ItemMenu({ onClick, disabled, titulo, children, tom }: {
+  onClick: () => void; disabled?: boolean; titulo?: string; children: React.ReactNode;
+  tom?: "violeta" | "verde" | "ambar";
+}) {
+  const cor = tom === "violeta" ? "text-violet-700 dark:text-violet-300"
+    : tom === "verde" ? "text-emerald-700 dark:text-emerald-300"
+    : tom === "ambar" ? "text-amber-700 dark:text-amber-300"
+    : "text-ww-text";
+  return (
+    <button type="button" onClick={onClick} disabled={disabled} title={titulo}
+      className={`w-full text-left px-2.5 py-1.5 rounded-md text-[11.5px] transition hover:bg-ww-rowHover disabled:opacity-35 disabled:cursor-not-allowed ${cor}`}>
       {children}
     </button>
   );
