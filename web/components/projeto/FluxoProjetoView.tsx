@@ -27,7 +27,7 @@ import GradeEditavel, {
 } from "./GradeEditavel";
 import TabelaPrevisto, { type LinhaPrevisto } from "./TabelaPrevisto";
 import ChartFrame, { type SeriesDef } from "@/components/viz/ChartFrame";
-import VizBar from "@/components/viz/VizBar";
+import VizCombo from "@/components/viz/VizCombo";
 
 type LinhaApi = {
   id: number; tipo: "entrada" | "saida"; descricao: string; categoria: string | null;
@@ -53,8 +53,18 @@ type Evento = {
   versao: number; acao: string; por: string | null; em: string;
   motivo: string | null; total_entradas: number | null; total_saidas: number | null; linhas: number | null;
 };
+type SaldoDia = {
+  dia: string; entrada_prev: number; saida_prev: number;
+  entrada_real: number; saida_real: number;
+  saldo_prev: number; saldo_real: number | null; eh_futuro: boolean;
+};
+type Orcamento = {
+  valor_budget: number | null; valor_total_projeto: number | null;
+  resultado_bruto_esperado_pct: number | null;
+} | null;
 type Payload = {
-  linhas: LinhaApi[]; previsto: LinhaPrevisto[]; cabecalho: Cabecalho; realizado: RealizadoRow[];
+  linhas: LinhaApi[]; previsto: LinhaPrevisto[]; saldo: SaldoDia[]; orcamento: Orcamento;
+  cabecalho: Cabecalho; realizado: RealizadoRow[];
   cobertura: Cobertura | null; eventos: Evento[];
   pode_editar: boolean; pode_aprovar: boolean; eu: string;
   error?: string;
@@ -68,6 +78,10 @@ const COLS: ColunaGrade[] = [
 ];
 
 const MESES = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
+const diaBr = (iso: string) => {
+  const [a, m, d] = iso.slice(0, 10).split("-");
+  return `${d}/${m}`;
+};
 const mesBr = (iso: string) => {
   const [a, m] = iso.slice(0, 7).split("-");
   return `${MESES[Number(m) - 1]}/${a.slice(2)}`;
@@ -152,6 +166,24 @@ export default function FluxoProjetoView({
   const totSai = manSai + omiSai;
   const margem = totEnt > 0 ? ((totEnt - totSai) / totEnt) * 100 : null;
 
+  /** O que já se moveu de verdade, e o que falta.
+   *
+   *  "Recebido" num pedido de compra diz que o material chegou, não que o
+   *  dinheiro saiu — por isso o pago vem do título, não do PC. É a diferença
+   *  entre ter a mercadoria e ter pagado por ela. */
+  const liq = useMemo(() => {
+    const pago = previsto.filter((l) => l.lado === "saida")
+                         .reduce((a, l) => a + Number(l.liquidado || 0), 0);
+    const recebido = previsto.filter((l) => l.lado === "entrada")
+                             .reduce((a, l) => a + Number(l.liquidado || 0), 0);
+    return {
+      pago, recebido,
+      faltaPagar:   Math.max(0, omiSai + manSai - pago),
+      faltaReceber: Math.max(0, omiEnt + manEnt - recebido),
+      caixa: recebido - pago,
+    };
+  }, [previsto, omiSai, manSai, omiEnt, manEnt]);
+
   /** Quanto escorregou desde a aprovação. Só existe com plano aprovado —
    *  sem foto congelada não há contra o que medir. */
   const desvio = useMemo(() => {
@@ -211,56 +243,57 @@ export default function FluxoProjetoView({
 
   /** Previsto e realizado no MESMO eixo de meses. Os dois lados podem ter meses
    *  que o outro não tem — sem unir as chaves, um mês só realizado sumiria. */
+  /** A curva DIÁRIA. Mensal escondia o que importa: numa barra de agosto não
+   *  dá pra ver que a saída veio antes da entrada — e é exatamente isso que
+   *  define se o projeto está financiando o cliente. */
   const grafico = useMemo(() => {
-    const acc = new Map<string, { pe: number; ps: number; re: number; rs: number }>();
-    const pega = (m: string) => acc.get(m) ?? { pe: 0, ps: 0, re: 0, rs: 0 };
-
+    const dias = (data?.saldo ?? []) as SaldoDia[];
+    // As linhas manuais ainda entram na curva, somadas ao dia delas.
+    const extra = new Map<string, { e: number; s: number }>();
     for (const l of preenchidas(entradas)) {
       if (!l.data) continue;
-      const m = l.data.slice(0, 7);
-      const c = pega(m); c.pe += num(l.valor); acc.set(m, c);
+      const c = extra.get(l.data) ?? { e: 0, s: 0 };
+      c.e += num(l.valor); extra.set(l.data, c);
     }
-    for (const l of preenchidas(saidas)) {
-      if (!l.data) continue;
-      const m = l.data.slice(0, 7);
-      const c = pega(m); c.ps += num(l.valor); acc.set(m, c);
-    }
-    // Previsto do Omie entra pela data EFETIVA — é o ponto do cronograma:
-    // corrigir a emissão move a barra de mês, e é isso que se quer enxergar.
-    for (const l of previsto) {
-      if (!l.data_efetiva) continue;
-      const m = l.data_efetiva.slice(0, 7);
-      const c = pega(m);
-      if (l.lado === "entrada") c.pe += Number(l.valor) || 0;
-      else                      c.ps += Number(l.valor) || 0;
-      acc.set(m, c);
-    }
-    for (const r of data?.realizado ?? []) {
-      const m = r.mes.slice(0, 7);
-      const c = pega(m);
-      c.re += Number(r.entrada_realizada) || 0;
-      c.rs += Number(r.saida_realizada) || 0;
-      acc.set(m, c);
-    }
-    return Array.from(acc.entries()).sort(([a], [b]) => a.localeCompare(b))
-      .map(([m, v]) => ({
-        x: mesBr(`${m}-01`),
-        "Entrada prevista":  v.pe,
-        "Entrada realizada": v.re,
-        "Saída prevista":    v.ps,
-        "Saída realizada":   v.rs,
-      }));
-  }, [entradas, saidas, data, previsto]);
+    return dias.map((d) => {
+      const x = d.dia.slice(0, 10);
+      const ex = extra.get(x);
+      return {
+        x: diaBr(x),
+        _iso: x,
+        "Entrada prevista":  Number(d.entrada_prev || 0) + (ex?.e ?? 0),
+        "Entrada realizada": Number(d.entrada_real || 0),
+        "Saída prevista":    Number(d.saida_prev || 0),
+        "Saída realizada":   Number(d.saida_real || 0),
+        "Saldo previsto":    Number(d.saldo_prev ?? 0),
+        "Saldo realizado":   d.saldo_real == null ? null : Number(d.saldo_real),
+      };
+    });
+  }, [data, entradas]);
+
+  const hojeIso = new Date().toISOString().slice(0, 10);
+  const rotuloHoje = useMemo(() => {
+    const achou = grafico.find((g) => g._iso >= hojeIso);
+    return achou?.x ?? null;
+  }, [grafico, hojeIso]);
 
   // Previsto vazado, realizado sólido: é a MESMA medida em dois estados, então
   // a cor continua dizendo de que medida se trata e o preenchimento diz o
   // estado. Quatro cores fariam procurar quatro coisas onde existem duas.
-  const serie: SeriesDef[] = [
+  const barras: SeriesDef[] = [
     { key: "Entrada prevista",  label: "Entrada prevista",  slot: 5, mark: "rect", variante: "vazada" },
     { key: "Entrada realizada", label: "Entrada realizada", slot: 5, mark: "rect" },
     { key: "Saída prevista",    label: "Saída prevista",    slot: 3, mark: "rect", variante: "vazada" },
     { key: "Saída realizada",   label: "Saída realizada",   slot: 3, mark: "rect" },
   ];
+  /** As duas curvas de equilíbrio. Mesma cor não daria: aqui são medidas
+   *  diferentes (plano × realidade), e é a comparação entre elas que responde
+   *  "estou financiando este cliente?". */
+  const linhas: SeriesDef[] = [
+    { key: "Saldo previsto",  label: "Saldo previsto",  slot: 0, mark: "line", tracejada: true },
+    { key: "Saldo realizado", label: "Saldo realizado", slot: 2, mark: "line" },
+  ];
+  const serie: SeriesDef[] = [...barras, ...linhas];
 
   const cab = data?.cabecalho ?? { status: "rascunho" as const, versao: 1 };
   const tom = TOM[cab.status];
@@ -365,47 +398,69 @@ export default function FluxoProjetoView({
       )}
 
       {/* Números-âncora. Um plano sem total é uma lista; com total é uma decisão. */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+      {/* Seis números, na ordem em que a pergunta aparece: o que planejei,
+          o que já se moveu, e como está o equilíbrio agora. */}
+      <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3">
         {[
           { rot: "Entradas previstas", val: brl(totEnt),
-            sub: `${brl(omiEnt)} do Omie${manEnt ? ` + ${brl(manEnt)} à mão` : ""}`, tom: "receber" },
-          { rot: "Saídas previstas",   val: brl(totSai),
-            sub: `${brl(omiSai)} do Omie${manSai ? ` + ${brl(manSai)} à mão` : ""}`,   tom: "pagar" },
+            sub: `${brl(liq.recebido)} já recebido`, tom: "receber" as const },
+          { rot: "Falta receber", val: brl(liq.faltaReceber),
+            sub: "do cliente", tom: "receber" as const },
+          { rot: "Saídas previstas", val: brl(totSai),
+            sub: `${brl(liq.pago)} já pago`, tom: "pagar" as const },
+          { rot: "Falta pagar", val: brl(liq.faltaPagar),
+            sub: "a fornecedores", tom: "pagar" as const },
           { rot: "Resultado previsto", val: brl(totEnt - totSai),
             sub: margem == null ? "sem entrada lançada" : `margem de ${margem.toFixed(1).replace(".", ",")}%`,
-            tom: totEnt - totSai >= 0 ? "receber" : "pagar" },
-          { rot: "Realizado no caixa", val: brl(realTot.e - realTot.s),
-            sub: `${brl(realTot.e)} entrou · ${brl(realTot.s)} saiu`, tom: "neutro" },
+            tom: (totEnt - totSai >= 0 ? "receber" : "pagar") as "receber" | "pagar" },
+          // O número que responde "estou com prejuízo agora?". Negativo = já
+          // saiu mais do que entrou; o projeto está sendo financiado por você.
+          { rot: "Caixa do projeto hoje", val: brl(liq.caixa),
+            sub: liq.caixa < 0 ? "você está financiando este projeto" : "entrou mais do que saiu",
+            tom: (liq.caixa >= 0 ? "receber" : "pagar") as "receber" | "pagar" },
         ].map((c) => (
           <div key={c.rot} className={`rounded-xl border p-3 ${
             c.tom === "receber" ? "border-emerald-500/25 bg-emerald-500/[0.06]"
-          : c.tom === "pagar"   ? "border-rose-500/25 bg-rose-500/[0.06]"
-          :                       "border-ww-border bg-ww-panel"}`}>
+                                : "border-rose-500/25 bg-rose-500/[0.06]"}`}>
             <div className="text-[9.5px] uppercase tracking-[0.7px] font-bold text-ww-textFaint">{c.rot}</div>
-            <div className={`text-[18px] font-bold tabular-nums tracking-[-0.5px] mt-1 ${
+            <div className={`text-[17px] font-bold tabular-nums tracking-[-0.5px] mt-1 ${
               c.tom === "receber" ? "text-emerald-600 dark:text-emerald-300"
-            : c.tom === "pagar"   ? "text-rose-600 dark:text-rose-300"
-            :                       "text-ww-text"}`}>{c.val}</div>
+                                  : "text-rose-600 dark:text-rose-300"}`}>{c.val}</div>
             <div className="text-[10.5px] text-ww-textMuted mt-0.5">{c.sub}</div>
           </div>
         ))}
       </div>
 
+      <CardBudget empresa={empresa} codigoProjeto={codigoProjeto}
+        orcamento={data?.orcamento ?? null} comprado={omiSai + manSai} pago={liq.pago}
+        podeEditar={podeEditar} onGravado={() => void carregar()} />
+
       <ChartFrame
-        title={`Previsto × realizado${nomeProjeto ? ` — ${nomeProjeto}` : ""}`}
+        title={`Fluxo de caixa do projeto${nomeProjeto ? ` — ${nomeProjeto}` : ""}`}
         subtitle={
-          "Barra vazada = previsto (o que você lançou abaixo); cheia = o que de fato entrou e saiu do caixa, pela data da baixa do título. "
-          + (data?.cobertura
-              ? `Realizado depende do título carregar o código do projeto: ${data.cobertura.titulos_pagar} título(s) a pagar e ${data.cobertura.titulos_receber} a receber estão vinculados, sobre ${data.cobertura.compras_no_projeto} compra(s) no projeto — o que sai sem vínculo não aparece aqui.`
+          "Dia a dia. Barra vazada = previsto; cheia = o que de fato entrou e saiu, pela baixa do título. "
+          + "A linha tracejada é o saldo do PLANO; a cheia é o saldo REAL, e ela para em hoje. "
+          + "Quando a cheia corre abaixo da tracejada, o projeto está sendo financiado por você."
+          + (data?.orcamento?.valor_budget
+              ? ` A régua marca o teto de gasto de ${brl(Number(data.orcamento.valor_budget))}.`
               : "")
         }
         series={serie} rows={grafico} valueFormat={(v) => brl(Number(v))}
-        loading={carregando} height={300}
+        loading={carregando} height={360}
       >
         {(vis) => (
-          <VizBar rows={grafico}
-            series={serie.filter((s) => vis.some((v) => v.key === s.key))}
-            valueFormat={(v) => brl(v)} />
+          <VizCombo rows={grafico}
+            bars={barras.filter((b) => vis.some((v) => v.key === b.key))}
+            lines={linhas.filter((l) => vis.some((v) => v.key === l.key))}
+            valueFormat={(v) => brl(v)}
+            marco={rotuloHoje ? { x: rotuloHoje, rotulo: "HOJE" } : undefined}
+            // A régua entra NEGATIVA: no eixo de saldo, gastar o teto derruba a
+            // curva até −budget. Marcar +budget mostraria a linha no lugar
+            // errado do desenho e não significaria nada.
+            regua={data?.orcamento?.valor_budget
+              ? { y: -Number(data?.orcamento?.valor_budget), rotulo: `teto de gasto ${brl(Number(data?.orcamento?.valor_budget))}` }
+              : undefined}
+          />
         )}
       </ChartFrame>
 
@@ -464,13 +519,10 @@ export default function FluxoProjetoView({
         linhas={entradas} onChange={(l) => { setEntradas(l); setSujo(true); }}
         somenteLeitura={!podeEditar}
       />
-      <Secao
-        titulo="Saídas acrescentadas à mão"
-        dica="Despesas do projeto que ainda não viraram pedido de compra."
-        total={manSai} tom="pagar"
-        linhas={saidas} onChange={(l) => { setSaidas(l); setSujo(true); }}
-        somenteLeitura={!podeEditar}
-      />
+      {/* As saídas manuais saíram da tela. Todo pedido de compra do projeto já
+          aparece no bloco do Omie assim que é lançado — manter um lugar para
+          digitar saída à mão criava uma segunda lista de compras que ninguém ia
+          manter, e que somaria em cima da que o ERP já tem. */}
 
       {(data?.eventos?.length ?? 0) > 0 && (
         <details className="rounded-xl border border-ww-border bg-ww-panel px-3.5 py-2.5">
@@ -525,6 +577,121 @@ function Secao({
         <GradeEditavel cols={COLS} linhas={linhas} onChange={onChange} altura={300}
           vazioMsg="Digite ou cole do Excel." />
       )}
+    </section>
+  );
+}
+
+/** O teto de gasto do projeto — e o quanto dele já foi comprometido.
+ *
+ *  Estava escondido: o número existia na tela de materiais, num canto, e não
+ *  havia como saber daqui quanto se podia gastar. Aqui ele é um bloco próprio,
+ *  com barra de consumo e o botão de editar à vista — "definir" quando ainda
+ *  não existe, o valor clicável quando existe.
+ *
+ *  Grava em /api/rc-projetos/budget, a MESMA rota da tela de materiais: dois
+ *  lugares para editar o mesmo número dariam dois budgets diferentes. */
+function CardBudget({
+  empresa, codigoProjeto, orcamento, comprado, pago, podeEditar, onGravado,
+}: {
+  empresa: string; codigoProjeto: number; orcamento: Orcamento;
+  comprado: number; pago: number; podeEditar: boolean; onGravado: () => void;
+}) {
+  const teto = orcamento?.valor_budget != null ? Number(orcamento.valor_budget) : null;
+  const [editando, setEditando] = useState(false);
+  const [txt, setTxt] = useState("");
+  const [salvando, setSalvando] = useState(false);
+  const [erro, setErro] = useState<string | null>(null);
+
+  const gravar = async () => {
+    const v = num(txt);
+    if (!Number.isFinite(v) || v < 0) { setErro("Valor inválido."); return; }
+    setSalvando(true); setErro(null);
+    try {
+      // PUT, não POST — a rota do budget só expõe PUT e DELETE. Um POST
+      // voltaria 405 e o botão pareceria não fazer nada.
+      const r = await fetch("/api/rc-projetos/budget", {
+        method: "PUT", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ empresa, codigo_projeto: codigoProjeto, valor_budget: v }),
+      });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) { setErro(j.error ?? r.statusText); return; }
+      setEditando(false); onGravado();
+    } catch (e) {
+      setErro(e instanceof Error ? e.message : String(e));
+    } finally { setSalvando(false); }
+  };
+
+  const pct = teto && teto > 0 ? Math.min(200, (comprado / teto) * 100) : null;
+  const estourou = pct != null && pct > 100;
+
+  return (
+    <section className={`rounded-xl border p-3.5 ${
+      estourou ? "border-rose-500/40 bg-rose-500/[0.06]" : "border-ww-border bg-ww-panel"}`}>
+      <div className="flex items-center gap-3 flex-wrap">
+        <div>
+          <div className="text-[9.5px] uppercase tracking-[0.7px] font-bold text-ww-textFaint">
+            Teto de gasto do projeto
+          </div>
+          {editando ? (
+            <div className="flex items-center gap-2 mt-1">
+              <span className="text-ww-textMuted text-[14px]">R$</span>
+              <input autoFocus value={txt} onChange={(e) => setTxt(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") void gravar();
+                                    if (e.key === "Escape") setEditando(false); }}
+                inputMode="decimal" placeholder="0,00"
+                className="w-[150px] text-[17px] font-bold tabular-nums bg-ww-bg border border-ww-accent
+                           rounded px-2 py-0.5 text-ww-text outline-none" />
+              <button type="button" onClick={() => void gravar()} disabled={salvando}
+                className="px-2.5 py-1 text-[11.5px] rounded-lg bg-ww-accent text-white font-semibold
+                           hover:brightness-110 transition disabled:opacity-40">
+                {salvando ? "…" : "Salvar"}
+              </button>
+              <button type="button" onClick={() => setEditando(false)}
+                className="text-[11px] text-ww-textMuted hover:text-ww-text">cancelar</button>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2 mt-1">
+              <span className="text-[19px] font-bold tabular-nums text-ww-text">
+                {teto != null ? brl(teto) : "não definido"}
+              </span>
+              {podeEditar && (
+                <button type="button"
+                  onClick={() => { setTxt(teto != null ? String(teto).replace(".", ",") : ""); setEditando(true); }}
+                  className="px-2 py-0.5 text-[11px] rounded-lg border border-ww-accent/60 text-ww-accent
+                             hover:bg-ww-accentSoft transition font-semibold">
+                  {teto != null ? "Editar teto" : "Definir teto"}
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+
+        <div className="ml-auto text-right text-[11px] text-ww-textMuted tabular-nums">
+          <div><strong className="text-ww-text">{brl(comprado)}</strong> já comprado</div>
+          <div>{brl(pago)} já pago · {teto != null ? brl(Math.max(0, teto - comprado)) : "—"} de folga</div>
+        </div>
+      </div>
+
+      {pct != null && (
+        <>
+          <div className="mt-2.5 h-2 rounded-full bg-ww-border/60 overflow-hidden">
+            <div className={`h-full rounded-full transition-all ${
+              estourou ? "bg-rose-500" : pct > 85 ? "bg-amber-500" : "bg-emerald-500"}`}
+              style={{ width: `${Math.min(100, pct)}%` }} />
+          </div>
+          <p className={`mt-1 text-[11px] ${estourou ? "text-rose-600 dark:text-rose-300" : "text-ww-textMuted"}`}>
+            {pct.toFixed(0)}% do teto comprometido
+            {estourou && <> — <strong>{brl(comprado - (teto ?? 0))} acima do teto</strong></>}
+          </p>
+        </>
+      )}
+      {teto == null && (
+        <p className="mt-2 text-[11px] text-ww-textMuted">
+          Sem teto definido, o gráfico não tem régua e não há como dizer se o projeto está
+          estourando o orçamento.
+        </p>
+      )}
+      {erro && <p className="mt-2 text-[11px] text-rose-600 dark:text-rose-300">{erro}</p>}
     </section>
   );
 }

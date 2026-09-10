@@ -23,7 +23,7 @@ import { useVizTema } from "./useVizMode";
 import type { SeriesDef } from "./ChartFrame";
 
 export default function VizCombo({
-  rows, bars, lines, xKey = "x", valueFormat, mode: scaleMode = "mesma-unidade", marco,
+  rows, bars, lines, xKey = "x", valueFormat, mode: scaleMode = "mesma-unidade", marco, regua,
 }: {
   rows: Array<Record<string, unknown>>;
   bars: SeriesDef[];
@@ -37,6 +37,12 @@ export default function VizCombo({
    *  diz o mesmo, mas só depois de comparar duas linhas; a divisória diz de
    *  primeira. */
   marco?: { x: string; rotulo: string };
+  /** Régua horizontal — um teto ou meta na escala dos valores.
+   *
+   *  Serve pro caso "existe um limite e eu preciso ver quando a curva encosta
+   *  nele". Sem a linha, comparar um acumulado com um número que está escrito
+   *  noutro lugar da tela é conta de cabeça a cada leitura. */
+  regua?: { y: number; rotulo: string };
   /** "mesma-unidade": barras e linhas já compartilham escala.
    *  "indexado": tudo vira índice base 100 no primeiro ponto — use quando as
    *  medidas têm unidades diferentes e você quer comparar a FORMA das curvas. */
@@ -105,6 +111,13 @@ export default function VizCombo({
                  radius={[4, 4, 0, 0]} isAnimationActive={false} />
           );
         })}
+        {regua != null && (
+          <ReferenceLine
+            y={regua.y} stroke={c.inkMuted} strokeDasharray="6 4" strokeWidth={1.25}
+            label={{ value: regua.rotulo, position: "insideTopLeft",
+                     fill: c.inkMuted, fontSize: 10, offset: 6 }}
+          />
+        )}
         {marco && (
           <ReferenceLine
             x={marco.x} stroke={c.inkMuted} strokeDasharray="3 3" strokeWidth={1}

@@ -60,7 +60,7 @@ export async function GET(req: Request) {
 
   // Tudo de uma vez: a tela mostra as quatro coisas juntas e buscar em série
   // somaria quatro idas ao banco antes do primeiro pixel.
-  const [linhas, cab, realizado, cobertura, eventos, previsto] = await Promise.all([
+  const [linhas, cab, realizado, cobertura, eventos, previsto, saldo, orc] = await Promise.all([
     admin.schema("approval").from("projeto_fluxo_linha")
       .select("id, tipo, descricao, categoria, data_prevista, valor, observacao, origem, ordem")
       .eq("empresa", empresa).eq("codigo_projeto", codigo)
@@ -78,10 +78,21 @@ export async function GET(req: Request) {
     admin.schema("bi").rpc("projeto_fluxo_previsto", {
       p_codigo_projeto: codigo, p_empresa: empresa,
     }),
+    // A curva diária de saldo — previsto e realizado no mesmo eixo. É ela que
+    // responde "estou com prejuízo neste projeto agora?".
+    admin.schema("bi").rpc("projeto_saldo_diario", {
+      p_codigo_projeto: codigo, p_empresa: empresa,
+    }),
+    // O teto de gasto do projeto. Vem da mesma tabela que a tela de materiais
+    // usa — um segundo lugar para editar o mesmo número daria dois budgets.
+    admin.schema("approval").from("rc_projetos_budget")
+      .select("valor_budget, valor_total_projeto, resultado_bruto_esperado_pct")
+      .eq("empresa", empresa).eq("codigo_projeto", codigo).maybeSingle(),
   ]);
 
   const falha = [["linhas", linhas], ["cabecalho", cab], ["realizado", realizado],
-                 ["cobertura", cobertura], ["eventos", eventos], ["previsto", previsto]]
+                 ["cobertura", cobertura], ["eventos", eventos], ["previsto", previsto],
+                 ["saldo", saldo], ["orcamento", orc]]
     .find(([, r]) => (r as { error?: unknown }).error);
   if (falha) {
     return NextResponse.json(
@@ -100,6 +111,8 @@ export async function GET(req: Request) {
     // Linhas derivadas do Omie + cronograma + desvio. A tela soma isto com as
     // manuais; nada aqui é apagável pelo usuário.
     previsto: previsto.data ?? [],
+    saldo: saldo.data ?? [],
+    orcamento: orc.data ?? null,
     eventos: eventos.data ?? [],
     pode_editar: canEdit(perms, "projetos", "pvos"),
     pode_aprovar: canApprove(perms, "projetos"),
