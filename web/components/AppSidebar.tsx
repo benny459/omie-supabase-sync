@@ -160,6 +160,20 @@ const BI: NavItem[] = [
 // Área FINANCEIRO — nasce fechada no AREA_DEFAULT.
 const FINANCEIRO: NavItem[] = [
   {
+    // Primeiro da área de propósito: é a tela que responde a pergunta inteira.
+    // As três abaixo continuam porque a consolidação ainda está em avaliação —
+    // quando forem aposentadas, viram redirect pras abas daqui.
+    href: "/bi/financeiro",
+    area: "financeiro",
+    label: "Financeiro",
+    tone: "text-sky-700",
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className="w-5 h-5" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M3 17l5-6 4 3 5-8"/><path d="M3 21h18"/><circle cx="17" cy="6" r="2"/>
+      </svg>
+    ),
+  },
+  {
     href: "/bi/contas-pagar",
     area: "financeiro",
     label: "Contas a Pagar",
