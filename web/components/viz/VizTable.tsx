@@ -53,7 +53,7 @@ const normaliza = (v: string) =>
 
 export default function VizTable<T extends Record<string, unknown>>({
   title, subtitle, cols, rows, ordemInicial, loading, altura = 420, totalizar,
-  onLinhaClick, podeClicar,
+  onLinhaClick, podeClicar, onCelulaClick, celulaClicavel, onTotalClick,
 }: {
   title: string;
   subtitle?: string;
@@ -72,6 +72,20 @@ export default function VizTable<T extends Record<string, unknown>>({
   /** Nem toda linha tem detalhe. Quando devolve false, a linha não fica
    *  clicável: prometer um detalhe que abre vazio é pior que não oferecer. */
   podeClicar?: (linha: T) => boolean;
+  /** Abre o detalhe de UM NÚMERO — a célula, não a linha.
+   *
+   *  Numa tabela agregada cada célula é uma soma diferente: "Projetos ×
+   *  vencido" e "Projetos × recebido" respondem a perguntas distintas e não
+   *  cabem num clique só de linha. Quem consome recebe a linha e a coluna, que
+   *  juntas identificam o recorte exato daquele valor. */
+  onCelulaClick?: (linha: T, col: Col<T>) => void;
+  /** Quais células têm detalhe. Sem isso toda célula viraria alvo, inclusive
+   *  as de texto — e um sublinhado que não abre nada é pior que nenhum. */
+  celulaClicavel?: (linha: T, col: Col<T>) => boolean;
+  /** Mesmo detalhe, agora do rodapé: a soma de todas as linhas filtradas
+   *  naquela coluna. É o "e no total, quem?" que vem logo depois do primeiro
+   *  clique. */
+  onTotalClick?: (col: Col<T>) => void;
 }) {
   const [busca, setBusca] = useState("");
   const [ordem, setOrdem] = useState<{ key: string; desc: boolean }>(
@@ -210,12 +224,26 @@ export default function VizTable<T extends Record<string, unknown>>({
                       </td>
                     );
                   }
+                  // Célula com detalhe: sublinhado pontilhado, que sinaliza
+                  // "há mais aqui" sem parecer link de navegação nem competir
+                  // com o número, que continua sendo o conteúdo.
+                  const abre = !!onCelulaClick && (celulaClicavel?.(r, c) ?? false);
                   return (
                     <td key={c.key}
                         className={`p-1.5 border-b border-ww-border/50 text-ww-text ${
                           alinhaDireita(c) ? "text-right tabular-nums" : ""}`}
                         title={texto.length > 28 ? texto : undefined}>
-                      {texto}
+                      {abre ? (
+                        <button type="button"
+                          onClick={(e) => { e.stopPropagation(); onCelulaClick!(r, c); }}
+                          title={`Ver a lista por trás de ${texto}`}
+                          className="underline decoration-dotted decoration-ww-textFaint underline-offset-[3px]
+                                     hover:text-ww-accent hover:decoration-ww-accent focus:outline-none
+                                     focus-visible:ring-1 focus-visible:ring-ww-accent rounded-sm transition-colors
+                                     tabular-nums">
+                          {texto}
+                        </button>
+                      ) : texto}
                     </td>
                   );
                 })}
@@ -226,16 +254,30 @@ export default function VizTable<T extends Record<string, unknown>>({
           {totais && (
             <tfoot className="sticky bottom-0 bg-ww-panel">
               <tr>
-                {cols.map((c, i) => (
-                  <td key={c.key}
-                      className={`p-1.5 font-bold text-ww-text border-t border-ww-borderStrong ${
-                        alinhaDireita(c) ? "text-right tabular-nums" : ""}`}>
-                    {i === 0 ? "Total (filtrado)"
-                      : totais[c.key] != null
-                        ? (c.tipo === "money" ? brl(totais[c.key]) : num(totais[c.key]))
-                        : ""}
-                  </td>
-                ))}
+                {cols.map((c, i) => {
+                  const texto = i === 0 ? "Total (filtrado)"
+                    : totais[c.key] != null
+                      ? (c.tipo === "money" ? brl(totais[c.key]) : num(totais[c.key]))
+                      : "";
+                  const abre = !!onTotalClick && i > 0 && totais[c.key] != null
+                            && (celulaClicavel?.(filtradas[0] ?? ({} as T), c) ?? false);
+                  return (
+                    <td key={c.key}
+                        className={`p-1.5 font-bold text-ww-text border-t border-ww-borderStrong ${
+                          alinhaDireita(c) ? "text-right tabular-nums" : ""}`}>
+                      {abre ? (
+                        <button type="button" onClick={() => onTotalClick!(c)}
+                          title={`Ver a lista por trás de ${texto}, somando todos os tipos`}
+                          className="underline decoration-dotted decoration-ww-textFaint underline-offset-[3px]
+                                     hover:text-ww-accent hover:decoration-ww-accent focus:outline-none
+                                     focus-visible:ring-1 focus-visible:ring-ww-accent rounded-sm transition-colors
+                                     tabular-nums">
+                          {texto}
+                        </button>
+                      ) : texto}
+                    </td>
+                  );
+                })}
               </tr>
             </tfoot>
           )}

@@ -26,6 +26,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import FluxoCaixaView from "./FluxoCaixaView";
 import ChartFrame, { type SeriesDef } from "@/components/viz/ChartFrame";
+import PainelRedim from "@/components/viz/PainelRedim";
 import VizBar from "@/components/viz/VizBar";
 import VizTable, { type Col } from "@/components/viz/VizTable";
 
@@ -93,6 +94,31 @@ const LADOS = [
 
 type Aba  = "fluxo" | "analise" | "recebiveis";
 
+/** Cada aba com a própria cor, e um ponto que aparece mesmo na aba inativa.
+ *
+ *  Três botões cinzas num trilho cinza só diziam "sou o do meio". Com cor, a
+ *  aba passa a ser reconhecida antes de ser lida — e o ponto sempre visível é o
+ *  que faz a cor servir também pra escolher, não só pra confirmar o que já foi
+ *  escolhido. Recebíveis herda o verde de "Receber", que já é o vocabulário da
+ *  tela; Fluxo fica no azul do caixa; Análise no violeta, que não é status. */
+const ABAS = [
+  { k: "fluxo" as const, label: "Fluxo",
+    hint: "quando o caixa aperta — e a mesa pra reagendar",
+    ponto: "bg-sky-500",
+    on:  "bg-sky-500/15 text-sky-700 dark:text-sky-300 font-semibold ring-1 ring-sky-500/45 shadow-sm",
+    off: "text-ww-textMuted hover:text-sky-700 dark:hover:text-sky-300 hover:bg-sky-500/[0.08]" },
+  { k: "analise" as const, label: "Análise",
+    hint: "por que aperta — aging, horizonte, mês a mês",
+    ponto: "bg-violet-500",
+    on:  "bg-violet-500/15 text-violet-700 dark:text-violet-300 font-semibold ring-1 ring-violet-500/45 shadow-sm",
+    off: "text-ww-textMuted hover:text-violet-700 dark:hover:text-violet-300 hover:bg-violet-500/[0.08]" },
+  { k: "recebiveis" as const, label: "Recebíveis",
+    hint: "onde o dinheiro trava, por tipo de venda",
+    ponto: "bg-emerald-500",
+    on:  "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 font-semibold ring-1 ring-emerald-500/45 shadow-sm",
+    off: "text-ww-textMuted hover:text-emerald-700 dark:hover:text-emerald-300 hover:bg-emerald-500/[0.08]" },
+];
+
 export default function FinanceiroView() {
   const [aba, setAba] = useState<Aba>("fluxo");
   const [lado, setLado] = useState<Lado>("ambos");
@@ -124,17 +150,14 @@ export default function FinanceiroView() {
         {/* Abas em controle segmentado: um trilho só, com a ativa em relevo.
             Botões soltos lado a lado não diziam que eram alternativas entre si. */}
         <div className="flex items-center gap-0.5 p-0.5 rounded-lg bg-ww-bg/60 border border-ww-border/60">
-          {([["fluxo", "Fluxo", "quando o caixa aperta — e a mesa pra reagendar"],
-             ["analise", "Análise", "por que aperta — aging, horizonte, mês a mês"],
-             ["recebiveis", "Recebíveis", "onde o dinheiro trava, por tipo de venda"]] as const)
-            .map(([k, l, hint]) => (
-              <button key={k} type="button" onClick={() => setAba(k)} title={hint}
-                className={`px-3.5 py-1.5 text-[12px] rounded-md transition-all duration-150 ${
-                  aba === k
-                    ? "bg-ww-panel text-ww-text font-semibold shadow-sm ring-1 ring-ww-border"
-                    : "text-ww-textMuted hover:text-ww-text"}`}>
-                {l}
-              </button>
+          {ABAS.map(({ k, label, hint, ponto, on, off }) => (
+            <button key={k} type="button" onClick={() => setAba(k)} title={hint}
+              className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 text-[12px] rounded-md transition-all duration-150 ${
+                aba === k ? on : off}`}>
+              <span aria-hidden className={`w-1.5 h-1.5 rounded-full transition-opacity ${ponto} ${
+                aba === k ? "opacity-100" : "opacity-45"}`} />
+              {label}
+            </button>
           ))}
         </div>
 
@@ -304,54 +327,74 @@ function Analise({ data, lado, loading }: { data: Payload | null; lado: Lado; lo
   const top = lado === "receber" ? data?.top.entra : data?.top.sai;
   const topRows = (top ?? []).map((t) => ({ x: t.contraparte, valor: t.valor }));
 
+  // Um painel por linha, largura cheia.
+  //
+  // Antes eram dois por linha. Num monitor comum isso dava ~600px a cada um, e a
+  // tabela da direita passava a rolar horizontalmente pra caber oito colunas de
+  // valor — ou seja: metade do dado ficava fora da tela e só aparecia a quem
+  // soubesse que dava pra rolar. Empilhado, cada painel recebe a largura toda e
+  // o ajuste de tamanho vira vertical, que é o eixo que o scroll da página já
+  // resolve naturalmente.
   return (
     <div className="space-y-3.5">
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-3.5">
-        <ChartFrame
-          title="Vencido — por idade do atraso"
-          subtitle="Um gráfico para os dois lados. Antes eram dois idênticos — um em Contas a Pagar, outro em Contas a Receber."
-          series={serieLado()} rows={aging} valueFormat={(v) => brl(Number(v))}
-          loading={loading} height={260}
-        >
-          {(vis) => <VizBar rows={aging} series={serieLado().filter((s) => vis.some((v) => v.key === s.key))}
-                            valueFormat={(v) => brlK(v)} />}
-        </ChartFrame>
+      <PainelRedim id="fin-aging" padrao={260}>
+        {(h) => (
+          <ChartFrame
+            title="Vencido — por idade do atraso"
+            subtitle="Um gráfico para os dois lados. Antes eram dois idênticos — um em Contas a Pagar, outro em Contas a Receber."
+            series={serieLado()} rows={aging} valueFormat={(v) => brl(Number(v))}
+            loading={loading} height={h}
+          >
+            {(vis) => <VizBar rows={aging} series={serieLado().filter((s) => vis.some((v) => v.key === s.key))}
+                              valueFormat={(v) => brlK(v)} />}
+          </ChartFrame>
+        )}
+      </PainelRedim>
 
-        <ChartFrame
-          title="Onde está o saldo aberto"
-          subtitle="Vencido · o que vence em 90 dias · o que está contratado além disso. O futuro contratado é grande e não é problema — só não é caixa de curto prazo."
-          series={serieLado()} rows={horizonte} valueFormat={(v) => brl(Number(v))}
-          loading={loading} height={260}
-        >
-          {(vis) => <VizBar rows={horizonte} series={serieLado().filter((s) => vis.some((v) => v.key === s.key))}
-                            valueFormat={(v) => brlK(v)} />}
-        </ChartFrame>
-      </div>
+      <PainelRedim id="fin-horizonte" padrao={260}>
+        {(h) => (
+          <ChartFrame
+            title="Onde está o saldo aberto"
+            subtitle="Vencido · o que vence em 90 dias · o que está contratado além disso. O futuro contratado é grande e não é problema — só não é caixa de curto prazo."
+            series={serieLado()} rows={horizonte} valueFormat={(v) => brl(Number(v))}
+            loading={loading} height={h}
+          >
+            {(vis) => <VizBar rows={horizonte} series={serieLado().filter((s) => vis.some((v) => v.key === s.key))}
+                              valueFormat={(v) => brlK(v)} />}
+          </ChartFrame>
+        )}
+      </PainelRedim>
 
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-3.5">
-        <ChartFrame
-          title={lado === "ambos" ? "Emitido por mês — receber × pagar" : "Emitido × liquidado por mês"}
-          subtitle={lado === "ambos"
-            ? "Com os dois lados, comparar o EMITIDO de cada um. Somar a receber com a pagar num total só não significaria nada."
-            : "O passado, mês a mês. A diferença entre emitir e liquidar é o que a curva do fluxo projeta pra frente."}
-          series={serieMensal} rows={mensal} valueFormat={(v) => brl(Number(v))}
-          loading={loading} height={260}
-        >
-          {(vis) => <VizBar rows={mensal} series={serieMensal.filter((s) => vis.some((v) => v.key === s.key))}
-                            valueFormat={(v) => brlK(v)} />}
-        </ChartFrame>
+      <PainelRedim id="fin-mensal" padrao={280}>
+        {(h) => (
+          <ChartFrame
+            title={lado === "ambos" ? "Emitido por mês — receber × pagar" : "Emitido × liquidado por mês"}
+            subtitle={lado === "ambos"
+              ? "Com os dois lados, comparar o EMITIDO de cada um. Somar a receber com a pagar num total só não significaria nada."
+              : "O passado, mês a mês. A diferença entre emitir e liquidar é o que a curva do fluxo projeta pra frente."}
+            series={serieMensal} rows={mensal} valueFormat={(v) => brl(Number(v))}
+            loading={loading} height={h}
+          >
+            {(vis) => <VizBar rows={mensal} series={serieMensal.filter((s) => vis.some((v) => v.key === s.key))}
+                              valueFormat={(v) => brlK(v)} />}
+          </ChartFrame>
+        )}
+      </PainelRedim>
 
-        <ChartFrame
-          title={lado === "receber" ? "Maiores clientes — recebido no período" : "Maiores fornecedores — pago no período"}
-          subtitle="Liquidado de fato, não contratado. Responde para onde o dinheiro foi."
-          series={[{ key: "valor", label: "Valor", slot: lado === "receber" ? 5 : 3, mark: "rect" }]}
-          rows={topRows} valueFormat={(v) => brl(Number(v))} loading={loading} height={260}
-        >
-          <VizBar rows={topRows}
+      <PainelRedim id="fin-top" padrao={330}>
+        {(h) => (
+          <ChartFrame
+            title={lado === "receber" ? "Maiores clientes — recebido no período" : "Maiores fornecedores — pago no período"}
+            subtitle="Liquidado de fato, não contratado. Responde para onde o dinheiro foi."
             series={[{ key: "valor", label: "Valor", slot: lado === "receber" ? 5 : 3, mark: "rect" }]}
-            layout="row" categoryWidth={190} valueFormat={(v) => brlK(v)} />
-        </ChartFrame>
-      </div>
+            rows={topRows} valueFormat={(v) => brl(Number(v))} loading={loading} height={h}
+          >
+            <VizBar rows={topRows}
+              series={[{ key: "valor", label: "Valor", slot: lado === "receber" ? 5 : 3, mark: "rect" }]}
+              layout="row" categoryWidth={230} valueFormat={(v) => brlK(v)} />
+          </ChartFrame>
+        )}
+      </PainelRedim>
 
       <EmAtraso data={data} lado={lado} loading={loading} />
     </div>
@@ -432,36 +475,187 @@ function EmAtraso({ data, lado, loading }: { data: Payload | null; lado: Lado; l
         )}
       </div>
 
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-3.5">
-        <ChartFrame
-          title={`Concentração do vencido — ${ehPagar ? "fornecedores" : "clientes"}`}
-          subtitle="Empilhado por idade do atraso: a altura é o total do nome, e a composição diz se é atraso recente ou dívida antiga."
-          series={serie} rows={topN} valueFormat={(v) => brl(Number(v))}
-          loading={loading} height={300}
-        >
-          {(vis) => (
-            <VizBar rows={topN} stacked layout="row" categoryWidth={200}
-              series={serie.filter((sr) => vis.some((v) => v.key === sr.key))}
-              valueFormat={(v) => brlK(v)} />
-          )}
-        </ChartFrame>
+      <PainelRedim id="fin-atraso-graf" padrao={330}>
+        {(h) => (
+          <ChartFrame
+            title={`Concentração do vencido — ${ehPagar ? "fornecedores" : "clientes"}`}
+            subtitle="Empilhado por idade do atraso: a altura é o total do nome, e a composição diz se é atraso recente ou dívida antiga."
+            series={serie} rows={topN} valueFormat={(v) => brl(Number(v))}
+            loading={loading} height={h}
+          >
+            {(vis) => (
+              <VizBar rows={topN} stacked layout="row" categoryWidth={240}
+                series={serie.filter((sr) => vis.some((v) => v.key === sr.key))}
+                valueFormat={(v) => brlK(v)} />
+            )}
+          </ChartFrame>
+        )}
+      </PainelRedim>
 
-        <VizTable
-          title={`${ehPagar ? "Fornecedores" : "Clientes"} em atraso — detalhe`}
-          subtitle="Ordenado pelo valor parado. A coluna 90d+ separa o que é operacional do que virou passivo."
-          cols={COLS_ATRASO}
-          rows={linhas as unknown as Record<string, unknown>[]}
-          ordemInicial="valor"
-          loading={loading}
-          altura={300}
-          totalizar={["valor", "ate_30", "de_31_90", "mais_90"]}
-        />
-      </div>
+      <PainelRedim id="fin-atraso-tab" padrao={340}>
+        {(h) => (
+          <VizTable
+            title={`${ehPagar ? "Fornecedores" : "Clientes"} em atraso — detalhe`}
+            subtitle="Ordenado pelo valor parado. A coluna 90d+ separa o que é operacional do que virou passivo."
+            cols={COLS_ATRASO}
+            rows={linhas as unknown as Record<string, unknown>[]}
+            ordemInicial="valor"
+            loading={loading}
+            altura={h}
+            totalizar={["valor", "ate_30", "de_31_90", "mais_90"]}
+          />
+        )}
+      </PainelRedim>
     </div>
   );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+
+/** As parcelas em que o faturamento se reparte. A chave é a coluna da tabela E
+ *  o p_bucket da função — manter o mesmo nome nos dois lados é o que evita um
+ *  mapeamento no meio que ninguém lembra de atualizar. */
+const BUCKETS: Record<string, string> = {
+  faturado:   "Faturado",
+  recebido:   "Recebido",
+  a_vencer:   "A vencer",
+  vencido:    "Vencido",
+  sem_titulo: "Sem título",
+};
+
+const pctFmt = (v: unknown) =>
+  v == null ? "—" : `${Number(v).toFixed(1).replace(".", ",")}%`;
+
+/** A lista por trás de um número.
+ *
+ *  Abre sobre a tela em vez de empurrar o conteúdo: quem clica num valor quer
+ *  ver quem o compõe e voltar, não perder o lugar na página. O cabeçalho repete
+ *  o número clicado e o total da lista lado a lado — se algum dia divergirem, a
+ *  divergência aparece aqui, não numa conferência manual. */
+function DrillDetalhe({
+  categoria, bucket, from, to, valorEsperado, onFechar,
+}: {
+  categoria: string | null;
+  bucket: string;
+  from: string;
+  to: string;
+  valorEsperado: number;
+  onFechar: () => void;
+}) {
+  const [linhas, setLinhas] = useState<Record<string, unknown>[] | null>(null);
+  const [erro, setErro] = useState<string | null>(null);
+  /** Altura da lista em função da janela, medida depois da montagem — ler
+   *  window durante o render quebraria qualquer render de servidor. */
+  const [alturaLista, setAlturaLista] = useState(420);
+
+  useEffect(() => {
+    const medir = () => setAlturaLista(Math.max(240, Math.round(window.innerHeight * 0.55)));
+    medir();
+    window.addEventListener("resize", medir);
+    return () => window.removeEventListener("resize", medir);
+  }, []);
+
+  useEffect(() => {
+    const esc = (e: KeyboardEvent) => { if (e.key === "Escape") onFechar(); };
+    window.addEventListener("keydown", esc);
+    return () => window.removeEventListener("keydown", esc);
+  }, [onFechar]);
+
+  useEffect(() => {
+    let vivo = true;
+    (async () => {
+      const q = new URLSearchParams({ from, to, bucket });
+      if (categoria) q.set("categoria", categoria);
+      try {
+        const r = await fetch(`/api/bi/financeiro/detalhe?${q}`, { cache: "no-store" });
+        const j = await r.json();
+        if (!vivo) return;
+        if (!r.ok) { setErro(j.error ?? r.statusText); return; }
+        setLinhas(j.linhas as Record<string, unknown>[]);
+      } catch (e) {
+        if (vivo) setErro(e instanceof Error ? e.message : String(e));
+      }
+    })();
+    return () => { vivo = false; };
+  }, [categoria, bucket, from, to]);
+
+  // A coluna do bucket só existe quando acrescenta algo: em "faturado" ela
+  // repetiria a coluna Faturado, e coluna duplicada faz duvidar de qual é a boa.
+  const cols: Col<Record<string, unknown>>[] = [
+    { key: "cliente",     label: "Cliente",     w: 300 },
+    { key: "numero_doc",  label: "Doc",         w: 92 },
+    { key: "dt_fat",      label: "Faturado em", tipo: "date",  w: 106 },
+    ...(bucket === "faturado" ? [] : [
+      { key: "valor", label: BUCKETS[bucket], tipo: "money" as const, w: 130 }]),
+    { key: "faturado",    label: "Faturado",    tipo: "money", w: 122 },
+    { key: "recebido",    label: "Recebido",    tipo: "money", w: 122 },
+    { key: "a_vencer",    label: "A vencer",    tipo: "money", w: 122 },
+    { key: "vencido",     label: "Vencido",     tipo: "money", w: 122 },
+    { key: "atraso_dias", label: "Atraso",      tipo: "dias",  w: 84 },
+    { key: "pct_recebido", label: "% recebido", w: 100, fmt: pctFmt },
+  ];
+
+  const somado = (linhas ?? []).reduce(
+    (a, l) => a + (Number(l[bucket === "faturado" ? "faturado" : "valor"]) || 0), 0);
+  const bate = Math.abs(somado - valorEsperado) < 0.5;
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/55 backdrop-blur-sm"
+      onClick={onFechar} role="dialog" aria-modal="true"
+    >
+      <div
+        className="w-full max-w-[1240px] max-h-[88vh] flex flex-col gap-2.5 bg-ww-bg border border-ww-border rounded-2xl shadow-2xl p-3.5"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-start gap-3">
+          <div className="min-w-0">
+            <h2 className="text-[13.5px] font-semibold text-ww-text">
+              {BUCKETS[bucket]} — {categoria ?? "todos os tipos de venda"}
+            </h2>
+            <p className="text-[11px] text-ww-textMuted mt-0.5">
+              Cada linha é um documento faturado. Período {from.slice(0, 10)} a {to.slice(0, 10)}.
+            </p>
+          </div>
+          <div className="ml-auto text-right shrink-0">
+            <div className="text-[17px] font-bold tabular-nums text-ww-text">{brl(valorEsperado)}</div>
+            <div className={`text-[10.5px] tabular-nums ${
+              linhas == null ? "text-ww-textFaint"
+                : bate ? "text-emerald-600 dark:text-emerald-400"
+                       : "text-amber-600 dark:text-amber-400"}`}>
+              {linhas == null ? "carregando…"
+                : bate ? `✓ a lista soma o mesmo · ${linhas.length} documentos`
+                       : `⚠ lista soma ${brl(somado)}`}
+            </div>
+          </div>
+          <button type="button" onClick={onFechar} aria-label="Fechar"
+            className="shrink-0 w-7 h-7 rounded-lg border border-ww-border text-ww-textMuted hover:text-ww-text hover:bg-ww-rowHover transition">
+            ✕
+          </button>
+        </div>
+
+        {erro && (
+          <div className="p-3 rounded-lg border border-rose-500/40 bg-rose-500/10 text-[12px] text-rose-700 dark:text-rose-300">
+            <strong>Erro:</strong> {erro}
+          </div>
+        )}
+
+        <div className="min-h-0 flex-1 overflow-hidden">
+          <VizTable
+            title="Documentos"
+            subtitle="Ordenado pelo valor da parcela. Busque por cliente ou número do documento; o CSV baixa o que está filtrado."
+            cols={cols}
+            rows={linhas ?? []}
+            ordemInicial={bucket === "faturado" ? "faturado" : "valor"}
+            loading={linhas == null}
+            altura={alturaLista}
+            totalizar={["faturado", "recebido", "a_vencer", "vencido"]}
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
 
 const COLS_COORTE: Col<Record<string, unknown>>[] = [
   { key: "categoria", label: "Tipo de venda", w: 140 },
@@ -476,6 +670,21 @@ const COLS_COORTE: Col<Record<string, unknown>>[] = [
 
 function Recebiveis({ data, loading }: { data: Payload | null; loading: boolean }) {
   const [mesSel, setMesSel] = useState<string | null>(null);
+  /** Qual número está aberto. `categoria: null` = a linha de total, que é o
+   *  mesmo recorte sem o filtro de tipo. */
+  const [drill, setDrill] = useState<{ categoria: string | null; bucket: string; valor: number } | null>(null);
+
+  /** O detalhe tem que respeitar o mês escolhido, senão abriria a lista do ano
+   *  inteiro por trás de um número que é de julho. */
+  const periodo = useMemo(() => {
+    const cheio = data?.periodo ?? { from: "", to: "" };
+    if (!mesSel) return cheio;
+    const ini = mesSel.slice(0, 10);
+    const d = new Date(`${ini}T12:00:00`);
+    const fim = new Date(d.getFullYear(), d.getMonth() + 1, 0);
+    const p2 = (n: number) => String(n).padStart(2, "0");
+    return { from: ini, to: `${fim.getFullYear()}-${p2(fim.getMonth() + 1)}-${p2(fim.getDate())}` };
+  }, [mesSel, data]);
 
   /** Coorte total: do que faturei em cada mês, quanto virou dinheiro. É a
    *  pergunta "o que aconteceu com o faturamento de julho", que nenhuma das três
@@ -530,18 +739,22 @@ function Recebiveis({ data, loading }: { data: Payload | null; loading: boolean 
 
   return (
     <div className="space-y-3.5">
-      <ChartFrame
-        title="Do que faturei, quanto virou dinheiro"
-        subtitle="Cada coluna é um mês de FATURAMENTO, repartido no destino do recebível. A altura é o faturado do mês — as partes somam o total, por isso empilha. Clique num mês pra abrir por tipo de venda."
-        series={serieCoorte} rows={coorte} valueFormat={(v) => brl(Number(v))}
-        loading={loading} height={300}
-      >
-        {(vis) => (
-          <VizBar rows={coorte} stacked totalNoTopo
-            series={serieCoorte.filter((s) => vis.some((v) => v.key === s.key))}
-            valueFormat={(v) => brlK(v)} />
+      <PainelRedim id="fin-coorte" padrao={300}>
+        {(h) => (
+          <ChartFrame
+            title="Do que faturei, quanto virou dinheiro"
+            subtitle="Cada coluna é um mês de FATURAMENTO, repartido no destino do recebível. A altura é o faturado do mês — as partes somam o total, por isso empilha. Clique num mês pra abrir por tipo de venda."
+            series={serieCoorte} rows={coorte} valueFormat={(v) => brl(Number(v))}
+            loading={loading} height={h}
+          >
+            {(vis) => (
+              <VizBar rows={coorte} stacked totalNoTopo
+                series={serieCoorte.filter((s) => vis.some((v) => v.key === s.key))}
+                valueFormat={(v) => brlK(v)} />
+            )}
+          </ChartFrame>
         )}
-      </ChartFrame>
+      </PainelRedim>
 
       <div className="flex items-center gap-2 flex-wrap px-1">
         <span className="text-[10px] uppercase tracking-[0.7px] font-bold text-ww-textFaint">Mês</span>
@@ -581,34 +794,56 @@ function Recebiveis({ data, loading }: { data: Payload | null; loading: boolean 
         </div>
       )}
 
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-3.5">
-        <ChartFrame
-          title={`Por tipo de venda${mesSel ? ` — ${mesBr(mesSel)}` : ""}`}
-          subtitle="Onde o recebível trava. Projetos atrasam diferente de avulsos, e o total escondia isso."
-          series={serieCoorte} rows={porCategoria} valueFormat={(v) => brl(Number(v))}
-          loading={loading} height={280}
-        >
-          {(vis) => (
-            <VizBar rows={porCategoria.map((c) => ({
-                x: c.categoria, Recebido: c.recebido, "A vencer": c.a_vencer,
-                Vencido: c.vencido, "Sem título": c.sem_titulo }))}
-              stacked layout="row" categoryWidth={130}
-              series={serieCoorte.filter((s) => vis.some((v) => v.key === s.key))}
-              valueFormat={(v) => brlK(v)} />
-          )}
-        </ChartFrame>
+      <PainelRedim id="fin-portipo-graf" padrao={280}>
+        {(h) => (
+          <ChartFrame
+            title={`Por tipo de venda${mesSel ? ` — ${mesBr(mesSel)}` : ""}`}
+            subtitle="Onde o recebível trava. Projetos atrasam diferente de avulsos, e o total escondia isso."
+            series={serieCoorte} rows={porCategoria} valueFormat={(v) => brl(Number(v))}
+            loading={loading} height={h}
+          >
+            {(vis) => (
+              <VizBar rows={porCategoria.map((c) => ({
+                  x: c.categoria, Recebido: c.recebido, "A vencer": c.a_vencer,
+                  Vencido: c.vencido, "Sem título": c.sem_titulo }))}
+                stacked layout="row" categoryWidth={160}
+                series={serieCoorte.filter((s) => vis.some((v) => v.key === s.key))}
+                valueFormat={(v) => brlK(v)} />
+            )}
+          </ChartFrame>
+        )}
+      </PainelRedim>
 
-        <VizTable
-          title={`Detalhe por tipo${mesSel ? ` — ${mesBr(mesSel)}` : ""}`}
-          subtitle="Os mesmos números do gráfico, para conferir e exportar."
-          cols={COLS_COORTE}
-          rows={porCategoria as unknown as Record<string, unknown>[]}
-          ordemInicial="faturado"
-          loading={loading}
-          altura={280}
-          totalizar={["faturado", "recebido", "a_vencer", "vencido", "sem_titulo"]}
+      <PainelRedim id="fin-portipo-tab" padrao={300}>
+        {(h) => (
+          <VizTable
+            title={`Detalhe por tipo${mesSel ? ` — ${mesBr(mesSel)}` : ""}`}
+            subtitle="Os mesmos números do gráfico. Todo valor é clicável: abre a lista de clientes e documentos por trás dele."
+            cols={COLS_COORTE}
+            rows={porCategoria as unknown as Record<string, unknown>[]}
+            ordemInicial="faturado"
+            loading={loading}
+            altura={h}
+            totalizar={["faturado", "recebido", "a_vencer", "vencido", "sem_titulo"]}
+            // Só as colunas de dinheiro abrem detalhe. "% recebido" é razão, não
+            // soma — não existe lista de clientes por trás de um percentual.
+            celulaClicavel={(_l, c) => c.key in BUCKETS}
+            onCelulaClick={(l, c) =>
+              setDrill({ categoria: String(l.categoria), bucket: c.key, valor: Number(l[c.key]) || 0 })}
+            onTotalClick={(c) =>
+              setDrill({ categoria: null, bucket: c.key,
+                         valor: porCategoria.reduce((a, r) => a + (Number((r as Record<string, unknown>)[c.key]) || 0), 0) })}
+          />
+        )}
+      </PainelRedim>
+
+      {drill && (
+        <DrillDetalhe
+          categoria={drill.categoria} bucket={drill.bucket} valorEsperado={drill.valor}
+          from={periodo.from} to={periodo.to}
+          onFechar={() => setDrill(null)}
         />
-      </div>
+      )}
     </div>
   );
 }
