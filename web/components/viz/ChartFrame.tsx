@@ -43,6 +43,12 @@ export type SeriesDef = {
    *  quebra a regra de que cor segue a entidade: o leitor passa a procurar
    *  quatro coisas onde existem duas. */
   variante?: "solida" | "vazada";
+  /** Linha tracejada. Reservada ao caso "mesma medida, dado que ainda não
+   *  aconteceu": projeção, meta, cenário. O traço separa o que foi medido do que
+   *  foi calculado, e a cor continua dizendo QUAL medida é — por isso realizado
+   *  e projeção da mesma curva compartilham o slot em vez de virarem duas
+   *  entidades de cores diferentes. */
+  tracejada?: boolean;
 };
 
 export default function ChartFrame({
@@ -131,8 +137,14 @@ export default function ChartFrame({
                   } ${travada ? "cursor-default" : "cursor-pointer hover:bg-ww-rowHover"}`}
                 >
                   {s.mark === "line" ? (
+                    // Tracejada na legenda também: se o traço distingue projeção
+                    // de realizado no gráfico, a legenda tem que carregar a mesma
+                    // distinção — senão ela nomeia duas coisas que parecem uma.
                     <span aria-hidden className="inline-block w-3.5 h-0.5 rounded-full transition-opacity"
-                          style={{ background: seriesColor(s.slot, mode, tema), opacity: off ? 0.3 : 1 }} />
+                          style={s.tracejada
+                            ? { opacity: off ? 0.3 : 1,
+                                backgroundImage: `repeating-linear-gradient(to right, ${seriesColor(s.slot, mode, tema)} 0 4px, transparent 4px 7px)` }
+                            : { background: seriesColor(s.slot, mode, tema), opacity: off ? 0.3 : 1 }} />
                   ) : (
                     // A marca espelha o preenchimento real do gráfico: cheia pra
                     // série sólida, contornada pra vazada. Sem isso o vazado na

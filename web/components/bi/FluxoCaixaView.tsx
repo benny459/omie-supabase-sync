@@ -169,11 +169,17 @@ type MensalRow = {
   saida_prevista: number; saida_realizada: number;
   resultado_previsto: number; resultado_realizado: number;
 };
+/** Movimento que JÁ aconteceu, por dia. Vem de dt_pagamento_d — a data da baixa,
+ *  não a do vencimento nem a da previsão. */
+type RealizadoRow = {
+  dia: string; entradas: number; saidas: number; liquido: number;
+  qtd_entradas: number; qtd_saidas: number;
+};
 type Payload = {
-  dias: number; ano: number; pode_editar: boolean;
+  dias: number; dias_atras: number; ano: number; pode_editar: boolean;
   saldo_atual: { saldo: number; dt_ref: string | null; origem: string } | null;
   titulos: Titulo[]; atrasados: Titulo[]; contas: ContaRow[];
-  cenario: Cenario | null; mensal: MensalRow[];
+  cenario: Cenario | null; mensal: MensalRow[]; realizado: RealizadoRow[];
 };
 type SyncResult = {
   ok: boolean; total: number; sucessos: number; erros: number;
@@ -297,6 +303,12 @@ export default function FluxoCaixaView() {
   const [janela, setJanela] = useState("60");
   const jan = JANELAS.find((j) => j.key === janela) ?? JANELAS[2];
   const dias = Math.max(1, jan.dias());
+  /** Quanto do passado desenhar junto. Zero = só a projeção, como era antes.
+   *
+   *  É estado separado da janela de propósito: quem olha 180 dias pra frente
+   *  raramente quer 180 pra trás, e amarrar os dois num controle só daria um
+   *  gráfico com 360 colunas ilegíveis. */
+  const [diasAtras, setDiasAtras] = useState(0);
   const [data, setData] = useState<Payload | null>(null);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
@@ -362,7 +374,8 @@ export default function FluxoCaixaView() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const r = await fetch(`/api/bi/fluxo-caixa?dias=${dias}`, { cache: "no-store" });
+      const r = await fetch(`/api/bi/fluxo-caixa?dias=${dias}&dias_atras=${diasAtras}`,
+                            { cache: "no-store" });
       const j = await r.json();
       if (!r.ok) { setErr(j.error ?? r.statusText); return; }
       setErr(null);
@@ -374,7 +387,7 @@ export default function FluxoCaixaView() {
     } finally {
       setLoading(false);
     }
-  }, [dias]);
+  }, [dias, diasAtras]);
 
   useEffect(() => { void load(); }, [load]);
 
@@ -533,14 +546,62 @@ export default function FluxoCaixaView() {
     return projetar(saldo0, titulosNaCurva, dias, extras, false, destinos);
   }, [destinos, saldo0, titulosNaCurva, dias, extras]);
 
-  const rows = curva.map((p, i) => ({
-    x: diaBr(p.dia),
-    Entradas: p.entradas,
-    Saídas: p.saidas,
-    Saldo: p.saldo,
-    ...(semAgendar ? { "Saldo sem agendar": semAgendar[i]?.saldo ?? 0 } : {}),
-    ...(previa ? { "Saldo simulado": previa[i]?.saldo ?? 0 } : {}),
-  }));
+  /** O passado, reconstruído de trás pra frente a partir do saldo de hoje.
+   *
+   *  O saldo de partida é a foto de HOJE. Pra saber o de um dia anterior é
+   *  preciso desfazer o que se moveu depois dele: saldo(d) = saldo0 − Σ líquido
+   *  dos dias entre d e hoje. Caminhar pra frente a partir de um saldo antigo
+   *  não daria — esse saldo antigo não existe em lugar nenhum.
+   *
+   *  Aproximação declarada: só entram baixas de títulos das empresas do escopo.
+   *  Tarifa bancária, transferência entre contas e qualquer movimento que não
+   *  passe por título ficam de fora, então a curva do passado é o caixa DOS
+   *  TÍTULOS, não o extrato. */
+  const passado = useMemo(() => {
+    const dd = data?.realizado ?? [];
+    if (!dd.length) return [];
+    const pts: Array<{ dia: string; entradas: number; saidas: number; saldo: number }> = [];
+    let saldo = saldo0;
+    // De trás pra frente, subtraindo o líquido de cada dia já percorrido.
+    for (let i = dd.length - 1; i >= 0; i--) {
+      const d = dd[i];
+      pts.unshift({
+        dia: d.dia,
+        entradas: Number(d.entradas) || 0,
+        saidas: -(Number(d.saidas) || 0),
+        saldo,
+      });
+      saldo -= Number(d.liquido) || 0;
+    }
+    return pts;
+  }, [data, saldo0]);
+
+  const rotuloHoje = diaBr(hojeIso());
+
+  const rows = [
+    ...passado.map((p) => ({
+      x: diaBr(p.dia),
+      Entradas: p.entradas,
+      Saídas: p.saidas,
+      // Curva do passado numa série própria: é a mesma medida, mas medida em vez
+      // de calculada. Nula nas colunas futuras pra não atravessar a divisória.
+      "Saldo realizado": p.saldo,
+      Saldo: null,
+      ...(semAgendar ? { "Saldo sem agendar": null } : {}),
+      ...(previa ? { "Saldo simulado": null } : {}),
+    })),
+    ...curva.map((p, i) => ({
+      x: diaBr(p.dia),
+      Entradas: p.entradas,
+      Saídas: p.saidas,
+      // O primeiro ponto da projeção também recebe o realizado, senão as duas
+      // linhas ficariam separadas por um vão de um dia no ponto de emenda.
+      "Saldo realizado": i === 0 && passado.length ? p.saldo : null,
+      Saldo: p.saldo,
+      ...(semAgendar ? { "Saldo sem agendar": semAgendar[i]?.saldo ?? 0 } : {}),
+      ...(previa ? { "Saldo simulado": previa[i]?.saldo ?? 0 } : {}),
+    })),
+  ];
 
   // Verde entra, vermelho sai — convenção contábil, e aqui ela é legítima como
   // escala: entrada e saída são polos de uma mesma medida com sinal, não duas
@@ -557,10 +618,16 @@ export default function FluxoCaixaView() {
   // juntas é o que diz se o reagendamento melhorou o caixa e em quanto — a
   // simulada sozinha não tem contra o quê ser comparada.
   const linhas: SeriesDef[] = [
+    // Realizado e projeção dividem o slot 0: é a MESMA medida, e o que muda é o
+    // estado. Dar uma cor nova à projeção faria o leitor procurar duas coisas
+    // onde existe uma — o traço já diz o que precisa ser dito.
+    ...(passado.length
+      ? [{ key: "Saldo realizado", label: "Saldo realizado", slot: 0, mark: "line" } as SeriesDef]
+      : []),
     ...(semAgendar
-      ? [{ key: "Saldo", label: "Saldo com agendados", slot: 0, mark: "line" } as SeriesDef,
-         { key: "Saldo sem agendar", label: "Saldo sem agendar", slot: 4, mark: "line" } as SeriesDef]
-      : [{ key: "Saldo", label: "Saldo projetado", slot: 0, mark: "line" } as SeriesDef]),
+      ? [{ key: "Saldo", label: "Saldo com agendados", slot: 0, mark: "line", tracejada: passado.length > 0 } as SeriesDef,
+         { key: "Saldo sem agendar", label: "Saldo sem agendar", slot: 4, mark: "line", tracejada: passado.length > 0 } as SeriesDef]
+      : [{ key: "Saldo", label: "Saldo projetado", slot: 0, mark: "line", tracejada: passado.length > 0 } as SeriesDef]),
     // A simulada entra por último pra desenhar por cima, e em âmbar: é hipótese,
     // não estado — não pode ter a mesma cor de nada que já aconteceu.
     ...(previa ? [{ key: "Saldo simulado", label: "▸ Caixa se aplicar o lote", slot: 2, mark: "line" } as SeriesDef] : []),
@@ -989,6 +1056,26 @@ export default function FluxoCaixaView() {
             </button>
           ))}
         </div>
+
+        {/* O passado no mesmo eixo. Controle próprio, separado da janela: quem
+            projeta 180 dias raramente quer 180 pra trás, e um controle só daria
+            um gráfico de 360 colunas. */}
+        <span className="h-5 w-px bg-ww-border" />
+        <div className="flex items-center gap-1">
+          <span className="text-[11px] text-ww-textMuted mr-1">Passado</span>
+          {([[0, "Só o futuro"], [15, "15d"], [30, "30d"], [60, "60d"], [90, "90d"]] as const)
+            .map(([d, l]) => (
+              <button key={d} type="button" onClick={() => setDiasAtras(d)}
+                title={d === 0 ? "Só a projeção, como era antes"
+                               : `Traz ${d} dias de movimento já realizado, à esquerda da divisória de hoje`}
+                className={`px-2 py-0.5 text-[11px] rounded border transition ${
+                  diasAtras === d ? "border-ww-accent text-ww-accent bg-ww-accentSoft font-semibold"
+                                  : "border-ww-border text-ww-textMuted hover:text-ww-text"}`}>
+                {l}
+              </button>
+          ))}
+        </div>
+
         <p className="text-[11px] text-ww-textFaint">
           Recebe <strong className="text-ww-textMuted">Safe</strong> · paga{" "}
           <strong className="text-ww-textMuted">Safe + CDG + Water</strong> · atrasados com previsão
@@ -1060,9 +1147,12 @@ export default function FluxoCaixaView() {
       </div>
 
       <ChartFrame
-        title="Fluxo de caixa projetado"
+        title={passado.length ? "Fluxo de caixa — realizado e projetado" : "Fluxo de caixa projetado"}
         subtitle={
-          `Barras = movimento do dia · linha = saldo acumulado, partindo de ${brl(saldo0)}`
+          (passado.length
+            ? `À esquerda de ${rotuloHoje}, o que JÁ se moveu (baixas de títulos do escopo — não é o extrato: tarifa e transferência não passam por título). À direita, projeção. `
+            : "")
+          + `Barras = movimento do dia · linha = saldo acumulado, partindo de ${brl(saldo0)}`
           + (comAtrasoRecebido
               ? ` — SIMULADO: ${brl(saldoOmie)} do Omie mais ${brl(atrasoTot.receber)} de atrasos a receber da Safe, como se entrassem hoje. `
               : `. `)
@@ -1097,6 +1187,7 @@ export default function FluxoCaixaView() {
             bars={barras.filter((b) => visiveis.some((v) => v.key === b.key))}
             lines={linhas.filter((l) => visiveis.some((v) => v.key === l.key))}
             valueFormat={(v) => brl(v)}
+            marco={passado.length ? { x: rotuloHoje, rotulo: `HOJE · ${rotuloHoje}` } : undefined}
           />
         )}
       </ChartFrame>

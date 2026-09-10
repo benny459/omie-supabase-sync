@@ -15,20 +15,28 @@
 // `mode="indexado"` implementa a 2 aqui dentro.
 
 import {
-  Bar, CartesianGrid, ComposedChart, Line, ResponsiveContainer, Tooltip, XAxis, YAxis,
+  Bar, CartesianGrid, ComposedChart, Line, ReferenceLine, ResponsiveContainer,
+  Tooltip, XAxis, YAxis,
 } from "recharts";
 import { CHROME, seriesColor } from "@/lib/viz/palette";
 import { useVizTema } from "./useVizMode";
 import type { SeriesDef } from "./ChartFrame";
 
 export default function VizCombo({
-  rows, bars, lines, xKey = "x", valueFormat, mode: scaleMode = "mesma-unidade",
+  rows, bars, lines, xKey = "x", valueFormat, mode: scaleMode = "mesma-unidade", marco,
 }: {
   rows: Array<Record<string, unknown>>;
   bars: SeriesDef[];
   lines: SeriesDef[];
   xKey?: string;
   valueFormat?: (v: number) => string;
+  /** Divisória vertical rotulada — o "você está aqui" do eixo x.
+   *
+   *  Num gráfico que mistura passado e futuro, sem ela o leitor não sabe onde
+   *  termina o que aconteceu e começa o que é conta. O tracejado das séries
+   *  diz o mesmo, mas só depois de comparar duas linhas; a divisória diz de
+   *  primeira. */
+  marco?: { x: string; rotulo: string };
   /** "mesma-unidade": barras e linhas já compartilham escala.
    *  "indexado": tudo vira índice base 100 no primeiro ponto — use quando as
    *  medidas têm unidades diferentes e você quer comparar a FORMA das curvas. */
@@ -97,9 +105,22 @@ export default function VizCombo({
                  radius={[4, 4, 0, 0]} isAnimationActive={false} />
           );
         })}
+        {marco && (
+          <ReferenceLine
+            x={marco.x} stroke={c.inkMuted} strokeDasharray="3 3" strokeWidth={1}
+            label={{ value: marco.rotulo, position: "insideTopRight",
+                     fill: c.inkMuted, fontSize: 10, offset: 6 }}
+          />
+        )}
         {lines.map((s) => (
           <Line key={s.key} dataKey={s.key} name={s.label}
                 stroke={seriesColor(s.slot, vizMode, tema)} strokeWidth={2} dot={false}
+                strokeDasharray={s.tracejada ? "5 4" : undefined}
+                // connectNulls fica FALSE: uma série que só existe em metade do
+                // eixo (realizado no passado, projeção no futuro) tem null na
+                // outra metade de propósito. Conectar atravessaria o buraco e
+                // desenharia uma reta que nenhum dado sustenta.
+                connectNulls={false}
                 activeDot={{ r: 4.5, strokeWidth: 2, stroke: c.surface }} isAnimationActive={false} />
         ))}
       </ComposedChart>
