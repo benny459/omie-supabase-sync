@@ -53,17 +53,13 @@ type Evento = {
   versao: number; acao: string; por: string | null; em: string;
   motivo: string | null; total_entradas: number | null; total_saidas: number | null; linhas: number | null;
 };
-type SaldoDia = {
-  dia: string; entrada_prev: number; saida_prev: number;
-  entrada_real: number; saida_real: number;
-  saldo_prev: number; saldo_real: number | null; eh_futuro: boolean;
-};
+type RealDia = { dia: string; entrada: number; saida: number };
 type Orcamento = {
   valor_budget: number | null; valor_total_projeto: number | null;
   resultado_bruto_esperado_pct: number | null;
 } | null;
 type Payload = {
-  linhas: LinhaApi[]; previsto: LinhaPrevisto[]; saldo: SaldoDia[]; orcamento: Orcamento;
+  linhas: LinhaApi[]; previsto: LinhaPrevisto[]; realizado_diario: RealDia[]; orcamento: Orcamento;
   cabecalho: Cabecalho; realizado: RealizadoRow[];
   cobertura: Cobertura | null; eventos: Evento[];
   pode_editar: boolean; pode_aprovar: boolean; eu: string;
@@ -243,38 +239,76 @@ export default function FluxoProjetoView({
 
   /** Previsto e realizado no MESMO eixo de meses. Os dois lados podem ter meses
    *  que o outro não tem — sem unir as chaves, um mês só realizado sumiria. */
-  /** A curva DIÁRIA. Mensal escondia o que importa: numa barra de agosto não
-   *  dá pra ver que a saída veio antes da entrada — e é exatamente isso que
-   *  define se o projeto está financiando o cliente. */
+  /** A curva DIÁRIA, montada aqui a partir do previsto e do realizado.
+   *
+   *  Mensal escondia o que importa: numa barra de agosto não dá pra ver que a
+   *  saída veio antes da entrada — e é isso que define se o projeto está sendo
+   *  financiado pela empresa.
+   *
+   *  Montada na tela, e não no banco, porque uma função que juntasse os dois
+   *  teria que recalcular o previsto inteiro a cada leitura — e o previsto é a
+   *  parte cara (a view de projetos não empurra o filtro e custa segundos). */
   const grafico = useMemo(() => {
-    const dias = (data?.saldo ?? []) as SaldoDia[];
-    // As linhas manuais ainda entram na curva, somadas ao dia delas.
-    const extra = new Map<string, { e: number; s: number }>();
+    const porDia = new Map<string, {
+      ep: number; sp: number; er: number; sr: number;
+    }>();
+    const cel = (d: string) => {
+      const c = porDia.get(d) ?? { ep: 0, sp: 0, er: 0, sr: 0 };
+      porDia.set(d, c); return c;
+    };
+
+    for (const l of previsto) {
+      if (!l.data_efetiva) continue;
+      const c = cel(l.data_efetiva.slice(0, 10));
+      if (l.lado === "entrada") c.ep += Number(l.valor) || 0;
+      else                      c.sp += Number(l.valor) || 0;
+    }
+    // As entradas lançadas à mão continuam entrando na curva.
     for (const l of preenchidas(entradas)) {
       if (!l.data) continue;
-      const c = extra.get(l.data) ?? { e: 0, s: 0 };
-      c.e += num(l.valor); extra.set(l.data, c);
+      cel(l.data).ep += num(l.valor);
     }
-    return dias.map((d) => {
-      const x = d.dia.slice(0, 10);
-      const ex = extra.get(x);
-      return {
-        x: diaBr(x),
-        _iso: x,
-        "Entrada prevista":  Number(d.entrada_prev || 0) + (ex?.e ?? 0),
-        "Entrada realizada": Number(d.entrada_real || 0),
-        "Saída prevista":    Number(d.saida_prev || 0),
-        "Saída realizada":   Number(d.saida_real || 0),
-        "Saldo previsto":    Number(d.saldo_prev ?? 0),
-        "Saldo realizado":   d.saldo_real == null ? null : Number(d.saldo_real),
-      };
-    });
-  }, [data, entradas]);
+    for (const r of (data?.realizado_diario ?? [])) {
+      const c = cel(r.dia.slice(0, 10));
+      c.er += Number(r.entrada) || 0;
+      c.sr += Number(r.saida) || 0;
+    }
+    if (!porDia.size) return [];
+
+    // Série contínua de dias: sem ela a linha ligaria pontos distantes como se
+    // o intervalo não existisse.
+    const chaves = Array.from(porDia.keys()).sort();
+    const ini = new Date(`${chaves[0]}T12:00:00`);
+    const fim = new Date(`${chaves[chaves.length - 1]}T12:00:00`);
+    const hoje = new Date(); hoje.setHours(12, 0, 0, 0);
+
+    const linhas: Array<Record<string, unknown>> = [];
+    let accP = 0, accR = 0;
+    for (const d = new Date(ini); d <= fim; d.setDate(d.getDate() + 1)) {
+      const iso = d.toISOString().slice(0, 10);
+      const c = porDia.get(iso) ?? { ep: 0, sp: 0, er: 0, sr: 0 };
+      accP += c.ep - c.sp;
+      const futuro = d > hoje;
+      if (!futuro) accR += c.er - c.sr;
+      linhas.push({
+        x: `${iso.slice(8, 10)}/${iso.slice(5, 7)}`,
+        _iso: iso,
+        "Entrada prevista": c.ep, "Entrada realizada": c.er,
+        "Saída prevista": c.sp,   "Saída realizada": c.sr,
+        "Saldo previsto": accP,
+        // A curva do realizado PARA em hoje: prolongá-la faria parecer que o
+        // projeto congelou, quando na verdade ainda não chegou lá.
+        "Saldo realizado": futuro ? null : accR,
+      });
+    }
+    return linhas;
+  }, [previsto, entradas, data]);
 
   const hojeIso = new Date().toISOString().slice(0, 10);
+  /** O rótulo do primeiro dia >= hoje, para a divisória vertical. */
   const rotuloHoje = useMemo(() => {
-    const achou = grafico.find((g) => g._iso >= hojeIso);
-    return achou?.x ?? null;
+    const achou = grafico.find((g) => String(g._iso) >= hojeIso);
+    return achou ? String(achou.x) : null;
   }, [grafico, hojeIso]);
 
   // Previsto vazado, realizado sólido: é a MESMA medida em dois estados, então

@@ -78,11 +78,10 @@ export async function GET(req: Request) {
     admin.schema("bi").rpc("projeto_fluxo_previsto", {
       p_codigo_projeto: codigo, p_empresa: empresa,
     }),
-    // A curva diária de saldo — previsto e realizado no mesmo eixo. É ela que
-    // responde "estou com prejuízo neste projeto agora?".
-    admin.schema("bi").rpc("projeto_saldo_diario", {
-      p_codigo_projeto: codigo, p_empresa: empresa,
-    }),
+    // O realizado dia a dia. A curva de saldo é montada na TELA a partir dele
+    // e do previsto — uma função de banco que juntasse os dois teria que
+    // recalcular o previsto inteiro, e o previsto é a parte cara.
+    admin.schema("bi").rpc("projeto_realizado_diario", { p_codigo_projeto: codigo }),
     // O teto de gasto do projeto. Vem da mesma tabela que a tela de materiais
     // usa — um segundo lugar para editar o mesmo número daria dois budgets.
     admin.schema("approval").from("rc_projetos_budget")
@@ -111,7 +110,7 @@ export async function GET(req: Request) {
     // Linhas derivadas do Omie + cronograma + desvio. A tela soma isto com as
     // manuais; nada aqui é apagável pelo usuário.
     previsto: previsto.data ?? [],
-    saldo: saldo.data ?? [],
+    realizado_diario: saldo.data ?? [],
     orcamento: orc.data ?? null,
     eventos: eventos.data ?? [],
     pode_editar: canEdit(perms, "projetos", "pvos"),
