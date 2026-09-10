@@ -223,17 +223,37 @@ export async function POST(req: Request) {
   }
 
   const admin = supaAdmin();
-  const { data: linhas, error: lErr } = await admin.schema("approval")
-    .from("projeto_fluxo_linha").select("tipo, valor")
-    .eq("empresa", empresa).eq("codigo_projeto", codigo);
-  if (lErr) return NextResponse.json({ error: lErr.message }, { status: 500 });
 
-  const todas = (linhas ?? []) as Array<{ tipo: string; valor: number }>;
-  if (acao === "enviar" && !todas.length) {
-    return NextResponse.json({ error: "Não há linhas no fluxo para enviar." }, { status: 400 });
+  // O plano é a soma de DUAS origens: o que vem do Omie (pedido de venda,
+  // títulos, pedidos de compra) e o que foi acrescentado à mão.
+  //
+  // Antes esta rota contava só as linhas manuais. Como o fluxo passou a vir
+  // pronto do ERP, um projeto normal tem zero linhas manuais — e enviar para
+  // aprovação respondia "não há linhas no fluxo", com R$ 52 mil e R$ 36 mil na
+  // tela. Os totais gravados na aprovação também sairiam zerados.
+  const [manuais, derivadas] = await Promise.all([
+    admin.schema("approval").from("projeto_fluxo_linha").select("tipo, valor")
+      .eq("empresa", empresa).eq("codigo_projeto", codigo),
+    admin.schema("bi").rpc("projeto_fluxo_previsto",
+      { p_codigo_projeto: codigo, p_empresa: empresa }),
+  ]);
+  if (manuais.error) return NextResponse.json({ error: manuais.error.message }, { status: 500 });
+  if (derivadas.error) return NextResponse.json({ error: derivadas.error.message }, { status: 500 });
+
+  const man = (manuais.data ?? []) as Array<{ tipo: string; valor: number }>;
+  const der = (derivadas.data ?? []) as Array<{ lado: string; valor: number }>;
+  const qtd = man.length + der.length;
+
+  if (acao === "enviar" && !qtd) {
+    return NextResponse.json({
+      error: "Este projeto não tem nada previsto: nenhum pedido de venda, título ou pedido de compra, e nenhuma linha lançada à mão.",
+    }, { status: 400 });
   }
-  const totEnt = todas.filter((l) => l.tipo === "entrada").reduce((a, l) => a + Number(l.valor), 0);
-  const totSai = todas.filter((l) => l.tipo === "saida").reduce((a, l) => a + Number(l.valor), 0);
+  const totEnt = man.filter((l) => l.tipo === "entrada").reduce((a, l) => a + Number(l.valor), 0)
+               + der.filter((l) => l.lado === "entrada").reduce((a, l) => a + Number(l.valor), 0);
+  const totSai = man.filter((l) => l.tipo === "saida").reduce((a, l) => a + Number(l.valor), 0)
+               + der.filter((l) => l.lado === "saida").reduce((a, l) => a + Number(l.valor), 0);
+  const todas = { length: qtd };
 
   const { data: atual } = await admin.schema("approval").from("projeto_fluxo")
     .select("versao, status").eq("empresa", empresa).eq("codigo_projeto", codigo).maybeSingle();
@@ -267,11 +287,10 @@ export async function POST(req: Request) {
   // previsão de cada linha AGORA, o desvio seria medido contra uma data que
   // muda junto com a linha — e nunca acusaria nada.
   if (acao === "aprovar") {
-    const { data: prev } = await admin.schema("bi")
-      .rpc("projeto_fluxo_previsto", { p_codigo_projeto: codigo, p_empresa: empresa });
-    const fotos = ((prev ?? []) as Array<{
+    // Reusa o que já foi buscado acima: previsto é a consulta cara da tela.
+    const fotos = (derivadas.data as Array<{
       fonte: string; referencia: string; data_efetiva: string | null; valor: number;
-    }>).map((r) => ({
+    }> ?? []).map((r) => ({
       empresa, codigo_projeto: codigo, versao,
       fonte: r.fonte, referencia: r.referencia,
       data_prevista: r.data_efetiva, valor: r.valor,
