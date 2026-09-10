@@ -20,6 +20,8 @@
 import { useCallback, useState } from "react";
 
 export type LinhaPrevisto = {
+  parcela: number;
+  parcelas_total: number;
   lado: "entrada" | "saida";
   fonte: "titulo_receber" | "pv_a_faturar" | "pedido_compra";
   referencia: string;
@@ -85,7 +87,7 @@ export default function TabelaPrevisto({
     campo: "dt_emissao_prevista" | "dt_previsao_manual",
     valor: string,
   ) => {
-    const chave = `${l.fonte}|${l.referencia}`;
+    const chave = `${l.fonte}|${l.referencia}|${l.parcela}`;
     setSalvando(chave); setErro(null);
     try {
       const r = await fetch("/api/rc-projetos/fluxo/cronograma", {
@@ -93,7 +95,7 @@ export default function TabelaPrevisto({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           empresa, codigo_projeto: codigoProjeto,
-          fonte: l.fonte, referencia: l.referencia,
+          fonte: l.fonte, referencia: l.referencia, parcela: l.parcela ?? 0,
           // Manda os DOIS campos sempre: a rota apaga o ajuste quando os dois
           // vêm vazios, e mandar só um faria o outro sumir sem querer.
           dt_emissao_prevista: campo === "dt_emissao_prevista" ? valor || null : l.dt_emissao,
@@ -141,7 +143,7 @@ export default function TabelaPrevisto({
           </thead>
           <tbody>
             {doLado.map((l) => {
-              const chave = `${l.fonte}|${l.referencia}`;
+              const chave = `${l.fonte}|${l.referencia}|${l.parcela}`;
               const sit = SITUACAO[l.situacao] ?? SITUACAO.sem_data;
               const ajustada = !!l.dt_emissao || !!l.data_manual;
               return (

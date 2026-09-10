@@ -30,6 +30,9 @@ type Body = {
   codigo_projeto?: number;
   fonte?: string;
   referencia?: string;
+  /** Qual parcela da referência. 0 = a linha inteira (título, pedido de
+   *  compra); 1..n quando o pedido de venda é parcelado. */
+  parcela?: number;
   dt_emissao_prevista?: string | null;
   dt_previsao_manual?: string | null;
   prazo_dias_aplicado?: number | null;
@@ -76,6 +79,7 @@ export async function PUT(req: Request) {
   const linha = {
     empresa, codigo_projeto: codigo,
     fonte: String(b.fonte), referencia: String(b.referencia),
+    parcela: Number.isFinite(Number(b.parcela)) ? Number(b.parcela) : 0,
     dt_emissao_prevista: b.dt_emissao_prevista || null,
     dt_previsao_manual: b.dt_previsao_manual || null,
     prazo_dias_aplicado: Number.isFinite(Number(b.prazo_dias_aplicado))
@@ -92,11 +96,12 @@ export async function PUT(req: Request) {
   if (vazia) {
     const { error } = await admin.schema("approval").from("projeto_fluxo_cronograma")
       .delete().eq("empresa", empresa).eq("codigo_projeto", codigo)
-      .eq("fonte", linha.fonte).eq("referencia", linha.referencia);
+      .eq("fonte", linha.fonte).eq("referencia", linha.referencia)
+      .eq("parcela", linha.parcela);
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   } else {
     const { error } = await admin.schema("approval").from("projeto_fluxo_cronograma")
-      .upsert(linha, { onConflict: "empresa,codigo_projeto,fonte,referencia" });
+      .upsert(linha, { onConflict: "empresa,codigo_projeto,fonte,referencia,parcela" });
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
@@ -109,8 +114,9 @@ export async function PUT(req: Request) {
       // Precisa da data EFETIVA, que é o que o Omie deve passar a mostrar.
       const { data: prev, error: pErr } = await admin.schema("bi")
         .rpc("projeto_fluxo_previsto", { p_codigo_projeto: codigo, p_empresa: empresa });
-      const alvo = ((prev ?? []) as Array<{ fonte: string; referencia: string; data_efetiva: string | null }>)
-        .find((r) => r.fonte === linha.fonte && r.referencia === linha.referencia);
+      const alvo = ((prev ?? []) as Array<{ fonte: string; referencia: string; parcela: number; data_efetiva: string | null }>)
+        .find((r) => r.fonte === linha.fonte && r.referencia === linha.referencia
+                  && Number(r.parcela ?? 0) === linha.parcela);
       if (pErr || !alvo?.data_efetiva) {
         omie = { ok: false, motivo: pErr?.message ?? "não consegui calcular a data efetiva desta linha" };
       } else {
