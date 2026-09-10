@@ -65,7 +65,27 @@ type Payload = {
   error?: string;
 };
 
-type Lado = "ambos" | "entra" | "sai";
+/** "Receber" e "Pagar", não "Entra" e "Sai".
+ *
+ *  Entra/sai descreve o movimento no caixa; receber/pagar é como o financeiro
+ *  chama, e é o nome das telas que esta substitui. Usar o vocabulário de quem
+ *  opera evita a tradução mental a cada leitura. */
+type Lado = "ambos" | "receber" | "pagar";
+/** Cores translúcidas por natureza: vermelho paga, verde recebe. Fundo com
+ *  alpha em vez de sólido porque o chip fica sobre painel escuro — cor cheia
+ *  competiria com os gráficos, que são o conteúdo. */
+const LADOS = [
+  { k: "ambos" as const, label: "Ambos",
+    on:  "border-ww-accent/70 text-ww-accent bg-ww-accent/15 font-semibold shadow-[0_0_0_3px_rgb(var(--color-ww-accent)/0.08)]",
+    off: "border-ww-border/70 text-ww-textMuted hover:text-ww-text hover:bg-ww-rowHover" },
+  { k: "receber" as const, label: "Receber",
+    on:  "border-emerald-500/70 text-emerald-600 dark:text-emerald-300 bg-emerald-500/15 font-semibold shadow-[0_0_0_3px_rgba(16,185,129,0.10)]",
+    off: "border-ww-border/70 text-ww-textMuted hover:text-emerald-600 dark:hover:text-emerald-300 hover:border-emerald-500/40 hover:bg-emerald-500/[0.07]" },
+  { k: "pagar" as const, label: "Pagar",
+    on:  "border-rose-500/70 text-rose-600 dark:text-rose-300 bg-rose-500/15 font-semibold shadow-[0_0_0_3px_rgba(244,63,94,0.10)]",
+    off: "border-ww-border/70 text-ww-textMuted hover:text-rose-600 dark:hover:text-rose-300 hover:border-rose-500/40 hover:bg-rose-500/[0.07]" },
+];
+
 type Aba  = "fluxo" | "analise" | "recebiveis";
 
 export default function FinanceiroView() {
@@ -95,16 +115,19 @@ export default function FinanceiroView() {
 
   return (
     <div className="space-y-3.5">
-      <div className="flex items-center gap-3 flex-wrap bg-ww-panel border border-ww-border rounded-xl p-2">
-        <div className="flex items-center gap-1">
+      <div className="flex items-center gap-3 flex-wrap bg-ww-panel/80 backdrop-blur-sm border border-ww-border rounded-xl px-2.5 py-2 shadow-sm">
+        {/* Abas em controle segmentado: um trilho só, com a ativa em relevo.
+            Botões soltos lado a lado não diziam que eram alternativas entre si. */}
+        <div className="flex items-center gap-0.5 p-0.5 rounded-lg bg-ww-bg/60 border border-ww-border/60">
           {([["fluxo", "Fluxo", "quando o caixa aperta — e a mesa pra reagendar"],
              ["analise", "Análise", "por que aperta — aging, horizonte, mês a mês"],
              ["recebiveis", "Recebíveis", "onde o dinheiro trava, por tipo de venda"]] as const)
             .map(([k, l, hint]) => (
               <button key={k} type="button" onClick={() => setAba(k)} title={hint}
-                className={`px-3 py-1.5 text-[12px] rounded-lg border transition ${
-                  aba === k ? "border-ww-accent text-ww-accent bg-ww-accentSoft font-semibold"
-                            : "border-transparent text-ww-textMuted hover:text-ww-text hover:bg-ww-rowHover"}`}>
+                className={`px-3.5 py-1.5 text-[12px] rounded-md transition-all duration-150 ${
+                  aba === k
+                    ? "bg-ww-panel text-ww-text font-semibold shadow-sm ring-1 ring-ww-border"
+                    : "text-ww-textMuted hover:text-ww-text"}`}>
                 {l}
               </button>
           ))}
@@ -115,17 +138,13 @@ export default function FinanceiroView() {
         {aba !== "fluxo" && (
           <>
             <span className="h-6 w-px bg-ww-border" />
-            <div className="flex items-center gap-1">
-              <span className="text-[9px] uppercase tracking-[0.7px] font-bold text-ww-textFaint mr-1">Lado</span>
-              {([["ambos", "Ambos"], ["entra", "Entra"], ["sai", "Sai"]] as const).map(([k, l]) => (
+            <div className="flex items-center gap-1.5">
+              <span className="text-[9px] uppercase tracking-[0.7px] font-bold text-ww-textFaint mr-0.5">Mostrar</span>
+              {LADOS.map(({ k, label, on, off }) => (
                 <button key={k} type="button" onClick={() => setLado(k)}
-                  className={`px-2.5 py-1 text-[11.5px] rounded-md border transition ${
-                    lado === k
-                      ? k === "entra" ? "border-emerald-500 text-emerald-700 dark:text-emerald-300 bg-emerald-500/10 font-semibold"
-                      : k === "sai"   ? "border-rose-500 text-rose-700 dark:text-rose-300 bg-rose-500/10 font-semibold"
-                      :                 "border-ww-accent text-ww-accent bg-ww-accentSoft font-semibold"
-                      : "border-ww-border text-ww-textMuted hover:text-ww-text"}`}>
-                  {l}
+                  className={`px-3 py-1.5 text-[11.5px] rounded-lg border transition-all duration-150 ${
+                    lado === k ? on : off}`}>
+                  {label}
                 </button>
               ))}
             </div>
@@ -144,6 +163,11 @@ export default function FinanceiroView() {
         </div>
       )}
 
+      {/* Resumo do que está em aberto. Faltava: as abas novas mostravam gráficos
+          sem nenhum número âncora, e "quanto é isso no total" ficava sem
+          resposta. Respeita o seletor — é o mesmo recorte dos gráficos. */}
+      {aba !== "fluxo" && data && <Resumo data={data} lado={lado} />}
+
       {/* A tela de fluxo INTEIRA, sem alteração. Todas as funções continuam. */}
       {aba === "fluxo" && <FluxoCaixaView />}
 
@@ -155,9 +179,66 @@ export default function FinanceiroView() {
 
 // ─────────────────────────────────────────────────────────────────────────────
 
+/** Faixa de resumo. Verde e vermelho translúcidos, e o número em tinta de texto
+ *  quando é neutro — cor só onde ela significa algo. */
+function Resumo({ data, lado }: { data: Payload; lado: Lado }) {
+  const r = data.resumo.entra, p = data.resumo.sai;
+  const cards: Array<{ rot: string; val: string; sub: string; tom: "receber" | "pagar" | "neutro" }> = [];
+
+  if (lado !== "pagar" && r) {
+    cards.push(
+      { rot: "A receber — em aberto", val: brl(r.saldo_aberto),
+        sub: `${r.qtd_titulos} títulos`, tom: "receber" },
+      { rot: "A receber — vencido", val: brl(r.em_atraso),
+        sub: `${brlK(r.prox_30_dias)} vencem em 30 dias`, tom: "receber" },
+    );
+  }
+  if (lado !== "receber" && p) {
+    cards.push(
+      { rot: "A pagar — em aberto", val: brl(p.saldo_aberto),
+        sub: `${p.qtd_titulos} títulos`, tom: "pagar" },
+      { rot: "A pagar — vencido", val: brl(p.em_atraso),
+        sub: `${brlK(p.prox_30_dias)} vencem em 30 dias`, tom: "pagar" },
+    );
+  }
+  if (lado === "ambos" && r && p) {
+    cards.push({
+      rot: "Saldo líquido em aberto",
+      val: brl(r.saldo_aberto - p.saldo_aberto),
+      sub: "a receber menos a pagar, sem prazo",
+      tom: "neutro",
+    });
+  }
+
+  const estilo = {
+    receber: "border-emerald-500/25 bg-emerald-500/[0.06]",
+    pagar:   "border-rose-500/25 bg-rose-500/[0.06]",
+    neutro:  "border-ww-border bg-ww-panel",
+  };
+  const tinta = {
+    receber: "text-emerald-600 dark:text-emerald-300",
+    pagar:   "text-rose-600 dark:text-rose-300",
+    neutro:  "text-ww-text",
+  };
+
+  return (
+    <div className={`grid gap-3 ${cards.length >= 5 ? "grid-cols-2 lg:grid-cols-5" : "grid-cols-2 lg:grid-cols-4"}`}>
+      {cards.map((c) => (
+        <div key={c.rot} className={`rounded-xl border p-3 transition-colors ${estilo[c.tom]}`}>
+          <div className="text-[9.5px] uppercase tracking-[0.7px] font-bold text-ww-textFaint">{c.rot}</div>
+          <div className={`text-[19px] font-bold tabular-nums tracking-[-0.5px] mt-1 ${tinta[c.tom]}`}>
+            {c.val}
+          </div>
+          <div className="text-[10.5px] text-ww-textMuted mt-0.5">{c.sub}</div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function Analise({ data, lado, loading }: { data: Payload | null; lado: Lado; loading: boolean }) {
-  const mostraEntra = lado !== "sai";
-  const mostraSai   = lado !== "entra";
+  const mostraEntra = lado !== "pagar";
+  const mostraSai   = lado !== "receber";
 
   /** Aging dos dois lados no MESMO eixo de faixas. As funções devolvem faixas
    *  iguais por construção, então casar por nome é seguro. */
@@ -192,8 +273,8 @@ function Analise({ data, lado, loading }: { data: Payload | null; lado: Lado; lo
    *  diferença de uma palavra que sustentava dois gráficos em duas telas. */
   const mensal = useMemo(() => {
     if (!data) return [];
-    const fonte = lado === "entra" ? data.mensal.entra
-                : lado === "sai"   ? data.mensal.sai
+    const fonte = lado === "receber" ? data.mensal.entra
+                : lado === "pagar"   ? data.mensal.sai
                 : null;
     if (fonte) return fonte.map((m) => ({ x: mesBr(`${m.mes}-01`), Emitido: m.emitido, Liquidado: m.pago }));
     // "Ambos": soma os dois lados por mês seria misturar entrada com saída, o
@@ -207,15 +288,15 @@ function Analise({ data, lado, loading }: { data: Payload | null; lado: Lado; lo
   }, [data, lado]);
 
   const serieLado = (): SeriesDef[] => [
-    ...(mostraEntra ? [{ key: "Entra", label: "Entra", slot: 5, mark: "rect" } as SeriesDef] : []),
-    ...(mostraSai   ? [{ key: "Sai",   label: "Sai",   slot: 3, mark: "rect" } as SeriesDef] : []),
+    ...(mostraEntra ? [{ key: "Entra", label: "A receber", slot: 5, mark: "rect" } as SeriesDef] : []),
+    ...(mostraSai   ? [{ key: "Sai",   label: "A pagar",  slot: 3, mark: "rect" } as SeriesDef] : []),
   ];
   const serieMensal: SeriesDef[] = lado === "ambos" ? serieLado() : [
     { key: "Emitido",   label: "Emitido", slot: 0, mark: "rect" },
-    { key: "Liquidado", label: lado === "entra" ? "Recebido" : "Pago", slot: 5, mark: "rect" },
+    { key: "Liquidado", label: lado === "receber" ? "Recebido" : "Pago", slot: 5, mark: "rect" },
   ];
 
-  const top = lado === "entra" ? data?.top.entra : data?.top.sai;
+  const top = lado === "receber" ? data?.top.entra : data?.top.sai;
   const topRows = (top ?? []).map((t) => ({ x: t.contraparte, valor: t.valor }));
 
   return (
@@ -223,7 +304,7 @@ function Analise({ data, lado, loading }: { data: Payload | null; lado: Lado; lo
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-3.5">
         <ChartFrame
           title="Vencido — por idade do atraso"
-          subtitle="Um gráfico para os dois lados. Antes eram dois idênticos, um em Contas a Pagar e outro em Contas a Receber."
+          subtitle="Um gráfico para os dois lados. Antes eram dois idênticos — um em Contas a Pagar, outro em Contas a Receber."
           series={serieLado()} rows={aging} valueFormat={(v) => brl(Number(v))}
           loading={loading} height={260}
         >
@@ -244,9 +325,9 @@ function Analise({ data, lado, loading }: { data: Payload | null; lado: Lado; lo
 
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-3.5">
         <ChartFrame
-          title={lado === "ambos" ? "Emitido por mês — entra × sai" : "Emitido × liquidado por mês"}
+          title={lado === "ambos" ? "Emitido por mês — receber × pagar" : "Emitido × liquidado por mês"}
           subtitle={lado === "ambos"
-            ? "Com os dois lados, comparar o EMITIDO de cada um: somar entrada com saída num total não significaria nada."
+            ? "Com os dois lados, comparar o EMITIDO de cada um. Somar a receber com a pagar num total só não significaria nada."
             : "O passado, mês a mês. A diferença entre emitir e liquidar é o que a curva do fluxo projeta pra frente."}
           series={serieMensal} rows={mensal} valueFormat={(v) => brl(Number(v))}
           loading={loading} height={260}
@@ -256,13 +337,13 @@ function Analise({ data, lado, loading }: { data: Payload | null; lado: Lado; lo
         </ChartFrame>
 
         <ChartFrame
-          title={lado === "entra" ? "Maiores clientes — recebido no período" : "Maiores fornecedores — pago no período"}
+          title={lado === "receber" ? "Maiores clientes — recebido no período" : "Maiores fornecedores — pago no período"}
           subtitle="Liquidado de fato, não contratado. Responde para onde o dinheiro foi."
-          series={[{ key: "valor", label: "Valor", slot: lado === "entra" ? 5 : 3, mark: "rect" }]}
+          series={[{ key: "valor", label: "Valor", slot: lado === "receber" ? 5 : 3, mark: "rect" }]}
           rows={topRows} valueFormat={(v) => brl(Number(v))} loading={loading} height={260}
         >
           <VizBar rows={topRows}
-            series={[{ key: "valor", label: "Valor", slot: lado === "entra" ? 5 : 3, mark: "rect" }]}
+            series={[{ key: "valor", label: "Valor", slot: lado === "receber" ? 5 : 3, mark: "rect" }]}
             layout="row" categoryWidth={190} valueFormat={(v) => brlK(v)} />
         </ChartFrame>
       </div>
@@ -355,27 +436,38 @@ function Recebiveis({ data, loading }: { data: Payload | null; loading: boolean 
       <div className="flex items-center gap-2 flex-wrap px-1">
         <span className="text-[10px] uppercase tracking-[0.7px] font-bold text-ww-textFaint">Mês</span>
         <button type="button" onClick={() => setMesSel(null)}
-          className={`px-2 py-0.5 text-[11px] rounded border transition ${
-            !mesSel ? "border-ww-accent text-ww-accent bg-ww-accentSoft font-semibold"
-                    : "border-ww-border text-ww-textMuted hover:text-ww-text"}`}>
+          className={`px-3 py-1 text-[11px] rounded-lg border transition-all duration-150 ${
+            !mesSel ? "border-ww-accent/70 text-ww-accent bg-ww-accent/15 font-semibold"
+                    : "border-ww-border/70 text-ww-textMuted hover:text-ww-text hover:bg-ww-rowHover"}`}>
           Todos
         </button>
         {coorte.map((c) => (
           <button key={c.mesIso} type="button" onClick={() => setMesSel(c.mesIso)}
             title={`${brl(c.faturado)} faturado · ${c.pct ?? "—"}% recebido`}
-            className={`px-2 py-0.5 text-[11px] rounded border transition tabular-nums ${
-              mesSel === c.mesIso ? "border-ww-accent text-ww-accent bg-ww-accentSoft font-semibold"
-                                  : "border-ww-border text-ww-textMuted hover:text-ww-text"}`}>
-            {c.x}{c.pct != null && <span className="ml-1 opacity-70">{Math.round(c.pct)}%</span>}
+            className={`inline-flex items-center gap-1.5 pl-2.5 pr-1.5 py-1 text-[11px] rounded-lg border transition-all duration-150 tabular-nums ${
+              mesSel === c.mesIso
+                ? "border-ww-accent/70 text-ww-accent bg-ww-accent/15 font-semibold"
+                : "border-ww-border/70 text-ww-textMuted hover:text-ww-text hover:bg-ww-rowHover"}`}>
+            {c.x}
+            {c.pct != null && (
+              // O % colorido pela conversão: é a informação que faz escolher o mês.
+              <span className={`px-1.5 py-px rounded text-[10px] font-semibold ${
+                c.pct >= 95 ? "bg-emerald-500/20 text-emerald-600 dark:text-emerald-300"
+                : c.pct >= 70 ? "bg-amber-500/20 text-amber-600 dark:text-amber-300"
+                :               "bg-rose-500/20 text-rose-600 dark:text-rose-300"}`}>
+                {Math.round(c.pct)}%
+              </span>
+            )}
           </button>
         ))}
       </div>
 
       {pior && (
-        <div className="px-3 py-2 rounded-lg border border-amber-500/40 bg-amber-500/10 text-[11.5px] text-amber-800 dark:text-amber-200">
-          Pior conversão {mesSel ? `em ${mesBr(mesSel)}` : "no período"}:{" "}
+        <div className="flex items-start gap-2 px-3.5 py-2.5 rounded-xl border border-amber-500/30 bg-amber-500/[0.08] text-[11.5px] text-amber-800 dark:text-amber-200">
+          <span aria-hidden className="text-[13px] leading-none mt-px">⚠</span>
+          <span>Pior conversão {mesSel ? `em ${mesBr(mesSel)}` : "no período"}:{" "}
           <strong>{pior.categoria}</strong> — {pior.pct?.toFixed(1).replace(".", ",")}% recebido de{" "}
-          {brl(pior.faturado)}, com <strong>{brl(pior.vencido)}</strong> vencido.
+          {brl(pior.faturado)}, com <strong>{brl(pior.vencido)}</strong> vencido.</span>
         </div>
       )}
 
