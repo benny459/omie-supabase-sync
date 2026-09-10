@@ -1144,10 +1144,17 @@ export default function FluxoCaixaView() {
             ))}
           </Grupo>
 
-          <Grupo rot="Fluxo">
-            {([["todos", "Ambos"], ["R", "Entra"], ["P", "Sai"]] as const).map(([k, l]) => (
-              <Chip key={k} on={tipo === k} onClick={() => { setTipo(k); ancoraRef.current = null; }}>{l}</Chip>
-            ))}
+          {/* "Receber"/"Pagar" e não "Entra"/"Sai": é o vocabulário do financeiro,
+              e o mesmo das telas que esta consolidou. A cor translúcida por
+              natureza deixa mirar sem ler — verde recebe, vermelho paga. */}
+          <Grupo rot="Natureza">
+            <Chip on={tipo === "todos"} onClick={() => { setTipo("todos"); ancoraRef.current = null; }}>
+              Ambos
+            </Chip>
+            <ChipTom on={tipo === "R"} tom="receber"
+              onClick={() => { setTipo("R"); ancoraRef.current = null; }}>Receber</ChipTom>
+            <ChipTom on={tipo === "P"} tom="pagar"
+              onClick={() => { setTipo("P"); ancoraRef.current = null; }}>Pagar</ChipTom>
           </Grupo>
 
           {/* Previsão: atalhos antes do intervalo. "Vence hoje" é a pergunta mais
@@ -1626,7 +1633,7 @@ export default function FluxoCaixaView() {
                         t.natureza === "R"
                           ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/30"
                           : "bg-rose-500/15 text-rose-700 dark:text-rose-300 border-rose-500/30"}`}>
-                        {t.natureza === "R" ? "Entra" : "Sai"}
+                        {t.natureza === "R" ? "Receber" : "Pagar"}
                       </span>
                     </td>
                     <td className="p-1.5 border-b border-ww-border/50 text-ww-textMuted">{t.empresa}</td>
@@ -1915,6 +1922,26 @@ function Grupo({ rot, children }: { rot: string; children: React.ReactNode }) {
       </span>
       <div className="flex items-center gap-1">{children}</div>
     </div>
+  );
+}
+
+/** Chip com cor por natureza. Fundo translúcido porque fica sobre painel
+ *  escuro — cor cheia competiria com a tabela, que é o conteúdo. */
+function ChipTom({
+  on, tom, onClick, children,
+}: { on: boolean; tom: "receber" | "pagar"; onClick: () => void; children: React.ReactNode }) {
+  const estilo = on
+    ? tom === "receber"
+      ? "border-emerald-500/70 text-emerald-600 dark:text-emerald-300 bg-emerald-500/15 font-semibold"
+      : "border-rose-500/70 text-rose-600 dark:text-rose-300 bg-rose-500/15 font-semibold"
+    : tom === "receber"
+      ? "border-ww-border text-ww-textMuted hover:text-emerald-600 dark:hover:text-emerald-300 hover:border-emerald-500/40 hover:bg-emerald-500/[0.07]"
+      : "border-ww-border text-ww-textMuted hover:text-rose-600 dark:hover:text-rose-300 hover:border-rose-500/40 hover:bg-rose-500/[0.07]";
+  return (
+    <button type="button" onClick={onClick}
+      className={`px-2 py-0.5 text-[11px] rounded border transition-all duration-150 whitespace-nowrap ${estilo}`}>
+      {children}
+    </button>
   );
 }
 
