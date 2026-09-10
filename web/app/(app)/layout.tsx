@@ -4,7 +4,7 @@ import ThemeToggle from "@/components/ThemeToggle";
 import SeletorPaleta from "@/components/viz/SeletorPaleta";
 import { UserPermsProvider } from "@/components/UserPermsProvider";
 import VersionWatcher from "@/components/VersionWatcher";
-import SupportWidget from "@/components/SupportWidget";
+// import SupportWidget from "@/components/SupportWidget";   // ver nota no fim do arquivo
 import { supaServer } from "@/lib/supabase-server";
 import type { AreaAccess, ModuleRole, PermsOverride, Role, UserPerms } from "@/lib/permissions";
 
@@ -47,10 +47,15 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         </div>
         <div className="p-4 md:p-6 min-w-0">{children}</div>
       </main>
+      {/* Suporte desligado a pedido do Benny em 10/09/2026 — vai ser retomado e
+          evoluído depois. Só a montagem saiu: components/SupportWidget.tsx,
+          /api/bug-chat e as tabelas continuam de pé, então voltar é descomentar
+          estas quatro linhas e o import acima.
+
       <SupportWidget
         user={user ? { email: user.email, nome: (user.user_metadata as { full_name?: string } | null)?.full_name || user.email } : null}
         isAdmin={!!perms?.is_admin}
-      />
+      /> */}
     </UserPermsProvider>
   );
 }
