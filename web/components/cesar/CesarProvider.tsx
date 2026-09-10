@@ -223,20 +223,9 @@ export default function CesarProvider({ children }: { children: React.ReactNode 
     <CesarCtx.Provider value={{ abrir, aberto }}>
       {children}
 
-      {/* Lançador flutuante. Só aparece com o painel fechado. */}
-      {!aberto && (
-        <button
-          type="button" onClick={() => abrir()}
-          title="Cesar — analista financeiro. Pergunte qualquer coisa sobre caixa, recebíveis, margem ou despesa."
-          className="fixed bottom-4 left-1/2 -translate-x-1/2 z-40 inline-flex items-center gap-2
-                     pl-3 pr-4 py-2 rounded-full border border-ww-border bg-ww-panel/95 backdrop-blur
-                     shadow-lg text-[12px] text-ww-text hover:border-ww-accent/60 hover:shadow-xl transition-all"
-        >
-          <span aria-hidden className="w-6 h-6 rounded-full bg-gradient-to-br from-sky-500 to-violet-500
-                                       text-white text-[11px] font-bold grid place-items-center">C</span>
-          Perguntar ao <strong className="font-semibold">Cesar</strong>
-        </button>
-      )}
+      {/* Sem lançador flutuante: a porta do Cesar é o BotaoCesar na barra de
+          cima. A pílula que ficava no rodapé era fixa no meio da tela e tapava
+          conteúdo — em Projetos, caía em cima da linha do pipeline. */}
 
       {aberto && (
         <aside className="fixed top-0 right-0 bottom-0 z-50 w-full sm:w-[min(560px,92vw)]

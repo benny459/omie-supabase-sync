@@ -4,6 +4,7 @@ import ThemeToggle from "@/components/ThemeToggle";
 import SeletorPaleta from "@/components/viz/SeletorPaleta";
 import { UserPermsProvider } from "@/components/UserPermsProvider";
 import VersionWatcher from "@/components/VersionWatcher";
+import BotaoCesar from "@/components/cesar/BotaoCesar";
 // import SupportWidget from "@/components/SupportWidget";   // ver nota no fim do arquivo
 import { supaServer } from "@/lib/supabase-server";
 import type { AreaAccess, ModuleRole, PermsOverride, Role, UserPerms } from "@/lib/permissions";
@@ -42,6 +43,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         <div className="border-b border-ww-border bg-ww-panel/70 backdrop-blur px-4 md:px-6 py-1.5 flex items-center justify-end gap-3">
           <VersionWatcher />
           <SyncStatusBar />
+          <BotaoCesar />
           <SeletorPaleta />
           <ThemeToggle />
         </div>
