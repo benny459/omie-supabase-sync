@@ -363,22 +363,24 @@ export default function FluxoProjetoView({
         )}
       </ChartFrame>
 
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-3.5">
-        <Secao
-          titulo="Entradas previstas"
-          dica="O que você espera receber: parcelas do PV, medições. Digite, ou cole do Excel as colunas Descrição · Categoria · Data · Valor."
-          total={totEnt} tom="receber"
-          linhas={entradas} onChange={(l) => { setEntradas(l); setSujo(true); }}
-          somenteLeitura={!podeEditar}
-        />
-        <Secao
-          titulo="Saídas previstas"
-          dica="O que você espera pagar: compras, serviços, despesas do projeto."
-          total={totSai} tom="pagar"
-          linhas={saidas} onChange={(l) => { setSaidas(l); setSujo(true); }}
-          somenteLeitura={!podeEditar}
-        />
-      </div>
+      {/* Empilhadas em largura cheia, não lado a lado. Com duas colunas a grade
+          recebia ~600px e a coluna VALOR — a mais importante das quatro — ficava
+          cortada fora da vista. Grade é para digitar; digitar num campo que não
+          se enxerga não é uma opção de layout. */}
+      <Secao
+        titulo="Entradas previstas"
+        dica="O que você espera receber: parcelas do PV, medições. Digite, ou cole do Excel as colunas Descrição · Categoria · Data · Valor."
+        total={totEnt} tom="receber"
+        linhas={entradas} onChange={(l) => { setEntradas(l); setSujo(true); }}
+        somenteLeitura={!podeEditar}
+      />
+      <Secao
+        titulo="Saídas previstas"
+        dica="O que você espera pagar: compras, serviços, despesas do projeto."
+        total={totSai} tom="pagar"
+        linhas={saidas} onChange={(l) => { setSaidas(l); setSujo(true); }}
+        somenteLeitura={!podeEditar}
+      />
 
       {(data?.eventos?.length ?? 0) > 0 && (
         <details className="rounded-xl border border-ww-border bg-ww-panel px-3.5 py-2.5">
