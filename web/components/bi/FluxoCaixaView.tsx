@@ -26,23 +26,63 @@ import VizBar from "@/components/viz/VizBar";
 import VizCombo from "@/components/viz/VizCombo";
 import VizTable, { type Col } from "@/components/viz/VizTable";
 
-// Janelas. "Esta semana" e "Mês atual" são dinâmicas: viram um número de dias
-// calculado na hora, então a curva termina exatamente no domingo / no último dia
-// do mês, em vez de num ponto arbitrário.
-type Janela = { key: string; label: string; dias: () => number };
-const JANELAS: Janela[] = [
-  { key: "semana", label: "Esta semana", dias: () => {
+// PERÍODO — um intervalo só, que pode cair dos dois lados do hoje.
+//
+// ── O erro que isto corrige ─────────────────────────────────────────────────
+// Antes eram dois controles: "Janela" (quantos dias pra frente) e "Passado"
+// (quantos pra trás). O modelo estava errado, e "Este mês" mostrou por quê: no
+// dia 10, este mês é 9 dias de passado e 20 de futuro — não é uma escolha entre
+// olhar pra frente OU pra trás. Com dois controles independentes, escolher "Este
+// mês" trazia do dia 10 ao dia 30 e escondia justamente o que já aconteceu.
+//
+// Agora existe UM período, com início e fim. Cada preset devolve os dois lados
+// como deslocamento em dias a partir de hoje (negativo = passado). "Próximos
+// 30 dias" é 0 → +30; "Últimos 30" é −30 → 0; "Este mês" é −9 → +20 hoje, e
+// amanhã é −10 → +19, porque é calculado na hora.
+type Periodo = {
+  key: string; label: string; dica: string;
+  /** [início, fim] em dias a partir de hoje. Negativo = passado. */
+  faixa: () => [number, number];
+};
+
+/** Meia-noite local, para a diferença entre datas não carregar a hora. */
+const meiaNoite = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
+const emDias = (alvo: Date) =>
+  Math.round((meiaNoite(alvo).getTime() - meiaNoite(new Date()).getTime()) / 86_400_000);
+
+const PERIODOS: Periodo[] = [
+  { key: "semana", label: "Esta semana", dica: "de segunda a domingo desta semana — parte já passou",
+    faixa: () => {
       const h = new Date();
-      return 7 - (h.getDay() === 0 ? 7 : h.getDay());   // até o próximo domingo
+      const dow = h.getDay() === 0 ? 7 : h.getDay();     // 1 = segunda … 7 = domingo
+      return [-(dow - 1), 7 - dow];
     } },
-  { key: "mes", label: "Mês atual", dias: () => {
+  { key: "mes", label: "Este mês", dica: "do dia 1º ao último dia do mês corrente — passado e futuro juntos",
+    faixa: () => {
       const h = new Date();
-      const fim = new Date(h.getFullYear(), h.getMonth() + 1, 0);
-      return Math.round((fim.getTime() - h.getTime()) / 86_400_000);
+      return [emDias(new Date(h.getFullYear(), h.getMonth(), 1)),
+              emDias(new Date(h.getFullYear(), h.getMonth() + 1, 0))];
     } },
-  { key: "60", label: "60 dias", dias: () => 60 },
-  { key: "90", label: "90 dias", dias: () => 90 },
-  { key: "180", label: "180 dias", dias: () => 180 },
+  { key: "mes-passado", label: "Mês passado", dica: "o mês fechado anterior, só realizado",
+    faixa: () => {
+      const h = new Date();
+      return [emDias(new Date(h.getFullYear(), h.getMonth() - 1, 1)),
+              emDias(new Date(h.getFullYear(), h.getMonth(), 0))];
+    } },
+  { key: "pm30", label: "±30 dias", dica: "30 dias pra trás e 30 pra frente",  faixa: () => [-30, 30] },
+  { key: "pm90", label: "±90 dias", dica: "90 pra trás e 90 pra frente",       faixa: () => [-90, 90] },
+  // Terminam ONTEM, não hoje. "Últimos 30 dias" são os 30 dias já fechados; se
+  // acabassem em hoje, o gráfico ganharia um trecho de projeção com um ponto só
+  // — que o recharts não desenha, produzindo uma legenda que promete uma linha
+  // tracejada inexistente.
+  { key: "u30",  label: "Últimos 30", dica: "os 30 dias já fechados, até ontem", faixa: () => [-30, -1] },
+  { key: "u90",  label: "Últimos 90", dica: "os 90 dias já fechados, até ontem", faixa: () => [-90, -1] },
+  { key: "p30",  label: "Próximos 30", dica: "só projeção",                    faixa: () => [0, 30] },
+  { key: "p60",  label: "Próximos 60", dica: "só projeção",                    faixa: () => [0, 60] },
+  { key: "p90",  label: "Próximos 90", dica: "só projeção",                    faixa: () => [0, 90] },
+  // "Este ano" não entra aqui de propósito: daria ~364 colunas diárias, com as
+  // barras a 3px. A pergunta do ano é respondida pelo gráfico MENSAL de
+  // previsto × realizado, logo abaixo nesta mesma tela.
 ];
 
 const brl = (v: number) =>
@@ -300,15 +340,24 @@ const COLS_CONTAS: Col<ContaRow>[] = [
 export default function FluxoCaixaView() {
   // Guarda o PRESET, não o número: "esta semana" precisa recalcular os dias a
   // cada render, senão vira um valor congelado no dia em que foi clicado.
-  const [janela, setJanela] = useState("60");
-  const jan = JANELAS.find((j) => j.key === janela) ?? JANELAS[2];
-  const dias = Math.max(1, jan.dias());
-  /** Quanto do passado desenhar junto. Zero = só a projeção, como era antes.
+  // Guarda o PRESET, não as datas: "este mês" precisa recalcular a cada render,
+  // senão vira um intervalo congelado no dia em que foi clicado.
+  const [periodo, setPeriodo] = useState("p60");
+  const per = PERIODOS.find((p) => p.key === periodo) ?? PERIODOS[7];
+  const [deOff, ateOff] = per.faixa();
+
+  /** Os dois lados do hoje, cada um não-negativo. É a tradução do período único
+   *  para o que cada fonte entende: o realizado só sabe olhar pra trás, a
+   *  projeção só pra frente. */
+  const diasAtras  = Math.max(0, -deOff);
+  const diasFrente = Math.max(0, ateOff);
+  /** Horizonte da BUSCA, não do desenho.
    *
-   *  É estado separado da janela de propósito: quem olha 180 dias pra frente
-   *  raramente quer 180 pra trás, e amarrar os dois num controle só daria um
-   *  gráfico com 360 colunas ilegíveis. */
-  const [diasAtras, setDiasAtras] = useState(0);
+   *  A mesa de reagendar come dos mesmos títulos que a curva. Se o período for
+   *  "Últimos 30", a frente é 0 e a mesa ficaria vazia — o usuário perderia a
+   *  ferramenta de reagendamento por ter escolhido olhar pra trás. Então busca
+   *  sempre pelo menos 60 dias e o GRÁFICO é que recorta. */
+  const dias = Math.max(diasFrente, 60);
   const [data, setData] = useState<Payload | null>(null);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
@@ -441,7 +490,7 @@ export default function FluxoCaixaView() {
    *  isso faria o gráfico não fechar com o card de "a vencer", que é contado no
    *  servidor pela data crua. Poucos títulos, mas some sem avisar se eu deixar. */
   const empurrao = useMemo(() => {
-    const fim = addDias(hojeIso(), dias);
+    const fim = addDias(hojeIso(), diasFrente);
     let qtd = 0, valor = 0, foraQtd = 0, foraValor = 0;
     for (const t of titulosNaCurva) {
       const novo = proximoDiaUtil(t.previsao);
@@ -520,15 +569,15 @@ export default function FluxoCaixaView() {
 
 
   const curva = useMemo(
-    () => projetar(saldo0, titulosNaCurva, dias, extras),
-    [saldo0, titulosNaCurva, dias, extras],
+    () => projetar(saldo0, titulosNaCurva, diasFrente, extras),
+    [saldo0, titulosNaCurva, diasFrente, extras],
   );
   /** O contrafactual: sem nenhum reagendamento, gravado ou desta sessão. */
   const semAgendar = useMemo(
     () => (comOverrideNaCurva > 0 || extras.length
-            ? projetar(saldo0, titulosNaCurva, dias, [], true)
+            ? projetar(saldo0, titulosNaCurva, diasFrente, [], true)
             : null),
-    [saldo0, titulosNaCurva, dias, extras.length, comOverrideNaCurva],
+    [saldo0, titulosNaCurva, diasFrente, extras.length, comOverrideNaCurva],
   );
 
 
@@ -543,8 +592,8 @@ export default function FluxoCaixaView() {
    *  às outras seria ruído. */
   const previa = useMemo(() => {
     if (!destinos.size) return null;
-    return projetar(saldo0, titulosNaCurva, dias, extras, false, destinos);
-  }, [destinos, saldo0, titulosNaCurva, dias, extras]);
+    return projetar(saldo0, titulosNaCurva, diasFrente, extras, false, destinos);
+  }, [destinos, saldo0, titulosNaCurva, diasFrente, extras]);
 
   /** O passado, reconstruído de trás pra frente a partir do saldo de hoje.
    *
@@ -573,10 +622,25 @@ export default function FluxoCaixaView() {
       });
       saldo -= Number(d.liquido) || 0;
     }
-    return pts;
-  }, [data, saldo0]);
+    // O recorte vem DEPOIS do passeio, não antes.
+    //
+    // Em "Mês passado" o período acaba em 31/08, mas o saldo de partida é o de
+    // HOJE — para chegar ao saldo de 31/08 é obrigatório desfazer também os dias
+    // de setembro. Filtrar antes faria o passeio começar de 31/08 com o saldo de
+    // hoje, e a curva inteira do mês sairia deslocada pelo movimento de setembro.
+    const de  = addDias(hojeIso(), deOff);
+    const ate = addDias(hojeIso(), Math.min(ateOff, -1));
+    return pts.filter((p) => p.dia >= de && p.dia <= ate);
+  }, [data, saldo0, deOff, ateOff]);
 
   const rotuloHoje = diaBr(hojeIso());
+  /** O período termina antes de hoje? Então não há futuro nenhum a desenhar —
+   *  em "Mês passado", uma coluna solitária de hoje estaria fora do intervalo
+   *  que o usuário pediu. */
+  const mostraFuturo = ateOff >= 0;
+  /** A divisória só faz sentido quando existem os DOIS lados. Num período só de
+   *  futuro ela cairia colada na borda esquerda, dizendo o óbvio. */
+  const temDivisoria = passado.length > 0 && mostraFuturo;
 
   const rows = [
     ...passado.map((p) => ({
@@ -590,7 +654,7 @@ export default function FluxoCaixaView() {
       ...(semAgendar ? { "Saldo sem agendar": null } : {}),
       ...(previa ? { "Saldo simulado": null } : {}),
     })),
-    ...curva.map((p, i) => ({
+    ...(mostraFuturo ? curva.map((p, i) => ({
       x: diaBr(p.dia),
       Entradas: p.entradas,
       Saídas: p.saidas,
@@ -600,7 +664,7 @@ export default function FluxoCaixaView() {
       Saldo: p.saldo,
       ...(semAgendar ? { "Saldo sem agendar": semAgendar[i]?.saldo ?? 0 } : {}),
       ...(previa ? { "Saldo simulado": previa[i]?.saldo ?? 0 } : {}),
-    })),
+    })) : []),
   ];
 
   // Verde entra, vermelho sai — convenção contábil, e aqui ela é legítima como
@@ -624,13 +688,13 @@ export default function FluxoCaixaView() {
     ...(passado.length
       ? [{ key: "Saldo realizado", label: "Saldo realizado", slot: 0, mark: "line" } as SeriesDef]
       : []),
-    ...(semAgendar
-      ? [{ key: "Saldo", label: "Saldo com agendados", slot: 0, mark: "line", tracejada: passado.length > 0 } as SeriesDef,
-         { key: "Saldo sem agendar", label: "Saldo sem agendar", slot: 4, mark: "line", tracejada: passado.length > 0 } as SeriesDef]
-      : [{ key: "Saldo", label: "Saldo projetado", slot: 0, mark: "line", tracejada: passado.length > 0 } as SeriesDef]),
+    ...(!mostraFuturo ? [] : semAgendar
+      ? [{ key: "Saldo", label: "Saldo com agendados", slot: 0, mark: "line", tracejada: temDivisoria } as SeriesDef,
+         { key: "Saldo sem agendar", label: "Saldo sem agendar", slot: 4, mark: "line", tracejada: temDivisoria } as SeriesDef]
+      : [{ key: "Saldo", label: "Saldo projetado", slot: 0, mark: "line", tracejada: temDivisoria } as SeriesDef]),
     // A simulada entra por último pra desenhar por cima, e em âmbar: é hipótese,
     // não estado — não pode ter a mesma cor de nada que já aconteceu.
-    ...(previa ? [{ key: "Saldo simulado", label: "▸ Caixa se aplicar o lote", slot: 2, mark: "line" } as SeriesDef] : []),
+    ...(previa && mostraFuturo ? [{ key: "Saldo simulado", label: "▸ Caixa se aplicar o lote", slot: 2, mark: "line" } as SeriesDef] : []),
   ];
 
   /** O que o lote faria com o pior dia da janela. É o número que decide se vale
@@ -660,8 +724,8 @@ export default function FluxoCaixaView() {
   }, [curva, semAgendar]);
 
   const agendadosForaDaJanela = useMemo(
-    () => Array.from(agenda.values()).filter((d) => d > addDias(hojeIso(), dias)).length,
-    [agenda, dias],
+    () => Array.from(agenda.values()).filter((d) => d > addDias(hojeIso(), diasFrente)).length,
+    [agenda, diasFrente],
   );
 
 
@@ -884,7 +948,7 @@ export default function FluxoCaixaView() {
 
 
   /** Agendado pra depois do fim da janela: gravado, mas fora do gráfico. */
-  const foraDaJanela = (v: string) => dataUtil(v) && v > addDias(hojeIso(), dias);
+  const foraDaJanela = (v: string) => dataUtil(v) && v > addDias(hojeIso(), diasFrente);
 
   // Grava no painel (não no Omie). É o que faz o título entrar na curva.
   const gravar = async (alvos: Array<{ cod: number; dia: string }>) => {
@@ -1044,36 +1108,37 @@ export default function FluxoCaixaView() {
   return (
     <div className="space-y-3">
       <div className="flex items-center gap-3 flex-wrap bg-ww-panel border border-ww-border rounded-xl p-2.5">
-        <div className="flex items-center gap-1">
-          <span className="text-[11px] text-ww-textMuted mr-1">Janela</span>
-          {JANELAS.map((j) => (
-            <button key={j.key} type="button" onClick={() => setJanela(j.key)}
-              title={`${j.dias()} dias a partir de hoje`}
-              className={`px-2 py-0.5 text-[11px] rounded border transition ${
-                janela === j.key ? "border-ww-accent text-ww-accent bg-ww-accentSoft font-semibold"
-                                 : "border-ww-border text-ww-textMuted hover:text-ww-text"}`}>
-              {j.label}
-            </button>
-          ))}
-        </div>
-
-        {/* O passado no mesmo eixo. Controle próprio, separado da janela: quem
-            projeta 180 dias raramente quer 180 pra trás, e um controle só daria
-            um gráfico de 360 colunas. */}
-        <span className="h-5 w-px bg-ww-border" />
-        <div className="flex items-center gap-1">
-          <span className="text-[11px] text-ww-textMuted mr-1">Passado</span>
-          {([[0, "Só o futuro"], [15, "15d"], [30, "30d"], [60, "60d"], [90, "90d"]] as const)
-            .map(([d, l]) => (
-              <button key={d} type="button" onClick={() => setDiasAtras(d)}
-                title={d === 0 ? "Só a projeção, como era antes"
-                               : `Traz ${d} dias de movimento já realizado, à esquerda da divisória de hoje`}
-                className={`px-2 py-0.5 text-[11px] rounded border transition ${
-                  diasAtras === d ? "border-ww-accent text-ww-accent bg-ww-accentSoft font-semibold"
-                                  : "border-ww-border text-ww-textMuted hover:text-ww-text"}`}>
-                {l}
+        {/* UM controle. Cada preset carrega os dois lados do hoje, e a barrinha
+            embaixo mostra a proporção passado/futuro daquele período — é o que
+            responde "por que este aqui tem passado e aquele não" sem clicar. */}
+        <div className="flex items-center gap-1 flex-wrap">
+          <span className="text-[11px] text-ww-textMuted mr-1">Período</span>
+          {PERIODOS.map((p) => {
+            const [a, b] = p.faixa();
+            const atras = Math.max(0, -a), frente = Math.max(0, b);
+            const total = Math.max(1, atras + frente);
+            return (
+              <button key={p.key} type="button" onClick={() => setPeriodo(p.key)}
+                title={`${p.dica} · ${diaBr(addDias(hojeIso(), a))} a ${diaBr(addDias(hojeIso(), b))}`}
+                className={`relative px-2 pt-0.5 pb-1 text-[11px] rounded border overflow-hidden transition ${
+                  periodo === p.key ? "border-ww-accent text-ww-accent bg-ww-accentSoft font-semibold"
+                                    : "border-ww-border text-ww-textMuted hover:text-ww-text"}`}>
+                {p.label}
+                <span aria-hidden className="absolute left-0 right-0 bottom-0 h-[2px] flex">
+                  <span className={periodo === p.key ? "bg-ww-accent/70" : "bg-ww-border"}
+                        style={{ width: `${(atras / total) * 100}%` }} />
+                  <span className={periodo === p.key ? "bg-ww-accent/25" : "bg-ww-border/40"}
+                        style={{ width: `${(frente / total) * 100}%` }} />
+                </span>
               </button>
-          ))}
+            );
+          })}
+          <span className="ml-1 text-[10.5px] text-ww-textFaint tabular-nums">
+            {diaBr(addDias(hojeIso(), deOff))} → {diaBr(addDias(hojeIso(), ateOff))}
+            {diasAtras > 0 && diasFrente > 0
+              ? ` · ${diasAtras}d realizados + ${diasFrente}d projetados`
+              : diasAtras > 0 ? " · só realizado" : " · só projeção"}
+          </span>
         </div>
 
         <p className="text-[11px] text-ww-textFaint">
@@ -1120,11 +1185,11 @@ export default function FluxoCaixaView() {
             ? `${data.saldo_atual.origem === "manual" ? "Ajuste manual" : "Extrato Omie.CASH"} de ${
                 data.saldo_atual.dt_ref ? diaBr(data.saldo_atual.dt_ref) : "—"}`
             : "Sem extrato"} />
-        <StatTile label={`Entradas a vencer · ${jan.label.toLowerCase()}`} value={brl(resumo.entradas)}
+        <StatTile label={`Entradas a vencer · ${per.label.toLowerCase()}`} value={brl(resumo.entradas)}
           hint={`${titulos.filter((t) => t.natureza === "R").length} títulos · Safe`} />
         {/* O hint declara o que ficou de fora. Sem isso o card diria "R$ X a
             pagar" enquanto existe mais a pagar que a curva não conta. */}
-        <StatTile label={`Saídas a vencer · ${jan.label.toLowerCase()}`} value={brl(Math.abs(resumo.saidas))}
+        <StatTile label={`Saídas a vencer · ${per.label.toLowerCase()}`} value={brl(Math.abs(resumo.saidas))}
           hint={`${titulosNaCurva.filter((t) => t.natureza === "P").length} títulos · Grupo`
             + (foraDoFluxo.pagar ? ` · ⚖ ${brl(foraDoFluxo.pagar)} fora da curva` : "")}
           higherIsBetter={false} />
@@ -1147,11 +1212,14 @@ export default function FluxoCaixaView() {
       </div>
 
       <ChartFrame
-        title={passado.length ? "Fluxo de caixa — realizado e projetado" : "Fluxo de caixa projetado"}
+        title={temDivisoria ? "Fluxo de caixa — realizado e projetado"
+               : passado.length ? "Fluxo de caixa realizado" : "Fluxo de caixa projetado"}
         subtitle={
-          (passado.length
+          (temDivisoria
             ? `À esquerda de ${rotuloHoje}, o que JÁ se moveu (baixas de títulos do escopo — não é o extrato: tarifa e transferência não passam por título). À direita, projeção. `
-            : "")
+            : passado.length
+              ? "Só realizado: baixas de títulos do escopo. Não é o extrato — tarifa e transferência não passam por título. "
+              : "")
           + `Barras = movimento do dia · linha = saldo acumulado, partindo de ${brl(saldo0)}`
           + (comAtrasoRecebido
               ? ` — SIMULADO: ${brl(saldoOmie)} do Omie mais ${brl(atrasoTot.receber)} de atrasos a receber da Safe, como se entrassem hoje. `
@@ -1187,7 +1255,7 @@ export default function FluxoCaixaView() {
             bars={barras.filter((b) => visiveis.some((v) => v.key === b.key))}
             lines={linhas.filter((l) => visiveis.some((v) => v.key === l.key))}
             valueFormat={(v) => brl(v)}
-            marco={passado.length ? { x: rotuloHoje, rotulo: `HOJE · ${rotuloHoje}` } : undefined}
+            marco={temDivisoria ? { x: rotuloHoje, rotulo: `HOJE · ${rotuloHoje}` } : undefined}
           />
         )}
       </ChartFrame>

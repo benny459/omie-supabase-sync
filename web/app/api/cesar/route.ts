@@ -82,7 +82,11 @@ export async function POST(req: Request) {
         while (rodada++ < MAX_RODADAS) {
           const resp = await anthropic.messages.create({
             model: modelo,
-            max_tokens: 8000,
+            max_tokens: 12000,
+            // Raciocínio ligado de propósito: escolher QUAIS consultas fazer, e
+            // depois cruzar o que voltou, é o trabalho — não é formatação. O
+            // orçamento é explícito para não depender do padrão do modelo.
+            thinking: { type: "enabled", budget_tokens: 4000 },
             system: sistema(hoje, contexto),
             tools: tools(),
             messages: msgs,
@@ -104,12 +108,22 @@ export async function POST(req: Request) {
                 envia({ t: "ferramenta", nome: ev.content_block.name });
               }
             } else if (ev.type === "content_block_delta") {
+              const b = blocos[ev.index];
               if (ev.delta.type === "text_delta") {
                 envia({ t: "texto", v: ev.delta.text });
-                const b = blocos[ev.index];
                 if (b?.type === "text") b.text += ev.delta.text;
               } else if (ev.delta.type === "input_json_delta") {
                 parciais.set(ev.index, (parciais.get(ev.index) ?? "") + ev.delta.partial_json);
+              }
+              // Bloco de raciocínio. Precisa ser remontado E devolvido com a
+              // assinatura na rodada seguinte — a API recusa a mensagem se o
+              // bloco voltar vazio ("each thinking block must contain
+              // thinking"), que foi exatamente o erro 400 em produção. Ele não
+              // vai pra tela: é rascunho, não resposta.
+              else if (ev.delta.type === "thinking_delta") {
+                if (b?.type === "thinking") b.thinking += ev.delta.thinking;
+              } else if (ev.delta.type === "signature_delta") {
+                if (b?.type === "thinking") b.signature = ev.delta.signature;
               }
             } else if (ev.type === "content_block_stop") {
               const b = blocos[ev.index];
@@ -125,8 +139,12 @@ export async function POST(req: Request) {
           }
 
           // filter(Boolean) porque o array é indexado por posição do bloco e
-          // pode ficar esparso se algum índice não abrir.
-          const conteudo = blocos.filter(Boolean);
+          // pode ficar esparso se algum índice não abrir. O segundo filtro é
+          // cinto de segurança: um bloco de raciocínio vazio derruba a rodada
+          // seguinte com 400, e é melhor perdê-lo do que perder a conversa.
+          const conteudo = blocos
+            .filter(Boolean)
+            .filter((b) => !(b.type === "thinking" && !b.thinking));
           const usos = conteudo.filter((b): b is Anthropic.ToolUseBlock => b.type === "tool_use");
           if (!usos.length) break;   // respondeu em texto: acabou
 
