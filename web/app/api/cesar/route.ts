@@ -84,9 +84,13 @@ export async function POST(req: Request) {
             model: modelo,
             max_tokens: 12000,
             // Raciocínio ligado de propósito: escolher QUAIS consultas fazer, e
-            // depois cruzar o que voltou, é o trabalho — não é formatação. O
-            // orçamento é explícito para não depender do padrão do modelo.
-            thinking: { type: "enabled", budget_tokens: 4000 },
+            // depois cruzar o que voltou, é o trabalho — não é formatação.
+            //
+            // A forma mudou no Opus 5: `{type:"enabled", budget_tokens}` é a API
+            // dos modelos 4.x e é recusada com 400 aqui. O modelo agora decide
+            // sozinho quanto pensar ("adaptive") e o que se controla é o ESFORÇO.
+            thinking: { type: "adaptive" },
+            output_config: { effort: "medium" },
             system: sistema(hoje, contexto),
             tools: tools(),
             messages: msgs,
