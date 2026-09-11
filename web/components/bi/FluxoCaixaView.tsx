@@ -572,6 +572,13 @@ export default function FluxoCaixaView() {
   /** Título → data destino. Uma data só, ou o rateio quando ligado. É este mapa
    *  que alimenta tanto a prévia da curva quanto a gravação, então prévia e
    *  resultado não podem divergir. */
+  /** O que a curva mostra COMO SE fosse aplicado — nada disto está gravado.
+   *
+   *  É o pedido do Benny, na ordem dele: "primeiro inserir uma data de
+   *  previsão, ver como ficaria essa data e, se eu gostar, mandar pro Omie".
+   *  Digitar passou a ser um ensaio, não um commit — e é isso que dissolve os
+   *  "passo 1, passo 2": não existe mais um estado intermediário gravado-mas-
+   *  não-enviado criado por quem está só experimentando. */
   const destinos = useMemo(() => {
     const m = new Map<number, string>();
     if (rateioOn) {
@@ -581,8 +588,24 @@ export default function FluxoCaixaView() {
     } else if (dataUtil(dataLote)) {
       for (const cod of sel) m.set(cod, dataLote);
     }
+    // Data digitada direto na linha vence a do lote: é a mais específica.
+    for (const [cod, v] of rascunho) if (dataUtil(v)) m.set(cod, v);
     return m;
-  }, [rateioOn, distribuicaoRateio, dataLote, sel]);
+  }, [rateioOn, distribuicaoRateio, dataLote, sel, rascunho]);
+
+  /** Grava e manda pro Omie numa ação só. Um botão, não dois.
+   *
+   *  O estado "gravado no painel mas não no Omie" continua existindo para o que
+   *  foi reagendado antes desta mudança — mas deixa de ser PRODUZIDO por quem
+   *  está usando a tela agora. */
+  const mandarProOmie = async () => {
+    const alvos = Array.from(destinos.entries()).map(([cod, dia]) => ({ cod, dia }));
+    if (!alvos.length) return;
+    if (!(await gravar(alvos))) return;   // não gravou: não vai pro ERP
+    await enviarOmie(false, alvos.map((a) => a.cod));
+    setRascunho(new Map());
+    setDataLote("");
+  };
 
 
 
@@ -975,9 +998,13 @@ export default function FluxoCaixaView() {
   const foraDaJanela = (v: string) => dataUtil(v) && v > addDias(hojeIso(), diasFrente);
 
   // Grava no painel (não no Omie). É o que faz o título entrar na curva.
-  const gravar = async (alvos: Array<{ cod: number; dia: string }>) => {
-    if (!alvos.length) return;
+  /** Devolve se gravou tudo. Quem encadeia o envio ao Omie precisa saber:
+   *  mandar pro ERP uma data que não entrou no painel seria pior que não
+   *  mandar nada. */
+  const gravar = async (alvos: Array<{ cod: number; dia: string }>): Promise<boolean> => {
+    if (!alvos.length) return false;
     setSalvando(true);
+    let ok = false;
     try {
       for (const a of alvos) {
         const r = await fetch("/api/previsao", {
@@ -988,7 +1015,7 @@ export default function FluxoCaixaView() {
         if (!r.ok) {
           const j = await r.json().catch(() => ({}));
           setErr(j.error ?? "falha ao gravar previsão");
-          return;
+          return false;
         }
       }
       setAgenda((prev) => {
@@ -1030,9 +1057,11 @@ export default function FluxoCaixaView() {
       // O título também migra de escopo quando deixa de estar vencido, que é o
       // certo: ele não é mais um atrasado.
       await load();
+      ok = true;
     } finally {
       setSalvando(false);
     }
+    return ok;
   };
 
   /** Tira da curva (ou devolve). Não toca no Omie e não apaga nada — o título
@@ -1324,26 +1353,16 @@ export default function FluxoCaixaView() {
               <Chip key={k} on={escopo === k}
                     onClick={() => { setEscopo(k); setSel(new Set()); setAviso(null); ancoraRef.current = null; }}>{l}</Chip>
             ))}
-            <span className="w-px h-4 bg-ww-border mx-0.5" />
-            <Chip on={tipo === "todos"} onClick={() => { setTipo("todos"); ancoraRef.current = null; }}>
-              Ambos
-            </Chip>
-            <ChipTom on={tipo === "R"} tom="receber"
-              onClick={() => { setTipo("R"); ancoraRef.current = null; }}>Receber</ChipTom>
-            <ChipTom on={tipo === "P"} tom="pagar"
-              onClick={() => { setTipo("P"); ancoraRef.current = null; }}>Pagar</ChipTom>
-            <span className="w-px h-4 bg-ww-border mx-0.5" />
-            <Chip on={soReprog} onClick={() => setSoReprog((v) => !v)}
-                  titulo="Só títulos cuja previsão eu alterei no painel">
-              ↻ Reprogramados {qtdReprog}
-            </Chip>
-            <Chip on={soReneg} onClick={() => setSoReneg((v) => !v)}
-                  titulo="Só os que estão fora da curva, esperando repactuação ou cancelamento">
-              ⚖ Fora da curva {qtdReneg}
-            </Chip>
+            {/* Receber/Pagar e os dois modos saíram da faixa e foram para o
+                menu Filtros (Benny, 11/09 — "muitas opções"). De oito chips
+                sobraram três; o resto continua a um clique, e o menu ganha
+                badge quando algum está ligado, para nada ficar filtrando em
+                silêncio. */}
             <span className="w-px h-4 bg-ww-border mx-0.5" />
             <Pop largura={340} gatilho={(aberto, toggle) => {
-              const ativos = (prevDe || prevAte ? 1 : 0) + (reprogDe || reprogAte ? 1 : 0) + (catsSel.size ? 1 : 0);
+              const ativos = (prevDe || prevAte ? 1 : 0) + (reprogDe || reprogAte ? 1 : 0)
+                           + (catsSel.size ? 1 : 0) + (tipo !== "todos" ? 1 : 0)
+                           + (soReprog ? 1 : 0) + (soReneg ? 1 : 0);
               return (
                 <button type="button" onClick={toggle}
                   className={`inline-flex items-center gap-1 px-2 py-0.5 text-[11px] rounded border transition ${
@@ -1355,6 +1374,31 @@ export default function FluxoCaixaView() {
               );
             }}>
               <div className="space-y-3">
+                <div>
+                  <p className="text-[9px] uppercase tracking-[0.7px] font-bold text-ww-textFaint mb-1">Natureza</p>
+                  <div className="flex items-center gap-1">
+                    <Chip on={tipo === "todos"} onClick={() => { setTipo("todos"); ancoraRef.current = null; }}>
+                      Ambos
+                    </Chip>
+                    <ChipTom on={tipo === "R"} tom="receber"
+                      onClick={() => { setTipo("R"); ancoraRef.current = null; }}>Receber</ChipTom>
+                    <ChipTom on={tipo === "P"} tom="pagar"
+                      onClick={() => { setTipo("P"); ancoraRef.current = null; }}>Pagar</ChipTom>
+                  </div>
+                </div>
+                <div>
+                  <p className="text-[9px] uppercase tracking-[0.7px] font-bold text-ww-textFaint mb-1">Só mostrar</p>
+                  <div className="flex items-center gap-1 flex-wrap">
+                    <Chip on={soReprog} onClick={() => setSoReprog((v) => !v)}
+                          titulo="Só títulos cuja previsão eu alterei no painel">
+                      ↻ Reprogramados {qtdReprog}
+                    </Chip>
+                    <Chip on={soReneg} onClick={() => setSoReneg((v) => !v)}
+                          titulo="Só os que estão fora da curva, esperando repactuação ou cancelamento">
+                      ⚖ Fora da curva {qtdReneg}
+                    </Chip>
+                  </div>
+                </div>
                 <div>
                   <p className="text-[9px] uppercase tracking-[0.7px] font-bold text-ww-textFaint mb-1">Previsão</p>
                   <div className="flex items-center gap-1 flex-wrap">
@@ -1491,9 +1535,10 @@ export default function FluxoCaixaView() {
                 </button>
               )}>
                 <div className="text-[11px] text-ww-textMuted leading-relaxed space-y-1.5">
-                  <p><strong className="text-ww-text">Reprogramar</strong> — sei a data nova → grava no painel e move a curva.</p>
-                  <p><strong className="text-ww-text">Tirar da curva</strong> — ainda vou repactuar ou cancelar, não sei a data → sai do gráfico e volta pelo filtro ⚖.</p>
-                  <p><strong className="text-ww-text">↑ Omie</strong> — leva a data nova pro ERP. Na linha envia um; no cabeçalho, todos os pendentes. Nada vai sozinho.</p>
+                  <p><strong className="text-ww-text">Escreva a data</strong> — na linha do título ou no campo da seleção. A curva âmbar mostra na hora como o caixa fica. Nada é gravado.</p>
+                  <p><strong className="text-ww-text">Mandar pro Omie</strong> — gostou do que viu? O botão grava a data e leva pro ERP no mesmo clique.</p>
+                  <p><strong className="text-ww-text">Tirar da curva</strong> — ainda vou repactuar ou cancelar, não sei a data → sai do gráfico e volta pelo filtro ⚖ (dentro de Filtros).</p>
+                  <p><strong className="text-ww-text">↑ Omie</strong> no cabeçalho — reenvia o que ficou pendente de alguma tentativa anterior.</p>
                 </div>
               </Pop>
             </div>
@@ -1505,6 +1550,36 @@ export default function FluxoCaixaView() {
             e tirar da curva moram no "⋯ Mais". O envio ao Omie tem seu caminho
             canônico na faixa âmbar de pendências, logo abaixo — o "passo 2"
             deixou de ser um segundo botão disputando atenção. */}
+        {/* ── A barra da prévia ─────────────────────────────────────────────
+            Aparece assim que existe UMA data digitada, na linha ou no lote, e
+            some quando não há nenhuma. Diz o que vai acontecer e oferece um
+            botão só. A ordem é a que o Benny descreveu: digita → vê na curva →
+            manda. */}
+        {podeEditar && destinos.size > 0 && selecionados.length === 0 && (
+          <div className="mb-2 p-2.5 rounded-lg bg-ww-accentSoft border-2 border-ww-accent flex items-center gap-3 flex-wrap">
+            <span className="text-[12px] text-ww-text">
+              <strong className="text-ww-accent">{destinos.size} título(s)</strong> com data nova —
+              a curva já mostra como fica. <span className="text-ww-textMuted">Nada foi gravado ainda.</span>
+            </span>
+            {impactoPrevia && (
+              <span className="text-[11px] tabular-nums text-ww-textMuted">
+                pior dia: {brl(impactoPrevia.antes)} → <strong className={
+                  impactoPrevia.delta >= 0 ? "text-emerald-600 dark:text-emerald-400"
+                                           : "text-rose-600 dark:text-rose-400"}>
+                  {brl(impactoPrevia.depois)}</strong>
+              </span>
+            )}
+            <button type="button" onClick={() => { setRascunho(new Map()); setDataLote(""); }}
+              className="text-[11px] text-ww-textFaint hover:text-ww-text">descartar</button>
+            <button type="button" disabled={salvando || syncing}
+              onClick={() => void mandarProOmie()}
+              title="Grava a data no painel e manda pro Omie de uma vez"
+              className="ml-auto px-3.5 py-1.5 text-[12px] rounded-md bg-ww-accent text-white font-bold hover:brightness-110 transition disabled:opacity-40">
+              {salvando || syncing ? "Enviando…" : `Mandar pro Omie (${destinos.size})`}
+            </button>
+          </div>
+        )}
+
         {podeEditar && selecionados.length > 0 && (
           <div className="mb-2 p-2.5 rounded-lg bg-ww-accentSoft border border-ww-accent/40">
             <div className="flex items-center gap-2.5 flex-wrap">
@@ -1541,19 +1616,24 @@ export default function FluxoCaixaView() {
                 </button>
               ))}
 
-              <button type="button" disabled={destinos.size === 0 || salvando}
+              {/* Um botão só (Benny, 11/09 — "inserir a data, ver como fica e,
+                  se eu gostar, mandar pro Omie"). Enquanto a data está digitada
+                  a curva âmbar já mostra o efeito e nada foi gravado; clicar
+                  grava e empurra pro ERP no mesmo gesto. Separar em dois passos
+                  era o que fazia o título sumir entre um e outro. */}
+              <button type="button" disabled={destinos.size === 0 || salvando || syncing}
                 title={rateioOn
-                  ? (destinos.size ? `Grava ${destinos.size} título(s) nas datas do rateio`
+                  ? (destinos.size ? `Grava e envia ${destinos.size} título(s) nas datas do rateio`
                                    : "Preencha ao menos uma data no rateio")
                   : dataLote && !dataUtil(dataLote) ? "Informe uma data a partir de hoje"
-                  : foraDaJanela(dataLote) ? "Grava, mas cai depois do fim da janela — não aparece na curva"
-                  : "Grava a data nova no painel e move a curva. O envio ao Omie fica pendente na faixa abaixo."}
-                onClick={() => gravar(Array.from(destinos, ([cod, dia]) => ({ cod, dia })))}
+                  : foraDaJanela(dataLote) ? "Vai gravar, mas cai depois do fim da janela — não aparece na curva"
+                  : "Grava a data nova e manda pro Omie de uma vez"}
+                onClick={() => void mandarProOmie()}
                 className="px-3.5 py-1 text-[11.5px] rounded-md border-2 border-ww-accent bg-ww-accent text-white hover:brightness-110 transition font-bold disabled:opacity-30 disabled:bg-transparent disabled:text-ww-textFaint disabled:border-ww-border">
-                {salvando ? "Gravando…"
+                {salvando || syncing ? "Enviando…"
                   : destinos.size === 0
-                    ? (rateioOn ? "Preencha o rateio ↓" : "Reprogramar")
-                    : `Reprogramar ${destinos.size}`}
+                    ? (rateioOn ? "Preencha o rateio ↓" : "Escolha a data")
+                    : `Mandar pro Omie (${destinos.size})`}
               </button>
 
               <div className="ml-auto">
@@ -1616,7 +1696,8 @@ export default function FluxoCaixaView() {
             {impactoPrevia && (
               <p className="mt-1.5 text-[10.5px] tabular-nums text-ww-textMuted"
                  title="Menor saldo da janela, hoje e com o lote aplicado. A linha âmbar no gráfico mostra a curva simulada.">
-                Efeito no caixa — pior dia: {brl(impactoPrevia.antes)} →{" "}
+                <span className="text-ww-textFaint">Nada gravado ainda · </span>
+                pior dia: {brl(impactoPrevia.antes)} →{" "}
                 <strong className={impactoPrevia.delta > 0
                   ? "text-emerald-600 dark:text-emerald-400"
                   : impactoPrevia.delta < 0 ? "text-rose-600 dark:text-rose-400" : "text-ww-text"}>
@@ -1907,15 +1988,16 @@ export default function FluxoCaixaView() {
                           new Map(prev).set(t.cod_titulo, e.target.value))}
                         // Commit ao sair do campo ou no Enter, e só se a data
                         // estiver completa e dentro da janela.
+                        // NÃO grava ao sair do campo. A data fica no rascunho,
+                        // a curva já mostra o efeito, e só o botão "Mandar pro
+                        // Omie" compromete. Gravar aqui era o que produzia o
+                        // estado intermediário que virava "passo 2".
                         onBlur={(e) => {
                           const v = e.target.value;
-                          setRascunho((prev) => {
-                            const n = new Map(prev);
-                            n.delete(t.cod_titulo);
-                            return n;
-                          });
-                          if (dataUtil(v) && v !== dia) {
-                            void gravar([{ cod: t.cod_titulo, dia: v }]);
+                          if (v && !dataUtil(v)) {
+                            setRascunho((prev) => {
+                              const n = new Map(prev); n.delete(t.cod_titulo); return n;
+                            });
                           }
                         }}
                         onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); }}
