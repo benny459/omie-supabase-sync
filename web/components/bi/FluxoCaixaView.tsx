@@ -1212,6 +1212,29 @@ export default function FluxoCaixaView() {
     return ok;
   };
 
+  /** Apaga a previsão gravada no painel e devolve o título à data do Omie.
+   *
+   *  Só vale para o que ainda NÃO foi enviado. Depois de ir pro ERP, a data
+   *  nova é a data real lá — apagar aqui deixaria painel e Omie divergindo em
+   *  silêncio, que é pior que não ter o botão. Nesse caso o caminho é
+   *  reagendar e enviar de novo. */
+  const apagarPrevisao = async (cod: number) => {
+    setSalvando(true);
+    try {
+      const r = await fetch(`/api/previsao?cod_titulo=${cod}`, { method: "DELETE" });
+      if (!r.ok) {
+        const j = await r.json().catch(() => ({}));
+        setErr(j.error ?? "falha ao apagar a previsão");
+        return;
+      }
+      setErr(null);
+      setAgenda((prev) => { const n = new Map(prev); n.delete(cod); return n; });
+      setRascunho((prev) => { const n = new Map(prev); n.delete(cod); return n; });
+      setAviso("Previsão apagada — o título voltou para a data do Omie.");
+      await load();
+    } finally { setSalvando(false); }
+  };
+
   /** Tira da curva (ou devolve). Não toca no Omie e não apaga nada — o título
    *  continua na mesa, some do gráfico, e o valor sai declarado na tela. */
   const marcarRenegociacao = async (cods: number[], entrar: boolean, motivo?: string) => {
@@ -2090,7 +2113,12 @@ export default function FluxoCaixaView() {
                       <div className="flex items-center gap-1">
                       <input type="date"
                         value={rascunho.get(t.cod_titulo) ?? dia}
-                        min={hojeIso()}
+                        // `min` vale pro que está sendo digitado AGORA. Com uma
+                        // data gravada antes de hoje o navegador marcava o campo
+                        // como inválido e mostrava "o valor deve ser
+                        // 11/09 ou posterior" — sobre um dado que existe e está
+                        // correto.
+                        min={!rascunho.has(t.cod_titulo) && dia && dia < hojeIso() ? undefined : hojeIso()}
                         disabled={!podeEditar || salvando}
                         // Digitação mexe só no rascunho — ver o comentário do estado.
                         onChange={(e) => setRascunho((prev) =>
@@ -2113,11 +2141,13 @@ export default function FluxoCaixaView() {
                         className={`text-[11px] bg-ww-bg border rounded px-1.5 py-0.5 text-ww-text disabled:opacity-50 ${
                           rascunho.has(t.cod_titulo)
                             ? "border-ww-accent bg-ww-accentSoft" : "border-ww-border"}`} />
-                      {/* Desfaz o que EU acabei de digitar. Só aparece com
-                          rascunho: apagar uma data já gravada é outra ação, e
-                          um ✕ que às vezes faz uma coisa e às vezes outra é
-                          pior do que dois botões. */}
-                      {rascunho.has(t.cod_titulo) && (
+                      {/* Três estados, e o ✕ só existe em dois deles.
+                          · digitado, não gravado  → descarta, local, sem rede
+                          · gravado, não enviado   → apaga e volta à data do Omie
+                          · já enviado             → sem ✕: a data nova É a data
+                            do ERP, e apagar aqui deixaria os dois divergindo em
+                            silêncio. Nesse caso reagenda e envia de novo. */}
+                      {rascunho.has(t.cod_titulo) ? (
                         <button type="button" title="Descartar esta data — nada foi gravado"
                           onClick={() => setRascunho((prev) => {
                             const n = new Map(prev); n.delete(t.cod_titulo); return n;
@@ -2125,7 +2155,22 @@ export default function FluxoCaixaView() {
                           className="text-[11px] leading-none text-ww-textFaint hover:text-rose-500 transition px-0.5">
                           ✕
                         </button>
-                      )}
+                      ) : podeEditar && t.tem_override && !t.sincronizado_omie ? (
+                        <button type="button" disabled={salvando}
+                          title={`Apagar esta previsão e voltar para a data do Omie (${
+                            t.previsao_original ? diaBr(t.previsao_original) : "original"})`}
+                          onClick={() => {
+                            if (!window.confirm(
+                              `Apagar a previsão de ${diaBr(dia)} deste título?\n\n`
+                              + `Ele volta para a data do Omie${
+                                t.previsao_original ? ` (${diaBr(t.previsao_original)})` : ""}. `
+                              + "Nada foi enviado pro ERP, então não há o que desfazer lá.")) return;
+                            void apagarPrevisao(t.cod_titulo);
+                          }}
+                          className="text-[11px] leading-none text-ww-textFaint hover:text-rose-500 transition px-0.5 disabled:opacity-40">
+                          ✕
+                        </button>
+                      ) : null}
                       </div>
                     </td>
                     <td className="p-1.5 border-b border-ww-border/50">
