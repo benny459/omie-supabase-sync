@@ -414,6 +414,15 @@ export default function FluxoCaixaView() {
     { col: "valor", desc: true },
   );
   const [salvando, setSalvando] = useState(false);
+  /** Títulos mexidos NESTA sessão. Existe por um motivo concreto: reprogramar
+   *  um atrasado para uma data futura faz ele deixar de ser atrasado no
+   *  servidor — ele sai do filtro "Atrasados" e some da tela no mesmo instante
+   *  em que você confirma a ação. Quem acabou de reprogramar perde de vista o
+   *  que fez e não tem como conferir.
+   *
+   *  Com este conjunto eles continuam na mesa, fixados no topo, qualquer que
+   *  seja o filtro, até a página ser recarregada. */
+  const [recentes, setRecentes] = useState<Set<number>>(new Set());
   /** Confirmação da gravação. Antes não havia nenhuma: aplicava e a tela não
    *  dizia se deu certo, então dava pra achar que reprogramou sem ter. */
   const [aviso, setAviso] = useState<string | null>(null);
@@ -430,7 +439,9 @@ export default function FluxoCaixaView() {
       setErr(null);
       setData(j as Payload);
       setAgenda(new Map());
-      setSel(new Set());
+      // A seleção NÃO é limpa: depois de reprogramar, quem estava marcado
+      // continua marcado para você conferir o que acabou de fazer. Limpar era
+      // a segunda razão de o título "sumir".
     } catch (e) {
       setErr(e instanceof Error ? e.message : String(e));
     } finally {
@@ -523,10 +534,17 @@ export default function FluxoCaixaView() {
    *  é só a união — sem consulta nova e sem risco de contar duas vezes, porque
    *  vencido e a-vencer são mutuamente exclusivos por construção. */
   const universo = useMemo(() => {
-    if (escopo === "atrasados") return atrasados;
-    if (escopo === "a_vencer")  return titulos;
-    return [...atrasados, ...titulos];
-  }, [escopo, atrasados, titulos]);
+    const base = escopo === "atrasados" ? atrasados
+               : escopo === "a_vencer"  ? titulos
+               : [...atrasados, ...titulos];
+    if (!recentes.size) return base;
+    // Traz de volta o que foi mexido agora e escapou do filtro. Sem isto,
+    // reprogramar um atrasado para o futuro faz a linha desaparecer no ato.
+    const jaTem = new Set(base.map((t) => t.cod_titulo));
+    const resgatados = [...atrasados, ...titulos]
+      .filter((t) => recentes.has(t.cod_titulo) && !jaTem.has(t.cod_titulo));
+    return [...resgatados, ...base];
+  }, [escopo, atrasados, titulos, recentes]);
 
   /** Quantos estão fora do fluxo no universo atual — o número do chip ⚖. */
   const qtdReneg = useMemo(
@@ -754,10 +772,16 @@ export default function FluxoCaixaView() {
         `${t.contraparte} ${t.categoria} ${t.documento} ${t.num_titulo ?? ""}`).includes(q));
 
     const sinal = ordem.desc ? -1 : 1;
+    // Recém-mexido vem sempre primeiro, qualquer que seja a ordenação. É o que
+    // garante que a linha que você acabou de reprogramar esteja à vista, e não
+    // na página 4 de uma lista de 230.
+    const topo = (t: Titulo) => (recentes.has(t.cod_titulo) ? 0 : 1);
     // String(...) em tudo: contraparte e categoria vêm de left join e podem ser
     // nulas. localeCompare em null lança, e a exceção acontece DENTRO do sort,
     // no meio do render.
     return arr.slice().sort((a, b) => {
+      const dt = topo(a) - topo(b);
+      if (dt !== 0) return dt;
       switch (ordem.col) {
         case "valor":       return sinal * (Number(a.valor) - Number(b.valor));
         case "previsao":    return sinal * String(a.previsao ?? "").localeCompare(String(b.previsao ?? ""));
@@ -769,7 +793,7 @@ export default function FluxoCaixaView() {
         default:            return 0;
       }
     });
-  }, [universo, tipo, soReprog, soReneg, reprogDe, reprogAte, catsSel, prevDe, prevAte, busca, ordem]);
+  }, [universo, tipo, soReprog, soReneg, reprogDe, reprogAte, catsSel, prevDe, prevAte, busca, ordem, recentes]);
 
   /** Teto de linhas DESENHADAS.
    *
@@ -970,6 +994,13 @@ export default function FluxoCaixaView() {
       setAgenda((prev) => {
         const n = new Map(prev);
         for (const a of alvos) n.set(a.cod, a.dia);
+        return n;
+      });
+      // Fixa na mesa o que acabou de ser mexido, para não sumir junto com o
+      // filtro de "atrasados" quando a data nova o tira de lá.
+      setRecentes((prev) => {
+        const n = new Set(prev);
+        for (const a of alvos) n.add(a.cod);
         return n;
       });
       setErr(null);
@@ -1438,6 +1469,20 @@ export default function FluxoCaixaView() {
                 className="px-2 py-0.5 text-[11px] rounded border border-ww-border text-ww-textMuted hover:text-ww-text hover:bg-ww-rowHover transition disabled:opacity-40">
                 {exportando ? "Gerando…" : "📊 Excel"}
               </button>
+              {/* O envio ao Omie mora AQUI, no cabeçalho, e não numa faixa
+                  separada. Uma faixa própria dizendo "3 pendências, envie" era
+                  lida como um segundo passo obrigatório; como botão junto de
+                  PDF e Excel, é só mais uma ação da mesa — e o estado real
+                  (quais linhas faltam) já está marcado na coluna Omie. */}
+              {podeEditar && pendentesOmieGeral.length > 0 && (
+                <button type="button" disabled={syncing}
+                  onClick={() => enviarOmie(false, pendentesOmieGeral.map((t) => t.cod_titulo))}
+                  title={`${pendentesOmieGeral.length} título(s) com data nova que o Omie ainda não recebeu · ${
+                    brl(pendentesOmieGeral.reduce((a, t) => a + (Number(t.valor) || 0), 0))}`}
+                  className="px-2.5 py-0.5 text-[11px] font-semibold rounded border border-amber-500 bg-amber-500/15 text-amber-700 dark:text-amber-300 hover:bg-amber-500/25 transition disabled:opacity-40">
+                  {syncing ? "Enviando…" : `↑ Omie (${pendentesOmieGeral.length})`}
+                </button>
+              )}
               <Pop largura={330} gatilho={(aberto, toggle) => (
                 <button type="button" onClick={toggle} aria-label="Como funciona"
                   className={`inline-flex items-center justify-center w-5 h-5 text-[11px] rounded-full border transition ${
@@ -1448,7 +1493,7 @@ export default function FluxoCaixaView() {
                 <div className="text-[11px] text-ww-textMuted leading-relaxed space-y-1.5">
                   <p><strong className="text-ww-text">Reprogramar</strong> — sei a data nova → grava no painel e move a curva.</p>
                   <p><strong className="text-ww-text">Tirar da curva</strong> — ainda vou repactuar ou cancelar, não sei a data → sai do gráfico e volta pelo filtro ⚖.</p>
-                  <p><strong className="text-ww-text">Enviar ao Omie</strong> — leva as datas já reprogramadas pro ERP. Nada vai pro Omie sozinho.</p>
+                  <p><strong className="text-ww-text">↑ Omie</strong> — leva a data nova pro ERP. Na linha envia um; no cabeçalho, todos os pendentes. Nada vai sozinho.</p>
                 </div>
               </Pop>
             </div>
@@ -1654,9 +1699,8 @@ export default function FluxoCaixaView() {
         {conflitos.length > 0 && (
           <div className="flex items-center gap-3 flex-wrap mb-2 px-3 py-2 rounded-lg border border-violet-500/40 bg-violet-500/10">
             <span className="text-[11.5px] text-violet-800 dark:text-violet-200">
-              <strong>{conflitos.length} título(s)</strong> tiveram a previsão alterada
-              <strong> no Omie depois</strong> do seu reagendamento. A curva usa a data do Omie —
-              ele é a origem.
+              <strong>{conflitos.length} título(s)</strong> mudaram de previsão no Omie depois que
+              você reagendou. Vale a data de lá.
             </span>
             <button type="button"
               onClick={() => { setSoReprog(true); setSel(new Set(conflitos.map((t) => t.cod_titulo))); }}
@@ -1669,34 +1713,17 @@ export default function FluxoCaixaView() {
         {/* Envio geral. Antes só dava pra enviar a SELEÇÃO — quem reprogramava,
             conferia e limpava a seleção ficava sem caminho pro Omie, e o
             contador do passo 2 aparecia zerado sem explicar por quê. */}
-        {podeEditar && pendentesOmieGeral.length > 0 && (
-          <div className="flex items-center gap-3 flex-wrap mb-2 px-3 py-2 rounded-lg border border-amber-500/40 bg-amber-500/10">
-            <span className="text-[11.5px] text-amber-800 dark:text-amber-200">
-              <strong>{pendentesOmieGeral.length} reprogramação(ões)</strong> gravadas no painel e
-              ainda <strong>não enviadas ao Omie</strong> ·{" "}
-              <span className="tabular-nums">
-                {brl(pendentesOmieGeral.reduce((a, t) => a + (Number(t.valor) || 0), 0))}
-              </span>
-              <span className="text-ww-textFaint"> — lá o título segue com a data antiga.</span>
-            </span>
-            <button type="button" disabled={syncing}
-              onClick={() => { setSoReprog(true); setSel(new Set(pendentesOmieGeral.map((t) => t.cod_titulo))); }}
-              className="px-2 py-0.5 text-[11px] rounded border border-ww-border text-ww-textMuted hover:text-ww-text transition">
-              Ver quais
-            </button>
-            <button type="button" disabled={syncing}
-              onClick={() => enviarOmie(false, pendentesOmieGeral.map((t) => t.cod_titulo))}
-              className="ml-auto px-3 py-1 text-[11.5px] rounded-md border-2 border-amber-500 bg-amber-500 text-white hover:brightness-110 transition font-bold disabled:opacity-40">
-              {syncing ? "Enviando…" : `Enviar todas ao Omie (${pendentesOmieGeral.length})`}
-            </button>
-          </div>
-        )}
+        {/* O banner de pendências virou um botão no cabeçalho (ver acima).
+            Uma faixa inteira dizendo "há 3 pendências" acima de uma tabela que
+            já marca essas 3 linhas era a terceira camada de aviso na mesma
+            tela — e era ela que criava a leitura de "passo 1, passo 2". */}
 
         {aviso && (
           <div className="mb-2 px-3 py-2 rounded-lg text-[11.5px] border bg-emerald-500/10 border-emerald-500/30 text-emerald-800 dark:text-emerald-200 flex items-center gap-2">
             <span>✓ {aviso}</span>
             <span className="text-ww-textFaint">
-              — já está na curva. Para o Omie receber, use o passo 2.
+              — já está na curva, e fixado no topo da lista. Clique em <strong>Omie</strong> na linha
+              para o ERP receber.
             </span>
             <button type="button" onClick={() => setAviso(null)}
               className="ml-auto text-ww-textFaint hover:text-ww-text">✕</button>
@@ -1760,8 +1787,13 @@ export default function FluxoCaixaView() {
                 const pendente = t.tem_override && !t.sincronizado_omie;
                 return (
                   <tr key={t.cod_titulo}
+                      // Barra à esquerda na linha mexida agora: ela está no topo
+                      // fora da ordem escolhida, e sem marca pareceria um erro
+                      // de ordenação em vez de "é esta que você acabou de mexer".
                       className={`viz-row ${
-                        t.em_renegociacao ? "bg-violet-500/10 opacity-75"
+                        recentes.has(t.cod_titulo)
+                          ? "bg-ww-accentSoft/60 shadow-[inset_3px_0_0_0_rgb(var(--color-ww-accent))]"
+                        : t.em_renegociacao ? "bg-violet-500/10 opacity-75"
                         : dia ? "bg-ww-accentSoft/40" : ""}`}>
                     {podeEditar && (
                       <td className="p-1.5 border-b border-ww-border/50">
