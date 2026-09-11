@@ -19,7 +19,8 @@
 // explícito, com simulação antes. Portado do waterworks-bi, onde rodou em
 // produção (23 envios OK em junho/2026).
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import ChartFrame, { type SeriesDef } from "@/components/viz/ChartFrame";
 import StatTile from "@/components/viz/StatTile";
 import VizBar from "@/components/viz/VizBar";
@@ -167,8 +168,33 @@ const diasAte = (iso: string | null) => {
 const ORDEM_ROTULO: Record<string, string> = {
   valor: "valor", previsao: "previsão", vencimento: "vencimento",
   contraparte: "contraparte", categoria: "categoria", reprogramado_em: "reprogramado em",
+  empresa: "empresa", natureza: "tipo", atraso: "situação",
 };
-type OrdemCol = "valor" | "previsao" | "vencimento" | "contraparte" | "categoria" | "reprogramado_em";
+type OrdemCol = "valor" | "previsao" | "vencimento" | "contraparte" | "categoria"
+              | "reprogramado_em" | "empresa" | "natureza" | "atraso";
+
+/** Faixas relativas para os filtros de data do cabeçalho.
+ *
+ *  "Esta semana" é segunda→domingo, não "hoje + 7": quem pergunta isso está
+ *  olhando a semana do calendário, e os dois intervalos só coincidem na
+ *  segunda-feira. */
+const FAIXAS_REL: Array<{ key: string; rot: string; faixa: () => [string, string] }> = [
+  { key: "vencidas", rot: "Vencidas", faixa: () => ["1900-01-01", addDias(hojeIso(), -1)] },
+  { key: "hoje",     rot: "Hoje",     faixa: () => [hojeIso(), hojeIso()] },
+  { key: "semana",   rot: "Esta semana", faixa: () => {
+      const h = new Date(`${hojeIso()}T12:00:00`);
+      const dow = h.getDay() === 0 ? 7 : h.getDay();          // domingo = 7
+      return [addDias(hojeIso(), -(dow - 1)), addDias(hojeIso(), 7 - dow)];
+    } },
+  { key: "mes", rot: "Este mês", faixa: () => {
+      const h = hojeIso();
+      const [a, m] = h.split("-").map(Number);
+      const ult = new Date(Date.UTC(a, m, 0)).getUTCDate();
+      return [`${h.slice(0, 8)}01`, `${h.slice(0, 8)}${String(ult).padStart(2, "0")}`];
+    } },
+  { key: "p7",  rot: "Próximos 7",  faixa: () => [hojeIso(), addDias(hojeIso(), 7)] },
+  { key: "p30", rot: "Próximos 30", faixa: () => [hojeIso(), addDias(hojeIso(), 30)] },
+];
 
 /** Minúsculas sem acento: quem digita "sirio" tem que achar "SÍRIO". */
 const normaliza = (v: string) =>
@@ -402,6 +428,15 @@ export default function FluxoCaixaView() {
    *  título. Entra como saldo INICIAL e não como entrada num dia qualquer —
    *  escolher um dia seria fabricar informação que ninguém tem. */
   const [comAtrasoRecebido, setComAtrasoRecebido] = useState(false);
+  /** Filtros que moram no cabeçalho da coluna.
+   *
+   *  Categoria, previsão e reprogramação NÃO ganham estado novo: reusam o que
+   *  o menu "Filtros" já tem. Dois estados para o mesmo recorte é como o painel
+   *  e o Webex divergiram — o cabeçalho é outra porta para a mesma sala. */
+  const [empSel, setEmpSel] = useState<Set<string>>(new Set());
+  const [contraSel, setContraSel] = useState<Set<string>>(new Set());
+  const [vencDe, setVencDe] = useState("");
+  const [vencAte, setVencAte] = useState("");
   const [soReprog, setSoReprog] = useState(false);
   /** Isola os que estão fora do fluxo — é aqui que se volta pra definir data. */
   const [soReneg, setSoReneg] = useState(false);
@@ -598,13 +633,22 @@ export default function FluxoCaixaView() {
    *  O estado "gravado no painel mas não no Omie" continua existindo para o que
    *  foi reagendado antes desta mudança — mas deixa de ser PRODUZIDO por quem
    *  está usando a tela agora. */
-  const mandarProOmie = async () => {
-    const alvos = Array.from(destinos.entries()).map(([cod, dia]) => ({ cod, dia }));
+  const mandarProOmie = async (apenas?: number[]) => {
+    const filtro = apenas ? new Set(apenas) : null;
+    const alvos = Array.from(destinos.entries())
+      .filter(([cod]) => !filtro || filtro.has(cod))
+      .map(([cod, dia]) => ({ cod, dia }));
     if (!alvos.length) return;
     if (!(await gravar(alvos))) return;   // não gravou: não vai pro ERP
     await enviarOmie(false, alvos.map((a) => a.cod));
-    setRascunho(new Map());
-    setDataLote("");
+    // Limpa só o que foi, senão mandar UMA linha apagaria as outras que a
+    // pessoa ainda estava avaliando.
+    setRascunho((prev) => {
+      const n = new Map(prev);
+      for (const a of alvos) n.delete(a.cod);
+      return n;
+    });
+    if (!apenas) setDataLote("");
   };
 
 
@@ -693,7 +737,7 @@ export default function FluxoCaixaView() {
       "Saldo realizado": p.saldo,
       Saldo: null,
       ...(semAgendar ? { "Saldo sem agendar": null } : {}),
-      ...(previa ? { "Saldo simulado": null } : {}),
+      ...(previa ? { "Saldo simulado": null, "Movimento simulado": null } : {}),
     })),
     ...(mostraFuturo ? curva.map((p, i) => ({
       x: diaBr(p.dia),
@@ -704,7 +748,20 @@ export default function FluxoCaixaView() {
       "Saldo realizado": i === 0 && passado.length ? p.saldo : null,
       Saldo: p.saldo,
       ...(semAgendar ? { "Saldo sem agendar": semAgendar[i]?.saldo ?? 0 } : {}),
-      ...(previa ? { "Saldo simulado": previa[i]?.saldo ?? 0 } : {}),
+      ...(previa ? {
+        "Saldo simulado": previa[i]?.saldo ?? 0,
+        // O DELTA, não o total: a barra âmbar é só o que o reagendamento
+        // acrescenta ou tira daquele dia. Somar o movimento inteiro desenharia
+        // de novo, em outra cor, o que a barra vermelha já mostra.
+        //
+        // O sinal segue a mesma convenção das outras: entrada pra cima, saída
+        // pra baixo. Mover um título de um dia pro outro DENTRO da janela dá
+        // duas barras — uma positiva onde ele saiu, uma negativa onde chegou —
+        // e é exatamente isso que o reagendamento faz com o caixa.
+        "Movimento simulado":
+          ((previa[i]?.entradas ?? 0) - (curva[i]?.entradas ?? 0))
+          + ((previa[i]?.saidas ?? 0) - (curva[i]?.saidas ?? 0)),
+      } : {}),
     })) : []),
   ];
 
@@ -718,6 +775,17 @@ export default function FluxoCaixaView() {
   const barras: SeriesDef[] = [
     { key: "Entradas", label: "Entradas (a receber)", slot: 5, mark: "rect" },  // verde
     { key: "Saídas",   label: "Saídas (a pagar)",     slot: 3, mark: "rect" },  // vermelho
+    // A barra do que ainda NÃO existe: âmbar (o hue da hipótese, o mesmo da
+    // linha simulada) e VAZADA (contorno cheio, miolo translúcido). O
+    // preenchimento diz o estado — cheio é fato, vazado é ensaio — e é a mesma
+    // gramática do previsto×realizado no gráfico mensal.
+    //
+    // Só existe enquanto há data digitada, então não estreita as barras do
+    // gráfico em repouso.
+    ...(previa && mostraFuturo
+      ? [{ key: "Movimento simulado", label: "▸ Movimento simulado (não gravado)",
+           slot: 2, mark: "rect", variante: "vazada" } as SeriesDef]
+      : []),
   ];
   // Com agendamento existem DUAS curvas: a simulada e a original. Ver as duas
   // juntas é o que diz se o reagendamento melhorou o caixa e em quanto — a
@@ -772,6 +840,21 @@ export default function FluxoCaixaView() {
 
   /** Categorias presentes no universo atual, com valor — quem reagenda escolhe
    *  pelo peso, não pelo nome. */
+  /** Empresas e contrapartes presentes, com o peso de cada uma. Saem do
+   *  `universo` (o escopo carregado), não da `lista` — uma lista que encolhe
+   *  conforme você marca esconde a opção que você ia marcar em seguida. */
+  const empOpcoes = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const t of universo) m.set(t.empresa, (m.get(t.empresa) ?? 0) + Number(t.valor || 0));
+    return Array.from(m.entries()).sort((a, b) => b[1] - a[1]);
+  }, [universo]);
+
+  const contraOpcoes = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const t of universo) m.set(t.contraparte, (m.get(t.contraparte) ?? 0) + Number(t.valor || 0));
+    return Array.from(m.entries()).sort((a, b) => b[1] - a[1]);
+  }, [universo]);
+
   const catsOpcoes = useMemo(() => {
     const m = new Map<string, number>();
     for (const t of universo) m.set(t.categoria, (m.get(t.categoria) ?? 0) + Number(t.valor || 0));
@@ -788,6 +871,10 @@ export default function FluxoCaixaView() {
       .filter((t) => !reprogDe  || (t.reprogramado_em ? diaLocalDe(t.reprogramado_em) >= reprogDe : false))
       .filter((t) => !reprogAte || (t.reprogramado_em ? diaLocalDe(t.reprogramado_em) <= reprogAte : false))
       .filter((t) => !catsSel.size || catsSel.has(t.categoria))
+      .filter((t) => !empSel.size || empSel.has(t.empresa))
+      .filter((t) => !contraSel.size || contraSel.has(t.contraparte))
+      .filter((t) => !vencDe  || (t.vencimento ? t.vencimento >= vencDe  : false))
+      .filter((t) => !vencAte || (t.vencimento ? t.vencimento <= vencAte : false))
       // Recorte pela previsão EFETIVA, que é a data que a curva usa.
       .filter((t) => !prevDe  || (t.previsao && t.previsao >= prevDe))
       .filter((t) => !prevAte || (t.previsao && t.previsao <= prevAte))
@@ -813,10 +900,20 @@ export default function FluxoCaixaView() {
         case "categoria":   return sinal * String(a.categoria ?? "").localeCompare(String(b.categoria ?? ""), "pt-BR");
         case "reprogramado_em":
           return sinal * String(a.reprogramado_em ?? "").localeCompare(String(b.reprogramado_em ?? ""));
+        case "empresa":  return sinal * String(a.empresa ?? "").localeCompare(String(b.empresa ?? ""));
+        case "natureza": return sinal * String(a.natureza).localeCompare(String(b.natureza));
+        // Situação ordena pelo ATRASO em dias, não pelo rótulo: "156d" tem que
+        // vir antes de "21d", e alfabeticamente viria depois. A vencer conta
+        // negativo — quanto mais longe o vencimento, mais folga.
+        case "atraso": {
+          const g = (t: Titulo) => t.dias_atraso ?? -(diasAte(t.previsao) ?? 0);
+          return sinal * (g(a) - g(b));
+        }
         default:            return 0;
       }
     });
-  }, [universo, tipo, soReprog, soReneg, reprogDe, reprogAte, catsSel, prevDe, prevAte, busca, ordem, recentes]);
+  }, [universo, tipo, soReprog, soReneg, reprogDe, reprogAte, catsSel, prevDe, prevAte,
+      empSel, contraSel, vencDe, vencAte, busca, ordem, recentes]);
 
   /** Teto de linhas DESENHADAS.
    *
@@ -828,6 +925,36 @@ export default function FluxoCaixaView() {
    *  A ordenação acontece ANTES do corte, então o topo é sempre o que importa
    *  pela ordem escolhida — por padrão, os maiores valores, que são os que movem
    *  a curva. Cortar antes de ordenar mostraria 150 linhas arbitrárias. */
+  /** Reordenar/refiltrar troca os índices das linhas, então a âncora do shift
+   *  precisa cair — senão o próximo intervalo marcaria linhas não vistas. */
+  const reord = useCallback(() => { ancoraRef.current = null; }, []);
+
+  /** Todo recorte ligado, com o botão que o desliga. Uma fonte só: se um filtro
+   *  novo não aparecer aqui, ele filtra escondido. */
+  const filtrosAtivos = useMemo(() => {
+    const f: Array<{ rot: string; limpar: () => void }> = [];
+    const faixa = (rot: string, de: string, ate: string) => {
+      const dd = de && !de.startsWith("1900") ? diaBr(de) : "";
+      if (de.startsWith("1900")) return `${rot} até ${diaBr(ate)}`;
+      return `${rot} ${dd}${ate ? ` → ${diaBr(ate)}` : "+"}`;
+    };
+    if (tipo !== "todos") f.push({ rot: tipo === "R" ? "só Receber" : "só Pagar", limpar: () => setTipo("todos") });
+    if (empSel.size) f.push({ rot: `Emp.: ${Array.from(empSel).join(", ")}`, limpar: () => setEmpSel(new Set()) });
+    if (contraSel.size) f.push({
+      rot: contraSel.size === 1 ? `Contraparte: ${Array.from(contraSel)[0]}` : `${contraSel.size} contrapartes`,
+      limpar: () => setContraSel(new Set()) });
+    if (catsSel.size) f.push({
+      rot: catsSel.size === 1 ? `Categoria: ${Array.from(catsSel)[0]}` : `${catsSel.size} categorias`,
+      limpar: () => setCatsSel(new Set()) });
+    if (vencDe || vencAte) f.push({ rot: faixa("Vencto", vencDe, vencAte), limpar: () => { setVencDe(""); setVencAte(""); } });
+    if (prevDe || prevAte) f.push({ rot: faixa("Previsão", prevDe, prevAte), limpar: () => { setPrevDe(""); setPrevAte(""); } });
+    if (reprogDe || reprogAte) f.push({ rot: faixa("Reprog.", reprogDe, reprogAte), limpar: () => { setReprogDe(""); setReprogAte(""); } });
+    if (soReprog) f.push({ rot: "↻ só reprogramados", limpar: () => setSoReprog(false) });
+    if (soReneg) f.push({ rot: "⚖ só fora da curva", limpar: () => setSoReneg(false) });
+    if (busca.trim()) f.push({ rot: `busca "${busca.trim()}"`, limpar: () => setBusca("") });
+    return f;
+  }, [tipo, empSel, contraSel, catsSel, vencDe, vencAte, prevDe, prevAte,
+      reprogDe, reprogAte, soReprog, soReneg, busca]);
   const TETO_LINHAS = 150;
   const linhasNaMesa = useMemo(() => lista.slice(0, TETO_LINHAS), [lista]);
   const linhasOcultas = lista.length - linhasNaMesa.length;
@@ -1359,137 +1486,28 @@ export default function FluxoCaixaView() {
                 badge quando algum está ligado, para nada ficar filtrando em
                 silêncio. */}
             <span className="w-px h-4 bg-ww-border mx-0.5" />
-            <Pop largura={340} gatilho={(aberto, toggle) => {
-              const ativos = (prevDe || prevAte ? 1 : 0) + (reprogDe || reprogAte ? 1 : 0)
-                           + (catsSel.size ? 1 : 0) + (tipo !== "todos" ? 1 : 0)
-                           + (soReprog ? 1 : 0) + (soReneg ? 1 : 0);
-              return (
-                <button type="button" onClick={toggle}
-                  className={`inline-flex items-center gap-1 px-2 py-0.5 text-[11px] rounded border transition ${
-                    ativos || aberto
-                      ? "border-ww-accent text-ww-accent bg-ww-accentSoft font-semibold"
-                      : "border-ww-border text-ww-textMuted hover:text-ww-text hover:bg-ww-rowHover"}`}>
-                  Filtros {ativos > 0 && <span className="px-1 rounded bg-ww-accent text-white text-[9.5px]">{ativos}</span>} ▾
-                </button>
-              );
-            }}>
-              <div className="space-y-3">
-                <div>
-                  <p className="text-[9px] uppercase tracking-[0.7px] font-bold text-ww-textFaint mb-1">Natureza</p>
-                  <div className="flex items-center gap-1">
-                    <Chip on={tipo === "todos"} onClick={() => { setTipo("todos"); ancoraRef.current = null; }}>
-                      Ambos
-                    </Chip>
-                    <ChipTom on={tipo === "R"} tom="receber"
-                      onClick={() => { setTipo("R"); ancoraRef.current = null; }}>Receber</ChipTom>
-                    <ChipTom on={tipo === "P"} tom="pagar"
-                      onClick={() => { setTipo("P"); ancoraRef.current = null; }}>Pagar</ChipTom>
-                  </div>
-                </div>
-                <div>
-                  <p className="text-[9px] uppercase tracking-[0.7px] font-bold text-ww-textFaint mb-1">Só mostrar</p>
-                  <div className="flex items-center gap-1 flex-wrap">
-                    <Chip on={soReprog} onClick={() => setSoReprog((v) => !v)}
-                          titulo="Só títulos cuja previsão eu alterei no painel">
-                      ↻ Reprogramados {qtdReprog}
-                    </Chip>
-                    <Chip on={soReneg} onClick={() => setSoReneg((v) => !v)}
-                          titulo="Só os que estão fora da curva, esperando repactuação ou cancelamento">
-                      ⚖ Fora da curva {qtdReneg}
-                    </Chip>
-                  </div>
-                </div>
-                <div>
-                  <p className="text-[9px] uppercase tracking-[0.7px] font-bold text-ww-textFaint mb-1">Previsão</p>
-                  <div className="flex items-center gap-1 flex-wrap">
-                    <Chip on={prevDe === hojeIso() && prevAte === hojeIso()}
-                          onClick={() => {
-                            const h = hojeIso();
-                            const jaEra = prevDe === h && prevAte === h;
-                            setPrevDe(jaEra ? "" : h); setPrevAte(jaEra ? "" : h);
-                          }}>Hoje</Chip>
-                    <Chip on={prevDe === hojeIso() && prevAte === addDias(hojeIso(), 7)}
-                          onClick={() => {
-                            const h = hojeIso(), f = addDias(h, 7);
-                            const jaEra = prevDe === h && prevAte === f;
-                            setPrevDe(jaEra ? "" : h); setPrevAte(jaEra ? "" : f);
-                          }}>7 dias</Chip>
-                    <input type="date" value={prevDe} onChange={(e) => setPrevDe(e.target.value)}
-                      title="Previsão a partir de"
-                      className="text-[11px] bg-ww-bg border border-ww-border rounded px-1.5 py-0.5 text-ww-text" />
-                    <span className="text-[10px] text-ww-textFaint">→</span>
-                    <input type="date" value={prevAte} onChange={(e) => setPrevAte(e.target.value)}
-                      title="Previsão até"
-                      className="text-[11px] bg-ww-bg border border-ww-border rounded px-1.5 py-0.5 text-ww-text" />
-                    {(prevDe || prevAte) && (
-                      <button type="button" onClick={() => { setPrevDe(""); setPrevAte(""); }}
-                        className="text-[10.5px] text-ww-accent hover:underline">limpar</button>
-                    )}
-                  </div>
-                </div>
-                <div>
-                  <p className="text-[9px] uppercase tracking-[0.7px] font-bold text-ww-textFaint mb-1"
-                     title="Quando EU reprogramei — outra data, não a previsão">Reprogramado em</p>
-                  <div className="flex items-center gap-1 flex-wrap">
-                    <Chip on={reprogDe === hojeIso() && reprogAte === hojeIso()}
-                          titulo="O que eu reprogramei hoje"
-                          onClick={() => {
-                            const h = hojeIso();
-                            const jaEra = reprogDe === h && reprogAte === h;
-                            setReprogDe(jaEra ? "" : h); setReprogAte(jaEra ? "" : h);
-                          }}>Hoje</Chip>
-                    <Chip on={reprogDe === addDias(hojeIso(), -7) && reprogAte === hojeIso()}
-                          titulo="Reprogramados nos últimos 7 dias"
-                          onClick={() => {
-                            const h = hojeIso(), d = addDias(h, -7);
-                            const jaEra = reprogDe === d && reprogAte === h;
-                            setReprogDe(jaEra ? "" : d); setReprogAte(jaEra ? "" : h);
-                          }}>7 dias</Chip>
-                    <input type="date" value={reprogDe} onChange={(e) => setReprogDe(e.target.value)}
-                      title="Reprogramado a partir de"
-                      className="text-[11px] bg-ww-bg border border-ww-border rounded px-1 py-0.5 text-ww-text" />
-                    <span className="text-[10px] text-ww-textFaint">→</span>
-                    <input type="date" value={reprogAte} onChange={(e) => setReprogAte(e.target.value)}
-                      title="Reprogramado até"
-                      className="text-[11px] bg-ww-bg border border-ww-border rounded px-1 py-0.5 text-ww-text" />
-                    {(reprogDe || reprogAte) && (
-                      <button type="button" onClick={() => { setReprogDe(""); setReprogAte(""); }}
-                        className="text-[10.5px] text-ww-accent hover:underline">limpar</button>
-                    )}
-                  </div>
-                </div>
-                <div>
-                  <div className="flex items-center justify-between mb-1">
-                    <p className="text-[9px] uppercase tracking-[0.7px] font-bold text-ww-textFaint">Categorias</p>
-                    {catsSel.size > 0 && (
-                      <button type="button" onClick={() => setCatsSel(new Set())}
-                        className="text-[10.5px] text-ww-accent hover:underline">limpar ({catsSel.size})</button>
-                    )}
-                  </div>
-                  <div className="max-h-[180px] overflow-auto -mx-1 px-1">
-                    {catsOpcoes.length === 0 && (
-                      <p className="text-[11px] text-ww-textFaint">Nada no escopo atual.</p>
-                    )}
-                    {catsOpcoes.map(([cat, val]) => {
-                      const on = catsSel.has(cat);
-                      return (
-                        <button key={cat} type="button"
-                          onClick={() => setCatsSel((prev) => {
-                            const n = new Set(prev);
-                            if (n.has(cat)) n.delete(cat); else n.add(cat);
-                            return n;
-                          })}
-                          className={`w-full flex items-center justify-between gap-2 px-2 py-1 rounded-md text-[11px] transition text-left ${
-                            on ? "bg-ww-accentSoft text-ww-accent font-semibold" : "text-ww-text hover:bg-ww-rowHover"}`}>
-                          <span className="truncate">{cat}</span>
-                          <span className="tabular-nums text-ww-textFaint">{brl(val)}</span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              </div>
-            </Pop>
+            {/* O que está filtrando AGORA, em chips que se desligam.
+                Os controles saíram daqui e foram para o cabeçalho de cada
+                coluna. O que sobra é o problema que os filtros por coluna
+                criam: um recorte ligado numa coluna que você não está olhando.
+                Esta faixa é o único lugar da tela que vê todos de uma vez. */}
+            {filtrosAtivos.map((f) => (
+              <button key={f.rot} type="button" onClick={f.limpar} title="Remover este filtro"
+                className="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] rounded border border-ww-accent bg-ww-accentSoft text-ww-accent transition hover:brightness-110">
+                {f.rot}<span className="text-[9px] opacity-70">✕</span>
+              </button>
+            ))}
+            {/* Botão próprio, e não só o ✕ de cada chip: com sete colunas
+                filtráveis, desfazer um por um é trabalho. Não mexe no escopo
+                (Atrasados / A vencer / Tudo) — aquele está sempre à vista nos
+                chips ao lado, então não é do tipo que se esquece ligado. */}
+            {filtrosAtivos.length > 0 && (
+              <button type="button" onClick={() => filtrosAtivos.forEach((f) => f.limpar())}
+                title="Remove todos os filtros de coluna e a busca. Não altera Atrasados / A vencer / Tudo."
+                className="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] rounded border border-ww-border text-ww-textMuted hover:text-rose-500 hover:border-rose-500/50 transition">
+                ✕ Limpar filtros ({filtrosAtivos.length})
+              </button>
+            )}
             <input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Buscar…"
               className="w-[130px] text-[11px] bg-ww-bg border border-ww-border rounded px-2 py-1 text-ww-text placeholder:text-ww-textFaint" />
             <div className="ml-auto flex items-center gap-1">
@@ -1840,19 +1858,88 @@ export default function FluxoCaixaView() {
                       className="accent-ww-accent" />
                   </th>
                 )}
-                <th style={{ width: 58 }} className="p-1.5 text-left shadow-[0_1px_0_0_rgb(var(--color-ww-border))]">Tipo</th>
-                <th style={{ width: 52 }} className="p-1.5 text-left shadow-[0_1px_0_0_rgb(var(--color-ww-border))]">Emp.</th>
-                <Th col="contraparte" w={196} ordem={ordem} setOrdem={setOrdem} onReordenar={() => { ancoraRef.current = null; }}>Contraparte</Th>
-                <Th col="categoria"   w={130} ordem={ordem} setOrdem={setOrdem} onReordenar={() => { ancoraRef.current = null; }}>Categoria</Th>
-                <Th col="vencimento"  w={74}  ordem={ordem} setOrdem={setOrdem} onReordenar={() => { ancoraRef.current = null; }}>Vencto</Th>
+                {/* Cada coluna filtra e ordena por si (Benny, 11/09). O estado é
+                    o MESMO do menu "Filtros" onde já existia — categoria,
+                    previsão e reprogramação são a mesma sala com duas portas.
+                    Duplicar seria repetir o erro que fez painel e Webex
+                    divergirem. */}
+                <ThMenu col="natureza" w={58} ordem={ordem} setOrdem={setOrdem} largura={190}
+                  onReordenar={reord} filtrando={tipo !== "todos"} rotulosOrdem={["Pagar 1º", "Receber 1º"]}
+                  menu={
+                    <div className="flex gap-1">
+                      {([["todos", "Ambos"], ["R", "Receber"], ["P", "Pagar"]] as const).map(([k, l]) => (
+                        <button key={k} type="button" onClick={() => { setTipo(k); reord(); }}
+                          className={`flex-1 px-1.5 py-1 rounded text-[11px] border transition ${
+                            tipo === k ? "border-ww-accent bg-ww-accentSoft text-ww-accent font-semibold"
+                                       : "border-ww-border text-ww-textMuted hover:text-ww-text"}`}>{l}</button>
+                      ))}
+                    </div>
+                  }>Tipo</ThMenu>
+                <ThMenu col="empresa" w={52} ordem={ordem} setOrdem={setOrdem} largura={220}
+                  onReordenar={reord} filtrando={empSel.size > 0}
+                  menu={<FiltroValores opcoes={empOpcoes} sel={empSel}
+                    onToggle={(v) => setEmpSel((p) => { const n = new Set(p); if (n.has(v)) n.delete(v); else n.add(v); return n; })}
+                    onLimpar={() => setEmpSel(new Set())} />}>Emp.</ThMenu>
+                <ThMenu col="contraparte" w={196} ordem={ordem} setOrdem={setOrdem} largura={300}
+                  onReordenar={reord} filtrando={contraSel.size > 0}
+                  menu={<FiltroValores opcoes={contraOpcoes} sel={contraSel} buscavel
+                    onToggle={(v) => setContraSel((p) => { const n = new Set(p); if (n.has(v)) n.delete(v); else n.add(v); return n; })}
+                    onLimpar={() => setContraSel(new Set())} />}>Contraparte</ThMenu>
+                <ThMenu col="categoria" w={130} ordem={ordem} setOrdem={setOrdem} largura={300}
+                  onReordenar={reord} filtrando={catsSel.size > 0}
+                  menu={<FiltroValores opcoes={catsOpcoes} sel={catsSel} buscavel
+                    onToggle={(v) => setCatsSel((p) => { const n = new Set(p); if (n.has(v)) n.delete(v); else n.add(v); return n; })}
+                    onLimpar={() => setCatsSel(new Set())} />}>Categoria</ThMenu>
+                <ThMenu col="vencimento" w={74} ordem={ordem} setOrdem={setOrdem} largura={260}
+                  onReordenar={reord} filtrando={!!(vencDe || vencAte)}
+                  rotulosOrdem={["Mais antiga", "Mais recente"]}
+                  menu={<FiltroData de={vencDe} ate={vencAte} setDe={setVencDe} setAte={setVencAte} />}
+                >Vencto</ThMenu>
                 {/* Previsão vigente: é a data que a curva usa hoje, e o ponto de
                     partida de qualquer reagendamento. Faltava na tela. */}
-                <Th col="previsao"    w={78}  ordem={ordem} setOrdem={setOrdem} onReordenar={() => { ancoraRef.current = null; }}>Previsão</Th>
-                <th style={{ width: 78 }} className="p-1.5 text-left shadow-[0_1px_0_0_rgb(var(--color-ww-border))]">Situação</th>
-                <Th col="valor" w={104} alinhaDireita ordem={ordem} setOrdem={setOrdem} onReordenar={() => { ancoraRef.current = null; }}>Valor</Th>
+                <ThMenu col="previsao" w={78} ordem={ordem} setOrdem={setOrdem} largura={260}
+                  onReordenar={reord} filtrando={!!(prevDe || prevAte)}
+                  rotulosOrdem={["Mais antiga", "Mais recente"]}
+                  menu={<FiltroData de={prevDe} ate={prevAte} setDe={setPrevDe} setAte={setPrevAte} />}
+                >Previsão</ThMenu>
+                <ThMenu col="atraso" w={78} ordem={ordem} setOrdem={setOrdem} largura={210}
+                  onReordenar={reord} filtrando={escopo !== "todos" || soReneg}
+                  rotulosOrdem={["Menos atraso", "Mais atraso"]}
+                  menu={
+                    <div className="space-y-1">
+                      {([["atrasados", "Só atrasados"], ["a_vencer", "Só a vencer"], ["todos", "Todos"]] as const).map(([k, l]) => (
+                        <button key={k} type="button"
+                          onClick={() => { setEscopo(k); setSel(new Set()); setAviso(null); reord(); }}
+                          className={`w-full text-left px-2 py-1 rounded text-[11px] transition ${
+                            escopo === k ? "bg-ww-accentSoft text-ww-accent font-semibold" : "text-ww-text hover:bg-ww-rowHover"}`}>
+                          {l}
+                        </button>
+                      ))}
+                      <div className="h-px bg-ww-border my-1" />
+                      <button type="button" onClick={() => setSoReneg((v) => !v)}
+                        className={`w-full text-left px-2 py-1 rounded text-[11px] transition ${
+                          soReneg ? "bg-violet-500/15 text-violet-700 dark:text-violet-300 font-semibold" : "text-ww-text hover:bg-ww-rowHover"}`}>
+                        ⚖ Só fora da curva ({qtdReneg})
+                      </button>
+                    </div>
+                  }>Situação</ThMenu>
+                <ThMenu col="valor" w={104} alinhaDireita ordem={ordem} setOrdem={setOrdem}
+                  onReordenar={reord} largura={190} rotulosOrdem={["Menor", "Maior"]}>Valor</ThMenu>
                 {/* Quando eu mexi. Só faz sentido pra reprogramado, mas a coluna
                     fica sempre — some e volta conforme o filtro seria pior. */}
-                <Th col="reprogramado_em" w={86} ordem={ordem} setOrdem={setOrdem} onReordenar={() => { ancoraRef.current = null; }}>Reprog.</Th>
+                <ThMenu col="reprogramado_em" w={86} ordem={ordem} setOrdem={setOrdem} largura={260}
+                  onReordenar={reord} filtrando={!!(reprogDe || reprogAte) || soReprog}
+                  rotulosOrdem={["Mais antiga", "Mais recente"]}
+                  menu={
+                    <div>
+                      <button type="button" onClick={() => setSoReprog((v) => !v)}
+                        className={`w-full text-left px-2 py-1 mb-2 rounded text-[11px] transition ${
+                          soReprog ? "bg-ww-accentSoft text-ww-accent font-semibold" : "text-ww-text hover:bg-ww-rowHover"}`}>
+                        ↻ Só os que eu reprogramei ({qtdReprog})
+                      </button>
+                      <FiltroData de={reprogDe} ate={reprogAte} setDe={setReprogDe} setAte={setReprogAte} />
+                    </div>
+                  }>Reprog.</ThMenu>
                 <th style={{ width: 128 }} className="p-1.5 text-left shadow-[0_1px_0_0_rgb(var(--color-ww-border))]">Nova previsão</th>
                 <th style={{ width: 96 }} className="p-1.5 text-left shadow-[0_1px_0_0_rgb(var(--color-ww-border))]">Omie</th>
               </tr>
@@ -1979,6 +2066,7 @@ export default function FluxoCaixaView() {
                       ) : "—"}
                     </td>
                     <td className="p-1.5 border-b border-ww-border/50">
+                      <div className="flex items-center gap-1">
                       <input type="date"
                         value={rascunho.get(t.cod_titulo) ?? dia}
                         min={hojeIso()}
@@ -2001,10 +2089,38 @@ export default function FluxoCaixaView() {
                           }
                         }}
                         onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); }}
-                        className="text-[11px] bg-ww-bg border border-ww-border rounded px-1.5 py-0.5 text-ww-text disabled:opacity-50" />
+                        className={`text-[11px] bg-ww-bg border rounded px-1.5 py-0.5 text-ww-text disabled:opacity-50 ${
+                          rascunho.has(t.cod_titulo)
+                            ? "border-ww-accent bg-ww-accentSoft" : "border-ww-border"}`} />
+                      {/* Desfaz o que EU acabei de digitar. Só aparece com
+                          rascunho: apagar uma data já gravada é outra ação, e
+                          um ✕ que às vezes faz uma coisa e às vezes outra é
+                          pior do que dois botões. */}
+                      {rascunho.has(t.cod_titulo) && (
+                        <button type="button" title="Descartar esta data — nada foi gravado"
+                          onClick={() => setRascunho((prev) => {
+                            const n = new Map(prev); n.delete(t.cod_titulo); return n;
+                          })}
+                          className="text-[11px] leading-none text-ww-textFaint hover:text-rose-500 transition px-0.5">
+                          ✕
+                        </button>
+                      )}
+                      </div>
                     </td>
                     <td className="p-1.5 border-b border-ww-border/50">
-                      {t.sincronizado_omie ? (
+                      {/* Com data digitada, a linha ganha seu próprio botão:
+                          quem mexeu num título só não precisa passar pelo
+                          total lá em cima. Vence o "✓ enviado" de propósito —
+                          há uma data nova esperando, e dizer "enviado" nesse
+                          momento seria falar do envio anterior. */}
+                      {podeEditar && destinos.has(t.cod_titulo) ? (
+                        <button type="button" disabled={salvando || syncing}
+                          onClick={() => void mandarProOmie([t.cod_titulo])}
+                          title={`Grava ${diaBr(destinos.get(t.cod_titulo)!)} e manda só este pro Omie`}
+                          className="px-1.5 py-0.5 text-[10px] rounded bg-ww-accent text-white font-semibold hover:brightness-110 transition disabled:opacity-40">
+                          {salvando || syncing ? "…" : "↑ Mandar"}
+                        </button>
+                      ) : t.sincronizado_omie ? (
                         <span className="text-[10px] text-emerald-600 dark:text-emerald-400" title="Já enviado pro Omie">
                           ✓ enviado
                         </span>
@@ -2100,31 +2216,216 @@ export default function FluxoCaixaView() {
   );
 }
 
-/** Cabeçalho de coluna ordenável. Clique alterna a direção; clique em outra
- *  coluna começa descendente, que é o que se quer em quase todo caso. */
-function Th({
+/** Popover que escapa do container.
+ *
+ *  O `Pop` normal é `absolute` e seria recortado: a mesa vive num div com
+ *  `overflow-auto` e altura máxima, então um menu de cabeçalho abriria por
+ *  dentro da própria barra de rolagem. Este aqui mede o gatilho e desenha em
+ *  `position: fixed` num portal no body.
+ *
+ *  Também vira pra esquerda quando não cabe à direita — as últimas colunas da
+ *  mesa ficam coladas na borda da tela. */
+function PopFixo({ gatilho, children, largura = 240 }: {
+  gatilho: (aberto: boolean, toggle: () => void) => React.ReactNode;
+  children: React.ReactNode;
+  largura?: number;
+}) {
+  const [aberto, setAberto] = useState(false);
+  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
+  const ancora = useRef<HTMLSpanElement>(null);
+  const caixa = useRef<HTMLDivElement>(null);
+
+  useLayoutEffect(() => {
+    if (!aberto || !ancora.current) { setPos(null); return; }
+    const r = ancora.current.getBoundingClientRect();
+    const left = Math.max(8, Math.min(r.left, window.innerWidth - largura - 8));
+    setPos({ top: r.bottom + 4, left });
+  }, [aberto, largura]);
+
+  useEffect(() => {
+    if (!aberto) return;
+    const fora = (e: MouseEvent) => {
+      const alvo = e.target as Node;
+      if (caixa.current?.contains(alvo) || ancora.current?.contains(alvo)) return;
+      setAberto(false);
+    };
+    // Rolar a mesa move o gatilho e o menu ficaria flutuando sozinho no lugar
+    // errado — fechar é mais honesto que reposicionar a cada frame.
+    const fecha = () => setAberto(false);
+    document.addEventListener("mousedown", fora);
+    window.addEventListener("scroll", fecha, true);
+    window.addEventListener("resize", fecha);
+    return () => {
+      document.removeEventListener("mousedown", fora);
+      window.removeEventListener("scroll", fecha, true);
+      window.removeEventListener("resize", fecha);
+    };
+  }, [aberto]);
+
+  return (
+    <span className="inline-flex" ref={ancora}>
+      {gatilho(aberto, () => setAberto((v) => !v))}
+      {aberto && pos && typeof document !== "undefined" && createPortal(
+        <div ref={caixa} style={{ position: "fixed", top: pos.top, left: pos.left, width: largura }}
+          className="z-[60] max-h-[380px] overflow-auto rounded-lg border border-ww-border bg-ww-drawer shadow-xl p-2 animate-in fade-in-0 slide-in-from-top-1 normal-case tracking-normal">
+          {children}
+        </div>, document.body)}
+    </span>
+  );
+}
+
+/** Os dois botões de ordenação de um menu de coluna, com os verbos da própria
+ *  coluna — "A → Z" numa data não diz nada, "mais antiga primeiro" diz. */
+function OrdenarPor({ col, ordem, setOrdem, onReordenar, rotulos }: {
+  col: OrdemCol;
+  ordem: { col: OrdemCol; desc: boolean };
+  setOrdem: (o: { col: OrdemCol; desc: boolean }) => void;
+  onReordenar?: () => void;
+  rotulos: [string, string];   // [crescente, decrescente]
+}) {
+  const btn = (desc: boolean, rot: string) => {
+    const ativo = ordem.col === col && ordem.desc === desc;
+    return (
+      <button type="button"
+        onClick={() => { setOrdem({ col, desc }); onReordenar?.(); }}
+        className={`flex-1 px-2 py-1 rounded text-[11px] border transition ${
+          ativo ? "border-ww-accent bg-ww-accentSoft text-ww-accent font-semibold"
+                : "border-ww-border text-ww-textMuted hover:text-ww-text hover:bg-ww-rowHover"}`}>
+        {rot}
+      </button>
+    );
+  };
+  return (
+    <div className="flex gap-1 mb-2">
+      {btn(false, `↑ ${rotulos[0]}`)}
+      {btn(true,  `↓ ${rotulos[1]}`)}
+    </div>
+  );
+}
+
+/** Lista de valores com marcação múltipla, ordenada por PESO no fluxo.
+ *
+ *  Ordem alfabética seria inútil aqui: quem filtra fornecedor numa mesa de
+ *  reagendamento procura o que move a curva, e esse é o de maior valor. */
+function FiltroValores({ opcoes, sel, onToggle, onLimpar, buscavel = false }: {
+  opcoes: Array<[string, number]>;
+  sel: Set<string>;
+  onToggle: (v: string) => void;
+  onLimpar: () => void;
+  buscavel?: boolean;
+}) {
+  const [q, setQ] = useState("");
+  const vis = q ? opcoes.filter(([v]) => normaliza(v).includes(normaliza(q))) : opcoes;
+  return (
+    <div>
+      {buscavel && (
+        <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Filtrar nesta lista…"
+          className="w-full mb-1.5 text-[11px] bg-ww-bg border border-ww-border rounded px-1.5 py-1 text-ww-text" />
+      )}
+      <div className="max-h-[190px] overflow-auto -mx-0.5 px-0.5">
+        {vis.length === 0 && <p className="text-[11px] text-ww-textFaint py-1">Nada aqui.</p>}
+        {vis.map(([v, peso]) => (
+          <button key={v} type="button" onClick={() => onToggle(v)}
+            className="w-full flex items-center gap-1.5 px-1 py-1 rounded text-left hover:bg-ww-rowHover transition">
+            <input type="checkbox" readOnly checked={sel.has(v)} className="accent-ww-accent pointer-events-none" />
+            <span className="flex-1 truncate text-[11px] text-ww-text" title={v}>{v || "(sem nome)"}</span>
+            <span className="text-[10px] tabular-nums text-ww-textFaint">{brl(peso)}</span>
+          </button>
+        ))}
+      </div>
+      {sel.size > 0 && (
+        <button type="button" onClick={onLimpar}
+          className="mt-1 text-[10.5px] text-ww-accent hover:underline">limpar ({sel.size})</button>
+      )}
+    </div>
+  );
+}
+
+/** Filtro de data com atalhos relativos.
+ *
+ *  Os atalhos existem porque a pergunta real quase nunca é um intervalo: é
+ *  "o que vence hoje" ou "o que cai nesta semana". Digitar duas datas pra
+ *  responder isso é trabalho que o botão faz melhor — e sem errar o domingo. */
+function FiltroData({ de, ate, setDe, setAte }: {
+  de: string; ate: string;
+  setDe: (v: string) => void; setAte: (v: string) => void;
+}) {
+  return (
+    <div>
+      <div className="flex flex-wrap gap-1 mb-2">
+        {FAIXAS_REL.map((f) => {
+          const [d, a] = f.faixa();
+          const ativo = de === d && ate === a;
+          return (
+            <button key={f.key} type="button"
+              onClick={() => { if (ativo) { setDe(""); setAte(""); } else { setDe(d); setAte(a); } }}
+              className={`px-1.5 py-0.5 text-[10.5px] rounded border transition ${
+                ativo ? "border-ww-accent bg-ww-accentSoft text-ww-accent font-semibold"
+                      : "border-ww-border text-ww-textMuted hover:text-ww-text hover:bg-ww-rowHover"}`}>
+              {f.rot}
+            </button>
+          );
+        })}
+      </div>
+      <div className="flex items-center gap-1">
+        <input type="date" value={de.startsWith("1900") ? "" : de} onChange={(e) => setDe(e.target.value)}
+          className="flex-1 text-[11px] bg-ww-bg border border-ww-border rounded px-1 py-0.5 text-ww-text" />
+        <span className="text-[10px] text-ww-textFaint">→</span>
+        <input type="date" value={ate} onChange={(e) => setAte(e.target.value)}
+          className="flex-1 text-[11px] bg-ww-bg border border-ww-border rounded px-1 py-0.5 text-ww-text" />
+      </div>
+      {(de || ate) && (
+        <button type="button" onClick={() => { setDe(""); setAte(""); }}
+          className="mt-1.5 text-[10.5px] text-ww-accent hover:underline">limpar</button>
+      )}
+    </div>
+  );
+}
+
+/** Cabeçalho com menu: ordenação + filtro da própria coluna.
+ *
+ *  O rótulo continua clicável e continua alternando a direção — quem só quer
+ *  ordenar não perde o clique único que já existia. O ▾ ao lado abre o menu.
+ *  Um ponto no rótulo marca a coluna que está filtrando, para nenhum recorte
+ *  ficar acontecendo em silêncio. */
+function ThMenu({
   col, w, children, ordem, setOrdem, alinhaDireita = false, onReordenar,
+  filtrando = false, rotulosOrdem = ["A → Z", "Z → A"], largura = 240, menu,
 }: {
   col: OrdemCol; w: number; children: React.ReactNode;
   ordem: { col: OrdemCol; desc: boolean };
   setOrdem: (o: { col: OrdemCol; desc: boolean }) => void;
   alinhaDireita?: boolean;
-  /** Reordenar troca os índices das linhas, então a âncora do shift precisa
-   *  cair — senão o intervalo seguinte marcaria linhas que o usuário não viu. */
   onReordenar?: () => void;
+  filtrando?: boolean;
+  rotulosOrdem?: [string, string];
+  largura?: number;
+  menu?: React.ReactNode;
 }) {
   const ativa = ordem.col === col;
   return (
     <th style={{ width: w }}
         className={`p-1.5 shadow-[0_1px_0_0_rgb(var(--color-ww-border))] ${
           alinhaDireita ? "text-right" : "text-left"}`}>
-      <button type="button"
-        onClick={() => { setOrdem(ativa ? { col, desc: !ordem.desc } : { col, desc: true }); onReordenar?.(); }}
-        className={`inline-flex items-center gap-0.5 uppercase tracking-wider transition ${
-          ativa ? "text-ww-accent font-semibold" : "hover:text-ww-text"}`}>
-        {children}
-        <span className="text-[8px] opacity-70">{ativa ? (ordem.desc ? "▼" : "▲") : ""}</span>
-      </button>
+      <span className={`inline-flex items-center gap-0.5 ${alinhaDireita ? "justify-end" : ""}`}>
+        <button type="button"
+          onClick={() => { setOrdem(ativa ? { col, desc: !ordem.desc } : { col, desc: true }); onReordenar?.(); }}
+          className={`inline-flex items-center gap-0.5 uppercase tracking-wider transition ${
+            ativa || filtrando ? "text-ww-accent font-semibold" : "hover:text-ww-text"}`}>
+          {children}
+          {filtrando && <span className="text-[7px] leading-none" title="Esta coluna está filtrando">●</span>}
+          <span className="text-[8px] opacity-70">{ativa ? (ordem.desc ? "▼" : "▲") : ""}</span>
+        </button>
+        <PopFixo largura={largura} gatilho={(aberto, toggle) => (
+          <button type="button" onClick={toggle} aria-label="Ordenar e filtrar"
+            className={`px-0.5 text-[9px] leading-none transition ${
+              aberto ? "text-ww-accent" : "text-ww-textFaint hover:text-ww-text"}`}>▾</button>
+        )}>
+          <OrdenarPor col={col} ordem={ordem} setOrdem={setOrdem}
+                      onReordenar={onReordenar} rotulos={rotulosOrdem} />
+          {menu && <div className="pt-2 border-t border-ww-border">{menu}</div>}
+        </PopFixo>
+      </span>
     </th>
   );
 }
