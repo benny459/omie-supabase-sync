@@ -167,13 +167,19 @@ export default function ChartFrame({
                     // legenda vira só "a mesma cor mais fraca", que se confunde
                     // com o esmaecido de série desligada.
                     <span aria-hidden className="inline-block w-2.5 h-2.5 rounded-sm transition-opacity"
-                          style={{
-                            background: seriesColor(s.slot, mode, tema),
-                            opacity: off ? 0.3 : (s.variante === "vazada" ? 0.28 : 1),
-                            border: s.variante === "vazada"
-                              ? `1.5px solid ${seriesColor(s.slot, mode, tema)}` : undefined,
-                            boxSizing: "border-box",
-                          }} />
+                          style={(() => {
+                            const cor = seriesColor(s.slot, mode, tema);
+                            // O translúcido vai no FUNDO, não na marca inteira:
+                            // com `opacity` global o contorno desbotava junto e o
+                            // swatch virava um quadradinho cinza — que é
+                            // exatamente o que "vazada" não quer dizer. No
+                            // gráfico é fillOpacity + stroke cheio; aqui idem.
+                            return s.variante === "vazada"
+                              ? { background: `color-mix(in srgb, ${cor} 28%, transparent)`,
+                                  border: `1.5px solid ${cor}`, boxSizing: "border-box" as const,
+                                  opacity: off ? 0.3 : 1 }
+                              : { background: cor, opacity: off ? 0.3 : 1 };
+                          })()} />
                   )}
                   {s.label}
                 </button>

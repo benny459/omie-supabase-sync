@@ -675,10 +675,31 @@ export default function FluxoCaixaView() {
    *
    *  Só existe com data válida e seleção — desenhar uma terceira linha idêntica
    *  às outras seria ruído. */
+  /** Os atrasados que a simulação precisa enxergar.
+   *
+   *  `extras` só traz atrasado JÁ GRAVADO — ele nasceu para desenhar o que a
+   *  agenda do painel já decidiu. Mas a mesa abre em "Atrasados", e reagendar
+   *  um deles é o uso principal desta tela: sem isto, digitar a data do título
+   *  mais atrasado não movia a curva um milímetro e o impacto dizia "0".
+   *
+   *  Atrasado não está em `titulosNaCurva` de propósito (ancorá-lo em hoje
+   *  jogaria R$ 441k no dia 1). Ele entra QUANDO GANHA DATA — e uma data
+   *  digitada é uma data, ainda que não gravada. */
+  const extrasPrevia = useMemo(() => {
+    if (!destinos.size) return extras;
+    const jaTem = new Set(extras.map((x) => x.t.cod_titulo));
+    const porCod = new Map(atrasados.map((t) => [t.cod_titulo, t]));
+    const novos = Array.from(destinos.entries())
+      .filter(([cod]) => !jaTem.has(cod))
+      .map(([cod, dia]) => ({ t: porCod.get(cod), dia }))
+      .filter((x): x is { t: Titulo; dia: string } => !!x.t);
+    return novos.length ? [...extras, ...novos] : extras;
+  }, [extras, destinos, atrasados]);
+
   const previa = useMemo(() => {
     if (!destinos.size) return null;
-    return projetar(saldo0, titulosNaCurva, diasFrente, extras, false, destinos);
-  }, [destinos, saldo0, titulosNaCurva, diasFrente, extras]);
+    return projetar(saldo0, titulosNaCurva, diasFrente, extrasPrevia, false, destinos);
+  }, [destinos, saldo0, titulosNaCurva, diasFrente, extrasPrevia]);
 
   /** O passado, reconstruído de trás pra frente a partir do saldo de hoje.
    *
