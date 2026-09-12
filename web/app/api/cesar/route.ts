@@ -9,6 +9,7 @@
 //   { t: "ferramenta", nome, entrada }   — começou uma consulta
 //   { t: "resultado", nome, linhas, truncado } — a consulta voltou
 //   { t: "texto", v }                    — pedaço da resposta
+//   { t: "acao", payload }               — ação pro navegador (ex.: baixar PDF)
 //   { t: "fim", uso }                    — acabou
 //   { t: "erro", v }
 
@@ -17,16 +18,18 @@ import { supaServer } from "@/lib/supabase-server";
 import { canViewArea } from "@/lib/permissions";
 import { loadPerms } from "@/lib/require-area";
 import { createClient } from "@supabase/supabase-js";
-import { executar, tools } from "@/lib/cesar/ferramentas";
+import { executar, tools, type CtxAcao } from "@/lib/cesar/ferramentas";
 import { sistema } from "@/lib/cesar/prompt";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
 
 /** Teto de rodadas de ferramenta. Não é economia: é trava contra laço — um
- *  modelo que se confunde pode ficar repetindo a mesma consulta. Oito rodadas
- *  cobrem qualquer pergunta que as ferramentas conseguem responder. */
-const MAX_RODADAS = 8;
+ *  modelo que se confunde pode ficar repetindo a mesma consulta. Doze, não
+ *  oito: a lição veio da Aria do FourMidia (11/09) — uma lista de chamados
+ *  confirmados de uma vez, em lotes de 2 por rodada, precisa de mais fôlego
+ *  do que "consultas encadeadas" sugere. */
+const MAX_RODADAS = 12;
 
 type Msg = { role: "user" | "assistant"; content: string };
 
@@ -91,6 +94,20 @@ export async function POST(req: Request) {
     process.env.SUPABASE_SERVICE_ROLE_KEY!,
     { auth: { persistSession: false }, db: { schema: "bi" } },
   );
+  // As AÇÕES (chamados e reports) escrevem no schema public — bugs,
+  // bug_sessions e cesar_reports. Cliente separado porque o `adm` acima é
+  // travado no schema bi, onde vivem as funções de consulta.
+  const admPublico = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    { auth: { persistSession: false }, db: { schema: "public" } },
+  );
+  const ctxAcao: CtxAcao = {
+    publico: admPublico,
+    email: user.email ?? "",
+    nome: (user.user_metadata as { full_name?: string } | null)?.full_name || user.email || "",
+    isAdmin: !!perms?.is_admin,
+  };
 
   // Data local (America/Sao_Paulo). toISOString() é UTC e depois das 21h daria
   // amanhã — o Cesar responderia "hoje" com a data errada.
@@ -123,6 +140,11 @@ export async function POST(req: Request) {
         const passos: Array<Record<string, unknown>> = [];
 
         while (rodada++ < MAX_RODADAS) {
+          /** stop_reason da rodada. "max_tokens" significa corte NO MEIO —
+           *  qualquer tool_use pode estar truncado, e executar metade de um
+           *  pedido é pior do que avisar e parar. */
+          let motivoParada: string | null = null;
+
           const resp = await anthropic.messages.create({
             model: modelo,
             max_tokens: 12000,
@@ -183,7 +205,20 @@ export async function POST(req: Request) {
               }
             } else if (ev.type === "message_delta") {
               saidaTot += ev.usage.output_tokens ?? 0;
+              if (ev.delta.stop_reason) motivoParada = ev.delta.stop_reason;
             }
+          }
+
+          // Cortou por teto de tokens: avisa em vez de sumir. O break mudo foi
+          // o que queimou a confiança na Aria (a pessoa confirmou uma lista e
+          // recebeu silêncio) — honestidade no lugar do silêncio.
+          if (motivoParada === "max_tokens") {
+            const aviso = "\n\nOpa — a resposta ficou grande demais e fui cortado no meio. " +
+              "Nada do que JÁ confirmei antes se perdeu; me manda um \"continua\" que eu sigo " +
+              "de onde parei, de preferência um pedido por vez.";
+            resposta += aviso;
+            envia({ t: "texto", v: aviso });
+            break;
           }
 
           // filter(Boolean) porque o array é indexado por posição do bloco e
@@ -201,12 +236,19 @@ export async function POST(req: Request) {
           // Todas as ferramentas da rodada em paralelo — são leituras
           // independentes, e serializar só somaria latência.
           const resultados = await Promise.all(usos.map(async (u) => {
-            const out = await executar(adm, u.name, (u.input ?? {}) as Record<string, unknown>);
+            let out = await executar(adm, u.name, (u.input ?? {}) as Record<string, unknown>, ctxAcao);
             const passo = { nome: u.name,
                            linhas: Number(out.total_linhas) || 0,
                            truncado: !!out.truncado, erro: out.erro ?? null };
             passos.push(passo);
             envia({ t: "resultado", ...passo });
+            // Ação pro navegador (gerar o PDF do report): vai direto pro
+            // cliente pelo stream. O payload NÃO volta pro modelo — ele já o
+            // montou; devolver dobraria o custo em tokens sem informação nova.
+            if (out.acao_cliente) {
+              envia({ t: "acao", payload: out.acao_cliente });
+              out = { ...out, acao_cliente: undefined, acao_enviada: true };
+            }
             return {
               type: "tool_result" as const,
               tool_use_id: u.id,
@@ -219,7 +261,21 @@ export async function POST(req: Request) {
         }
 
         if (rodada > MAX_RODADAS) {
-          envia({ t: "texto", v: "\n\n_(parei aqui: bati o limite de consultas para uma pergunta só. Refaça mais específica.)_" });
+          const aviso = "\n\n_(parei aqui: bati o limite de consultas para uma pergunta só. Refaça mais específica.)_";
+          resposta += aviso;
+          envia({ t: "texto", v: aviso });
+        }
+
+        // A pessoa NUNCA recebe o vazio. Se qualquer caminho deixou a resposta
+        // em branco (rodadas esgotadas no meio do trabalho, corte estranho),
+        // dizer isso vale mais que o silêncio — e o texto entra em `resposta`
+        // por construção, então também fica gravado na conversa.
+        if (!resposta.trim()) {
+          const aviso = "Me atrapalhei ao concluir e não terminei tudo o que você pediu. " +
+            "Me manda um \"continua\" que eu confiro o que já ficou feito e termino o resto — " +
+            "se preferir, me passa um pedido por vez.";
+          resposta = aviso;
+          envia({ t: "texto", v: aviso });
         }
         // Grava a resposta E carimba a conversa como ativa, para ela subir ao
         // topo da lista. Ordenar por data de criação faria uma conversa retomada

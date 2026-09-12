@@ -155,6 +155,19 @@ export default function CesarProvider({ children }: { children: React.ReactNode 
                                    erro: (ev.erro as string) ?? null };
               return c;
             });
+          } else if (ev.t === "acao") {
+            // Ação pro navegador. Hoje só uma: desenhar e baixar o PDF do
+            // report. Import dinâmico porque o jsPDF pesa e o painel inteiro
+            // não deve pagar por ele — só quem pediu um report.
+            const payload = ev.payload as { acao?: string; report?: unknown } | undefined;
+            if (payload?.acao === "report_pdf" && payload.report) {
+              try {
+                const { gerarReportPDF } = await import("@/lib/cesar/report-pdf");
+                gerarReportPDF(payload.report as import("@/lib/cesar/report-pdf").ReportPayload);
+              } catch (e) {
+                setErro(`Não consegui gerar o PDF: ${e instanceof Error ? e.message : String(e)}`);
+              }
+            }
           } else if (ev.t === "erro") {
             setErro(String(ev.v));
           }
@@ -457,6 +470,10 @@ const ROTULO: Record<string, string> = {
   vendas_resumo: "resumo de vendas",
   compras_mensal: "compras por mês",
   compras_por_grupo: "compras por grupo",
+  criar_ticket: "abrindo o chamado",
+  consultar_ticket: "consultando seus chamados",
+  gerar_report_pdf: "montando o PDF do report",
+  salvar_report: "incorporando o report ao controle",
 };
 
 function Passos({ passos }: { passos: Passo[] }) {

@@ -5,7 +5,8 @@ import SeletorPaleta from "@/components/viz/SeletorPaleta";
 import { UserPermsProvider } from "@/components/UserPermsProvider";
 import VersionWatcher from "@/components/VersionWatcher";
 import BotaoCesar from "@/components/cesar/BotaoCesar";
-// import SupportWidget from "@/components/SupportWidget";   // ver nota no fim do arquivo
+import ReportsSalvos from "@/components/cesar/ReportsSalvos";
+import SupportWidget from "@/components/SupportWidget";
 import { supaServer } from "@/lib/supabase-server";
 import type { AreaAccess, ModuleRole, PermsOverride, Role, UserPerms } from "@/lib/permissions";
 
@@ -47,17 +48,18 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           <SeletorPaleta />
           <ThemeToggle />
         </div>
-        <div className="p-4 md:p-6 min-w-0">{children}</div>
+        <div className="p-4 md:p-6 min-w-0">
+          {children}
+          {/* "Reports do Cesar" no fim das telas de BI suportadas. Montagem
+              única aqui: o componente lê a pathname e só renderiza onde deve. */}
+          <ReportsSalvos />
+        </div>
       </main>
-      {/* Suporte desligado a pedido do Benny em 10/09/2026 — vai ser retomado e
-          evoluído depois. Só a montagem saiu: components/SupportWidget.tsx,
-          /api/bug-chat e as tabelas continuam de pé, então voltar é descomentar
-          estas quatro linhas e o import acima.
-
+      {/* Reativado em 12/09/2026 a pedido do Benny (junto do upgrade do Cesar). */}
       <SupportWidget
         user={user ? { email: user.email, nome: (user.user_metadata as { full_name?: string } | null)?.full_name || user.email } : null}
         isAdmin={!!perms?.is_admin}
-      /> */}
+      />
     </UserPermsProvider>
   );
 }

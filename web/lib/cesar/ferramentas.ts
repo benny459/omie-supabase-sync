@@ -21,6 +21,7 @@
 // nesse caso.
 
 import type Anthropic from "@anthropic-ai/sdk";
+import type { SupabaseClient } from "@supabase/supabase-js";
 
 /** Escopo padrão do painel, o mesmo das telas. Deixar explícito evita a
  *  pergunta "esses números são de qual empresa?" a cada resposta. */
@@ -310,9 +311,253 @@ export const FERRAMENTAS: Record<string, Def> = {
   },
 };
 
+// ── Ações (não são consultas ao bi) ─────────────────────────────────────────
+// Chamados e reports. Diferente das consultas, estas ESCREVEM — em public.bugs
+// (mesma central do SupportWidget) e em public.cesar_reports — ou devolvem uma
+// ação para o navegador executar (gerar o PDF). Por isso recebem um contexto
+// com o usuário logado e um cliente service_role do schema public.
+
+/** Telas cujo controle aceita reports incorporados do Cesar. */
+export const TELAS_REPORT = [
+  "/bi/fluxo-caixa",
+  "/bi/contas-pagar",
+  "/bi/contas-receber",
+  "/bi/financeiro",
+  "/relatorios/faturamento",
+];
+
+// Mesmo tenant do SupportWidget (web/lib/bug-supabase.ts). Duplicado de
+// propósito: aquele módulo instancia um client de BROWSER no load do módulo,
+// e este arquivo roda no servidor.
+const BUG_EMPRESA_ID = "b1bf590f-c281-41f8-9968-a70b0dc02b31";
+
+export type CtxAcao = {
+  /** Cliente service_role no schema PUBLIC — bugs, bug_sessions, cesar_reports. */
+  publico: SupabaseClient;
+  email: string;
+  nome: string;
+  isAdmin: boolean;
+};
+
+type DefAcao = {
+  descricao: string;
+  entrada: Record<string, unknown>;
+  required: string[];
+  exec: (ctx: CtxAcao, i: Record<string, unknown>) => Promise<Record<string, unknown>>;
+};
+
+// A leitura de status espelha o STATUS_LABEL do SupportWidget — o Cesar tem
+// que contar a MESMA história que o balão de suporte conta, senão o usuário
+// ouve duas versões do mesmo chamado.
+const STATUS_HUMANO: Record<string, string> = {
+  aberto: "recebido — na fila da análise automática",
+  em_processamento: "em análise",
+  aguardando_user: "aguardando uma resposta sua (responda pelo balão Suporte)",
+  pronto: "resolvido — aguardando a publicação",
+  pendente_merge: "quase publicando",
+  validado: "concluído",
+  excede_escopo: "encaminhado para avaliação humana",
+  falhou: "a correção automática não conseguiu — a equipe foi avisada",
+  recusado: "não tratado",
+  cancelado: "cancelado",
+  sugestao_futura: "sugestão registrada — aguardando o Benny avaliar",
+};
+
+export const ACOES: Record<string, DefAcao> = {
+  criar_ticket: {
+    descricao:
+      "Abre um chamado na central de suporte do painel: problema (algo quebrado/errado — entra na fila de correção automática) ou sugestao (pedido de melhoria/função nova — fica aguardando o Benny avaliar; NADA é aprovado automaticamente). Chame SÓ depois que a pessoa CONFIRMAR que quer abrir. A descrição deve conter tudo que ela relatou: tela, o que fez, o que aconteceu, o que esperava.",
+    entrada: {
+      descricao: { type: "string", description: "Relato completo, em linguagem simples." },
+      tipo: { type: "string", enum: ["problema", "sugestao"], description: "problema = quebrado/errado; sugestao = melhoria/função nova." },
+      tela: { type: "string", description: "Caminho da tela onde aconteceu, ex.: /bi/fluxo-caixa. Opcional." },
+    },
+    required: ["descricao", "tipo"],
+    exec: async (ctx, i) => {
+      const descricao = String(i.descricao || "").trim();
+      if (descricao.length < 15) return { erro: "descrição curta demais — peça mais detalhes antes de abrir" };
+      const sugestao = i.tipo === "sugestao";
+      const tela = typeof i.tela === "string" ? i.tela.slice(0, 200) : "";
+
+      // Mesmo formato do SupportWidget: uma sessão + o bug ligado a ela. O
+      // cron bug-analyze só pega status='aberto' — sugestão entra como
+      // 'sugestao_futura' e fica parada até alguém decidir, sem disparar nada.
+      const sess = await ctx.publico
+        .from("bug_sessions")
+        .insert({
+          empresa_id: BUG_EMPRESA_ID,
+          reporter_email: ctx.email,
+          reporter_nome: ctx.nome,
+          status: "submetida",
+          bug_count: 1,
+          submitted_at: new Date().toISOString(),
+        })
+        .select("id")
+        .single();
+      if (sess.error || !sess.data) return { erro: "não consegui registrar o chamado agora" };
+
+      const bug = await ctx.publico
+        .from("bugs")
+        .insert({
+          empresa_id: BUG_EMPRESA_ID,
+          session_id: sess.data.id,
+          reporter_email: ctx.email,
+          reporter_nome: ctx.nome,
+          descricao,
+          url: tela,
+          user_agent: "Cesar (assistente do painel)",
+          console_logs: [],
+          imagens_extras: [],
+          mensagens: [{ role: "user", content: descricao, ts: new Date().toISOString() }],
+          status: sugestao ? "sugestao_futura" : "aberto",
+          contexto: { source: "cesar", tipo: sugestao ? "sugestao" : "problema", ...(tela ? { tela } : {}) },
+        })
+        .select("ticket_code")
+        .single();
+      if (bug.error || !bug.data) return { erro: "não consegui registrar o chamado agora" };
+
+      return {
+        ticket_code: bug.data.ticket_code,
+        tipo: sugestao ? "sugestao" : "problema",
+        mensagem: sugestao
+          ? "sugestão registrada — diga o NÚMERO do ticket e explique que ela fica aguardando o Benny avaliar; dá pra acompanhar pelo balão Suporte ou perguntando aqui"
+          : "chamado aberto — a análise é automática; diga o NÚMERO do ticket e que dá pra acompanhar pelo balão Suporte no canto da tela ou perguntando aqui pro Cesar",
+      };
+    },
+  },
+
+  consultar_ticket: {
+    descricao:
+      "Andamento dos chamados da própria pessoa: por código (TK...) ou, sem código, os últimos que ela abriu. Use quando perguntarem 'e meu chamado?', 'já resolveram?'.",
+    entrada: {
+      codigo: { type: "string", description: "Código TK..., opcional — sem ele mostra os últimos da pessoa." },
+    },
+    required: [],
+    exec: async (ctx, i) => {
+      const codigo = String(i.codigo || "").trim().toUpperCase();
+      const cols = "ticket_code,status,descricao,url,created_at,github_issue_number,mensagens";
+      const base = ctx.publico.from("bugs").select(cols).eq("empresa_id", BUG_EMPRESA_ID);
+      const { data, error } = codigo
+        ? await base.eq("ticket_code", codigo).limit(1)
+        : await base.eq("reporter_email", ctx.email).order("created_at", { ascending: false }).limit(5);
+      if (error) return { erro: "não consegui consultar agora" };
+      if (!data?.length) return { nada: codigo ? `não achei o chamado ${codigo}` : "a pessoa não tem chamados abertos" };
+
+      type Linha = {
+        ticket_code: string | null; status: string; descricao: string | null; url: string | null;
+        created_at: string; github_issue_number: number | null;
+        mensagens: { role?: string; from?: string; content?: string }[] | null;
+      };
+      return {
+        chamados: (data as Linha[]).map((b) => {
+          // Igual ao effectiveStatus do widget: Issue criada com status ainda
+          // 'aberto' significa que a correção já está a caminho.
+          const eff = b.github_issue_number && (b.status === "aberto" || b.status === "em_processamento")
+            ? "pronto" : b.status;
+          const ultimaDoSuporte = (b.mensagens ?? []).filter((m) => m.role && m.role !== "user").slice(-1)[0];
+          return {
+            codigo: b.ticket_code,
+            aberto_em: b.created_at?.slice(0, 10),
+            resumo: (b.descricao || "").slice(0, 90),
+            situacao: STATUS_HUMANO[eff] ?? eff,
+            ...(b.url ? { tela: b.url } : {}),
+            ...(ultimaDoSuporte?.content ? { ultima_mensagem_do_suporte: String(ultimaDoSuporte.content).slice(0, 300) } : {}),
+          };
+        }),
+      };
+    },
+  },
+
+  gerar_report_pdf: {
+    descricao:
+      "Gera um PDF profissional (título, KPIs, tabelas, gráfico de barras) que baixa na hora no navegador. Monte o conteúdo APENAS com números que as ferramentas desta conversa devolveram — nunca estime nem invente. Depois de gerar, PERGUNTE se a pessoa quer incorporar o report ao controle da tela correspondente (aí use salvar_report).",
+    entrada: {
+      titulo: { type: "string", description: "Título do report, ex.: 'Contas a pagar — Setembro/2026'." },
+      subtitulo: { type: "string", description: "Uma linha de contexto (período, filtro, escopo)." },
+      kpis: {
+        type: "array",
+        description: "Até 8 números de destaque.",
+        items: { type: "object", properties: { rotulo: { type: "string" }, valor: { type: "string", description: "Já formatado, ex.: 'R$ 4.707,54'." } }, required: ["rotulo", "valor"] },
+      },
+      tabelas: {
+        type: "array",
+        items: {
+          type: "object",
+          properties: {
+            titulo: { type: "string" },
+            colunas: { type: "array", items: { type: "string" } },
+            linhas: { type: "array", items: { type: "array", items: { type: "string" } }, description: "Valores já formatados (R$, datas dd/mm)." },
+          },
+          required: ["colunas", "linhas"],
+        },
+      },
+      barras: {
+        type: "array",
+        description: "Gráficos de barras horizontais (ex.: total por categoria).",
+        items: {
+          type: "object",
+          properties: {
+            titulo: { type: "string" },
+            itens: { type: "array", items: { type: "object", properties: { rotulo: { type: "string" }, valor: { type: "number", description: "Valor numérico cru, para o tamanho da barra." }, texto: { type: "string", description: "Rótulo formatado exibido na ponta, ex.: 'R$ 12.300,00'." } }, required: ["rotulo", "valor"] } },
+          },
+          required: ["titulo", "itens"],
+        },
+      },
+    },
+    required: ["titulo"],
+    exec: async (_ctx, i) => {
+      const titulo = String(i.titulo || "").trim();
+      if (!titulo) return { erro: "faltou o título do report" };
+      const report = {
+        titulo,
+        subtitulo: i.subtitulo ? String(i.subtitulo) : undefined,
+        kpis: Array.isArray(i.kpis) ? i.kpis : undefined,
+        tabelas: Array.isArray(i.tabelas) ? i.tabelas : undefined,
+        barras: Array.isArray(i.barras) ? i.barras : undefined,
+      };
+      if (!report.kpis?.length && !report.tabelas?.length && !report.barras?.length) {
+        return { erro: "report vazio — inclua kpis, tabelas ou barras com os números consultados" };
+      }
+      return {
+        acao_cliente: { acao: "report_pdf", report },
+        mensagem: "o PDF baixa em instantes no navegador — agora PERGUNTE se a pessoa quer incorporar este report ao controle da tela correspondente (se sim, use salvar_report com o MESMO conteúdo)",
+      };
+    },
+  },
+
+  salvar_report: {
+    descricao:
+      `Incorpora um report gerado ao controle de uma tela do painel — ele fica na seção 'Reports do Cesar' no fim daquela tela, para qualquer pessoa com acesso baixar depois. Use SÓ depois que a pessoa confirmar, reenviando o MESMO conteúdo do gerar_report_pdf. Telas válidas: ${TELAS_REPORT.join(", ")}.`,
+    entrada: {
+      tela: { type: "string", enum: TELAS_REPORT, description: "Tela cujo controle recebe o report — a que corresponde ao assunto." },
+      titulo: { type: "string" },
+      report: { type: "object", description: "O mesmo objeto passado ao gerar_report_pdf (titulo, subtitulo, kpis, tabelas, barras)." },
+    },
+    required: ["tela", "titulo", "report"],
+    exec: async (ctx, i) => {
+      const tela = String(i.tela || "");
+      if (!TELAS_REPORT.includes(tela)) return { erro: "tela inválida para incorporar report" };
+      const titulo = String(i.titulo || "").trim();
+      const report = i.report;
+      if (!titulo || !report || typeof report !== "object") return { erro: "faltou o título ou o conteúdo do report" };
+      const { error } = await ctx.publico.from("cesar_reports").insert({
+        tela,
+        titulo: titulo.slice(0, 140),
+        payload: report,
+        criado_por: ctx.email,
+      });
+      if (error) return { erro: "não consegui salvar o report agora" };
+      return {
+        ok: true,
+        mensagem: `report incorporado ao controle de ${tela} — aparece na seção "Reports do Cesar" no fim daquela tela, com download em PDF`,
+      };
+    },
+  },
+};
+
 /** Catálogo no formato que a API de tools espera. */
 export function tools(): Anthropic.Tool[] {
-  return Object.entries(FERRAMENTAS).map(([nome, d]) => ({
+  const consultas = Object.entries(FERRAMENTAS).map(([nome, d]) => ({
     name: nome,
     description: d.descricao,
     input_schema: {
@@ -326,6 +571,16 @@ export function tools(): Anthropic.Tool[] {
         .map(([k]) => k),
     },
   }));
+  const acoes = Object.entries(ACOES).map(([nome, d]) => ({
+    name: nome,
+    description: d.descricao,
+    input_schema: {
+      type: "object" as const,
+      properties: d.entrada,
+      required: d.required,
+    },
+  }));
+  return [...consultas, ...acoes];
 }
 
 type Rpc = {
@@ -334,10 +589,22 @@ type Rpc = {
   }>;
 };
 
-/** Executa uma ferramenta e devolve o resultado já com a truncagem declarada. */
+/** Executa uma ferramenta e devolve o resultado já com a truncagem declarada.
+ *  Ações (chamados/reports) exigem o ctx com o usuário; consultas não. */
 export async function executar(
-  adm: Rpc, nome: string, entrada: Record<string, unknown>,
+  adm: Rpc, nome: string, entrada: Record<string, unknown>, ctx?: CtxAcao,
 ): Promise<Record<string, unknown>> {
+  const acao = ACOES[nome];
+  if (acao) {
+    if (!ctx) return { erro: `${nome}: contexto do usuário ausente` };
+    try {
+      return await acao.exec(ctx, entrada);
+    } catch (e) {
+      console.error(`cesar acao ${nome}`, e);
+      return { erro: "a ação falhou agora — tente de novo em instantes" };
+    }
+  }
+
   const d = FERRAMENTAS[nome];
   if (!d) return { erro: `ferramenta desconhecida: ${nome}` };
 
