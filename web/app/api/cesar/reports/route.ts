@@ -1,16 +1,16 @@
 // Reports do Cesar incorporados ao controle de uma tela.
 //
-//   GET    /api/cesar/reports?tela=/bi/fluxo-caixa  → lista os da tela
-//   POST   { tela, titulo, report }                 → grava (o caminho normal é a
-//                                                     ferramenta salvar_report, que
-//                                                     insere direto no servidor;
-//                                                     este POST existe pra qualquer
-//                                                     gravação vinda do painel)
-//   DELETE ?id=<uuid>                               → exclui (só admin)
+//   GET    /api/cesar/reports?tela=/bi/fluxo-caixa  → lista os visíveis pra pessoa
+//   POST   { tela, titulo, report, visibilidade }   → grava (botão Incorporar do
+//                                                     drawer; a conversa usa a
+//                                                     ferramenta salvar_report)
+//   DELETE ?id=<uuid>                               → exclui (admin ou o dono)
 //
-// A régua de acesso é a MESMA da tela: quem não enxerga /bi/fluxo-caixa não
-// lista os reports de /bi/fluxo-caixa. A tela é a unidade de permissão aqui —
-// o report é um anexo dela, não um dado à parte.
+// Régua de leitura (v3): quem não enxerga a ÁREA da tela não vê nada; dentro
+// dela, o report aparece se visibilidade='todos', se a pessoa é a dona, ou se
+// foi compartilhado com o e-mail dela (visibilidade='custom' + shared_emails).
+// Quem decide a visibilidade é o servidor, pelo teto do usuário
+// (cesar_report_user_config — exceção por e-mail; sem exceção, pode tudo).
 
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
@@ -18,12 +18,10 @@ import { supaServer } from "@/lib/supabase-server";
 import { canViewArea, type Area } from "@/lib/permissions";
 import { loadPerms } from "@/lib/require-area";
 import { TELAS_REPORT } from "@/lib/cesar/ferramentas";
+import { modoReportDoUsuario, visivelPara, type ReportLinha } from "@/lib/cesar/report-config";
 
 export const runtime = "nodejs";
 
-// Mesmo requireArea das pages correspondentes. /bi/financeiro hoje não chama
-// requireArea na page (provável esquecimento), mas aqui vale a régua da área
-// financeiro — melhor a API mais restrita que a tela do que o contrário.
 const AREA_DA_TELA: Record<string, Area> = {
   "/bi/fluxo-caixa": "financeiro",
   "/bi/contas-pagar": "financeiro",
@@ -32,9 +30,8 @@ const AREA_DA_TELA: Record<string, Area> = {
   "/relatorios/faturamento": "vendas",
 };
 
-// Escrita e exclusão passam pelo service_role: a RLS de cesar_reports só abre
-// SELECT pra authenticated — inserir/apagar é decisão do servidor, nunca do
-// navegador direto no Supabase.
+// Escrita/exclusão pelo service_role: a RLS de cesar_reports só abre SELECT
+// pra authenticated — inserir/apagar é decisão do servidor.
 const admPublico = () => createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!,
@@ -58,17 +55,18 @@ export async function GET(req: Request) {
   const chk = await checarTela(tela);
   if ("erro" in chk) return chk.erro;
 
-  // Leitura pelo cliente do usuário: a RLS (select p/ authenticated) é a
-  // segunda tranca depois da checagem de área acima.
   const supa = await supaServer("public");
-  const { data, error } = await supa
+  const { data: { user } } = await supa.auth.getUser();
+  const email = (user?.email || "").toLowerCase();
+
+  const { data, error } = await admPublico()
     .from("cesar_reports")
-    .select("id, tela, titulo, payload, criado_por, created_at")
+    .select("id, tela, titulo, payload, criado_por, visibilidade, shared_emails, created_at")
     .eq("tela", tela!)
     .order("created_at", { ascending: false })
     .limit(30);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json({ reports: data ?? [] });
+  return NextResponse.json({ reports: ((data ?? []) as ReportLinha[]).filter((r) => visivelPara(r, email)) });
 }
 
 export async function POST(req: Request) {
@@ -85,13 +83,24 @@ export async function POST(req: Request) {
 
   const supa = await supaServer("public");
   const { data: { user } } = await supa.auth.getUser();
-  const { data, error } = await admPublico()
+  const email = (user?.email || "").toLowerCase();
+  const adm = admPublico();
+
+  // Teto do usuário: exceção 'nenhum' bloqueia; 'proprio' força só-para-si.
+  const modo = await modoReportDoUsuario(adm, email);
+  if (modo === "nenhum") {
+    return NextResponse.json({ error: "Você não pode incorporar reports (regra do admin)." }, { status: 403 });
+  }
+  const pedida = body.visibilidade === "proprio" ? "proprio" : "todos";
+  const visibilidade = modo === "todos" ? pedida : "proprio";
+
+  const { data, error } = await adm
     .from("cesar_reports")
-    .insert({ tela, titulo, payload: report, criado_por: user?.email ?? "" })
+    .insert({ tela, titulo, payload: report, criado_por: user?.email ?? "", visibilidade })
     .select("id")
     .single();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json({ ok: true, id: data?.id });
+  return NextResponse.json({ ok: true, id: data?.id, visibilidade });
 }
 
 export async function DELETE(req: Request) {
@@ -100,11 +109,20 @@ export async function DELETE(req: Request) {
 
   const perms = await loadPerms();
   if (!perms) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  // Excluir é destrutivo e o report é compartilhado por todo mundo que vê a
-  // tela — por isso só admin, não o autor.
-  if (!perms.is_admin) return NextResponse.json({ error: "Só admin exclui reports" }, { status: 403 });
 
-  const { error } = await admPublico().from("cesar_reports").delete().eq("id", id);
+  const supa = await supaServer("public");
+  const { data: { user } } = await supa.auth.getUser();
+  const email = (user?.email || "").toLowerCase();
+
+  const adm = admPublico();
+  const { data: alvo } = await adm.from("cesar_reports").select("criado_por").eq("id", id).maybeSingle();
+  if (!alvo) return NextResponse.json({ ok: true });
+  const dono = String(alvo.criado_por || "").toLowerCase() === email;
+  if (!dono && !perms.is_admin) {
+    return NextResponse.json({ error: "Só o dono do report ou admin exclui" }, { status: 403 });
+  }
+
+  const { error } = await adm.from("cesar_reports").delete().eq("id", id);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ ok: true });
 }

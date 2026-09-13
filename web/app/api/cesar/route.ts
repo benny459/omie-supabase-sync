@@ -104,6 +104,7 @@ export async function POST(req: Request) {
   );
   const ctxAcao: CtxAcao = {
     publico: admPublico,
+    bi: adm,
     email: user.email ?? "",
     nome: (user.user_metadata as { full_name?: string } | null)?.full_name || user.email || "",
     isAdmin: !!perms?.is_admin,

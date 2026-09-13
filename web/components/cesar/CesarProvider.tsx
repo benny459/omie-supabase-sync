@@ -16,8 +16,17 @@ import {
 } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import type { ReportPayload } from "@/lib/cesar/report-pdf";
 
 type Msg = { role: "user" | "assistant"; content: string };
+/** O cartão de report com BOTÕES (v3): o Cesar prepara, a pessoa decide
+ *  clicando — Baixar PDF, Baixar Excel e, se o teto permite, Incorporar. */
+type Oferta = {
+  report: ReportPayload;
+  tela: string;
+  pode_incorporar: "todos" | "proprio" | null;
+  incorporado?: { id: string; visibilidade: string };
+};
 /** Uma consulta que o Cesar fez enquanto pensava. Fica visível: uma resposta
  *  financeira sem dizer de onde veio é uma opinião. */
 type Passo = { nome: string; linhas?: number; truncado?: boolean; erro?: string | null };
@@ -65,6 +74,7 @@ export default function CesarProvider({ children }: { children: React.ReactNode 
   /** Painel do histórico aberto por cima da conversa. */
   const [verHistorico, setVerHistorico] = useState(false);
   const [conversas, setConversas] = useState<Conversa[] | null>(null);
+  const [oferta, setOferta] = useState<Oferta | null>(null);
   const contextoRef = useRef<string | undefined>(undefined);
   /** Em qual conversa estamos gravando. Null = a próxima pergunta cria uma. */
   const conversaRef = useRef<string | null>(null);
@@ -156,14 +166,27 @@ export default function CesarProvider({ children }: { children: React.ReactNode 
               return c;
             });
           } else if (ev.t === "acao") {
-            // Ação pro navegador. Hoje só uma: desenhar e baixar o PDF do
-            // report. Import dinâmico porque o jsPDF pesa e o painel inteiro
-            // não deve pagar por ele — só quem pediu um report.
-            const payload = ev.payload as { acao?: string; report?: unknown } | undefined;
-            if (payload?.acao === "report_pdf" && payload.report) {
+            // Ação pro navegador. Import dinâmico porque o jsPDF/exceljs pesam
+            // e o painel inteiro não deve pagar por eles — só quem pediu.
+            const payload = ev.payload as {
+              acao?: string; report?: unknown; tela?: string;
+              pode_incorporar?: "todos" | "proprio" | null; id?: string;
+            } | undefined;
+            if (payload?.acao === "oferta_report" && payload.report) {
+              // v3: nada baixa sozinho — o cartão com botões decide.
+              setOferta({
+                report: payload.report as ReportPayload,
+                tela: String(payload.tela || "/bi/fluxo-caixa"),
+                pode_incorporar: payload.pode_incorporar ?? null,
+              });
+            } else if (payload?.acao === "report_atualizado" && payload.id) {
+              // A página do report escuta e recarrega sozinha.
+              window.dispatchEvent(new CustomEvent("cesar:report-atualizado", { detail: { id: payload.id } }));
+            } else if (payload?.acao === "report_pdf" && payload.report) {
+              // Legado (conversas antigas): baixa direto.
               try {
                 const { gerarReportPDF } = await import("@/lib/cesar/report-pdf");
-                gerarReportPDF(payload.report as import("@/lib/cesar/report-pdf").ReportPayload);
+                gerarReportPDF(payload.report as ReportPayload);
               } catch (e) {
                 setErro(`Não consegui gerar o PDF: ${e instanceof Error ? e.message : String(e)}`);
               }
@@ -181,7 +204,7 @@ export default function CesarProvider({ children }: { children: React.ReactNode 
   }, [msgs, pensando]);
 
   const limpar = () => {
-    setMsgs([]); setPassos([]); setErro(null);
+    setMsgs([]); setPassos([]); setErro(null); setOferta(null);
     contextoRef.current = undefined; conversaRef.current = null;
     setOrigem(null); setVerHistorico(false);
   };
@@ -314,6 +337,8 @@ export default function CesarProvider({ children }: { children: React.ReactNode 
               <Passos passos={passos} />
             )}
 
+            {oferta && <OfertaReport oferta={oferta} onMudou={setOferta} />}
+
             {erro && (
               <div className="p-2.5 rounded-lg border border-rose-500/40 bg-rose-500/10
                               text-[11.5px] text-rose-700 dark:text-rose-300">
@@ -352,6 +377,98 @@ export default function CesarProvider({ children }: { children: React.ReactNode 
         </aside>
       )}
     </CesarCtx.Provider>
+  );
+}
+
+/** O cartão do report preparado: quem decide é a pessoa, clicando. Depois de
+ *  incorporar, o próprio cartão vira o atalho pra tela navegável do report. */
+function OfertaReport({ oferta, onMudou }: {
+  oferta: Oferta; onMudou: (o: Oferta | null) => void;
+}) {
+  const [ocupado, setOcupado] = useState<string | null>(null);
+  const [erro, setErro] = useState<string | null>(null);
+
+  const baixar = async (tipo: "pdf" | "excel") => {
+    setOcupado(tipo); setErro(null);
+    try {
+      if (tipo === "pdf") {
+        const { gerarReportPDF } = await import("@/lib/cesar/report-pdf");
+        gerarReportPDF(oferta.report);
+      } else {
+        const { gerarReportExcel } = await import("@/lib/cesar/report-excel");
+        await gerarReportExcel(oferta.report);
+      }
+    } catch (e) {
+      setErro(e instanceof Error ? e.message : String(e));
+    }
+    setOcupado(null);
+  };
+
+  const incorporar = async (visibilidade: "todos" | "proprio") => {
+    setOcupado("incorporar"); setErro(null);
+    try {
+      const r = await fetch("/api/cesar/reports", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tela: oferta.tela, titulo: oferta.report.titulo, report: oferta.report, visibilidade }),
+      });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) { setErro(j.error ?? r.statusText); }
+      else onMudou({ ...oferta, incorporado: { id: String(j.id), visibilidade: String(j.visibilidade) } });
+    } catch (e) {
+      setErro(e instanceof Error ? e.message : String(e));
+    }
+    setOcupado(null);
+  };
+
+  const btn = "px-2.5 py-1.5 text-[11px] rounded-lg border border-ww-border text-ww-textMuted " +
+    "hover:text-ww-text hover:border-ww-accent/50 hover:bg-ww-rowHover transition disabled:opacity-40";
+
+  return (
+    <div className="rounded-xl border border-ww-accent/40 bg-ww-accent/5 p-3 space-y-2">
+      <div className="flex items-center gap-2">
+        <span aria-hidden className="w-5 h-5 rounded-full bg-gradient-to-br from-sky-500 to-violet-500
+                                      text-white text-[9px] font-bold grid place-items-center shrink-0">C</span>
+        <span className="min-w-0 flex-1 truncate text-[12px] font-semibold text-ww-text">{oferta.report.titulo}</span>
+      </div>
+      {oferta.incorporado ? (
+        <div className="flex flex-wrap items-center gap-2 text-[11.5px] text-ww-text">
+          <span className="text-emerald-500 font-semibold">✓ incorporado</span>
+          {oferta.incorporado.visibilidade === "proprio" ? "só para você" : "para a equipe"} ·
+          <a href={`/reports-cesar/${oferta.incorporado.id}`} className="text-ww-accent hover:underline">
+            abrir a tela do report →
+          </a>
+        </div>
+      ) : (
+        <div className="flex flex-wrap items-center gap-1.5">
+          <button type="button" className={btn} disabled={ocupado !== null} onClick={() => void baixar("pdf")}>
+            {ocupado === "pdf" ? "gerando…" : "Baixar PDF"}
+          </button>
+          <button type="button" className={btn} disabled={ocupado !== null} onClick={() => void baixar("excel")}>
+            {ocupado === "excel" ? "gerando…" : "Baixar Excel"}
+          </button>
+          {oferta.pode_incorporar === "todos" && (
+            <span className="inline-flex overflow-hidden rounded-lg border border-ww-accent/50">
+              <button type="button" disabled={ocupado !== null} onClick={() => void incorporar("todos")}
+                className="px-2.5 py-1.5 text-[11px] font-semibold bg-ww-accent text-white hover:brightness-110 transition disabled:opacity-40">
+                {ocupado === "incorporar" ? "…" : "Incorporar p/ equipe"}
+              </button>
+              <button type="button" disabled={ocupado !== null} onClick={() => void incorporar("proprio")}
+                className="px-2 py-1.5 text-[11px] bg-ww-accent/15 text-ww-accent hover:bg-ww-accent/25 transition disabled:opacity-40">
+                só p/ mim
+              </button>
+            </span>
+          )}
+          {oferta.pode_incorporar === "proprio" && (
+            <button type="button" disabled={ocupado !== null} onClick={() => void incorporar("proprio")}
+              className="px-2.5 py-1.5 text-[11px] font-semibold rounded-lg bg-ww-accent text-white hover:brightness-110 transition disabled:opacity-40">
+              {ocupado === "incorporar" ? "…" : "Incorporar (só p/ mim)"}
+            </button>
+          )}
+        </div>
+      )}
+      {erro && <p className="text-[10.5px] text-rose-500">{erro}</p>}
+    </div>
   );
 }
 
@@ -472,8 +589,11 @@ const ROTULO: Record<string, string> = {
   compras_por_grupo: "compras por grupo",
   criar_ticket: "abrindo o chamado",
   consultar_ticket: "consultando seus chamados",
-  gerar_report_pdf: "montando o PDF do report",
+  gerar_report_pdf: "preparando o report",
   salvar_report: "incorporando o report ao controle",
+  atualizar_report: "ajustando o report",
+  descrever_dados: "instalando os componentes (mapa dos dados)",
+  consulta_sob_medida: "instalando os componentes (consulta sob medida)",
 };
 
 function Passos({ passos }: { passos: Passo[] }) {
@@ -528,8 +648,9 @@ function Vazio({ onEscolher, temContexto }: { onEscolher: (q: string) => void; t
     <div className="space-y-2.5 pt-1">
       <p className="text-[12px] text-ww-textMuted leading-relaxed">
         Sou o Cesar. Leio o seu financeiro pelas mesmas funções que alimentam este
-        painel — então o número que eu der é o que está na tela. Não escrevo
-        consulta nova nem estimo o que não sei; quando faltar dado, eu digo.
+        painel — o número que eu der é o que está na tela, nunca estimativa.
+        E se você pedir algo que ainda não existe pronto, eu monto os
+        componentes na hora e te entrego.
       </p>
       <div className="flex flex-col gap-1.5">
         {sugestoes.map((s) => (

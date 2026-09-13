@@ -22,6 +22,8 @@
 
 import type Anthropic from "@anthropic-ai/sdk";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { modoReportDoUsuario } from "./report-config";
+import { validarSqlLeitura, limparSql } from "./sql-guard";
 
 /** Escopo padrão do painel, o mesmo das telas. Deixar explícito evita a
  *  pergunta "esses números são de qual empresa?" a cada resposta. */
@@ -334,6 +336,11 @@ const BUG_EMPRESA_ID = "b1bf590f-c281-41f8-9968-a70b0dc02b31";
 export type CtxAcao = {
   /** Cliente service_role no schema PUBLIC — bugs, bug_sessions, cesar_reports. */
   publico: SupabaseClient;
+  /** Cliente service_role no schema BI — onde vivem as RPCs, inclusive as de
+   *  auto-extensão (cesar_descrever_dados / cesar_consulta_livre). Tipado
+   *  estruturalmente (Rpc) porque o generic de schema do supabase-js não
+   *  cruza entre "bi" e "public". */
+  bi: Rpc;
   email: string;
   nome: string;
   isAdmin: boolean;
@@ -470,8 +477,9 @@ export const ACOES: Record<string, DefAcao> = {
 
   gerar_report_pdf: {
     descricao:
-      "Gera um PDF profissional (título, KPIs, tabelas, gráfico de barras) que baixa na hora no navegador. Monte o conteúdo APENAS com números que as ferramentas desta conversa devolveram — nunca estime nem invente. Depois de gerar, PERGUNTE se a pessoa quer incorporar o report ao controle da tela correspondente (aí use salvar_report).",
+      "PREPARA um report profissional e mostra um cartão com BOTÕES no painel: Baixar PDF, Baixar Excel e (se a pessoa pode) Incorporar ao controle da tela. Quem decide clicando é a pessoa — você NÃO baixa nada nem pergunta nada depois; só avise que os botões apareceram. Monte o conteúdo APENAS com números que as ferramentas desta conversa devolveram — nunca estime nem invente.",
     entrada: {
+      tela: { type: "string", enum: TELAS_REPORT, description: "Tela cujo controle corresponde ao assunto do report (o botão Incorporar usa isso)." },
       titulo: { type: "string", description: "Título do report, ex.: 'Contas a pagar — Setembro/2026'." },
       subtitulo: { type: "string", description: "Uma linha de contexto (período, filtro, escopo)." },
       kpis: {
@@ -505,7 +513,7 @@ export const ACOES: Record<string, DefAcao> = {
       },
     },
     required: ["titulo"],
-    exec: async (_ctx, i) => {
+    exec: async (ctx, i) => {
       const titulo = String(i.titulo || "").trim();
       if (!titulo) return { erro: "faltou o título do report" };
       const report = {
@@ -518,9 +526,11 @@ export const ACOES: Record<string, DefAcao> = {
       if (!report.kpis?.length && !report.tabelas?.length && !report.barras?.length) {
         return { erro: "report vazio — inclua kpis, tabelas ou barras com os números consultados" };
       }
+      const tela = TELAS_REPORT.includes(String(i.tela)) ? String(i.tela) : TELAS_REPORT[0];
+      const modo = await modoReportDoUsuario(ctx.publico, ctx.email);
       return {
-        acao_cliente: { acao: "report_pdf", report },
-        mensagem: "o PDF baixa em instantes no navegador — agora PERGUNTE se a pessoa quer incorporar este report ao controle da tela correspondente (se sim, use salvar_report com o MESMO conteúdo)",
+        acao_cliente: { acao: "oferta_report", report, tela, pode_incorporar: modo === "nenhum" ? null : modo },
+        mensagem: "os botões do report apareceram no painel (Baixar PDF, Baixar Excel e, se a pessoa pode, Incorporar). NÃO pergunte nada — só avise que é clicar nos botões logo abaixo",
       };
     },
   },
@@ -532,6 +542,7 @@ export const ACOES: Record<string, DefAcao> = {
       tela: { type: "string", enum: TELAS_REPORT, description: "Tela cujo controle recebe o report — a que corresponde ao assunto." },
       titulo: { type: "string" },
       report: { type: "object", description: "O mesmo objeto passado ao gerar_report_pdf (titulo, subtitulo, kpis, tabelas, barras)." },
+      visibilidade: { type: "string", enum: ["todos", "proprio"], description: "todos = equipe inteira vê; proprio = só quem incorporou. Pergunte à pessoa qual ela quer." },
     },
     required: ["tela", "titulo", "report"],
     exec: async (ctx, i) => {
@@ -540,16 +551,104 @@ export const ACOES: Record<string, DefAcao> = {
       const titulo = String(i.titulo || "").trim();
       const report = i.report;
       if (!titulo || !report || typeof report !== "object") return { erro: "faltou o título ou o conteúdo do report" };
-      const { error } = await ctx.publico.from("cesar_reports").insert({
+      // A régua do servidor manda: exceção 'nenhum' bloqueia, 'proprio' força
+      // visibilidade própria mesmo que a pessoa tenha pedido pra equipe.
+      const modo = await modoReportDoUsuario(ctx.publico, ctx.email);
+      if (modo === "nenhum") return { erro: "esta pessoa não pode incorporar reports (regra definida pelo admin) — diga isso com simpatia" };
+      const pedida = i.visibilidade === "proprio" ? "proprio" : "todos";
+      const visibilidade = modo === "todos" ? pedida : "proprio";
+      const { data, error } = await ctx.publico.from("cesar_reports").insert({
         tela,
         titulo: titulo.slice(0, 140),
         payload: report,
         criado_por: ctx.email,
-      });
+        visibilidade,
+      }).select("id").single();
       if (error) return { erro: "não consegui salvar o report agora" };
       return {
         ok: true,
-        mensagem: `report incorporado ao controle de ${tela} — aparece na seção "Reports do Cesar" no fim daquela tela, com download em PDF`,
+        id: data?.id,
+        visibilidade,
+        mensagem: `report incorporado — fica no menu "Reports do Cesar" no topo de ${tela}, e abre como uma tela navegável${visibilidade === "proprio" ? ", visível SÓ para esta pessoa" : ", disponível para a equipe"}`,
+      };
+    },
+  },
+
+  atualizar_report: {
+    descricao:
+      "Atualiza um report JÁ incorporado (ajustes/inclusões pedidos com o report aberto). Passe o payload COMPLETO novo — o conteúdo antigo mais os ajustes; o que você não incluir some. Só o dono do report ou admin.",
+    entrada: {
+      id: { type: "string", description: "O id (uuid) do report — vem no contexto da conversa aberta a partir dele." },
+      titulo: { type: "string", description: "Título novo. Omita para manter." },
+      report: { type: "object", description: "Payload completo novo (titulo, subtitulo, kpis, tabelas, barras)." },
+    },
+    required: ["id", "report"],
+    exec: async (ctx, i) => {
+      const id = String(i.id || "").trim();
+      if (!/^[0-9a-f-]{36}$/.test(id)) return { erro: "id do report inválido" };
+      if (!i.report || typeof i.report !== "object") return { erro: "faltou o conteúdo novo do report" };
+      const { data: atual } = await ctx.publico
+        .from("cesar_reports").select("id, criado_por, titulo").eq("id", id).maybeSingle();
+      if (!atual) return { erro: "não achei esse report — talvez tenha sido removido" };
+      const dono = String(atual.criado_por || "").toLowerCase() === ctx.email.toLowerCase();
+      if (!dono && !ctx.isAdmin) return { erro: "só quem incorporou o report (ou admin) pode ajustá-lo" };
+      const titulo = String(i.titulo || atual.titulo || "").trim().slice(0, 140);
+      const { error } = await ctx.publico
+        .from("cesar_reports")
+        .update({ payload: i.report, titulo })
+        .eq("id", id);
+      if (error) return { erro: "não consegui atualizar o report agora" };
+      return {
+        ok: true,
+        acao_cliente: { acao: "report_atualizado", id },
+        mensagem: "report atualizado — a tela dele recarrega sozinha; avise que está pronto",
+      };
+    },
+  },
+
+  // ── Auto-extensão: quando falta ferramenta, o Cesar INSTALA na hora ───────
+  descrever_dados: {
+    descricao:
+      "Passo 1 da montagem de uma consulta sob medida: o mapa dos dados (esquemas finance, sales, orders e bi — tabela, coluna, tipo). Use quando NENHUMA ferramenta pronta alcança o que a pessoa pediu. Antes de chamar, avise em linguagem leiga que você está preparando os componentes ('deixa comigo — vou montar essa consulta agora, me dá uns instantes'). Só a gestão (admin) tem acesso.",
+    entrada: {
+      assunto: { type: "string", description: "Palavra pra filtrar o mapa (nome provável de tabela/coluna), ex.: 'titulo', 'projeto'. Vazio traz tudo." },
+    },
+    required: [],
+    exec: async (ctx, i) => {
+      if (!ctx.isAdmin) return { erro: "consultas sob medida são só da gestão — ofereça o mais próximo que as ferramentas prontas alcançam" };
+      const { data, error } = await ctx.bi.rpc("cesar_descrever_dados", {
+        p_filtro: String(i.assunto || "").slice(0, 60) || null,
+      });
+      if (error) return { erro: `não consegui mapear os dados: ${error.message}` };
+      const colunas = Array.isArray(data) ? data : [];
+      return {
+        colunas: colunas.slice(0, 400),
+        total: colunas.length,
+        ...(colunas.length > 400 ? { aviso: "mapa cortado em 400 colunas — refine o assunto" } : {}),
+      };
+    },
+  },
+
+  consulta_sob_medida: {
+    descricao:
+      "Passo 2: executa UMA consulta de leitura (SELECT/WITH) que você escreveu com base no mapa do descrever_dados. Roda travada em só-leitura, 8s de tempo e 200 linhas — escrever é impossível. Qualifique as tabelas com o esquema (finance.x, sales.y). Depois apresente o resultado normalmente (números sagrados valem aqui também). Só a gestão (admin).",
+    entrada: {
+      sql: { type: "string", description: "A consulta SELECT/WITH, um comando só, tabelas qualificadas com esquema." },
+      motivo: { type: "string", description: "Uma frase do que a consulta responde (fica no histórico da conversa)." },
+    },
+    required: ["sql"],
+    exec: async (ctx, i) => {
+      if (!ctx.isAdmin) return { erro: "consultas sob medida são só da gestão — ofereça o mais próximo que as ferramentas prontas alcançam" };
+      const sql = limparSql(String(i.sql || ""));
+      const v = validarSqlLeitura(sql);
+      if (!v.ok) return { erro: `consulta recusada: ${v.motivo}` };
+      const { data, error } = await ctx.bi.rpc("cesar_consulta_livre", { p_sql: sql });
+      if (error) return { erro: `a consulta falhou: ${error.message} — ajuste e tente de novo` };
+      const linhas = Array.isArray(data) ? data : [];
+      return {
+        linhas,
+        total_linhas: linhas.length,
+        ...(linhas.length >= 200 ? { truncado: true, aviso: "teto de 200 linhas atingido — se precisar do total, agregue na própria consulta (SUM/COUNT/GROUP BY)" } : {}),
       };
     },
   },

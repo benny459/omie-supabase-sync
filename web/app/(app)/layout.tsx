@@ -49,10 +49,11 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           <ThemeToggle />
         </div>
         <div className="p-4 md:p-6 min-w-0">
+          {/* Menu "Reports do Cesar" no TOPO das telas de BI suportadas (v3).
+              Montagem única aqui: o componente lê a pathname e só renderiza
+              onde deve — em linha própria, sem sobrepor os botões da tela. */}
+          <ReportsSalvos userEmail={user?.email} />
           {children}
-          {/* "Reports do Cesar" no fim das telas de BI suportadas. Montagem
-              única aqui: o componente lê a pathname e só renderiza onde deve. */}
-          <ReportsSalvos />
         </div>
       </main>
       {/* Reativado em 12/09/2026 a pedido do Benny (junto do upgrade do Cesar). */}

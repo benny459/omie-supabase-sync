@@ -1,5 +1,6 @@
 import { supaServer } from "@/lib/supabase-server";
 import UsersAdmin from "@/components/UsersAdmin";
+import CesarReportsConfig from "@/components/cesar/CesarReportsConfig";
 import SyncPanel from "@/components/SyncPanel";
 import RunDetailsPanel from "@/components/RunDetailsPanel";
 import FetchOmieButton from "@/components/FetchOmieButton";
@@ -79,6 +80,8 @@ export default async function ConfiguracoesPage() {
           </span>
         </header>
         <UsersAdmin initialUsers={(users ?? []) as UserRow[]} currentUserId={user?.id ?? ""} />
+
+        <CesarReportsConfig />
       </section>
 
       {/* Painel de Sync — status individual dos workflows + horários */}

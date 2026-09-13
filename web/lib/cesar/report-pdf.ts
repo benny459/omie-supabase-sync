@@ -38,7 +38,7 @@ const PAGE_H = 841.89;
 const M = 48;
 const CONTENT_W = PAGE_W - M * 2;
 
-const pareceNumero = (s: string) => /^[\sR$\-+]?[\d.,%\s]+$/.test(String(s || "").trim()) && /\d/.test(s);
+const pareceNumero = (s: string) => /^[\sR$\-+]*[\d.,%\s]+$/.test(String(s || "").trim()) && /\d/.test(s);
 
 export function gerarReportPDF(p: ReportPayload) {
   const doc = new jsPDF({ unit: "pt", format: "a4" });
