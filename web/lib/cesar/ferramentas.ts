@@ -24,6 +24,7 @@ import type Anthropic from "@anthropic-ai/sdk";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { modoReportDoUsuario } from "./report-config";
 import { validarSqlLeitura, limparSql } from "./sql-guard";
+import { validarFontesDoReport } from "./report-fontes";
 
 /** Escopo padrão do painel, o mesmo das telas. Deixar explícito evita a
  *  pergunta "esses números são de qual empresa?" a cada resposta. */
@@ -493,10 +494,28 @@ export const ACOES: Record<string, DefAcao> = {
           type: "object",
           properties: {
             titulo: { type: "string" },
-            colunas: { type: "array", items: { type: "string" } },
+            colunas: { type: "array", items: { type: "string" }, description: "Cabeçalhos. Coluna de dinheiro leva '(R$)' no nome — liga a formatação de moeda nos dados vivos." },
             linhas: { type: "array", items: { type: "array", items: { type: "string" } }, description: "Valores já formatados (R$, datas dd/mm)." },
+            fonte: { type: "object", properties: { sql: { type: "string" } }, description: "REPORT DINÂMICO (só admin): a consulta SELECT que gerou esta tabela, colunas na MESMA ordem dos cabeçalhos, com placeholders {{de}}/{{ate}} ou {{id-do-filtro}} quando houver filtros. Com fonte, a tela do report reexecuta ao abrir — anexe SEMPRE que a consulta veio de consulta_sob_medida." },
           },
           required: ["colunas", "linhas"],
+        },
+      },
+      filtros: {
+        type: "array",
+        description: "REPORT DINÂMICO (só admin): controles na tela do report — use quando pedirem seletor de período/filtros. periodo usa id 'periodo' e placeholders {{de}}/{{ate}}; escolha usa o próprio id como placeholder e só aceita as opções listadas.",
+        items: {
+          type: "object",
+          properties: {
+            tipo: { type: "string", enum: ["periodo", "escolha"] },
+            id: { type: "string" },
+            rotulo: { type: "string" },
+            de: { type: "string", description: "período padrão inicial (AAAA-MM-DD)" },
+            ate: { type: "string", description: "período padrão final (AAAA-MM-DD)" },
+            opcoes: { type: "array", items: { type: "string" } },
+            padrao: { type: "string" },
+          },
+          required: ["tipo", "id"],
         },
       },
       barras: {
@@ -507,6 +526,7 @@ export const ACOES: Record<string, DefAcao> = {
           properties: {
             titulo: { type: "string" },
             itens: { type: "array", items: { type: "object", properties: { rotulo: { type: "string" }, valor: { type: "number", description: "Valor numérico cru, para o tamanho da barra." }, texto: { type: "string", description: "Rótulo formatado exibido na ponta, ex.: 'R$ 12.300,00'." } }, required: ["rotulo", "valor"] } },
+            fonte: { type: "object", properties: { sql: { type: "string" } }, description: "REPORT DINÂMICO (só admin): SELECT com 2-3 colunas (rotulo, valor, texto) e os placeholders dos filtros." },
           },
           required: ["titulo", "itens"],
         },
@@ -522,10 +542,13 @@ export const ACOES: Record<string, DefAcao> = {
         kpis: Array.isArray(i.kpis) ? i.kpis : undefined,
         tabelas: Array.isArray(i.tabelas) ? i.tabelas : undefined,
         barras: Array.isArray(i.barras) ? i.barras : undefined,
+        filtros: Array.isArray(i.filtros) ? i.filtros : undefined,
       };
       if (!report.kpis?.length && !report.tabelas?.length && !report.barras?.length) {
         return { erro: "report vazio — inclua kpis, tabelas ou barras com os números consultados" };
       }
+      const fontes = validarFontesDoReport(report as never, ctx.isAdmin);
+      if (!fontes.ok) return { erro: `report dinâmico recusado: ${fontes.motivo}` };
       const tela = TELAS_REPORT.includes(String(i.tela)) ? String(i.tela) : TELAS_REPORT[0];
       const modo = await modoReportDoUsuario(ctx.publico, ctx.email);
       return {
@@ -551,6 +574,8 @@ export const ACOES: Record<string, DefAcao> = {
       const titulo = String(i.titulo || "").trim();
       const report = i.report;
       if (!titulo || !report || typeof report !== "object") return { erro: "faltou o título ou o conteúdo do report" };
+      const fontes = validarFontesDoReport(report as never, ctx.isAdmin);
+      if (!fontes.ok) return { erro: `report dinâmico recusado: ${fontes.motivo}` };
       // A régua do servidor manda: exceção 'nenhum' bloqueia, 'proprio' força
       // visibilidade própria mesmo que a pessoa tenha pedido pra equipe.
       const modo = await modoReportDoUsuario(ctx.publico, ctx.email);
@@ -587,6 +612,8 @@ export const ACOES: Record<string, DefAcao> = {
       const id = String(i.id || "").trim();
       if (!/^[0-9a-f-]{36}$/.test(id)) return { erro: "id do report inválido" };
       if (!i.report || typeof i.report !== "object") return { erro: "faltou o conteúdo novo do report" };
+      const fontesAtt = validarFontesDoReport(i.report as never, ctx.isAdmin);
+      if (!fontesAtt.ok) return { erro: `report dinâmico recusado: ${fontesAtt.motivo}` };
       const { data: atual } = await ctx.publico
         .from("cesar_reports").select("id, criado_por, titulo").eq("id", id).maybeSingle();
       if (!atual) return { erro: "não achei esse report — talvez tenha sido removido" };

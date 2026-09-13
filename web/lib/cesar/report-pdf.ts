@@ -14,14 +14,27 @@
 import { jsPDF } from "jspdf";
 
 export interface ReportKpi { rotulo: string; valor: string }
-export interface ReportTabela { titulo?: string; colunas: string[]; linhas: string[][] }
-export interface ReportBarras { titulo: string; itens: { rotulo: string; valor: number; texto?: string }[] }
+/** `fonte` (reports dinâmicos, 13/09): a consulta que gerou o bloco, com
+ *  placeholders {{de}}/{{ate}}/{{id-de-escolha}} — a tela do report reexecuta
+ *  ao abrir e quando os filtros mudam. PDF/Excel usam as linhas exibidas. */
+export interface ReportTabela { titulo?: string; colunas: string[]; linhas: string[][]; fonte?: { sql: string } }
+export interface ReportBarras { titulo: string; itens: { rotulo: string; valor: number; texto?: string }[]; fonte?: { sql: string } }
+export interface ReportFiltroDef {
+  tipo: "periodo" | "escolha";
+  id: string;
+  rotulo?: string;
+  de?: string;
+  ate?: string;
+  opcoes?: string[];
+  padrao?: string;
+}
 export interface ReportPayload {
   titulo: string;
   subtitulo?: string;
   kpis?: ReportKpi[];
   tabelas?: ReportTabela[];
   barras?: ReportBarras[];
+  filtros?: ReportFiltroDef[];
   rodape?: string;
 }
 

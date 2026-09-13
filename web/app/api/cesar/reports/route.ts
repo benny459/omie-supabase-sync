@@ -19,6 +19,7 @@ import { canViewArea, type Area } from "@/lib/permissions";
 import { loadPerms } from "@/lib/require-area";
 import { TELAS_REPORT } from "@/lib/cesar/ferramentas";
 import { modoReportDoUsuario, visivelPara, type ReportLinha } from "@/lib/cesar/report-config";
+import { validarFontesDoReport } from "@/lib/cesar/report-fontes";
 
 export const runtime = "nodejs";
 
@@ -91,6 +92,8 @@ export async function POST(req: Request) {
   if (modo === "nenhum") {
     return NextResponse.json({ error: "Você não pode incorporar reports (regra do admin)." }, { status: 403 });
   }
+  const fontes = validarFontesDoReport(report, !!chk.perms?.is_admin);
+  if (!fontes.ok) return NextResponse.json({ error: `report dinâmico recusado: ${fontes.motivo}` }, { status: 403 });
   const pedida = body.visibilidade === "proprio" ? "proprio" : "todos";
   const visibilidade = modo === "todos" ? pedida : "proprio";
 

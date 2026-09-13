@@ -15,7 +15,7 @@ import {
   ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid,
 } from "recharts";
 import { useCesar } from "@/components/cesar/CesarProvider";
-import type { ReportPayload, ReportTabela } from "@/lib/cesar/report-pdf";
+import type { ReportPayload, ReportTabela, ReportFiltroDef } from "@/lib/cesar/report-pdf";
 
 const pareceNumero = (s: string) => /^[\sR$\-+]*[\d.,%\s]+$/.test(String(s || "").trim()) && /\d/.test(s);
 const numeroDe = (s: string) => Number(String(s).replace(/[^\d,-]/g, "").replace(/\./g, "").replace(",", "."));
@@ -103,6 +103,97 @@ function TabelaInterativa({ t }: { t: ReportTabela }) {
         </table>
       </div>
     </section>
+  );
+}
+
+/* ----------------------- filtros vivos (fontes) ----------------------- */
+
+type Valores = Record<string, string | { de?: string; ate?: string }>;
+type Dados = {
+  tabelas: Record<number, string[][]>;
+  barras: Record<number, { rotulo: string; valor: number; texto?: string }[]>;
+  erros: string[];
+};
+
+function FiltrosBar({ filtros, reportId, onDados }: {
+  filtros: ReportFiltroDef[];
+  reportId: string;
+  onDados: (d: Dados | null) => void;
+}) {
+  const [valores, setValores] = useState<Valores>(() => {
+    const v: Valores = {};
+    for (const f of filtros) {
+      if (f.tipo === "periodo") v[f.id] = { de: f.de, ate: f.ate };
+      else v[f.id] = f.padrao || f.opcoes?.[0] || "";
+    }
+    return v;
+  });
+  const [carregando, setCarregando] = useState(false);
+  const [erro, setErro] = useState<string | null>(null);
+
+  const aplicar = async (vals: Valores) => {
+    setCarregando(true);
+    setErro(null);
+    try {
+      const r = await fetch(`/api/cesar/reports/${reportId}/dados`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ filtros: vals }),
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || "não deu");
+      if (Array.isArray(d.data?.erros) && d.data.erros.length) setErro(d.data.erros.join(" · "));
+      onDados(d.data as Dados);
+    } catch (e) {
+      setErro(e instanceof Error ? e.message : "erro ao atualizar");
+    }
+    setCarregando(false);
+  };
+
+  // DINÂMICO: ao abrir, os dados já vêm do banco do momento.
+  const rodouRef = useRef(false);
+  useEffect(() => {
+    if (rodouRef.current) return;
+    rodouRef.current = true;
+    void aplicar(valores);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const campo = "h-8 rounded-lg border border-ww-border bg-ww-bg px-2 text-[11.5px] text-ww-text focus:outline-none focus:border-ww-accent/60";
+  return (
+    <div className="flex flex-wrap items-end gap-3 rounded-xl border border-ww-border bg-ww-panel/40 px-3 py-2.5">
+      {filtros.map((f) => f.tipo === "periodo" ? (
+        <div key={f.id} className="flex items-end gap-2">
+          <label className="flex flex-col gap-1 text-[9.5px] font-bold uppercase tracking-wide text-ww-textFaint">
+            {f.rotulo || "Período"} — de
+            <input type="date" className={campo} defaultValue={f.de || ""}
+              onChange={(e) => setValores((v) => ({ ...v, [f.id]: { ...(typeof v[f.id] === "object" ? v[f.id] as object : {}), de: e.target.value } }))} />
+          </label>
+          <label className="flex flex-col gap-1 text-[9.5px] font-bold uppercase tracking-wide text-ww-textFaint">
+            até
+            <input type="date" className={campo} defaultValue={f.ate || ""}
+              onChange={(e) => setValores((v) => ({ ...v, [f.id]: { ...(typeof v[f.id] === "object" ? v[f.id] as object : {}), ate: e.target.value } }))} />
+          </label>
+        </div>
+      ) : (
+        <label key={f.id} className="flex flex-col gap-1 text-[9.5px] font-bold uppercase tracking-wide text-ww-textFaint">
+          {f.rotulo || f.id}
+          <select className={campo} defaultValue={f.padrao || f.opcoes?.[0] || ""}
+            onChange={(e) => {
+              const vals = { ...valores, [f.id]: e.target.value };
+              setValores(vals);
+              void aplicar(vals);
+            }}>
+            {(f.opcoes || []).map((o) => <option key={o} value={o}>{o}</option>)}
+          </select>
+        </label>
+      ))}
+      <button type="button" disabled={carregando} onClick={() => void aplicar(valores)}
+        className="h-8 px-3 rounded-lg text-[11.5px] font-semibold bg-ww-accent text-white hover:brightness-110 transition disabled:opacity-40">
+        {carregando ? "atualizando…" : "Aplicar"}
+      </button>
+      {erro && <span className="text-[10.5px] text-rose-500">{erro}</span>}
+    </div>
   );
 }
 
@@ -210,15 +301,55 @@ export default function ReportView({ report, meta, podeAjustar, onMudou }: {
   const { abrir } = useCesar();
   const [baixando, setBaixando] = useState<string | null>(null);
 
+  // Dados vivos: fontes reexecutam ao abrir e quando os filtros mudam.
+  const [dados, setDados] = useState<Dados | null>(null);
+  const temFontes = useMemo(() =>
+    (report.tabelas || []).some((t) => t.fonte?.sql) || (report.barras || []).some((g) => g.fonte?.sql),
+  [report]);
+  useEffect(() => {
+    if (!temFontes || report.filtros?.length) return;
+    fetch(`/api/cesar/reports/${meta.id}/dados`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ filtros: {} }),
+    })
+      .then((r) => r.json())
+      .then((d) => { if (d?.data) setDados(d.data as Dados); })
+      .catch(() => {}); // falhou: fica a foto gravada, sem alarde
+  }, [temFontes, report, meta.id]);
+  const efetivo = useMemo<ReportPayload>(() => {
+    if (!dados) return report;
+    return {
+      ...report,
+      tabelas: (report.tabelas || []).map((t, i) => dados.tabelas[i] ? { ...t, linhas: dados.tabelas[i] } : t),
+      barras: (report.barras || []).map((g, i) => dados.barras[i] ? { ...g, itens: dados.barras[i] } : g),
+    };
+  }, [report, dados]);
+
+  // Renomear (só dono/admin): lápis ao lado do título, salva no blur/Enter.
+  const [renomeando, setRenomeando] = useState(false);
+  const [novoTitulo, setNovoTitulo] = useState(report.titulo);
+  const renomear = async () => {
+    setRenomeando(false);
+    const t = novoTitulo.trim();
+    if (!t || t === report.titulo) return;
+    await fetch(`/api/cesar/reports/${meta.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ titulo: t, report: { ...report, titulo: t } }),
+    }).catch(() => {});
+    onMudou();
+  };
+
   const baixar = async (tipo: "pdf" | "excel") => {
     setBaixando(tipo);
     try {
       if (tipo === "pdf") {
         const { gerarReportPDF } = await import("@/lib/cesar/report-pdf");
-        gerarReportPDF(report);
+        gerarReportPDF(efetivo);
       } else {
         const { gerarReportExcel } = await import("@/lib/cesar/report-excel");
-        await gerarReportExcel(report);
+        await gerarReportExcel(efetivo);
       }
     } catch { /* silencioso */ }
     setBaixando(null);
@@ -245,12 +376,42 @@ export default function ReportView({ report, meta, podeAjustar, onMudou }: {
           <h1 className="flex items-center gap-2 text-xl md:text-2xl font-semibold text-ww-text tracking-tight">
             <span aria-hidden className="w-6 h-6 rounded-full bg-gradient-to-br from-sky-500 to-violet-500
                                           text-white text-[10px] font-bold grid place-items-center shrink-0">C</span>
-            <span className="min-w-0 break-words">{report.titulo}</span>
+            {renomeando ? (
+              <input autoFocus value={novoTitulo}
+                className="min-w-0 flex-1 rounded-lg border border-ww-accent/60 bg-ww-bg px-2 py-0.5 text-xl md:text-2xl
+                           font-semibold text-ww-text focus:outline-none"
+                onChange={(e) => setNovoTitulo(e.target.value)}
+                onBlur={() => void renomear()}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") void renomear();
+                  if (e.key === "Escape") { setNovoTitulo(report.titulo); setRenomeando(false); }
+                }} />
+            ) : (
+              <span className="min-w-0 break-words">{report.titulo}</span>
+            )}
+            {podeAjustar && !renomeando && (
+              <button type="button" title="Renomear o report" onClick={() => { setNovoTitulo(report.titulo); setRenomeando(true); }}
+                className="shrink-0 text-ww-textFaint hover:text-ww-text transition">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+                  <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
+                </svg>
+              </button>
+            )}
           </h1>
-          <p className="mt-0.5 text-[12px] text-ww-textMuted">
-            {report.subtitulo ? `${report.subtitulo} · ` : ""}
-            incorporado em {new Date(meta.created_at).toLocaleDateString("pt-BR", { day: "2-digit", month: "short", year: "numeric" })}
-            {meta.criado_por ? ` por ${meta.criado_por.split("@")[0]}` : ""}
+          <p className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[12px] text-ww-textMuted">
+            <span>
+              {report.subtitulo ? `${report.subtitulo} · ` : ""}
+              incorporado em {new Date(meta.created_at).toLocaleDateString("pt-BR", { day: "2-digit", month: "short", year: "numeric" })}
+              {meta.criado_por ? ` por ${meta.criado_por.split("@")[0]}` : ""}
+            </span>
+            {temFontes && (
+              <span className={`inline-flex items-center gap-1 rounded-full border px-1.5 text-[10px] font-semibold ${
+                dados ? "border-emerald-500/40 text-emerald-500" : "border-ww-border text-ww-textFaint"}`}
+                title={dados ? "Os números vêm do banco agora, não do dia em que o report foi criado" : "Atualizando com os dados do momento…"}>
+                <span className={`h-1.5 w-1.5 rounded-full ${dados ? "bg-emerald-500" : "bg-ww-textFaint animate-pulse"}`} />
+                {dados ? "ao vivo" : "atualizando…"}
+              </span>
+            )}
           </p>
         </div>
         <div className="ml-auto flex shrink-0 flex-wrap items-center gap-2">
@@ -276,6 +437,10 @@ export default function ReportView({ report, meta, podeAjustar, onMudou }: {
         </div>
       </div>
 
+      {!!report.filtros?.length && (
+        <FiltrosBar filtros={report.filtros} reportId={meta.id} onDados={setDados} />
+      )}
+
       {!!report.kpis?.length && (
         <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
           {report.kpis.slice(0, 8).map((k, i) => (
@@ -287,9 +452,9 @@ export default function ReportView({ report, meta, podeAjustar, onMudou }: {
         </div>
       )}
 
-      {(report.tabelas || []).map((t, i) => <TabelaInterativa key={i} t={t} />)}
+      {(efetivo.tabelas || []).map((t, i) => <TabelaInterativa key={`${i}-${dados ? "v" : "s"}`} t={t} />)}
 
-      {(report.barras || []).map((g, i) => {
+      {(efetivo.barras || []).map((g, i) => {
         const dados = (g.itens || []).slice(0, 14).map((it) => ({ nome: it.rotulo, valor: Number(it.valor) || 0, texto: it.texto }));
         const moeda = dados.some((d) => d.texto && /R\$/.test(d.texto));
         return (

@@ -11,6 +11,7 @@ import { supaServer } from "@/lib/supabase-server";
 import { canViewArea, type Area } from "@/lib/permissions";
 import { loadPerms } from "@/lib/require-area";
 import { visivelPara, type ReportLinha } from "@/lib/cesar/report-config";
+import { validarFontesDoReport } from "@/lib/cesar/report-fontes";
 
 export const runtime = "nodejs";
 
@@ -89,7 +90,11 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       .slice(0, 30);
     patch.shared_emails = emails;
   }
-  if (body.report && typeof body.report === "object") patch.payload = body.report;
+  if (body.report && typeof body.report === "object") {
+    const fontes = validarFontesDoReport(body.report, !!perms.is_admin);
+    if (!fontes.ok) return NextResponse.json({ error: `report dinâmico recusado: ${fontes.motivo}` }, { status: 403 });
+    patch.payload = body.report;
+  }
   if (typeof body.titulo === "string" && body.titulo.trim()) patch.titulo = body.titulo.trim().slice(0, 140);
   if (!Object.keys(patch).length) return NextResponse.json({ error: "nada para ajustar" }, { status: 400 });
 
