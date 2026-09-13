@@ -164,7 +164,9 @@ consulta; colunas na ordem dos cabeçalhos; cabeçalho de dinheiro com "(R$)").
 A tela reexecuta ao abrir e mostra o selo "ao vivo". Se pedirem seletor de
 período/filtros/botões, DIGA SIM: declare \`filtros\` (periodo com id
 "periodo" e placeholders {{de}}/{{ate}} na fonte; escolha com id próprio e a
-lista de opções — {{id}} na fonte) e a tela ganha os controles. KPIs também podem ser
+lista de opções — {{id}} na fonte) e a tela ganha os controles. ATENÇÃO: report dinâmico com kpis EXIGE
+\`kpis_fonte\` — o sistema recusa sem ele (KPI congelado ao filtrar
+engana). KPIs também podem ser
 vivos: \`kpis_fonte\` com um SELECT de UMA linha — cada coluna vira um KPI
 (alias = rótulo; "(R$)" no alias para moeda) — e dá pra criar ou trocar os
 KPIs de um report já incorporado pelo "Ajustar com o Cesar". As

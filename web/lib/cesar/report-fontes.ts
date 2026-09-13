@@ -56,6 +56,12 @@ export function validarFontesDoReport(report: ReportPayload, podeFontes: boolean
   if (!fontes.length && !filtros.length) return { ok: true };
   if (!podeFontes) return { ok: false, motivo: "só admin pode criar reports dinâmicos (fontes/filtros)" };
   if (!fontes.length) return { ok: false, motivo: "há filtros declarados mas nenhuma tabela/gráfico tem fonte" };
+  // KPI congelado num report dinâmico engana (Benny, 13/09): se o report é
+  // vivo e tem kpis, o kpis_fonte é OBRIGATÓRIO — a tela filtra e os números
+  // de cima têm que acompanhar.
+  if ((report.kpis || []).length && !report.kpis_fonte?.sql) {
+    return { ok: false, motivo: "os KPIs ficariam congelados quando os filtros mudassem — inclua kpis_fonte (SELECT de UMA linha, um KPI por coluna, mesmos placeholders) ou remova os kpis" };
+  }
   for (const f of filtros) {
     if (f.tipo !== "periodo" && f.tipo !== "escolha") return { ok: false, motivo: "tipo de filtro inválido" };
     if (f.tipo === "escolha" && (!Array.isArray(f.opcoes) || !f.opcoes.length)) {
