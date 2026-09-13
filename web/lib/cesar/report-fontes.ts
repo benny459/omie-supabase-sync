@@ -51,6 +51,7 @@ export function validarFontesDoReport(report: ReportPayload, podeFontes: boolean
   const fontes: string[] = [];
   for (const t of report.tabelas || []) if (t.fonte?.sql) fontes.push(t.fonte.sql);
   for (const g of report.barras || []) if (g.fonte?.sql) fontes.push(g.fonte.sql);
+  if (report.kpis_fonte?.sql) fontes.push(report.kpis_fonte.sql);
   const filtros = (report.filtros || []) as ReportFiltroDef[];
   if (!fontes.length && !filtros.length) return { ok: true };
   if (!podeFontes) return { ok: false, motivo: "só admin pode criar reports dinâmicos (fontes/filtros)" };
@@ -99,6 +100,7 @@ async function executar(bi: Rpc, sql: string): Promise<Record<string, unknown>[]
 export interface DadosVivos {
   tabelas: Record<number, string[][]>;
   barras: Record<number, { rotulo: string; valor: number; texto?: string }[]>;
+  kpis?: { rotulo: string; valor: string }[];
   erros: string[];
 }
 
@@ -122,6 +124,24 @@ export async function executarFontes(bi: Rpc, report: ReportPayload, valores: Va
       });
     } catch (e) {
       out.erros.push(`tabela ${i + 1}: ${(e instanceof Error ? e.message : "erro").slice(0, 120)}`);
+    }
+  }
+
+  // KPIs vivos: uma linha; cada coluna vira um KPI (alias = rótulo).
+  if (report.kpis_fonte?.sql) {
+    const sub = substituir(report.kpis_fonte.sql, filtros, valores);
+    if (!sub.sql) out.erros.push(sub.erro || "filtro inválido");
+    else {
+      try {
+        const rows = await executar(bi, sub.sql);
+        const linha = rows[0] || {};
+        out.kpis = Object.entries(linha).slice(0, 8).map(([k, v]) => ({
+          rotulo: k.replace(/_/g, " "),
+          valor: celula(v, k),
+        }));
+      } catch (e) {
+        out.erros.push(`kpis: ${(e instanceof Error ? e.message : "erro").slice(0, 120)}`);
+      }
     }
   }
 

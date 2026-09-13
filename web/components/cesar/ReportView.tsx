@@ -112,6 +112,7 @@ type Valores = Record<string, string | { de?: string; ate?: string }>;
 type Dados = {
   tabelas: Record<number, string[][]>;
   barras: Record<number, { rotulo: string; valor: number; texto?: string }[]>;
+  kpis?: { rotulo: string; valor: string }[];
   erros: string[];
 };
 
@@ -304,7 +305,7 @@ export default function ReportView({ report, meta, podeAjustar, onMudou }: {
   // Dados vivos: fontes reexecutam ao abrir e quando os filtros mudam.
   const [dados, setDados] = useState<Dados | null>(null);
   const temFontes = useMemo(() =>
-    (report.tabelas || []).some((t) => t.fonte?.sql) || (report.barras || []).some((g) => g.fonte?.sql),
+    (report.tabelas || []).some((t) => t.fonte?.sql) || (report.barras || []).some((g) => g.fonte?.sql) || !!report.kpis_fonte?.sql,
   [report]);
   useEffect(() => {
     if (!temFontes || report.filtros?.length) return;
@@ -321,6 +322,7 @@ export default function ReportView({ report, meta, podeAjustar, onMudou }: {
     if (!dados) return report;
     return {
       ...report,
+      kpis: dados.kpis?.length ? dados.kpis : report.kpis,
       tabelas: (report.tabelas || []).map((t, i) => dados.tabelas[i] ? { ...t, linhas: dados.tabelas[i] } : t),
       barras: (report.barras || []).map((g, i) => dados.barras[i] ? { ...g, itens: dados.barras[i] } : g),
     };
@@ -441,9 +443,9 @@ export default function ReportView({ report, meta, podeAjustar, onMudou }: {
         <FiltrosBar filtros={report.filtros} reportId={meta.id} onDados={setDados} />
       )}
 
-      {!!report.kpis?.length && (
+      {!!efetivo.kpis?.length && (
         <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-          {report.kpis.slice(0, 8).map((k, i) => (
+          {efetivo.kpis.slice(0, 8).map((k, i) => (
             <div key={i} className="rounded-xl border border-ww-border bg-ww-panel/60 px-3.5 py-3">
               <p className="text-[10px] font-bold uppercase tracking-wide text-ww-textFaint">{k.rotulo}</p>
               <p className="mt-1 truncate text-lg font-semibold text-ww-text tabular-nums" title={k.valor}>{k.valor}</p>

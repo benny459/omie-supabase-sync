@@ -24,7 +24,7 @@ import type Anthropic from "@anthropic-ai/sdk";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { modoReportDoUsuario } from "./report-config";
 import { validarSqlLeitura, limparSql } from "./sql-guard";
-import { validarFontesDoReport } from "./report-fontes";
+import { validarFontesDoReport, executarFontes } from "./report-fontes";
 
 /** Escopo padrão do painel, o mesmo das telas. Deixar explícito evita a
  *  pergunta "esses números são de qual empresa?" a cada resposta. */
@@ -371,6 +371,17 @@ const STATUS_HUMANO: Record<string, string> = {
   sugestao_futura: "sugestão registrada — aguardando o Benny avaliar",
 };
 
+/** Pré-flight das fontes: roda cada consulta UMA vez com os filtros padrão.
+ *  Fonte quebrada nunca vira report incorporado — o erro volta pro Cesar
+ *  corrigir na hora ("gráficos sem erros a criar"). */
+async function testarFontes(ctx: CtxAcao, report: never): Promise<string | null> {
+  const r = report as { tabelas?: { fonte?: { sql: string } }[]; barras?: { fonte?: { sql: string } }[]; kpis_fonte?: { sql: string } };
+  const tem = (r.tabelas || []).some((t) => t.fonte?.sql) || (r.barras || []).some((g) => g.fonte?.sql) || !!r.kpis_fonte?.sql;
+  if (!tem) return null;
+  const teste = await executarFontes(ctx.bi, report, {});
+  return teste.erros.length ? teste.erros.join(" · ") : null;
+}
+
 export const ACOES: Record<string, DefAcao> = {
   criar_ticket: {
     descricao:
@@ -501,6 +512,11 @@ export const ACOES: Record<string, DefAcao> = {
           required: ["colunas", "linhas"],
         },
       },
+      kpis_fonte: {
+        type: "object",
+        properties: { sql: { type: "string" } },
+        description: "REPORT DINÂMICO (só admin): SELECT de UMA linha — cada coluna vira um KPI (alias = rótulo; use \"(R$)\" no alias para moeda). Os KPIs passam a atualizar sozinhos; dá pra criar/trocar KPIs de um report existente pelo atualizar_report.",
+      },
       filtros: {
         type: "array",
         description: "REPORT DINÂMICO (só admin): controles na tela do report — use quando pedirem seletor de período/filtros. periodo usa id 'periodo' e placeholders {{de}}/{{ate}}; escolha usa o próprio id como placeholder e só aceita as opções listadas.",
@@ -543,12 +559,15 @@ export const ACOES: Record<string, DefAcao> = {
         tabelas: Array.isArray(i.tabelas) ? i.tabelas : undefined,
         barras: Array.isArray(i.barras) ? i.barras : undefined,
         filtros: Array.isArray(i.filtros) ? i.filtros : undefined,
+        kpis_fonte: i.kpis_fonte && typeof i.kpis_fonte === "object" ? i.kpis_fonte : undefined,
       };
       if (!report.kpis?.length && !report.tabelas?.length && !report.barras?.length) {
         return { erro: "report vazio — inclua kpis, tabelas ou barras com os números consultados" };
       }
       const fontes = validarFontesDoReport(report as never, ctx.isAdmin);
       if (!fontes.ok) return { erro: `report dinâmico recusado: ${fontes.motivo}` };
+      const falha = await testarFontes(ctx, report as never);
+      if (falha) return { erro: `as fontes falharam no teste (${falha}) — corrija a consulta e gere de novo` };
       const tela = TELAS_REPORT.includes(String(i.tela)) ? String(i.tela) : TELAS_REPORT[0];
       const modo = await modoReportDoUsuario(ctx.publico, ctx.email);
       return {
@@ -576,6 +595,8 @@ export const ACOES: Record<string, DefAcao> = {
       if (!titulo || !report || typeof report !== "object") return { erro: "faltou o título ou o conteúdo do report" };
       const fontes = validarFontesDoReport(report as never, ctx.isAdmin);
       if (!fontes.ok) return { erro: `report dinâmico recusado: ${fontes.motivo}` };
+      const falhaSalvar = await testarFontes(ctx, report as never);
+      if (falhaSalvar) return { erro: `as fontes falharam no teste (${falhaSalvar}) — corrija a consulta antes de incorporar` };
       // A régua do servidor manda: exceção 'nenhum' bloqueia, 'proprio' força
       // visibilidade própria mesmo que a pessoa tenha pedido pra equipe.
       const modo = await modoReportDoUsuario(ctx.publico, ctx.email);
@@ -614,6 +635,8 @@ export const ACOES: Record<string, DefAcao> = {
       if (!i.report || typeof i.report !== "object") return { erro: "faltou o conteúdo novo do report" };
       const fontesAtt = validarFontesDoReport(i.report as never, ctx.isAdmin);
       if (!fontesAtt.ok) return { erro: `report dinâmico recusado: ${fontesAtt.motivo}` };
+      const falhaAtt = await testarFontes(ctx, i.report as never);
+      if (falhaAtt) return { erro: `as fontes falharam no teste (${falhaAtt}) — corrija a consulta e atualize de novo` };
       const { data: atual } = await ctx.publico
         .from("cesar_reports").select("id, criado_por, titulo").eq("id", id).maybeSingle();
       if (!atual) return { erro: "não achei esse report — talvez tenha sido removido" };

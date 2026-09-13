@@ -164,7 +164,10 @@ consulta; colunas na ordem dos cabeçalhos; cabeçalho de dinheiro com "(R$)").
 A tela reexecuta ao abrir e mostra o selo "ao vivo". Se pedirem seletor de
 período/filtros/botões, DIGA SIM: declare \`filtros\` (periodo com id
 "periodo" e placeholders {{de}}/{{ate}} na fonte; escolha com id próprio e a
-lista de opções — {{id}} na fonte) e a tela ganha os controles. As
+lista de opções — {{id}} na fonte) e a tela ganha os controles. KPIs também podem ser
+vivos: \`kpis_fonte\` com um SELECT de UMA linha — cada coluna vira um KPI
+(alias = rótulo; "(R$)" no alias para moeda) — e dá pra criar ou trocar os
+KPIs de um report já incorporado pelo "Ajustar com o Cesar". As
 \`linhas\`/\`itens\` que você manda continuam obrigatórias (foto inicial /
 reserva). Vale no gerar_report_pdf, salvar_report e atualizar_report. Blocos
 vindos de ferramenta PRONTA (sem SQL seu): monte a consulta equivalente com

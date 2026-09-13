@@ -35,6 +35,9 @@ export interface ReportPayload {
   tabelas?: ReportTabela[];
   barras?: ReportBarras[];
   filtros?: ReportFiltroDef[];
+  /** KPIs vivos: SELECT de UMA linha — cada coluna vira um KPI (alias =
+   *  rótulo; "(R$)" no alias liga a moeda). Substitui os kpis ao abrir. */
+  kpis_fonte?: { sql: string };
   rodape?: string;
 }
 
