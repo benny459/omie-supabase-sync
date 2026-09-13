@@ -10,6 +10,7 @@
 // existe nas telas suportadas. Some quando a tela não tem report visível.
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { usePathname, useRouter } from "next/navigation";
 import { useUserPerms } from "@/components/UserPermsProvider";
 import { TELAS_REPORT } from "@/lib/cesar/ferramentas";
@@ -33,7 +34,10 @@ export default function ReportsSalvos({ userEmail }: { userEmail?: string | null
 
   const [reports, setReports] = useState<Rep[] | null>(null);
   const [aberto, setAberto] = useState(false);
+  // Dropdown em PORTAL no body: nenhum botão da página vaza por cima.
+  const [pos, setPos] = useState<{ top: number; right: number } | null>(null);
   const boxRef = useRef<HTMLDivElement>(null);
+  const painelRef = useRef<HTMLDivElement>(null);
   const email = (userEmail || "").toLowerCase();
 
   const carregar = useCallback(async (tela: string) => {
@@ -55,10 +59,19 @@ export default function ReportsSalvos({ userEmail }: { userEmail?: string | null
   useEffect(() => {
     if (!aberto) return;
     const fora = (e: MouseEvent) => {
-      if (boxRef.current && !boxRef.current.contains(e.target as Node)) setAberto(false);
+      const t = e.target as Node;
+      if (boxRef.current?.contains(t) || painelRef.current?.contains(t)) return;
+      setAberto(false);
     };
+    const fecha = () => setAberto(false);
     document.addEventListener("mousedown", fora);
-    return () => document.removeEventListener("mousedown", fora);
+    window.addEventListener("scroll", fecha, true);
+    window.addEventListener("resize", fecha);
+    return () => {
+      document.removeEventListener("mousedown", fora);
+      window.removeEventListener("scroll", fecha, true);
+      window.removeEventListener("resize", fecha);
+    };
   }, [aberto]);
 
   if (!suportada || !reports || reports.length === 0) return null;
@@ -74,7 +87,12 @@ export default function ReportsSalvos({ userEmail }: { userEmail?: string | null
   return (
     <div className="relative z-40 mb-3 flex justify-end">
       <div ref={boxRef} className="relative inline-block">
-        <button type="button" onClick={() => setAberto((a) => !a)}
+        <button type="button"
+          onClick={(e) => {
+            const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+            setPos({ top: r.bottom + 6, right: Math.max(8, window.innerWidth - r.right) });
+            setAberto((a) => !a);
+          }}
           className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-[11.5px] rounded-lg border border-ww-border
                      bg-ww-panel text-ww-textMuted hover:text-ww-text hover:border-ww-accent/50 shadow-sm transition">
           <span aria-hidden className="w-4 h-4 rounded-full bg-gradient-to-br from-sky-500 to-violet-500
@@ -83,9 +101,11 @@ export default function ReportsSalvos({ userEmail }: { userEmail?: string | null
           <span className="rounded-full bg-ww-accent/15 px-1.5 text-[10px] font-bold text-ww-accent">{reports.length}</span>
           <span aria-hidden className={`text-[9px] transition-transform ${aberto ? "rotate-180" : ""}`}>▾</span>
         </button>
-        {aberto && (
-          <div className="absolute right-0 z-50 mt-1.5 w-[340px] max-h-[60vh] overflow-y-auto rounded-xl border
-                          border-ww-border bg-ww-panel shadow-xl p-1.5">
+        {aberto && pos && createPortal(
+          <div ref={painelRef}
+            className="fixed z-[45] w-[340px] max-h-[60vh] overflow-y-auto rounded-xl border
+                       border-ww-border bg-ww-panel shadow-2xl p-1.5"
+            style={{ top: pos.top, right: pos.right }}>
             {reports.map((rep) => {
               const dono = (rep.criado_por || "").toLowerCase() === email;
               return (
@@ -116,7 +136,8 @@ export default function ReportsSalvos({ userEmail }: { userEmail?: string | null
                 </div>
               );
             })}
-          </div>
+          </div>,
+          document.body
         )}
       </div>
     </div>

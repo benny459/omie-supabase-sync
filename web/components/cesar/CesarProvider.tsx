@@ -36,7 +36,7 @@ type Conversa = {
 };
 
 type Ctx = {
-  abrir: (opts?: { contexto?: string; pergunta?: string; origem?: string }) => void;
+  abrir: (opts?: { contexto?: string; pergunta?: string; origem?: string; novaConversa?: boolean }) => void;
   aberto: boolean;
 };
 const CesarCtx = createContext<Ctx>({ abrir: () => {}, aberto: false });
@@ -81,7 +81,13 @@ export default function CesarProvider({ children }: { children: React.ReactNode 
   const fimRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
-  const abrir = useCallback((opts?: { contexto?: string; pergunta?: string; origem?: string }) => {
+  const abrir = useCallback((opts?: { contexto?: string; pergunta?: string; origem?: string; novaConversa?: boolean }) => {
+    if (opts?.novaConversa) {
+      // Conversa zerada e DEDICADA (ex.: "Ajustar com o Cesar" num report):
+      // continuar o chat antigo dava a impressão de não ser daquele report.
+      setMsgs([]); setPassos([]); setErro(null); setOferta(null);
+      conversaRef.current = null; setVerHistorico(false);
+    }
     if (opts?.contexto) contextoRef.current = opts.contexto;
     setOrigem(opts?.origem ?? null);
     setAberto(true);

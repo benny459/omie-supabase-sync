@@ -234,6 +234,7 @@ export default function ReportView({ report, meta, podeAjustar, onMudou }: {
       contexto,
       origem: `report: ${report.titulo}`,
       pergunta: "Quero ajustar este report: ",
+      novaConversa: true,
     });
   };
 
