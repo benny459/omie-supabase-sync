@@ -96,11 +96,15 @@ function tomDoEvento(ev: string | null): { rot: string; classe: string } {
 }
 
 export default function PlanoFechamento({
-  empresa, codigoProjeto, podeEditar, dados, onMudou,
+  empresa, codigoProjeto, podeEditar, dados, onMudou, somenteCondicoes = false,
 }: {
   empresa: string; codigoProjeto: number; podeEditar: boolean;
   dados: PlanoCompleto | null;
   onMudou: () => void;
+  /** Na aba Condições, só as parcelas e os campos editáveis — a agenda de
+   *  compras e o efetivo pertencem ao Resumo, e repeti-los nas duas abas
+   *  desfaria o que separar em abas resolveu. */
+  somenteCondicoes?: boolean;
 }) {
   const [erro, setErro] = useState<string | null>(null);
   const [aviso, setAviso] = useState<string | null>(null);
@@ -425,7 +429,10 @@ export default function PlanoFechamento({
               aparecer com dois nomes — e era parte do motivo de a tela ter
               treze números antes de qualquer tabela. */}
 
-          {/* ── Parcelas ─────────────────────────────────────────────────── */}
+          {/* ── Parcelas ───────────────────────────────────────────────────
+              Vivem na aba Condições: são o acordo com o cliente, e a previsão
+              de faturamento de cada uma é o que o cronograma ajusta. */}
+          {somenteCondicoes && (
           <div>
             <div className="flex items-baseline gap-2 mb-1.5">
               <span className="text-[10px] uppercase tracking-wider font-semibold text-ww-textMuted">
@@ -542,6 +549,7 @@ export default function PlanoFechamento({
               </table>
             </div>
           </div>
+          )}
 
           {/* ── Saídas sem pedido de compra ──────────────────────────────── */}
           <div>
@@ -654,7 +662,7 @@ export default function PlanoFechamento({
               arquivo, mas corrigir um vencimento ou um valor não justifica
               reexportar a proposta e reimportar — e quem não pode corrigir
               acaba não corrigindo. */}
-          {(materiais.length > 0 || podeEditar) && (
+          {!somenteCondicoes && (materiais.length > 0 || podeEditar) && (
             <details className="rounded-lg border border-ww-border" open={materiais.length > 0 && materiais.length <= 6}>
               <summary className="cursor-pointer px-2.5 py-1.5 text-[11.5px] text-ww-textMuted hover:text-ww-text">
                 Agenda de compras do plano — {materiais.length} vencimento(s) ·{" "}
@@ -793,7 +801,7 @@ export default function PlanoFechamento({
               de obra estourou" só vira decisão quando se sabe que eram 1
               engenheiro por 2 dias e 1 técnico por 8,5 dias EQUIVALENTES — e
               que os equivalentes já embutem sábado (1,5×) e domingo (2×). */}
-          {custos.length > 0 && (
+          {!somenteCondicoes && custos.length > 0 && (
             <details className="rounded-lg border border-ww-border">
               <summary className="cursor-pointer px-2.5 py-1.5 text-[11.5px] text-ww-textMuted hover:text-ww-text">
                 Efetivo e despesas consideradas —{" "}

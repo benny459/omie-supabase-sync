@@ -29,7 +29,8 @@ import TabelaPrevisto, { type LinhaPrevisto } from "./TabelaPrevisto";
 import ChartFrame, { type SeriesDef } from "@/components/viz/ChartFrame";
 import VizCombo from "@/components/viz/VizCombo";
 import PlanoFechamento, { type PlanoCompleto } from "@/components/projeto/PlanoFechamento";
-import ResumoProjeto, { type Execucao, type Venda } from "@/components/projeto/ResumoProjeto";
+import { ReguaExecucao, Faturamento, Recebimento, CondicoesComerciais,
+         type Execucao, type Venda } from "@/components/projeto/ResumoProjeto";
 
 type LinhaApi = {
   id: number; tipo: "entrada" | "saida"; descricao: string; categoria: string | null;
@@ -112,10 +113,15 @@ const TOM: Record<Cabecalho["status"], { rot: string; ponto: string; dica: strin
                dica: "ajuste o plano e envie de novo." },
 };
 
+/** As abas do projeto. Cada assunto na sua — antes era tudo numa rolagem só,
+ *  com treze números antes da primeira tabela. */
+export type AbaProjeto = "resumo" | "condicoes" | "faturamento" | "fluxo" | "omie";
+
 export default function FluxoProjetoView({
-  empresa, codigoProjeto, nomeProjeto,
+  empresa, codigoProjeto, nomeProjeto, aba = "resumo",
 }: {
   empresa: string; codigoProjeto: number; nomeProjeto?: string;
+  aba?: AbaProjeto;
 }) {
   const [data, setData] = useState<Payload | null>(null);
   const [entradas, setEntradas] = useState<LinhaGrade[]>([linhaVazia(COLS)]);
@@ -606,33 +612,58 @@ export default function FluxoProjetoView({
         </div>
       )}
 
-      {/* UM bloco no topo, não treze cartões em três faixas.
-          Havia seis números do fluxo, seis do plano e o teto — nenhum errado,
-          e juntos ilegíveis: a mesma grandeza aparecia com dois nomes em dois
-          lugares ("saídas previstas" e "custo total"). Agora são três
-          perguntas na ordem em que se pergunta: o que foi fechado, quanto
-          planejamos gastar, quanto já consumimos. */}
-      <ResumoProjeto
-        plano={plano}
-        execucao={data?.execucao ?? null}
-        vendas={data?.vendas ?? []}
-        entradasOmie={omiEnt + manEnt}
-        saidasOmie={omiSai + manSai}
-        teto={tetoVigente}
-        podeEditar={podeEditar}
-        onEditarTeto={() => setEditandoTeto(true)} />
+      {/* ── RESUMO ────────────────────────────────────────────────────────
+          Os KPIs ficam FIXOS acima das abas (no Workspace). Aqui mora o que
+          responde "como está indo": onde o dinheiro que sai parou, e as
+          premissas que definiram o plano. */}
+      {aba === "resumo" && (
+        <>
+          <Bloco titulo="Execução da despesa"
+                 dica="o mesmo dinheiro, em cada estágio — da reserva ao pagamento">
+            <ReguaExecucao plano={plano} execucao={data?.execucao ?? null} teto={tetoVigente} />
+          </Bloco>
 
-      {/* As premissas vêm ANTES do gráfico e das tabelas do Omie.
-          É a ordem em que o projeto acontece: primeiro se fecha, depois se
-          compra. E é o único bloco que tem conteúdo num projeto recém-ganho —
-          deixá-lo no rodapé faria a tela abrir vazia justamente quando ela
-          mais serve, que é para decidir. */}
-      <PlanoFechamento empresa={empresa} codigoProjeto={codigoProjeto}
-        podeEditar={podeEditar} dados={plano} onMudou={() => void carregarPlano()} />
+          <PlanoFechamento empresa={empresa} codigoProjeto={codigoProjeto}
+            podeEditar={podeEditar} dados={plano} onMudou={() => void carregarPlano()} />
+        </>
+      )}
 
-      {/* O teto só aparece quando alguém vai mexer nele. O número em si já
-          está no bloco de consumo lá em cima; um cartão permanente para uma
-          edição rara era mais uma faixa disputando a atenção. */}
+      {/* ── CONDIÇÕES COMERCIAIS ─────────────────────────────────────────── */}
+      {aba === "condicoes" && (
+        <>
+          <Bloco titulo="O que foi acordado"
+                 dica="o que vale é o do fechamento; a origem vem embaixo, nomeada">
+            <CondicoesComerciais plano={plano} />
+          </Bloco>
+          <PlanoFechamento empresa={empresa} codigoProjeto={codigoProjeto}
+            podeEditar={podeEditar} dados={plano} onMudou={() => void carregarPlano()}
+            somenteCondicoes />
+        </>
+      )}
+
+      {/* ── FATURAMENTO & RECEBIMENTO ────────────────────────────────────── */}
+      {aba === "faturamento" && (
+        <>
+          <Bloco titulo="Faturamento"
+                 dica="os PV/OS do projeto — é a etapa deles que diz se já virou nota">
+            <Faturamento vendas={data?.vendas ?? []} />
+          </Bloco>
+          <Bloco titulo="Recebimento"
+                 dica="faturado não é recebido: entre a nota e o dinheiro está o título">
+            <Recebimento execucao={data?.execucao ?? null} vendas={data?.vendas ?? []}
+              plano={plano} teto={tetoVigente} />
+          </Bloco>
+          <Secao
+            titulo="Acrescentado à mão"
+            dica="O que o Omie ainda não tem: parcela que não virou título, despesa prevista, serviço a contratar. Digite, ou cole do Excel as colunas Descrição · Categoria · Data · Valor."
+            total={manEnt} tom="receber"
+            linhas={entradas} onChange={(l) => { setEntradas(l); setSujo(true); }}
+            somenteLeitura={!podeEditar}
+          />
+        </>
+      )}
+
+      {/* O teto abre sobre qualquer aba — é edição rara, não faixa fixa. */}
       {editandoTeto && (
         <CardBudget empresa={empresa} codigoProjeto={codigoProjeto}
           orcamento={data?.orcamento ?? null} comprado={omiSai + manSai} pago={liq.pago}
@@ -642,6 +673,7 @@ export default function FluxoProjetoView({
           plano={plano} />
       )}
 
+      {aba === "fluxo" && (
       <ChartFrame
         title={`Fluxo de caixa do projeto${nomeProjeto ? ` — ${nomeProjeto}` : ""}`}
         subtitle={
@@ -692,15 +724,13 @@ export default function FluxoProjetoView({
           />
         )}
       </ChartFrame>
+      )}
 
-      {/* Empilhadas em largura cheia, não lado a lado. Com duas colunas a grade
-          recebia ~600px e a coluna VALOR — a mais importante das quatro — ficava
-          cortada fora da vista. Grade é para digitar; digitar num campo que não
-          se enxerga não é uma opção de layout. */}
       {/* ── O que veio do Omie ──────────────────────────────────────────────
-          Vem primeiro porque é o grosso do plano na maioria dos projetos, e
-          porque a coluna de emissão é onde o cronograma entra. Não é apagável:
-          é recalculado do ERP a cada leitura. */}
+          Aba própria: são as linhas cruas do ERP, e a coluna de emissão é
+          onde o cronograma entra. Nada aqui é apagável — é recalculado do ERP
+          a cada leitura. */}
+      {aba === "omie" && (
       <section className="viz-panel bg-ww-panel border border-ww-border rounded-xl p-3.5 min-w-0 space-y-3">
         <header>
           <h3 className="text-[12.5px] font-semibold text-ww-text tracking-wide uppercase">
@@ -743,20 +773,9 @@ export default function FluxoProjetoView({
             codigoProjeto={codigoProjeto} podeEditar={podeEditar} onMudou={() => void carregar()} />
         </div>
       </section>
+      )}
 
-      <Secao
-        titulo="Acrescentado à mão"
-        dica="O que o Omie ainda não tem: parcela que não virou título, despesa prevista, serviço a contratar. Digite, ou cole do Excel as colunas Descrição · Categoria · Data · Valor."
-        total={manEnt} tom="receber"
-        linhas={entradas} onChange={(l) => { setEntradas(l); setSujo(true); }}
-        somenteLeitura={!podeEditar}
-      />
-      {/* As saídas manuais saíram da tela. Todo pedido de compra do projeto já
-          aparece no bloco do Omie assim que é lançado — manter um lugar para
-          digitar saída à mão criava uma segunda lista de compras que ninguém ia
-          manter, e que somaria em cima da que o ERP já tem. */}
-
-      {(data?.eventos?.length ?? 0) > 0 && (
+      {aba === "resumo" && (data?.eventos?.length ?? 0) > 0 && (
         <details className="rounded-xl border border-ww-border bg-ww-panel px-3.5 py-2.5">
           <summary className="text-[11.5px] text-ww-textMuted cursor-pointer">
             Histórico de aprovação ({data!.eventos.length})
@@ -781,6 +800,27 @@ export default function FluxoProjetoView({
         </details>
       )}
     </div>
+  );
+}
+
+/** A moldura de uma seção de aba: título, dica e conteúdo.
+ *
+ *  Uma só, em vez de cada bloco inventar a sua — era parte do motivo de a
+ *  tela ter "muita informação com a mesma aparência". */
+function Bloco({ titulo, dica, acao, children }: {
+  titulo: string; dica?: string; acao?: React.ReactNode; children: React.ReactNode;
+}) {
+  return (
+    <section className="rounded-xl border border-ww-border bg-ww-panel p-3.5 min-w-0">
+      <header className="flex items-start gap-3 mb-3">
+        <div className="min-w-0">
+          <h3 className="text-[12px] font-semibold text-ww-text tracking-wide uppercase">{titulo}</h3>
+          {dica && <p className="text-[11px] text-ww-textMuted mt-0.5 normal-case">{dica}</p>}
+        </div>
+        {acao && <div className="ml-auto shrink-0">{acao}</div>}
+      </header>
+      {children}
+    </section>
   );
 }
 

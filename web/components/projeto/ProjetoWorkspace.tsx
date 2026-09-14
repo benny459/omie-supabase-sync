@@ -1,6 +1,6 @@
 "use client";
 
-// A tela do projeto, com tudo no mesmo lugar.
+// A tela do projeto: três números fixos e seis abas.
 //
 // ── O que estava espalhado ───────────────────────────────────────────────────
 // Materiais era uma sub-página; Fluxo Financeiro era um modal de upload no
@@ -8,34 +8,49 @@
 // e nenhuma delas mostrava o que a outra sabia — dava para aprovar compra sem
 // nunca ter visto o plano de caixa, porque o plano vivia atrás de outro botão.
 //
-// Agora é uma tela com abas. A ordem não é arbitrária: Fluxo primeiro porque é
-// ele que destrava a aprovação das compras, e é a pergunta que traz a maioria
-// das pessoas aqui.
+// ── E o que ficou espalhado depois ───────────────────────────────────────────
+// Juntar tudo numa aba só resolveu o primeiro problema e criou outro: treze
+// números em três faixas de cartões antes da primeira tabela, com a mesma
+// aparência, e nada dizendo por onde começar.
+//
+// Agora os TRÊS números que definem o projeto — quanto fechei, quanto vou
+// gastar, quanto sobra — ficam fixos acima das abas, porque são a pergunta que
+// não muda de aba para aba. O resto virou um assunto por aba.
+//
+// ── Por que os KPIs carregam separado ────────────────────────────────────────
+// Eles saem só do PLANO, que é tabela própria e responde rápido. O fluxo do
+// Omie leva dezenas de segundos (a view de projetos não empurra o filtro).
+// Carregar os dois juntos faria os três números esperarem por algo de que não
+// precisam — e eles são o que a pessoa veio ver.
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 // RcProjetoItensBlock não é mais montado — a lista virou uma tabela só.
 // O arquivo continua no repositório caso falte alguma função dele.
 import RcProjetoUploadButton from "@/components/RcProjetoUploadButton";
-import FluxoProjetoView from "./FluxoProjetoView";
+import FluxoProjetoView, { type AbaProjeto } from "./FluxoProjetoView";
 import MateriaisGrade from "./MateriaisGrade";
+import { KpisProjeto } from "./ResumoProjeto";
+import type { PlanoCompleto } from "./PlanoFechamento";
 
-type Aba = "fluxo" | "materiais";
+type Aba = AbaProjeto | "materiais";
 
-const ABAS = [
-  { k: "fluxo" as const, label: "Fluxo financeiro",
-    dica: "o previsto do projeto, a aprovação e o confronto com o caixa",
-    ponto: "bg-sky-500",
-    on:  "bg-sky-500/15 text-sky-700 dark:text-sky-300 font-semibold ring-1 ring-sky-500/45 shadow-sm",
-    off: "text-ww-textMuted hover:text-sky-700 dark:hover:text-sky-300 hover:bg-sky-500/[0.08]" },
-  { k: "materiais" as const, label: "Lista de materiais",
-    dica: "itens do projeto, vínculo com PC e status de recebimento",
-    ponto: "bg-emerald-500",
-    on:  "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 font-semibold ring-1 ring-emerald-500/45 shadow-sm",
-    off: "text-ww-textMuted hover:text-emerald-700 dark:hover:text-emerald-300 hover:bg-emerald-500/[0.08]" },
+const ABAS: Array<{ k: Aba; label: string; dica: string }> = [
+  { k: "resumo",      label: "Resumo",
+    dica: "onde o dinheiro que sai parou, e as premissas que definiram o plano" },
+  { k: "condicoes",   label: "Condições comerciais",
+    dica: "o que foi acordado com o cliente e as parcelas do fechamento" },
+  { k: "faturamento", label: "Faturamento & recebimento",
+    dica: "os PV/OS do projeto, o que já virou nota e o que já entrou" },
+  { k: "fluxo",       label: "Fluxo de caixa",
+    dica: "plano, previsto e realizado no mesmo eixo, dia a dia" },
+  { k: "omie",        label: "Compras / Omie",
+    dica: "títulos e pedidos de compra crus do ERP, com a emissão da NF" },
+  { k: "materiais",   label: "Lista de materiais",
+    dica: "itens do projeto, vínculo com PC e status de recebimento" },
 ];
 
 export default function ProjetoWorkspace({
-  empresa, codigoProjeto, nomeProjeto, abaInicial = "fluxo",
+  empresa, codigoProjeto, nomeProjeto, abaInicial = "resumo",
 }: {
   empresa: string; codigoProjeto: number; nomeProjeto?: string; abaInicial?: Aba;
 }) {
@@ -44,6 +59,26 @@ export default function ProjetoWorkspace({
    *  remontar é o jeito mais simples de ele refletir o que acabou de ser
    *  gravado sem duplicar a lógica de fetch. */
   const [chave, setChave] = useState(0);
+
+  /** O plano, para os KPIs do topo. Leitura barata e independente do fluxo. */
+  const [plano, setPlano] = useState<PlanoCompleto | null>(null);
+  const carregarPlano = useCallback(async () => {
+    try {
+      const r = await fetch(
+        `/api/rc-projetos/plano?empresa=${encodeURIComponent(empresa)}&codigo_projeto=${codigoProjeto}`,
+        { cache: "no-store" });
+      if (r.ok) setPlano((await r.json()) as PlanoCompleto);
+    } catch { /* sem plano, os KPIs mostram traço */ }
+  }, [empresa, codigoProjeto]);
+  useEffect(() => { void carregarPlano(); }, [carregarPlano, chave]);
+
+  /** O teto vigente. Aqui o manual não é conhecido (vive no payload do fluxo),
+   *  então vale o do plano — e a aba Resumo, que tem os dois, corrige. */
+  const cab = plano?.plano ?? null;
+  const tetoPlano = cab
+    ? Number(cab.custo_materiais ?? 0) + Number(cab.custo_mao_obra ?? 0)
+      + Number(cab.custo_despesas ?? 0)
+    : 0;
 
   const aposGravar = useCallback(() => {
     setChave((k) => k + 1);
@@ -57,35 +92,37 @@ export default function ProjetoWorkspace({
 
   return (
     <div className="space-y-3.5">
-      <div className="flex items-center gap-3 flex-wrap bg-ww-panel/80 backdrop-blur-sm border border-ww-border rounded-xl px-2.5 py-2 shadow-sm">
-        <div className="flex items-center gap-0.5 p-0.5 rounded-lg bg-ww-bg/60 border border-ww-border/60">
-          {ABAS.map(({ k, label, dica, ponto, on, off }) => (
-            <button key={k} type="button" onClick={() => setAba(k)} title={dica}
-              className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 text-[12px] rounded-md transition-all duration-150 ${
-                aba === k ? on : off}`}>
-              <span aria-hidden className={`w-1.5 h-1.5 rounded-full ${ponto} ${
-                aba === k ? "opacity-100" : "opacity-45"}`} />
-              {label}
-            </button>
-          ))}
-        </div>
+      {/* Os três números que não mudam de aba para aba. */}
+      <KpisProjeto plano={plano} teto={tetoPlano > 0 ? tetoPlano : null}
+        podeEditar={false} />
 
-        {/* Um upload por aba, e só.
-            A aba Fluxo tinha DOIS botões de importar planilha: este e o
-            "Importar planilha do fechamento" dentro das premissas, para
-            arquivos diferentes. Ninguém sabia qual usar — e o daqui era um
-            subconjunto do outro (budget é o custo, etapas são as parcelas com
-            seus eventos). O import do fechamento passou a gravar os dois, e
-            este saiu. O botão continua na aba Materiais, onde é o único. */}
-        <div className="ml-auto flex items-center gap-2">
-          {aba === "materiais" && (
+      {/* Abas como sublinhado, não como pílulas coloridas: seis pílulas com
+          ponto de cor cada uma competiriam com os KPIs logo acima. A cor fica
+          reservada ao que é dado. */}
+      <div className="flex items-center gap-1 flex-wrap border-b border-ww-border">
+        {ABAS.map(({ k, label, dica }) => (
+          <button key={k} type="button" onClick={() => setAba(k)} title={dica}
+            className={`px-3 py-2 text-[12px] -mb-px border-b-2 transition-colors ${
+              aba === k
+                ? "border-ww-accent text-ww-text font-semibold"
+                : "border-transparent text-ww-textMuted hover:text-ww-text"}`}>
+            {label}
+          </button>
+        ))}
+
+        {/* Um upload por aba, e só. A aba Fluxo tinha DOIS botões de importar
+            planilha, para arquivos diferentes; o import do fechamento passou a
+            cobrir os dois e este ficou só em Materiais. */}
+        {aba === "materiais" && (
+          <div className="ml-auto pb-1.5">
             <RcProjetoUploadButton empresa={empresa} codigoProjeto={codigoProjeto} onDone={aposGravar} />
-          )}
-        </div>
+          </div>
+        )}
       </div>
 
-      {aba === "fluxo" && (
-        <FluxoProjetoView empresa={empresa} codigoProjeto={codigoProjeto} nomeProjeto={nomeProjeto} />
+      {aba !== "materiais" && (
+        <FluxoProjetoView empresa={empresa} codigoProjeto={codigoProjeto}
+          nomeProjeto={nomeProjeto} aba={aba} />
       )}
 
       {/* UMA tabela. Antes havia duas com os mesmos itens — a grade para
