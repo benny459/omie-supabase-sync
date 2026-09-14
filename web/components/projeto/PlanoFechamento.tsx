@@ -95,6 +95,37 @@ function tomDoEvento(ev: string | null): { rot: string; classe: string } {
   return { rot: ev ?? "—", classe: "bg-ww-border/40 text-ww-textMuted border-ww-border" };
 }
 
+/** De quem é a conta de um item da proposta.
+ *
+ *  A planilha escreve em português corrido ("POR NOSSA CONTA", "INCLUSA",
+ *  "INCLUSOS no valor"), então a classificação é por texto. O que importa
+ *  distinguir é uma coisa só: sai do nosso caixa ou não — é daí que o fluxo
+ *  sabe o que somar. */
+function classificaConta(v: string | null): "nosso" | "incluso" | "outro" {
+  const t = (v ?? "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  if (!t || t === "—" || /nao informado/.test(t)) return "outro";
+  if (/nossa|nosso/.test(t)) return "nosso";
+  if (/inclus/.test(t)) return "incluso";
+  return "outro";
+}
+
+/** Um número do bloco "como foi fechado": o que vale grande, a origem pequena. */
+function Kpi({ rot, valor, nota, origem }: {
+  rot: string; valor: string; nota?: string; origem?: string;
+}) {
+  return (
+    <div className="px-3 py-2.5 min-w-0">
+      <div className="text-[9px] uppercase tracking-[0.7px] font-bold text-ww-textFaint">{rot}</div>
+      <div className="text-[15px] font-semibold text-ww-text tabular-nums leading-tight mt-0.5 truncate"
+           title={valor}>
+        {valor}
+      </div>
+      {nota && <div className="text-[10.5px] text-ww-textMuted tabular-nums truncate" title={nota}>{nota}</div>}
+      {origem && <div className="text-[9.5px] text-ww-textFaint truncate" title={origem}>{origem}</div>}
+    </div>
+  );
+}
+
 export default function PlanoFechamento({
   empresa, codigoProjeto, podeEditar, dados, onMudou,
 }: {
@@ -368,51 +399,131 @@ export default function PlanoFechamento({
 
       {plano && (
         <>
-          {/* ── Condições ────────────────────────────────────────────────── */}
-          <div className="rounded-lg border border-ww-border p-2.5">
-            <div className="text-[10px] uppercase tracking-wider font-semibold text-ww-textMuted mb-2">
-              O que está e o que não está incluso
+          {/* ── Como foi fechado ─────────────────────────────────────────
+              Antes era um grid de oito campos de texto com o mesmo peso, e
+              dois deles mentiam: mostravam o TEXTO DA PROPOSTA no lugar do
+              que foi acordado.
+
+              "28 ddl · Média Faturamento Direto" é o que estava escrito na
+              proposta — a própria planilha anota que "o fechamento só lhe pôs
+              datas". O que foi fechado são quatro parcelas de 25%. E
+              "Faturamento: Misto" só existe no bloco de texto da proposta;
+              nunca foi confirmado ao ganhar.
+
+              Agora o que vale vem grande, e a origem vem embaixo, nomeada. */}
+          <div className="rounded-lg border border-ww-border overflow-hidden">
+            <div className="grid grid-cols-1 sm:grid-cols-3 divide-y sm:divide-y-0 sm:divide-x divide-ww-border/70">
+              <Kpi rot="Pagamento"
+                valor={parcelas.length
+                  ? `${parcelas.length}× de ${parcelas[0]?.pct != null ? `${Number(parcelas[0].pct).toFixed(0)}%` : brl(totEnt / parcelas.length)}`
+                  : "—"}
+                nota={parcelas.length && parcelas.some((p) => p.dias != null)
+                  ? `${parcelas.map((p) => (p.dias != null ? `${p.dias}` : "?")).join(" · ")} dias${
+                      plano.eixo_pagamento ? ` de ${dia(plano.eixo_pagamento)}` : ""}`
+                  : undefined}
+                origem={plano.prop_pagamento ?? plano.forma_pagamento
+                  ? `na proposta: ${plano.prop_pagamento ?? plano.forma_pagamento}`
+                  : undefined} />
+
+              <Kpi rot="Entrega"
+                valor={plano.prazo_entrega_dias ? `${plano.prazo_entrega_dias} dias` : "—"}
+                nota={plano.data_base || plano.entrega_prevista
+                  ? `${dia(plano.data_base)} → ${dia(plano.entrega_prevista)}` : undefined}
+                origem={plano.prop_prazo ? `na proposta: ${plano.prop_prazo}` : undefined} />
+
+              {/* Faturamento nunca é confirmado no fechamento — só existe no
+                  texto da proposta. Dizer isso evita que alguém o cite numa
+                  discussão como se tivesse sido acordado depois. */}
+              <Kpi rot="Faturamento"
+                valor={plano.faturamento ?? plano.prop_faturamento ?? "—"}
+                origem="como está na proposta — não foi reconfirmado no fechamento" />
             </div>
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-x-3 gap-y-2">
-              {campo("Frete", "frete")}
-              {campo("Deslocamento e estadia", "deslocamento")}
-              {campo("Instalação", "instalacao")}
-              {campo("Impostos", "impostos")}
-              {campo("Garantia", "garantia")}
-              {campo("Forma de pagamento", "forma_pagamento")}
-              {campo("Faturamento", "faturamento")}
-              <div>
-                <div className="text-[9px] uppercase tracking-[0.7px] font-bold text-ww-textFaint">
-                  Início oficial
+
+            {/* Quem paga o quê. É daqui que o fluxo sabe o que somar, então o
+                que sai do nosso caixa fica em vermelho e o resto, apagado. */}
+            <div className="border-t border-ww-border/70 bg-ww-bg/40 px-3 py-2.5 space-y-2">
+              {([["Sai do nosso caixa", "nosso"],
+                 ["Incluso no preço",  "incluso"]] as const).map(([titulo, classe]) => {
+                const itens = ([["Frete", plano.frete], ["Deslocamento e estadia", plano.deslocamento],
+                                ["Instalação", plano.instalacao], ["Impostos", plano.impostos]] as const)
+                  .filter(([, v]) => classificaConta(v) === classe);
+                if (!itens.length) return null;
+                return (
+                  <div key={titulo} className="flex items-baseline gap-2 flex-wrap">
+                    <span className="text-[9px] uppercase tracking-[0.7px] font-bold text-ww-textFaint w-[124px] shrink-0">
+                      {titulo}
+                    </span>
+                    {itens.map(([rot, v]) => (
+                      <span key={rot} title={v ?? ""}
+                        className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10.5px] border ${
+                          classe === "nosso"
+                            ? "bg-rose-500/12 text-rose-700 dark:text-rose-300 border-rose-500/30"
+                            : "bg-ww-border/30 text-ww-textMuted border-ww-border"}`}>
+                        {rot}
+                      </span>
+                    ))}
+                  </div>
+                );
+              })}
+              {(["Frete", "Deslocamento e estadia", "Instalação", "Impostos"] as const)
+                .map((rot, i) => [rot, [plano.frete, plano.deslocamento, plano.instalacao, plano.impostos][i]] as const)
+                .filter(([, v]) => classificaConta(v) === "outro").length > 0 && (
+                <div className="flex items-baseline gap-2 flex-wrap">
+                  <span className="text-[9px] uppercase tracking-[0.7px] font-bold text-ww-textFaint w-[124px] shrink-0">
+                    Do cliente / a definir
+                  </span>
+                  {([["Frete", plano.frete], ["Deslocamento e estadia", plano.deslocamento],
+                     ["Instalação", plano.instalacao], ["Impostos", plano.impostos]] as const)
+                    .filter(([, v]) => classificaConta(v) === "outro")
+                    .map(([rot, v]) => (
+                      <span key={rot} title={v ?? "não informado"}
+                        className="inline-flex px-1.5 py-0.5 rounded text-[10.5px] border border-ww-border text-ww-textFaint">
+                        {rot}{v ? `: ${v}` : ""}
+                      </span>
+                    ))}
                 </div>
-                {podeEditar ? (
-                  <input type="date" defaultValue={plano.data_base ?? ""}
-                    title="Eixo das saídas que contam em dias — mão de obra, despesas"
-                    onBlur={(e) => {
-                      if (e.target.value !== (plano.data_base ?? "")) void gravarCab("data_base", e.target.value);
-                    }}
-                    className="w-full mt-0.5 text-[11.5px] bg-transparent text-ww-text rounded px-1 py-0.5
-                               border border-transparent hover:border-ww-border
-                               focus:border-ww-accent focus:bg-ww-accentSoft outline-none" />
-                ) : (
-                  <div className="mt-0.5 text-[11.5px] text-ww-text px-1 py-0.5">{dia(plano.data_base)}</div>
-                )}
-              </div>
-            </div>
-            <p className="text-[10.5px] text-ww-textMuted mt-2">
-              O que é <strong>por nossa conta</strong> vira saída de caixa e entra no fluxo abaixo.
-              O que é do cliente não entra.
-              {plano.entrega_prevista && <> Entrega prevista: <strong>{dia(plano.entrega_prevista)}</strong>
-                {plano.prazo_entrega_dias ? ` (${plano.prazo_entrega_dias} dias)` : ""}.</>}
-              {/* Duas datas que parecem a mesma coisa e não são: uma move as
-                  etapas de obra, a outra move as previsões de faturamento.
-                  Confundi-las desloca o fluxo inteiro sem que nada pareça
-                  errado. */}
-              {plano.eixo_pagamento && plano.eixo_pagamento !== plano.data_base && (
-                <> Os <strong>prazos de pagamento</strong> contam de{" "}
-                  <strong>{dia(plano.eixo_pagamento)}</strong>, não do início do projeto.</>
               )}
-            </p>
+              {plano.garantia && (
+                <div className="flex items-baseline gap-2">
+                  <span className="text-[9px] uppercase tracking-[0.7px] font-bold text-ww-textFaint w-[124px] shrink-0">
+                    Garantia
+                  </span>
+                  <span className="text-[11px] text-ww-text">{plano.garantia}</span>
+                </div>
+              )}
+            </div>
+
+            {/* Os campos crus ficam a um clique — editáveis, sem ocupar a tela
+                inteira o tempo todo. */}
+            {podeEditar && (
+              <details className="border-t border-ww-border/70">
+                <summary className="cursor-pointer px-3 py-1.5 text-[10.5px] text-ww-textFaint hover:text-ww-text">
+                  Editar as condições
+                </summary>
+                <div className="px-3 pb-3 grid grid-cols-2 sm:grid-cols-4 gap-x-3 gap-y-2">
+                  {campo("Frete", "frete")}
+                  {campo("Deslocamento e estadia", "deslocamento")}
+                  {campo("Instalação", "instalacao")}
+                  {campo("Impostos", "impostos")}
+                  {campo("Garantia", "garantia")}
+                  {campo("Forma de pagamento (proposta)", "forma_pagamento")}
+                  {campo("Faturamento", "faturamento")}
+                  <div>
+                    <div className="text-[9px] uppercase tracking-[0.7px] font-bold text-ww-textFaint">
+                      Início oficial
+                    </div>
+                    <input type="date" defaultValue={plano.data_base ?? ""}
+                      title="Eixo das saídas que contam em dias — mão de obra, despesas"
+                      onBlur={(e) => {
+                        if (e.target.value !== (plano.data_base ?? "")) void gravarCab("data_base", e.target.value);
+                      }}
+                      className="w-full mt-0.5 text-[11.5px] bg-transparent text-ww-text rounded px-1 py-0.5
+                                 border border-transparent hover:border-ww-border
+                                 focus:border-ww-accent focus:bg-ww-accentSoft outline-none" />
+                  </div>
+                </div>
+              </details>
+            )}
           </div>
 
           {/* Os seis cartões de valor que ficavam aqui subiram para o resumo
