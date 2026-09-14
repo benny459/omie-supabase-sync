@@ -26,6 +26,13 @@ import { lerPlanoFechamento, type PlanoFechamento as Lido } from "@/lib/plano-fe
 export type PlanoCab = {
   proposta: string | null; cliente: string | null;
   data_base: string | null; valor_venda: number | null;
+  valor_fechado: number | null;
+  confirmado_por: string | null; confirmado_em: string | null;
+  eixo_pagamento: string | null;
+  prop_pagamento: string | null; prop_faturamento: string | null;
+  prop_prazo: string | null; prop_frete: string | null;
+  prop_garantia: string | null; prop_instalacao: string | null;
+  prop_observacoes: string | null;
   prazo_entrega_dias: number | null; entrega_prevista: string | null;
   frete: string | null; deslocamento: string | null; instalacao: string | null;
   impostos: string | null; garantia: string | null;
@@ -37,7 +44,7 @@ export type PlanoCab = {
   importado_de: string | null; importado_em: string | null; importado_por: string | null;
 };
 export type PlanoParcela = {
-  parcela: number; evento: string | null; pct: number | null;
+  parcela: number; evento: string | null; pct: number | null; dias: number | null;
   dt_plano: string | null; dt_ajustada: string | null;
   valor: number; num_titulo: string | null; observacao: string | null;
 };
@@ -237,6 +244,12 @@ export default function PlanoFechamento({
                 {plano.proposta && <strong className="text-ww-text">{plano.proposta}</strong>}
                 {plano.cliente && <> · {plano.cliente}</>}
                 {" · "}{parcelas.length} parcela(s) · {saidas.length} saída(s) previstas.
+                {plano.confirmado_por && (
+                  <span className="text-ww-textMuted">
+                    {" "}Fechado por <strong className="text-ww-text">{plano.confirmado_por}</strong>
+                    {plano.confirmado_em ? ` em ${plano.confirmado_em}` : ""}.
+                  </span>
+                )}
                 {plano.importado_em && (
                   <span className="text-ww-textFaint">
                     {" "}Importado de {plano.importado_de} em{" "}
@@ -369,13 +382,29 @@ export default function PlanoFechamento({
               O que é do cliente não entra.
               {plano.entrega_prevista && <> Entrega prevista: <strong>{dia(plano.entrega_prevista)}</strong>
                 {plano.prazo_entrega_dias ? ` (${plano.prazo_entrega_dias} dias)` : ""}.</>}
+              {/* Duas datas que parecem a mesma coisa e não são: uma move as
+                  etapas de obra, a outra move as previsões de faturamento.
+                  Confundi-las desloca o fluxo inteiro sem que nada pareça
+                  errado. */}
+              {plano.eixo_pagamento && plano.eixo_pagamento !== plano.data_base && (
+                <> Os <strong>prazos de pagamento</strong> contam de{" "}
+                  <strong>{dia(plano.eixo_pagamento)}</strong>, não do início do projeto.</>
+              )}
             </p>
           </div>
 
           {/* ── Margem projetada ─────────────────────────────────────────── */}
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
             {[
-              { r: "Valor de venda", v: brl(plano.valor_venda), t: "verde" },
+              // O FECHADO é o que vale. O calculado aparece embaixo quando
+              // difere — não como erro, mas porque a margem da MC foi feita
+              // sobre ele, e quem lê o percentual precisa saber disso.
+              { r: plano.valor_fechado != null ? "Valor fechado" : "Valor de venda",
+                v: brl(plano.valor_fechado ?? plano.valor_venda),
+                s: plano.valor_fechado != null && plano.valor_venda != null
+                   && Math.abs(plano.valor_fechado - plano.valor_venda) > 0.05
+                   ? `proposta calculava ${brl(plano.valor_venda)}` : undefined,
+                t: "verde" },
               { r: "Materiais (CMV)", v: brl(plano.custo_materiais), t: "vermelho" },
               { r: "Mão de obra", v: brl(plano.custo_mao_obra), t: "vermelho" },
               { r: "Despesas", v: brl(plano.custo_despesas), t: "vermelho" },
@@ -383,7 +412,11 @@ export default function PlanoFechamento({
               { r: "Margem projetada",
                 v: plano.margem_pct != null
                   ? `${Number(plano.margem_pct).toFixed(1).replace(".", ",")}%` : "—",
-                s: brl(plano.margem_valor), t: "verde" },
+                s: plano.valor_fechado != null && plano.valor_venda != null
+                   && Math.abs(plano.valor_fechado - plano.valor_venda) > 0.05
+                   ? `${brl(plano.margem_valor)} · sobre o valor calculado`
+                   : brl(plano.margem_valor),
+                t: "verde" },
             ].map((c) => (
               <div key={c.r} className={`rounded-lg border p-2 ${
                 c.t === "verde" ? "border-emerald-500/25 bg-emerald-500/[0.05]"
@@ -419,6 +452,7 @@ export default function PlanoFechamento({
                     <th className="text-left p-1.5 font-semibold w-[46px]">#</th>
                     <th className="text-left p-1.5 font-semibold min-w-[190px]">Evento</th>
                     <th className="text-right p-1.5 font-semibold w-[62px]">%</th>
+                    <th className="text-right p-1.5 font-semibold w-[56px]">Dias</th>
                     <th className="text-left p-1.5 font-semibold w-[86px]">Plano</th>
                     <th className="text-left p-1.5 font-semibold w-[130px]">Previsão de faturamento</th>
                     <th className="text-right p-1.5 font-semibold w-[76px]">Desvio</th>
@@ -447,6 +481,11 @@ export default function PlanoFechamento({
                         </td>
                         <td className="p-1.5 border-b border-ww-border/50 text-right tabular-nums text-ww-textMuted">
                           {p.pct != null ? `${Number(p.pct).toFixed(0)}%` : "—"}
+                        </td>
+                        <td className="p-1.5 border-b border-ww-border/50 text-right tabular-nums text-ww-textFaint"
+                            title={plano.eixo_pagamento
+                              ? `Contados de ${dia(plano.eixo_pagamento)}` : undefined}>
+                          {p.dias != null ? `${p.dias}d` : "—"}
                         </td>
                         {/* O baseline fica visível mesmo depois de ajustado: é
                             contra ele que se enxerga o tamanho do desvio. */}
@@ -646,6 +685,57 @@ export default function PlanoFechamento({
                         </td>
                       </tr>
                     ))}
+                  </tbody>
+                </table>
+              </div>
+            </details>
+          )}
+
+          {/* ── O que o cliente aceitou ──────────────────────────────────
+              Separado do "confirmado" de propósito, porque a planilha separa:
+              "É este o texto que foi ao PDF e que o cliente aceitou". Quando
+              o confirmado difere do proposto, a diferença é o que foi decidido
+              DEPOIS — e é ela que vira discussão se houver desacordo. */}
+          {(plano.prop_pagamento || plano.prop_faturamento || plano.prop_prazo
+            || plano.prop_frete || plano.prop_garantia || plano.prop_instalacao
+            || plano.prop_observacoes) && (
+            <details className="rounded-lg border border-ww-border">
+              <summary className="cursor-pointer px-2.5 py-1.5 text-[11.5px] text-ww-textMuted hover:text-ww-text">
+                Texto da proposta — o que foi ao PDF e o cliente aceitou
+              </summary>
+              <div className="px-2.5 pb-2.5">
+                <table className="w-full text-[11px] border-collapse mt-1">
+                  <tbody>
+                    {([["Pagamento", plano.prop_pagamento, plano.forma_pagamento],
+                       ["Faturamento", plano.prop_faturamento, plano.faturamento],
+                       ["Prazo de entrega", plano.prop_prazo,
+                        plano.prazo_entrega_dias ? `${plano.prazo_entrega_dias} dias` : null],
+                       ["Frete", plano.prop_frete, plano.frete],
+                       ["Garantia", plano.prop_garantia, plano.garantia],
+                       ["Instalação", plano.prop_instalacao, plano.instalacao],
+                       ["Observações", plano.prop_observacoes, null]] as const)
+                      .filter(([, v]) => v)
+                      .map(([rot, naProposta, confirmado]) => {
+                        const mudou = !!confirmado && !!naProposta
+                          && confirmado.trim().toLowerCase() !== naProposta.trim().toLowerCase();
+                        return (
+                          <tr key={rot} className="viz-row">
+                            <td className="p-1 border-b border-ww-border/40 text-ww-textFaint w-[128px] align-top">
+                              {rot}
+                            </td>
+                            <td className="p-1 border-b border-ww-border/40 text-ww-text align-top">
+                              {naProposta}
+                            </td>
+                            <td className="p-1 border-b border-ww-border/40 align-top w-[46%]">
+                              {mudou && (
+                                <span className="text-ww-accent">
+                                  → no fechamento: <strong>{confirmado}</strong>
+                                </span>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
                   </tbody>
                 </table>
               </div>

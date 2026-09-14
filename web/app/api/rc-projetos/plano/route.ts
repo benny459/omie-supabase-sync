@@ -27,7 +27,7 @@ export const maxDuration = 60;
 
 type Parcela = {
   parcela: number; evento?: string | null; pct?: number | null;
-  dt_plano?: string | null; valor: number;
+  dias?: number | null; dt_plano?: string | null; valor: number;
 };
 type Saida = {
   origem: "material" | "sem_pc"; descricao?: string | null;
@@ -126,6 +126,14 @@ export async function POST(req: Request) {
     empresa, codigo_projeto: codigo,
     proposta: s(b.proposta, 120), cliente: s(b.cliente, 200),
     data_base: dt(b.data_base), valor_venda: n(b.valor_venda),
+    // O acordado vence o calculado quando diferem — a planilha declara isso.
+    valor_fechado: n(b.valor_fechado),
+    confirmado_por: s(b.confirmado_por, 120), confirmado_em: s(b.confirmado_em, 60),
+    eixo_pagamento: dt(b.eixo_pagamento),
+    prop_pagamento: s(b.prop_pagamento, 300), prop_faturamento: s(b.prop_faturamento, 300),
+    prop_prazo: s(b.prop_prazo, 200), prop_frete: s(b.prop_frete, 200),
+    prop_garantia: s(b.prop_garantia, 300), prop_instalacao: s(b.prop_instalacao, 300),
+    prop_observacoes: s(b.prop_observacoes, 2000),
     prazo_entrega_dias: n(b.prazo_entrega_dias),
     entrega_prevista: dt(b.entrega_prevista),
     frete: s(b.frete, 200), deslocamento: s(b.deslocamento, 200),
@@ -152,7 +160,7 @@ export async function POST(req: Request) {
       const prev = guardado.get(Number(p.parcela));
       return {
         empresa, codigo_projeto: codigo, parcela: Math.trunc(Number(p.parcela)),
-        evento: s(p.evento, 200), pct: n(p.pct),
+        evento: s(p.evento, 200), pct: n(p.pct), dias: n(p.dias),
         dt_plano: dt(p.dt_plano),
         dt_ajustada: prev?.dt_ajustada ?? null,
         num_titulo: prev?.num_titulo ?? null,
@@ -202,10 +210,10 @@ export async function PUT(req: Request) {
                    "forma_pagamento", "faturamento", "observacoes", "cliente", "proposta"]) {
     if (k in b) campos[k] = s(b[k], k === "observacoes" ? 2000 : 200);
   }
-  for (const k of ["data_base", "entrega_prevista"]) {
+  for (const k of ["data_base", "entrega_prevista", "eixo_pagamento"]) {
     if (k in b) campos[k] = dt(b[k]);
   }
-  for (const k of ["valor_venda", "prazo_entrega_dias"]) {
+  for (const k of ["valor_venda", "valor_fechado", "prazo_entrega_dias"]) {
     if (k in b) campos[k] = n(b[k]);
   }
   if (!Object.keys(campos).length) {
