@@ -301,17 +301,32 @@ export default function PlanoFechamento({
             {previa.proposta && <> · {previa.proposta}</>}
             {previa.cliente && <> · {previa.cliente}</>}
           </p>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11.5px]">
-            {[["Parcelas", `${previa.parcelas.length} · ${brl(previa.parcelas.reduce((a, p) => a + p.valor, 0))}`],
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 text-[11.5px]">
+            {([
+              ["Parcelas", `${previa.parcelas.length} · ${brl(previa.parcelas.reduce((a, p) => a + p.valor, 0))}`],
               ["Saídas", `${previa.saidas.length} · ${brl(previa.saidas.reduce((a, s) => a + s.valor, 0))}`],
-              ["Valor de venda", brl(previa.valor_venda)],
-              ["Início do projeto", dia(previa.data_base)]].map(([r, v]) => (
+              // O FECHADO, não o calculado: era isto que ia para o banco, e a
+              // prévia mostrava o outro número — quem conferisse veria um valor
+              // e gravaria outro.
+              [previa.valor_fechado != null ? "Valor fechado" : "Valor de venda",
+               brl(previa.valor_fechado ?? previa.valor_venda)],
+              ["Início do projeto", dia(previa.data_base)],
+              // Só aparece quando difere do início: iguais, é ruído.
+              ...(previa.eixo_pagamento && previa.eixo_pagamento !== previa.data_base
+                ? [["Prazos contam de", dia(previa.eixo_pagamento)] as [string, string]] : []),
+            ] as Array<[string, string]>).map(([r, v]) => (
               <div key={r}>
                 <div className="text-[9px] uppercase tracking-[0.7px] font-bold text-ww-textFaint">{r}</div>
                 <div className="text-ww-text tabular-nums">{v}</div>
               </div>
             ))}
           </div>
+          {previa.confirmado_por && (
+            <p className="text-[11px] text-ww-textMuted">
+              Fechado por <strong className="text-ww-text">{previa.confirmado_por}</strong>
+              {previa.confirmado_em ? ` em ${previa.confirmado_em}` : ""}.
+            </p>
+          )}
           {avisosImport.length > 0 && (
             <ul className="text-[11px] text-amber-700 dark:text-amber-300 space-y-0.5 list-disc pl-4">
               {avisosImport.map((a) => <li key={a}>{a}</li>)}
