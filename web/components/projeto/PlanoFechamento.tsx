@@ -95,37 +95,6 @@ function tomDoEvento(ev: string | null): { rot: string; classe: string } {
   return { rot: ev ?? "—", classe: "bg-ww-border/40 text-ww-textMuted border-ww-border" };
 }
 
-/** De quem é a conta de um item da proposta.
- *
- *  A planilha escreve em português corrido ("POR NOSSA CONTA", "INCLUSA",
- *  "INCLUSOS no valor"), então a classificação é por texto. O que importa
- *  distinguir é uma coisa só: sai do nosso caixa ou não — é daí que o fluxo
- *  sabe o que somar. */
-function classificaConta(v: string | null): "nosso" | "incluso" | "outro" {
-  const t = (v ?? "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-  if (!t || t === "—" || /nao informado/.test(t)) return "outro";
-  if (/nossa|nosso/.test(t)) return "nosso";
-  if (/inclus/.test(t)) return "incluso";
-  return "outro";
-}
-
-/** Um número do bloco "como foi fechado": o que vale grande, a origem pequena. */
-function Kpi({ rot, valor, nota, origem }: {
-  rot: string; valor: string; nota?: string; origem?: string;
-}) {
-  return (
-    <div className="px-3 py-2.5 min-w-0">
-      <div className="text-[9px] uppercase tracking-[0.7px] font-bold text-ww-textFaint">{rot}</div>
-      <div className="text-[15px] font-semibold text-ww-text tabular-nums leading-tight mt-0.5 truncate"
-           title={valor}>
-        {valor}
-      </div>
-      {nota && <div className="text-[10.5px] text-ww-textMuted tabular-nums truncate" title={nota}>{nota}</div>}
-      {origem && <div className="text-[9.5px] text-ww-textFaint truncate" title={origem}>{origem}</div>}
-    </div>
-  );
-}
-
 export default function PlanoFechamento({
   empresa, codigoProjeto, podeEditar, dados, onMudou,
 }: {
@@ -210,14 +179,16 @@ export default function PlanoFechamento({
     } finally { setOcupado(false); }
   }, [empresa, codigoProjeto, onMudou]);
 
-  const novaSaida = useCallback(async () => {
+  const novaSaida = useCallback(async (origem: "material" | "sem_pc" = "sem_pc") => {
     setOcupado(true); setErro(null);
     try {
       const r = await fetch("/api/rc-projetos/plano/linha", {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          empresa, codigo_projeto: codigoProjeto,
-          descricao: "Nova despesa", dt_prevista: plano?.data_base ?? hojeIso(), valor: 0,
+          empresa, codigo_projeto: codigoProjeto, origem,
+          descricao: origem === "material" ? "Nova compra" : "Nova despesa",
+          etapa: origem === "material" ? "Fabricação" : null,
+          dt_prevista: plano?.data_base ?? hojeIso(), valor: 0,
         }),
       });
       const j = await r.json();
@@ -399,132 +370,44 @@ export default function PlanoFechamento({
 
       {plano && (
         <>
-          {/* ── Como foi fechado ─────────────────────────────────────────
-              Antes era um grid de oito campos de texto com o mesmo peso, e
-              dois deles mentiam: mostravam o TEXTO DA PROPOSTA no lugar do
-              que foi acordado.
-
-              "28 ddl · Média Faturamento Direto" é o que estava escrito na
-              proposta — a própria planilha anota que "o fechamento só lhe pôs
-              datas". O que foi fechado são quatro parcelas de 25%. E
-              "Faturamento: Misto" só existe no bloco de texto da proposta;
-              nunca foi confirmado ao ganhar.
-
-              Agora o que vale vem grande, e a origem vem embaixo, nomeada. */}
-          <div className="rounded-lg border border-ww-border overflow-hidden">
-            <div className="grid grid-cols-1 sm:grid-cols-3 divide-y sm:divide-y-0 sm:divide-x divide-ww-border/70">
-              <Kpi rot="Pagamento"
-                valor={parcelas.length
-                  ? `${parcelas.length}× de ${parcelas[0]?.pct != null ? `${Number(parcelas[0].pct).toFixed(0)}%` : brl(totEnt / parcelas.length)}`
-                  : "—"}
-                nota={parcelas.length && parcelas.some((p) => p.dias != null)
-                  ? `${parcelas.map((p) => (p.dias != null ? `${p.dias}` : "?")).join(" · ")} dias${
-                      plano.eixo_pagamento ? ` de ${dia(plano.eixo_pagamento)}` : ""}`
-                  : undefined}
-                origem={plano.prop_pagamento ?? plano.forma_pagamento
-                  ? `na proposta: ${plano.prop_pagamento ?? plano.forma_pagamento}`
-                  : undefined} />
-
-              <Kpi rot="Entrega"
-                valor={plano.prazo_entrega_dias ? `${plano.prazo_entrega_dias} dias` : "—"}
-                nota={plano.data_base || plano.entrega_prevista
-                  ? `${dia(plano.data_base)} → ${dia(plano.entrega_prevista)}` : undefined}
-                origem={plano.prop_prazo ? `na proposta: ${plano.prop_prazo}` : undefined} />
-
-              {/* Faturamento nunca é confirmado no fechamento — só existe no
-                  texto da proposta. Dizer isso evita que alguém o cite numa
-                  discussão como se tivesse sido acordado depois. */}
-              <Kpi rot="Faturamento"
-                valor={plano.faturamento ?? plano.prop_faturamento ?? "—"}
-                origem="como está na proposta — não foi reconfirmado no fechamento" />
-            </div>
-
-            {/* Quem paga o quê. É daqui que o fluxo sabe o que somar, então o
-                que sai do nosso caixa fica em vermelho e o resto, apagado. */}
-            <div className="border-t border-ww-border/70 bg-ww-bg/40 px-3 py-2.5 space-y-2">
-              {([["Sai do nosso caixa", "nosso"],
-                 ["Incluso no preço",  "incluso"]] as const).map(([titulo, classe]) => {
-                const itens = ([["Frete", plano.frete], ["Deslocamento e estadia", plano.deslocamento],
-                                ["Instalação", plano.instalacao], ["Impostos", plano.impostos]] as const)
-                  .filter(([, v]) => classificaConta(v) === classe);
-                if (!itens.length) return null;
-                return (
-                  <div key={titulo} className="flex items-baseline gap-2 flex-wrap">
-                    <span className="text-[9px] uppercase tracking-[0.7px] font-bold text-ww-textFaint w-[124px] shrink-0">
-                      {titulo}
-                    </span>
-                    {itens.map(([rot, v]) => (
-                      <span key={rot} title={v ?? ""}
-                        className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10.5px] border ${
-                          classe === "nosso"
-                            ? "bg-rose-500/12 text-rose-700 dark:text-rose-300 border-rose-500/30"
-                            : "bg-ww-border/30 text-ww-textMuted border-ww-border"}`}>
-                        {rot}
-                      </span>
-                    ))}
+          {/* Pagamento, entrega, faturamento e "por conta de quem" subiram
+              para o resumo do topo: são o que define se o projeto se paga
+              sozinho, e ficavam abaixo da dobra. Aqui ficam só os campos
+              crus, para corrigir. */}
+          {podeEditar && (
+            <details className="rounded-lg border border-ww-border">
+              <summary className="cursor-pointer px-2.5 py-1.5 text-[11.5px] text-ww-textMuted hover:text-ww-text">
+                Editar as condições comerciais
+              </summary>
+              <div className="px-2.5 pb-2.5 grid grid-cols-2 sm:grid-cols-4 gap-x-3 gap-y-2">
+                {campo("Frete", "frete")}
+                {campo("Deslocamento e estadia", "deslocamento")}
+                {campo("Instalação", "instalacao")}
+                {campo("Impostos", "impostos")}
+                {campo("Garantia", "garantia")}
+                {campo("Forma de pagamento (proposta)", "forma_pagamento")}
+                {campo("Faturamento", "faturamento")}
+                <div>
+                  <div className="text-[9px] uppercase tracking-[0.7px] font-bold text-ww-textFaint">
+                    Início oficial
                   </div>
-                );
-              })}
-              {(["Frete", "Deslocamento e estadia", "Instalação", "Impostos"] as const)
-                .map((rot, i) => [rot, [plano.frete, plano.deslocamento, plano.instalacao, plano.impostos][i]] as const)
-                .filter(([, v]) => classificaConta(v) === "outro").length > 0 && (
-                <div className="flex items-baseline gap-2 flex-wrap">
-                  <span className="text-[9px] uppercase tracking-[0.7px] font-bold text-ww-textFaint w-[124px] shrink-0">
-                    Do cliente / a definir
-                  </span>
-                  {([["Frete", plano.frete], ["Deslocamento e estadia", plano.deslocamento],
-                     ["Instalação", plano.instalacao], ["Impostos", plano.impostos]] as const)
-                    .filter(([, v]) => classificaConta(v) === "outro")
-                    .map(([rot, v]) => (
-                      <span key={rot} title={v ?? "não informado"}
-                        className="inline-flex px-1.5 py-0.5 rounded text-[10.5px] border border-ww-border text-ww-textFaint">
-                        {rot}{v ? `: ${v}` : ""}
-                      </span>
-                    ))}
+                  <input type="date" defaultValue={plano.data_base ?? ""}
+                    title="Eixo das saídas que contam em dias — mão de obra, despesas"
+                    onBlur={(e) => {
+                      if (e.target.value !== (plano.data_base ?? "")) void gravarCab("data_base", e.target.value);
+                    }}
+                    className="w-full mt-0.5 text-[11.5px] bg-transparent text-ww-text rounded px-1 py-0.5
+                               border border-transparent hover:border-ww-border
+                               focus:border-ww-accent focus:bg-ww-accentSoft outline-none" />
                 </div>
-              )}
+              </div>
               {plano.garantia && (
-                <div className="flex items-baseline gap-2">
-                  <span className="text-[9px] uppercase tracking-[0.7px] font-bold text-ww-textFaint w-[124px] shrink-0">
-                    Garantia
-                  </span>
-                  <span className="text-[11px] text-ww-text">{plano.garantia}</span>
-                </div>
+                <p className="px-2.5 pb-2 text-[10.5px] text-ww-textMuted">
+                  Garantia: {plano.garantia}
+                </p>
               )}
-            </div>
-
-            {/* Os campos crus ficam a um clique — editáveis, sem ocupar a tela
-                inteira o tempo todo. */}
-            {podeEditar && (
-              <details className="border-t border-ww-border/70">
-                <summary className="cursor-pointer px-3 py-1.5 text-[10.5px] text-ww-textFaint hover:text-ww-text">
-                  Editar as condições
-                </summary>
-                <div className="px-3 pb-3 grid grid-cols-2 sm:grid-cols-4 gap-x-3 gap-y-2">
-                  {campo("Frete", "frete")}
-                  {campo("Deslocamento e estadia", "deslocamento")}
-                  {campo("Instalação", "instalacao")}
-                  {campo("Impostos", "impostos")}
-                  {campo("Garantia", "garantia")}
-                  {campo("Forma de pagamento (proposta)", "forma_pagamento")}
-                  {campo("Faturamento", "faturamento")}
-                  <div>
-                    <div className="text-[9px] uppercase tracking-[0.7px] font-bold text-ww-textFaint">
-                      Início oficial
-                    </div>
-                    <input type="date" defaultValue={plano.data_base ?? ""}
-                      title="Eixo das saídas que contam em dias — mão de obra, despesas"
-                      onBlur={(e) => {
-                        if (e.target.value !== (plano.data_base ?? "")) void gravarCab("data_base", e.target.value);
-                      }}
-                      className="w-full mt-0.5 text-[11.5px] bg-transparent text-ww-text rounded px-1 py-0.5
-                                 border border-transparent hover:border-ww-border
-                                 focus:border-ww-accent focus:bg-ww-accentSoft outline-none" />
-                  </div>
-                </div>
-              </details>
-            )}
-          </div>
+            </details>
+          )}
 
           {/* Os seis cartões de valor que ficavam aqui subiram para o resumo
               do topo. Repetidos nos dois lugares, faziam a mesma grandeza
@@ -659,7 +542,7 @@ export default function PlanoFechamento({
                 {semPc.length} linha(s) · {brl(semPc.filter((s) => s.no_fluxo).reduce((a, s) => a + Number(s.valor || 0), 0))}
               </span>
               {podeEditar && (
-                <button type="button" onClick={() => void novaSaida()} disabled={ocupado}
+                <button type="button" onClick={() => void novaSaida("sem_pc")} disabled={ocupado}
                   className="ml-auto text-[10.5px] text-ww-accent hover:underline disabled:opacity-40">
                   + acrescentar despesa
                 </button>
@@ -755,9 +638,13 @@ export default function PlanoFechamento({
             )}
           </div>
 
-          {/* ── Agenda de materiais ──────────────────────────────────────── */}
-          {materiais.length > 0 && (
-            <details className="rounded-lg border border-ww-border">
+          {/* ── Agenda de compras ────────────────────────────────────────
+              Editável na própria linha, como planilha. A agenda nasce do
+              arquivo, mas corrigir um vencimento ou um valor não justifica
+              reexportar a proposta e reimportar — e quem não pode corrigir
+              acaba não corrigindo. */}
+          {(materiais.length > 0 || podeEditar) && (
+            <details className="rounded-lg border border-ww-border" open={materiais.length > 0 && materiais.length <= 6}>
               <summary className="cursor-pointer px-2.5 py-1.5 text-[11.5px] text-ww-textMuted hover:text-ww-text">
                 Agenda de compras do plano — {materiais.length} vencimento(s) ·{" "}
                 <span className="tabular-nums">
@@ -770,24 +657,122 @@ export default function PlanoFechamento({
                   de compra forem sendo lançados no Omie, o cenário <strong>previsto</strong> passa a
                   usar os pedidos reais — esta agenda continua sendo o baseline.
                 </p>
-                <table className="w-full text-[11px] border-collapse">
-                  <tbody>
-                    {materiais.map((s) => (
-                      <tr key={s.id} className="viz-row">
-                        <td className="p-1 border-b border-ww-border/40 tabular-nums text-ww-textMuted w-[74px]">
-                          {dia(s.dt_prevista)}
-                        </td>
-                        <td className="p-1 border-b border-ww-border/40 text-ww-text truncate" title={s.descricao ?? ""}>
-                          {s.fornecedor}
-                        </td>
-                        <td className="p-1 border-b border-ww-border/40 text-ww-textFaint w-[110px]">{s.etapa}</td>
-                        <td className="p-1 border-b border-ww-border/40 text-right tabular-nums text-ww-text w-[100px]">
-                          {brl(s.valor)}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                {materiais.length === 0 ? (
+                  <p className="text-[11.5px] text-ww-textFaint py-1">Nenhuma compra no plano.</p>
+                ) : (
+                  <div className="overflow-x-auto border border-ww-border rounded-lg">
+                    <table className="w-full text-[11.5px] border-collapse">
+                      <thead className="bg-ww-bg">
+                        <tr className="text-[10px] uppercase tracking-wider text-ww-textMuted">
+                          <th className="text-left p-1.5 font-semibold w-[122px]">Vencimento</th>
+                          <th className="text-left p-1.5 font-semibold min-w-[230px]">Fornecedor</th>
+                          <th className="text-left p-1.5 font-semibold w-[124px]">Etapa</th>
+                          <th className="text-right p-1.5 font-semibold w-[118px]">Valor</th>
+                          <th className="text-left p-1.5 font-semibold w-[72px]">No fluxo?</th>
+                          <th className="w-[32px]" />
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {materiais.map((s) => (
+                          <tr key={s.id} className={`viz-row ${s.no_fluxo ? "" : "opacity-50"}`}>
+                            <td className="p-1 border-b border-ww-border/40">
+                              {podeEditar ? (
+                                <input type="date" defaultValue={s.dt_prevista ?? ""}
+                                  onBlur={(e) => {
+                                    if ((e.target.value || null) !== (s.dt_prevista ?? null)) {
+                                      void gravarLinha({ tipo: "saida", id: s.id, dt_prevista: e.target.value });
+                                    }
+                                  }}
+                                  className="w-[114px] bg-transparent px-1 py-1 text-[11px] tabular-nums text-ww-text rounded
+                                             border border-transparent hover:border-ww-border
+                                             focus:border-ww-accent focus:bg-ww-accentSoft outline-none" />
+                              ) : <span className="px-1.5 tabular-nums text-ww-textMuted">{dia(s.dt_prevista)}</span>}
+                            </td>
+                            <td className="p-1 border-b border-ww-border/40">
+                              {podeEditar ? (
+                                <input defaultValue={s.fornecedor ?? ""} placeholder="—"
+                                  onBlur={(e) => {
+                                    if (e.target.value !== (s.fornecedor ?? "")) {
+                                      // Descrição acompanha o fornecedor: é ela
+                                      // que aparece no fluxo, e deixá-la para
+                                      // trás faria a linha mudar de nome só na
+                                      // metade dos lugares.
+                                      void gravarLinha({ tipo: "saida", id: s.id,
+                                        fornecedor: e.target.value,
+                                        descricao: `${e.target.value}${s.etapa ? ` · ${s.etapa}` : ""}` });
+                                    }
+                                  }}
+                                  className="w-full bg-transparent px-1 py-1 text-[11.5px] text-ww-text rounded
+                                             border border-transparent hover:border-ww-border
+                                             focus:border-ww-accent focus:bg-ww-accentSoft outline-none" />
+                              ) : <span className="px-1.5 text-ww-text">{s.fornecedor}</span>}
+                            </td>
+                            <td className="p-1 border-b border-ww-border/40">
+                              {podeEditar ? (
+                                <input defaultValue={s.etapa ?? ""} placeholder="—"
+                                  onBlur={(e) => {
+                                    if (e.target.value !== (s.etapa ?? "")) {
+                                      void gravarLinha({ tipo: "saida", id: s.id, etapa: e.target.value });
+                                    }
+                                  }}
+                                  className="w-full bg-transparent px-1 py-1 text-[11px] text-ww-textMuted rounded
+                                             border border-transparent hover:border-ww-border
+                                             focus:border-ww-accent focus:bg-ww-accentSoft outline-none" />
+                              ) : <span className="px-1.5 text-ww-textFaint">{s.etapa}</span>}
+                            </td>
+                            <td className="p-1 border-b border-ww-border/40 text-right">
+                              {podeEditar ? (
+                                <input type="number" step="0.01" defaultValue={Number(s.valor || 0)}
+                                  onBlur={(e) => {
+                                    const v = Number(e.target.value);
+                                    if (Number.isFinite(v) && v !== Number(s.valor || 0)) {
+                                      void gravarLinha({ tipo: "saida", id: s.id, valor: v });
+                                    }
+                                  }}
+                                  className="w-full text-right bg-transparent px-1 py-1 text-[11.5px] tabular-nums text-ww-text rounded
+                                             border border-transparent hover:border-ww-border
+                                             focus:border-ww-accent focus:bg-ww-accentSoft outline-none" />
+                              ) : <span className="px-1.5 tabular-nums text-ww-text">{brl(s.valor)}</span>}
+                            </td>
+                            <td className="p-1.5 border-b border-ww-border/40">
+                              <input type="checkbox" checked={s.no_fluxo} disabled={!podeEditar || ocupado}
+                                title="Desmarcar tira do fluxo sem apagar a linha"
+                                onChange={(e) => void gravarLinha({ tipo: "saida", id: s.id, no_fluxo: e.target.checked })}
+                                className="accent-ww-accent" />
+                            </td>
+                            <td className="p-1.5 border-b border-ww-border/40 text-right">
+                              {podeEditar && (
+                                <button type="button" disabled={ocupado}
+                                  onClick={() => void apagarSaida(s.id, s.fornecedor ?? "esta linha")}
+                                  title="Remover do plano"
+                                  className="text-[11px] text-ww-textFaint hover:text-rose-500 transition disabled:opacity-40">
+                                  ✕
+                                </button>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                      <tfoot className="bg-ww-bg">
+                        <tr className="border-t border-ww-borderStrong">
+                          <td className="p-1.5 font-semibold text-ww-textMuted text-[10.5px]" colSpan={3}>
+                            {materiais.filter((s) => s.no_fluxo).length} no fluxo
+                          </td>
+                          <td className="p-1.5 text-right font-bold tabular-nums text-ww-text">
+                            {brl(materiais.filter((s) => s.no_fluxo).reduce((a, s) => a + Number(s.valor || 0), 0))}
+                          </td>
+                          <td colSpan={2} />
+                        </tr>
+                      </tfoot>
+                    </table>
+                  </div>
+                )}
+                {podeEditar && (
+                  <button type="button" onClick={() => void novaSaida("material")} disabled={ocupado}
+                    className="mt-1.5 text-[10.5px] text-ww-accent hover:underline disabled:opacity-40">
+                    + acrescentar compra
+                  </button>
+                )}
               </div>
             </details>
           )}

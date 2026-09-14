@@ -126,12 +126,18 @@ export default function ResumoProjeto({
 
         <Numero rot="Custo planejado" valor={temPlano ? brl(planejado) : "—"}
           tom="text-ww-text"
-          nota={temPlano
-            ? `materiais ${brl(pMat)} · obra ${brl(pMao)} · despesas ${brl(pDes)}`
-            : "importe o plano do fechamento"}
+          nota={temPlano ? undefined : "importe o plano do fechamento"}
           acao={podeEditar && onEditarTeto
             ? { rot: teto != null && Math.abs(teto - (pMat + pMao + pDes)) > 0.05 ? "teto ajustado" : "ajustar", fn: onEditarTeto }
-            : undefined} />
+            : undefined}>
+          {/* A composição como BARRA, não como três valores em texto.
+              Ler "materiais 48.617 · obra 4.272 · despesas 15.850" exige três
+              divisões de cabeça para saber que material é dois terços do custo.
+              A barra diz isso antes de qualquer número. */}
+          {temPlano && pMat + pMao + pDes > 0 && (
+            <Composicao mat={pMat} mao={pMao} desp={pDes} />
+          )}
+        </Numero>
 
         <Numero rot="Resultado planejado"
           valor={temPlano ? brl(resultado) : "—"}
@@ -218,6 +224,68 @@ export default function ResumoProjeto({
         </div>
       )}
 
+      {/* ── Como foi fechado ───────────────────────────────────────────────
+          Subiu do bloco de premissas: pagamento e entrega são o que define se
+          o projeto se paga sozinho, e ficavam abaixo da dobra, num grid de
+          oito campos de texto com o mesmo peso.
+
+          Dois deles mostravam o TEXTO DA PROPOSTA no lugar do que foi
+          acordado. "28 ddl" é o que estava escrito antes de alguém definir as
+          parcelas — a própria planilha anota que "o fechamento só lhe pôs
+          datas". O que vale agora vem grande; a origem vem embaixo, nomeada. */}
+      {cab && (
+        <div className="border-t border-ww-border/70 grid grid-cols-1 sm:grid-cols-3
+                        divide-y sm:divide-y-0 sm:divide-x divide-ww-border/70">
+          <Mini rot="Pagamento"
+            valor={parcelas.length
+              ? `${parcelas.length}× de ${parcelas[0]?.pct != null
+                  ? `${Number(parcelas[0].pct).toFixed(0)}%` : brl(somaParcelas / parcelas.length)}`
+              : "—"}
+            nota={parcelas.some((p) => p.dias != null)
+              ? `${parcelas.map((p) => (p.dias != null ? p.dias : "?")).join(" · ")} dias${
+                  cab.eixo_pagamento ? ` de ${dia(cab.eixo_pagamento)}` : ""}`
+              : undefined}
+            origem={cab.prop_pagamento ?? cab.forma_pagamento
+              ? `na proposta: ${cab.prop_pagamento ?? cab.forma_pagamento}` : undefined} />
+
+          <Mini rot="Entrega"
+            valor={cab.prazo_entrega_dias ? `${cab.prazo_entrega_dias} dias` : "—"}
+            nota={cab.data_base || cab.entrega_prevista
+              ? `${dia(cab.data_base)} → ${dia(cab.entrega_prevista)}` : undefined}
+            origem={cab.prop_prazo ? `na proposta: ${cab.prop_prazo}` : undefined} />
+
+          {/* O que sai do NOSSO caixa em vermelho: é daqui que o fluxo sabe o
+              que somar, e a distinção merece cor, não mais uma linha de texto. */}
+          <div className="px-3.5 py-3 min-w-0">
+            <div className="text-[9.5px] uppercase tracking-[0.7px] font-bold text-ww-textFaint">
+              Por conta de quem
+            </div>
+            <div className="mt-1.5 flex flex-wrap gap-1">
+              {([["Frete", cab.frete], ["Deslocamento", cab.deslocamento],
+                 ["Instalação", cab.instalacao], ["Impostos", cab.impostos]] as const)
+                .map(([rot, v]) => {
+                  const cl = conta(v);
+                  return (
+                    <span key={rot} title={v ?? "não informado"}
+                      className={`inline-flex px-1.5 py-0.5 rounded text-[10.5px] border ${
+                        cl === "nosso"
+                          ? "bg-rose-500/12 text-rose-700 dark:text-rose-300 border-rose-500/30"
+                          : cl === "incluso"
+                          ? "bg-ww-border/30 text-ww-textMuted border-ww-border"
+                          : "border-dashed border-ww-border text-ww-textFaint"}`}>
+                      {rot}
+                    </span>
+                  );
+                })}
+            </div>
+            <div className="mt-1 text-[9.5px] text-ww-textFaint">
+              <span className="text-rose-600 dark:text-rose-400">vermelho</span> sai do nosso caixa ·
+              cinza está incluso no preço
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ── Recebimento: uma linha, não uma faixa ───────────────────────── */}
       <div className="border-t border-ww-border/70 px-3.5 py-2 flex flex-wrap items-center gap-x-5 gap-y-1 text-[11.5px]">
         <span className="text-[9.5px] uppercase tracking-[0.7px] font-bold text-ww-textFaint">
@@ -245,9 +313,10 @@ export default function ResumoProjeto({
 }
 
 /** Um dos três números do topo. */
-function Numero({ rot, valor, tom, nota, extra, acao }: {
+function Numero({ rot, valor, tom, nota, extra, acao, children }: {
   rot: string; valor: string; tom: string; nota?: string; extra?: string;
   acao?: { rot: string; fn: () => void };
+  children?: React.ReactNode;
 }) {
   return (
     <div className="px-3.5 py-3 min-w-0">
@@ -265,8 +334,73 @@ function Numero({ rot, valor, tom, nota, extra, acao }: {
       </div>
       {nota && <div className="text-[10.5px] text-ww-textMuted truncate" title={nota}>{nota}</div>}
       {extra && <div className="text-[10px] text-ww-textFaint truncate" title={extra}>{extra}</div>}
+      {children}
     </div>
   );
+}
+
+/** De que é feito o custo planejado — em barra, com cor por natureza.
+ *
+ *  As MESMAS cores da régua de execução: materiais esmeralda, mão de obra
+ *  azul, despesas violeta. Repetir a cor entre os dois blocos é o que permite
+ *  ligar "71% é material" a "o requisitado é tudo material". */
+function Composicao({ mat, mao, desp }: { mat: number; mao: number; desp: number }) {
+  const tot = mat + mao + desp;
+  const fatias = [
+    { rot: "materiais", v: mat,  tom: "bg-emerald-500" },
+    { rot: "obra",      v: mao,  tom: "bg-sky-500" },
+    { rot: "despesas",  v: desp, tom: "bg-violet-500" },
+  ].filter((f) => f.v > 0);
+  return (
+    <div className="mt-1.5">
+      {/* gap de 2px entre as fatias: sem ele, duas cores adjacentes de
+          luminosidade parecida leem como uma faixa só. */}
+      <div className="flex gap-[2px] h-2">
+        {fatias.map((f) => (
+          <div key={f.rot} className={`${f.tom} rounded-[2px]`}
+            style={{ width: `${(f.v / tot) * 100}%` }}
+            title={`${f.rot}: ${brl(f.v)}`} />
+        ))}
+      </div>
+      <div className="mt-1 flex flex-wrap gap-x-2.5 gap-y-0.5">
+        {fatias.map((f) => (
+          <span key={f.rot} className="inline-flex items-center gap-1 text-[10px] text-ww-textMuted">
+            <span aria-hidden className={`w-1.5 h-1.5 rounded-[1px] ${f.tom}`} />
+            {f.rot} <span className="tabular-nums text-ww-textFaint">
+              {Math.round((f.v / tot) * 100)}%
+            </span>
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/** Número secundário do bloco de premissas — menor que os três do topo, de
+ *  propósito: pagamento é condição, não valor. */
+function Mini({ rot, valor, nota, origem }: {
+  rot: string; valor: string; nota?: string; origem?: string;
+}) {
+  return (
+    <div className="px-3.5 py-3 min-w-0">
+      <div className="text-[9.5px] uppercase tracking-[0.7px] font-bold text-ww-textFaint">{rot}</div>
+      <div className="text-[15px] font-semibold text-ww-text tabular-nums leading-tight mt-0.5 truncate"
+           title={valor}>{valor}</div>
+      {nota && <div className="text-[10.5px] text-ww-textMuted tabular-nums truncate" title={nota}>{nota}</div>}
+      {origem && <div className="text-[9.5px] text-ww-textFaint truncate" title={origem}>{origem}</div>}
+    </div>
+  );
+}
+
+/** De quem é a conta. A planilha escreve em português corrido, então a
+ *  classificação é por texto — e o que importa distinguir é uma coisa só:
+ *  sai do nosso caixa ou não. */
+function conta(v: string | null | undefined): "nosso" | "incluso" | "outro" {
+  const t = (v ?? "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  if (!t || t === "—" || /nao informado/.test(t)) return "outro";
+  if (/nossa|nosso/.test(t)) return "nosso";
+  if (/inclus/.test(t)) return "incluso";
+  return "outro";
 }
 
 function Par({ rot, v, forte, tom }: { rot: string; v: string; forte?: boolean; tom?: string }) {

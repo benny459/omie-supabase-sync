@@ -109,10 +109,14 @@ export async function POST(req: Request) {
   const { data, error } = await supaAdmin().schema("approval").from("projeto_plano_saida")
     .insert({
       empresa: String(b.empresa), codigo_projeto: Number(b.codigo_projeto),
-      // Linha criada na tela é sempre 'sem_pc': a agenda de materiais vem da
-      // planilha, e uma compra digitada aqui viraria pedido de compra depois —
-      // aí apareceria duas vezes no fluxo.
-      origem: "sem_pc",
+      // Material ou despesa — quem chama decide.
+      //
+      // A agenda de compras nasce da planilha, mas correção pequena não
+      // justifica reexportar e reimportar o arquivo. O risco de contar duas
+      // vezes (a linha aqui e o pedido de compra depois) é real e existe
+      // igualmente para as linhas importadas: quem resolve isso é o cenário
+      // PREVISTO, que usa os pedidos do Omie e ignora a agenda do plano.
+      origem: b.origem === "material" ? "material" : "sem_pc",
       descricao: s(b.descricao) ?? "(sem descrição)",
       fornecedor: s(b.fornecedor, 200), etapa: s(b.etapa, 120),
       dias_apos_base: n(b.dias_apos_base), dt_prevista: v,
