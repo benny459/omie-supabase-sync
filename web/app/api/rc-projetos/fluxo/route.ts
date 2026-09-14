@@ -60,7 +60,7 @@ export async function GET(req: Request) {
 
   // Tudo de uma vez: a tela mostra as quatro coisas juntas e buscar em série
   // somaria quatro idas ao banco antes do primeiro pixel.
-  const [linhas, cab, realizado, cobertura, eventos, previsto, saldo, orc, exec] = await Promise.all([
+  const [linhas, cab, realizado, cobertura, eventos, previsto, saldo, orc, exec, vendas] = await Promise.all([
     admin.schema("approval").from("projeto_fluxo_linha")
       .select("id, tipo, descricao, categoria, data_prevista, valor, observacao, origem, ordem")
       .eq("empresa", empresa).eq("codigo_projeto", codigo)
@@ -95,11 +95,17 @@ export async function GET(req: Request) {
     admin.schema("bi").rpc("projeto_execucao", {
       p_codigo_projeto: codigo, p_empresa: empresa,
     }),
+    // Os PV/OS do projeto. Vêm de sales, NÃO da view de pedidos de compra:
+    // aquela só enxerga PV que tem PC, e mostrava uma das quatro parcelas
+    // deste projeto — escondendo justamente a que já foi faturada.
+    admin.schema("bi").rpc("projeto_vendas", {
+      p_codigo_projeto: codigo, p_empresa: empresa,
+    }),
   ]);
 
   const falha = [["linhas", linhas], ["cabecalho", cab], ["realizado", realizado],
                  ["cobertura", cobertura], ["eventos", eventos], ["previsto", previsto],
-                 ["saldo", saldo], ["orcamento", orc], ["execucao", exec]]
+                 ["saldo", saldo], ["orcamento", orc], ["execucao", exec], ["vendas", vendas]]
     .find(([, r]) => (r as { error?: unknown }).error);
   if (falha) {
     return NextResponse.json(
@@ -121,6 +127,7 @@ export async function GET(req: Request) {
     realizado_diario: saldo.data ?? [],
     orcamento: orc.data ?? null,
     execucao: ((exec.data as unknown[]) ?? [])[0] ?? null,
+    vendas: vendas.data ?? [],
     eventos: eventos.data ?? [],
     pode_editar: canEdit(perms, "projetos", "pvos"),
     pode_aprovar: canApprove(perms, "projetos"),

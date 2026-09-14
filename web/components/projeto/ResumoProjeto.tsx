@@ -28,6 +28,14 @@
 
 import type { PlanoCompleto } from "./PlanoFechamento";
 
+/** Um pedido de venda ou ordem de serviço do projeto. */
+export type Venda = {
+  tipo: "PV" | "OS"; label: string; numero: string;
+  valor: number; etapa_code: string | null; etapa_texto: string | null;
+  dt_previsao: string | null; dt_faturado: string | null;
+  num_nfe: string | null; faturado: boolean;
+};
+
 export type Execucao = {
   requisitado: number; aprovado: number; recusado: number;
   a_pagar: number; pago: number;
@@ -53,10 +61,12 @@ const dia = (s: string | null | undefined) => {
 const pctTxt = (v: number) => `${v.toFixed(1).replace(".", ",")}%`;
 
 export default function ResumoProjeto({
-  plano, execucao, entradasOmie, saidasOmie, teto, onEditarTeto, podeEditar,
+  plano, execucao, vendas, entradasOmie, saidasOmie, teto, onEditarTeto, podeEditar,
 }: {
   plano: PlanoCompleto | null;
   execucao: Execucao | null;
+  /** Os PV/OS do projeto — a fonte de "o que já foi faturado". */
+  vendas: Venda[];
   entradasOmie: number;
   saidasOmie: number;
   teto: number | null;
@@ -107,8 +117,19 @@ export default function ResumoProjeto({
 
   const recebido = ex?.recebido ?? 0;
   const aReceber = ex?.a_receber ?? 0;
-  const aFaturar = Math.max(0, valor - entradasOmie);
   const caixa = recebido - pag;
+
+  /** O faturamento vem dos PV/OS, não do título.
+   *
+   *  Título só existe DEPOIS da nota. Medir "quanto falta faturar" pelo que
+   *  tem título faz a conta começar do fim — as três OS que ainda não viraram
+   *  nota simplesmente não existiriam. */
+  const faturadas = vendas.filter((v) => v.faturado);
+  const aFaturarVendas = vendas.filter((v) => !v.faturado);
+  const vlFaturado = faturadas.reduce((a, v) => a + Number(v.valor || 0), 0);
+  const vlAFaturar = aFaturarVendas.reduce((a, v) => a + Number(v.valor || 0), 0);
+  // Sem PV/OS carregado, cai para a conta antiga em vez de mostrar zero.
+  const aFaturar = vendas.length ? vlAFaturar : Math.max(0, valor - entradasOmie);
 
   return (
     <section className="rounded-xl border border-ww-border bg-ww-panel overflow-hidden">
@@ -286,14 +307,67 @@ export default function ResumoProjeto({
         </div>
       )}
 
+      {/* ── Faturamento: os PV/OS, um por um ───────────────────────────────
+          A tela dizia "R$ 68.930 ainda a faturar" e não mostrava que UMA das
+          quatro parcelas já virou nota — porque lia os PV da view de pedidos
+          de COMPRA, que só enxerga PV com PC atrelado.
+
+          Cada parcela do plano tem um PV ou OS correspondente no Omie, e é a
+          etapa dele que diz se já foi faturada. Ver os quatro lado a lado é o
+          que responde "posso cobrar o cliente?". */}
+      {vendas.length > 0 && (
+        <div className="bg-ww-bg/50 border-t border-ww-border/70 px-3.5 py-3">
+          <div className="flex items-baseline gap-2 mb-2 flex-wrap">
+            <span className="text-[9.5px] uppercase tracking-[0.7px] font-bold text-ww-textFaint">
+              Faturamento
+            </span>
+            <span className="text-[11px] text-ww-textMuted tabular-nums">
+              {faturadas.length} de {vendas.length} faturada(s) ·{" "}
+              <strong className="text-emerald-600 dark:text-emerald-300">{brl(vlFaturado)}</strong>
+              {vlAFaturar > 0.5 && <> · falta emitir {brl(vlAFaturar)}</>}
+            </span>
+          </div>
+          <ul className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-1.5">
+            {vendas.map((v) => (
+              <li key={`${v.tipo}${v.numero}`}
+                className={`rounded-lg border px-2 py-1.5 min-w-0 ${
+                  v.faturado
+                    ? "border-emerald-500/35 bg-emerald-500/[0.07]"
+                    : "border-ww-border bg-ww-panel/60"}`}>
+                <div className="flex items-baseline gap-1.5">
+                  <span className="font-mono text-[11px] font-semibold text-ww-text">{v.label}</span>
+                  <span className="ml-auto text-[11px] tabular-nums text-ww-text">{brl(v.valor)}</span>
+                </div>
+                <div className="mt-0.5 flex items-center gap-1 flex-wrap">
+                  <span className={`inline-flex px-1.5 py-0.5 rounded text-[9.5px] font-semibold border ${
+                    v.faturado
+                      ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/30"
+                      : "bg-sky-500/12 text-sky-700 dark:text-sky-300 border-sky-500/25"}`}>
+                    {v.faturado ? "Faturado" : (v.etapa_texto ?? "A faturar")}
+                  </span>
+                  {v.num_nfe && (
+                    <span className="text-[9.5px] text-ww-textMuted">NF {v.num_nfe}</span>
+                  )}
+                </div>
+                <div className="mt-0.5 text-[9.5px] text-ww-textFaint tabular-nums">
+                  {v.faturado && v.dt_faturado
+                    ? `emitida em ${dia(v.dt_faturado)}`
+                    : v.dt_previsao ? `previsão ${dia(v.dt_previsao)}` : "sem data"}
+                </div>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       {/* ── Recebimento: uma linha, não uma faixa ───────────────────────── */}
       <div className="border-t border-ww-border/70 px-3.5 py-2 flex flex-wrap items-center gap-x-5 gap-y-1 text-[11.5px]">
         <span className="text-[9.5px] uppercase tracking-[0.7px] font-bold text-ww-textFaint">
           Recebimento
         </span>
         <Par rot="recebido" v={brl(recebido)} forte={recebido > 0} tom="text-emerald-600 dark:text-emerald-300" />
-        <Par rot="a receber" v={brl(aReceber)} />
-        {aFaturar > 0.5 && <Par rot="ainda a faturar" v={brl(aFaturar)} />}
+        <Par rot="em título, a receber" v={brl(aReceber)} />
+        {aFaturar > 0.5 && <Par rot="ainda sem nota" v={brl(aFaturar)} />}
         <span className="ml-auto tabular-nums text-ww-textMuted">
           caixa do projeto hoje{" "}
           <strong className={caixa >= 0

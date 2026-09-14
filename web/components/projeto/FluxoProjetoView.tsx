@@ -29,7 +29,7 @@ import TabelaPrevisto, { type LinhaPrevisto } from "./TabelaPrevisto";
 import ChartFrame, { type SeriesDef } from "@/components/viz/ChartFrame";
 import VizCombo from "@/components/viz/VizCombo";
 import PlanoFechamento, { type PlanoCompleto } from "@/components/projeto/PlanoFechamento";
-import ResumoProjeto, { type Execucao } from "@/components/projeto/ResumoProjeto";
+import ResumoProjeto, { type Execucao, type Venda } from "@/components/projeto/ResumoProjeto";
 
 type LinhaApi = {
   id: number; tipo: "entrada" | "saida"; descricao: string; categoria: string | null;
@@ -63,7 +63,8 @@ type Orcamento = {
 type Payload = {
   linhas: LinhaApi[]; previsto: LinhaPrevisto[]; realizado_diario: RealDia[]; orcamento: Orcamento;
   cabecalho: Cabecalho; realizado: RealizadoRow[];
-  cobertura: Cobertura | null; eventos: Evento[]; execucao: Execucao | null;
+  cobertura: Cobertura | null; eventos: Evento[];
+  execucao: Execucao | null; vendas: Venda[];
   pode_editar: boolean; pode_aprovar: boolean; eu: string;
   error?: string;
 };
@@ -614,6 +615,7 @@ export default function FluxoProjetoView({
       <ResumoProjeto
         plano={plano}
         execucao={data?.execucao ?? null}
+        vendas={data?.vendas ?? []}
         entradasOmie={omiEnt + manEnt}
         saidasOmie={omiSai + manSai}
         teto={tetoVigente}
@@ -704,11 +706,14 @@ export default function FluxoProjetoView({
           <h3 className="text-[12.5px] font-semibold text-ww-text tracking-wide uppercase">
             Do Omie — pedido de venda, títulos e compras
           </h3>
+          {/* Três frases viraram uma. A explicação de que "nada é apagado pelo
+              painel" e de que "entra sem ninguém digitar" era tranquilizar
+              sobre um medo que ninguém tem — quem lê quer saber o que faz com
+              a coluna editável. */}
           <p className="text-[11px] text-ww-textMuted mt-0.5">
-            Isto já existe no ERP e entra no plano sem ninguém digitar. Ajuste a
-            <strong className="text-ww-text"> emissão da NF</strong> pelo cronograma e a
-            <strong className="text-ww-text"> nova previsão</strong> sai sozinha, somando o prazo do
-            pedido de venda. Nada aqui é apagado pelo painel.
+            Títulos e pedidos de compra que já existem no ERP. Ajuste a{" "}
+            <strong className="text-ww-text">emissão da NF</strong> e a nova previsão sai sozinha,
+            somando o prazo do pedido.
           </p>
         </header>
 
