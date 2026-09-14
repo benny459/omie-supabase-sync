@@ -140,7 +140,8 @@ export default function PlanoFechamento({
       const j = await r.json();
       if (!r.ok) { setErro(j.error ?? r.statusText); return; }
       setAviso(
-        `Plano importado: ${j.parcelas} parcela(s) e ${j.saidas} saída(s).`
+        `Plano importado: ${j.parcelas} parcela(s), ${j.saidas} saída(s)`
+        + (j.etapas ? ` e ${j.etapas} etapa(s) de cronograma` : "") + "."
         + (j.ajustes_preservados
             ? ` ${j.ajustes_preservados} previsão(ões) que você já tinha ajustado foram mantidas.`
             : ""));
@@ -278,11 +279,14 @@ export default function PlanoFechamento({
             <input ref={arquivoRef} type="file" accept=".xlsx,.xlsm" className="hidden"
               onChange={(e) => { const f = e.target.files?.[0]; if (f) void escolher(f); }} />
             <button type="button" onClick={() => arquivoRef.current?.click()} disabled={ocupado}
-              title="Lê a planilha CP-MC da proposta (abas Fluxo e MC)"
-              className={`px-2.5 py-1 text-[11.5px] rounded-lg border transition disabled:opacity-40 ${
+              title={plano
+                ? "Substitui o plano pela revisão nova da proposta. As previsões de faturamento que você já ajustou são mantidas."
+                : "Lê a planilha CP-MC que o sistema de propostas gera — abas Fluxo, Condições e MC"}
+              className={`inline-flex items-center gap-1.5 px-2.5 py-1 text-[11.5px] rounded-lg border transition disabled:opacity-40 ${
                 plano ? "border-ww-border text-ww-textMuted hover:text-ww-text hover:bg-ww-rowHover"
                       : "border-ww-accent bg-ww-accent text-white font-semibold hover:brightness-110"}`}>
-              {plano ? "Reimportar planilha" : "Importar planilha do fechamento"}
+              <span aria-hidden>↑</span>
+              {plano ? "Subir revisão da proposta" : "Importar planilha da proposta"}
             </button>
           </div>
         )}
@@ -361,11 +365,18 @@ export default function PlanoFechamento({
       )}
 
       {!plano && !previa && (
-        <p className="text-[11.5px] text-ww-textFaint py-2">
-          Nenhum plano importado. Sem ele a tela só enxerga o que já existe no Omie —
-          e no começo do projeto isso é quase nada: mão de obra e despesas de viagem
-          nunca viram pedido de compra.
-        </p>
+        <div className="py-2 space-y-1">
+          <p className="text-[11.5px] text-ww-textFaint">
+            Nenhum plano importado. Sem ele a tela só enxerga o que já existe no Omie —
+            e no começo do projeto isso é quase nada: mão de obra e despesas de viagem
+            nunca viram pedido de compra.
+          </p>
+          <p className="text-[11px] text-ww-textFaint">
+            O arquivo é o <strong className="text-ww-textMuted">CP-MC</strong> que o sistema de
+            propostas gera (CP-MC_….xlsx). Traz as parcelas, as condições, o custo e a agenda
+            de compras — e de uma vez define o teto de gasto e as etapas do cronograma.
+          </p>
+        </div>
       )}
 
       {plano && (

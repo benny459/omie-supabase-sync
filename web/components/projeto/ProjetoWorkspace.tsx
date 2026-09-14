@@ -16,7 +16,6 @@ import { useCallback, useState } from "react";
 // RcProjetoItensBlock não é mais montado — a lista virou uma tabela só.
 // O arquivo continua no repositório caso falte alguma função dele.
 import RcProjetoUploadButton from "@/components/RcProjetoUploadButton";
-import FluxoFinanceiroUploadButton from "@/components/FluxoFinanceiroUploadButton";
 import FluxoProjetoView from "./FluxoProjetoView";
 import MateriaisGrade from "./MateriaisGrade";
 
@@ -71,12 +70,17 @@ export default function ProjetoWorkspace({
           ))}
         </div>
 
-        {/* A planilha continua existindo — virou UM dos caminhos, não a porta.
-            Fica ao lado da aba a que pertence pra não parecer ação global. */}
+        {/* Um upload por aba, e só.
+            A aba Fluxo tinha DOIS botões de importar planilha: este e o
+            "Importar planilha do fechamento" dentro das premissas, para
+            arquivos diferentes. Ninguém sabia qual usar — e o daqui era um
+            subconjunto do outro (budget é o custo, etapas são as parcelas com
+            seus eventos). O import do fechamento passou a gravar os dois, e
+            este saiu. O botão continua na aba Materiais, onde é o único. */}
         <div className="ml-auto flex items-center gap-2">
-          {aba === "materiais"
-            ? <RcProjetoUploadButton empresa={empresa} codigoProjeto={codigoProjeto} onDone={aposGravar} />
-            : <FluxoFinanceiroUploadButton empresa={empresa} codigoProjeto={codigoProjeto} />}
+          {aba === "materiais" && (
+            <RcProjetoUploadButton empresa={empresa} codigoProjeto={codigoProjeto} onDone={aposGravar} />
+          )}
         </div>
       </div>
 
