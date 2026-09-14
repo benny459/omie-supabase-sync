@@ -199,12 +199,20 @@ export default function ResumoProjeto({
             ) : (
               <>Nenhum pedido de compra lançado neste projeto.</>
             )}
+            {/* Quando o que falta documentar É a mão de obra + despesas, dizer
+                o valor duas vezes é ruído — a frase fica mais curta e mais
+                exata nomeando a causa em vez de repetir o número. */}
             {semDocumento > 0.005 && (
-              <> Outros <strong className="text-ww-text">{brl(semDocumento)}</strong> do planejado
-                não têm documento nenhum
-                {pMao + pDes > 0.005 && <> — {brl(pMao + pDes)} são mão de obra e despesas, que
-                  por natureza nunca viram pedido de compra</>}.
-              </>
+              Math.abs(semDocumento - (pMao + pDes)) < 0.05 ? (
+                <> Os outros <strong className="text-ww-text">{brl(semDocumento)}</strong> são
+                  mão de obra e despesas, que por natureza nunca viram pedido de compra.</>
+              ) : (
+                <> Outros <strong className="text-ww-text">{brl(semDocumento)}</strong> do planejado
+                  não têm documento nenhum
+                  {pMao + pDes > 0.005 && <>, dos quais {brl(pMao + pDes)} são mão de obra e
+                    despesas, que nunca viram pedido de compra</>}.
+                </>
+              )
             )}
           </p>
         </div>
