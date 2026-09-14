@@ -398,10 +398,17 @@ export default function FluxoProjetoView({
       : CENARIOS[cenario]);
 
   // O HUE diz a medida (verde entra, vermelho sai) e o PREENCHIMENTO diz o
-  // estado. Três estados, três densidades: o plano é o mais fraco porque é o
-  // mais antigo e o mais hipotético; o realizado é sólido porque é fato.
+  // estado. Só que estados são TRÊS e densidades são duas — plano e previsto
+  // saíam com o mesmo verde vazado, literalmente a mesma barra com dois nomes
+  // na legenda.
+  //
+  // A saída não é inventar uma terceira densidade: é notar que a barra do
+  // plano só interessa quando se olha o plano sozinho. Comparando os três, o
+  // que se compara são as CURVAS — e três pares de barra por dia deixariam
+  // cada uma com 3px de largura.
+  const soPlano = cenario === "plano";
   const barras: SeriesDef[] = [
-    ...(temPlano ? [
+    ...(temPlano && soPlano ? [
       { key: "Entrada do plano", label: "Entrada do plano", slot: 5, mark: "rect", variante: "vazada" } as SeriesDef,
       { key: "Saída do plano",   label: "Saída do plano",   slot: 3, mark: "rect", variante: "vazada" } as SeriesDef,
     ] : []),
@@ -415,8 +422,12 @@ export default function FluxoProjetoView({
    *  diferentes (plano × expectativa × realidade), e é a comparação entre elas
    *  que responde "estou financiando este cliente?" e "escorregou quanto?". */
   const linhas: SeriesDef[] = [
+    // Rosa, não ciano. O slot 4 é vizinho do 0 na rampa e as duas curvas saíam
+    // tracejadas no mesmo azul — a legenda nomeava duas coisas que o gráfico
+    // desenhava como uma. O 6 não é usado por nada aqui e se separa do azul,
+    // do amarelo do realizado e do verde/vermelho das barras.
     ...(temPlano
-      ? [{ key: "Saldo do plano", label: "Saldo do plano (fechamento)", slot: 4, mark: "line", tracejada: true } as SeriesDef]
+      ? [{ key: "Saldo do plano", label: "Saldo do plano (fechamento)", slot: 6, mark: "line", tracejada: true } as SeriesDef]
       : []),
     { key: "Saldo previsto",  label: "Saldo previsto",  slot: 0, mark: "line", tracejada: true } as SeriesDef,
     { key: "Saldo realizado", label: "Saldo realizado", slot: 2, mark: "line" } as SeriesDef,
