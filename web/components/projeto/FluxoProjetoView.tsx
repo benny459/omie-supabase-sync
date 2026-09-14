@@ -28,6 +28,7 @@ import GradeEditavel, {
 import TabelaPrevisto, { type LinhaPrevisto } from "./TabelaPrevisto";
 import ChartFrame, { type SeriesDef } from "@/components/viz/ChartFrame";
 import VizCombo from "@/components/viz/VizCombo";
+import PlanoFechamento, { type PlanoCompleto } from "@/components/projeto/PlanoFechamento";
 
 type LinhaApi = {
   id: number; tipo: "entrada" | "saida"; descricao: string; categoria: string | null;
@@ -122,6 +123,26 @@ export default function FluxoProjetoView({
   /** Marca que a grade foi tocada. Sem isso não dá pra distinguir "nada mudou"
    *  de "mudou e voltou ao mesmo" — e o botão de salvar mentiria nos dois. */
   const [sujo, setSujo] = useState(false);
+  /** O plano de fechamento, se houver. Carregado em paralelo com o fluxo —
+   *  é outra fonte, com outro tempo de resposta, e travar uma na outra só
+   *  atrasaria a tela. */
+  const [plano, setPlano] = useState<PlanoCompleto | null>(null);
+  /** Qual cenário o gráfico mostra. "todos" é o padrão porque a pergunta que
+   *  traz alguém aqui é comparativa: o que combinei, o que está previsto e o
+   *  que de fato aconteceu. Ver um sozinho não responde nada. */
+  const [cenario, setCenario] = useState<"todos" | "plano" | "previsto" | "realizado">("todos");
+
+  const carregarPlano = useCallback(async () => {
+    try {
+      const r = await fetch(
+        `/api/rc-projetos/plano?empresa=${encodeURIComponent(empresa)}&codigo_projeto=${codigoProjeto}`,
+        { cache: "no-store" });
+      if (!r.ok) return;
+      setPlano((await r.json()) as PlanoCompleto);
+    } catch { /* plano ausente não impede o resto da tela */ }
+  }, [empresa, codigoProjeto]);
+
+  useEffect(() => { void carregarPlano(); }, [carregarPlano]);
 
   const carregar = useCallback(async () => {
     setCarregando(true);
@@ -250,12 +271,26 @@ export default function FluxoProjetoView({
    *  parte cara (a view de projetos não empurra o filtro e custa segundos). */
   const grafico = useMemo(() => {
     const porDia = new Map<string, {
-      ep: number; sp: number; er: number; sr: number;
+      ep: number; sp: number; er: number; sr: number; e0: number; s0: number;
     }>();
     const cel = (d: string) => {
-      const c = porDia.get(d) ?? { ep: 0, sp: 0, er: 0, sr: 0 };
+      const c = porDia.get(d) ?? { ep: 0, sp: 0, er: 0, sr: 0, e0: 0, s0: 0 };
       porDia.set(d, c); return c;
     };
+
+    // ── O PLANO (cenário inicial) ──────────────────────────────────────────
+    // Lançado pela data do FECHAMENTO, não pela ajustada: este cenário é a
+    // foto do que foi combinado. Usar a data ajustada aqui faria a curva do
+    // plano se mexer junto com o cronograma e o desvio desapareceria — que é
+    // o defeito clássico de baseline que acompanha a realidade.
+    for (const p of (plano?.parcelas ?? [])) {
+      if (!p.dt_plano) continue;
+      cel(p.dt_plano).e0 += Number(p.valor) || 0;
+    }
+    for (const x of (plano?.saidas ?? [])) {
+      if (!x.no_fluxo || !x.dt_prevista) continue;
+      cel(x.dt_prevista).s0 += Number(x.valor) || 0;
+    }
 
     for (const l of previsto) {
       if (!l.data_efetiva) continue;
@@ -267,6 +302,28 @@ export default function FluxoProjetoView({
     for (const l of preenchidas(entradas)) {
       if (!l.data) continue;
       cel(l.data).ep += num(l.valor);
+    }
+    // ── O plano no PREVISTO, só o que o Omie não tem como saber ────────────
+    // Mão de obra e despesa de viagem nunca viram pedido de compra: se não
+    // entrarem por aqui, o previsto fica menor que a realidade e a margem
+    // aparece melhor do que é. Compras NÃO entram — elas viram pedido no
+    // Omie e contariam duas vezes.
+    //
+    // As parcelas do plano entram pela data AJUSTADA (o cronograma real) e só
+    // enquanto não viraram título: com num_titulo preenchido, o Omie já conta.
+    for (const x of (plano?.saidas ?? [])) {
+      if (!x.no_fluxo || x.origem !== "sem_pc" || !x.dt_prevista) continue;
+      cel(x.dt_prevista).sp += Number(x.valor) || 0;
+    }
+    if (!omiEnt) {
+      // Só quando o Omie não conhece entrada nenhuma. Havendo PV ou título, é
+      // ele que manda — a parcela do plano viraria uma segunda previsão do
+      // mesmo dinheiro.
+      for (const p of (plano?.parcelas ?? [])) {
+        if (p.num_titulo) continue;
+        const d = p.dt_ajustada ?? p.dt_plano;
+        if (d) cel(d).ep += Number(p.valor) || 0;
+      }
     }
     for (const r of (data?.realizado_diario ?? [])) {
       const c = cel(r.dia.slice(0, 10));
@@ -283,11 +340,13 @@ export default function FluxoProjetoView({
     const hoje = new Date(); hoje.setHours(12, 0, 0, 0);
 
     const linhas: Array<Record<string, unknown>> = [];
-    let accP = 0, accR = 0;
+    let accP = 0, accR = 0, acc0 = 0;
+    const temPlano = !!(plano?.parcelas.length || plano?.saidas.length);
     for (const d = new Date(ini); d <= fim; d.setDate(d.getDate() + 1)) {
       const iso = d.toISOString().slice(0, 10);
-      const c = porDia.get(iso) ?? { ep: 0, sp: 0, er: 0, sr: 0 };
+      const c = porDia.get(iso) ?? { ep: 0, sp: 0, er: 0, sr: 0, e0: 0, s0: 0 };
       accP += c.ep - c.sp;
+      acc0 += c.e0 - c.s0;
       const futuro = d > hoje;
       if (!futuro) accR += c.er - c.sr;
       linhas.push({
@@ -295,6 +354,9 @@ export default function FluxoProjetoView({
         _iso: iso,
         "Entrada prevista": c.ep, "Entrada realizada": c.er,
         "Saída prevista": c.sp,   "Saída realizada": c.sr,
+        ...(temPlano ? {
+          "Entrada do plano": c.e0, "Saída do plano": c.s0, "Saldo do plano": acc0,
+        } : {}),
         "Saldo previsto": accP,
         // A curva do realizado PARA em hoje: prolongá-la faria parecer que o
         // projeto congelou, quando na verdade ainda não chegou lá.
@@ -302,7 +364,7 @@ export default function FluxoProjetoView({
       });
     }
     return linhas;
-  }, [previsto, entradas, data]);
+  }, [previsto, entradas, data, plano, omiEnt]);
 
   const hojeIso = new Date().toISOString().slice(0, 10);
   /** O rótulo do primeiro dia >= hoje, para a divisória vertical. */
@@ -314,20 +376,76 @@ export default function FluxoProjetoView({
   // Previsto vazado, realizado sólido: é a MESMA medida em dois estados, então
   // a cor continua dizendo de que medida se trata e o preenchimento diz o
   // estado. Quatro cores fariam procurar quatro coisas onde existem duas.
+  const temPlano = !!(plano?.parcelas.length || plano?.saidas.length);
+
+  /** Os três cenários, e o que cada um responde.
+   *
+   *   PLANO      o que foi combinado no fechamento. Não se mexe.
+   *   PREVISTO   o que se espera hoje: PV e pedidos de compra reais do Omie,
+   *              mais o que o ERP não tem como saber (mão de obra, despesa).
+   *   REALIZADO  o que de fato entrou e saiu, pela baixa do título.
+   *
+   *  O seletor existe porque os três juntos são doze séries — legítimo para
+   *  comparar, denso demais para ler uma coisa só. */
+  const CENARIOS = {
+    plano:     ["Entrada do plano", "Saída do plano", "Saldo do plano"],
+    previsto:  ["Entrada prevista", "Saída prevista", "Saldo previsto"],
+    realizado: ["Entrada realizada", "Saída realizada", "Saldo realizado"],
+  } as const;
+  const visiveis = new Set<string>(
+    cenario === "todos"
+      ? [...CENARIOS.plano, ...CENARIOS.previsto, ...CENARIOS.realizado]
+      : CENARIOS[cenario]);
+
+  // O HUE diz a medida (verde entra, vermelho sai) e o PREENCHIMENTO diz o
+  // estado. Três estados, três densidades: o plano é o mais fraco porque é o
+  // mais antigo e o mais hipotético; o realizado é sólido porque é fato.
   const barras: SeriesDef[] = [
-    { key: "Entrada prevista",  label: "Entrada prevista",  slot: 5, mark: "rect", variante: "vazada" },
-    { key: "Entrada realizada", label: "Entrada realizada", slot: 5, mark: "rect" },
-    { key: "Saída prevista",    label: "Saída prevista",    slot: 3, mark: "rect", variante: "vazada" },
-    { key: "Saída realizada",   label: "Saída realizada",   slot: 3, mark: "rect" },
-  ];
-  /** As duas curvas de equilíbrio. Mesma cor não daria: aqui são medidas
-   *  diferentes (plano × realidade), e é a comparação entre elas que responde
-   *  "estou financiando este cliente?". */
+    ...(temPlano ? [
+      { key: "Entrada do plano", label: "Entrada do plano", slot: 5, mark: "rect", variante: "vazada" } as SeriesDef,
+      { key: "Saída do plano",   label: "Saída do plano",   slot: 3, mark: "rect", variante: "vazada" } as SeriesDef,
+    ] : []),
+    { key: "Entrada prevista",  label: "Entrada prevista",  slot: 5, mark: "rect", variante: "vazada" } as SeriesDef,
+    { key: "Entrada realizada", label: "Entrada realizada", slot: 5, mark: "rect" } as SeriesDef,
+    { key: "Saída prevista",    label: "Saída prevista",    slot: 3, mark: "rect", variante: "vazada" } as SeriesDef,
+    { key: "Saída realizada",   label: "Saída realizada",   slot: 3, mark: "rect" } as SeriesDef,
+  ].filter((b) => visiveis.has(b.key));
+
+  /** As curvas de equilíbrio. Cor diferente para cada uma: aqui são medidas
+   *  diferentes (plano × expectativa × realidade), e é a comparação entre elas
+   *  que responde "estou financiando este cliente?" e "escorregou quanto?". */
   const linhas: SeriesDef[] = [
-    { key: "Saldo previsto",  label: "Saldo previsto",  slot: 0, mark: "line", tracejada: true },
-    { key: "Saldo realizado", label: "Saldo realizado", slot: 2, mark: "line" },
-  ];
+    ...(temPlano
+      ? [{ key: "Saldo do plano", label: "Saldo do plano (fechamento)", slot: 4, mark: "line", tracejada: true } as SeriesDef]
+      : []),
+    { key: "Saldo previsto",  label: "Saldo previsto",  slot: 0, mark: "line", tracejada: true } as SeriesDef,
+    { key: "Saldo realizado", label: "Saldo realizado", slot: 2, mark: "line" } as SeriesDef,
+  ].filter((l) => visiveis.has(l.key));
   const serie: SeriesDef[] = [...barras, ...linhas];
+
+  /** O desvio contra o PLANO — em dinheiro e em dias.
+   *
+   *  É o número que fecha a pergunta do projeto: combinei X, hoje espero Y.
+   *  Em dias, o atraso da primeira parcela que ainda não faturou; adiantar o
+   *  recebimento não é notícia, atrasar é. */
+  const vsPlano = useMemo(() => {
+    if (!temPlano) return null;
+    const pEnt = (plano?.parcelas ?? []).reduce((a, p) => a + Number(p.valor || 0), 0);
+    const pSai = (plano?.saidas ?? []).filter((x) => x.no_fluxo)
+                                      .reduce((a, x) => a + Number(x.valor || 0), 0);
+    const atrasos = (plano?.parcelas ?? [])
+      .filter((p) => p.dt_ajustada && p.dt_plano && p.dt_ajustada > p.dt_plano)
+      .map((p) => Math.round(
+        (new Date(`${p.dt_ajustada}T12:00:00`).getTime()
+         - new Date(`${p.dt_plano}T12:00:00`).getTime()) / 86_400_000));
+    return {
+      entradas: totEnt - pEnt, saidas: totSai - pSai,
+      resultado: (totEnt - totSai) - (pEnt - pSai),
+      planoResultado: pEnt - pSai,
+      piorAtraso: atrasos.length ? Math.max(...atrasos) : 0,
+      parcelasAtrasadas: atrasos.length,
+    };
+  }, [temPlano, plano, totEnt, totSai]);
 
   const cab = data?.cabecalho ?? { status: "rascunho" as const, versao: 1 };
   const tom = TOM[cab.status];
@@ -424,6 +542,28 @@ export default function FluxoProjetoView({
         </div>
       )}
 
+      {/* O confronto que fecha o projeto: combinei X, hoje espero Y.
+          Fica no topo junto dos outros avisos porque perder 10% da margem
+          entre o fechamento e a obra é notícia, não linha de tabela. */}
+      {vsPlano && (Math.abs(vsPlano.resultado) > 0.5 || vsPlano.parcelasAtrasadas > 0) && (
+        <div className={`p-2.5 rounded-lg border text-[12px] ${
+          vsPlano.resultado >= 0
+            ? "border-emerald-500/40 bg-emerald-500/[0.08] text-emerald-800 dark:text-emerald-200"
+            : "border-rose-500/40 bg-rose-500/[0.08] text-rose-800 dark:text-rose-200"}`}>
+          <strong>Contra o plano do fechamento:</strong>{" "}
+          resultado {vsPlano.resultado >= 0 ? "melhor" : "pior"} em{" "}
+          <strong>{brl(Math.abs(vsPlano.resultado))}</strong>{" "}
+          (plano {brl(vsPlano.planoResultado)} → hoje {brl(totEnt - totSai)}).
+          {Math.abs(vsPlano.saidas) > 0.5 && (
+            <> Saídas {vsPlano.saidas > 0 ? "acima" : "abaixo"} em {brl(Math.abs(vsPlano.saidas))}.</>
+          )}
+          {vsPlano.parcelasAtrasadas > 0 && (
+            <> {vsPlano.parcelasAtrasadas} parcela(s) com faturamento adiado — a pior em{" "}
+              <strong>{vsPlano.piorAtraso} dias</strong>.</>
+          )}
+        </div>
+      )}
+
       {sujo && (
         <div className="p-2.5 rounded-lg border border-amber-500/40 bg-amber-500/10 text-[12px] text-amber-800 dark:text-amber-200">
           Há alterações não gravadas. O gráfico já mostra o que você digitou; o painel só passa a
@@ -465,18 +605,56 @@ export default function FluxoProjetoView({
         ))}
       </div>
 
+      {/* As premissas vêm ANTES do gráfico e das tabelas do Omie.
+          É a ordem em que o projeto acontece: primeiro se fecha, depois se
+          compra. E é o único bloco que tem conteúdo num projeto recém-ganho —
+          deixá-lo no rodapé faria a tela abrir vazia justamente quando ela
+          mais serve, que é para decidir. */}
+      <PlanoFechamento empresa={empresa} codigoProjeto={codigoProjeto}
+        podeEditar={podeEditar} dados={plano} onMudou={() => void carregarPlano()} />
+
       <CardBudget empresa={empresa} codigoProjeto={codigoProjeto}
         orcamento={data?.orcamento ?? null} comprado={omiSai + manSai} pago={liq.pago}
-        podeEditar={podeEditar} onGravado={() => void carregar()} />
+        podeEditar={podeEditar} onGravado={() => void carregar()}
+        // O custo de materiais da MC é o teto que a proposta projetou. Oferecer
+        // como sugestão evita que alguém digite um número de cabeça quando o
+        // número certo já está na planilha importada.
+        sugestao={plano?.plano?.custo_materiais ?? null} />
+
+      {/* Alternar entre os cenários, ou ver os três.
+          Os três juntos são nove séries — legítimo para comparar, denso demais
+          quando a pergunta é sobre um só. */}
+      {temPlano && (
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <span className="text-[10px] uppercase tracking-[0.7px] font-bold text-ww-textFaint mr-0.5">
+            Cenário
+          </span>
+          {([["todos", "Os três", "Plano, previsto e realizado no mesmo eixo — o desvio aparece na distância entre as curvas"],
+             ["plano", "Inicial", "O que foi combinado no fechamento. Não se mexe."],
+             ["previsto", "Previsto", "O que se espera hoje: PV e compras do Omie, mais mão de obra e despesas"],
+             ["realizado", "Realizado", "O que de fato entrou e saiu, pela baixa do título"]] as const).map(([k, rot, dica]) => (
+            <button key={k} type="button" onClick={() => setCenario(k)} title={dica}
+              className={`px-2.5 py-0.5 text-[11px] rounded-lg border transition ${
+                cenario === k
+                  ? "border-ww-accent bg-ww-accentSoft text-ww-accent font-semibold"
+                  : "border-ww-border text-ww-textMuted hover:text-ww-text hover:bg-ww-rowHover"}`}>
+              {rot}
+            </button>
+          ))}
+        </div>
+      )}
 
       <ChartFrame
         title={`Fluxo de caixa do projeto${nomeProjeto ? ` — ${nomeProjeto}` : ""}`}
         subtitle={
-          "Dia a dia. Barra vazada = previsto; cheia = o que de fato entrou e saiu, pela baixa do título. "
-          + "A linha tracejada é o saldo do PLANO; a cheia é o saldo REAL, e ela para em hoje. "
-          + "Quando a cheia corre abaixo da tracejada, o projeto está sendo financiado por você."
+          "Dia a dia. Barra vazada = ainda não aconteceu; cheia = o que de fato entrou e saiu, pela baixa do título. "
+          + (temPlano
+              ? "São três curvas de saldo: a do PLANO (fechamento), a PREVISTA (o que se espera hoje) e a REALIZADA, que para em hoje. "
+                + "A distância entre a do plano e a prevista é o desvio; quando a realizada corre abaixo das duas, o projeto está sendo financiado por você. "
+              : "A linha tracejada é o saldo do PLANO; a cheia é o saldo REAL, e ela para em hoje. "
+                + "Quando a cheia corre abaixo da tracejada, o projeto está sendo financiado por você. ")
           + (data?.orcamento?.valor_budget
-              ? ` A régua marca o teto de gasto de ${brl(Number(data.orcamento.valor_budget))}.`
+              ? `A régua marca o teto de gasto de ${brl(Number(data.orcamento.valor_budget))}.`
               : "")
         }
         series={serie} rows={grafico} valueFormat={(v) => brl(Number(v))}
@@ -625,10 +803,13 @@ function Secao({
  *  Grava em /api/rc-projetos/budget, a MESMA rota da tela de materiais: dois
  *  lugares para editar o mesmo número dariam dois budgets diferentes. */
 function CardBudget({
-  empresa, codigoProjeto, orcamento, comprado, pago, podeEditar, onGravado,
+  empresa, codigoProjeto, orcamento, comprado, pago, podeEditar, onGravado, sugestao,
 }: {
   empresa: string; codigoProjeto: number; orcamento: Orcamento;
   comprado: number; pago: number; podeEditar: boolean; onGravado: () => void;
+  /** O custo de materiais que a proposta projetou. Vira um botão em vez de um
+   *  número para digitar de cabeça. */
+  sugestao?: number | null;
 }) {
   const teto = orcamento?.valor_budget != null ? Number(orcamento.valor_budget) : null;
   const [editando, setEditando] = useState(false);
@@ -682,6 +863,14 @@ function CardBudget({
               </button>
               <button type="button" onClick={() => setEditando(false)}
                 className="text-[11px] text-ww-textMuted hover:text-ww-text">cancelar</button>
+              {sugestao != null && sugestao > 0 && (
+                <button type="button"
+                  onClick={() => setTxt(sugestao.toFixed(2).replace(".", ","))}
+                  title="O custo de materiais projetado na MC da proposta"
+                  className="text-[11px] text-ww-accent hover:underline">
+                  usar o da proposta ({brl(sugestao)})
+                </button>
+              )}
             </div>
           ) : (
             <div className="flex items-center gap-2 mt-1">
