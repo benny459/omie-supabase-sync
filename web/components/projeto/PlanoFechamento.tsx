@@ -415,42 +415,10 @@ export default function PlanoFechamento({
             </p>
           </div>
 
-          {/* ── Margem projetada ─────────────────────────────────────────── */}
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
-            {[
-              // O FECHADO é o que vale. O calculado aparece embaixo quando
-              // difere — não como erro, mas porque a margem da MC foi feita
-              // sobre ele, e quem lê o percentual precisa saber disso.
-              { r: plano.valor_fechado != null ? "Valor fechado" : "Valor de venda",
-                v: brl(plano.valor_fechado ?? plano.valor_venda),
-                s: plano.valor_fechado != null && plano.valor_venda != null
-                   && Math.abs(plano.valor_fechado - plano.valor_venda) > 0.05
-                   ? `proposta calculava ${brl(plano.valor_venda)}` : undefined,
-                t: "verde" },
-              { r: "Materiais (CMV)", v: brl(plano.custo_materiais), t: "vermelho" },
-              { r: "Mão de obra", v: brl(plano.custo_mao_obra), t: "vermelho" },
-              { r: "Despesas", v: brl(plano.custo_despesas), t: "vermelho" },
-              { r: "Custo total", v: brl((plano.custo_materiais ?? 0) + (plano.custo_mao_obra ?? 0) + (plano.custo_despesas ?? 0)), t: "vermelho" },
-              { r: "Margem projetada",
-                v: plano.margem_pct != null
-                  ? `${Number(plano.margem_pct).toFixed(1).replace(".", ",")}%` : "—",
-                s: plano.valor_fechado != null && plano.valor_venda != null
-                   && Math.abs(plano.valor_fechado - plano.valor_venda) > 0.05
-                   ? `${brl(plano.margem_valor)} · sobre o valor calculado`
-                   : brl(plano.margem_valor),
-                t: "verde" },
-            ].map((c) => (
-              <div key={c.r} className={`rounded-lg border p-2 ${
-                c.t === "verde" ? "border-emerald-500/25 bg-emerald-500/[0.05]"
-                                : "border-rose-500/25 bg-rose-500/[0.05]"}`}>
-                <div className="text-[9px] uppercase tracking-[0.7px] font-bold text-ww-textFaint">{c.r}</div>
-                <div className={`text-[13px] font-bold tabular-nums mt-0.5 ${
-                  c.t === "verde" ? "text-emerald-600 dark:text-emerald-300"
-                                  : "text-rose-600 dark:text-rose-300"}`}>{c.v}</div>
-                {c.s && <div className="text-[10px] text-ww-textMuted tabular-nums">{c.s}</div>}
-              </div>
-            ))}
-          </div>
+          {/* Os seis cartões de valor que ficavam aqui subiram para o resumo
+              do topo. Repetidos nos dois lugares, faziam a mesma grandeza
+              aparecer com dois nomes — e era parte do motivo de a tela ter
+              treze números antes de qualquer tabela. */}
 
           {/* ── Parcelas ─────────────────────────────────────────────────── */}
           <div>
