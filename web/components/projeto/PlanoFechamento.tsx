@@ -54,8 +54,14 @@ export type PlanoSaida = {
   dias_apos_base: number | null; dt_prevista: string | null;
   valor: number; no_fluxo: boolean;
 };
+export type PlanoCusto = {
+  id: number; grupo: "efetivo" | "despesa"; descricao: string | null;
+  qtd_pessoas: number | null; valor_unit: number | null;
+  quantidade: number | null; subtotal: number; observacao: string | null;
+};
 export type PlanoCompleto = {
   plano: PlanoCab | null; parcelas: PlanoParcela[]; saidas: PlanoSaida[];
+  custos: PlanoCusto[];
 };
 
 const brl = (v: number | null | undefined) =>
@@ -106,6 +112,7 @@ export default function PlanoFechamento({
   const plano = dados?.plano ?? null;
   const parcelas = dados?.parcelas ?? [];
   const saidas = dados?.saidas ?? [];
+  const custos = dados?.custos ?? [];
 
   // ── Importação ───────────────────────────────────────────────────────────
   const escolher = useCallback(async (f: File) => {
@@ -702,6 +709,82 @@ export default function PlanoFechamento({
                     ))}
                   </tbody>
                 </table>
+              </div>
+            </details>
+          )}
+
+          {/* ── Como se chegou no custo que não vira pedido de compra ────
+              O total já está no card acima. O que falta é a composição: "a mão
+              de obra estourou" só vira decisão quando se sabe que eram 1
+              engenheiro por 2 dias e 1 técnico por 8,5 dias EQUIVALENTES — e
+              que os equivalentes já embutem sábado (1,5×) e domingo (2×). */}
+          {custos.length > 0 && (
+            <details className="rounded-lg border border-ww-border">
+              <summary className="cursor-pointer px-2.5 py-1.5 text-[11.5px] text-ww-textMuted hover:text-ww-text">
+                Efetivo e despesas consideradas —{" "}
+                <span className="tabular-nums">
+                  {brl(custos.reduce((a, x) => a + Number(x.subtotal || 0), 0))}
+                </span>
+              </summary>
+              <div className="px-2.5 pb-2.5 space-y-2.5">
+                {([["efetivo", "Efetivo técnico", "Dias equiv."],
+                   ["despesa", "Despesas operacionais", "Diárias / qtd"]] as const).map(([g, rot, colQtd]) => {
+                  const linhas = custos.filter((x) => x.grupo === g);
+                  if (!linhas.length) return null;
+                  return (
+                    <div key={g}>
+                      <div className="flex items-baseline gap-2 mt-1.5 mb-1">
+                        <span className="text-[10px] uppercase tracking-wider font-semibold text-ww-textMuted">
+                          {rot}
+                        </span>
+                        <span className="text-[10.5px] text-ww-textFaint tabular-nums">
+                          {brl(linhas.reduce((a, x) => a + Number(x.subtotal || 0), 0))}
+                        </span>
+                      </div>
+                      <table className="w-full text-[11px] border-collapse">
+                        <thead>
+                          <tr className="text-[9.5px] uppercase tracking-wider text-ww-textFaint">
+                            <th className="text-left  p-1 font-semibold">Item</th>
+                            <th className="text-right p-1 font-semibold w-[54px]">Pessoas</th>
+                            <th className="text-right p-1 font-semibold w-[90px]">
+                              {g === "efetivo" ? "Custo/dia" : "Valor unit."}
+                            </th>
+                            <th className="text-right p-1 font-semibold w-[84px]">{colQtd}</th>
+                            <th className="text-right p-1 font-semibold w-[96px]">Subtotal</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {linhas.map((x) => (
+                            <tr key={x.id} className="viz-row">
+                              <td className="p-1 border-b border-ww-border/40 text-ww-text">
+                                {x.descricao}
+                                {x.observacao && (
+                                  <span className="block text-[9.5px] text-ww-textFaint">{x.observacao}</span>
+                                )}
+                              </td>
+                              <td className="p-1 border-b border-ww-border/40 text-right tabular-nums text-ww-textMuted">
+                                {x.qtd_pessoas ?? "—"}
+                              </td>
+                              <td className="p-1 border-b border-ww-border/40 text-right tabular-nums text-ww-textMuted">
+                                {x.valor_unit != null ? brl(x.valor_unit) : "—"}
+                              </td>
+                              <td className="p-1 border-b border-ww-border/40 text-right tabular-nums text-ww-textMuted">
+                                {x.quantidade ?? "—"}
+                              </td>
+                              <td className="p-1 border-b border-ww-border/40 text-right tabular-nums text-ww-text">
+                                {brl(x.subtotal)}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  );
+                })}
+                <p className="text-[10.5px] text-ww-textMuted">
+                  Dias equivalentes já embutem o multiplicador por turno: sábado 1,5× e domingo 2×.
+                  Nada disto vira pedido de compra — é a única composição que existe destes custos.
+                </p>
               </div>
             </details>
           )}

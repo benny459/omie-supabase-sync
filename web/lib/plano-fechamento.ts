@@ -38,6 +38,20 @@ export type SaidaPlano = {
   no_fluxo: boolean;
 };
 
+/** Uma linha da composição do custo que não vira pedido de compra. */
+export type CustoPlano = {
+  grupo: "efetivo" | "despesa";
+  descricao: string;
+  qtd_pessoas: number | null;
+  valor_unit: number | null;
+  /** Diárias, para despesa; dias EQUIVALENTES, para efetivo — já com o
+   *  multiplicador de sábado (1,5×) e domingo (2×) embutido. */
+  quantidade: number | null;
+  subtotal: number;
+  observacao: string | null;
+  ordem: number;
+};
+
 export type PlanoFechamento = {
   proposta: string | null;
   cliente: string | null;
@@ -78,6 +92,7 @@ export type PlanoFechamento = {
   margem_valor: number | null;
   parcelas: ParcelaPlano[];
   saidas: SaidaPlano[];
+  custos: CustoPlano[];
   /** O que não foi encontrado. A tela mostra — um plano que importou meio e não
    *  diz qual metade é pior que um plano que não importou. */
   avisos: string[];
@@ -330,6 +345,47 @@ export function lerPlanoFechamento(buf: ArrayBuffer): PlanoFechamento {
   const margem_valor = mcLinha(25);
   if (valor_venda == null) avisos.push("Não achei o faturamento total na aba MC.");
 
+  const brl = (n: number) =>
+    n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+
+  // ── Composição do custo que não vira pedido de compra ────────────────────
+  //
+  // Efetivo:  Nível | Técnicos | comercial | noturno | sábado | domingo | Custo/dia | Dias eq. | Subtotal
+  // Despesa:  Despesa | Técnicos | Valor unit. | Diárias/Qtd | Subtotal | Observação
+  //
+  // A linha TOTAL de cada bloco fica de fora: o total já está no cabeçalho, e
+  // repeti-lo como linha faria qualquer soma na tela dar o dobro.
+  const custos: CustoPlano[] = [];
+  for (const l of bloco(mc, "EFETIVO TÉCNICO")) {
+    const desc = txt(l[0]);
+    if (!desc || semAcento(desc) === "total") continue;
+    const sub = num(l[8]);
+    if (sub == null) continue;
+    custos.push({
+      grupo: "efetivo", descricao: desc,
+      qtd_pessoas: num(l[1]), valor_unit: num(l[6]), quantidade: num(l[7]),
+      subtotal: sub,
+      // Os dias por turno são a razão de o equivalente não bater com o corrido.
+      observacao: [["comercial", num(l[2])], ["noturno", num(l[3])],
+                   ["sábado", num(l[4])], ["domingo", num(l[5])]]
+        .filter(([, v]) => (v as number) > 0)
+        .map(([k, v]) => `${v}d ${k}`).join(" · ") || null,
+      ordem: custos.length,
+    });
+  }
+  for (const l of bloco(mc, "DESPESAS CONSIDERADAS")) {
+    const desc = txt(l[0]);
+    if (!desc || semAcento(desc) === "total") continue;
+    const sub = num(l[4]);
+    if (sub == null) continue;
+    custos.push({
+      grupo: "despesa", descricao: desc,
+      qtd_pessoas: num(l[1]), valor_unit: num(l[2]), quantidade: num(l[3]),
+      subtotal: sub, observacao: txt(l[5]) || null,
+      ordem: custos.length,
+    });
+  }
+
   // ── Conferências entre abas ──────────────────────────────────────────────
   //
   // As parcelas são digitadas na planilha e o valor de venda é calculado. Nada
@@ -339,9 +395,6 @@ export function lerPlanoFechamento(buf: ArrayBuffer): PlanoFechamento {
   //
   // Não corrijo: a planilha é a fonte e talvez a diferença seja proposital
   // (um frete somado à parcela, por exemplo). Só me recuso a escondê-la.
-  const brl = (n: number) =>
-    n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
-
   // As parcelas conferem contra o VALOR FECHADO, não contra o calculado na MC.
   // A planilha declara qual dos dois vale ("Difere do valor calculado na
   // proposta — vale o que foi fechado"), e medir contra o errado acusaria uma
@@ -365,6 +418,18 @@ export function lerPlanoFechamento(buf: ArrayBuffer): PlanoFechamento {
       + `(${valor_fechado > valor_venda ? "+" : ""}${brl(valor_fechado - valor_venda)}). `
       + `Vale o fechado — a margem projetada da MC foi calculada sobre o outro.`);
   }
+  // O detalhe tem que fechar com o total, senão a tela discrimina errado.
+  for (const [g, tot, rot] of [["efetivo", custo_mao_obra, "mão de obra"],
+                               ["despesa", custo_despesas, "despesas"]] as const) {
+    const linhas = custos.filter((c) => c.grupo === g);
+    if (!linhas.length || tot == null) continue;
+    const soma = linhas.reduce((a, c) => a + c.subtotal, 0);
+    if (Math.abs(soma - tot) > 0.05) {
+      avisos.push(
+        `O detalhe de ${rot} soma ${brl(soma)} mas o total da MC é ${brl(tot)}.`);
+    }
+  }
+
   const somaCustoMC = (custo_materiais ?? 0) + (custo_mao_obra ?? 0) + (custo_despesas ?? 0);
   const somaS = saidas.filter((s) => s.no_fluxo).reduce((a, s) => a + s.valor, 0);
   if (somaCustoMC > 0 && Math.abs(somaS - somaCustoMC) > 0.05) {
@@ -394,6 +459,6 @@ export function lerPlanoFechamento(buf: ArrayBuffer): PlanoFechamento {
     faturamento:     condicao("Faturamento")                 ?? buscar(propTxt, "Faturamento"),
     observacoes:     condicao("Observações")                 ?? buscar(propTxt, "Observações"),
     custo_materiais, custo_mao_obra, custo_despesas, margem_pct, margem_valor,
-    parcelas, saidas, avisos,
+    parcelas, saidas, custos, avisos,
   };
 }

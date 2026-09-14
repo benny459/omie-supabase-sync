@@ -627,33 +627,7 @@ export default function FluxoProjetoView({
       <CardBudget empresa={empresa} codigoProjeto={codigoProjeto}
         orcamento={data?.orcamento ?? null} comprado={omiSai + manSai} pago={liq.pago}
         podeEditar={podeEditar} onGravado={() => void carregar()}
-        // O custo de materiais da MC é o teto que a proposta projetou. Oferecer
-        // como sugestão evita que alguém digite um número de cabeça quando o
-        // número certo já está na planilha importada.
-        sugestao={plano?.plano?.custo_materiais ?? null} />
-
-      {/* Alternar entre os cenários, ou ver os três.
-          Os três juntos são nove séries — legítimo para comparar, denso demais
-          quando a pergunta é sobre um só. */}
-      {temPlano && (
-        <div className="flex items-center gap-1.5 flex-wrap">
-          <span className="text-[10px] uppercase tracking-[0.7px] font-bold text-ww-textFaint mr-0.5">
-            Cenário
-          </span>
-          {([["todos", "Os três", "Plano, previsto e realizado no mesmo eixo — o desvio aparece na distância entre as curvas"],
-             ["plano", "Inicial", "O que foi combinado no fechamento. Não se mexe."],
-             ["previsto", "Previsto", "O que se espera hoje: PV e compras do Omie, mais mão de obra e despesas"],
-             ["realizado", "Realizado", "O que de fato entrou e saiu, pela baixa do título"]] as const).map(([k, rot, dica]) => (
-            <button key={k} type="button" onClick={() => setCenario(k)} title={dica}
-              className={`px-2.5 py-0.5 text-[11px] rounded-lg border transition ${
-                cenario === k
-                  ? "border-ww-accent bg-ww-accentSoft text-ww-accent font-semibold"
-                  : "border-ww-border text-ww-textMuted hover:text-ww-text hover:bg-ww-rowHover"}`}>
-              {rot}
-            </button>
-          ))}
-        </div>
-      )}
+        plano={plano} />
 
       <ChartFrame
         title={`Fluxo de caixa do projeto${nomeProjeto ? ` — ${nomeProjeto}` : ""}`}
@@ -670,6 +644,27 @@ export default function FluxoProjetoView({
         }
         series={serie} rows={grafico} valueFormat={(v) => brl(Number(v))}
         loading={carregando} height={360}
+        acoes={temPlano ? (
+          <label className="inline-flex items-center gap-1.5">
+            <span className="text-[10px] uppercase tracking-[0.6px] font-bold text-ww-textFaint">
+              Vendo
+            </span>
+            {/* Um select, não quatro chips: a lista dos cenários é uma escolha
+                entre alternativas exclusivas, e a seta diz isso sem precisar
+                de rótulo. Fica no cabeçalho do gráfico porque é ele que muda —
+                solto acima da moldura parecia pertencer ao bloco anterior. */}
+            <select value={cenario}
+              onChange={(e) => setCenario(e.target.value as typeof cenario)}
+              title="Qual fluxo o gráfico mostra"
+              className="px-2 py-0.5 text-[11px] rounded border border-ww-border bg-ww-bg text-ww-text
+                         hover:border-ww-accent/60 focus:border-ww-accent outline-none cursor-pointer">
+              <option value="todos">Os três (consolidado)</option>
+              <option value="plano">Plano inicial — o fechamento</option>
+              <option value="previsto">Previsto — o que se espera hoje</option>
+              <option value="realizado">Realizado — o que aconteceu</option>
+            </select>
+          </label>
+        ) : undefined}
       >
         {(vis) => (
           <VizCombo rows={grafico}
@@ -814,15 +809,43 @@ function Secao({
  *  Grava em /api/rc-projetos/budget, a MESMA rota da tela de materiais: dois
  *  lugares para editar o mesmo número dariam dois budgets diferentes. */
 function CardBudget({
-  empresa, codigoProjeto, orcamento, comprado, pago, podeEditar, onGravado, sugestao,
+  empresa, codigoProjeto, orcamento, comprado, pago, podeEditar, onGravado, plano,
 }: {
   empresa: string; codigoProjeto: number; orcamento: Orcamento;
   comprado: number; pago: number; podeEditar: boolean; onGravado: () => void;
-  /** O custo de materiais que a proposta projetou. Vira um botão em vez de um
-   *  número para digitar de cabeça. */
-  sugestao?: number | null;
+  /** O plano de fechamento. O teto NASCE dele — a proposta já projetou quanto
+   *  o projeto pode custar, e discriminado por natureza. */
+  plano?: PlanoCompleto | null;
 }) {
-  const teto = orcamento?.valor_budget != null ? Number(orcamento.valor_budget) : null;
+  const cab = plano?.plano ?? null;
+  const pMat = cab?.custo_materiais != null ? Number(cab.custo_materiais) : null;
+  const pMao = cab?.custo_mao_obra  != null ? Number(cab.custo_mao_obra)  : null;
+  const pDes = cab?.custo_despesas  != null ? Number(cab.custo_despesas)  : null;
+  const tetoPlano = (pMat ?? pMao ?? pDes) != null
+    ? (pMat ?? 0) + (pMao ?? 0) + (pDes ?? 0) : null;
+
+  /** O teto vem do PLANO, e o manual só existe para sobrepô-lo.
+   *
+   *  Antes o card abria "não definido" num projeto cuja proposta já dizia
+   *  quanto ele podia custar — e pedia para alguém digitar de cabeça um número
+   *  que estava na planilha, discriminado. Definir à mão continua possível: o
+   *  teto é decisão de quem administra, e a proposta é só a melhor sugestão
+   *  disponível no dia zero. */
+  const manual = orcamento?.valor_budget != null ? Number(orcamento.valor_budget) : null;
+  const teto = manual ?? tetoPlano;
+  const doPlano = manual == null && tetoPlano != null;
+
+  /** Onde o teto está comprometido, por natureza.
+   *
+   *  Só materiais viram pedido de compra — então só eles têm "comprado" vindo
+   *  do Omie. Mão de obra e despesa ficam em 100% previsto até serem pagas, e
+   *  mostrar as três como uma barra só esconderia que R$ 20 mil do teto não
+   *  têm como aparecer no ERP. */
+  const naturezas = tetoPlano == null ? [] : [
+    { rot: "Materiais",   previsto: pMat ?? 0, real: comprado, tom: "bg-emerald-500" },
+    { rot: "Mão de obra", previsto: pMao ?? 0, real: 0,        tom: "bg-sky-500" },
+    { rot: "Despesas",    previsto: pDes ?? 0, real: 0,        tom: "bg-violet-500" },
+  ].filter((x) => x.previsto > 0);
   const [editando, setEditando] = useState(false);
   const [txt, setTxt] = useState("");
   const [salvando, setSalvando] = useState(false);
@@ -874,12 +897,12 @@ function CardBudget({
               </button>
               <button type="button" onClick={() => setEditando(false)}
                 className="text-[11px] text-ww-textMuted hover:text-ww-text">cancelar</button>
-              {sugestao != null && sugestao > 0 && (
+              {tetoPlano != null && tetoPlano > 0 && (
                 <button type="button"
-                  onClick={() => setTxt(sugestao.toFixed(2).replace(".", ","))}
-                  title="O custo de materiais projetado na MC da proposta"
+                  onClick={() => setTxt(tetoPlano.toFixed(2).replace(".", ","))}
+                  title="Custo total projetado na MC: materiais + mão de obra + despesas"
                   className="text-[11px] text-ww-accent hover:underline">
-                  usar o da proposta ({brl(sugestao)})
+                  usar o da proposta ({brl(tetoPlano)})
                 </button>
               )}
             </div>
@@ -888,13 +911,28 @@ function CardBudget({
               <span className="text-[19px] font-bold tabular-nums text-ww-text">
                 {teto != null ? brl(teto) : "não definido"}
               </span>
+              {/* De onde saiu o número. Sem isto ninguém sabe se o teto foi
+                  decidido por alguém ou herdado da proposta — e são coisas
+                  diferentes na hora de discutir um estouro. */}
+              {doPlano && (
+                <span className="px-1.5 py-0.5 text-[10px] rounded border border-ww-border text-ww-textMuted"
+                      title="Custo total da MC da proposta. Editar aqui sobrepõe.">
+                  do plano de fechamento
+                </span>
+              )}
               {podeEditar && (
                 <button type="button"
-                  onClick={() => { setTxt(teto != null ? String(teto).replace(".", ",") : ""); setEditando(true); }}
+                  onClick={() => { setTxt(teto != null ? teto.toFixed(2).replace(".", ",") : ""); setEditando(true); }}
                   className="px-2 py-0.5 text-[11px] rounded-lg border border-ww-accent/60 text-ww-accent
                              hover:bg-ww-accentSoft transition font-semibold">
-                  {teto != null ? "Editar teto" : "Definir teto"}
+                  {manual != null ? "Editar teto" : doPlano ? "Sobrepor" : "Definir teto"}
                 </button>
+              )}
+              {manual != null && tetoPlano != null && Math.abs(manual - tetoPlano) > 0.05 && (
+                <span className="text-[10.5px] text-ww-textFaint tabular-nums"
+                      title="O que a proposta projetou">
+                  plano: {brl(tetoPlano)}
+                </span>
               )}
             </div>
           )}
@@ -919,10 +957,42 @@ function CardBudget({
           </p>
         </>
       )}
+
+      {/* ── Onde o teto está, por natureza ────────────────────────────────
+          Uma barra só esconderia que R$ 20 mil do teto (mão de obra +
+          despesas) NÃO têm como aparecer no ERP: nenhuma delas vira pedido de
+          compra. Sem discriminar, "58% comprometido" parece folga e não é. */}
+      {naturezas.length > 0 && (
+        <div className="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+          {naturezas.map((nat) => {
+            const p = nat.previsto > 0 ? Math.min(100, (nat.real / nat.previsto) * 100) : 0;
+            const naoVaiAoErp = nat.rot !== "Materiais";
+            return (
+              <div key={nat.rot}>
+                <div className="flex items-baseline justify-between gap-1">
+                  <span className="text-[10px] uppercase tracking-[0.6px] font-bold text-ww-textFaint">
+                    {nat.rot}
+                  </span>
+                  <span className="text-[11px] tabular-nums text-ww-text">{brl(nat.previsto)}</span>
+                </div>
+                <div className="mt-1 h-1.5 rounded-full bg-ww-border/60 overflow-hidden">
+                  <div className={`h-full rounded-full ${nat.tom}`} style={{ width: `${p}%` }} />
+                </div>
+                <div className="mt-0.5 text-[10px] text-ww-textMuted tabular-nums">
+                  {naoVaiAoErp
+                    ? "previsto · não vira pedido de compra"
+                    : `${brl(nat.real)} já comprado`}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
       {teto == null && (
         <p className="mt-2 text-[11px] text-ww-textMuted">
           Sem teto definido, o gráfico não tem régua e não há como dizer se o projeto está
-          estourando o orçamento.
+          estourando o orçamento. Importe o plano de fechamento e ele vem da proposta.
         </p>
       )}
       {erro && <p className="mt-2 text-[11px] text-rose-600 dark:text-rose-300">{erro}</p>}

@@ -69,21 +69,24 @@ export async function GET(req: Request) {
   if (!k) return NextResponse.json({ error: "empresa e codigo_projeto obrigatórios" }, { status: 400 });
 
   const admin = supaAdmin().schema("approval");
-  const [cab, parc, said] = await Promise.all([
+  const [cab, parc, said, cust] = await Promise.all([
     admin.from("projeto_plano").select("*")
       .eq("empresa", k.empresa).eq("codigo_projeto", k.codigo).maybeSingle(),
     admin.from("projeto_plano_parcela").select("*")
       .eq("empresa", k.empresa).eq("codigo_projeto", k.codigo).order("parcela"),
     admin.from("projeto_plano_saida").select("*")
       .eq("empresa", k.empresa).eq("codigo_projeto", k.codigo).order("dt_prevista"),
+    admin.from("projeto_plano_custo").select("*")
+      .eq("empresa", k.empresa).eq("codigo_projeto", k.codigo).order("ordem"),
   ]);
-  const err = cab.error ?? parc.error ?? said.error;
+  const err = cab.error ?? parc.error ?? said.error ?? cust.error;
   if (err) return NextResponse.json({ error: err.message }, { status: 500 });
 
   return NextResponse.json({
     plano: cab.data ?? null,
     parcelas: parc.data ?? [],
     saidas: said.data ?? [],
+    custos: cust.data ?? [],
   });
 }
 
@@ -157,6 +160,16 @@ export async function POST(req: Request) {
       dt_prevista: dt(x.dt_prevista), valor: n(x.valor) ?? 0,
       no_fluxo: x.no_fluxo !== false,
     })),
+    p_custos: (Array.isArray(b.custos) ? b.custos : []).map((x, i) => {
+      const c = x as Record<string, unknown>;
+      return {
+        grupo: c.grupo === "efetivo" ? "efetivo" : "despesa",
+        descricao: s(c.descricao, 200),
+        qtd_pessoas: n(c.qtd_pessoas), valor_unit: n(c.valor_unit),
+        quantidade: n(c.quantidade), subtotal: n(c.subtotal) ?? 0,
+        observacao: s(c.observacao, 300), ordem: i,
+      };
+    }),
     p_quem: auth.quem,
   });
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });

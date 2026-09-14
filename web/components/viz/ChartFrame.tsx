@@ -53,7 +53,7 @@ export type SeriesDef = {
 };
 
 export default function ChartFrame({
-  title, subtitle, series, rows, valueFormat, loading, children, height = 260,
+  title, subtitle, series, rows, valueFormat, loading, children, height = 260, acoes,
 }: {
   title: string;
   subtitle?: string;
@@ -69,6 +69,12 @@ export default function ChartFrame({
    *  dos cliques na legenda). Use a função quando o gráfico deve reagir. */
   children: React.ReactNode | ((visiveis: SeriesDef[]) => React.ReactNode);
   height?: number;
+  /** Controles do próprio gráfico, no cabeçalho, à esquerda de Cesar/Tabela.
+   *
+   *  Quem escolhe O QUE o gráfico mostra tem que ficar junto do gráfico. Solto
+   *  acima da moldura, o controle parece pertencer ao bloco anterior — e quem
+   *  chega na tela não liga uma coisa à outra. */
+  acoes?: React.ReactNode;
 }) {
   const [asTable, setAsTable] = useState(false);
   const cesar = useCesar();
@@ -106,6 +112,7 @@ export default function ChartFrame({
           <h3 className="text-[12.5px] font-semibold text-ww-text tracking-wide uppercase truncate">{title}</h3>
           {subtitle && <p className="text-[11px] text-ww-textMuted mt-0.5 normal-case">{subtitle}</p>}
         </div>
+        {acoes && <div className="shrink-0 flex items-center gap-1.5">{acoes}</div>}
         {/* Pergunta SOBRE este gráfico. Leva o recorte que está na tela junto,
             para o Cesar não começar perguntando "de que período você fala". */}
         <button
