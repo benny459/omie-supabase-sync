@@ -111,87 +111,56 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Planilha grande demais para um plano" }, { status: 400 });
   }
 
-  const admin = supaAdmin().schema("approval");
-  const agora = new Date().toISOString();
-
-  // Guarda os ajustes de data ANTES de apagar: são cronograma de obra, não
-  // proposta, e quem reimporta está revisando o preço, não o cronograma.
-  const { data: antigas } = await admin.from("projeto_plano_parcela")
-    .select("parcela, dt_ajustada, num_titulo, observacao")
-    .eq("empresa", empresa).eq("codigo_projeto", codigo);
-  const guardado = new Map(
-    (antigas ?? []).map((p) => [Number(p.parcela), p]));
-
-  const cab = {
-    empresa, codigo_projeto: codigo,
-    proposta: s(b.proposta, 120), cliente: s(b.cliente, 200),
-    data_base: dt(b.data_base), valor_venda: n(b.valor_venda),
-    // O acordado vence o calculado quando diferem — a planilha declara isso.
-    valor_fechado: n(b.valor_fechado),
-    confirmado_por: s(b.confirmado_por, 120), confirmado_em: s(b.confirmado_em, 60),
-    eixo_pagamento: dt(b.eixo_pagamento),
-    prop_pagamento: s(b.prop_pagamento, 300), prop_faturamento: s(b.prop_faturamento, 300),
-    prop_prazo: s(b.prop_prazo, 200), prop_frete: s(b.prop_frete, 200),
-    prop_garantia: s(b.prop_garantia, 300), prop_instalacao: s(b.prop_instalacao, 300),
-    prop_observacoes: s(b.prop_observacoes, 2000),
-    prazo_entrega_dias: n(b.prazo_entrega_dias),
-    entrega_prevista: dt(b.entrega_prevista),
-    frete: s(b.frete, 200), deslocamento: s(b.deslocamento, 200),
-    instalacao: s(b.instalacao, 200), impostos: s(b.impostos, 200),
-    garantia: s(b.garantia, 200), forma_pagamento: s(b.forma_pagamento, 200),
-    faturamento: s(b.faturamento, 200), observacoes: s(b.observacoes, 2000),
-    custo_materiais: n(b.custo_materiais), custo_mao_obra: n(b.custo_mao_obra),
-    custo_despesas: n(b.custo_despesas),
-    margem_pct: n(b.margem_pct), margem_valor: n(b.margem_valor),
-    importado_de: s(b.importado_de, 300), importado_em: agora,
-    importado_por: auth.quem, atualizado_em: agora, atualizado_por: auth.quem,
-  };
-
-  const e1 = (await admin.from("projeto_plano").upsert(cab, { onConflict: "empresa,codigo_projeto" })).error;
-  if (e1) return NextResponse.json({ error: e1.message }, { status: 500 });
-
-  await admin.from("projeto_plano_parcela").delete()
-    .eq("empresa", empresa).eq("codigo_projeto", codigo);
-  await admin.from("projeto_plano_saida").delete()
-    .eq("empresa", empresa).eq("codigo_projeto", codigo);
-
-  if (parcelas.length) {
-    const linhas = parcelas.map((p) => {
-      const prev = guardado.get(Number(p.parcela));
-      return {
-        empresa, codigo_projeto: codigo, parcela: Math.trunc(Number(p.parcela)),
-        evento: s(p.evento, 200), pct: n(p.pct), dias: n(p.dias),
-        dt_plano: dt(p.dt_plano),
-        dt_ajustada: prev?.dt_ajustada ?? null,
-        num_titulo: prev?.num_titulo ?? null,
-        observacao: prev?.observacao ?? null,
-        valor: n(p.valor) ?? 0,
-        atualizado_em: agora, atualizado_por: auth.quem,
-      };
-    });
-    const e2 = (await admin.from("projeto_plano_parcela").insert(linhas)).error;
-    if (e2) return NextResponse.json({ error: e2.message }, { status: 500 });
-  }
-
-  if (saidas.length) {
-    const linhas = saidas.map((x) => ({
-      empresa, codigo_projeto: codigo,
+  // Uma chamada, uma transação. Antes eram cinco escritas soltas pelo
+  // PostgREST — grava cabeçalho, apaga parcelas, apaga saídas, insere
+  // parcelas, insere saídas — cada uma com sua própria transação.
+  //
+  // Na primeira importação real a quinta falhou (faltava GRANT na sequence) e
+  // o projeto ficou com cabeçalho e parcelas mas NENHUMA saída: R$ 91.055,04
+  // entrando, R$ 0,00 saindo, margem de 100%. Um erro que apaga tudo é um
+  // erro; um que deixa metade e mostra margem inventada é dado falso com cara
+  // de verdadeiro, e ninguém tem motivo para desconfiar dele.
+  const { data, error } = await supaAdmin().schema("approval").rpc("plano_importar", {
+    p_empresa: empresa,
+    p_codigo: codigo,
+    p_cab: {
+      proposta: s(b.proposta, 120), cliente: s(b.cliente, 200),
+      data_base: dt(b.data_base),
+      valor_venda: n(b.valor_venda),
+      // O acordado vence o calculado quando diferem — a planilha declara isso.
+      valor_fechado: n(b.valor_fechado),
+      confirmado_por: s(b.confirmado_por, 120), confirmado_em: s(b.confirmado_em, 60),
+      eixo_pagamento: dt(b.eixo_pagamento),
+      prazo_entrega_dias: n(b.prazo_entrega_dias),
+      entrega_prevista: dt(b.entrega_prevista),
+      frete: s(b.frete, 200), deslocamento: s(b.deslocamento, 200),
+      instalacao: s(b.instalacao, 200), impostos: s(b.impostos, 200),
+      garantia: s(b.garantia, 200), forma_pagamento: s(b.forma_pagamento, 200),
+      faturamento: s(b.faturamento, 200), observacoes: s(b.observacoes, 2000),
+      prop_pagamento: s(b.prop_pagamento, 300), prop_faturamento: s(b.prop_faturamento, 300),
+      prop_prazo: s(b.prop_prazo, 200), prop_frete: s(b.prop_frete, 200),
+      prop_garantia: s(b.prop_garantia, 300), prop_instalacao: s(b.prop_instalacao, 300),
+      prop_observacoes: s(b.prop_observacoes, 2000),
+      custo_materiais: n(b.custo_materiais), custo_mao_obra: n(b.custo_mao_obra),
+      custo_despesas: n(b.custo_despesas),
+      margem_pct: n(b.margem_pct), margem_valor: n(b.margem_valor),
+      importado_de: s(b.importado_de, 300),
+    },
+    p_parcelas: parcelas.map((x) => ({
+      parcela: Math.trunc(Number(x.parcela)), evento: s(x.evento, 200),
+      pct: n(x.pct), dias: n(x.dias), dt_plano: dt(x.dt_plano), valor: n(x.valor) ?? 0,
+    })),
+    p_saidas: saidas.map((x) => ({
       origem: x.origem === "sem_pc" ? "sem_pc" : "material",
       descricao: s(x.descricao, 300), fornecedor: s(x.fornecedor, 200),
-      etapa: s(x.etapa, 120),
-      dias_apos_base: n(x.dias_apos_base), dt_prevista: dt(x.dt_prevista),
-      valor: n(x.valor) ?? 0, no_fluxo: x.no_fluxo !== false,
-      atualizado_em: agora, atualizado_por: auth.quem,
-    }));
-    const e3 = (await admin.from("projeto_plano_saida").insert(linhas)).error;
-    if (e3) return NextResponse.json({ error: e3.message }, { status: 500 });
-  }
-
-  const preservadas = parcelas.filter((p) => guardado.get(Number(p.parcela))?.dt_ajustada).length;
-  return NextResponse.json({
-    ok: true, parcelas: parcelas.length, saidas: saidas.length,
-    ajustes_preservados: preservadas,
+      etapa: s(x.etapa, 120), dias_apos_base: n(x.dias_apos_base),
+      dt_prevista: dt(x.dt_prevista), valor: n(x.valor) ?? 0,
+      no_fluxo: x.no_fluxo !== false,
+    })),
+    p_quem: auth.quem,
   });
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  return NextResponse.json(data ?? { ok: true });
 }
 
 export async function PUT(req: Request) {
