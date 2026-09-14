@@ -60,7 +60,7 @@ export async function GET(req: Request) {
 
   // Tudo de uma vez: a tela mostra as quatro coisas juntas e buscar em série
   // somaria quatro idas ao banco antes do primeiro pixel.
-  const [linhas, cab, realizado, cobertura, eventos, previsto, saldo, orc] = await Promise.all([
+  const [linhas, cab, realizado, cobertura, eventos, previsto, saldo, orc, exec] = await Promise.all([
     admin.schema("approval").from("projeto_fluxo_linha")
       .select("id, tipo, descricao, categoria, data_prevista, valor, observacao, origem, ordem")
       .eq("empresa", empresa).eq("codigo_projeto", codigo)
@@ -87,11 +87,19 @@ export async function GET(req: Request) {
     admin.schema("approval").from("rc_projetos_budget")
       .select("valor_budget, valor_total_projeto, resultado_bruto_esperado_pct")
       .eq("empresa", empresa).eq("codigo_projeto", codigo).maybeSingle(),
+    // Em que ESTÁGIO está o dinheiro que sai. A tela dizia "já comprado" sobre
+    // um pedido em etapa de requisição, sem aprovação e sem um único título —
+    // requisitado, aprovado, a pagar e pago são coisas diferentes, e a
+    // diferença entre as duas primeiras é justamente o que a aprovação do
+    // fluxo existe para controlar.
+    admin.schema("bi").rpc("projeto_execucao", {
+      p_codigo_projeto: codigo, p_empresa: empresa,
+    }),
   ]);
 
   const falha = [["linhas", linhas], ["cabecalho", cab], ["realizado", realizado],
                  ["cobertura", cobertura], ["eventos", eventos], ["previsto", previsto],
-                 ["saldo", saldo], ["orcamento", orc]]
+                 ["saldo", saldo], ["orcamento", orc], ["execucao", exec]]
     .find(([, r]) => (r as { error?: unknown }).error);
   if (falha) {
     return NextResponse.json(
@@ -112,6 +120,7 @@ export async function GET(req: Request) {
     previsto: previsto.data ?? [],
     realizado_diario: saldo.data ?? [],
     orcamento: orc.data ?? null,
+    execucao: ((exec.data as unknown[]) ?? [])[0] ?? null,
     eventos: eventos.data ?? [],
     pode_editar: canEdit(perms, "projetos", "pvos"),
     pode_aprovar: canApprove(perms, "projetos"),

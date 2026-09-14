@@ -29,7 +29,7 @@ import TabelaPrevisto, { type LinhaPrevisto } from "./TabelaPrevisto";
 import ChartFrame, { type SeriesDef } from "@/components/viz/ChartFrame";
 import VizCombo from "@/components/viz/VizCombo";
 import PlanoFechamento, { type PlanoCompleto } from "@/components/projeto/PlanoFechamento";
-import ResumoProjeto from "@/components/projeto/ResumoProjeto";
+import ResumoProjeto, { type Execucao } from "@/components/projeto/ResumoProjeto";
 
 type LinhaApi = {
   id: number; tipo: "entrada" | "saida"; descricao: string; categoria: string | null;
@@ -63,7 +63,7 @@ type Orcamento = {
 type Payload = {
   linhas: LinhaApi[]; previsto: LinhaPrevisto[]; realizado_diario: RealDia[]; orcamento: Orcamento;
   cabecalho: Cabecalho; realizado: RealizadoRow[];
-  cobertura: Cobertura | null; eventos: Evento[];
+  cobertura: Cobertura | null; eventos: Evento[]; execucao: Execucao | null;
   pode_editar: boolean; pode_aprovar: boolean; eu: string;
   error?: string;
 };
@@ -98,15 +98,17 @@ const paraGrade = (ls: LinhaApi[]): LinhaGrade[] => {
   return g.length ? [...g, linhaVazia(COLS)] : [linhaVazia(COLS)];
 };
 
-const TOM: Record<Cabecalho["status"], { rot: string; classe: string; dica: string }> = {
-  rascunho:  { rot: "Rascunho", classe: "border-ww-border bg-ww-panel text-ww-textMuted",
-               dica: "Ainda não foi enviado para aprovação." },
-  pendente:  { rot: "Aguardando aprovação", classe: "border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-300",
-               dica: "Enviado. As compras do projeto continuam travadas até a decisão." },
-  aprovado:  { rot: "Aprovado", classe: "border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
-               dica: "As compras deste projeto já podem ser aprovadas." },
-  rejeitado: { rot: "Rejeitado", classe: "border-rose-500/40 bg-rose-500/10 text-rose-700 dark:text-rose-300",
-               dica: "Ajuste o plano e envie de novo." },
+/** Estado do fluxo. `ponto` em vez de `classe`: o status virou uma linha com
+ *  um ponto de cor, não um card com fundo próprio. */
+const TOM: Record<Cabecalho["status"], { rot: string; ponto: string; dica: string }> = {
+  rascunho:  { rot: "Rascunho", ponto: "bg-ww-textFaint",
+               dica: "ainda não foi enviado para aprovação." },
+  pendente:  { rot: "Aguardando aprovação", ponto: "bg-amber-500",
+               dica: "as compras do projeto continuam travadas até a decisão." },
+  aprovado:  { rot: "Aprovado", ponto: "bg-emerald-500",
+               dica: "as compras deste projeto já podem ser aprovadas." },
+  rejeitado: { rot: "Rejeitado", ponto: "bg-rose-500",
+               dica: "ajuste o plano e envie de novo." },
 };
 
 export default function FluxoProjetoView({
@@ -484,16 +486,19 @@ export default function FluxoProjetoView({
 
   return (
     <div className="space-y-3.5">
-      {/* Faixa de estado. Fica no topo porque é ela que responde "posso comprar
-          neste projeto?" — a pergunta que traz a maioria das pessoas aqui. */}
-      <div className={`flex items-start gap-3 flex-wrap px-3.5 py-2.5 rounded-xl border text-[12px] ${tom.classe}`}>
+      {/* Estado do fluxo: LINHA, não card.
+          Era um bloco com borda e fundo próprios, do mesmo tamanho do resumo
+          do projeto — e "Rascunho" não é uma informação do mesmo peso que
+          R$ 91 mil. Um ponto de cor e uma frase bastam; o que precisa de
+          destaque são os botões, e eles já o têm por serem botões. */}
+      <div className="flex items-center gap-2.5 flex-wrap px-1 text-[12px]">
+        <span aria-hidden className={`w-2 h-2 rounded-full shrink-0 ${tom.ponto}`} />
         <div className="min-w-0">
-          <strong>{tom.rot}</strong>
-          {cab.versao > 1 && <span className="opacity-70"> · v{cab.versao}</span>}
-          <span className="block text-[11px] opacity-90 mt-0.5">
-            {tom.dica}
+          <strong className="text-ww-text">{tom.rot}</strong>
+          {cab.versao > 1 && <span className="text-ww-textFaint"> · v{cab.versao}</span>}
+          <span className="text-ww-textMuted"> — {tom.dica}
             {cab.status === "aprovado" && cab.decidido_por && (
-              <> Aprovado por {cab.decidido_por}
+              <> Por {cab.decidido_por}
                 {cab.decidido_em ? ` em ${new Date(cab.decidido_em).toLocaleDateString("pt-BR")}` : ""}.</>
             )}
             {cab.status === "rejeitado" && cab.motivo && <> Motivo: <em>{cab.motivo}</em></>}
@@ -573,10 +578,12 @@ export default function FluxoProjetoView({
           Fica no topo junto dos outros avisos porque perder 10% da margem
           entre o fechamento e a obra é notícia, não linha de tabela. */}
       {vsPlano && (Math.abs(vsPlano.resultado) > 0.5 || vsPlano.parcelasAtrasadas > 0) && (
-        <div className={`p-2.5 rounded-lg border text-[12px] ${
+        // Barra à esquerda em vez de caixa inteira colorida: a cor continua
+        // dizendo bom/ruim sem competir em peso com os números do resumo.
+        <div className={`pl-3 py-1.5 border-l-[3px] text-[11.5px] ${
           vsPlano.resultado >= 0
-            ? "border-emerald-500/40 bg-emerald-500/[0.08] text-emerald-800 dark:text-emerald-200"
-            : "border-rose-500/40 bg-rose-500/[0.08] text-rose-800 dark:text-rose-200"}`}>
+            ? "border-emerald-500 text-emerald-700 dark:text-emerald-300"
+            : "border-rose-500 text-rose-700 dark:text-rose-300"}`}>
           <strong>Contra o plano do fechamento:</strong>{" "}
           resultado {vsPlano.resultado >= 0 ? "melhor" : "pior"} em{" "}
           <strong>{brl(Math.abs(vsPlano.resultado))}</strong>{" "}
@@ -606,10 +613,9 @@ export default function FluxoProjetoView({
           planejamos gastar, quanto já consumimos. */}
       <ResumoProjeto
         plano={plano}
+        execucao={data?.execucao ?? null}
         entradasOmie={omiEnt + manEnt}
         saidasOmie={omiSai + manSai}
-        recebido={liq.recebido}
-        pago={liq.pago}
         teto={tetoVigente}
         podeEditar={podeEditar}
         onEditarTeto={() => setEditandoTeto(true)} />
