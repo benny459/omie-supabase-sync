@@ -4400,9 +4400,34 @@ function BucketTotals({
     pcTotal = Number(r.valor_total ?? 0);
   }
 
+  /** PC amarrado a um projeto DIFERENTE do PV.
+   *
+   *  A view já calcula isto (`pc_projeto_mismatch`) e o total ignorava. No
+   *  PV1873 alguém digitou o PC 7163 no lugar do 7168 — números vizinhos — e
+   *  o 7163 é de outro projeto, no valor de R$ 60.879,25 contra R$ 465,90 do
+   *  RC. O cabeçalho somava e o badge dizia "+12967% vs RC".
+   *
+   *  Esse badge aponta para a coisa errada: sugere que a COMPRA estourou,
+   *  quando o que estourou foi o vínculo. Quem lê vai conferir preço de filtro
+   *  — e o preço está certo. E a aprovação trava por um motivo que não existe.
+   *
+   *  O total continua somando de propósito: zerá-lo em silêncio esconderia o
+   *  vínculo errado em vez de forçar a correção. O que muda é o que a tela
+   *  diz ser o problema. */
+  const pcDeOutroProjeto = items.find((r) => r.pc_projeto_mismatch === true);
+
   // Badge do PC comparando com RC. Threshold pequeno (1%) trata arredondamentos
   // como "igual". Sem RC ou sem PC → sem badge (neutro).
   const pcBadge = (() => {
+    if (pcDeOutroProjeto) {
+      const outro = String(pcDeOutroProjeto.pc_projeto_nome ?? "outro projeto");
+      const num = String(pcDeOutroProjeto.pc_numero ?? pcDeOutroProjeto.pc_numero_manual ?? "?");
+      return { kind: "gt" as const, tone: "amber",
+               label: "PC de outro projeto",
+               title: `O PC ${num} pertence a "${outro}", não a este PV. `
+                    + `Confira o número do pedido de compra — o total e a comparação com o RC `
+                    + `estão medindo a compra errada.` };
+    }
     if (rcTotal <= 0 || pcTotal <= 0) return null;
     const diff = (pcTotal - rcTotal) / rcTotal;
     if (Math.abs(diff) < 0.01) return { kind: "eq" as const, tone: "emerald", label: `= RC`, title: "PC bate com o RC estimado" };
@@ -4601,6 +4626,9 @@ function TotalCol({ label, value, withDivider, badge, canView = true }: { label:
   const badgeStyle = !badge ? "" :
     badge.tone === "rose"    ? "bg-rose-100 text-rose-800 border-rose-300 dark:bg-rose-950/50 dark:text-rose-200 dark:border-rose-800" :
     badge.tone === "emerald" ? "bg-emerald-100 text-emerald-800 border-emerald-300 dark:bg-emerald-950/50 dark:text-emerald-200 dark:border-emerald-800" :
+    // Âmbar = "o número está medindo a coisa errada", não "o número é ruim".
+    // Vermelho diria que a compra estourou; o problema é o vínculo.
+    badge.tone === "amber"   ? "bg-amber-100 text-amber-900 border-amber-400 dark:bg-amber-950/60 dark:text-amber-200 dark:border-amber-700" :
                                "bg-blue-100 text-blue-800 border-blue-300 dark:bg-blue-950/50 dark:text-blue-200 dark:border-blue-800";
   return (
     <div className={`text-center relative min-w-0 ${withDivider ? "pl-2" : ""}`}>
