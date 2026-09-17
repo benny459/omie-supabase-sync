@@ -92,14 +92,22 @@ export async function POST(req: Request) {
 
   // Descobre pc_numero existente por natural key antes do upsert — pra preservar
   // vínculo quando a planilha nova não trouxe PC (fetch em batch pra evitar N+1).
+  //
+  // Traz a linha INTEIRA, não só a chave: o que for apagado vai para a
+  // lixeira, e arquivar exige o valor. Buscar de novo depois seria uma
+  // segunda ida ao banco para ler o que já esteve na mão.
   const { data: existing, error: fetchErr } = await approval
     .from("rc_projetos_itens")
-    .select("id, equipamento, item_norm, pc_numero")
+    .select("id, equipamento, item, item_norm, qtd, modelo, observacao, pc_numero, criado_em, criado_por")
     .eq("empresa", empresa)
     .eq("codigo_projeto", codigoProjeto);
   if (fetchErr) return NextResponse.json({ error: fetchErr.message }, { status: 500 });
 
-  type ExistingRow = { id: string; equipamento: string; item_norm: string; pc_numero: string | null };
+  type ExistingRow = {
+    id: string; equipamento: string; item: string | null; item_norm: string;
+    qtd: number | null; modelo: string | null; observacao: string | null;
+    pc_numero: string | null; criado_em: string | null; criado_por: string | null;
+  };
   const existingByKey = new Map<string, ExistingRow>();
   for (const r of (existing ?? []) as ExistingRow[]) {
     existingByKey.set(`${r.equipamento}\x01${r.item_norm}`, r);
@@ -134,20 +142,54 @@ export async function POST(req: Request) {
     });
   if (upErr) return NextResponse.json({ error: upErr.message }, { status: 500 });
 
-  // Sync destrutivo: deleta items que existiam mas sumiram da planilha nova
+  // ── Sync destrutivo, agora com lixeira ───────────────────────────────────
+  //
+  // Item que não vem na planilha nova sai — a planilha define o que existe, e
+  // foi pedido assim. O que mudou é que ele passa a ser ARQUIVADO antes.
+  //
+  // Em 31/07/2026 o PJ358_Brasterapica perdeu equipamentos inteiros porque
+  // alguém subiu uma planilha só com a aba "Eletrica". Restaram 36 itens de
+  // painel num projeto de tratamento de água. Não havia rastro, e 48 dias
+  // depois já estava fora de qualquer janela de recuperação do banco.
   const incomingKeys = new Set(deduped.map((d) => `${d.equipamento}\x01${itemNorm(d.item)}`));
-  const toDelete: string[] = [];
+  const aRemover: ExistingRow[] = [];
   for (const [key, row] of existingByKey) {
-    if (!incomingKeys.has(key)) toDelete.push(row.id);
+    if (!incomingKeys.has(key)) aRemover.push(row);
   }
+
   let deleted = 0;
-  if (toDelete.length > 0) {
+  const equipamentosPerdidos: string[] = [];
+  if (aRemover.length > 0) {
+    // Equipamento que desapareceu INTEIRO é o caso grave: não é a planilha
+    // corrigindo um item, é uma aba que ficou de fora do arquivo.
+    const equipEntrando = new Set(deduped.map((d) => d.equipamento));
+    const equipSaindo = new Set(aRemover.map((r) => r.equipamento));
+    for (const e of equipSaindo) if (!equipEntrando.has(e)) equipamentosPerdidos.push(e);
+
+    // Arquiva ANTES de apagar. Se o insert falhar, nada é removido — perder o
+    // dado de novo por causa da proteção seria o pior desfecho possível.
+    const { error: arqErr } = await approval
+      .from("rc_projetos_itens_lixeira")
+      .insert(aRemover.map((r) => ({
+        item_id: r.id, empresa, codigo_projeto: codigoProjeto,
+        equipamento: r.equipamento, item: r.item, item_norm: r.item_norm,
+        qtd: r.qtd, modelo: r.modelo, observacao: r.observacao,
+        pc_numero: r.pc_numero, criado_em: r.criado_em, criado_por: r.criado_por,
+        apagado_por: userEmail,
+        apagado_por_upload: `${rows.length} item(ns) de ${equipEntrando.size} equipamento(s)`,
+      })));
+    if (arqErr) {
+      return NextResponse.json(
+        { error: `não consegui arquivar os ${aRemover.length} item(ns) que sairiam — nada foi apagado: ${arqErr.message}` },
+        { status: 500 });
+    }
+
     const { error: delErr, count } = await approval
       .from("rc_projetos_itens")
       .delete({ count: "exact" })
-      .in("id", toDelete);
+      .in("id", aRemover.map((r) => r.id));
     if (delErr) return NextResponse.json({ error: delErr.message }, { status: 500 });
-    deleted = count ?? toDelete.length;
+    deleted = count ?? aRemover.length;
   }
 
   return NextResponse.json({
@@ -156,5 +198,9 @@ export async function POST(req: Request) {
     total_processados: rows.length,
     total_deletados: deleted,
     total_no_projeto: rows.length,
+    // A tela precisa PODER avisar. "total_deletados: 412" passou despercebido
+    // uma vez; o nome do equipamento que sumiu não passa.
+    equipamentos_removidos: equipamentosPerdidos,
+    recuperavel: deleted > 0,
   });
 }

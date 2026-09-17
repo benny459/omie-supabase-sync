@@ -41,7 +41,7 @@ export default function RcProjetoUploadButton({
   const [parsed, setParsed] = useState<ParsedItem[] | null>(null);
   const [fileName, setFileName] = useState<string>("");
   const [busy, setBusy] = useState(false);
-  const [msg, setMsg] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
+  const [msg, setMsg] = useState<{ kind: "ok" | "warn" | "err"; text: string } | null>(null);
   const [diff, setDiff] = useState<{ novos: number; atualizados: number; removidos: number; total_atual: number } | null>(null);
   const [preflighting, setPreflighting] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -246,7 +246,26 @@ export default function RcProjetoUploadButton({
         setMsg({ kind: "err", text: j.error ?? "Falha no upload" });
         return;
       }
-      setMsg({ kind: "ok", text: `✓ ${j.total_processados} itens processados${j.total_deletados > 0 ? ` · ${j.total_deletados} removidos (sumiram da nova planilha)` : ""}` });
+      // Remoção não é detalhe do sucesso. "✓ 36 processados · 412 removidos"
+      // lê como vitória — e foi assim que o PJ358 perdeu equipamentos
+      // inteiros sem ninguém notar. Quando sai um EQUIPAMENTO inteiro, a
+      // mensagem deixa de ser verde e nomeia o que sumiu: a aba que faltou no
+      // arquivo é a causa, e o nome dela é o que faz a ficha cair.
+      const removidos = Number(j.total_deletados ?? 0);
+      const equips: string[] = Array.isArray(j.equipamentos_removidos) ? j.equipamentos_removidos : [];
+      if (equips.length > 0) {
+        setMsg({ kind: "warn", text:
+          `⚠ ${j.total_processados} itens processados, mas ${removidos} foram removidos — `
+          + `sumiu ${equips.length === 1 ? "o equipamento" : "os equipamentos"} `
+          + `“${equips.join("”, “")}”. A planilha nova não trouxe essa${equips.length === 1 ? "" : "s"} aba${equips.length === 1 ? "" : "s"}. `
+          + `Dá para desfazer em “Itens removidos”.` });
+      } else if (removidos > 0) {
+        setMsg({ kind: "warn", text:
+          `✓ ${j.total_processados} itens processados · ${removidos} removidos por não estarem `
+          + `na planilha nova. Dá para desfazer em “Itens removidos”.` });
+      } else {
+        setMsg({ kind: "ok", text: `✓ ${j.total_processados} itens processados` });
+      }
       setTimeout(() => {
         setOpen(false); setParsed(null); setFileName(""); setMsg(null);
         router.refresh();
@@ -375,8 +394,12 @@ export default function RcProjetoUploadButton({
 
               {msg && (
                 <div className={`mt-3 text-xs rounded-md px-3 py-2 ${
-                  msg.kind === "ok" ? "text-emerald-800 bg-emerald-50 border border-emerald-200"
-                                    : "text-rose-700 bg-rose-50 border border-rose-200"
+                  msg.kind === "ok"   ? "text-emerald-800 bg-emerald-50 border border-emerald-200"
+                  // Âmbar: gravou, mas apagou coisa. Verde diria "deu certo" e
+                  // foi assim que uma perda de equipamentos inteiros passou
+                  // batida; vermelho diria que falhou, e não falhou.
+                  : msg.kind === "warn" ? "text-amber-900 bg-amber-50 border border-amber-300"
+                                        : "text-rose-700 bg-rose-50 border border-rose-200"
                 }`}>{msg.text}</div>
               )}
             </div>
