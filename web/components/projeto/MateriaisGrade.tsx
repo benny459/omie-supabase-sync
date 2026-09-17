@@ -21,7 +21,7 @@
 // Uma rota "manual" separada criaria duas definições do que é a lista, e elas
 // divergiriam no primeiro ajuste de regra.
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import * as XLSX from "xlsx";
 import GradeEditavel, { linhaVazia, num, type ColunaGrade, type LinhaGrade } from "./GradeEditavel";
 import PcPickerModal, { type PcSearchResult } from "./PcPickerModal";
@@ -108,6 +108,13 @@ export default function MateriaisGrade({
       } },
   ], []);
 
+  /** A leitura inicial funcionou?
+   *
+   *  Falso enquanto não carregou e depois de qualquer falha. Salvar com isto
+   *  falso mandaria uma lista vazia por cima do que está no banco — a rota já
+   *  trava, mas a tela não deve nem tentar. */
+  const [carregouOk, setCarregouOk] = useState(false);
+
   const carregar = useCallback(async () => {
     setCarregando(true);
     try {
@@ -122,7 +129,9 @@ export default function MateriaisGrade({
           .select("valor_budget, valor_comprometido, valor_restante, qtd_itens, qtd_itens_com_pc")
           .eq("empresa", empresa).eq("codigo_projeto", codigoProjeto).maybeSingle(),
       ]);
-      if (itens.error) { setErro(itens.error.message); return; }
+      // Sem marcar a carga como OK, a tela fica indistinguível de "projeto
+      // vazio" — e foi assim que salvar por cima apagou lista alheia.
+      if (itens.error) { setErro(itens.error.message); setCarregouOk(false); return; }
       const rows = (itens.data ?? []) as ItemRow[];
       setOriginal(rows.length);
       setResumo((res.data as Resumo | null) ?? null);
@@ -144,9 +153,10 @@ export default function MateriaisGrade({
         })) as LinhaGrade[],
         linhaVazia(COLS),
       ]);
-      setSujo(false); setErro(null); setMarcadas(new Set());
+      setSujo(false); setErro(null); setMarcadas(new Set()); setCarregouOk(true);
     } catch (e) {
       setErro(e instanceof Error ? e.message : String(e));
+      setCarregouOk(false);
     } finally { setCarregando(false); }
   }, [empresa, codigoProjeto, COLS]);
 
@@ -162,7 +172,12 @@ export default function MateriaisGrade({
     () => (equipFiltro ? linhas.filter((l) => !l.item?.trim() || String(l.equipamento || "Geral") === equipFiltro) : linhas),
     [linhas, equipFiltro]);
 
-  const salvar = useCallback(async () => {
+  const salvar = useCallback(async (confirmarRemocao = false) => {
+    if (!carregouOk) {
+      setErro("A lista não chegou a carregar. Recarregue a página antes de salvar — "
+            + "gravar agora apagaria o que está no projeto.");
+      return;
+    }
     if (validas.length < original) {
       const ok = window.confirm(
         `A lista tem ${original} item(ns) gravado(s) e você está salvando ${validas.length}.\n\n` +
@@ -175,6 +190,7 @@ export default function MateriaisGrade({
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           empresa, codigo_projeto: codigoProjeto,
+          confirmar_remocao: confirmarRemocao,
           items: validas.map((l) => ({
             equipamento: String(l.equipamento ?? "").trim() || "Geral",
             item: String(l.item ?? "").trim(),
@@ -186,14 +202,30 @@ export default function MateriaisGrade({
         }),
       });
       const j = await r.json();
+      // 409 = a rota recusou uma remoção em massa. Mostra o tamanho do estrago
+      // em número, não em "tem certeza?" — a pergunta genérica é a que se
+      // responde no automático.
+      if (r.status === 409 && j.error === "remocao_em_massa") {
+        if (window.confirm(`${j.mensagem}\n\nGravar assim mesmo?`)) {
+          await salvarRef.current?.(true);
+        }
+        return;
+      }
       if (!r.ok) { setErro(j.error ?? r.statusText); return; }
-      setAviso(`${validas.length} item(ns) gravado(s)${comPc ? `, ${comPc} com PC vinculado` : ""}.`);
+      const removidos = Number(j.total_deletados ?? 0);
+      setAviso(`${validas.length} item(ns) gravado(s)${comPc ? `, ${comPc} com PC vinculado` : ""}`
+        + (removidos > 0 ? ` · ${removidos} removido(s), recuperável em "Itens removidos"` : "") + ".");
       await carregar();
       onGravado?.();
     } catch (e) {
       setErro(e instanceof Error ? e.message : String(e));
     } finally { setSalvando(false); }
-  }, [empresa, codigoProjeto, validas, original, comPc, carregar, onGravado]);
+  }, [empresa, codigoProjeto, validas, original, comPc, carregar, onGravado, carregouOk]);
+
+  /** Ref para o salvar poder rechamar a si mesmo depois da confirmação, sem
+   *  entrar na lista de dependências do próprio useCallback. */
+  const salvarRef = useRef<((c?: boolean) => Promise<void>) | null>(null);
+  salvarRef.current = salvar;
 
   /** Vincula as marcadas a um PC. Escreve direto pela rota de vínculo em vez de
    *  mexer na grade: são itens que já existem no banco, e passar por um salvar

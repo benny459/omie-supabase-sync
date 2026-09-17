@@ -32,6 +32,9 @@ type Body = {
   empresa: string;
   codigo_projeto: number;
   items: Item[];
+  /** Autoriza uma remoção em massa (metade ou mais da lista). Sem isto a rota
+   *  devolve 409 e não apaga nada — ver a trava, mais abaixo. */
+  confirmar_remocao?: boolean;
 };
 
 const HARD_CAP = 2000;
@@ -155,6 +158,39 @@ export async function POST(req: Request) {
   const aRemover: ExistingRow[] = [];
   for (const [key, row] of existingByKey) {
     if (!incomingKeys.has(key)) aRemover.push(row);
+  }
+
+  /** Trava contra o apagão.
+   *
+   *  A grade salva por esta mesma rota. Quando a carga dela falha — a view de
+   *  itens é pesada e essa tela já demora — ela fica com UMA linha vazia e o
+   *  contador de "quantos existem" em zero. A guarda da tela compara o que vai
+   *  salvar com esse zero, não dispara, e salvar 3 itens digitados apaga os
+   *  478 que estavam no banco.
+   *
+   *  Aqui a conta é feita contra o que o BANCO tem, que é o número que não
+   *  mente. Some quase tudo? Pára e exige confirmação explícita. Não é
+   *  paranoia: já aconteceu, e a única cópia do trabalho de outra pessoa foi
+   *  embora sem ninguém notar.
+   *
+   *  O piso de 5 evita atrapalhar projeto pequeno, onde trocar a lista
+   *  inteira é uso normal. */
+  const existiam = existingByKey.size;
+  const apagaQuase = existiam >= 5 && aRemover.length >= existiam * 0.5;
+  if (apagaQuase && body.confirmar_remocao !== true) {
+    return NextResponse.json({
+      error: "remocao_em_massa",
+      mensagem:
+        `Esta planilha tem ${rows.length} item(ns) e o projeto tem ${existiam}. `
+        + `Gravar assim REMOVE ${aRemover.length} item(ns)`
+        + (aRemover.length === existiam ? " — a lista inteira" : "")
+        + `. Se a intenção é substituir a lista, confirme; se a tela abriu vazia `
+        + `por erro de carga, recarregue antes de salvar.`,
+      existiam,
+      entrando: rows.length,
+      seriam_removidos: aRemover.length,
+      equipamentos_afetados: Array.from(new Set(aRemover.map((r) => r.equipamento))),
+    }, { status: 409 });
   }
 
   let deleted = 0;
