@@ -2542,6 +2542,13 @@ function BucketCard({
             📊 <span>Fluxo Financeiro</span> <span className="opacity-60">→</span>
           </a>
           <ProjetoEscopoButton empresa={projetoActions.empresaProj} codigoProjeto={projetoActions.codProj} />
+          {/* Resumo do fechamento vindo do CRM + download do CP/MC Excel.
+              O link proposta→projeto é feito lá, no resumo do fechamento. */}
+          <a href={`/projetos/${projetoActions.codProj}/fechamento`}
+            title="Resumo do fechamento da proposta linkada no CRM e download do CP/MC Excel"
+            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[11.5px] font-semibold border border-amber-400 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-200 hover:bg-amber-100 dark:hover:bg-amber-900/50 transition">
+            🏆 <span>Fechamento CRM</span> <span className="opacity-60">→</span>
+          </a>
         </div>
       )}
       {/* Header card — usamos <div role="button"> em vez de <button> porque o
