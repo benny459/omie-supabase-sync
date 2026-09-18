@@ -47,17 +47,18 @@ function CartaoFechamento({ f, temCpmc }: { f: FechamentoCrm; temCpmc: boolean }
           </div>
         </div>
         <div className="flex items-center gap-2">
-          {temCpmc ? (
+          {temCpmc && (
             <a href={f.cpmcUrl} download
+              title="Última versão publicada pelo CRM"
               className="inline-flex items-center gap-1 px-3 py-1.5 rounded-md text-[12px] font-bold border border-emerald-400 dark:border-emerald-700 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-200 hover:bg-emerald-100 dark:hover:bg-emerald-900/50 transition">
               ▦ Baixar CP/MC Excel
             </a>
-          ) : (
-            <span className="text-[11px] text-ww-muted border border-ww-border rounded-md px-2.5 py-1.5"
-              title="O arquivo sobe quando o fechamento é salvo no CRM (ou ao gerar o CP/MC por lá)">
-              CP/MC ainda não publicado pelo CRM
-            </span>
           )}
+          <a href={f.gerarUrl}
+            title="Gera o CP/MC agora, direto do fechamento gravado no CRM — o mesmo arquivo do botão de lá (leva alguns segundos)"
+            className="inline-flex items-center gap-1 px-3 py-1.5 rounded-md text-[12px] font-bold border border-sky-400 dark:border-sky-700 bg-sky-50 dark:bg-sky-950/40 text-sky-800 dark:text-sky-200 hover:bg-sky-100 dark:hover:bg-sky-900/50 transition">
+            ⟳ {temCpmc ? "Gerar atualizado" : "Gerar CP/MC agora"}
+          </a>
           <a href={f.crmUrl} target="_blank" rel="noreferrer"
             className="text-[11.5px] text-sky-700 dark:text-sky-300 underline">
             abrir no CRM ↗

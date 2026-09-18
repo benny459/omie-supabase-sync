@@ -42,6 +42,7 @@ export type FechamentoCrm = {
   cliente?: string;
   recebimento: RecebimentoCrm;
   cpmcUrl: string;      // caminho fixo do snapshot — pode ainda não existir
+  gerarUrl: string;     // endpoint do CRM que gera o Excel na hora (e publica o snapshot)
   crmUrl: string;       // deep-link pra abrir a proposta no CRM
 };
 
@@ -66,6 +67,7 @@ export async function fetchFechamentosDoProjeto(codigoProjeto: number | string):
         cliente: dj.cl?.emp || "",
         recebimento: dj.recebimento,
         cpmcUrl: `${CRM_URL}/storage/v1/object/public/propostas-pdfs/${CRM_EMPRESA}/${encodeURIComponent(p.numero)}/cpmc.xlsx`,
+        gerarUrl: `https://propostas-ww.vercel.app/api/cpmc-gerar?num=${encodeURIComponent(p.numero)}`,
         crmUrl: `https://propostas-ww.vercel.app/?num=${encodeURIComponent(p.numero)}`,
       };
     });
