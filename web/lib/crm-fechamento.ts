@@ -116,6 +116,69 @@ export async function fetchFechamentosDoProjeto(codigoProjeto: number | string):
     });
 }
 
+export type BudgetCrm = {
+  codigoProjeto: number;
+  numero: string;
+  budgetCustos: number;        // materiais/equipamentos da CP — o budget de compras
+  despesas: number;
+  maoDeObra: number;
+  valorTotalProjeto: number;
+  resultadoEsperado: number;
+  resultadoEsperadoPct: number | null;
+};
+
+/**
+ * Budget de vários projetos de uma vez, direto do fechamento do CRM.
+ *
+ * O card de /projetos mostrava "definir" em projeto fechado, porque o budget
+ * só existia depois de alguém importar o Fluxo Financeiro à mão — sendo que o
+ * fechamento do CRM já tem o número certo (a CP da proposta ganha). Aqui ele é
+ * lido em UMA chamada para a lista inteira da tela.
+ */
+export async function fetchBudgetsDoCrm(codigosProjeto: number[]): Promise<Map<number, BudgetCrm>> {
+  const codigos = Array.from(new Set(codigosProjeto.filter((c) => Number.isFinite(c) && c > 0)));
+  const mapa = new Map<number, BudgetCrm>();
+  if (!codigos.length) return mapa;
+
+  const filtro = `dados_json->recebimento->projetoPainel->>codigo=in.(${codigos.join(",")})`;
+  const url = `${CRM_URL}/rest/v1/propostas?select=numero,valor,dados_json&empresa_id=eq.${CRM_EMPRESA}&${filtro}&limit=400`;
+  const r = await fetch(url, {
+    headers: { apikey: CRM_ANON, Authorization: `Bearer ${CRM_ANON}` },
+    cache: "no-store",
+  });
+  if (!r.ok) throw new Error(`CRM respondeu ${r.status}`);
+
+  const rows = (await r.json()) as Array<{ numero: string; valor?: number; dados_json?: Record<string, unknown> }>;
+  for (const p of rows) {
+    const dj = p.dados_json as {
+      recebimento?: RecebimentoCrm;
+      formacaoCusto?: { cpTotal?: number; moTotal?: number; despTotal?: number };
+    } | undefined;
+    const cod = Number(dj?.recebimento?.projetoPainel?.codigo);
+    if (!Number.isFinite(cod)) continue;
+
+    const fc = dj?.formacaoCusto ?? {};
+    const budgetCustos = Number(fc.cpTotal) || 0;
+    const maoDeObra = Number(fc.moTotal) || 0;
+    const despesas = Number(fc.despTotal) || 0;
+    const valorTotalProjeto = Number(dj?.recebimento?.valorTotal) || Number(p.valor) || 0;
+    const resultadoEsperado = valorTotalProjeto - (budgetCustos + maoDeObra + despesas);
+
+    /* Mais de uma proposta no mesmo projeto: fica a de maior valor — é a que
+       manda no orçamento. (fetchFechamentosDoProjeto lista todas.) */
+    const jaTem = mapa.get(cod);
+    if (jaTem && jaTem.valorTotalProjeto >= valorTotalProjeto) continue;
+
+    mapa.set(cod, {
+      codigoProjeto: cod,
+      numero: p.numero,
+      budgetCustos, despesas, maoDeObra, valorTotalProjeto, resultadoEsperado,
+      resultadoEsperadoPct: valorTotalProjeto > 0 ? resultadoEsperado / valorTotalProjeto : null,
+    });
+  }
+  return mapa;
+}
+
 /** O snapshot do CP/MC já existe no Storage? (o CRM sobe ao salvar o fechamento) */
 export async function cpmcExiste(url: string): Promise<boolean> {
   try {

@@ -163,14 +163,17 @@ type CronogramaSummary = {
   proxima_nome: string | null;
 };
 
-// Budget summary por projeto — só /projetos. Fonte: rc_projetos_budget (Fluxo
-// Financeiro). Total lançado + aprovado são derivados dos rows (não dos totais
-// do budget) porque essa comparação é o quanto do orçamento já virou compromisso.
+// Budget summary por projeto — só /projetos. Fonte: o fechamento do CRM quando
+// a proposta ganha está linkada ao projeto (é o que foi vendido), senão
+// rc_projetos_budget (Fluxo Financeiro importado à mão). Total lançado +
+// aprovado são derivados dos rows (não dos totais do budget) porque essa
+// comparação é o quanto do orçamento já virou compromisso.
 type BudgetSummary = {
   budget_custos: number | null;
   valor_total_projeto: number | null;
   resultado_bruto_esperado: number | null;
   resultado_bruto_esperado_pct: number | null;
+  origem?: string;
 };
 
 type Bucket = {
@@ -596,7 +599,7 @@ export default function BoldAvulsosView({
         const qs = Array.from(keys).join(",");
         const r = await fetch(`/api/rc-projetos/budget/summary?keys=${encodeURIComponent(qs)}`, { signal: ctrl.signal });
         if (!r.ok) return;
-        const j = await r.json() as { rows: Array<{ key: string; budget_custos: number | null; valor_total_projeto: number | null; resultado_bruto_esperado: number | null; resultado_bruto_esperado_pct: number | null }> };
+        const j = await r.json() as { rows: Array<{ key: string; budget_custos: number | null; valor_total_projeto: number | null; resultado_bruto_esperado: number | null; resultado_bruto_esperado_pct: number | null; origem?: string }> };
         const next = new Map<string, BudgetSummary>();
         for (const row of (j.rows ?? [])) {
           next.set(row.key, {
@@ -604,6 +607,7 @@ export default function BoldAvulsosView({
             valor_total_projeto: row.valor_total_projeto,
             resultado_bruto_esperado: row.resultado_bruto_esperado,
             resultado_bruto_esperado_pct: row.resultado_bruto_esperado_pct,
+            origem: row.origem,
           });
         }
         setBudgetMap(next);
@@ -4547,7 +4551,12 @@ function BudgetTotals({
       {/* Col esquerda — Budget + barra consumido */}
       <div className="flex flex-col min-w-0 flex-1 gap-1">
         <div className="flex items-baseline justify-between gap-2">
-          <span className="text-[10px] uppercase tracking-[0.5px] text-ww-textMuted font-bold">Budget</span>
+          <span className="text-[10px] uppercase tracking-[0.5px] text-ww-textMuted font-bold"
+                title={budget?.origem === "crm"
+                  ? "Materiais e equipamentos (CP) do fechamento da proposta no CRM"
+                  : "Custos previstos do Fluxo Financeiro importado"}>
+            Budget{budget?.origem === "crm" && <span className="ml-1 font-normal normal-case text-ww-textFaint">· CRM</span>}
+          </span>
           <span className="text-[13px] font-semibold tabular-nums text-ww-text whitespace-nowrap">
             {budgetVal != null ? gateBRL(budgetVal, canViewValues) : <span className="text-ww-textFaint italic text-[11px]">definir</span>}
           </span>

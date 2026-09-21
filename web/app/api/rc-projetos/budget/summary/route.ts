@@ -3,6 +3,7 @@
 
 import { NextResponse } from "next/server";
 import { supaServer } from "@/lib/supabase-server";
+import { fetchBudgetsDoCrm } from "@/lib/crm-fechamento";
 
 export const runtime = "nodejs";
 
@@ -52,7 +53,35 @@ export async function GET(req: Request) {
       valor_total_projeto: r.valor_total_projeto,
       resultado_bruto_esperado: r.resultado_bruto_esperado,
       resultado_bruto_esperado_pct: r.resultado_bruto_esperado_pct,
+      origem: "fluxo" as string,
     }));
+
+  /* Fechamento do CRM manda quando existe: é o que foi efetivamente vendido,
+     com a CP da proposta ganha. Sem ele o card ficava "definir" até alguém
+     importar o Fluxo Financeiro à mão — e comparava os PCs contra nada.
+     Falar com o CRM é best-effort: se cair, o card volta ao que já mostrava. */
+  try {
+    const doCrm = await fetchBudgetsDoCrm(Array.from(codigos));
+    if (doCrm.size) {
+      const porKey = new Map(rows.map((r) => [r.key, r]));
+      for (const k of keys) {
+        const [emp, cod] = k.split("|");
+        const b = doCrm.get(Number(cod));
+        if (!b) continue;
+        const linha = {
+          key: `${emp}|${Number(cod)}`,
+          budget_custos: b.budgetCustos,
+          valor_total_projeto: b.valorTotalProjeto,
+          resultado_bruto_esperado: b.resultadoEsperado,
+          resultado_bruto_esperado_pct: b.resultadoEsperadoPct,
+          origem: "crm",
+        };
+        const atual = porKey.get(linha.key);
+        if (atual) Object.assign(atual, linha);
+        else { rows.push(linha); porKey.set(linha.key, linha); }
+      }
+    }
+  } catch { /* CRM fora do ar não derruba o card */ }
 
   return NextResponse.json({ rows });
 }
