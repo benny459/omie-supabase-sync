@@ -62,6 +62,23 @@ export async function GET(req: Request) {
     return q.range(from, to);
   };
 
+  // Linhas manuais (ncod_ped < 0) só entram na MV no próximo refresh (10min).
+  // Busca-as na view VIVA em paralelo e substitui as da MV no merge — senão a
+  // linha recém-criada some no reload pós-criação e o usuário acha que falhou.
+  // (~2-3s na view viva filtrada; corre em paralelo com a paginação da MV.)
+  const liveManualPromise = (async (): Promise<Record<string, unknown>[] | null> => {
+    try {
+      const liveClient = createClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.SUPABASE_SERVICE_ROLE_KEY!,
+        { auth: { persistSession: false }, db: { schema: "approval" } },
+      );
+      const { data, error } = await liveClient.from(view).select("*").lt("ncod_ped", 0);
+      if (error) return null;
+      return (data ?? []) as Record<string, unknown>[];
+    } catch { return null; }
+  })();
+
   const rows: Record<string, unknown>[] = [];
   let headerCount: number | null = null;
   let truncated = false;
@@ -77,11 +94,19 @@ export async function GET(req: Request) {
     if (batch.length < size) break;   // última página
   }
 
+  // Merge: linhas manuais frescas da view viva substituem as da MV (stale).
+  // Se a view viva falhar (timeout etc), mantém as da MV — nunca pior que antes.
+  const liveManual = await liveManualPromise;
+  let merged = rows;
+  if (liveManual !== null) {
+    merged = rows.filter(r => Number(r.ncod_ped) >= 0).concat(liveManual);
+  }
+
   // Buscamos a MV inteira, então rows.length É o total — mais confiável que o
   // count "estimated" do planner. Só caímos no header count se batemos MAX_ROWS.
   return NextResponse.json({
-    rows,
-    count: truncated ? (headerCount ?? rows.length) : rows.length,
+    rows: merged,
+    count: truncated ? (headerCount ?? merged.length) : merged.length,
     truncated,
   });
 }
