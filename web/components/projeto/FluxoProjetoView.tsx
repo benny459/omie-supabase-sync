@@ -638,9 +638,14 @@ export default function FluxoProjetoView({
                  dica="o que vale é o do fechamento; a origem vem embaixo, nomeada">
             <CondicoesComerciais plano={plano} />
           </Bloco>
-          <PlanoFechamento empresa={empresa} codigoProjeto={codigoProjeto}
-            podeEditar={podeEditar} dados={plano} onMudou={() => void carregarPlano()}
-            somenteCondicoes />
+          {/* Na mesma aba que o Resumo, o bloco completo de premissas já foi
+              desenhado acima — repetir só a parte das condições punha
+              "PREMISSAS DO FECHAMENTO" duas vezes na mesma rolagem. */}
+          {!ver("resumo") && (
+            <PlanoFechamento empresa={empresa} codigoProjeto={codigoProjeto}
+              podeEditar={podeEditar} dados={plano} onMudou={() => void carregarPlano()}
+              somenteCondicoes />
+          )}
         </>
       )}
 
