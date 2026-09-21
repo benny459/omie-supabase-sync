@@ -174,6 +174,17 @@ const FINANCEIRO: NavItem[] = [
     ),
   },
   {
+    href: "/bi/simples",
+    area: "financeiro",
+    label: "Simples Nacional",
+    tone: "text-amber-700",
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className="w-5 h-5" strokeLinecap="round" strokeLinejoin="round">
+        <rect x="4" y="2" width="16" height="20" rx="2"/><path d="M8 6h8M8 10h3M13 10h3M8 14h3M13 14h3M8 18h8"/>
+      </svg>
+    ),
+  },
+  {
     href: "/bi/contas-pagar",
     area: "financeiro",
     label: "Contas a Pagar",
