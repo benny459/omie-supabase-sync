@@ -118,11 +118,14 @@ const TOM: Record<Cabecalho["status"], { rot: string; ponto: string; dica: strin
 export type AbaProjeto = "resumo" | "condicoes" | "faturamento" | "fluxo" | "omie";
 
 export default function FluxoProjetoView({
-  empresa, codigoProjeto, nomeProjeto, aba = "resumo",
+  empresa, codigoProjeto, nomeProjeto, abas = ["resumo"],
 }: {
   empresa: string; codigoProjeto: number; nomeProjeto?: string;
-  aba?: AbaProjeto;
+  abas?: AbaProjeto[];
 }) {
+  /* Uma aba da tela pode conter vários assuntos: `ver` decide o que
+     desenhar sem duplicar o componente (e o fetch) por assunto. */
+  const ver = (k: AbaProjeto) => abas.includes(k);
   const [data, setData] = useState<Payload | null>(null);
   const [entradas, setEntradas] = useState<LinhaGrade[]>([linhaVazia(COLS)]);
   const [saidas, setSaidas] = useState<LinhaGrade[]>([linhaVazia(COLS)]);
@@ -616,7 +619,7 @@ export default function FluxoProjetoView({
           Os KPIs ficam FIXOS acima das abas (no Workspace). Aqui mora o que
           responde "como está indo": onde o dinheiro que sai parou, e as
           premissas que definiram o plano. */}
-      {aba === "resumo" && (
+      {ver("resumo") && (
         <>
           <Bloco titulo="Execução da despesa"
                  dica="o mesmo dinheiro, em cada estágio — da reserva ao pagamento">
@@ -629,7 +632,7 @@ export default function FluxoProjetoView({
       )}
 
       {/* ── CONDIÇÕES COMERCIAIS ─────────────────────────────────────────── */}
-      {aba === "condicoes" && (
+      {ver("condicoes") && (
         <>
           <Bloco titulo="O que foi acordado"
                  dica="o que vale é o do fechamento; a origem vem embaixo, nomeada">
@@ -642,7 +645,7 @@ export default function FluxoProjetoView({
       )}
 
       {/* ── FATURAMENTO & RECEBIMENTO ────────────────────────────────────── */}
-      {aba === "faturamento" && (
+      {ver("faturamento") && (
         <>
           <Bloco titulo="Faturamento"
                  dica="os PV/OS do projeto — é a etapa deles que diz se já virou nota">
@@ -673,7 +676,7 @@ export default function FluxoProjetoView({
           plano={plano} />
       )}
 
-      {aba === "fluxo" && (
+      {ver("fluxo") && (
       <ChartFrame
         title={`Fluxo de caixa do projeto${nomeProjeto ? ` — ${nomeProjeto}` : ""}`}
         subtitle={
@@ -730,7 +733,7 @@ export default function FluxoProjetoView({
           Aba própria: são as linhas cruas do ERP, e a coluna de emissão é
           onde o cronograma entra. Nada aqui é apagável — é recalculado do ERP
           a cada leitura. */}
-      {aba === "omie" && (
+      {ver("omie") && (
       <section className="viz-panel bg-ww-panel border border-ww-border rounded-xl p-3.5 min-w-0 space-y-3">
         <header>
           <h3 className="text-[12.5px] font-semibold text-ww-text tracking-wide uppercase">
@@ -775,7 +778,7 @@ export default function FluxoProjetoView({
       </section>
       )}
 
-      {aba === "resumo" && (data?.eventos?.length ?? 0) > 0 && (
+      {ver("resumo") && (data?.eventos?.length ?? 0) > 0 && (
         <details className="rounded-xl border border-ww-border bg-ww-panel px-3.5 py-2.5">
           <summary className="text-[11.5px] text-ww-textMuted cursor-pointer">
             Histórico de aprovação ({data!.eventos.length})

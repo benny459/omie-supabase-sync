@@ -29,26 +29,28 @@ import { useCallback, useEffect, useState } from "react";
 import RcProjetoUploadButton from "@/components/RcProjetoUploadButton";
 import FluxoProjetoView, { type AbaProjeto } from "./FluxoProjetoView";
 import MateriaisGrade from "./MateriaisGrade";
+import FechamentoCrmBloco from "./FechamentoCrmBloco";
 import { KpisProjeto } from "./ResumoProjeto";
 import type { PlanoCompleto } from "./PlanoFechamento";
 
-type Aba = AbaProjeto | "materiais";
+type Aba = "resumo" | "fluxo" | "materiais";
 
-const ABAS: Array<{ k: Aba; label: string; dica: string }> = [
-  { k: "resumo",      label: "Resumo",
-    dica: "onde o dinheiro que sai parou, e as premissas que definiram o plano" },
-  { k: "condicoes",   label: "Condições comerciais",
-    dica: "o que foi acordado com o cliente e as parcelas do fechamento" },
-  { k: "faturamento", label: "Faturamento & recebimento",
-    dica: "os PV/OS do projeto, o que já virou nota e o que já entrou" },
-  { k: "fluxo",       label: "Fluxo de caixa",
-    dica: "plano, previsto e realizado no mesmo eixo, dia a dia" },
-  { k: "omie",        label: "Compras / Omie",
-    dica: "títulos e pedidos de compra crus do ERP, com a emissão da NF" },
-  { k: "materiais",   label: "Lista de materiais",
-    dica: "itens do projeto, vínculo com PC e status de recebimento" },
+/* Três abas, não seis. As antigas "Condições comerciais", "Faturamento &
+   recebimento" e "Compras / Omie" não eram assuntos separados: eram partes
+   da mesma pergunta. Condições é a premissa do Resumo; faturamento e compras
+   do Omie são os dois lados do Fluxo. Cada aba agora responde uma pergunta
+   inteira, e o que se abre é uma tela só em vez de seis meias-telas. */
+const ABAS: Array<{ k: Aba; label: string; dica: string; partes: AbaProjeto[] }> = [
+  { k: "resumo",    label: "Resumo",
+    dica: "o fechamento que veio do CRM, onde o dinheiro parou e as premissas do plano",
+    partes: ["resumo", "condicoes"] },
+  { k: "fluxo",     label: "Fluxo de caixa",
+    dica: "plano, previsto e realizado no mesmo eixo — com o faturamento e as compras do Omie",
+    partes: ["fluxo", "faturamento", "omie"] },
+  { k: "materiais", label: "Lista de materiais",
+    dica: "itens do projeto, vínculo com PC e status de recebimento",
+    partes: [] },
 ];
-
 export default function ProjetoWorkspace({
   empresa, codigoProjeto, nomeProjeto, abaInicial = "resumo",
 }: {
@@ -120,9 +122,15 @@ export default function ProjetoWorkspace({
         )}
       </div>
 
+      {/* O fechamento do CRM abre o Resumo: é a premissa de tudo o que vem
+          depois — o que foi vendido, quando fatura, o que se reservou para
+          gastar — e o CP/MC para baixar. */}
+      {aba === "resumo" && <FechamentoCrmBloco codigoProjeto={codigoProjeto} />}
+
       {aba !== "materiais" && (
         <FluxoProjetoView empresa={empresa} codigoProjeto={codigoProjeto}
-          nomeProjeto={nomeProjeto} aba={aba} />
+          nomeProjeto={nomeProjeto}
+          abas={ABAS.find((a) => a.k === aba)?.partes ?? ["resumo"]} />
       )}
 
       {/* UMA tabela. Antes havia duas com os mesmos itens — a grade para
