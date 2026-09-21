@@ -12,11 +12,16 @@ import { supaBrowser } from "@/lib/supabase";
  * Cada row é criada em approval.approvals com ncod_ped negativo. A view
  * v_pc_completo captura esses placeholders via CTE manual_rc_rows.
  */
+// Valor sentinela do seletor: ancorar a linha direto no projeto (sem PV/OS).
+// Vira codigo_projeto no insert; a view resolve o bucket via finance.projetos.
+const DIRETO_NO_PROJETO = "__projeto__";
+
 export default function AddRowButton({
   empresa,
   pv_os_label,
   modulo,
   pvOsOptions,
+  codigoProjeto,
 }: {
   empresa: string;
   /** Quando bucket é por PV/OS (avulsos), já vem o label certo. Null pra "Sem PV/OS". */
@@ -24,6 +29,9 @@ export default function AddRowButton({
   modulo: string;
   /** Lista de PV/OSs do bucket — usado em /projetos (bucket = projeto → vários PV/OS). */
   pvOsOptions?: string[];
+  /** Bucket de projeto: permite criar linha ancorada direto no projeto,
+      mesmo sem nenhum PV/OS (caso dos projetos só com PCs diretos). */
+  codigoProjeto?: number;
   existingNcodPeds?: number[];
 }) {
   const router = useRouter();
@@ -36,18 +44,22 @@ export default function AddRowButton({
 
   // Opções únicas de PV/OS do bucket (pra /projetos)
   const pvChoices = Array.from(new Set((pvOsOptions ?? []).filter(Boolean))).sort();
-  const needsPvSelect = pvChoices.length > 1;
+  const canDirect = !pv_os_label && codigoProjeto != null;
+  const needsPvSelect = pvChoices.length + (canDirect ? 1 : 0) > 1;
 
   useEffect(() => {
     if (open) {
-      setSelectedPv(pv_os_label ?? pvChoices[0] ?? "");
+      setSelectedPv(pv_os_label ?? pvChoices[0] ?? (canDirect ? DIRETO_NO_PROJETO : ""));
       setMsg(null); setErr(null);
     }
-  }, [open, pv_os_label, needsPvSelect, pvChoices]);
+  }, [open, pv_os_label, needsPvSelect, pvChoices, canDirect]);
 
   async function addRows() {
-    const target = needsPvSelect ? selectedPv : (pv_os_label ?? pvChoices[0] ?? "");
+    const target = needsPvSelect
+      ? selectedPv
+      : (pv_os_label ?? pvChoices[0] ?? (canDirect ? DIRETO_NO_PROJETO : ""));
     if (!target) { setErr("Escolha um PV/OS"); return; }
+    const isDirect = target === DIRETO_NO_PROJETO;
     const n = Math.max(1, Math.min(50, Math.floor(qty)));
     setBusy(true); setErr(null); setMsg(null);
 
@@ -68,7 +80,11 @@ export default function AddRowButton({
     const rows = Array.from({ length: n }, () => {
       const row = {
         empresa, ncod_ped: next, modulo,
-        source: "native", status: "PENDENTE", pv_os_label: target,
+        source: "native", status: "PENDENTE",
+        pv_os_label: isDirect ? null : target,
+        // Âncora de fallback: garante o bucket do projeto mesmo se o PV/OS
+        // escolhido não resolver codigo_projeto na view.
+        ...(codigoProjeto != null ? { codigo_projeto: codigoProjeto } : {}),
       };
       next -= 1;
       return row;
@@ -77,7 +93,7 @@ export default function AddRowButton({
     const { error } = await approval.from("approvals").insert(rows);
     setBusy(false);
     if (error) { setErr(error.message); return; }
-    setMsg(`✓ ${n} linha${n !== 1 ? "s" : ""} adicionada${n !== 1 ? "s" : ""} em ${target}`);
+    setMsg(`✓ ${n} linha${n !== 1 ? "s" : ""} adicionada${n !== 1 ? "s" : ""} ${isDirect ? "no projeto" : `em ${target}`}`);
     // router.refresh() do Next 16 nao invalida fetches client-side em
     // /api/rows (BoldAvulsosView gerencia fetch com state local).
     // Reload duro garante que as linhas novas aparecam no bucket.
@@ -106,7 +122,8 @@ export default function AddRowButton({
                 <h3 className="font-semibold text-ww-text">Adicionar linhas</h3>
                 <p className="text-xs text-ww-textMuted mt-0.5">
                   Cria {qty > 1 ? `${qty} linhas` : "1 linha"} de RC em branco
-                  {!needsPvSelect && pv_os_label && ` no ${pv_os_label}`}.
+                  {!needsPvSelect && pv_os_label && ` no ${pv_os_label}`}
+                  {!needsPvSelect && !pv_os_label && !pvChoices.length && canDirect && " direto no projeto"}.
                 </p>
               </div>
               <button onClick={() => setOpen(false)} className="text-ww-textFaint hover:text-ww-text text-lg leading-none">×</button>
@@ -120,6 +137,7 @@ export default function AddRowButton({
                   className="w-full px-3 py-2 border border-ww-border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
                 >
                   <option value="">— Escolha —</option>
+                  {canDirect && <option value={DIRETO_NO_PROJETO}>Direto no projeto (sem PV/OS)</option>}
                   {pvChoices.map(p => <option key={p} value={p}>{p}</option>)}
                 </select>
               </div>

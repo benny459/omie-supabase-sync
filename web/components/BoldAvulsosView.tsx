@@ -2821,7 +2821,9 @@ function BucketCard({
                 <AddRowButton empresa={bucket.rows[0]?.empresa as string ?? "SF"}
                   pv_os_label={bucket.groupKind === "pvos" ? bucket.pv_os_label : null}
                   modulo={modulo}
-                  pvOsOptions={bucket.groupKind === "pvos" ? undefined : [...new Set(bucket.rows.map(r => String(r.pv_os_label ?? "")).filter(Boolean))]} />
+                  pvOsOptions={bucket.groupKind === "pvos" ? undefined : [...new Set(bucket.rows.map(r => String(r.pv_os_label ?? "")).filter(Boolean))]}
+                  codigoProjeto={bucket.groupKind === "pvos" ? undefined
+                    : bucket.rows.map(r => Number(r.codigo_projeto ?? r.pv_codigo_projeto ?? 0)).find(n => n > 0)} />
                 {/* Botão da lista de materiais foi movido pro header do bucket
                     (mais visível). Upload é feito na sub-página /projetos/:id/materiais. */}
               </div>
