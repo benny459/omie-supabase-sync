@@ -230,6 +230,33 @@ export default function MateriaisGrade({
   /** Vincula as marcadas a um PC. Escreve direto pela rota de vínculo em vez de
    *  mexer na grade: são itens que já existem no banco, e passar por um salvar
    *  da lista inteira arriscaria carregar junto uma edição não intencional. */
+  /* Vínculo automático: casa cada item com o item comprado nos pedidos DESTE
+     projeto e grava o número. Só sobra para a mão o que não achou — e o que
+     casou por semelhança (não por texto idêntico) fica listado para conferir. */
+  const [autoLink, setAutoLink] = useState<{
+    total: number; exatos: number; similares: number; semPc: number;
+    palpites: Array<{ id: string; item: string; pc: string | null; score: number; descPc: string }>;
+  } | null>(null);
+  const vincularAuto = useCallback(async () => {
+    setSalvando(true); setErro(null); setAutoLink(null);
+    try {
+      const r = await fetch("/api/rc-projetos/itens/auto-link", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ empresa, codigo_projeto: codigoProjeto, aplicar: true }),
+      });
+      const j = await r.json();
+      if (!r.ok) { setErro(j.error ?? "falha ao vincular"); return; }
+      setAutoLink(j);
+      setAviso(j.gravados
+        ? `${j.gravados} item(ns) vinculados — ${j.exatos} por descrição idêntica, ${j.similares} por semelhança` +
+          (j.semPc ? `; ${j.semPc} sem pedido correspondente, para vincular à mão` : "")
+        : (j.aviso ?? "Nenhum item novo para vincular."));
+      await carregar();
+      onGravado?.();
+    } catch (e) { setErro(e instanceof Error ? e.message : String(e)); }
+    finally { setSalvando(false); }
+  }, [empresa, codigoProjeto, carregar, onGravado]);
+
   const vincular = useCallback(async (pc: PcSearchResult) => {
     const ids = Array.from(marcadas)
       .filter((id) => id.startsWith("db"))
@@ -288,6 +315,13 @@ export default function MateriaisGrade({
               resta {brl(resumo.valor_restante)}
             </span>
           )}
+          <button type="button" onClick={() => void vincularAuto()} disabled={salvando}
+            title="Procura, nos pedidos de compra deste projeto, o item que corresponde a cada linha — e grava o número do PC"
+            className="px-2 py-1 text-[11px] rounded-lg border border-sky-400 dark:border-sky-700
+                       bg-sky-50 dark:bg-sky-950/40 text-sky-800 dark:text-sky-200
+                       hover:bg-sky-100 dark:hover:bg-sky-900/50 transition disabled:opacity-40">
+            ⇄ Vincular PCs automaticamente
+          </button>
           <button type="button" onClick={exportar} disabled={!validas.length}
             className="px-2 py-1 text-[11px] rounded-lg border border-ww-border text-ww-textMuted
                        hover:text-ww-text hover:bg-ww-rowHover transition disabled:opacity-40">
@@ -378,6 +412,34 @@ export default function MateriaisGrade({
                 : new Set()),
             }}
             vazioMsg="Digite, cole do Excel ou use o botão de planilha acima." />}
+
+      {autoLink && autoLink.palpites.length > 0 && (
+        <details open className="rounded-lg border border-ww-border bg-ww-bg/40 px-3 py-2">
+          <summary className="text-[11.5px] text-ww-text cursor-pointer">
+            Conferir o vínculo automático — {autoLink.similares} por semelhança,{" "}
+            {autoLink.semPc} sem pedido correspondente
+          </summary>
+          <table className="w-full mt-2 text-[11px]">
+            <tbody>
+              {autoLink.palpites.map((p) => (
+                <tr key={p.id} className="border-t border-ww-border/60">
+                  <td className="py-1 pr-2 text-ww-text">{p.item}</td>
+                  <td className="py-1 pr-2 whitespace-nowrap">
+                    {p.pc
+                      ? <span className="text-emerald-600 dark:text-emerald-300">→ PC {p.pc}</span>
+                      : <span className="text-ww-textFaint">sem correspondência</span>}
+                  </td>
+                  <td className="py-1 text-ww-textMuted">{p.descPc || "—"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <p className="text-[10.5px] text-ww-textFaint mt-1.5">
+            O que ficou sem correspondência vincula-se à mão: marque as linhas na tabela e use “Vincular ao PC”.
+            Para trocar um vínculo, é o mesmo caminho.
+          </p>
+        </details>
+      )}
 
       {picker && (
         <PcPickerModal empresa={empresa} codigoProjeto={codigoProjeto}
