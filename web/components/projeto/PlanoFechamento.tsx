@@ -97,6 +97,7 @@ function tomDoEvento(ev: string | null): { rot: string; classe: string } {
 
 export default function PlanoFechamento({
   empresa, codigoProjeto, podeEditar, dados, onMudou, somenteCondicoes = false,
+  somenteImportar = false,
 }: {
   empresa: string; codigoProjeto: number; podeEditar: boolean;
   dados: PlanoCompleto | null;
@@ -105,6 +106,10 @@ export default function PlanoFechamento({
    *  compras e o efetivo pertencem ao Resumo, e repeti-los nas duas abas
    *  desfaria o que separar em abas resolveu. */
   somenteCondicoes?: boolean;
+  /** Só o cabeçalho com o botão de subir a planilha e a prévia da importação
+      — é assim que o Fluxo de caixa oferece o upload sem trazer junto o
+      bloco inteiro de premissas, que ele não mostra. */
+  somenteImportar?: boolean;
 }) {
   const [erro, setErro] = useState<string | null>(null);
   const [aviso, setAviso] = useState<string | null>(null);
@@ -383,7 +388,7 @@ export default function PlanoFechamento({
         </div>
       )}
 
-      {plano && (
+      {plano && !somenteImportar && (
         <>
           {/* Pagamento, entrega, faturamento e "por conta de quem" subiram
               para o resumo do topo: são o que define se o projeto se paga

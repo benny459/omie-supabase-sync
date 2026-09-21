@@ -11,6 +11,7 @@
 // resposta. O que saiu não sumiu do banco — só deixou de disputar a atenção.
 
 import { useCallback, useEffect, useState } from "react";
+import PlanoFechamento, { type PlanoCompleto } from "./PlanoFechamento";
 
 type Linha = {
   id: number; tipo: "entrada" | "saida"; descricao: string;
@@ -100,6 +101,19 @@ export default function FluxoSimples({
 }: { empresa: string; codigoProjeto: number; tetoPlano: number }) {
   const [data, setData] = useState<Payload | null>(null);
   const [erro, setErro] = useState<string | null>(null);
+  /* O plano é o que enche as duas agendas. O upload vive AQUI porque é aqui
+     que a falta dele aparece — a tela diz "nada na agenda ainda" e o botão
+     de resolver está na mesma dobra. */
+  const [plano, setPlano] = useState<PlanoCompleto | null>(null);
+  const carregarPlano = useCallback(async () => {
+    try {
+      const r = await fetch(
+        `/api/rc-projetos/plano?empresa=${encodeURIComponent(empresa)}&codigo_projeto=${codigoProjeto}`,
+        { cache: "no-store" });
+      if (r.ok) setPlano((await r.json()) as PlanoCompleto);
+    } catch { /* sem plano, o botão continua oferecendo a importação */ }
+  }, [empresa, codigoProjeto]);
+  useEffect(() => { void carregarPlano(); }, [carregarPlano]);
 
   const carregar = useCallback(async () => {
     try {
@@ -134,6 +148,11 @@ export default function FluxoSimples({
 
   return (
     <div className="space-y-3.5">
+      {/* Subir o CP/MC preenchido: é daqui que saem as duas agendas. */}
+      <PlanoFechamento empresa={empresa} codigoProjeto={codigoProjeto}
+        podeEditar dados={plano} somenteImportar
+        onMudou={() => { void carregarPlano(); void carregar(); }} />
+
       <Agenda
         titulo="Entradas" dica="a agenda que veio da planilha — e o que dela já caiu no caixa"
         linhas={entradas} jaFoi={recebido} falta={aReceber}
