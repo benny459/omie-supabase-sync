@@ -4,6 +4,23 @@
 
 ---
 
+## [2026-09-21] [painel] feat | Simples Nacional — projeção do DAS do mês
+
+- **Origem:** Benny pediu conferência dos extratos PGDAS de 07 e 08/2026 da Safe Water contra o faturamento real, e depois "estimar no mês qual será o Simples apurado" e "monitorar as notas de serviço".
+- **Conferência (fez-se antes de construir):** mercantil = NF-e autorizadas fora canceladas/devolvidas; serviço = OS faturadas COM NOTA (OS de recibo fica fora — isentas). Bateu **ao centavo** nos dois meses: 167.623,30 / 136.401,48 (jul) e 299.837,37 / 35.138,00 (ago).
+- **Motor `lib/simples.ts`:** faixas e repartição dos Anexos I, III e V, alíquota efetiva `(RBT12 × nominal − dedução) ÷ RBT12`, fator r com corte em 28%, e o **teto de 5% do ISS** com redistribuição proporcional do excedente (é o que faz o IRPJ do Anexo III sair 82,21 em vez de 76,62). Testado contra os dois PGDAS: pior divergência R$ 0,02.
+- **Insight que dá valor à tela:** a alíquota está TRAVADA no dia 1º — depende só de meses fechados. Só a base se move. Daí o KPI "custo de cada R$ 1.000 faturado" (R$ 115,18 mercantil / R$ 210,21 serviço em set/2026), que é número de decisão em tempo real.
+- **Banco:** `finance.simples_historico` (receita+folha declaradas, seed 01/2025–08/2026 dos extratos — fonte do RBT12 e do fator r, porque em alguns meses o contador declarou diferente do Omie) e `finance.simples_anexo_iii` (clientes fora do fator r; hoje só o 9866935780, R$ 10.978,50/mês). Funções `finance.simples_faturamento` e `finance.simples_documentos`.
+- **Tela** `/bi/simples` (área financeiro): o que já está travado, memorial por atividade e tributo, 3 cenários de fechamento, notas do mês (com toggle para ver as OS de recibo) e conferência Omie × PGDAS mês a mês.
+- Conferido em produção: DAS 10.091,72 com o faturado até 18/09; abr, jun, jul e ago marcam "confere" na conferência.
+
+## [2026-09-21] [painel] fix | Budget do card vem do fechamento do CRM
+
+- Benny: "divergência de budget para materiais — o certo aqui seria 48k mas no card o budget é maior".
+- **Diagnóstico:** o card não mostrava budget errado — mostrava `definir` (não havia linha em `approval.rc_projetos_budget`, que só nasce quando alguém importa o Fluxo Financeiro à mão). Os R$ 62.189,42 visíveis eram o **Lançado** (soma dos PCs), solto, sem nada com que comparar.
+- **Fix:** `fetchBudgetsDoCrm()` em `lib/crm-fechamento.ts` lê o budget de vários projetos numa chamada só (`projetoPainel->>codigo=in.(...)`), e `/api/rc-projetos/budget/summary` sobrepõe o CRM quando há proposta linkada. Best-effort: CRM fora do ar não derruba o card. O rótulo vira "BUDGET · CRM".
+- PJ363 saiu de `definir` para budget **48.617,27**, venda **91.055,04** e M.B. esperada **24,5%** — os mesmos números da tela de Resumo. E revelou o que estava escondido: os PCs lançados estão em **128% do budget** de materiais.
+
 ## [2026-06-27] [meta] setup | Vault inicializado (Fase A skeleton)
 
 - Estrutura criada: `docs/obsidian/Service/` (vault) + `md-obsidian/` (backup) + `scripts/sync-vault.sh`
