@@ -32,6 +32,7 @@ function LinhaKV({ k, v, sub }: { k: string; v: string; sub?: string }) {
 
 function CartaoFechamento({ f, temCpmc }: { f: FechamentoCrm; temCpmc: boolean }) {
   const rec = f.recebimento;
+  const cu = f.custos;
   const cf = rec.confirmacoes || {};
   const conta = (v: boolean | undefined, sim: string, nao: string) =>
     v == null ? "— não confirmado —" : v ? sim : nao;
@@ -80,6 +81,36 @@ function CartaoFechamento({ f, temCpmc }: { f: FechamentoCrm; temCpmc: boolean }
           <LinhaKV k="Deslocamento e estadia" v={conta(cf.deslocamento, "Por nossa conta", "Por conta do cliente")} />
           <LinhaKV k="Instalação" v={conta(cf.instalacao, "Inclusa", "Não inclusa")} />
           <LinhaKV k="Impostos" v={conta(cf.impostos, "Inclusos no valor", "Por fora")} />
+
+          {/* Diretriz de custos da proposta — o resumo do que a planilha
+              detalha, para se ter o todo antes de baixar o arquivo. */}
+          {(cu.material > 0 || cu.maoDeObra > 0 || cu.despesas > 0) && (
+            <>
+              <div className="text-[11px] font-bold uppercase tracking-wide text-ww-muted mt-3 mb-1">
+                Custos considerados na proposta
+              </div>
+              {cu.material > 0 && (
+                <LinhaKV k="Materiais e equipamentos (CP)" v={brl(cu.material)} />
+              )}
+              {cu.maoDeObra > 0 && (
+                <LinhaKV k="Mão de obra" v={brl(cu.maoDeObra)}
+                  sub={cu.diarias > 0
+                    ? `${cu.tecnicos} técnico(s) · ${cu.diarias} diária(s)`
+                      + (cu.sabados || cu.domingos ? ` — ${cu.sabados} sáb, ${cu.domingos} dom` : "")
+                    : undefined} />
+              )}
+              {cu.frete > 0 && (
+                <LinhaKV k="Frete estimado" v={brl(cu.frete)}
+                  sub={cu.freteViagens > 0 ? `${cu.freteViagens} viagem(ns) — por nossa conta só se confirmado acima` : undefined} />
+              )}
+              {cu.despesas > 0 && (
+                <LinhaKV k="Demais despesas estimadas" v={brl(Math.max(0, cu.despesas - cu.frete))}
+                  sub="Estadia, passagens, locação, alimentação…" />
+              )}
+              <LinhaKV k="Total de saídas previsto" v={brl(cu.material + cu.maoDeObra + cu.despesas)}
+                sub="O detalhe, item a item e no tempo, está no CP/MC Excel" />
+            </>
+          )}
         </div>
         <div>
           <div className="text-[11px] font-bold uppercase tracking-wide text-ww-muted mb-1">

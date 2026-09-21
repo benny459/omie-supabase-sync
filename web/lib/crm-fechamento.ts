@@ -35,11 +35,25 @@ export type RecebimentoCrm = {
   projetoPainel?: { codigo: number; nome: string };
 };
 
+/** Diretriz de custos da proposta (CP/MC), resumida para a primeira tela. */
+export type CustosCrm = {
+  material: number;      // total da CP (materiais/equipamentos)
+  maoDeObra: number;     // total de mão de obra considerado
+  despesas: number;      // total de despesas (frete, estadia, passagens...)
+  frete: number;         // só o frete estimado (por viagem, dentro de despesas)
+  freteViagens: number;
+  tecnicos: number;
+  diarias: number;       // dias de trabalho somados (como na planilha)
+  sabados: number;
+  domingos: number;
+};
+
 export type FechamentoCrm = {
   numero: string;
   status?: string;
   valor?: number;
   cliente?: string;
+  custos: CustosCrm;
   recebimento: RecebimentoCrm;
   cpmcUrl: string;      // caminho fixo do snapshot — pode ainda não existir
   gerarUrl: string;     // endpoint do CRM que gera o Excel na hora (e publica o snapshot)
@@ -59,12 +73,41 @@ export async function fetchFechamentosDoProjeto(codigoProjeto: number | string):
   return rows
     .filter((p) => (p.dados_json as { recebimento?: RecebimentoCrm } | undefined)?.recebimento)
     .map((p) => {
-      const dj = p.dados_json as { recebimento: RecebimentoCrm; cl?: { emp?: string } };
+      const dj = p.dados_json as {
+        recebimento: RecebimentoCrm;
+        cl?: { emp?: string };
+        formacaoCusto?: Record<string, unknown>;
+      };
+      /* Mesmas contas do bloco CUSTOS CONSIDERADOS da planilha: as diárias
+         somam os dias de trabalho por nível (comercial+noturno+sáb+dom); o
+         frete é por viagem e vive dentro do total de despesas. */
+      const fc = (dj.formacaoCusto || {}) as {
+        cpTotal?: number; moTotal?: number; despTotal?: number;
+        maoDeObra?: Array<{ qtd?: number; comercial?: number; noturno?: number; sabado?: number; domingo?: number }>;
+        despesasCp?: { frete?: { unit?: number; diarias?: number } };
+      };
+      let tecnicos = 0, diarias = 0, sabados = 0, domingos = 0;
+      for (const m of fc.maoDeObra || []) {
+        const dias = (m.comercial || 0) + (m.noturno || 0) + (m.sabado || 0) + (m.domingo || 0);
+        if ((m.qtd || 0) > 0 && dias > 0) {
+          tecnicos += m.qtd || 0; diarias += dias;
+          sabados += m.sabado || 0; domingos += m.domingo || 0;
+        }
+      }
+      const custos: CustosCrm = {
+        material: Number(fc.cpTotal) || 0,
+        maoDeObra: Number(fc.moTotal) || 0,
+        despesas: Number(fc.despTotal) || 0,
+        frete: (Number(fc.despesasCp?.frete?.unit) || 0) * (Number(fc.despesasCp?.frete?.diarias) || 0),
+        freteViagens: Number(fc.despesasCp?.frete?.diarias) || 0,
+        tecnicos, diarias, sabados, domingos,
+      };
       return {
         numero: p.numero,
         status: p.status,
         valor: p.valor,
         cliente: dj.cl?.emp || "",
+        custos,
         recebimento: dj.recebimento,
         cpmcUrl: `${CRM_URL}/storage/v1/object/public/propostas-pdfs/${CRM_EMPRESA}/${encodeURIComponent(p.numero)}/cpmc.xlsx`,
         gerarUrl: `https://propostas-ww.vercel.app/api/cpmc-gerar?num=${encodeURIComponent(p.numero)}`,
