@@ -30,6 +30,7 @@ import RcProjetoUploadButton from "@/components/RcProjetoUploadButton";
 import FluxoProjetoView, { type AbaProjeto } from "./FluxoProjetoView";
 import MateriaisGrade from "./MateriaisGrade";
 import FechamentoCrmBloco from "./FechamentoCrmBloco";
+import ProjetoEscopoButton from "../ProjetoEscopoButton";
 import { KpisProjeto } from "./ResumoProjeto";
 import type { PlanoCompleto } from "./PlanoFechamento";
 
@@ -111,6 +112,15 @@ export default function ProjetoWorkspace({
             {label}
           </button>
         ))}
+
+        {/* O escopo — frete, estadia, deslocamento e faturamento "por nossa
+            conta" — é o mesmo assunto do "por conta de quem" do fechamento,
+            que abre o Resumo. Era um quarto botão no card do projeto. */}
+        {aba === "resumo" && (
+          <div className="ml-auto pb-1.5">
+            <ProjetoEscopoButton empresa={empresa} codigoProjeto={codigoProjeto} />
+          </div>
+        )}
 
         {/* Um upload por aba, e só. A aba Fluxo tinha DOIS botões de importar
             planilha, para arquivos diferentes; o import do fechamento passou a

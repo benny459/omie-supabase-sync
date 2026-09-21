@@ -22,7 +22,6 @@ import RcExcelDropZone from "./RcExcelDropZone";
 // + download modelo) entra no header do bucket pra ficar à mão sem entrar
 // na sub-página. O dot Cronograma reflete o estado agregado das etapas.
 import FluxoFinanceiroUploadButton from "./FluxoFinanceiroUploadButton";
-import ProjetoEscopoButton from "./ProjetoEscopoButton";
 import PvOsComentarios from "./PvOsComentarios";
 import BucketSyncButton from "./BucketSyncButton";
 import SyncNowButton from "./SyncNowButton";
@@ -2528,26 +2527,14 @@ function BucketCard({
       {projetoActions && (
         <div className="flex items-center gap-2 flex-wrap px-5 py-2 border-b border-ww-border bg-ww-bg/60"
              onClick={(e) => e.stopPropagation()}>
-          {/* As duas portas levam à MESMA tela, em abas diferentes. Antes o
-              Fluxo Financeiro abria um modal só de upload — quem queria ver o
-              plano do projeto não tinha para onde ir. */}
-          <a href={`/projetos/${projetoActions.codProj}/materiais?empresa=${encodeURIComponent(projetoActions.empresaProj)}&aba=materiais`}
-            title="Lista de materiais: digitar, colar do Excel, vincular ao PC e acompanhar o recebimento"
-            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[11.5px] font-semibold border border-emerald-400 dark:border-emerald-700 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-200 hover:bg-emerald-100 dark:hover:bg-emerald-900/50 transition">
-            🧱 <span>Lista de Materiais</span> <span className="opacity-60">→</span>
-          </a>
-          <a href={`/projetos/${projetoActions.codProj}/materiais?empresa=${encodeURIComponent(projetoActions.empresaProj)}&aba=fluxo`}
-            title="Fluxo de caixa previsto do projeto, aprovação e comparação com o realizado"
-            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[11.5px] font-semibold border border-sky-400 dark:border-sky-700 bg-sky-50 dark:bg-sky-950/40 text-sky-800 dark:text-sky-200 hover:bg-sky-100 dark:hover:bg-sky-900/50 transition">
-            📊 <span>Fluxo Financeiro</span> <span className="opacity-60">→</span>
-          </a>
-          <ProjetoEscopoButton empresa={projetoActions.empresaProj} codigoProjeto={projetoActions.codProj} />
-          {/* Resumo do fechamento vindo do CRM + download do CP/MC Excel.
-              O link proposta→projeto é feito lá, no resumo do fechamento. */}
-          <a href={`/projetos/${projetoActions.codProj}/fechamento`}
-            title="Resumo do fechamento da proposta linkada no CRM e download do CP/MC Excel"
-            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[11.5px] font-semibold border border-amber-400 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-200 hover:bg-amber-100 dark:hover:bg-amber-900/50 transition">
-            🏆 <span>Fechamento CRM</span> <span className="opacity-60">→</span>
+          {/* UM botão. Eram quatro, e três levavam à mesma tela em abas
+              diferentes — o quarto (Escopo) é um assunto do Resumo e mudou-se
+              para lá. Quem abre o projeto quer o projeto; qual aba ver é
+              decisão de dentro, não da porta. */}
+          <a href={`/projetos/${projetoActions.codProj}/materiais?empresa=${encodeURIComponent(projetoActions.empresaProj)}`}
+            title="Fechamento do CRM, fluxo de caixa e lista de materiais deste projeto"
+            className="inline-flex items-center gap-1 px-3 py-1 rounded-md text-[11.5px] font-semibold border border-sky-400 dark:border-sky-700 bg-sky-50 dark:bg-sky-950/40 text-sky-800 dark:text-sky-200 hover:bg-sky-100 dark:hover:bg-sky-900/50 transition">
+            📂 <span>Abrir projeto</span> <span className="opacity-60">→</span>
           </a>
         </div>
       )}
