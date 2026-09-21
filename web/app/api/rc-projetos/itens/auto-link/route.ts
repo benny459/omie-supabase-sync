@@ -6,6 +6,7 @@
 // achar fica para vínculo manual, que é a única parte que sobra para a mão.
 import { NextResponse } from "next/server";
 import { supaServer } from "@/lib/supabase-server";
+import { supaAdmin } from "@/lib/supabase-admin";
 import { casarItens, type ItemPc, type Palpite } from "@/lib/match-pc";
 
 export const runtime = "nodejs";
@@ -47,8 +48,10 @@ export async function POST(req: Request) {
   }
 
   /* Os itens comprados vivem no schema orders, uma linha por item do pedido.
-     Filtra pelo projeto: pedido de outro projeto não é candidato. */
-  const orders = supa.schema("orders" as never);
+     Filtra pelo projeto: pedido de outro projeto não é candidato.
+     Lido com a chave de serviço — `orders` não é exposto ao usuário
+     autenticado (o mesmo caminho que /api/admin/pc-lookup usa). */
+  const orders = supaAdmin().schema("orders" as never);
   const { data: pcRows, error: e2 } = await orders
     .from("pedidos_compra")
     .select("cnumero, cdescricao, cproduto")
