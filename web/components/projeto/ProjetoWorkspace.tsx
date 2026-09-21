@@ -43,8 +43,8 @@ type Aba = "resumo" | "fluxo" | "materiais";
    inteira, e o que se abre é uma tela só em vez de seis meias-telas. */
 const ABAS: Array<{ k: Aba; label: string; dica: string; partes: AbaProjeto[] }> = [
   { k: "resumo",    label: "Resumo",
-    dica: "o fechamento que veio do CRM, onde o dinheiro parou e as premissas do plano",
-    partes: ["resumo", "condicoes"] },
+    dica: "o fechamento que veio do CRM e onde o dinheiro parou",
+    partes: ["resumo"] },
   { k: "fluxo",     label: "Fluxo de caixa",
     dica: "plano, previsto e realizado no mesmo eixo — com o faturamento e as compras do Omie",
     partes: ["fluxo", "faturamento", "omie"] },
@@ -62,6 +62,10 @@ export default function ProjetoWorkspace({
    *  remontar é o jeito mais simples de ele refletir o que acabou de ser
    *  gravado sem duplicar a lógica de fetch. */
   const [chave, setChave] = useState(0);
+  /* Há fechamento do CRM linkado? Com ele, o Resumo não repete premissas e
+     condições — o cartão já as traz. Sem ele, elas voltam, senão o projeto
+     ficaria sem nenhuma referência de plano. */
+  const [temCrm, setTemCrm] = useState<boolean | null>(null);
 
   /** O plano, para os KPIs do topo. Leitura barata e independente do fluxo. */
   const [plano, setPlano] = useState<PlanoCompleto | null>(null);
@@ -135,12 +139,16 @@ export default function ProjetoWorkspace({
       {/* O fechamento do CRM abre o Resumo: é a premissa de tudo o que vem
           depois — o que foi vendido, quando fatura, o que se reservou para
           gastar — e o CP/MC para baixar. */}
-      {aba === "resumo" && <FechamentoCrmBloco codigoProjeto={codigoProjeto} />}
+      {aba === "resumo" && <FechamentoCrmBloco codigoProjeto={codigoProjeto} onCarregado={setTemCrm} />}
 
       {aba !== "materiais" && (
         <FluxoProjetoView empresa={empresa} codigoProjeto={codigoProjeto}
           nomeProjeto={nomeProjeto}
-          abas={ABAS.find((a) => a.k === aba)?.partes ?? ["resumo"]} />
+          abas={(() => {
+            const base = ABAS.find((a) => a.k === aba)?.partes ?? ["resumo"];
+            return aba === "resumo" && temCrm === false
+              ? ([...base, "premissas", "condicoes"] as AbaProjeto[]) : base;
+          })()} />
       )}
 
       {/* UMA tabela. Antes havia duas com os mesmos itens — a grade para

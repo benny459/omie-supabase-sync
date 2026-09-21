@@ -115,7 +115,7 @@ const TOM: Record<Cabecalho["status"], { rot: string; ponto: string; dica: strin
 
 /** As abas do projeto. Cada assunto na sua — antes era tudo numa rolagem só,
  *  com treze números antes da primeira tabela. */
-export type AbaProjeto = "resumo" | "condicoes" | "faturamento" | "fluxo" | "omie";
+export type AbaProjeto = "resumo" | "premissas" | "condicoes" | "faturamento" | "fluxo" | "omie";
 
 export default function FluxoProjetoView({
   empresa, codigoProjeto, nomeProjeto, abas = ["resumo"],
@@ -626,8 +626,14 @@ export default function FluxoProjetoView({
             <ReguaExecucao plano={plano} execucao={data?.execucao ?? null} teto={tetoVigente} />
           </Bloco>
 
-          <PlanoFechamento empresa={empresa} codigoProjeto={codigoProjeto}
-            podeEditar={podeEditar} dados={plano} onMudou={() => void carregarPlano()} />
+          {/* As premissas só aparecem quando NÃO há fechamento do CRM
+              linkado: com ele, o cartão do topo já traz parcelas, condições e
+              custos — e o mesmo conteúdo duas vezes na mesma rolagem é o que
+              fazia a tela parecer complicada. */}
+          {ver("premissas") && (
+            <PlanoFechamento empresa={empresa} codigoProjeto={codigoProjeto}
+              podeEditar={podeEditar} dados={plano} onMudou={() => void carregarPlano()} />
+          )}
         </>
       )}
 

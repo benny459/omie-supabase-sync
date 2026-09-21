@@ -7,7 +7,9 @@ import { useEffect, useState } from "react";
 import CartaoFechamento from "./CartaoFechamentoCrm";
 import type { FechamentoCrm } from "@/lib/crm-fechamento";
 
-export default function FechamentoCrmBloco({ codigoProjeto }: { codigoProjeto: number }) {
+export default function FechamentoCrmBloco({ codigoProjeto, onCarregado }: {
+  codigoProjeto: number; onCarregado?: (tem: boolean) => void;
+}) {
   const [dados, setDados] = useState<{ fechamentos: FechamentoCrm[]; temCpmc: boolean[] } | null>(null);
   const [erro, setErro] = useState("");
 
@@ -18,12 +20,12 @@ export default function FechamentoCrmBloco({ codigoProjeto }: { codigoProjeto: n
         const r = await fetch(`/api/crm-fechamento?codigo=${codigoProjeto}`, { cache: "no-store" });
         const j = await r.json();
         if (!vivo) return;
-        if (!r.ok) setErro(String(j?.error || r.status));
-        else setDados(j);
-      } catch (e) { if (vivo) setErro(e instanceof Error ? e.message : String(e)); }
+        if (!r.ok) { setErro(String(j?.error || r.status)); onCarregado?.(false); }
+        else { setDados(j); onCarregado?.((j?.fechamentos?.length ?? 0) > 0); }
+      } catch (e) { if (vivo) { setErro(e instanceof Error ? e.message : String(e)); onCarregado?.(false); } }
     })();
     return () => { vivo = false; };
-  }, [codigoProjeto]);
+  }, [codigoProjeto, onCarregado]);
 
   if (erro) {
     return (
