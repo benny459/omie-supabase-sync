@@ -30,6 +30,7 @@ import RcProjetoUploadButton from "@/components/RcProjetoUploadButton";
 import FluxoProjetoView, { type AbaProjeto } from "./FluxoProjetoView";
 import MateriaisGrade from "./MateriaisGrade";
 import FechamentoCrmBloco from "./FechamentoCrmBloco";
+import FluxoSimples from "./FluxoSimples";
 import ProjetoEscopoButton from "../ProjetoEscopoButton";
 import { KpisProjeto } from "./ResumoProjeto";
 import type { PlanoCompleto } from "./PlanoFechamento";
@@ -46,8 +47,8 @@ const ABAS: Array<{ k: Aba; label: string; dica: string; partes: AbaProjeto[] }>
     dica: "o fechamento que veio do CRM e onde o dinheiro parou",
     partes: ["resumo"] },
   { k: "fluxo",     label: "Fluxo de caixa",
-    dica: "plano, previsto e realizado no mesmo eixo — com o faturamento e as compras do Omie",
-    partes: ["fluxo", "faturamento", "omie"] },
+    dica: "as agendas de entrada e saída da planilha, o que já entrou e saiu, e o budget contra as compras",
+    partes: [] },
   { k: "materiais", label: "Lista de materiais",
     dica: "itens do projeto, vínculo com PC e status de recebimento",
     partes: [] },
@@ -141,14 +142,17 @@ export default function ProjetoWorkspace({
           gastar — e o CP/MC para baixar. */}
       {aba === "resumo" && <FechamentoCrmBloco codigoProjeto={codigoProjeto} onCarregado={setTemCrm} />}
 
-      {aba !== "materiais" && (
+      {aba === "fluxo" && (
+        <FluxoSimples empresa={empresa} codigoProjeto={codigoProjeto}
+          tetoPlano={tetoPlano} />
+      )}
+
+      {aba === "resumo" && (
         <FluxoProjetoView empresa={empresa} codigoProjeto={codigoProjeto}
           nomeProjeto={nomeProjeto}
-          abas={(() => {
-            const base = ABAS.find((a) => a.k === aba)?.partes ?? ["resumo"];
-            return aba === "resumo" && temCrm === false
-              ? ([...base, "premissas", "condicoes"] as AbaProjeto[]) : base;
-          })()} />
+          abas={(temCrm === false
+            ? (["resumo", "premissas", "condicoes"] as AbaProjeto[])
+            : (["resumo"] as AbaProjeto[]))} />
       )}
 
       {/* UMA tabela. Antes havia duas com os mesmos itens — a grade para
