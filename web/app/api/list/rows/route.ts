@@ -66,6 +66,9 @@ export async function GET(req: Request) {
   // Busca-as na view VIVA em paralelo e substitui as da MV no merge — senão a
   // linha recém-criada some no reload pós-criação e o usuário acha que falhou.
   // (~2-3s na view viva filtrada; corre em paralelo com a paginação da MV.)
+  // Também paginada: são >1000 linhas manuais e o cap do PostgREST cortava o
+  // resto — como o merge troca TODAS as manuais da MV, ~700 PVs sumiam de
+  // /avulsos (ex: PV1931/PV1932). Qualquer falha devolve null → fica a MV.
   const liveManualPromise = (async (): Promise<Record<string, unknown>[] | null> => {
     try {
       const liveClient = createClient(
@@ -73,9 +76,18 @@ export async function GET(req: Request) {
         process.env.SUPABASE_SERVICE_ROLE_KEY!,
         { auth: { persistSession: false }, db: { schema: "approval" } },
       );
-      const { data, error } = await liveClient.from(view).select("*").lt("ncod_ped", 0);
-      if (error) return null;
-      return (data ?? []) as Record<string, unknown>[];
+      const live: Record<string, unknown>[] = [];
+      for (let offset = 0; offset < MAX_ROWS; offset += PAGE) {
+        const { data, error } = await liveClient.from(view).select("*").lt("ncod_ped", 0)
+          .order("pv_os_label", { ascending: true, nullsFirst: false })
+          .order("ncod_ped",    { ascending: true })
+          .range(offset, offset + PAGE - 1);
+        if (error) return null;
+        const batch = (data ?? []) as Record<string, unknown>[];
+        live.push(...batch);
+        if (batch.length < PAGE) return live;
+      }
+      return null;  // bateu MAX_ROWS — incompleto, melhor ficar com a MV
     } catch { return null; }
   })();
 
