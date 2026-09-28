@@ -104,7 +104,9 @@ const MODULES: NavItem[] = [
   },
   {
     href: "/estoque",
-    area: "compras",
+    // Temporário: área financeiro (= só quem tem concessão explícita) até o
+    // clone do Omie sair do refino; depois volta pra "compras".
+    area: "financeiro",
     label: "Estoque",
     tone: "text-orange-600",
     icon: (
