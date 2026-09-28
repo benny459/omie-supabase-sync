@@ -6,6 +6,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import NovoTituloModal from "./NovoTituloModal";
+import FornecedorDrawer from "./FornecedorDrawer";
 
 type Agg = { total: number; qtd: number };
 type Breakdown = { nome: string; total: number; qtd: number };
@@ -29,6 +30,33 @@ type Row = {
   conta_corrente: string | null;
   observacao: string | null;
   boleto_numero: string | null;
+
+  // Campos que a fonte antiga (contas_pagar) nao trazia.
+  codigo_cliente_fornecedor: number | null;
+  contraparte_razao: string | null;
+  pagamento: string | null;
+  dt_registro: string | null;
+  val_aberto: number | string | null;
+  val_liquido: number | string | null;
+  juros: number | string | null;
+  multa: number | string | null;
+  desconto: number | string | null;
+  dias_para_vencer: number | null;
+  em_aberto: boolean | null;
+  num_boleto: string | null;
+  codigo_barras: string | null;
+  chave_nfe: string | null;
+  num_contrato: string | null;
+  categorias_rateio: string | null;
+  tem_rateio: boolean | null;
+  grupo_despesa: string | null;
+  origem: string | null;
+  operacao: string | null;
+  tipo_documento: string | null;
+  cod_titulo: number | null;
+  info_u_inc: string | null;
+  info_d_inc: string | null;
+  info_u_alt: string | null;
 };
 type ApiResp = {
   rows: Row[];
@@ -97,6 +125,108 @@ function BreakdownCol({ titulo, items }: { titulo: string; items: Breakdown[] })
   );
 }
 
+/* ── Registo de colunas ────────────────────────────────────────────────────
+ * A view traz 74 campos. Mostrar os 74 numa tabela é ilegível — o próprio
+ * design da Fourmidia diz isso e corta para 10, avisando que cortar é uma
+ * regressão de fluxo para quem usava o campo cortado.
+ *
+ * A saída é não escolher pelo utilizador: tudo está aqui, um conjunto sensato
+ * vem ligado, e o controlo "Colunas" abre o resto. A escolha fica gravada no
+ * browser, por tipo (pagar/receber), porque quem paga e quem cobra não olha
+ * para as mesmas coisas.
+ */
+type ColKey = keyof Row;
+type ColDef = {
+  key: ColKey;
+  label: string;
+  grupo: "Básico" | "Datas" | "Valores" | "Documento" | "Classificação" | "Origem";
+  align?: "right";
+  largura?: string;
+  /** Como desenhar. Sem isto, mostra o valor cru. */
+  render?: (r: Row) => React.ReactNode;
+};
+
+const COLUNAS: ColDef[] = [
+  // Básico
+  { key: "vencimento", label: "Venc.", grupo: "Básico", render: (r) => dataBR(r.vencimento) },
+  { key: "empresa", label: "Emp.", grupo: "Básico" },
+  { key: "contraparte", label: "__CONTRAPARTE__", grupo: "Básico", largura: "max-w-[260px]" },
+  { key: "status_titulo", label: "Status", grupo: "Básico" },
+
+  // Datas
+  { key: "emissao", label: "Emissão", grupo: "Datas", render: (r) => dataBR(r.emissao) },
+  { key: "previsao", label: "Previsão", grupo: "Datas", render: (r) => dataBR(r.previsao) },
+  { key: "pagamento", label: "Pago em", grupo: "Datas", render: (r) => dataBR(r.pagamento) },
+  { key: "dias_para_vencer", label: "Dias", grupo: "Datas", align: "right",
+    render: (r) => r.dias_para_vencer == null ? "—"
+      : `${r.dias_para_vencer > 0 ? "+" : ""}${r.dias_para_vencer}` },
+  { key: "dt_registro", label: "Registro", grupo: "Datas" },
+
+  // Valores
+  { key: "valor_documento", label: "Valor", grupo: "Valores", align: "right",
+    render: (r) => money(r.valor_documento) },
+  { key: "val_aberto", label: "Em aberto", grupo: "Valores", align: "right",
+    render: (r) => Number(r.val_aberto ?? 0) > 0 ? money(r.val_aberto) : "—" },
+  { key: "valor_pago", label: "Pago", grupo: "Valores", align: "right",
+    render: (r) => Number(r.valor_pago ?? 0) > 0 ? money(r.valor_pago) : "—" },
+  { key: "val_liquido", label: "Líquido", grupo: "Valores", align: "right",
+    render: (r) => money(r.val_liquido) },
+  { key: "juros", label: "Juros", grupo: "Valores", align: "right",
+    render: (r) => Number(r.juros ?? 0) > 0 ? money(r.juros) : "—" },
+  { key: "multa", label: "Multa", grupo: "Valores", align: "right",
+    render: (r) => Number(r.multa ?? 0) > 0 ? money(r.multa) : "—" },
+  { key: "desconto", label: "Desconto", grupo: "Valores", align: "right",
+    render: (r) => Number(r.desconto ?? 0) > 0 ? money(r.desconto) : "—" },
+
+  // Documento
+  { key: "numero_documento", label: "Doc / Parc", grupo: "Documento",
+    render: (r) => `${r.numero_documento ?? "—"}${r.numero_parcela ? ` · ${r.numero_parcela}` : ""}` },
+  { key: "numero_documento_fiscal", label: "NF", grupo: "Documento" },
+  { key: "chave_nfe", label: "Chave NFe", grupo: "Documento", largura: "max-w-[160px]" },
+  { key: "num_boleto", label: "Boleto", grupo: "Documento" },
+  { key: "codigo_barras", label: "Cód. barras", grupo: "Documento", largura: "max-w-[180px]" },
+  { key: "numero_pedido", label: "Pedido / OS", grupo: "Documento" },
+  { key: "num_contrato", label: "Contrato", grupo: "Documento" },
+
+  // Classificação
+  { key: "categoria", label: "Categoria", grupo: "Classificação", largura: "max-w-[180px]",
+    // Rateado é diferente de mal classificado: o título entra em várias
+    // categorias e mostrar só uma faz o custo parecer de quem não é.
+    render: (r) => (
+      <span className="inline-flex items-center gap-1">
+        <span className="truncate">{r.categoria ?? "—"}</span>
+        {r.tem_rateio && (
+          <span title={`Rateado: ${r.categorias_rateio}`}
+                className="shrink-0 px-1 rounded text-[9px] font-bold bg-violet-500/15 text-violet-500 border border-violet-500/30">
+            RATEIO
+          </span>
+        )}
+      </span>
+    ) },
+  { key: "categorias_rateio", label: "Rateio", grupo: "Classificação", largura: "max-w-[160px]" },
+  { key: "grupo_despesa", label: "Grupo", grupo: "Classificação", largura: "max-w-[160px]" },
+  { key: "projeto", label: "Projeto", grupo: "Classificação", largura: "max-w-[160px]" },
+  { key: "conta_corrente", label: "Conta", grupo: "Classificação", largura: "max-w-[140px]" },
+
+  // Origem e rasto
+  { key: "origem", label: "Origem", grupo: "Origem" },
+  { key: "operacao", label: "Operação", grupo: "Origem" },
+  { key: "tipo_documento", label: "Tipo", grupo: "Origem" },
+  { key: "cod_titulo", label: "Cód. Omie", grupo: "Origem", align: "right" },
+  { key: "info_u_inc", label: "Lançado por", grupo: "Origem" },
+  { key: "info_d_inc", label: "Lançado em", grupo: "Origem" },
+  { key: "info_u_alt", label: "Alterado por", grupo: "Origem" },
+  { key: "observacao", label: "Observação", grupo: "Origem", largura: "max-w-[240px]" },
+];
+
+// O que vem ligado: as 10 de hoje mais "Em aberto", que é o campo que faltava
+// e é o que se olha para decidir o que pagar.
+const COLUNAS_PADRAO: ColKey[] = [
+  "vencimento", "empresa", "contraparte", "numero_documento",
+  "numero_documento_fiscal", "categoria", "projeto", "conta_corrente",
+  "valor_documento", "val_aberto", "status_titulo",
+];
+
 const PAGE_SIZE = 100;
 
 export default function TitulosView({ tipo }: { tipo: "pagar" | "receber" }) {
@@ -114,6 +244,35 @@ export default function TitulosView({ tipo }: { tipo: "pagar" | "receber" }) {
   const [sort, setSort] = useState<{ key: "vencimento" | "valor" | "contraparte"; asc: boolean }>({ key: "vencimento", asc: true });
   const [novoAberto, setNovoAberto] = useState(false);
   const [refresh, setRefresh] = useState(0);
+  const [fornecedorSel, setFornecedorSel] = useState<{ cod: number; empresa: string } | null>(null);
+  const [colunasAberto, setColunasAberto] = useState(false);
+  /* Escolha de colunas por tipo: quem paga e quem cobra nao olha para o mesmo.
+     Fica no browser porque e preferencia de quem opera, nao do sistema. */
+  const chavePrefs = `titulos.colunas.${tipo}`;
+  const [colsVisiveis, setColsVisiveis] = useState<ColKey[]>(COLUNAS_PADRAO);
+  const [prefsCarregadas, setPrefsCarregadas] = useState(false);
+  useEffect(() => {
+    try {
+      const gravado = window.localStorage.getItem(chavePrefs);
+      if (gravado) {
+        const lista = JSON.parse(gravado) as ColKey[];
+        // Filtra contra o registo: coluna removida do codigo nao pode
+        // ressuscitar de uma preferencia antiga.
+        const validas = lista.filter((k) => COLUNAS.some((c) => c.key === k));
+        if (validas.length) setColsVisiveis(validas);
+      }
+    } catch { /* preferencia corrompida: fica o padrao */ }
+    setPrefsCarregadas(true);
+  }, [chavePrefs]);
+  useEffect(() => {
+    if (!prefsCarregadas) return;   // nao gravar o padrao por cima do gravado
+    try { window.localStorage.setItem(chavePrefs, JSON.stringify(colsVisiveis)); } catch { /* quota */ }
+  }, [colsVisiveis, chavePrefs, prefsCarregadas]);
+  // Ordem sempre a do registo, para a tabela nao dancar conforme a ordem de clique.
+  const colunasAtivas = useMemo(
+    () => COLUNAS.filter((c) => colsVisiveis.includes(c.key)),
+    [colsVisiveis],
+  );
 
   useEffect(() => {
     const ctrl = new AbortController();
@@ -272,37 +431,81 @@ export default function TitulosView({ tipo }: { tipo: "pagar" | "receber" }) {
 
       {/* ── Tabela ── */}
       <div className="rounded-xl border border-ww-border bg-ww-panel overflow-hidden">
+        {/* MetaBar, à maneira da Fourmidia: o que está à vista, e os controlos
+            que mudam isso — separados dos filtros, que mudam o QUE se vê. */}
+        <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-1.5 border-b border-ww-border text-[11px]">
+          <span className="text-ww-textMuted">
+            {filtered.length} lançamento(s)
+            {filtered.length > 0 && <> · exibindo {page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, filtered.length)}</>}
+          </span>
+          <div className="relative">
+            <button
+              onClick={() => setColunasAberto((v) => !v)}
+              className="px-2 py-1 rounded-md border border-ww-border text-ww-textMuted hover:bg-ww-rowHover font-medium">
+              Colunas · {colsVisiveis.length}/{COLUNAS.length}
+            </button>
+            {colunasAberto && (
+              <>
+                <div className="fixed inset-0 z-30" onClick={() => setColunasAberto(false)} />
+                <div className="absolute right-0 top-full mt-1 z-40 w-[560px] max-h-[440px] overflow-y-auto
+                                rounded-xl border border-ww-border bg-ww-panel shadow-2xl p-3">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-[11px] font-semibold text-ww-text">Campos do Omie</span>
+                    <button onClick={() => setColsVisiveis(COLUNAS_PADRAO)}
+                            className="text-[10px] text-ww-textMuted hover:text-ww-text underline underline-offset-2">
+                      voltar ao padrão
+                    </button>
+                  </div>
+                  {(["Básico", "Datas", "Valores", "Documento", "Classificação", "Origem"] as const).map((g) => (
+                    <div key={g} className="mb-2">
+                      <div className="text-[9px] font-bold uppercase tracking-wide text-ww-textFaint mb-1">{g}</div>
+                      <div className="grid grid-cols-3 gap-x-3 gap-y-0.5">
+                        {COLUNAS.filter((c) => c.grupo === g).map((c) => (
+                          <label key={c.key} className="flex items-center gap-1.5 text-[11px] text-ww-textMuted cursor-pointer hover:text-ww-text">
+                            <input
+                              type="checkbox"
+                              checked={colsVisiveis.includes(c.key)}
+                              onChange={() => setColsVisiveis((cur) =>
+                                cur.includes(c.key) ? cur.filter((k) => k !== c.key) : [...cur, c.key])}
+                              className="accent-ww-accent" />
+                            <span className="truncate">{c.key === "contraparte" ? label : c.label}</span>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+
         <div className="overflow-x-auto">
           <table className="w-full text-[12px]">
             <thead>
               <tr className="border-b border-ww-border text-left text-[10px] uppercase tracking-wide text-ww-textFaint">
-                <th className="px-3 py-2 cursor-pointer select-none whitespace-nowrap"
-                    onClick={() => setSort((s) => ({ key: "vencimento", asc: s.key === "vencimento" ? !s.asc : true }))}>
-                  Venc. {sort.key === "vencimento" ? (sort.asc ? "↑" : "↓") : ""}
-                </th>
-                <th className="px-3 py-2">Emp.</th>
-                <th className="px-3 py-2 cursor-pointer select-none"
-                    onClick={() => setSort((s) => ({ key: "contraparte", asc: s.key === "contraparte" ? !s.asc : true }))}>
-                  {label} {sort.key === "contraparte" ? (sort.asc ? "↑" : "↓") : ""}
-                </th>
-                <th className="px-3 py-2">Doc / Parc</th>
-                <th className="px-3 py-2">NF</th>
-                <th className="px-3 py-2">Categoria</th>
-                <th className="px-3 py-2">Projeto</th>
-                <th className="px-3 py-2">Conta</th>
-                <th className="px-3 py-2 text-right cursor-pointer select-none whitespace-nowrap"
-                    onClick={() => setSort((s) => ({ key: "valor", asc: s.key === "valor" ? !s.asc : false }))}>
-                  Valor {sort.key === "valor" ? (sort.asc ? "↑" : "↓") : ""}
-                </th>
-                <th className="px-3 py-2">Status</th>
+                {colunasAtivas.map((c) => {
+                  const ordenavel = c.key === "vencimento" || c.key === "valor_documento" || c.key === "contraparte";
+                  const chaveSort = c.key === "valor_documento" ? "valor" : c.key as "vencimento" | "contraparte";
+                  return (
+                    <th key={c.key}
+                        className={`px-3 py-2 whitespace-nowrap ${c.align === "right" ? "text-right" : ""} ${ordenavel ? "cursor-pointer select-none" : ""}`}
+                        onClick={ordenavel
+                          ? () => setSort((s) => ({ key: chaveSort, asc: s.key === chaveSort ? !s.asc : c.key !== "valor_documento" }))
+                          : undefined}>
+                      {c.key === "contraparte" ? label : c.label}
+                      {ordenavel && sort.key === chaveSort ? (sort.asc ? " ↑" : " ↓") : ""}
+                    </th>
+                  );
+                })}
               </tr>
             </thead>
             <tbody>
               {loading && (
-                <tr><td colSpan={10} className="px-3 py-8 text-center text-ww-textMuted">Carregando títulos…</td></tr>
+                <tr><td colSpan={colunasAtivas.length} className="px-3 py-8 text-center text-ww-textMuted">Carregando títulos…</td></tr>
               )}
               {!loading && pageRows.length === 0 && (
-                <tr><td colSpan={10} className="px-3 py-8 text-center text-ww-textFaint">Nenhum título com esses filtros.</td></tr>
+                <tr><td colSpan={colunasAtivas.length} className="px-3 py-8 text-center text-ww-textFaint">Nenhum título com esses filtros.</td></tr>
               )}
               {!loading && pageRows.map((row) => {
                 const meta = STATUS_META[row.status_titulo ?? ""] ?? { label: row.status_titulo ?? "—", cls: "border-ww-border text-ww-textMuted" };
@@ -310,28 +513,49 @@ export default function TitulosView({ tipo }: { tipo: "pagar" | "receber" }) {
                   <tr key={`${row.empresa}-${row.codigo_lancamento_omie}`}
                       className="border-b border-ww-border/60 hover:bg-ww-rowHover/60 transition-colors"
                       title={row.observacao ?? undefined}>
-                    <td className="px-3 py-1.5 whitespace-nowrap font-medium text-ww-text">{dataBR(row.vencimento)}</td>
-                    <td className="px-3 py-1.5 text-ww-textFaint">{row.empresa}</td>
-                    <td className="px-3 py-1.5 max-w-[260px] truncate font-medium text-ww-text" title={row.contraparte ?? undefined}>
-                      {row.contraparte ?? "—"}
-                    </td>
-                    <td className="px-3 py-1.5 whitespace-nowrap text-ww-textMuted">
-                      {row.numero_documento ?? "—"}{row.numero_parcela ? ` · ${row.numero_parcela}` : ""}
-                    </td>
-                    <td className="px-3 py-1.5 whitespace-nowrap text-ww-textMuted">{row.numero_documento_fiscal ?? "—"}</td>
-                    <td className="px-3 py-1.5 max-w-[180px] truncate text-ww-textMuted" title={row.categoria ?? undefined}>{row.categoria ?? "—"}</td>
-                    <td className="px-3 py-1.5 max-w-[160px] truncate text-ww-textMuted" title={row.projeto ?? undefined}>{row.projeto ?? "—"}</td>
-                    <td className="px-3 py-1.5 max-w-[140px] truncate text-ww-textFaint" title={row.conta_corrente ?? undefined}>{row.conta_corrente ?? "—"}</td>
-                    <td className="px-3 py-1.5 text-right font-semibold text-ww-text whitespace-nowrap">{money(row.valor_documento)}</td>
-                    <td className="px-3 py-1.5">
-                      <span className={`inline-block px-1.5 py-0.5 rounded border text-[10px] font-semibold whitespace-nowrap ${meta.cls}`}>{meta.label}</span>
-                    </td>
+                    {colunasAtivas.map((c) => {
+                      // Status tem pílula própria; contraparte abre o retrato.
+                      if (c.key === "status_titulo") {
+                        return (
+                          <td key={c.key} className="px-3 py-1.5">
+                            <span className={`inline-block px-1.5 py-0.5 rounded border text-[10px] font-semibold whitespace-nowrap ${meta.cls}`}>{meta.label}</span>
+                          </td>
+                        );
+                      }
+                      if (c.key === "contraparte") {
+                        return (
+                          <td key={c.key} className="px-3 py-1.5 max-w-[260px]">
+                            <button
+                              onClick={() => row.codigo_cliente_fornecedor && setFornecedorSel({
+                                cod: Number(row.codigo_cliente_fornecedor), empresa: row.empresa,
+                              })}
+                              disabled={!row.codigo_cliente_fornecedor}
+                              title={row.contraparte ?? undefined}
+                              className="max-w-full truncate font-medium text-ww-text hover:text-ww-accent hover:underline underline-offset-2 disabled:hover:text-ww-text disabled:hover:no-underline text-left">
+                              {row.contraparte ?? "—"}
+                            </button>
+                          </td>
+                        );
+                      }
+                      const conteudo = c.render ? c.render(row) : (row[c.key] as React.ReactNode);
+                      const vazio = conteudo == null || conteudo === "";
+                      return (
+                        <td key={c.key}
+                            className={`px-3 py-1.5 ${c.largura ?? "whitespace-nowrap"} ${c.largura ? "truncate" : ""} ${
+                              c.align === "right" ? "text-right tabular-nums" : ""
+                            } ${c.key === "valor_documento" ? "font-semibold text-ww-text" : "text-ww-textMuted"}`}
+                            title={typeof conteudo === "string" ? conteudo : undefined}>
+                          {vazio ? "—" : conteudo}
+                        </td>
+                      );
+                    })}
                   </tr>
                 );
               })}
             </tbody>
           </table>
         </div>
+
         {/* Rodapé */}
         <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 border-t border-ww-border text-[11px] text-ww-textMuted">
           <span>
@@ -349,6 +573,16 @@ export default function TitulosView({ tipo }: { tipo: "pagar" | "receber" }) {
           )}
         </div>
       </div>
+
+      {fornecedorSel && (
+        <FornecedorDrawer
+          cod={fornecedorSel.cod}
+          empresa={fornecedorSel.empresa}
+          tipo={tipo}
+          rotulo={label}
+          onClose={() => setFornecedorSel(null)}
+        />
+      )}
 
       {novoAberto && (
         <NovoTituloModal
