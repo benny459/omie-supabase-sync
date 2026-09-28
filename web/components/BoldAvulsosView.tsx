@@ -1199,18 +1199,49 @@ export default function BoldAvulsosView({
       // PCs Standalone: 1 row = 1 PC. Sem RC nem PV próprios.
       for (const r of filtered) pc += Number(r.valor_total ?? 0);
     } else {
-      const seen = new Set<string>();
+      /* Mesma regra do BucketTotals, e pelo mesmo motivo. Agrupar por
+         pv_os_label e ficar com a primeira linha do grupo somava um PC só de
+         todos os que não têm vínculo — e aqui é a página inteira, então o
+         balde "—" juntava os PCs sem vínculo de TODOS os projetos e contava
+         um. Ao mesmo tempo, o PC digitado à mão numa linha entrava de novo,
+         apesar de apontar para um PC que já existe.
+         Agora: PC uma vez por número, PV uma vez por PV/OS, RC linha a linha. */
+      const pcPorNumero = new Map<string, number>();
+      const pvPorLabel  = new Map<string, number>();
+      // Para a M.B.: que PCs pertencem a cada PV/OS, sem repetir número.
+      const pcsDoPvos = new Map<string, Set<string>>();
       for (const r of filtered) {
-        const k = String(r.pv_os_label ?? "—");
-        if (seen.has(k)) continue;
-        seen.add(k);
-        const rPv = Number(r.pv_valor_total ?? 0);
-        const rPc = Number(r.pc_custo_total_calc ?? 0);
-        rc += Number(r.rc_custo_total_calc ?? 0);
-        pc += rPc;
-        pv += rPv;
-        pvosTotal += 1;
-        if (rPv > 0 && rPc > 0) { pvMedido += rPv; pcMedido += rPc; pvosMedidos += 1; }
+        const empresa = String(r.empresa ?? "");
+        const numeroPc = String(r.pc_numero ?? r.pc_numero_manual ?? "").trim();
+        if (numeroPc) {
+          const chave = `${empresa}|${numeroPc}`;
+          // A linha do Omie (ncod_ped > 0) manda sobre o ponteiro manual.
+          if (!pcPorNumero.has(chave) || Number(r.ncod_ped ?? 0) > 0) {
+            pcPorNumero.set(chave, Number(r.valor_total ?? 0));
+          }
+        }
+        const label = r.pv_os_label != null ? `${empresa}|${String(r.pv_os_label)}` : "";
+        if (label) {
+          if (!pvPorLabel.has(label)) pvPorLabel.set(label, Number(r.pv_valor_total ?? 0));
+          if (numeroPc) {
+            const doPvos = pcsDoPvos.get(label) ?? new Set<string>();
+            doPvos.add(`${empresa}|${numeroPc}`);
+            pcsDoPvos.set(label, doPvos);
+          }
+        }
+        const custoRc = Number(r.rc_custo ?? 0);
+        if (custoRc) rc += (Number(r.rc_qtd ?? 0) || 1) * custoRc;
+      }
+      for (const v of pcPorNumero.values()) pc += v;
+      for (const v of pvPorLabel.values())  pv += v;
+
+      pvosTotal = pvPorLabel.size;
+      for (const [label, valorPv] of pvPorLabel) {
+        let custoDoPvos = 0;
+        for (const chave of pcsDoPvos.get(label) ?? []) custoDoPvos += pcPorNumero.get(chave) ?? 0;
+        if (valorPv > 0 && custoDoPvos > 0) {
+          pvMedido += valorPv; pcMedido += custoDoPvos; pvosMedidos += 1;
+        }
       }
     }
     return {
