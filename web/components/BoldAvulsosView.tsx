@@ -2639,6 +2639,11 @@ function BucketCard({
    */
   const blocos = useMemo(() => {
     const porGrupo = new Map<string, AnyRow[]>();
+    // Linhas que estão ali só como espaço por preencher. Precisam de ser
+    // reconhecíveis no render: numa linha sem PC, uma coluna calculada não
+    // tem o que mostrar — e a view, como a linha ainda traz a etiqueta do
+    // PV/OS, entrega o total daquela partição, que não é dela.
+    const linhasSlot = new Set<AnyRow>();
     // Peso de um bloco inclui as colunas dos blocos que andam com ele: a
     // decisão de aprovação é o que distingue duas cópias do mesmo PC.
     const colunasDePeso = new Map<string, string[]>();
@@ -2689,6 +2694,7 @@ function BucketCard({
               && String(r.source ?? "") === "native") {
             slotsVistos.add(n);
             slots.push(r);
+            linhasSlot.add(r);
           }
           continue;
         }
@@ -2730,14 +2736,14 @@ function BucketCard({
       const dono = BLOCO_ACOMPANHA[g.key];
       if (dono && porGrupo.has(dono)) porGrupo.set(g.key, porGrupo.get(dono)!);
     }
-    return porGrupo;
+    return { porGrupo, linhasSlot };
   }, [visibleGroups, items]);
 
   // Altura da tabela = o bloco mais comprido. Os mais curtos terminam antes,
   // sem preencher o resto com linhas fantasma.
   const nLinhas = useMemo(() => {
     let n = 0;
-    for (const g of visibleGroups) n = Math.max(n, blocos.get(g.key)?.length ?? 0);
+    for (const g of visibleGroups) n = Math.max(n, blocos.porGrupo.get(g.key)?.length ?? 0);
     return n;
   }, [visibleGroups, blocos]);
 
@@ -2995,7 +3001,7 @@ function BucketCard({
                   {Array.from({ length: nLinhas }, (_, i) => {
                     // A linha da seleção vem do bloco dono da aprovação (PC),
                     // não da posição visual — os blocos deslizam independentes.
-                    const rSel = blocoDaSelecao ? blocos.get(blocoDaSelecao)?.[i] : undefined;
+                    const rSel = blocoDaSelecao ? blocos.porGrupo.get(blocoDaSelecao)?.[i] : undefined;
                     const valorSel = rSel?.valor_total != null ? Number(rSel.valor_total) : null;
                     const selKey = rSel ? `${rSel.empresa}|${rSel.ncod_ped}|${valorSel ?? ""}` : null;
                     const checked = selKey != null && selected.has(selKey);
@@ -3007,7 +3013,7 @@ function BucketCard({
                         } ${i > 0 ? "border-t border-ww-border" : ""}`}>
                         {flatCols.map(({ col, group }, j) => {
                           // Cada célula lê da linha de origem DO SEU bloco.
-                          const lista = blocos.get(group.key);
+                          const lista = blocos.porGrupo.get(group.key);
                           const r = lista?.[i];
                           /* A checkbox abre o bloco dono da seleção (o PC) em vez
                              de ficar no início da linha. A linha começa no PV/OS,
@@ -3050,10 +3056,17 @@ function BucketCard({
                               ? isActiveGroup ? `${group.tint}` : `${group.tint}/70`
                               : isActiveGroup ? `${group.tint}/40` : `${group.tint}/15`
                           } ${alignClassFor(col)} ${isNumericFmt(col) ? "tabular-nums font-mono" : ""} ${isMerged ? "font-semibold" : ""}`;
+                          /* Numa linha-slot só o campo onde se escreve fica
+                             vivo. O resto é ruído: a linha ainda carrega a
+                             etiqueta do PV/OS, então a view devolve o total
+                             daquela partição — R$ 18.625,37 aparecia numa
+                             linha sem PC nenhum, como se fosse dela. */
+                          const slotMudo = r != null && !col.editable
+                            && blocos.linhasSlot.has(r);
                           // Bloco já terminou (é mais curto que o vizinho) ou
                           // valor repetido: célula fica em branco, sem conteúdo
                           // fantasma e sem sugerir um registo que não existe.
-                          if (r == null || repetido) {
+                          if (r == null || repetido || slotMudo) {
                             const vazia = <td key={`${col.key}-${j}`} className={cellClass} />;
                             return tdCheck ? [tdCheck, vazia] : vazia;
                           }
