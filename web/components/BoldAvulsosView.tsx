@@ -27,6 +27,7 @@ import BucketSyncButton from "./BucketSyncButton";
 import SyncNowButton from "./SyncNowButton";
 import AddRowButton from "./AddRowButton";
 import GlobalSearch from "./GlobalSearch";
+import PcsExcluidosButton from "./PcsExcluidosButton";
 import { AtribuicaoModal } from "./AtribuirClienteView";
 import { Virtuoso, type VirtuosoHandle } from "react-virtuoso";
 
@@ -66,6 +67,14 @@ const ETAPAS_FECHADAS = new Set(["Entrega", "Faturado", "Cancelado"]);
    linha inteira igual) e dizer o que nem conta como entrada — a linha de um PC
    traz o nome do projeto, mas isso não faz dela um PV/OS.
    Bloco que não esteja aqui usa o conteúdo inteiro como identidade. */
+/* Ordem natural de leitura dentro do bloco. As parcelas de um PV/OS lêem-se
+   pela data limite: é a ordem em que o trabalho tem de sair. Sem data vai para
+   o fim, para não empurrar o que tem prazo. Bloco fora daqui mantém a ordem
+   que veio da consulta. */
+const ORDEM_DO_BLOCO: Record<string, string> = {
+  pvos: "_pv_data_previsao_d",
+};
+
 const IDENTIDADE_DO_BLOCO: Record<string, string[]> = {
   pvos: ["pv_os_label"],
   pc:   ["pc_numero", "pc_numero_manual"],
@@ -1665,6 +1674,64 @@ export default function BoldAvulsosView({
   }
 
 
+  /* Excluir pedido de compra.
+   *
+   * Não é DELETE: a linha do PC vem de orders.pedidos_compra, o espelho do
+   * Omie, e o sync repõe o que se apagar. Marca-se em platform.excluded_pc e
+   * /api/list/rows deixa de a devolver. Some da vista, sobrevive ao sync, e
+   * volta se for engano.
+   *
+   * Exclui pelo NÚMERO do PC: se o mesmo número aparece na linha do Omie e
+   * numa linha manual, saem as duas — é um pedido de compra só.
+   */
+  async function excluirPcsSelecionados() {
+    if (selected.size === 0) return;
+    const porChave = new Map(
+      rows.map((r) => [
+        `${r.empresa}|${r.ncod_ped}|${r.valor_total != null ? Number(r.valor_total) : ""}`,
+        r,
+      ]),
+    );
+    const empresas = new Set<string>();
+    const pcs = new Set<string>();
+    let semPc = 0;
+    for (const k of selected) {
+      const r = porChave.get(k);
+      const pc = String(r?.pc_numero ?? r?.pc_numero_manual ?? "").trim();
+      if (!r || !pc) { semPc++; continue; }
+      empresas.add(String(r.empresa ?? ""));
+      pcs.add(pc);
+    }
+    if (pcs.size === 0) {
+      alert("Nenhum pedido de compra na seleção. Marque a linha de um PC.");
+      return;
+    }
+    if (empresas.size > 1) {
+      alert("Selecione PCs de uma empresa de cada vez.");
+      return;
+    }
+    const lista = [...pcs].sort();
+    const aviso = semPc > 0 ? `\n\n(${semPc} linha(s) sem PC foram ignoradas.)` : "";
+    const motivo = prompt(
+      `Esconder ${lista.length} pedido(s) de compra do painel?\n\n`
+      + `PC: ${lista.slice(0, 12).join(", ")}${lista.length > 12 ? "…" : ""}\n\n`
+      + `Sai da vista e dos totais; o dado continua no Omie e dá para trazer de volta.\n`
+      + `Motivo (opcional):${aviso}`,
+      "",
+    );
+    if (motivo === null) return;   // cancelou
+    const res = await fetch("/api/pcs/excluir", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "exclude", empresa: [...empresas][0], pcs: lista, motivo,
+      }),
+    });
+    const j = await res.json().catch(() => ({}));
+    if (!res.ok) { alert(`Erro: ${j.error ?? res.statusText}`); return; }
+    setSelected(new Set());
+    if (typeof window !== "undefined") window.location.reload();
+  }
+
   // Card de um bucket — usado pelos DOIS caminhos de render (virtualizado e
   // normal), pra não duplicar a lista de props.
   const renderBucketCard = (b: Bucket) => (
@@ -1758,6 +1825,8 @@ export default function BoldAvulsosView({
         </span>
         <div className="self-center"><GlobalSearch /></div>
         <div className="self-center"><SyncNowButton /></div>
+        {/* Só aparece se houver PC escondido — é a porta de volta da exclusão. */}
+        <div className="self-center"><PcsExcluidosButton /></div>
         <div className="flex-1" />
         <span className="text-[11.5px] text-ww-textMuted font-mono uppercase tracking-wider font-semibold">
           {user?.role ?? "viewer"}
@@ -2064,6 +2133,12 @@ export default function BoldAvulsosView({
           )}
           {(isAdmin || userCanEdit || userCanApprove) && (
             <button onClick={batchDelete} className="px-2.5 py-1 text-[12px] font-semibold border border-rose-400/60 text-rose-300 hover:bg-rose-600 hover:text-white rounded-md transition" title="Apagar linha(s) selecionada(s) — só RC manual sem ser admin">🗑 Apagar</button>
+          )}
+          {/* Esconder PC é coisa diferente de apagar linha: o PC vem do Omie e
+              o sync repõe o que for apagado. Por isso botão próprio, e sem
+              exigir admin — quem compra é quem sabe que o PC saiu do projeto. */}
+          {(isAdmin || userCanEdit || userCanApprove) && (
+            <button onClick={excluirPcsSelecionados} className="px-2.5 py-1 text-[12px] font-semibold border border-amber-400/60 text-amber-300 hover:bg-amber-600 hover:text-white rounded-md transition" title="Esconder do painel o(s) pedido(s) de compra selecionado(s) — reversível">🚫 Excluir PC</button>
           )}
           <button onClick={() => setSelected(new Set())} className="text-base px-1 opacity-60 hover:opacity-100 transition" title="Limpar seleção">×</button>
         </div>
@@ -2580,10 +2655,22 @@ function BucketCard({
           lista[jaEm] = r;
         }
       }
+      const ordenarPor = ORDEM_DO_BLOCO[g.key];
+      if (ordenarPor) {
+        lista.sort((a, b) => {
+          const va = a[ordenarPor], vb = b[ordenarPor];
+          const sa = va == null ? "" : String(va).trim();
+          const sb = vb == null ? "" : String(vb).trim();
+          if (!sa && !sb) return 0;
+          if (!sa) return 1;              // sem data fica no fim
+          if (!sb) return -1;
+          return sa < sb ? -1 : sa > sb ? 1 : 0;
+        });
+      }
       porGrupo.set(g.key, lista);
     }
     /* Blocos acompanhantes copiam a lista do dono: mesma linha de origem, mesma
-       posição. Feito depois de todos empacotarem, para o dono já existir. */
+       posição. Feito depois de ordenar, para acompanhar a ordem final. */
     for (const g of visibleGroups) {
       const dono = BLOCO_ACOMPANHA[g.key];
       if (dono && porGrupo.has(dono)) porGrupo.set(g.key, porGrupo.get(dono)!);
@@ -2803,13 +2890,13 @@ function BucketCard({
                 {/* Header em 2 camadas: grupos com tint + colunas */}
                 <thead>
                   <tr>
-                    {(userCanApprove || userCanEdit) && (
-                      <th className="bg-ww-bg w-8" rowSpan={2}></th>
-                    )}
                     {visibleGroups.map((g) => {
                       const isActive = g.key === activeStageKey;
+                      // A coluna da checkbox mora DENTRO do bloco que é dono da
+                      // seleção (o PC), por isso conta no colSpan dele.
+                      const temCheck = (userCanApprove || userCanEdit) && g.key === blocoDaSelecao;
                       return (
-                        <th key={g.key} colSpan={g.columns.length} data-group={g.key}
+                        <th key={g.key} colSpan={g.columns.length + (temCheck ? 1 : 0)} data-group={g.key}
                           className={`px-3 py-2 text-[13px] font-semibold text-left text-ww-text ${g.tint} border-b-2 border-r-2 border-ww-borderStrong last:border-r-0 ${
                             isActive ? "ring-2 ring-inset ring-sky-500 dark:ring-sky-400 shadow-md" : ""
                           }`}>
@@ -2823,7 +2910,10 @@ function BucketCard({
                       const nextGroup = flatCols[i + 1]?.group;
                       const isLastOfGroup = !nextGroup || nextGroup.key !== group.key;
                       const isActive = group.key === activeStageKey;
-                      return (
+                      const primeiraDoGrupo = flatCols[i - 1]?.group.key !== group.key;
+                      const abreCheck = (userCanApprove || userCanEdit)
+                        && group.key === blocoDaSelecao && primeiraDoGrupo;
+                      const th = (
                         <th key={`${col.key}-${i}`}
                           className={`px-2.5 py-1.5 text-[12px] font-semibold border-b whitespace-nowrap ${
                             isLastOfGroup ? "border-r-2 border-ww-borderStrong" : "border-r border-ww-border/60"
@@ -2836,6 +2926,13 @@ function BucketCard({
                           {col.label.replace(/^\*/, "")}
                         </th>
                       );
+                      if (!abreCheck) return th;
+                      // Cabeçalho da checkbox, já dentro do bloco de seleção.
+                      return [
+                        <th key={`__check-${group.key}`}
+                          className={`w-8 border-b border-r border-ww-border/60 ${group.tint}/40`} />,
+                        th,
+                      ];
                     })}
                   </tr>
                 </thead>
@@ -2853,19 +2950,30 @@ function BucketCard({
                         className={`transition ${rSel ? "cursor-pointer" : ""} ${
                           checked ? "bg-[#f4faf7] dark:bg-[#15302a]/30" : "hover:bg-ww-rowHover"
                         } ${i > 0 ? "border-t border-ww-border" : ""}`}>
-                        {(userCanApprove || userCanEdit) && (
-                          <td className="px-2 py-1 align-middle" onClick={(e) => e.stopPropagation()}>
-                            {selKey && (
-                              <input type="checkbox" checked={checked}
-                                onChange={() => toggleSel(selKey)}
-                                className="accent-ww-accent cursor-pointer" />
-                            )}
-                          </td>
-                        )}
                         {flatCols.map(({ col, group }, j) => {
                           // Cada célula lê da linha de origem DO SEU bloco.
                           const lista = blocos.get(group.key);
                           const r = lista?.[i];
+                          /* A checkbox abre o bloco dono da seleção (o PC) em vez
+                             de ficar no início da linha. A linha começa no PV/OS,
+                             e ali a checkbox parecia marcar a parcela quando na
+                             verdade marca o pedido de compra. */
+                          const primeiraDoGrupo = flatCols[j - 1]?.group.key !== group.key;
+                          const abreCheck = (userCanApprove || userCanEdit)
+                            && group.key === blocoDaSelecao && primeiraDoGrupo;
+                          const tdCheck = abreCheck ? (
+                            <td key={`__check-${group.key}`}
+                              className={`px-2 py-1 align-middle border-r border-ww-border/60 ${
+                                group.key === activeStageKey ? `${group.tint}/40` : `${group.tint}/15`
+                              }`}
+                              onClick={(e) => e.stopPropagation()}>
+                              {selKey && (
+                                <input type="checkbox" checked={checked}
+                                  onChange={() => toggleSel(selKey)}
+                                  className="accent-ww-accent cursor-pointer" />
+                              )}
+                            </td>
+                          ) : null;
                           const nextGroup = flatCols[j + 1]?.group;
                           const isLastOfGroup = !nextGroup || nextGroup.key !== group.key;
                           const isActiveGroup = group.key === activeStageKey;
@@ -2891,9 +2999,10 @@ function BucketCard({
                           // valor repetido: célula fica em branco, sem conteúdo
                           // fantasma e sem sugerir um registo que não existe.
                           if (r == null || repetido) {
-                            return <td key={`${col.key}-${j}`} className={cellClass} />;
+                            const vazia = <td key={`${col.key}-${j}`} className={cellClass} />;
+                            return tdCheck ? [tdCheck, vazia] : vazia;
                           }
-                          return (
+                          const td = (
                             <td key={`${col.key}-${j}`}
                               onClick={(e) => { if (col.editable) e.stopPropagation(); }}
                               className={cellClass}>
@@ -2917,6 +3026,7 @@ function BucketCard({
                                 )} />
                             </td>
                           );
+                          return tdCheck ? [tdCheck, td] : td;
                         })}
                       </tr>
                     );

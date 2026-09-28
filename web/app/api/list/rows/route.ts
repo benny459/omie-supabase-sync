@@ -114,6 +114,32 @@ export async function GET(req: Request) {
     merged = rows.filter(r => Number(r.ncod_ped) >= 0).concat(liveManual);
   }
 
+  /* PCs escondidos (platform.excluded_pc). Filtra-se aqui, e não na view, por
+     dois motivos: a v_pc_completo é grande e não está versionada em lado
+     nenhum — mexer nela para isto seria risco desproporcionado; e filtrar
+     depois da MV faz o PC sumir no primeiro reload, em vez de esperar pelo
+     refresh de 10 minutos.
+     Vale para o PC do Omie e para a linha manual que aponte para o mesmo
+     número: excluir o 7262 tira o 7262, venha ele de onde vier.
+     Se a consulta falhar, não se esconde nada — mostrar a mais é menos grave
+     que esconder por engano. */
+  try {
+    const { data: escondidos, error: errEsc } = await adm
+      .schema("platform" as never).from("excluded_pc")
+      .select("empresa, pc_numero");
+    if (!errEsc && escondidos && escondidos.length > 0) {
+      const chaves = new Set(
+        (escondidos as { empresa: string; pc_numero: string }[])
+          .map(e => `${e.empresa}|${String(e.pc_numero).trim()}`),
+      );
+      merged = merged.filter((r) => {
+        const pc = String(r.pc_numero ?? r.pc_numero_manual ?? "").trim();
+        if (!pc) return true;
+        return !chaves.has(`${String(r.empresa ?? "")}|${pc}`);
+      });
+    }
+  } catch { /* lista de exclusão indisponível: mostra tudo */ }
+
   // Buscamos a MV inteira, então rows.length É o total — mais confiável que o
   // count "estimated" do planner. Só caímos no header count se batemos MAX_ROWS.
   return NextResponse.json({
