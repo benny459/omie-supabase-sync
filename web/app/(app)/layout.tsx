@@ -10,6 +10,12 @@ import SupportWidget from "@/components/SupportWidget";
 import { supaServer } from "@/lib/supabase-server";
 import type { AreaAccess, ModuleRole, PermsOverride, Role, UserPerms } from "@/lib/permissions";
 
+/* Botão "Suporte" do canto inferior direito.
+   Oculto em 28/09/2026 a pedido do Benny, para voltar mais à frente — trocar
+   para true e está de volta, nada mais. (Já tinha sido desligado antes e
+   reativado em 12/09/2026, junto do upgrade do Cesar.) */
+const SUPORTE_VISIVEL = false;
+
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const supa = await supaServer();
   const { data: { user } } = await supa.auth.getUser();
@@ -56,11 +62,12 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           {children}
         </div>
       </main>
-      {/* Reativado em 12/09/2026 a pedido do Benny (junto do upgrade do Cesar). */}
-      <SupportWidget
-        user={user ? { email: user.email, nome: (user.user_metadata as { full_name?: string } | null)?.full_name || user.email } : null}
-        isAdmin={!!perms?.is_admin}
-      />
+      {SUPORTE_VISIVEL && (
+        <SupportWidget
+          user={user ? { email: user.email, nome: (user.user_metadata as { full_name?: string } | null)?.full_name || user.email } : null}
+          isAdmin={!!perms?.is_admin}
+        />
+      )}
     </UserPermsProvider>
   );
 }
