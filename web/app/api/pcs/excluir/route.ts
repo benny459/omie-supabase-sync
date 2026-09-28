@@ -118,7 +118,8 @@ export async function GET() {
      hora, que é o que permite contar e restaurar projeto a projeto.
      Se a MV falhar, devolve-se a lista sem projeto: pior é não poder restaurar. */
   const numeros = Array.from(new Set(linhas.map((l) => String(l.pc_numero))));
-  const contexto = new Map<string, { projeto_nome: string | null; valor_total: number | null }>();
+  const projetosDoPc = new Map<string, Set<string>>();
+  const valorDoPc = new Map<string, number | null>();
   try {
     const mv = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -128,21 +129,29 @@ export async function GET() {
     const { data: ctx } = await mv.from("mv_pc_projetos")
       .select("empresa, pc_numero, projeto_nome, valor_total")
       .in("pc_numero", numeros);
+    /* Um PC pode aparecer em MAIS DE UM projeto — é o caso de quem digitou o
+       número no PV errado: o PC real fica no projeto dele e a cópia manual
+       noutro. Como a exclusão é por número, ele sai dos dois; então os dois
+       têm de poder trazê-lo de volta. Guardar só o primeiro escondia a porta
+       de volta num deles. */
     for (const c of (ctx ?? []) as {
       empresa: string; pc_numero: string; projeto_nome: string | null; valor_total: number | null;
     }[]) {
       const chave = `${c.empresa}|${String(c.pc_numero).trim()}`;
-      // Mesmo PC pode vir em mais de uma linha da MV; o projeto é o mesmo.
-      if (!contexto.has(chave)) {
-        contexto.set(chave, { projeto_nome: c.projeto_nome, valor_total: c.valor_total });
+      if (c.projeto_nome) {
+        const set = projetosDoPc.get(chave) ?? new Set<string>();
+        set.add(c.projeto_nome);
+        projetosDoPc.set(chave, set);
       }
+      if (!valorDoPc.has(chave)) valorDoPc.set(chave, c.valor_total);
     }
   } catch { /* sem contexto: a lista global continua a funcionar */ }
 
   return NextResponse.json({
     rows: linhas.map((l) => {
-      const c = contexto.get(`${l.empresa}|${String(l.pc_numero).trim()}`);
-      return { ...l, projeto_nome: c?.projeto_nome ?? null, valor_total: c?.valor_total ?? null };
+      const chave = `${l.empresa}|${String(l.pc_numero).trim()}`;
+      const projetos = Array.from(projetosDoPc.get(chave) ?? []).sort();
+      return { ...l, projetos, valor_total: valorDoPc.get(chave) ?? null };
     }),
   });
 }

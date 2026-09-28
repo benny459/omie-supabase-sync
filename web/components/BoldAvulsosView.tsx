@@ -579,11 +579,12 @@ export default function BoldAvulsosView({
   const escondidosPorProjeto = useMemo(() => {
     const m = new Map<string, PcEscondido[]>();
     for (const e of pcsEscondidos) {
-      const k = e.projeto_nome ?? "";
-      if (!k) continue;
-      const atual = m.get(k) ?? [];
-      atual.push(e);
-      m.set(k, atual);
+      // Um PC pode ter aparecido em mais de um projeto; entra no chip de cada.
+      for (const k of e.projetos ?? []) {
+        const atual = m.get(k) ?? [];
+        atual.push(e);
+        m.set(k, atual);
+      }
     }
     return m;
   }, [pcsEscondidos]);

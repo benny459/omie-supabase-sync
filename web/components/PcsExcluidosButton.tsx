@@ -20,7 +20,8 @@ export type PcEscondido = {
   motivo: string | null;
   excluded_at: string;
   excluded_by: string | null;
-  projeto_nome?: string | null;
+  /** Todos os projetos onde este PC aparecia. Pode ser mais de um. */
+  projetos?: string[];
   valor_total?: number | null;
 };
 
@@ -147,7 +148,7 @@ export default function PcsExcluidosButton({
                     return (
                       <tr key={chave} className="border-t border-ww-border">
                         <td className="py-1.5 pr-3 font-mono text-ww-text">{e.pc_numero}</td>
-                        <td className="py-1.5 pr-3 text-ww-textMuted">{e.projeto_nome || "—"}</td>
+                        <td className="py-1.5 pr-3 text-ww-textMuted">{e.projetos?.length ? e.projetos.join(" · ") : "—"}</td>
                         <td className="py-1.5 pr-3 text-ww-textMuted tabular-nums text-right">{brl(e.valor_total)}</td>
                         <td className="py-1.5 pr-3 text-ww-textMuted">{e.motivo || "—"}</td>
                         <td className="py-1.5 pr-3 text-ww-textMuted tabular-nums">{dataCurta(e.excluded_at)}</td>
