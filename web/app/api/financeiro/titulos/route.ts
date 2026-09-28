@@ -38,13 +38,70 @@ export type TituloRow = {
   observacao: string | null;
   boleto_gerado: string | null;
   boleto_numero: string | null;
+
+  // ── Campos do Omie que a fonte antiga nao trazia ────────────────────────
+  contraparte_razao: string | null;
+  codigo_cliente_fornecedor: number | null;
+  pagamento: string | null;
+  dt_registro: string | null;
+  dt_cancelamento: string | null;
+  /** Saldo devedor do titulo. Antes era inferido de documento menos pago. */
+  val_aberto: number | string | null;
+  val_liquido: number | string | null;
+  juros: number | string | null;
+  multa: number | string | null;
+  desconto: number | string | null;
+  liquidado: string | null;
+  em_aberto: boolean | null;
+  dias_para_vencer: number | null;
+  num_boleto: string | null;
+  codigo_barras: string | null;
+  nsu: string | null;
+  num_os: string | null;
+  cod_nf: number | null;
+  num_contrato: string | null;
+  /** Lista de categorias quando o titulo e rateado: "2.01.01, 2.01.03". */
+  categorias_rateio: string | null;
+  tem_rateio: boolean | null;
+  grupo_despesa: string | null;
+  cod_cc: number | null;
+  operacao: string | null;
+  /** ADCP APIP BARP COMP CTEP DEVP IMPP MANP RPTP */
+  origem: string | null;
+  tipo_documento: string | null;
+  cod_comprador: number | null;
+  cod_vendedor: string | null;
+  valor_ir: number | string | null;
+  valor_pis: number | string | null;
+  valor_cofins: number | string | null;
+  valor_csll: number | string | null;
+  valor_inss: number | string | null;
+  valor_iss: number | string | null;
+  info_u_inc: string | null;
+  info_d_inc: string | null;
+  info_u_alt: string | null;
+  info_d_alt: string | null;
+  cod_tit_repet: number | null;
+  synced_at: string | null;
 };
 
+/* Todos os campos do titulo. A fonte passou de finance.v_titulos (que le
+   contas_pagar) para finance.v_titulos_omie (que le pesquisa_titulos): medido
+   em 28/09/26, a antiga era um subconjunto estrito — faltavam-lhe 694 titulos
+   em aberto, R$ 3.104.769,54, e tres anos de historico. A view nova mantem os
+   nomes antigos como alias, por isso a tela nao muda de contrato. */
 const COLS =
-  "empresa, codigo_lancamento_omie, contraparte, cnpj_cpf, vencimento, previsao, emissao, " +
-  "valor_documento, valor_pago, status_titulo, numero_documento, numero_parcela, " +
-  "numero_documento_fiscal, numero_pedido, categoria, projeto, conta_corrente, observacao, " +
-  "boleto_gerado, boleto_numero";
+  "empresa, codigo_lancamento_omie, contraparte, contraparte_razao, cnpj_cpf, " +
+  "codigo_cliente_fornecedor, vencimento, previsao, emissao, pagamento, dt_registro, " +
+  "valor_documento, valor_pago, val_aberto, val_liquido, juros, multa, desconto, " +
+  "status_titulo, liquidado, dt_cancelamento, em_aberto, dias_para_vencer, " +
+  "numero_documento, numero_parcela, numero_documento_fiscal, numero_pedido, " +
+  "num_boleto, codigo_barras, nsu, chave_nfe, num_os, cod_nf, num_contrato, " +
+  "categoria, codigo_categoria, categorias_rateio, tem_rateio, grupo_despesa, " +
+  "projeto, codigo_projeto, conta_corrente, cod_cc, operacao, origem, tipo_documento, " +
+  "cod_comprador, cod_vendedor, observacao, boleto_gerado, boleto_numero, " +
+  "valor_ir, valor_pis, valor_cofins, valor_csll, valor_inss, valor_iss, " +
+  "info_u_inc, info_d_inc, info_u_alt, info_d_alt, cod_tit_repet, synced_at";
 
 function num(v: number | string | null): number {
   const n = Number(v ?? 0);
@@ -91,7 +148,7 @@ export async function GET(req: Request) {
   const MAX_ROWS = 30_000;
   const rows: TituloRow[] = [];
   for (let offset = 0; offset < MAX_ROWS; offset += PAGE) {
-    let q = admin.from("v_titulos").select(COLS).eq("tipo", tipo);
+    let q = admin.from("v_titulos_omie").select(COLS).eq("tipo", tipo);
     if (modo === "aberto") {
       q = q.in("status_titulo", ABERTO_STATUS);
     } else {
@@ -102,7 +159,7 @@ export async function GET(req: Request) {
       .order("vencimento", { ascending: true, nullsFirst: false })
       .order("codigo_lancamento_omie", { ascending: true })
       .range(offset, offset + PAGE - 1);
-    if (error) return NextResponse.json({ error: `v_titulos: ${error.message}` }, { status: 500 });
+    if (error) return NextResponse.json({ error: `v_titulos_omie: ${error.message}` }, { status: 500 });
     const batch = (data ?? []) as unknown as TituloRow[];
     rows.push(...batch);
     if (batch.length < PAGE) break;
