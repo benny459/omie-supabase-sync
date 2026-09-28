@@ -57,6 +57,15 @@ type Row = {
   info_u_inc: string | null;
   info_d_inc: string | null;
   info_u_alt: string | null;
+  info_d_alt: string | null;
+  cod_nf: number | null;
+  num_os: string | null;
+  valor_ir: number | string | null;
+  valor_pis: number | string | null;
+  valor_cofins: number | string | null;
+  valor_csll: number | string | null;
+  valor_inss: number | string | null;
+  valor_iss: number | string | null;
 };
 type ApiResp = {
   rows: Row[];
@@ -139,7 +148,7 @@ type ColKey = keyof Row;
 type ColDef = {
   key: ColKey;
   label: string;
-  grupo: "Básico" | "Datas" | "Valores" | "Documento" | "Classificação" | "Origem";
+  grupo: "Básico" | "Datas" | "Valores" | "Documento" | "Classificação" | "Origem" | "Fiscal";
   align?: "right";
   largura?: string;
   /** Como desenhar. Sem isto, mostra o valor cru. */
@@ -217,6 +226,25 @@ const COLUNAS: ColDef[] = [
   { key: "info_d_inc", label: "Lançado em", grupo: "Origem" },
   { key: "info_u_alt", label: "Alterado por", grupo: "Origem" },
   { key: "observacao", label: "Observação", grupo: "Origem", largura: "max-w-[240px]" },
+
+  /* Fiscal e códigos internos. Ficam disponíveis porque o pedido foi trazer
+     TUDO e depois cortar — mas ficam desligados por padrão e num grupo à
+     parte: os seis impostos retidos têm valor em 4 títulos de 64.886, e os
+     códigos só servem para bater com o Omie quando algo não fecha. */
+  { key: "valor_ir", label: "IR", grupo: "Fiscal", align: "right", render: (r) => Number(r.valor_ir ?? 0) > 0 ? money(r.valor_ir) : "—" },
+  { key: "valor_pis", label: "PIS", grupo: "Fiscal", align: "right", render: (r) => Number(r.valor_pis ?? 0) > 0 ? money(r.valor_pis) : "—" },
+  { key: "valor_cofins", label: "COFINS", grupo: "Fiscal", align: "right", render: (r) => Number(r.valor_cofins ?? 0) > 0 ? money(r.valor_cofins) : "—" },
+  { key: "valor_csll", label: "CSLL", grupo: "Fiscal", align: "right", render: (r) => Number(r.valor_csll ?? 0) > 0 ? money(r.valor_csll) : "—" },
+  { key: "valor_inss", label: "INSS", grupo: "Fiscal", align: "right", render: (r) => Number(r.valor_inss ?? 0) > 0 ? money(r.valor_inss) : "—" },
+  { key: "valor_iss", label: "ISS", grupo: "Fiscal", align: "right", render: (r) => Number(r.valor_iss ?? 0) > 0 ? money(r.valor_iss) : "—" },
+  { key: "numero_parcela", label: "Parcela", grupo: "Fiscal" },
+  { key: "cnpj_cpf", label: "CNPJ / CPF", grupo: "Fiscal", largura: "max-w-[150px]" },
+  { key: "contraparte_razao", label: "Razão social", grupo: "Fiscal", largura: "max-w-[240px]" },
+  { key: "codigo_cliente_fornecedor", label: "Cód. contraparte", grupo: "Fiscal", align: "right" },
+  { key: "cod_nf", label: "Cód. NF", grupo: "Fiscal", align: "right" },
+  { key: "num_os", label: "Nº OS", grupo: "Fiscal" },
+  { key: "em_aberto", label: "Está aberto?", grupo: "Fiscal", render: (r) => r.em_aberto ? "sim" : "não" },
+  { key: "info_d_alt", label: "Alterado em", grupo: "Fiscal" },
 ];
 
 // O que vem ligado: as 10 de hoje mais "Em aberto", que é o campo que faltava
@@ -456,7 +484,7 @@ export default function TitulosView({ tipo }: { tipo: "pagar" | "receber" }) {
                       voltar ao padrão
                     </button>
                   </div>
-                  {(["Básico", "Datas", "Valores", "Documento", "Classificação", "Origem"] as const).map((g) => (
+                  {(["Básico", "Datas", "Valores", "Documento", "Classificação", "Origem", "Fiscal"] as const).map((g) => (
                     <div key={g} className="mb-2">
                       <div className="text-[9px] font-bold uppercase tracking-wide text-ww-textFaint mb-1">{g}</div>
                       <div className="grid grid-cols-3 gap-x-3 gap-y-0.5">
