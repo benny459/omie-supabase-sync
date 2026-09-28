@@ -27,7 +27,33 @@ type Body = {
   codigo_projeto?: number | null;
   numero_documento?: string | null;
   observacao?: string | null;
+
+  // Campos que o Omie aceita e o formulario nao mandava. Os nomes seguem a
+  // tabela espelho finance.contas_pagar, que e o payload do Omie ja gravado.
+  data_emissao?: string | null;        // YYYY-MM-DD
+  data_entrada?: string | null;        // YYYY-MM-DD
+  numero_parcela?: string | null;
+  numero_documento_fiscal?: string | null;
+  chave_nfe?: string | null;
+  numero_pedido?: string | null;
+  codigo_tipo_documento?: string | null;   // NFE BOL PIX DAS CTE ...
+  id_origem?: string | null;               // COMP MANP ADCP ...
+  valor_pis?: number | null;    retem_pis?: boolean;
+  valor_cofins?: number | null; retem_cofins?: boolean;
+  valor_csll?: number | null;   retem_csll?: boolean;
+  valor_ir?: number | null;     retem_ir?: boolean;
+  valor_iss?: number | null;    retem_iss?: boolean;
+  valor_inss?: number | null;   retem_inss?: boolean;
 };
+
+/** Data opcional: so vai pro Omie se vier no formato certo. */
+function dataOpcional(iso: string | null | undefined): string | null {
+  return iso && /^\d{4}-\d{2}-\d{2}$/.test(iso) ? brDate(iso) : null;
+}
+/** O Omie quer "S"/"N" nos retem_*, nao booleano. */
+function sn(v: boolean | undefined): "S" | "N" {
+  return v ? "S" : "N";
+}
 
 function brDate(iso: string): string {
   const [y, m, d] = iso.split("-");
@@ -79,6 +105,33 @@ export async function POST(req: Request) {
   if (body.numero_documento) param.numero_documento = body.numero_documento;
   if (body.observacao) param.observacao = body.observacao;
 
+  /* Opcionais: so entram no payload quando preenchidos. Mandar campo vazio
+     faz o Omie recusar o lancamento inteiro em vez de ignorar o campo. */
+  const emissao = dataOpcional(body.data_emissao);
+  if (emissao) param.data_emissao = emissao;
+  const entrada = dataOpcional(body.data_entrada);
+  if (entrada) param.data_entrada = entrada;
+  if (body.numero_parcela) param.numero_parcela = body.numero_parcela;
+  if (body.numero_documento_fiscal) param.numero_documento_fiscal = body.numero_documento_fiscal;
+  if (body.chave_nfe) param.chave_nfe = body.chave_nfe;
+  if (body.numero_pedido) param.numero_pedido = body.numero_pedido;
+  if (body.codigo_tipo_documento) param.codigo_tipo_documento = body.codigo_tipo_documento;
+  if (body.id_origem) param.id_origem = body.id_origem;
+
+  // Imposto so viaja com o par valor+retem; um sem o outro nao diz nada.
+  const impostos: [keyof Body, keyof Body, string, string][] = [
+    ["valor_pis", "retem_pis", "valor_pis", "retem_pis"],
+    ["valor_cofins", "retem_cofins", "valor_cofins", "retem_cofins"],
+    ["valor_csll", "retem_csll", "valor_csll", "retem_csll"],
+    ["valor_ir", "retem_ir", "valor_ir", "retem_ir"],
+    ["valor_iss", "retem_iss", "valor_iss", "retem_iss"],
+    ["valor_inss", "retem_inss", "valor_inss", "retem_inss"],
+  ];
+  for (const [kv, kr, pv, pr] of impostos) {
+    const v = Number(body[kv] ?? 0);
+    if (v > 0) { param[pv] = v; param[pr] = sn(body[kr] as boolean | undefined); }
+  }
+
   const endpoint = tipo === "pagar"
     ? "https://app.omie.com.br/api/v1/financas/contapagar/"
     : "https://app.omie.com.br/api/v1/financas/contareceber/";
@@ -128,6 +181,19 @@ export async function POST(req: Request) {
     codigo_projeto: body.codigo_projeto ?? null,
     numero_documento: body.numero_documento ?? null,
     observacao: body.observacao ?? null,
+    data_emissao: emissao,
+    data_entrada: entrada,
+    numero_parcela: body.numero_parcela ?? null,
+    numero_documento_fiscal: body.numero_documento_fiscal ?? null,
+    chave_nfe: body.chave_nfe ?? null,
+    numero_pedido: body.numero_pedido ?? null,
+    id_origem: body.id_origem ?? null,
+    valor_pis: body.valor_pis ?? null,       retem_pis: sn(body.retem_pis),
+    valor_cofins: body.valor_cofins ?? null, retem_cofins: sn(body.retem_cofins),
+    valor_csll: body.valor_csll ?? null,     retem_csll: sn(body.retem_csll),
+    valor_ir: body.valor_ir ?? null,         retem_ir: sn(body.retem_ir),
+    valor_iss: body.valor_iss ?? null,       retem_iss: sn(body.retem_iss),
+    valor_inss: body.valor_inss ?? null,     retem_inss: sn(body.retem_inss),
     status_titulo: status,
     synced_at: new Date().toISOString(),
   };

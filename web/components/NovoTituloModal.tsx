@@ -11,6 +11,83 @@ type Categoria = { codigo: string; descricao: string };
 type Conta = { cod_cc: number; descricao: string };
 type Projeto = { codigo: number; nome: string };
 
+/* Tipos de documento e origens que o Omie aceita — a lista saiu do que já
+   está lançado na base (finance.pesquisa_titulos), não de um catálogo
+   inventado: são os 17 tipos e 8 origens que a empresa usa de facto. */
+const TIPOS_DOC: [string, string][] = [
+  ["NFE", "Nota fiscal eletrônica"],
+  ["NFS", "Nota fiscal de serviço"],
+  ["BOL", "Boleto"],
+  ["PIX", "PIX"],
+  ["FAT", "Fatura"],
+  ["REC", "Recibo"],
+  ["CTE", "Conhecimento de transporte"],
+  ["DAS", "DAS — Simples Nacional"],
+  ["DARE", "DARE"],
+  ["ND", "Nota de débito"],
+  ["ADI", "Adiantamento"],
+  ["ANT", "Antecipação"],
+  ["PED", "Pedido"],
+  ["DEBA", "Débito automático"],
+  ["FPGT", "Folha de pagamento"],
+  ["CUSJ", "Custas judiciais"],
+  ["99999", "Outros"],
+];
+
+const ORIGENS: [string, string][] = [
+  ["MANP", "Lançamento manual"],
+  ["COMP", "Compra"],
+  ["ADCP", "Adiantamento"],
+  ["CTEP", "Conhecimento de transporte"],
+  ["DEVP", "Devolução"],
+  ["BARP", "Arquivo de retorno"],
+  ["RPTP", "Repetição / recorrência"],
+  ["APIP", "API"],
+];
+
+const IMPOSTOS = [
+  { chave: "pis" as const,    nome: "PIS" },
+  { chave: "cofins" as const, nome: "COFINS" },
+  { chave: "csll" as const,   nome: "CSLL" },
+  { chave: "ir" as const,     nome: "IR" },
+  { chave: "iss" as const,    nome: "ISS" },
+  { chave: "inss" as const,   nome: "INSS" },
+];
+type ChaveImposto = (typeof IMPOSTOS)[number]["chave"];
+
+/** "1.234,56" → 1234.56. Vazio vira 0. */
+function paraNumero(v: string): number {
+  const n = Number((v ?? "").replace(/\./g, "").replace(",", "."));
+  return Number.isFinite(n) ? n : 0;
+}
+const moedaBR = (v: number) =>
+  v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+
+/* Secção dobrável. O formulário passou de 9 para 21 campos; mostrar os 21
+   abertos transformava "lançar uma conta" numa provação. O essencial fica à
+   vista, o resto abre — e o cabeçalho resume o que está lá dentro, para não
+   ser preciso abrir só para conferir. */
+function Secao({ titulo, resumo, aberta, onToggle, children }: {
+  titulo: string; resumo?: string; aberta: boolean;
+  onToggle: () => void; children: React.ReactNode;
+}) {
+  return (
+    <div className="border border-ww-border rounded-lg overflow-hidden">
+      <button type="button" onClick={onToggle}
+        className="w-full flex items-center justify-between gap-2 px-3 py-2 text-left hover:bg-ww-bg transition">
+        <span className="text-[11px] font-semibold uppercase tracking-wide text-ww-textMuted">{titulo}</span>
+        <span className="flex items-center gap-2 min-w-0">
+          {!aberta && resumo && (
+            <span className="text-[11px] text-ww-textFaint truncate max-w-[220px]">{resumo}</span>
+          )}
+          <span className="text-[9px] text-ww-textFaint">{aberta ? "▲" : "▼"}</span>
+        </span>
+      </button>
+      {aberta && <div className="px-3 pb-3 pt-1">{children}</div>}
+    </div>
+  );
+}
+
 function hojeISO() {
   return new Date().toLocaleDateString("sv-SE", { timeZone: "America/Sao_Paulo" });
 }
@@ -39,6 +116,23 @@ export default function NovoTituloModal({
   const [projeto, setProjeto] = useState("");
   const [numeroDoc, setNumeroDoc] = useState("");
   const [obs, setObs] = useState("");
+
+  // Campos do Omie que o formulário não pedia.
+  const [tipoDoc, setTipoDoc] = useState("");
+  const [origem, setOrigem] = useState("");
+  const [numeroDocFiscal, setNumeroDocFiscal] = useState("");
+  const [numeroParcela, setNumeroParcela] = useState("");
+  const [numeroPedido, setNumeroPedido] = useState("");
+  const [chaveNfe, setChaveNfe] = useState("");
+  const [emissao, setEmissao] = useState("");
+  const [entrada, setEntrada] = useState("");
+  const [impostos, setImpostos] = useState<Record<ChaveImposto, string>>({
+    pis: "", cofins: "", csll: "", ir: "", iss: "", inss: "",
+  });
+  const [secDoc, setSecDoc] = useState(false);
+  const [secDatas, setSecDatas] = useState(false);
+  const [secImp, setSecImp] = useState(false);
+  const totalImpostos = IMPOSTOS.reduce((t, i) => t + paraNumero(impostos[i.chave]), 0);
 
   const [salvando, setSalvando] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -101,6 +195,22 @@ export default function NovoTituloModal({
           codigo_projeto: projeto ? Number(projeto) : undefined,
           numero_documento: numeroDoc || undefined,
           observacao: obs || undefined,
+
+          codigo_tipo_documento: tipoDoc || undefined,
+          id_origem: origem || undefined,
+          numero_documento_fiscal: numeroDocFiscal || undefined,
+          numero_parcela: numeroParcela || undefined,
+          numero_pedido: numeroPedido || undefined,
+          chave_nfe: chaveNfe || undefined,
+          data_emissao: emissao || undefined,
+          data_entrada: entrada || undefined,
+          // Valor preenchido implica retenção — o par vai junto ou nenhum vai.
+          valor_pis: paraNumero(impostos.pis) || undefined,       retem_pis: paraNumero(impostos.pis) > 0,
+          valor_cofins: paraNumero(impostos.cofins) || undefined, retem_cofins: paraNumero(impostos.cofins) > 0,
+          valor_csll: paraNumero(impostos.csll) || undefined,     retem_csll: paraNumero(impostos.csll) > 0,
+          valor_ir: paraNumero(impostos.ir) || undefined,         retem_ir: paraNumero(impostos.ir) > 0,
+          valor_iss: paraNumero(impostos.iss) || undefined,       retem_iss: paraNumero(impostos.iss) > 0,
+          valor_inss: paraNumero(impostos.inss) || undefined,     retem_inss: paraNumero(impostos.inss) > 0,
         }),
       });
       const j = await r.json();
@@ -118,7 +228,7 @@ export default function NovoTituloModal({
   return (
     <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4" onClick={onClose}>
       <div onClick={(e) => e.stopPropagation()}
-           className="bg-ww-panel border border-ww-border rounded-xl shadow-2xl max-w-lg w-full p-5 space-y-4 max-h-[92vh] overflow-y-auto">
+           className="bg-ww-panel border border-ww-border rounded-xl shadow-2xl max-w-2xl w-full p-5 space-y-3 max-h-[92vh] overflow-y-auto">
         <div className="flex items-start justify-between">
           <div>
             <h3 className="font-semibold text-ww-text text-[15px]">
@@ -216,6 +326,80 @@ export default function NovoTituloModal({
             <input value={numeroDoc} onChange={(e) => setNumeroDoc(e.target.value)} className={inputCls} />
           </div>
         </div>
+
+        {/* ── Documento ────────────────────────────────────────────────── */}
+        <Secao titulo="Documento" aberta={secDoc} onToggle={() => setSecDoc((v) => !v)}
+               resumo={[tipoDoc, numeroDocFiscal, numeroParcela].filter(Boolean).join(" · ")}>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className={labelCls}>Tipo de documento</label>
+              <select value={tipoDoc} onChange={(e) => setTipoDoc(e.target.value)} className={inputCls}>
+                <option value="">—</option>
+                {TIPOS_DOC.map(([cod, nome]) => <option key={cod} value={cod}>{cod} · {nome}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className={labelCls}>Origem</label>
+              <select value={origem} onChange={(e) => setOrigem(e.target.value)} className={inputCls}>
+                <option value="">—</option>
+                {ORIGENS.map(([cod, nome]) => <option key={cod} value={cod}>{cod} · {nome}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className={labelCls}>Nº nota fiscal</label>
+              <input value={numeroDocFiscal} onChange={(e) => setNumeroDocFiscal(e.target.value)} className={inputCls} />
+            </div>
+            <div>
+              <label className={labelCls}>Parcela</label>
+              <input value={numeroParcela} onChange={(e) => setNumeroParcela(e.target.value)}
+                     placeholder="ex.: 001/012" className={inputCls} />
+            </div>
+            <div>
+              <label className={labelCls}>Nº pedido / OS</label>
+              <input value={numeroPedido} onChange={(e) => setNumeroPedido(e.target.value)} className={inputCls} />
+            </div>
+            <div>
+              <label className={labelCls}>Chave NFe</label>
+              <input value={chaveNfe} onChange={(e) => setChaveNfe(e.target.value)}
+                     placeholder="44 dígitos" className={`${inputCls} font-mono text-[11px]`} />
+            </div>
+          </div>
+        </Secao>
+
+        {/* ── Datas ───────────────────────────────────────────────────── */}
+        <Secao titulo="Datas" aberta={secDatas} onToggle={() => setSecDatas((v) => !v)}
+               resumo={[emissao && `emissão ${emissao}`, entrada && `entrada ${entrada}`].filter(Boolean).join(" · ")}>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className={labelCls}>Emissão</label>
+              <input type="date" value={emissao} onChange={(e) => setEmissao(e.target.value)} className={inputCls} />
+            </div>
+            <div>
+              <label className={labelCls}>Entrada</label>
+              <input type="date" value={entrada} onChange={(e) => setEntrada(e.target.value)} className={inputCls} />
+            </div>
+          </div>
+        </Secao>
+
+        {/* ── Impostos retidos ────────────────────────────────────────── */}
+        <Secao titulo="Impostos retidos" aberta={secImp} onToggle={() => setSecImp((v) => !v)}
+               resumo={totalImpostos > 0 ? `retido ${moedaBR(totalImpostos)}` : ""}>
+          <div className="grid grid-cols-3 gap-3">
+            {IMPOSTOS.map(({ chave, nome }) => (
+              <div key={chave}>
+                <label className={labelCls}>{nome}</label>
+                <input
+                  value={impostos[chave]}
+                  onChange={(e) => setImpostos((cur) => ({ ...cur, [chave]: e.target.value }))}
+                  placeholder="0,00"
+                  className={`${inputCls} text-right tabular-nums`} />
+              </div>
+            ))}
+          </div>
+          <p className="text-[10px] text-ww-textFaint mt-2">
+            Valor preenchido vai ao Omie já marcado como retido. Em branco não viaja.
+          </p>
+        </Secao>
 
         <div>
           <label className={labelCls}>Observação</label>
