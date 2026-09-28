@@ -81,10 +81,6 @@ const IDENTIDADE_DO_BLOCO: Record<string, string[]> = {
   rc:   ["rc_numero", "rc_descricao"],
 };
 
-/* O único par que anda em linha: a aprovação é DO pedido de compra. Deslizando
-   sozinha, diria que um PC está aprovado quando o aprovado foi outro.
-   Todo o resto — RC, Materiais/NFe Entrada, NFe Saída, Serviços — é
-   independente e compacta por conta própria, sem deixar linha em branco. */
 /* Blocos onde uma linha manual ainda sem número vale como SLOT — espaço vazio
    à espera de ser preenchido, criado pelo "+ Nova linha". Sem isto o botão
    criava uma linha que nunca aparecia, porque bloco sem conteúdo não ocupa
@@ -92,8 +88,15 @@ const IDENTIDADE_DO_BLOCO: Record<string, string[]> = {
    buraco no meio da informação. */
 const BLOCO_ACEITA_SLOT = new Set(["pc"]);
 
+/* O que anda em linha com o pedido de compra, porque descreve o mesmo pedido:
+   a aprovação é DELE, e a NF de entrada é a chegada DAQUELE material — as 349
+   linhas com NF no banco têm todas um PC, nenhuma solta. Deslizando sozinhos,
+   diriam que um PC foi aprovado ou recebido quando foi outro — o oposto de
+   "quero checar quando cada material chegou".
+   RC, NFe Saída e Serviços são independentes e compactam por conta própria. */
 const BLOCO_ACOMPANHA: Record<string, string> = {
   aprovacao: "pc",
+  log:       "pc",   // Materiais / NFe Entrada
 };
 type FacetKey = "pv_etapa_texto" | "projeto_nome" | "tipo_omie" | "pc_etapa_texto" | "codigo_categoria" | "contato_fornecedor" | "mt_status_fornecimento";
 type FacetState = Partial<Record<FacetKey, Set<string>>>;
