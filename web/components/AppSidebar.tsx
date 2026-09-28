@@ -104,9 +104,7 @@ const MODULES: NavItem[] = [
   },
   {
     href: "/estoque",
-    // Temporário: área financeiro (= só quem tem concessão explícita) até o
-    // clone do Omie sair do refino; depois volta pra "compras".
-    area: "financeiro",
+    area: "erp",
     label: "Estoque",
     tone: "text-orange-600",
     icon: (
@@ -190,7 +188,7 @@ const FINANCEIRO: NavItem[] = [
     // Livro operacional de títulos (clone do Omie) — diferente do /bi/contas-pagar,
     // que é a agenda analítica compra→venda→pagamento.
     href: "/financeiro/pagar",
-    area: "financeiro",
+    area: "erp",
     label: "Títulos a Pagar",
     tone: "text-rose-600",
     icon: (
@@ -202,7 +200,7 @@ const FINANCEIRO: NavItem[] = [
   },
   {
     href: "/financeiro/receber",
-    area: "financeiro",
+    area: "erp",
     label: "Títulos a Receber",
     tone: "text-emerald-600",
     icon: (

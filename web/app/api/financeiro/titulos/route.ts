@@ -67,8 +67,8 @@ function topN(map: Map<string, Agg>, n: number) {
 export async function GET(req: Request) {
   const perms = await loadPerms();
   if (!perms) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  if (!canViewArea(perms, "financeiro")) {
-    return NextResponse.json({ error: "Sem acesso à área financeiro" }, { status: 403 });
+  if (!canViewArea(perms, "erp")) {
+    return NextResponse.json({ error: "Sem acesso à área ERP" }, { status: 403 });
   }
 
   const url = new URL(req.url);

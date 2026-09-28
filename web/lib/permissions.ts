@@ -13,15 +13,16 @@ export type BlockKey = "pvos" | "rc" | "pc" | "aprovacao" | "log" | "extras";
 // fusão do BI e do Metabase no painel: sem ele, absorver Contas a Pagar e
 // margem por cliente colocaria dados financeiros na frente de todo mundo que
 // loga, porque o menu não sabia filtrar nada.
-export type Area = "operacao" | "compras" | "vendas" | "financeiro" | "bi";
+export type Area = "operacao" | "compras" | "vendas" | "financeiro" | "erp" | "bi";
 
-export const AREAS: Area[] = ["operacao", "compras", "vendas", "financeiro", "bi"];
+export const AREAS: Area[] = ["operacao", "compras", "vendas", "financeiro", "erp", "bi"];
 
 export const AREA_LABELS: Record<Area, { label: string; desc: string }> = {
   operacao:   { label: "Operação",   desc: "Avulsos, Projetos, PCs — o dia a dia" },
   compras:    { label: "Compras",    desc: "RC/PC, fornecedores, rateio por cliente" },
   vendas:     { label: "Vendas",     desc: "Faturamento, pipeline, rentabilidade" },
   financeiro: { label: "Financeiro", desc: "Contas a pagar/receber, saldo, DRE" },
+  erp:        { label: "ERP · Omie", desc: "Clone operacional do Omie — títulos, estoque, faturamento" },
   bi:         { label: "BI",         desc: "Dashboards analíticos consolidados" },
 };
 
@@ -36,6 +37,7 @@ const AREA_DEFAULT: Record<Area, boolean> = {
   compras:    true,
   vendas:     true,
   financeiro: false,
+  erp:        false,
   bi:         false,
 };
 
@@ -46,7 +48,7 @@ const AREA_DEFAULT: Record<Area, boolean> = {
 // sem ninguém perceber. Dado financeiro consolidado (DRE, contas a pagar/receber
 // e os dashboards de BI) só aparece pra quem tem row com can_view=true em
 // platform.user_area_access. Liberar é um INSERT; esquecer não vaza.
-const AREAS_RESTRITAS = new Set<Area>(["financeiro", "bi"]);
+const AREAS_RESTRITAS = new Set<Area>(["financeiro", "erp", "bi"]);
 
 export function canViewArea(user: UserPerms | null | undefined, area: Area): boolean {
   if (!user) return false;

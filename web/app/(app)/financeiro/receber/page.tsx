@@ -4,7 +4,7 @@ import TitulosView from "@/components/TitulosView";
 export const dynamic = "force-dynamic";
 
 export default async function ContasReceberPage() {
-  await requireArea("financeiro");
+  await requireArea("erp");
 
   return (
     <div className="space-y-4">

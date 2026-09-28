@@ -37,8 +37,8 @@ function brDate(iso: string): string {
 export async function POST(req: Request) {
   const perms = await loadPerms();
   if (!perms) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  if (!canViewArea(perms, "financeiro")) {
-    return NextResponse.json({ error: "Sem acesso à área financeiro" }, { status: 403 });
+  if (!canViewArea(perms, "erp")) {
+    return NextResponse.json({ error: "Sem acesso à área ERP" }, { status: 403 });
   }
 
   let body: Body;

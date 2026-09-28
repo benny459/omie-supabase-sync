@@ -4,9 +4,7 @@ import EstoqueView from "@/components/EstoqueView";
 export const dynamic = "force-dynamic";
 
 export default async function EstoquePage() {
-  // Temporário: preso à área "financeiro" (só concessão explícita — hoje só o
-  // Benny) enquanto o clone do Omie está em refino. Liberar = voltar pra "compras".
-  await requireArea("financeiro");
+  await requireArea("erp");
 
   return (
     <div className="space-y-4">

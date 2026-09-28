@@ -17,9 +17,8 @@ const MAX_ROWS = 30_000;
 export async function GET(req: Request) {
   const perms = await loadPerms();
   if (!perms) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  if (!canViewArea(perms, "financeiro")) {
-    // Temporário (refino do clone Omie): só área financeiro — hoje só o Benny.
-    return NextResponse.json({ error: "Sem acesso" }, { status: 403 });
+  if (!canViewArea(perms, "erp")) {
+    return NextResponse.json({ error: "Sem acesso à área ERP" }, { status: 403 });
   }
 
   const url = new URL(req.url);

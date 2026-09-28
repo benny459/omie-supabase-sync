@@ -60,6 +60,25 @@ type ServicosFilter = "todos" | "concluidos" | "agendados" | "sem_os";
 
 // Etapas que contam como "Exec./Faturado" — pré-faturamento, já faturado ou cancelado
 const ETAPAS_FECHADAS = new Set(["Entrega", "Faturado", "Cancelado"]);
+
+/* O código que identifica uma entrada em cada bloco da grade. Serve a duas
+   coisas ao empacotar os blocos: dizer o que é duplicado (mesmo código, não
+   linha inteira igual) e dizer o que nem conta como entrada — a linha de um PC
+   traz o nome do projeto, mas isso não faz dela um PV/OS.
+   Bloco que não esteja aqui usa o conteúdo inteiro como identidade. */
+const IDENTIDADE_DO_BLOCO: Record<string, string[]> = {
+  pvos: ["pv_os_label"],
+  pc:   ["pc_numero", "pc_numero_manual"],
+  rc:   ["rc_numero", "rc_descricao"],
+};
+
+/* O único par que anda em linha: a aprovação é DO pedido de compra. Deslizando
+   sozinha, diria que um PC está aprovado quando o aprovado foi outro.
+   Todo o resto — RC, Materiais/NFe Entrada, NFe Saída, Serviços — é
+   independente e compacta por conta própria, sem deixar linha em branco. */
+const BLOCO_ACOMPANHA: Record<string, string> = {
+  aprovacao: "pc",
+};
 type FacetKey = "pv_etapa_texto" | "projeto_nome" | "tipo_omie" | "pc_etapa_texto" | "codigo_categoria" | "contato_fornecedor" | "mt_status_fornecimento";
 type FacetState = Partial<Record<FacetKey, Set<string>>>;
 
@@ -2483,30 +2502,110 @@ function BucketCard({
   }, [items, bucket.pv_os_label, bucket.groupKind, bucket.pvOsCount, modulo,
       allPcsApproved, aprovCountInBucket, pcRowsForApproval, cronogramaMap, todayStartMs]);
 
-  // Pré-computa runs de pv_os_label dentro do bucket: pra cada índice, quantas
-  // linhas seguidas compartilham o mesmo pv_os_label (e qual o índice de início).
-  // Usado pra aplicar rowspan dos merged cells (totais/diff por PV/OS) por run,
-  // não pelo bucket inteiro — crítico no modo projeto (bucket = vários PV/OS).
-  const pvosRuns = useMemo(() => {
-    const startIdx: number[] = new Array(items.length);
-    const runSize: number[] = new Array(items.length);
-    let i = 0;
-    while (i < items.length) {
-      const lbl = String(items[i].pv_os_label ?? "—");
-      let j = i;
-      while (j < items.length && String(items[j].pv_os_label ?? "—") === lbl) j++;
-      const size = j - i;
-      for (let k = i; k < j; k++) { startIdx[k] = i; runSize[k] = size; }
-      i = j;
-    }
-    return { startIdx, runSize };
-  }, [items]);
-
   // Achata todas as colunas visíveis junto com seu grupo (pra header em 2 camadas)
   const flatCols = useMemo(() => {
     const out: { col: import("@/lib/columns").Column; group: Group }[] = [];
     for (const g of visibleGroups) for (const c of g.columns) out.push({ col: c, group: g });
     return out;
+  }, [visibleGroups]);
+
+  /* ── Empacotamento por bloco ──────────────────────────────────────────────
+   * A linha do banco carrega TODOS os blocos de uma vez (PV/OS + RC + PC +
+   * Materiais + Saída), e quase nunca tem os cinco preenchidos. Desenhar linha
+   * a linha fazia duas coisas ruins ao mesmo tempo:
+   *
+   *   1. A mesma OS aparecia repetida em cada linha dos PCs dela — 4 parcelas
+   *      liam-se como 10+.
+   *   2. Onde um bloco não tinha nada ficava buraco no meio da informação, e
+   *      o buraco de um bloco não coincide com o do vizinho.
+   *
+   * Agora cada bloco é a sua própria lista: conteúdo repetido colapsa, o que
+   * sobra sobe, e blocos podem ter comprimentos diferentes (mais RC do que PC
+   * é normal). A linha visual deixa de ser um registo — por isso cada célula
+   * guarda a SUA linha de origem, que é o que a edição e a aprovação usam.
+   */
+  const blocos = useMemo(() => {
+    const porGrupo = new Map<string, AnyRow[]>();
+    // Peso de um bloco inclui as colunas dos blocos que andam com ele: a
+    // decisão de aprovação é o que distingue duas cópias do mesmo PC.
+    const colunasDePeso = new Map<string, string[]>();
+    for (const g of visibleGroups) {
+      const cols = g.columns.map(c => c.key);
+      for (const outro of visibleGroups) {
+        if (BLOCO_ACOMPANHA[outro.key] === g.key) cols.push(...outro.columns.map(c => c.key));
+      }
+      colunasDePeso.set(g.key, cols);
+    }
+    for (const g of visibleGroups) {
+      const identidade = IDENTIDADE_DO_BLOCO[g.key];
+      const ondeEsta = new Map<string, number>();   // chave -> indice na lista
+      const lista: AnyRow[] = [];
+      const pesoCols = colunasDePeso.get(g.key) ?? g.columns.map(c => c.key);
+      /* Default não é informação. "PENDENTE" é a ausência de decisão e rc_qtd
+         vem 1 mesmo em linha vazia — contá-los fazia uma cópia sem nada
+         parecer tão completa quanto a que tem a aprovação de verdade. */
+      const temValor = (row: AnyRow, key: string) => {
+        const v = row[key];
+        if (v == null) return false;
+        const s = String(v).trim();
+        if (s === "") return false;
+        if (key === "status" || key === "status_label") return s !== "PENDENTE" && s !== "Pendente";
+        if (key === "rc_qtd") return s !== "1";
+        return true;
+      };
+      const ocupaLinha = (row: AnyRow) => g.columns.some(c => temValor(row, c.key));
+      const peso = (row: AnyRow) => pesoCols.reduce((n, k) => n + (temValor(row, k) ? 1 : 0), 0);
+      for (const r of items) {
+        if (!ocupaLinha(r)) continue;             // bloco sem nada não ocupa linha
+        /* Duplicado é o mesmo CÓDIGO repetido, não a linha inteira igual — é
+           assim que se lê a grade. Sem código de identidade o bloco não é uma
+           entrada, é eco de outro: o nome do projeto repete-se na linha de todo
+           PC, mas não faz dele um PV/OS. */
+        const chave = identidade
+          ? (identidade.map(k => String(r[k] ?? "").trim()).find(Boolean) ?? "")
+          : g.columns.map(c => String(r[c.key] ?? "").trim()).join("~");
+        if (!chave) continue;
+
+        const jaEm = ondeEsta.get(chave);
+        if (jaEm == null) { ondeEsta.set(chave, lista.length); lista.push(r); continue; }
+        /* Mesmo código outra vez. Fica a cópia que decidiu — nos dados reais a
+           aprovação tanto está na linha do Omie (50 casos) como na manual (29),
+           então preferir sempre uma origem mostraria compra aprovada como
+           pendente. Empatando, fica a do Omie, que sobrevive ao sync. */
+        const atual = lista[jaEm];
+        const pesoNovo = peso(r), pesoAtual = peso(atual);
+        if (pesoNovo > pesoAtual
+            || (pesoNovo === pesoAtual
+                && Number(r.ncod_ped ?? 0) > Number(atual.ncod_ped ?? 0))) {
+          lista[jaEm] = r;
+        }
+      }
+      porGrupo.set(g.key, lista);
+    }
+    /* Blocos acompanhantes copiam a lista do dono: mesma linha de origem, mesma
+       posição. Feito depois de todos empacotarem, para o dono já existir. */
+    for (const g of visibleGroups) {
+      const dono = BLOCO_ACOMPANHA[g.key];
+      if (dono && porGrupo.has(dono)) porGrupo.set(g.key, porGrupo.get(dono)!);
+    }
+    return porGrupo;
+  }, [visibleGroups, items]);
+
+  // Altura da tabela = o bloco mais comprido. Os mais curtos terminam antes,
+  // sem preencher o resto com linhas fantasma.
+  const nLinhas = useMemo(() => {
+    let n = 0;
+    for (const g of visibleGroups) n = Math.max(n, blocos.get(g.key)?.length ?? 0);
+    return n;
+  }, [visibleGroups, blocos]);
+
+  /* A checkbox de aprovação precisa de um registo concreto. Com os blocos a
+   * deslizarem independentes ela não pode viver "na linha", então segue o
+   * bloco PC — que é onde a aprovação de facto acontece. Sem bloco PC visível,
+   * cai no primeiro bloco que houver, para não deixar a seleção sem dono. */
+  const blocoDaSelecao = useMemo(() => {
+    if (visibleGroups.some(g => g.key === "pc")) return "pc";
+    return visibleGroups[0]?.key ?? null;
   }, [visibleGroups]);
 
   // Ações do projeto (só /projetos com codigo_projeto): faixa horizontal no
@@ -2741,51 +2840,63 @@ function BucketCard({
                   </tr>
                 </thead>
                 <tbody>
-                  {items.map((r, i) => {
-                    const valor = r.valor_total != null ? Number(r.valor_total) : null;
-                    const selKey = `${r.empresa}|${r.ncod_ped}|${valor ?? ""}`;
-                    const checked = selected.has(selKey);
+                  {Array.from({ length: nLinhas }, (_, i) => {
+                    // A linha da seleção vem do bloco dono da aprovação (PC),
+                    // não da posição visual — os blocos deslizam independentes.
+                    const rSel = blocoDaSelecao ? blocos.get(blocoDaSelecao)?.[i] : undefined;
+                    const valorSel = rSel?.valor_total != null ? Number(rSel.valor_total) : null;
+                    const selKey = rSel ? `${rSel.empresa}|${rSel.ncod_ped}|${valorSel ?? ""}` : null;
+                    const checked = selKey != null && selected.has(selKey);
                     return (
                       <tr key={i}
-                        onClick={() => onRowClick(r)}
-                        className={`cursor-pointer transition ${
+                        onClick={() => { if (rSel) onRowClick(rSel); }}
+                        className={`transition ${rSel ? "cursor-pointer" : ""} ${
                           checked ? "bg-[#f4faf7] dark:bg-[#15302a]/30" : "hover:bg-ww-rowHover"
                         } ${i > 0 ? "border-t border-ww-border" : ""}`}>
                         {(userCanApprove || userCanEdit) && (
                           <td className="px-2 py-1 align-middle" onClick={(e) => e.stopPropagation()}>
-                            <input type="checkbox" checked={checked}
-                              onChange={() => toggleSel(selKey)}
-                              className="accent-ww-accent cursor-pointer" />
+                            {selKey && (
+                              <input type="checkbox" checked={checked}
+                                onChange={() => toggleSel(selKey)}
+                                className="accent-ww-accent cursor-pointer" />
+                            )}
                           </td>
                         )}
                         {flatCols.map(({ col, group }, j) => {
-                          // Totais e diff % são iguais por PV/OS → rowspan ao longo
-                          // do run de linhas com mesmo pv_os_label. Em modo PV/OS o
-                          // bucket = 1 PV/OS, então span = items.length. Em modo
-                          // projeto, span = tamanho do run dentro do bucket.
-                          const MERGED_KEYS = new Set([
-                            "rc_custo_total_calc", "pc_custo_total_calc",
-                            "dif_pct_pc_rc", "rc_pc_vs_rc",
-                            "servicos_concluidos",  // 1 ✅ por bucket OS (trigger garante mesmo valor em todas rows)
-                          ]);
-                          const isMerged = MERGED_KEYS.has(col.key);
-                          const runStart = pvosRuns.startIdx[i];
-                          const runSize  = pvosRuns.runSize[i];
-                          if (isMerged && i !== runStart) return null;
+                          // Cada célula lê da linha de origem DO SEU bloco.
+                          const lista = blocos.get(group.key);
+                          const r = lista?.[i];
                           const nextGroup = flatCols[j + 1]?.group;
                           const isLastOfGroup = !nextGroup || nextGroup.key !== group.key;
                           const isActiveGroup = group.key === activeStageKey;
+                          // Totais por PV/OS repetem-se dentro do bloco; mostra
+                          // só quando o valor muda em relação à linha de cima.
+                          const MERGED_KEYS = new Set([
+                            "rc_custo_total_calc", "pc_custo_total_calc",
+                            "dif_pct_pc_rc", "rc_pc_vs_rc",
+                            "servicos_concluidos",
+                          ]);
+                          const isMerged = MERGED_KEYS.has(col.key);
+                          const repetido = isMerged && r != null && i > 0
+                            && lista?.[i - 1] != null
+                            && String(lista[i - 1][col.key] ?? "") === String(r[col.key] ?? "");
+                          const cellClass = `px-2 py-1 align-middle whitespace-nowrap ${
+                            isLastOfGroup ? "border-r-2 border-ww-borderStrong" : "border-r border-ww-border/60"
+                          } last:border-r-0 ${
+                            col.editable
+                              ? isActiveGroup ? `${group.tint}` : `${group.tint}/70`
+                              : isActiveGroup ? `${group.tint}/40` : `${group.tint}/15`
+                          } ${alignClassFor(col)} ${isNumericFmt(col) ? "tabular-nums font-mono" : ""} ${isMerged ? "font-semibold" : ""}`;
+                          // Bloco já terminou (é mais curto que o vizinho) ou
+                          // valor repetido: célula fica em branco, sem conteúdo
+                          // fantasma e sem sugerir um registo que não existe.
+                          if (r == null || repetido) {
+                            return <td key={`${col.key}-${j}`} className={cellClass} />;
+                          }
                           return (
                             <td key={`${col.key}-${j}`}
-                              rowSpan={isMerged && runSize > 1 ? runSize : undefined}
                               onClick={(e) => { if (col.editable) e.stopPropagation(); }}
-                              className={`px-2 py-1 align-middle whitespace-nowrap ${
-                                isLastOfGroup ? "border-r-2 border-ww-borderStrong" : "border-r border-ww-border/60"
-                              } last:border-r-0 ${
-                                col.editable
-                                  ? isActiveGroup ? `${group.tint}` : `${group.tint}/70`
-                                  : isActiveGroup ? `${group.tint}/40` : `${group.tint}/15`
-                              } ${alignClassFor(col)} ${isNumericFmt(col) ? "tabular-nums font-mono" : ""} ${isMerged ? "font-semibold" : ""}`}>
+                              className={cellClass}>
                               <Cell
                                 row={
                                   // RC sem PC herda APROVADO quando bucket inteiro aprovado
@@ -2800,7 +2911,10 @@ function BucketCard({
                                 todayStartMs={todayStartMs}
                                 atribuicaoMap={atribuicaoMap}
                                 onAtribuicaoClick={onAtribuicaoClick}
-                                onStatusClick={(anchor) => onStatusClick(selKey, r, anchor)} />
+                                onStatusClick={(anchor) => onStatusClick(
+                                  `${r.empresa}|${r.ncod_ped}|${r.valor_total != null ? Number(r.valor_total) : ""}`,
+                                  r, anchor,
+                                )} />
                             </td>
                           );
                         })}
@@ -4384,16 +4498,37 @@ function BucketTotals({
     pcTotal = Number(r.pc_custo_total_calc ?? 0);
     pvTotal = Number(r.pv_valor_total ?? 0);
   } else if (bucket.groupKind === "project") {
-    const seen = new Map<string, { rc: number; pc: number; pv: number }>();
+    /* Um projeto junta vários PV/OS MAIS os PCs que o Omie ainda não amarrou a
+       nenhum deles. Agregar por pv_os_label — como fazíamos — errava duas
+       vezes, e nas duas direções:
+         1. Todo PC sem vínculo caía no mesmo balde "—" e, como só a primeira
+            linha do balde entrava, contava UM PC e ignorava os outros.
+         2. O PC digitado à mão numa linha de RC somava de novo, apesar de ser
+            só um ponteiro para um PC que já existe no Omie.
+       No PJ361 os dois erros davam R$ 79.504,62 (131% do budget) para
+       R$ 122.469,27 de compra real (201%) — 14 PCs de fora e 7 em dobro.
+
+       Agora cada bloco soma pela sua própria chave: PC uma vez por número de
+       PC, RC linha a linha (cada linha é a sua requisição), PV uma vez por
+       PV/OS. */
+    const pcPorNumero = new Map<string, number>();
+    const pvPorLabel  = new Map<string, number>();
     for (const r of items) {
-      const k = String(r.pv_os_label ?? "—");
-      if (!seen.has(k)) seen.set(k, {
-        rc: Number(r.rc_custo_total_calc ?? 0),
-        pc: Number(r.pc_custo_total_calc ?? 0),
-        pv: Number(r.pv_valor_total ?? 0),
-      });
+      const pc = String(r.pc_numero ?? r.pc_numero_manual ?? "").trim();
+      if (pc) {
+        // A linha do Omie (ncod_ped > 0) manda sobre o ponteiro manual.
+        if (!pcPorNumero.has(pc) || Number(r.ncod_ped ?? 0) > 0) {
+          pcPorNumero.set(pc, Number(r.valor_total ?? 0));
+        }
+      }
+      const rcCusto = Number(r.rc_custo ?? 0);
+      if (rcCusto) rcTotal += (Number(r.rc_qtd ?? 0) || 1) * rcCusto;
+
+      const pv = r.pv_os_label != null ? String(r.pv_os_label) : "";
+      if (pv && !pvPorLabel.has(pv)) pvPorLabel.set(pv, Number(r.pv_valor_total ?? 0));
     }
-    for (const v of seen.values()) { rcTotal += v.rc; pcTotal += v.pc; pvTotal += v.pv; }
+    for (const v of pcPorNumero.values()) pcTotal += v;
+    for (const v of pvPorLabel.values())  pvTotal += v;
   } else if (bucket.groupKind === "pc") {
     // PC Standalone: só PC; SEM RC, SEM PV
     const r = items[0] ?? {};
