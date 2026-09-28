@@ -2680,9 +2680,13 @@ function BucketCard({
           : g.columns.map(c => String(r[c.key] ?? "").trim()).join("~");
         if (!chave) {
           /* Linha manual ainda sem número é um slot do "+ Nova linha": espaço
-             para escrever o PC. Guarda-se para o fim do bloco. */
+             para escrever o PC. Guarda-se para o fim do bloco.
+             source === "native" é o que o botão grava. Sem esse filtro entravam
+             também as linhas "omie_new" — o PV/OS que ainda não tem PC nenhum
+             também tem ncod_ped negativo, e virava slot fantasma. */
           const n = Number(r.ncod_ped ?? 0);
-          if (BLOCO_ACEITA_SLOT.has(g.key) && n < 0 && !slotsVistos.has(n)) {
+          if (BLOCO_ACEITA_SLOT.has(g.key) && n < 0 && !slotsVistos.has(n)
+              && String(r.source ?? "") === "native") {
             slotsVistos.add(n);
             slots.push(r);
           }
