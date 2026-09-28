@@ -1,0 +1,41 @@
+name: Import Estoque (Omie → Supabase) [Diário]
+
+on:
+  workflow_dispatch:
+    inputs:
+      empresas:
+        description: "Empresas (CSV)"
+        required: false
+        default: "SF"
+      full:
+        description: "Backfill desde 01/01/2024 (1 = sim)"
+        required: false
+        default: ""
+  schedule:
+    - cron: "43 12,16,20 * * 1-5"   # 09:43 / 13:43 / 17:43 BRT dias úteis
+
+jobs:
+  import:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Run
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          OMIE_APP_KEY_SF: ${{ secrets.OMIE_APP_KEY_SF }}
+          OMIE_APP_SECRET_SF: ${{ secrets.OMIE_APP_SECRET_SF }}
+          OMIE_APP_KEY_CD: ${{ secrets.OMIE_APP_KEY_CD }}
+          OMIE_APP_SECRET_CD: ${{ secrets.OMIE_APP_SECRET_CD }}
+          OMIE_APP_KEY_WW: ${{ secrets.OMIE_APP_KEY_WW }}
+          OMIE_APP_SECRET_WW: ${{ secrets.OMIE_APP_SECRET_WW }}
+          EMPRESAS_ALVO: ${{ github.event.inputs.empresas || 'SF' }}
+          ESTOQUE_FULL: ${{ github.event.inputs.full || '' }}
+          PYTHONUNBUFFERED: "1"
+        run: python3 scripts/import_estoque.py
