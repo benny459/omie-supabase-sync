@@ -174,6 +174,32 @@ const FINANCEIRO: NavItem[] = [
     ),
   },
   {
+    // Livro operacional de títulos (clone do Omie) — diferente do /bi/contas-pagar,
+    // que é a agenda analítica compra→venda→pagamento.
+    href: "/financeiro/pagar",
+    area: "financeiro",
+    label: "Títulos a Pagar",
+    tone: "text-rose-600",
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className="w-5 h-5" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M6 2h9l5 5v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2z"/>
+        <path d="M14 2v6h6M8 13h8M8 17h8M12 9v10"/>
+      </svg>
+    ),
+  },
+  {
+    href: "/financeiro/receber",
+    area: "financeiro",
+    label: "Títulos a Receber",
+    tone: "text-emerald-600",
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className="w-5 h-5" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M6 2h9l5 5v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2z"/>
+        <path d="M14 2v6h6M8 14l3 3 5-6"/>
+      </svg>
+    ),
+  },
+  {
     href: "/bi/simples",
     area: "financeiro",
     label: "Simples Nacional",
