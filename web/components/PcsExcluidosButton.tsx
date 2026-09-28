@@ -1,63 +1,74 @@
 "use client";
 
 /**
- * "N PC escondidos" — a porta de volta da exclusão de pedido de compra.
+ * Chip "N PC escondido(s)" + modal para trazer de volta.
  *
  * Esconder um PC é reversível por desenho (só marca em platform.excluded_pc),
  * mas reversível sem botão não vale nada: ninguém esconde nada se não souber
- * como trazer de volta. Este é o botão.
+ * como desfazer. Este é o botão.
  *
- * Só aparece quando há algo escondido — sem exclusões, não ocupa espaço.
+ * Componente controlado: quem chama passa a lista já filtrada. Assim o mesmo
+ * componente serve o chip global do topo e o chip de cada projeto, sem cada
+ * card ir buscar a lista por conta própria.
  */
 
-import { useCallback, useEffect, useState } from "react";
+import { useState } from "react";
 
-type Escondido = {
+export type PcEscondido = {
   empresa: string;
   pc_numero: string;
   motivo: string | null;
   excluded_at: string;
   excluded_by: string | null;
+  projeto_nome?: string | null;
+  valor_total?: number | null;
 };
 
-export default function PcsExcluidosButton() {
-  const [linhas, setLinhas] = useState<Escondido[]>([]);
+const brl = (v: number | null | undefined) =>
+  v == null ? "—" : v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+
+export default function PcsExcluidosButton({
+  linhas,
+  titulo = "Pedidos de compra escondidos",
+  compacto = false,
+  onMudou,
+}: {
+  linhas: PcEscondido[];
+  titulo?: string;
+  /** true no chip de um projeto: menor, sem a palavra "PC" repetida. */
+  compacto?: boolean;
+  onMudou: () => void;
+}) {
   const [aberto, setAberto] = useState(false);
   const [ocupado, setOcupado] = useState<string | null>(null);
   const [erro, setErro] = useState<string | null>(null);
 
-  const carregar = useCallback(async () => {
-    try {
-      const r = await fetch("/api/pcs/excluir", { cache: "no-store" });
-      if (!r.ok) return;
-      const j = await r.json();
-      setLinhas((j.rows ?? []) as Escondido[]);
-    } catch { /* silencioso: é um extra, não pode derrubar a página */ }
-  }, []);
-
-  useEffect(() => { carregar(); }, [carregar]);
-
-  async function restaurar(e: Escondido) {
+  async function chamar(empresa: string, pcs: string[], marca: string) {
     setErro(null);
-    setOcupado(`${e.empresa}|${e.pc_numero}`);
+    setOcupado(marca);
     try {
       const r = await fetch("/api/pcs/excluir", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "restore", empresa: e.empresa, pcs: [e.pc_numero] }),
+        body: JSON.stringify({ action: "restore", empresa, pcs }),
       });
       const j = await r.json().catch(() => ({}));
-      if (!r.ok) { setErro(j.error ?? r.statusText); setOcupado(null); return; }
-      // Reload duro: a lista é buscada no client e o PC tem de reaparecer na grade.
-      window.location.reload();
+      if (!r.ok) { setErro(j.error ?? r.statusText); setOcupado(null); return false; }
+      return true;
     } catch (err) {
       setErro(err instanceof Error ? err.message : String(err));
       setOcupado(null);
+      return false;
     }
   }
 
-  /* Restaurar tudo de uma vez. Fica dentro do modal e atrás de confirmação de
-     propósito: é a tecla que desfaz o trabalho de muita gente, e deve custar
-     a carregar. Uma empresa de cada vez, que é como a API aceita. */
+  async function restaurarUm(e: PcEscondido) {
+    const ok = await chamar(e.empresa, [e.pc_numero], `${e.empresa}|${e.pc_numero}`);
+    // Reload duro: a grade é buscada no client e o PC tem de reaparecer nela.
+    if (ok) { onMudou(); window.location.reload(); }
+  }
+
+  /* Restaurar tudo de uma vez fica atrás de confirmação: é a tecla que desfaz
+     o trabalho de quem limpou a vista, e deve custar a carregar. */
   async function restaurarTodos() {
     const porEmpresa = new Map<string, string[]>();
     for (const l of linhas) {
@@ -65,32 +76,17 @@ export default function PcsExcluidosButton() {
       atual.push(l.pc_numero);
       porEmpresa.set(l.empresa, atual);
     }
-    const resumo = [...porEmpresa.entries()]
-      .map(([emp, pcs]) => `${emp}: ${pcs.length}`).join(" · ");
+    const resumo = [...porEmpresa.entries()].map(([e, p]) => `${e}: ${p.length}`).join(" · ");
     if (!confirm(
-      `Trazer de volta TODOS os ${linhas.length} pedidos de compra escondidos?\n\n`
-      + `${resumo}\n\nEles voltam à grade e aos totais dos projetos.`
+      `Trazer de volta ${linhas.length} pedido(s) de compra?\n\n${resumo}\n\n`
+      + `Voltam à grade e aos totais.`
     )) return;
-    setErro(null);
-    setOcupado("__todos__");
-    try {
-      for (const [empresa, pcs] of porEmpresa) {
-        const r = await fetch("/api/pcs/excluir", {
-          method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ action: "restore", empresa, pcs }),
-        });
-        if (!r.ok) {
-          const j = await r.json().catch(() => ({}));
-          setErro(`${empresa}: ${j.error ?? r.statusText}`);
-          setOcupado(null);
-          return;
-        }
-      }
-      window.location.reload();
-    } catch (err) {
-      setErro(err instanceof Error ? err.message : String(err));
-      setOcupado(null);
+    for (const [empresa, pcs] of porEmpresa) {
+      const ok = await chamar(empresa, pcs, "__todos__");
+      if (!ok) return;
     }
+    onMudou();
+    window.location.reload();
   }
 
   if (linhas.length === 0) return null;
@@ -103,10 +99,12 @@ export default function PcsExcluidosButton() {
   return (
     <>
       <button
-        onClick={() => setAberto(true)}
-        title="Pedidos de compra escondidos do painel — clique para trazer de volta"
-        className="px-2 py-0.5 rounded-full text-[11px] font-semibold border border-amber-400/60 text-amber-600 dark:text-amber-300 hover:bg-amber-500 hover:text-white transition">
-        🚫 {linhas.length} PC escondido{linhas.length !== 1 ? "s" : ""}
+        onClick={(ev) => { ev.stopPropagation(); setAberto(true); }}
+        title="Pedidos de compra escondidos — clique para trazer de volta"
+        className={`rounded-full font-semibold border border-amber-400/60 text-amber-600 dark:text-amber-300 hover:bg-amber-500 hover:text-white transition ${
+          compacto ? "px-1.5 py-px text-[10px] uppercase tracking-[0.3px]" : "px-2 py-0.5 text-[11px]"
+        }`}>
+        🚫 {linhas.length}{compacto ? " escondido" + (linhas.length !== 1 ? "s" : "") : ` PC escondido${linhas.length !== 1 ? "s" : ""}`}
       </button>
 
       {aberto && (
@@ -116,7 +114,7 @@ export default function PcsExcluidosButton() {
                className="bg-ww-panel rounded-xl shadow-2xl max-w-2xl w-full max-h-[80vh] flex flex-col">
             <div className="flex items-start justify-between p-5 pb-3">
               <div>
-                <h3 className="font-semibold text-ww-text">Pedidos de compra escondidos</h3>
+                <h3 className="font-semibold text-ww-text">{titulo}</h3>
                 <p className="text-xs text-ww-textMuted mt-0.5">
                   Saíram da vista e dos totais. O dado continua no Omie — trazer de volta é imediato.
                 </p>
@@ -136,7 +134,8 @@ export default function PcsExcluidosButton() {
                 <thead className="sticky top-0 bg-ww-panel">
                   <tr className="text-ww-textMuted text-left">
                     <th className="py-1.5 pr-3 font-semibold">PC</th>
-                    <th className="py-1.5 pr-3 font-semibold">Empresa</th>
+                    <th className="py-1.5 pr-3 font-semibold">Projeto</th>
+                    <th className="py-1.5 pr-3 font-semibold text-right">Valor</th>
                     <th className="py-1.5 pr-3 font-semibold">Motivo</th>
                     <th className="py-1.5 pr-3 font-semibold">Quando</th>
                     <th className="py-1.5 font-semibold"></th>
@@ -148,14 +147,15 @@ export default function PcsExcluidosButton() {
                     return (
                       <tr key={chave} className="border-t border-ww-border">
                         <td className="py-1.5 pr-3 font-mono text-ww-text">{e.pc_numero}</td>
-                        <td className="py-1.5 pr-3 text-ww-textMuted">{e.empresa}</td>
+                        <td className="py-1.5 pr-3 text-ww-textMuted">{e.projeto_nome || "—"}</td>
+                        <td className="py-1.5 pr-3 text-ww-textMuted tabular-nums text-right">{brl(e.valor_total)}</td>
                         <td className="py-1.5 pr-3 text-ww-textMuted">{e.motivo || "—"}</td>
                         <td className="py-1.5 pr-3 text-ww-textMuted tabular-nums">{dataCurta(e.excluded_at)}</td>
                         <td className="py-1.5 text-right">
                           <button
-                            disabled={ocupado === chave}
-                            onClick={() => restaurar(e)}
-                            className="px-2.5 py-1 text-[11px] font-semibold border border-emerald-400/60 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-600 hover:text-white rounded-md transition disabled:opacity-40">
+                            disabled={ocupado != null}
+                            onClick={() => restaurarUm(e)}
+                            className="px-2.5 py-1 text-[11px] font-semibold border border-emerald-400/60 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-600 hover:text-white rounded-md transition disabled:opacity-40 whitespace-nowrap">
                             {ocupado === chave ? "Trazendo…" : "↩ Trazer de volta"}
                           </button>
                         </td>
@@ -166,7 +166,6 @@ export default function PcsExcluidosButton() {
               </table>
             </div>
 
-            {/* Rodapé: a ação em massa vive aqui, discreta e com confirmação. */}
             <div className="flex items-center justify-between gap-3 px-5 py-3 border-t border-ww-border">
               <span className="text-[11px] text-ww-textMuted">
                 {linhas.length} escondido{linhas.length !== 1 ? "s" : ""}

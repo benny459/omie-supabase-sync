@@ -27,7 +27,7 @@ import BucketSyncButton from "./BucketSyncButton";
 import SyncNowButton from "./SyncNowButton";
 import AddRowButton from "./AddRowButton";
 import GlobalSearch from "./GlobalSearch";
-import PcsExcluidosButton from "./PcsExcluidosButton";
+import PcsExcluidosButton, { type PcEscondido } from "./PcsExcluidosButton";
 import { AtribuicaoModal } from "./AtribuirClienteView";
 import { Virtuoso, type VirtuosoHandle } from "react-virtuoso";
 
@@ -560,6 +560,33 @@ export default function BoldAvulsosView({
   // PostgREST corta resultset em 1000 rows. SSR pega só primeira página rápido;
   // cliente busca páginas extras em background pra completar (até 5000 rows).
   const [rows, setRows] = useState<AnyRow[]>(initialRows);
+
+  /* PCs escondidos. Buscados uma vez e distribuídos: o chip do topo mostra o
+     total e cada projeto mostra os seus. Os PCs escondidos NÃO vêm em `rows`
+     (a lista já os filtra), por isso o projeto de cada um vem da própria API. */
+  const [pcsEscondidos, setPcsEscondidos] = useState<PcEscondido[]>([]);
+  const carregarEscondidos = useCallback(async () => {
+    try {
+      const r = await fetch("/api/pcs/excluir", { cache: "no-store" });
+      if (!r.ok) return;
+      const j = await r.json();
+      setPcsEscondidos((j.rows ?? []) as PcEscondido[]);
+    } catch { /* extra: nunca derruba a página */ }
+  }, []);
+  useEffect(() => { carregarEscondidos(); }, [carregarEscondidos]);
+
+  // projeto → os seus escondidos, para o chip de cada card não varrer a lista.
+  const escondidosPorProjeto = useMemo(() => {
+    const m = new Map<string, PcEscondido[]>();
+    for (const e of pcsEscondidos) {
+      const k = e.projeto_nome ?? "";
+      if (!k) continue;
+      const atual = m.get(k) ?? [];
+      atual.push(e);
+      m.set(k, atual);
+    }
+    return m;
+  }, [pcsEscondidos]);
   const [loadingMore, setLoadingMore] = useState(false);
 
   // Cronograma summary por projeto — só em /projetos. Fecha "empresa|codigo"
@@ -1795,6 +1822,8 @@ export default function BoldAvulsosView({
               onToggleAlarme={toggleAlarme}
               cronogramaMap={cronogramaMap}
               budgetMap={budgetMap}
+              pcsEscondidos={escondidosPorProjeto.get(b.pv_os_label) ?? []}
+              onEscondidosMudou={carregarEscondidos}
               atribuicaoMap={atribuicaoMap}
               onAtribuicaoClick={(row) => {
                 const empresa = String(row.empresa ?? "SF");
@@ -1864,7 +1893,9 @@ export default function BoldAvulsosView({
         <div className="self-center"><GlobalSearch /></div>
         <div className="self-center"><SyncNowButton /></div>
         {/* Só aparece se houver PC escondido — é a porta de volta da exclusão. */}
-        <div className="self-center"><PcsExcluidosButton /></div>
+        <div className="self-center">
+          <PcsExcluidosButton linhas={pcsEscondidos} onMudou={carregarEscondidos} />
+        </div>
         <div className="flex-1" />
         <span className="text-[11.5px] text-ww-textMuted font-mono uppercase tracking-wider font-semibold">
           {user?.role ?? "viewer"}
@@ -2244,6 +2275,7 @@ function Sparkline({ data }: { data: readonly number[] }) {
 function BucketCard({
   bucket, modulo, isAdmin, userCanApprove, userCanEdit, open, onToggle, onRowClick, onStatusClick, selected, toggleSel, visibleGroups, onEnsureOpen, optimisticStatus, canViewValues = true, canViewMargin = true, todayStartMs, alarmesActive, onToggleAlarme, cronogramaMap, budgetMap,
   aguardandoLiberacao = false, userCanReleasePv = false, onToggleLiberacao,
+  pcsEscondidos = [], onEscondidosMudou,
   atribuicaoMap, onAtribuicaoClick,
 }: {
   bucket: Bucket;
@@ -2266,6 +2298,9 @@ function BucketCard({
   alarmesActive: Set<AlarmKind>;
   onToggleAlarme: (k: AlarmKind) => void;
   cronogramaMap?: Map<string, CronogramaSummary>;
+  /** PCs escondidos DESTE projeto — o chip de restauro do card. */
+  pcsEscondidos?: PcEscondido[];
+  onEscondidosMudou?: () => void;
   budgetMap?: Map<string, BudgetSummary>;
   // "Aguardando Liberação" — só avulsos. Marcado por usuários com can_release_pv.
   aguardandoLiberacao?: boolean;
@@ -2900,6 +2935,20 @@ function BucketCard({
                   </button>
                 );
               })}
+            </div>
+          )}
+          {/* Quantos PCs deste projeto estão escondidos, e a porta de volta.
+              Fica aqui e não no rodapé porque tem de ser legível com o card
+              fechado — a pergunta é "quantos eu poderia restaurar", e isso não
+              se responde obrigando a abrir cada projeto. */}
+          {pcsEscondidos.length > 0 && (
+            <div className="mt-1.5" onClick={(e) => e.stopPropagation()}>
+              <PcsExcluidosButton
+                linhas={pcsEscondidos}
+                compacto
+                titulo={`PCs escondidos · ${bucket.pv_os_label}`}
+                onMudou={() => onEscondidosMudou?.()}
+              />
             </div>
           )}
         </div>

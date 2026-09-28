@@ -10,10 +10,19 @@
 // pedir a um admin era o que tornava isto impossível na prática.
 
 import { NextResponse } from "next/server";
+import { createClient } from "@supabase/supabase-js";
 import { supaServer } from "@/lib/supabase-server";
 import { supaAdmin } from "@/lib/supabase-admin";
 
 export const runtime = "nodejs";
+
+type Escondido = {
+  empresa: string;
+  pc_numero: string;
+  motivo: string | null;
+  excluded_at: string;
+  excluded_by: string | null;
+};
 
 type Body = {
   action: "exclude" | "restore";
@@ -94,10 +103,46 @@ export async function GET() {
   const { data: { user } } = await supa.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const { data, error } = await supaAdmin()
+  const admin = supaAdmin();
+  const { data, error } = await admin
     .schema("platform" as never).from("excluded_pc")
     .select("empresa, pc_numero, motivo, excluded_at, excluded_by")
     .order("excluded_at", { ascending: false });
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json({ rows: data ?? [] });
+
+  const linhas = (data ?? []) as Escondido[];
+  if (linhas.length === 0) return NextResponse.json({ rows: [] });
+
+  /* A tabela guarda só (empresa, número) — de propósito, para não desatualizar
+     quando o PC muda de projeto no Omie. O projeto e o valor vêm da MV na
+     hora, que é o que permite contar e restaurar projeto a projeto.
+     Se a MV falhar, devolve-se a lista sem projeto: pior é não poder restaurar. */
+  const numeros = Array.from(new Set(linhas.map((l) => String(l.pc_numero))));
+  const contexto = new Map<string, { projeto_nome: string | null; valor_total: number | null }>();
+  try {
+    const mv = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!,
+      { auth: { persistSession: false }, db: { schema: "sales" } },
+    );
+    const { data: ctx } = await mv.from("mv_pc_projetos")
+      .select("empresa, pc_numero, projeto_nome, valor_total")
+      .in("pc_numero", numeros);
+    for (const c of (ctx ?? []) as {
+      empresa: string; pc_numero: string; projeto_nome: string | null; valor_total: number | null;
+    }[]) {
+      const chave = `${c.empresa}|${String(c.pc_numero).trim()}`;
+      // Mesmo PC pode vir em mais de uma linha da MV; o projeto é o mesmo.
+      if (!contexto.has(chave)) {
+        contexto.set(chave, { projeto_nome: c.projeto_nome, valor_total: c.valor_total });
+      }
+    }
+  } catch { /* sem contexto: a lista global continua a funcionar */ }
+
+  return NextResponse.json({
+    rows: linhas.map((l) => {
+      const c = contexto.get(`${l.empresa}|${String(l.pc_numero).trim()}`);
+      return { ...l, projeto_nome: c?.projeto_nome ?? null, valor_total: c?.valor_total ?? null };
+    }),
+  });
 }
