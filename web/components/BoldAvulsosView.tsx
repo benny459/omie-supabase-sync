@@ -85,6 +85,13 @@ const IDENTIDADE_DO_BLOCO: Record<string, string[]> = {
    sozinha, diria que um PC está aprovado quando o aprovado foi outro.
    Todo o resto — RC, Materiais/NFe Entrada, NFe Saída, Serviços — é
    independente e compacta por conta própria, sem deixar linha em branco. */
+/* Blocos onde uma linha manual ainda sem número vale como SLOT — espaço vazio
+   à espera de ser preenchido, criado pelo "+ Nova linha". Sem isto o botão
+   criava uma linha que nunca aparecia, porque bloco sem conteúdo não ocupa
+   linha. Os slots vão para o FIM do bloco: dão onde escrever sem reabrir
+   buraco no meio da informação. */
+const BLOCO_ACEITA_SLOT = new Set(["pc"]);
+
 const BLOCO_ACOMPANHA: Record<string, string> = {
   aprovacao: "pc",
 };
@@ -2661,8 +2668,9 @@ function BucketCard({
       };
       const ocupaLinha = (row: AnyRow) => g.columns.some(c => temValor(row, c.key));
       const peso = (row: AnyRow) => pesoCols.reduce((n, k) => n + (temValor(row, k) ? 1 : 0), 0);
+      const slots: AnyRow[] = [];
+      const slotsVistos = new Set<number>();
       for (const r of items) {
-        if (!ocupaLinha(r)) continue;             // bloco sem nada não ocupa linha
         /* Duplicado é o mesmo CÓDIGO repetido, não a linha inteira igual — é
            assim que se lê a grade. Sem código de identidade o bloco não é uma
            entrada, é eco de outro: o nome do projeto repete-se na linha de todo
@@ -2670,7 +2678,17 @@ function BucketCard({
         const chave = identidade
           ? (identidade.map(k => String(r[k] ?? "").trim()).find(Boolean) ?? "")
           : g.columns.map(c => String(r[c.key] ?? "").trim()).join("~");
-        if (!chave) continue;
+        if (!chave) {
+          /* Linha manual ainda sem número é um slot do "+ Nova linha": espaço
+             para escrever o PC. Guarda-se para o fim do bloco. */
+          const n = Number(r.ncod_ped ?? 0);
+          if (BLOCO_ACEITA_SLOT.has(g.key) && n < 0 && !slotsVistos.has(n)) {
+            slotsVistos.add(n);
+            slots.push(r);
+          }
+          continue;
+        }
+        if (!ocupaLinha(r)) continue;             // bloco sem nada não ocupa linha
 
         const jaEm = ondeEsta.get(chave);
         if (jaEm == null) { ondeEsta.set(chave, lista.length); lista.push(r); continue; }
@@ -2698,6 +2716,8 @@ function BucketCard({
           return sa < sb ? -1 : sa > sb ? 1 : 0;
         });
       }
+      // Os slots entram depois de ordenar: ficam sempre no fim, por preencher.
+      lista.push(...slots);
       porGrupo.set(g.key, lista);
     }
     /* Blocos acompanhantes copiam a lista do dono: mesma linha de origem, mesma
