@@ -102,19 +102,29 @@ def importar_posicao(sigla: str):
 
 
 def importar_movimentos(sigla: str, dt_ini: date, dt_fim: date):
-    print(f"\n▶️  {sigla} | Movimentos {br(dt_ini)} → {br(dt_fim)}")
-    items = fetch_omie_paginated(
-        url=OMIE_URL, call="ListarMovimentoEstoque", sigla=sigla,
-        list_field="movProdutoListar", page_size=500,
-        page_key="nPagina", size_key="nRegPorPagina",
-        extra_param={"dDtInicial": br(dt_ini), "dDtFinal": br(dt_fim), "lista_local_estoque": "TODOS"},
-        label="MovEstoque",
-    )
-    rows = [r for r in (map_movimento(m, sigla) for m in items) if r["id_mov"]]
-    if rows:
-        supa_upsert(SCHEMA, "estoque_movimentos", rows, "empresa,id_mov")
-    print(f"   ✅ {sigla}: {len(rows)} movimentos")
-    return len(rows)
+    # O ListarMovimentoEstoque TRUNCA janelas longas em silêncio (pedimos
+    # 01/01/2024→hoje e voltaram só jan–mar). Varre em fatias de 30 dias e
+    # upserta cada fatia — id_mov é idempotente.
+    print(f"\n▶️  {sigla} | Movimentos {br(dt_ini)} → {br(dt_fim)} (fatias de 30d)")
+    total = 0
+    ini = dt_ini
+    while ini <= dt_fim:
+        fim = min(ini + timedelta(days=29), dt_fim)
+        items = fetch_omie_paginated(
+            url=OMIE_URL, call="ListarMovimentoEstoque", sigla=sigla,
+            list_field="movProdutoListar", page_size=500,
+            page_key="nPagina", size_key="nRegPorPagina",
+            extra_param={"dDtInicial": br(ini), "dDtFinal": br(fim), "lista_local_estoque": "TODOS"},
+            label=f"MovEstoque {br(ini)}–{br(fim)}",
+        )
+        rows = [r for r in (map_movimento(m, sigla) for m in items) if r["id_mov"]]
+        if rows:
+            supa_upsert(SCHEMA, "estoque_movimentos", rows, "empresa,id_mov")
+        total += len(rows)
+        ini = fim + timedelta(days=1)
+        time.sleep(1)
+    print(f"   ✅ {sigla}: {total} movimentos")
+    return total
 
 
 def main():
