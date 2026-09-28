@@ -1,6 +1,11 @@
 -- 14: schema estoque — posição e movimentação de estoque do Omie
 -- (endpoint estoque/consulta: ListarPosEstoque + ListarMovimentoEstoque).
 -- Datas já convertidas pra DATE no importer (scripts/import_estoque.py).
+--
+-- ⚠️ ESTADO FINAL: o PostgREST do projeto só expõe public/sales/orders/finance/
+-- approval/platform/bi (config de Dashboard, não de migração). A migração
+-- "estoque_para_schema_orders" moveu as tabelas para orders.estoque_posicao e
+-- orders.estoque_movimentos — este arquivo fica como referência do DDL.
 
 CREATE SCHEMA IF NOT EXISTS estoque;
 

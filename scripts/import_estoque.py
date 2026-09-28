@@ -21,7 +21,7 @@ from _common import (
 )
 
 OMIE_URL = "https://app.omie.com.br/api/v1/estoque/consulta/"
-SCHEMA = "estoque"
+SCHEMA = "orders"  # PostgREST não expõe schema próprio; tabelas orders.estoque_*
 
 
 def br(d: date) -> str:
@@ -96,7 +96,7 @@ def importar_posicao(sigla: str):
     )
     rows = [r for r in (map_posicao(p, sigla, hoje) for p in items) if r["n_cod_prod"]]
     if rows:
-        supa_upsert(SCHEMA, "posicao", rows, "empresa,n_cod_prod,codigo_local_estoque")
+        supa_upsert(SCHEMA, "estoque_posicao", rows, "empresa,n_cod_prod,codigo_local_estoque")
     print(f"   ✅ {sigla}: {len(rows)} produtos na posição")
     return len(rows)
 
@@ -112,7 +112,7 @@ def importar_movimentos(sigla: str, dt_ini: date, dt_fim: date):
     )
     rows = [r for r in (map_movimento(m, sigla) for m in items) if r["id_mov"]]
     if rows:
-        supa_upsert(SCHEMA, "movimentos", rows, "empresa,id_mov")
+        supa_upsert(SCHEMA, "estoque_movimentos", rows, "empresa,id_mov")
     print(f"   ✅ {sigla}: {len(rows)} movimentos")
     return len(rows)
 
