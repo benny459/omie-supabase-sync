@@ -1,0 +1,20 @@
+:root {
+  --shadow-card: 0 12px 32px rgba(30,50,90,.10), inset 0 1px 0 rgba(255,255,255,.06);
+  --shadow-section: 0 16px 40px rgba(30,50,90,.12), inset 0 1px 0 rgba(255,255,255,.06);
+  --shadow-float: 0 6px 16px rgba(30,50,90,.08);
+  --ww-glow-accent: 0 0 16px rgba(47,107,255,.30);
+  --ww-glow-ok: 0 0 8px rgba(47,107,255,.55);
+  --ww-glow-chip: 0 0 12px rgba(47,107,255,.20);
+  --ww-active-nav: linear-gradient(180deg, #ffffff, #eef3ff);
+  --ww-active-ring: inset 0 1px 0 rgba(255,255,255,.1), 0 0 0 1px rgba(47,107,255,.35);
+  --shadow-card-allka: 0 1px 2px rgba(16,24,40,.06), 0 1px 3px rgba(16,24,40,.04);
+  --shadow-elevated: 0 4px 8px rgba(16,24,40,.06), 0 14px 40px rgba(16,24,40,.10);
+  --ease-standard: cubic-bezier(.2,.7,.2,1);
+  --dur-fast: .15s;
+}
+.dark {
+  --shadow-card: 0 12px 32px rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.06);
+  --shadow-section: 0 16px 40px rgba(0,0,0,.40), inset 0 1px 0 rgba(255,255,255,.06);
+  --shadow-float: 0 6px 16px rgba(0,0,0,.25);
+  --ww-active-nav: linear-gradient(180deg, #1B2F7A, #172a66);
+}

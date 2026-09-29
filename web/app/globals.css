@@ -113,6 +113,44 @@
   --ww-brand-1: #1B2F7A; --ww-brand-2: #2F6BFF; --ww-brand-3: #3BB8FF; --ww-brand-dash: #C9CED8;
 }
 
+/* ── Tipografia, espaco e efeitos do pacote (typography/spacing/effects.css) ──
+   Vao como estao: os componentes do design system leem estes nomes, e mante-los
+   iguais e o que permite trazer o componente sem o reescrever. */
+:root {
+  --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "Segoe UI", system-ui, sans-serif;
+  --font-display: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", system-ui, sans-serif;
+  --font-numeric: tabular-nums;
+  --text-kpi-hero: 28px; --text-kpi: 24px; --text-h1: 22px; --text-h2: 17px; --text-h3: 14px;
+  --text-body: 13px; --text-body-sm: 12.5px; --text-meta: 12px; --text-chip: 11.5px; --text-micro: 10.5px;
+  --weight-regular: 500; --weight-semibold: 600; --weight-bold: 700; --weight-display: 700;
+  --tracking-tight: -0.02em; --tracking-label: 0.06em;
+  --space-1: 2px; --space-2: 4px; --space-3: 6px; --space-4: 8px; --space-5: 10px;
+  --space-6: 12px; --space-7: 14px; --space-8: 16px; --space-9: 18px; --space-10: 20px;
+  --space-page-x: 28px; --space-page-y: 22px;
+  --radius-bar: 3px; --radius-seg: 4px; --radius-button: 10px; --radius-row: 12px;
+  --radius-card: 16px; --radius-panel: 18px; --radius-section: 20px; --radius-pill: 999px;
+  --tree-indent: 26px;
+  --sidebar-width: 244px;
+  --shadow-card: 0 12px 32px rgba(30,50,90,.10), inset 0 1px 0 rgba(255,255,255,.06);
+  --shadow-section: 0 16px 40px rgba(30,50,90,.12), inset 0 1px 0 rgba(255,255,255,.06);
+  --shadow-float: 0 6px 16px rgba(30,50,90,.08);
+  --ww-glow-accent: 0 0 16px rgba(47,107,255,.30);
+  --ww-glow-ok: 0 0 8px rgba(47,107,255,.55);
+  --ww-glow-chip: 0 0 12px rgba(47,107,255,.20);
+  --ww-active-nav: linear-gradient(180deg, #ffffff, #eef3ff);
+  --ww-active-ring: inset 0 1px 0 rgba(255,255,255,.1), 0 0 0 1px rgba(47,107,255,.35);
+  --shadow-card-allka: 0 1px 2px rgba(16,24,40,.06), 0 1px 3px rgba(16,24,40,.04);
+  --shadow-elevated: 0 4px 8px rgba(16,24,40,.06), 0 14px 40px rgba(16,24,40,.10);
+  --ease-standard: cubic-bezier(.2,.7,.2,1);
+  --dur-fast: .15s;
+}
+.dark {
+  --shadow-card: 0 12px 32px rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.06);
+  --shadow-section: 0 16px 40px rgba(0,0,0,.40), inset 0 1px 0 rgba(255,255,255,.06);
+  --shadow-float: 0 6px 16px rgba(0,0,0,.25);
+  --ww-active-nav: linear-gradient(180deg, #1B2F7A, #172a66);
+}
+
 /* No claro o card não precisa de brilho — precisa de elevação. Mesma classe,
    tratamento oposto: sombra suave em vez de fio de luz. */
 .viz-panel {
@@ -256,7 +294,8 @@ html, body {
   background: var(--ww-bg-grad, rgb(var(--color-ww-bg)));
   background-attachment: fixed;
   color: rgb(var(--color-ww-text));
-  font-family: -apple-system, BlinkMacSystemFont, system-ui, "SF Pro Text", "SF Pro Display", "Segoe UI", Roboto, sans-serif;
+  font-family: var(--font-sans);
+  font-variant-numeric: tabular-nums;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   font-feature-settings: "kern", "liga", "cv11", "ss03";

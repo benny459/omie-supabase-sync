@@ -1,0 +1,5 @@
+html, body { margin: 0; background: var(--ww-bg); color: var(--ww-text); font-family: var(--font-sans); font-variant-numeric: tabular-nums; -webkit-font-smoothing: antialiased; }
+*, *::before, *::after { box-sizing: border-box; }
+a { color: var(--ww-accent-text); text-decoration: none; }
+a:hover { color: var(--ww-accent-strong); }
+button { font: inherit; }

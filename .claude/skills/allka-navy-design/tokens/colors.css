@@ -1,0 +1,53 @@
+/* Allka — cores oficiais (landing allka.ai: --ink, --ac, --t1/t2/t3, --or, cores por área) aplicadas ao Painel. :root = claro, .dark = escuro. */
+:root {
+  --ww-bg: #F5F7FB;
+  --ww-bg-grad: radial-gradient(900px 520px at 10% -12%, rgba(47,107,255,.10) 0%, transparent 60%), radial-gradient(800px 500px at 92% -10%, rgba(59,184,255,.10) 0%, transparent 60%), linear-gradient(180deg, #F5F7FB, #FFFFFF 60%);
+  --ww-panel: #FFFFFF;
+  --ww-panel-grad: linear-gradient(180deg, #FFFFFF, #fafbfd);
+  --ww-panel-sunken: #F5F7FB;
+  --ww-row-l0: #f1f4fa; --ww-row-l1: #FFFFFF; --ww-row-l2: #fafbfd; --ww-row-hover: #eaeff8;
+  --ww-sidebar: #FFFFFF;
+  --ww-border: #E6E8EE; --ww-border-subtle: rgba(11,18,32,.06); --ww-border-strong: rgba(11,18,32,.16); --ww-track: rgba(11,18,32,.08);
+  --ww-text: #0B1220; --ww-text-2: #4A5361; --ww-text-muted: #5d6778; --ww-text-faint: #8A93A3;
+  --ww-accent: #2F6BFF; --ww-accent-strong: #1B2F7A; --ww-accent-sky: #3BB8FF; --ww-accent-text: #2F6BFF;
+  --ww-accent-soft: rgba(47,107,255,.10);
+  --ww-accent-grad: linear-gradient(180deg, #2F6BFF, #1B2F7A);
+  --ww-brand-grad: linear-gradient(90deg, #1B2F7A, #2F6BFF 55%, #3BB8FF);
+  --ww-on-accent: #FFFFFF;
+  --ww-ok: #3BB8FF;     --ww-ok-text: #2F6BFF;     --ww-ok-soft: rgba(59,184,255,.14);
+  --ww-warn: #F5C542;   --ww-warn-text: #9a6f00;   --ww-warn-soft: rgba(245,197,66,.18);
+  --ww-crit: #FF6B4A;   --ww-crit-text: #d9482a;   --ww-crit-soft: rgba(255,107,74,.14);
+  --ww-info: #5C8BFF;   --ww-info-text: #2F6BFF;   --ww-info-soft: rgba(92,139,255,.14);
+  --ww-violet: #9A82FF; --ww-violet-text: #6a4fe0; --ww-violet-soft: rgba(154,130,255,.16);
+  --ww-off: #E6E8EE;    --ww-off-text: #8A93A3;    --ww-off-soft: rgba(11,18,32,.05);
+  --ww-bar-muted: #d6dbe5;
+  --ww-hero-grad: linear-gradient(160deg, #1B2F7A, #12275F);
+  --ww-hero-text: #FFFFFF; --ww-hero-text-2: #C9D6F2;
+  /* cores por área (landing: --c-fin, --c-ops, --c-crm, --c-cad, --c-rh, --c-ia) */
+  --ww-area-fin: #3BB8FF; --ww-area-ops: #19C6A6; --ww-area-crm: #9A82FF; --ww-area-cad: #FF8F73; --ww-area-rh: #F5C542; --ww-area-ia: #6CCBFF;
+  --ww-cat-contratuais: #3BB8FF; --ww-cat-projetos: #5C8BFF; --ww-cat-revenda: #9A82FF; --ww-cat-avulsos: #F5C542; --ww-cat-botsw: #19C6A6; --ww-cat-outras: #4a5878;
+  --ww-orange: #FF6B4A; --ww-navy: #12275F;
+  /* segmentos do logo (claro: t1/t2/t3 da landing) */
+  --ww-brand-1: #1B2F7A; --ww-brand-2: #2F6BFF; --ww-brand-3: #3BB8FF; --ww-brand-dash: #C9CED8;
+}
+.dark {
+  --ww-bg: #0B1220;
+  --ww-bg-grad: radial-gradient(900px 520px at 10% -12%, rgba(47,107,255,.24) 0%, transparent 60%), radial-gradient(800px 500px at 92% -10%, rgba(59,184,255,.14) 0%, transparent 60%), linear-gradient(180deg, #0F1B3D 0%, #0B1220 45%, #0A1020);
+  --ww-panel: #111A2E;
+  --ww-panel-grad: linear-gradient(180deg, #131d33, #111A2E);
+  --ww-panel-sunken: #0e1627;
+  --ww-row-l0: #15203a; --ww-row-l1: #111A2E; --ww-row-l2: #0f182b; --ww-row-hover: #1a2744;
+  --ww-sidebar: #111A2E;
+  --ww-border: #1F2A40; --ww-border-subtle: rgba(92,139,255,.07); --ww-border-strong: rgba(92,139,255,.22); --ww-track: rgba(92,139,255,.10);
+  --ww-text: #F2F4F8; --ww-text-2: #C9D6F2; --ww-text-muted: #9AA6BD; --ww-text-faint: #7F8DB3;
+  --ww-accent: #5C8BFF; --ww-accent-text: #6CCBFF; --ww-accent-soft: rgba(92,139,255,.14);
+  --ww-ok-text: #6CCBFF; --ww-warn-text: #f8d56f; --ww-crit-text: #ff9d85; --ww-info-text: #9db6ff; --ww-violet-text: #bfaeff;
+  --ww-off: #3F4655; --ww-off-text: #7F8DB3; --ww-off-soft: rgba(255,255,255,.05);
+  --ww-bar-muted: #2c3b5c;
+  /* logo Allka: segmentos #4C67C9 → #5C8BFF → #6CCBFF, tracinhos #3F4655 */
+  --ww-brand-1: #4C67C9; --ww-brand-2: #5C8BFF; --ww-brand-3: #6CCBFF; --ww-brand-dash: #3F4655;
+  --ww-accent-sky: #6CCBFF;
+  --ww-accent-grad: linear-gradient(180deg, #5C8BFF, #4C67C9);
+  --ww-brand-grad: linear-gradient(90deg, #4C67C9, #5C8BFF 55%, #6CCBFF);
+  --ww-ok: #6CCBFF; --ww-ok-soft: rgba(108,203,255,.14);
+}

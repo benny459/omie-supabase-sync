@@ -1,0 +1,11 @@
+/* Padrão escolhido: Apple San Francisco (SF Pro) via system stack. Sem webfont.
+   Em Windows/Android cai para Segoe UI / Roboto. Números sempre tabular-nums. */
+:root {
+  --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "Segoe UI", system-ui, sans-serif;
+  --font-display: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", system-ui, sans-serif;
+  --font-numeric: tabular-nums;
+  --text-kpi-hero: 28px; --text-kpi: 24px; --text-h1: 22px; --text-h2: 17px; --text-h3: 14px;
+  --text-body: 13px; --text-body-sm: 12.5px; --text-meta: 12px; --text-chip: 11.5px; --text-micro: 10.5px;
+  --weight-regular: 500; --weight-semibold: 600; --weight-bold: 700; --weight-display: 700;
+  --tracking-tight: -0.02em; --tracking-label: 0.06em;
+}
