@@ -1,0 +1,32 @@
+-- 16: Triangulação v2 — RCs SEM citação de PV/OS nas observações
+--
+-- Calibração no gabarito (854 RCs citadas usadas como verdade):
+--   · gap emissão RC−PV: mediana 1 dia, p90 = 6 dias (confirma o processo:
+--     RC sai no mesmo dia ou logo depois do PV)
+--   · código de produto NUNCA cruza (cadastro de compra ≠ cadastro de venda)
+--   · projeto do PC (ncod_proj) = projeto do PV em 94% dos casos → sinal âncora
+--   · regra estrita (mesmo projeto + janela 0–15d + similaridade trigram média
+--     dos itens ≥0,70 + margem ≥0,30 sobre o 2º candidato): 95,4% de precisão
+--   · OSs por projeto+data: 31% de precisão → NUNCA auto; só sugestão
+--
+-- Objetos (definições autoritativas nas migrações triangulacao_rc_pv e
+-- capturar_rcs_v2_com_vinculos):
+--   · approval.rc_vinculos — vínculo por RC (metodo: triangulacao | sugestao |
+--     manual; manual nunca é sobrescrito)
+--   · approval.triangular_rcs_omie() — regra estrita → 'triangulacao';
+--     candidatos sim≥0,4 sem força → 'sugestao'
+--   · approval.capturar_rcs_omie() v2 — refs = citações nas obs ∪ vínculos
+--     (triangulacao/manual)
+--   · approval.rc_pipeline() — triangular → capturar; pg_cron
+--     'capturar-rcs-omie' de hora em hora
+--
+-- Primeira rodada (29/09/26): 15 triangulados + 18 sugestões — todos os
+-- triangulados eram de PVs já faturados (vínculo registrado, bucket intocado).
+-- O grosso das RCs sem citação é despesa geral (Sedex, coleta, renovação de
+-- documento) que não pertence a PV nenhum — correto ficarem de fora.
+--
+-- CRM (waterworks-crm epoazrnafevkirxhkmog): propostas.omie_numero_pedido já
+-- traz proposta↔PV/OS reconciliado (149 casos), mas o CUSTO da CP não está no
+-- banco — vive no cpmc.xlsx do Storage. Se um dia precisar de mais recall,
+-- o caminho é parsear o cpmc e casar custo exato item a item.
+SELECT 'ver migrações triangulacao_rc_pv + capturar_rcs_v2_com_vinculos';
