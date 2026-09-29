@@ -21,9 +21,11 @@ export async function GET(req: Request) {
   }
 
   const url = new URL(req.url);
-  const view = url.searchParams.get("view") === "compras" ? "compras" : "vendas";
-  const schema = view === "compras" ? "orders" : "sales";
-  const tabela = view === "compras" ? "v_erp_compras" : "v_erp_vendas";
+  const pedido = url.searchParams.get("view") ?? "vendas";
+  const view = ["compras", "nfentrada", "vendas"].includes(pedido) ? pedido : "vendas";
+  const schema = view === "vendas" ? "sales" : "orders";
+  const tabela = view === "compras" ? "v_erp_compras"
+    : view === "nfentrada" ? "v_erp_nf_entrada" : "v_erp_vendas";
 
   const admin = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -33,10 +35,11 @@ export async function GET(req: Request) {
 
   const rows: Record<string, unknown>[] = [];
   for (let offset = 0; offset < MAX_ROWS; offset += PAGE) {
-    let q = admin.from(tabela).select("*");
-    q = view === "compras"
-      ? q.order("emissao", { ascending: false, nullsFirst: false }).order("ncod_ped", { ascending: true })
-      : q.order("emissao", { ascending: false, nullsFirst: false }).order("label", { ascending: true });
+    let q = admin.from(tabela).select("*")
+      .order("emissao", { ascending: false, nullsFirst: false });
+    q = view === "compras" ? q.order("ncod_ped", { ascending: true })
+      : view === "nfentrada" ? q.order("id_receb", { ascending: true })
+      : q.order("label", { ascending: true });
     const { data, error } = await q.range(offset, offset + PAGE - 1);
     if (error) return NextResponse.json({ error: `${tabela}: ${error.message}` }, { status: 500 });
     const batch = (data ?? []) as Record<string, unknown>[];

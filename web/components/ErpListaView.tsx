@@ -5,7 +5,7 @@
 // vai redesenhar em cima); um conjunto enxuto vem ligado por default e a
 // escolha fica no localStorage, por módulo. Clique na linha abre os itens.
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 type Row = Record<string, unknown>;
 type Item = {
@@ -58,6 +58,28 @@ const COLS_VENDAS: Col[] = [
   { key: "codigo_vendedor", label: "Vendedor (cód.)" },
 ];
 
+const COLS_NF_ENTRADA: Col[] = [
+  { key: "numero", label: "NF", on: true, render: r => <span className="font-semibold">{texto(r.numero)}</span> },
+  { key: "serie", label: "Série" },
+  { key: "empresa", label: "Emp." },
+  { key: "status", label: "Status", on: true },
+  { key: "fornecedor", label: "Fornecedor", on: true, largura: "max-w-[240px]" },
+  { key: "cnpj_cpf", label: "CNPJ" },
+  { key: "emissao", label: "Emissão", on: true, render: r => dataBR(r.emissao) },
+  { key: "dt_recebimento", label: "Recebida em", on: true, render: r => dataBR(r.dt_recebimento) },
+  { key: "dt_registro", label: "Registrada em", render: r => dataBR(r.dt_registro) },
+  { key: "valor_total", label: "Valor", on: true, align: "right", render: r => <span className="font-semibold">{money(r.valor_total)}</span> },
+  { key: "total_produtos", label: "Produtos", align: "right", render: r => Number(r.total_produtos ?? 0) ? money(r.total_produtos) : "—" },
+  { key: "vlr_frete", label: "Frete", align: "right", render: r => Number(r.vlr_frete ?? 0) ? money(r.vlr_frete) : "—" },
+  { key: "vlr_icms", label: "ICMS", align: "right", render: r => Number(r.vlr_icms ?? 0) ? money(r.vlr_icms) : "—" },
+  { key: "vlr_ipi", label: "IPI", align: "right", render: r => Number(r.vlr_ipi ?? 0) ? money(r.vlr_ipi) : "—" },
+  { key: "pc_numero", label: "PC", on: true },
+  { key: "projeto", label: "Projeto", on: true, largura: "max-w-[170px]" },
+  { key: "categoria", label: "Categoria", largura: "max-w-[170px]" },
+  { key: "natureza_operacao", label: "Natureza", largura: "max-w-[200px]" },
+  { key: "chave_nfe", label: "Chave", largura: "max-w-[160px]" },
+];
+
 const COLS_COMPRAS: Col[] = [
   { key: "numero", label: "Nº", on: true, render: r => <span className="font-semibold">{texto(r.numero)}</span> },
   { key: "empresa", label: "Emp." },
@@ -82,33 +104,37 @@ const COLS_COMPRAS: Col[] = [
 const PAGE_SIZE = 100;
 
 export default function ErpListaView({ modulo }: { modulo: "vendas" | "compras" }) {
-  const cols = modulo === "vendas" ? COLS_VENDAS : COLS_COMPRAS;
-  const lsKey = `erp-cols-${modulo}`;
+  const [aba, setAbaRaw] = useState<string>(modulo === "vendas" ? "abertos" : "rcs");
+  const emNf = modulo === "compras" && aba === "nfs";
+  const cols = emNf ? COLS_NF_ENTRADA : modulo === "vendas" ? COLS_VENDAS : COLS_COMPRAS;
+  const lsKey = `erp-cols-${modulo}${emNf ? "-nf" : ""}`;
 
   const [rows, setRows] = useState<Row[]>([]);
+  const [rowsNf, setRowsNf] = useState<Row[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
   const [q, setQ] = useState("");
-  const [aba, setAba] = useState<string>(modulo === "vendas" ? "abertos" : "rcs");
+  const setAba = (k: string) => { setAbaRaw(k); setEtapaSel(""); };
   const [tipoSel, setTipoSel] = useState("");
   const [empresaSel, setEmpresaSel] = useState("");
   const [page, setPage] = useState(0);
   const [colsOn, setColsOn] = useState<string[]>(() => cols.filter(c => c.on).map(c => c.key));
+  const [colsOnNf, setColsOnNf] = useState<string[]>(() => COLS_NF_ENTRADA.filter(c => c.on).map(c => c.key));
   const [colsAberto, setColsAberto] = useState(false);
   const [drawer, setDrawer] = useState<Row | null>(null);
   const [itens, setItens] = useState<Item[] | null>(null);
-  const lsLido = useRef(false);
-
   useEffect(() => {
-    if (lsLido.current) return;
-    lsLido.current = true;
     try {
       const v = JSON.parse(localStorage.getItem(lsKey) ?? "null");
-      if (Array.isArray(v) && v.length) setColsOn(v.filter((k: string) => cols.some(c => c.key === k)));
+      if (Array.isArray(v) && v.length) {
+        const filtrado = v.filter((k: string) => cols.some(c => c.key === k));
+        (emNf ? setColsOnNf : setColsOn)(filtrado);
+      }
     } catch { /* default */ }
-  }, [lsKey, cols]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lsKey]);
   const salvarCols = (next: string[]) => {
-    setColsOn(next);
+    setColsAtuais(next);
     try { localStorage.setItem(lsKey, JSON.stringify(next)); } catch { /* sem storage */ }
   };
 
@@ -129,6 +155,18 @@ export default function ErpListaView({ modulo }: { modulo: "vendas" | "compras" 
     return () => ctrl.abort();
   }, [modulo]);
 
+  // NFs de entrada: busca uma vez, quando a aba abre pela primeira vez.
+  useEffect(() => {
+    if (!emNf || rowsNf !== null) return;
+    (async () => {
+      try {
+        const r = await fetch(`/api/erp/lista?view=nfentrada`);
+        const j = await r.json();
+        setRowsNf(r.ok ? (j.rows as Row[]) : []);
+      } catch { setRowsNf([]); }
+    })();
+  }, [emNf, rowsNf]);
+
   useEffect(() => {
     if (!drawer) { setItens(null); return; }
     (async () => {
@@ -143,35 +181,53 @@ export default function ErpListaView({ modulo }: { modulo: "vendas" | "compras" 
     })();
   }, [drawer, modulo]);
 
-  const empresas = useMemo(() => [...new Set(rows.map(r => String(r.empresa)))].sort(), [rows]);
+  const base = emNf ? (rowsNf ?? []) : rows;
+  const empresas = useMemo(() => [...new Set(base.map(r => String(r.empresa)))].sort(), [base]);
+  const [etapaSel, setEtapaSel] = useState("");
   const etapas = useMemo(() => {
     const m = new Map<string, string>();
-    rows.forEach(r => m.set(String(r.etapa ?? ""), String(r.etapa_desc ?? r.etapa ?? "")));
+    base.forEach(r => {
+      if (emNf) m.set(String(r.status ?? ""), String(r.status ?? ""));
+      else m.set(String(r.etapa ?? ""), String(r.etapa_desc ?? r.etapa ?? ""));
+    });
     return [...m.entries()].sort();
-  }, [rows]);
-  const [etapaSel, setEtapaSel] = useState("");
+  }, [base, emNf]);
 
   const filtrados = useMemo(() => {
-    let out = rows;
-    if (modulo === "vendas") {
+    let out = base;
+    if (emNf) {
+      if (etapaSel) out = out.filter(r => String(r.status ?? "") === etapaSel);
+    } else if (modulo === "vendas") {
       if (aba === "abertos") out = out.filter(r => !r.faturado && !r.cancelado);
       if (aba === "faturados") out = out.filter(r => !!r.faturado);
       if (tipoSel) out = out.filter(r => r.tipo === tipoSel);
+      if (etapaSel) out = out.filter(r => String(r.etapa ?? "") === etapaSel);
     } else {
       if (aba === "rcs") out = out.filter(r => !!r.eh_requisicao);
       if (aba === "pedidos") out = out.filter(r => !r.eh_requisicao);
+      if (etapaSel) out = out.filter(r => String(r.etapa ?? "") === etapaSel);
     }
     if (empresaSel) out = out.filter(r => r.empresa === empresaSel);
-    if (etapaSel) out = out.filter(r => String(r.etapa ?? "") === etapaSel);
     if (q.trim()) {
       const t = q.trim().toLowerCase();
       out = out.filter(r => Object.values(r).some(v => v != null && String(v).toLowerCase().includes(t)));
     }
     return out;
-  }, [rows, modulo, aba, tipoSel, empresaSel, etapaSel, q]);
+  }, [base, emNf, modulo, aba, tipoSel, empresaSel, etapaSel, q]);
 
   const resumo = useMemo(() => {
     const mes = hojeISO().slice(0, 7);
+    if (emNf) {
+      const nfs = rowsNf ?? [];
+      const receb = nfs.filter(r => !!r.recebida && !r.cancelada);
+      const recMes = receb.filter(r => String(r.dt_recebimento ?? "").startsWith(mes));
+      const pend = nfs.filter(r => !r.recebida && !r.cancelada);
+      return [
+        { label: "NFs recebidas", valor: receb.reduce((s, r) => s + Number(r.valor_total ?? 0), 0), qtd: receb.length, tone: "text-emerald-600" },
+        { label: "Recebidas no mês", valor: recMes.reduce((s, r) => s + Number(r.valor_total ?? 0), 0), qtd: recMes.length, tone: "text-sky-600" },
+        { label: "Pendentes", valor: pend.reduce((s, r) => s + Number(r.valor_total ?? 0), 0), qtd: pend.length, tone: "text-amber-600" },
+      ];
+    }
     if (modulo === "vendas") {
       const abertos = rows.filter(r => !r.faturado && !r.cancelado);
       const fatMes = rows.filter(r => String(r.dt_fat ?? "").startsWith(mes));
@@ -189,14 +245,16 @@ export default function ErpListaView({ modulo }: { modulo: "vendas" | "compras" 
       { label: "A receber", valor: aReceber.reduce((s, r) => s + Number(r.valor_total ?? 0), 0), qtd: aReceber.length, tone: "text-sky-600" },
       { label: "Recebido no mês", valor: recMes.reduce((s, r) => s + Number(r.valor_total ?? 0), 0), qtd: recMes.length, tone: "text-emerald-600" },
     ];
-  }, [rows, modulo]);
+  }, [rows, rowsNf, emNf, modulo]);
 
-  const ativas = cols.filter(c => colsOn.includes(c.key));
+  const colsAtuais = emNf ? colsOnNf : colsOn;
+  const setColsAtuais = emNf ? setColsOnNf : setColsOn;
+  const ativas = cols.filter(c => colsAtuais.includes(c.key));
   const pages = Math.max(1, Math.ceil(filtrados.length / PAGE_SIZE));
   const totalFiltrado = filtrados.reduce((s, r) => s + Number(r.valor_total ?? 0), 0);
   const abas = modulo === "vendas"
     ? [["abertos", "Em aberto"], ["faturados", "Faturados"], ["todos", "Todos"]]
-    : [["rcs", "RCs / em compra"], ["pedidos", "Pedidos"], ["todos", "Todos"]];
+    : [["rcs", "RCs / em compra"], ["pedidos", "Pedidos"], ["nfs", "NF de entrada"], ["todos", "Todos"]];
 
   return (
     <div className="space-y-3">
@@ -256,8 +314,8 @@ export default function ErpListaView({ modulo }: { modulo: "vendas" | "compras" 
             <div className="absolute right-0 z-30 mt-1 w-60 max-h-72 overflow-y-auto rounded-lg border border-ww-border bg-ww-panel shadow-xl p-2">
               {cols.map(c => (
                 <label key={c.key} className="flex items-center gap-2 px-1.5 py-1 text-[12px] text-ww-text hover:bg-ww-rowHover rounded cursor-pointer">
-                  <input type="checkbox" checked={colsOn.includes(c.key)}
-                    onChange={() => salvarCols(colsOn.includes(c.key) ? colsOn.filter(k => k !== c.key) : [...colsOn, c.key])} />
+                  <input type="checkbox" checked={colsAtuais.includes(c.key)}
+                    onChange={() => salvarCols(colsAtuais.includes(c.key) ? colsAtuais.filter(k => k !== c.key) : [...colsAtuais, c.key])} />
                   {c.label}
                 </label>
               ))}
@@ -280,11 +338,11 @@ export default function ErpListaView({ modulo }: { modulo: "vendas" | "compras" 
               </tr>
             </thead>
             <tbody>
-              {loading && <tr><td colSpan={ativas.length} className="px-3 py-8 text-center text-ww-textMuted">Carregando…</td></tr>}
+              {(loading || (emNf && rowsNf === null)) && <tr><td colSpan={ativas.length} className="px-3 py-8 text-center text-ww-textMuted">Carregando…</td></tr>}
               {!loading && filtrados.length === 0 && <tr><td colSpan={ativas.length} className="px-3 py-8 text-center text-ww-textFaint">Nada com esses filtros.</td></tr>}
               {!loading && filtrados.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE).map((r, i) => (
-                <tr key={`${r.empresa}-${r.label ?? r.ncod_ped}-${i}`}
-                    onClick={() => setDrawer(r)}
+                <tr key={`${r.empresa}-${r.label ?? r.ncod_ped ?? r.id_receb}-${i}`}
+                    onClick={() => { if (!emNf) setDrawer(r); }}
                     className={`border-b border-ww-border/60 hover:bg-ww-rowHover/60 cursor-pointer transition-colors ${r.cancelado ? "opacity-40 line-through" : ""}`}>
                   {ativas.map(c => (
                     <td key={c.key}
