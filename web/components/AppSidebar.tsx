@@ -103,6 +103,28 @@ const MODULES: NavItem[] = [
     ),
   },
   {
+    href: "/erp/vendas",
+    area: "erp",
+    label: "Vendas · PV/OS",
+    tone: "text-teal-600",
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className="w-5 h-5" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M3 3h2l2 12h12l2-8H7"/><circle cx="9" cy="19" r="1.5"/><circle cx="17" cy="19" r="1.5"/>
+      </svg>
+    ),
+  },
+  {
+    href: "/erp/compras",
+    area: "erp",
+    label: "Compras · PC/RC",
+    tone: "text-amber-600",
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className="w-5 h-5" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M20 7l-8-4-8 4v10l8 4 8-4V7z"/><path d="M4 7l8 4 8-4M12 11v10"/>
+      </svg>
+    ),
+  },
+  {
     href: "/estoque",
     area: "erp",
     label: "Estoque",
