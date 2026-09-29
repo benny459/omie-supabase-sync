@@ -3,29 +3,114 @@
 @tailwind utilities;
 
 /* ─────────────────────────────────────────────────────────────────────────
-   Variação D — "Bold ⌘K" — Paleta warm + teal accent
-   Variáveis CSS em RGB tuple pra suportar alpha do Tailwind via
-   rgb(var(--x) / <alpha-value>).
+   Allka Navy — design system do Painel (pacote design_handoff_painel_navy).
+   Substitui a "Variação D" (accent #1d4ea2).
+
+   DUAS convenções de propósito, a mesma cor nas duas:
+
+   · --color-ww-*  triplo "R G B". É o que o Tailwind consome em
+     rgb(var(--x) / <alpha-value>), e é o que faz `bg-ww-border/60` existir.
+     Todo o código do app usa estes. Hex aqui partiria cada /alpha da app.
+   · --ww-*        hex e gradientes, verbatim do pacote. É o que os
+     componentes do design system usam. Ficam disponíveis para os portar
+     sem traduzir.
+
+   Os triplos são derivados do colors.css do pacote por scripts/…conv_tokens
+   — rgba composto sobre o fundo do modo, porque um rgba(11,18,32,.16) virado
+   em triplo a alpha cheio dava uma borda quase preta no tema claro.
    ───────────────────────────────────────────────────────────────────────── */
-/* Tema CLARO — o mesmo produto do escuro, espelhado. Neutros com viés azul
-   (não cinza puro, não warm) pra o par claro/escuro ler como dois modos de uma
-   coisa só. Accent é o mesmo azul de ação, um passo mais escuro pra clarar
-   4.5:1 contra branco. */
 :root {
-  --color-ww-bg:           238 243 250;  /* #eef3fa — plano de fundo */
+  --color-ww-bg:           245 247 251;
   --color-ww-panel:        255 255 255;
-  --color-ww-border:       223 231 242;  /* #dfe7f2 */
-  --color-ww-borderStrong: 194 207 227;  /* #c2cfe3 */
-  --color-ww-text:         15 30 58;     /* #0f1e3a — mesmo hue do fundo escuro */
-  --color-ww-textMuted:    81 99 127;
-  --color-ww-textFaint:    132 150 176;
-  --color-ww-accent:       29 78 162;    /* #1d4ea2 — 6.4:1 no branco */
-  --color-ww-accentSoft:   225 235 250;
-  --color-ww-rowHover:     245 249 254;
+  --color-ww-panelSunken:  245 247 251;
+  --color-ww-sidebar:      255 255 255;
+  --color-ww-border:       230 232 238;
+  --color-ww-borderStrong: 208 210 216;
+  --color-ww-borderSubtle: 231 233 238;
+  --color-ww-track:        226 229 233;
+  --color-ww-text:         11 18 32;
+  --color-ww-text2:        74 83 97;
+  --color-ww-textMuted:    93 103 120;
+  --color-ww-textFaint:    138 147 163;
+  --color-ww-accent:       47 107 255;
+  --color-ww-accentStrong: 27 47 122;
+  --color-ww-accentSky:    59 184 255;
+  --color-ww-accentText:   47 107 255;
+  --color-ww-accentSoft:   225 233 251;
+  --color-ww-onAccent:     255 255 255;
+  --color-ww-rowL0:        241 244 250;
+  --color-ww-rowL1:        255 255 255;
+  --color-ww-rowL2:        250 251 253;
+  --color-ww-rowHover:     234 239 248;
+  --color-ww-ok:           59 184 255;
+  --color-ww-okText:       47 107 255;
+  --color-ww-okSoft:       219 238 252;
+  --color-ww-warn:         245 197 66;
+  --color-ww-warnText:     154 111 0;
+  --color-ww-warnSoft:     245 238 218;
+  --color-ww-crit:         255 107 74;
+  --color-ww-critText:     217 72 42;
+  --color-ww-critSoft:     246 227 226;
+  --color-ww-info:         92 139 255;
+  --color-ww-infoText:     47 107 255;
+  --color-ww-infoSoft:     224 232 252;
+  --color-ww-violet:       154 130 255;
+  --color-ww-violetText:   106 79 224;
+  --color-ww-violetSoft:   230 228 252;
+  --color-ww-off:          230 232 238;
+  --color-ww-offText:      138 147 163;
+  --color-ww-offSoft:      233 236 240;
+  --color-ww-barMuted:     214 219 229;
+  --color-ww-navy:         18 39 95;
+  --color-ww-orange:       255 107 74;
+  --color-ww-areaFin:      59 184 255;
+  --color-ww-areaOps:      25 198 166;
+  --color-ww-areaCrm:      154 130 255;
+  --color-ww-areaCad:      255 143 115;
+  --color-ww-areaRh:       245 197 66;
+  --color-ww-areaIa:       108 203 255;
+  --color-ww-brand1:       27 47 122;
+  --color-ww-brand2:       47 107 255;
+  --color-ww-brand3:       59 184 255;
+  --color-ww-brandDash:    201 206 216;
+
+  /* Sem equivalente no Navy: realce de célula editada (amarelo) e superfícies
+     do drawer. Mantidos da paleta anterior — o pacote não os cobre. */
   --color-ww-editHi:       255 249 219;
   --color-ww-editLine:     201 168 44;
   --color-ww-drawer:       255 255 255;
-  --color-ww-drawerHead:   238 243 250;
+  --color-ww-drawerHead:   245 247 251;
+
+  /* ── Navy verbatim (hex/gradientes) ── */
+  --ww-bg: #F5F7FB;
+  --ww-bg-grad: radial-gradient(900px 520px at 10% -12%, rgba(47,107,255,.10) 0%, transparent 60%), radial-gradient(800px 500px at 92% -10%, rgba(59,184,255,.10) 0%, transparent 60%), linear-gradient(180deg, #F5F7FB, #FFFFFF 60%);
+  --ww-panel: #FFFFFF;
+  --ww-panel-grad: linear-gradient(180deg, #FFFFFF, #fafbfd);
+  --ww-panel-sunken: #F5F7FB;
+  --ww-row-l0: #f1f4fa; --ww-row-l1: #FFFFFF; --ww-row-l2: #fafbfd; --ww-row-hover: #eaeff8;
+  --ww-sidebar: #FFFFFF;
+  --ww-border: #E6E8EE; --ww-border-subtle: rgba(11,18,32,.06); --ww-border-strong: rgba(11,18,32,.16); --ww-track: rgba(11,18,32,.08);
+  --ww-text: #0B1220; --ww-text-2: #4A5361; --ww-text-muted: #5d6778; --ww-text-faint: #8A93A3;
+  --ww-accent: #2F6BFF; --ww-accent-strong: #1B2F7A; --ww-accent-sky: #3BB8FF; --ww-accent-text: #2F6BFF;
+  --ww-accent-soft: rgba(47,107,255,.10);
+  --ww-accent-grad: linear-gradient(180deg, #2F6BFF, #1B2F7A);
+  --ww-brand-grad: linear-gradient(90deg, #1B2F7A, #2F6BFF 55%, #3BB8FF);
+  --ww-on-accent: #FFFFFF;
+  --ww-ok: #3BB8FF;     --ww-ok-text: #2F6BFF;     --ww-ok-soft: rgba(59,184,255,.14);
+  --ww-warn: #F5C542;   --ww-warn-text: #9a6f00;   --ww-warn-soft: rgba(245,197,66,.18);
+  --ww-crit: #FF6B4A;   --ww-crit-text: #d9482a;   --ww-crit-soft: rgba(255,107,74,.14);
+  --ww-info: #5C8BFF;   --ww-info-text: #2F6BFF;   --ww-info-soft: rgba(92,139,255,.14);
+  --ww-violet: #9A82FF; --ww-violet-text: #6a4fe0; --ww-violet-soft: rgba(154,130,255,.16);
+  --ww-off: #E6E8EE;    --ww-off-text: #8A93A3;    --ww-off-soft: rgba(11,18,32,.05);
+  --ww-bar-muted: #d6dbe5;
+  --ww-hero-grad: linear-gradient(160deg, #1B2F7A, #12275F);
+  --ww-hero-text: #FFFFFF; --ww-hero-text-2: #C9D6F2;
+  /* cores por área (landing: --c-fin, --c-ops, --c-crm, --c-cad, --c-rh, --c-ia) */
+  --ww-area-fin: #3BB8FF; --ww-area-ops: #19C6A6; --ww-area-crm: #9A82FF; --ww-area-cad: #FF8F73; --ww-area-rh: #F5C542; --ww-area-ia: #6CCBFF;
+  --ww-cat-contratuais: #3BB8FF; --ww-cat-projetos: #5C8BFF; --ww-cat-revenda: #9A82FF; --ww-cat-avulsos: #F5C542; --ww-cat-botsw: #19C6A6; --ww-cat-outras: #4a5878;
+  --ww-orange: #FF6B4A; --ww-navy: #12275F;
+  /* segmentos do logo (claro: t1/t2/t3 da landing) */
+  --ww-brand-1: #1B2F7A; --ww-brand-2: #2F6BFF; --ww-brand-3: #3BB8FF; --ww-brand-dash: #C9CED8;
 }
 
 /* No claro o card não precisa de brilho — precisa de elevação. Mesma classe,
@@ -41,20 +126,85 @@
    dos gráficos precisa ser revalidada contra a nova superfície: os números e o
    comando estão em lib/viz/palette.ts. */
 .dark {
-  --color-ww-bg:           10 20 40;    /* #0a1428 — plano de fundo */
-  --color-ww-panel:        21 39 68;    /* #152744 — superfície dos cards */
-  --color-ww-border:       36 54 92;    /* #24365c */
-  --color-ww-borderStrong: 51 73 122;   /* #33497a */
-  --color-ww-text:         234 240 251;
-  --color-ww-textMuted:    157 178 212;
-  --color-ww-textFaint:    107 130 168;
-  --color-ww-accent:       74 144 226;  /* #4a90e2 — azul de ação */
-  --color-ww-accentSoft:   27 47 82;
-  --color-ww-rowHover:     26 45 78;
+  --color-ww-bg:           11 18 32;
+  --color-ww-panel:        17 26 46;
+  --color-ww-panelSunken:  14 22 39;
+  --color-ww-sidebar:      17 26 46;
+  --color-ww-border:       31 42 64;
+  --color-ww-borderStrong: 29 45 81;
+  --color-ww-borderSubtle: 17 26 48;
+  --color-ww-track:        19 30 54;
+  --color-ww-text:         242 244 248;
+  --color-ww-text2:        201 214 242;
+  --color-ww-textMuted:    154 166 189;
+  --color-ww-textFaint:    127 141 179;
+  --color-ww-accent:       92 139 255;
+  --color-ww-accentStrong: 27 47 122;
+  --color-ww-accentSky:    108 203 255;
+  --color-ww-accentText:   108 203 255;
+  --color-ww-accentSoft:   22 35 63;
+  --color-ww-onAccent:     255 255 255;
+  --color-ww-rowL0:        21 32 58;
+  --color-ww-rowL1:        17 26 46;
+  --color-ww-rowL2:        15 24 43;
+  --color-ww-rowHover:     26 39 68;
+  --color-ww-ok:           108 203 255;
+  --color-ww-okText:       108 203 255;
+  --color-ww-okSoft:       25 44 63;
+  --color-ww-warn:         245 197 66;
+  --color-ww-warnText:     248 213 111;
+  --color-ww-warnSoft:     53 50 38;
+  --color-ww-crit:         255 107 74;
+  --color-ww-critText:     255 157 133;
+  --color-ww-critSoft:     45 30 38;
+  --color-ww-info:         92 139 255;
+  --color-ww-infoText:     157 182 255;
+  --color-ww-infoSoft:     22 35 63;
+  --color-ww-violet:       154 130 255;
+  --color-ww-violetText:   191 174 255;
+  --color-ww-violetSoft:   34 36 68;
+  --color-ww-off:          63 70 85;
+  --color-ww-offText:      127 141 179;
+  --color-ww-offSoft:      23 30 43;
+  --color-ww-barMuted:     44 59 92;
+  --color-ww-navy:         18 39 95;
+  --color-ww-orange:       255 107 74;
+  --color-ww-areaFin:      59 184 255;
+  --color-ww-areaOps:      25 198 166;
+  --color-ww-areaCrm:      154 130 255;
+  --color-ww-areaCad:      255 143 115;
+  --color-ww-areaRh:       245 197 66;
+  --color-ww-areaIa:       108 203 255;
+  --color-ww-brand1:       76 103 201;
+  --color-ww-brand2:       92 139 255;
+  --color-ww-brand3:       108 203 255;
+  --color-ww-brandDash:    63 70 85;
+
   --color-ww-editHi:       44 58 40;
   --color-ww-editLine:     92 122 84;
-  --color-ww-drawer:       21 39 68;
-  --color-ww-drawerHead:   15 28 50;
+  --color-ww-drawer:       17 26 46;
+  --color-ww-drawerHead:   14 22 39;
+
+  /* ── Navy verbatim (hex/gradientes) ── */
+  --ww-bg: #0B1220;
+  --ww-bg-grad: radial-gradient(900px 520px at 10% -12%, rgba(47,107,255,.24) 0%, transparent 60%), radial-gradient(800px 500px at 92% -10%, rgba(59,184,255,.14) 0%, transparent 60%), linear-gradient(180deg, #0F1B3D 0%, #0B1220 45%, #0A1020);
+  --ww-panel: #111A2E;
+  --ww-panel-grad: linear-gradient(180deg, #131d33, #111A2E);
+  --ww-panel-sunken: #0e1627;
+  --ww-row-l0: #15203a; --ww-row-l1: #111A2E; --ww-row-l2: #0f182b; --ww-row-hover: #1a2744;
+  --ww-sidebar: #111A2E;
+  --ww-border: #1F2A40; --ww-border-subtle: rgba(92,139,255,.07); --ww-border-strong: rgba(92,139,255,.22); --ww-track: rgba(92,139,255,.10);
+  --ww-text: #F2F4F8; --ww-text-2: #C9D6F2; --ww-text-muted: #9AA6BD; --ww-text-faint: #7F8DB3;
+  --ww-accent: #5C8BFF; --ww-accent-text: #6CCBFF; --ww-accent-soft: rgba(92,139,255,.14);
+  --ww-ok-text: #6CCBFF; --ww-warn-text: #f8d56f; --ww-crit-text: #ff9d85; --ww-info-text: #9db6ff; --ww-violet-text: #bfaeff;
+  --ww-off: #3F4655; --ww-off-text: #7F8DB3; --ww-off-soft: rgba(255,255,255,.05);
+  --ww-bar-muted: #2c3b5c;
+  /* logo Allka: segmentos #4C67C9 → #5C8BFF → #6CCBFF, tracinhos #3F4655 */
+  --ww-brand-1: #4C67C9; --ww-brand-2: #5C8BFF; --ww-brand-3: #6CCBFF; --ww-brand-dash: #3F4655;
+  --ww-accent-sky: #6CCBFF;
+  --ww-accent-grad: linear-gradient(180deg, #5C8BFF, #4C67C9);
+  --ww-brand-grad: linear-gradient(90deg, #4C67C9, #5C8BFF 55%, #6CCBFF);
+  --ww-ok: #6CCBFF; --ww-ok-soft: rgba(108,203,255,.14);
 }
 
 /* Painel "embossed" — leitura de placa sobreposta da referência: fio de luz no
@@ -103,7 +253,8 @@
 /* Stack tipográfico — Inter (UI) + JetBrains Mono (códigos/valores)
    carregados via next/font no app/layout.tsx (CSS vars --font-sans, --font-mono). */
 html, body {
-  background: rgb(var(--color-ww-bg));
+  background: var(--ww-bg-grad, rgb(var(--color-ww-bg)));
+  background-attachment: fixed;
   color: rgb(var(--color-ww-text));
   font-family: -apple-system, BlinkMacSystemFont, system-ui, "SF Pro Text", "SF Pro Display", "Segoe UI", Roboto, sans-serif;
   -webkit-font-smoothing: antialiased;
