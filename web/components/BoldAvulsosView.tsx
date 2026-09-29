@@ -28,6 +28,8 @@ import SyncNowButton from "./SyncNowButton";
 import AddRowButton from "./AddRowButton";
 import GlobalSearch from "./GlobalSearch";
 import PcsExcluidosButton, { type PcEscondido } from "./PcsExcluidosButton";
+import KanbanRaias from "./navy/KanbanRaias";
+import { SegmentedControl } from "./navy/primitivos";
 import { AtribuicaoModal } from "./AtribuirClienteView";
 import { Virtuoso, type VirtuosoHandle } from "react-virtuoso";
 
@@ -567,6 +569,22 @@ export default function BoldAvulsosView({
   /* PCs escondidos. Buscados uma vez e distribuídos: o chip do topo mostra o
      total e cada projeto mostra os seus. Os PCs escondidos NÃO vêm em `rows`
      (a lista já os filtra), por isso o projeto de cada um vem da própria API. */
+  /* Vista escolhida. O handoff pede Lista · Linha do tempo · Tabela · Kanban;
+     entram as que existem, e a lista continua a ser o default — quem abre a
+     tela hoje encontra o que encontrava. Fica no browser por modulo. */
+  const [vista, setVista] = useState<"lista" | "kanban">("lista");
+  useEffect(() => {
+    try {
+      const v = window.localStorage.getItem(`painel.vista.${modulo}`);
+      if (v === "kanban" || v === "lista") setVista(v);
+    } catch { /* preferencia corrompida: fica a lista */ }
+  }, [modulo]);
+  const trocarVista = useCallback((v: string) => {
+    const alvo = v === "kanban" ? "kanban" : "lista";
+    setVista(alvo);
+    try { window.localStorage.setItem(`painel.vista.${modulo}`, alvo); } catch { /* quota */ }
+  }, [modulo]);
+
   const [pcsEscondidos, setPcsEscondidos] = useState<PcEscondido[]>([]);
   const carregarEscondidos = useCallback(async () => {
     try {
@@ -2158,6 +2176,30 @@ export default function BoldAvulsosView({
       {/* Total visível — painel com soma RC/PC/PV reagindo ao filtro atual */}
       <GrandTotalBar grand={grandTotal} modulo={modulo} count={filtered.length} canViewValues={userCanViewValues} />
 
+      {/* Seletor de vista — mesmos dados, leituras diferentes. */}
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <SegmentedControl
+          options={[{ value: "lista", label: "Lista" }, { value: "kanban", label: "Kanban" }]}
+          value={vista}
+          onChange={trocarVista}
+        />
+        {vista === "kanban" && (
+          <span className="text-[11px] text-ww-textMuted">
+            Uma raia por {modulo === "projetos" ? "projeto" : "pedido"} · colunas pelo estado do lote · leitura, sem arrastar
+          </span>
+        )}
+      </div>
+
+      {vista === "kanban" ? (
+        <div className="pb-20 min-w-0 overflow-x-auto">
+          <KanbanRaias
+            buckets={buckets}
+            formatarValor={(v) => gateBRL(v, userCanViewValues)}
+            onLoteClick={(r) => setDrawerItem({ ...r })}
+          />
+        </div>
+      ) : (
+      <>
       {/* Lista de cards */}
       {/* /pcs (1368 buckets) e /avulsos (1227) são virtualizados: só ~30 cards
           ficam montados por vez. /projetos NÃO — tem só 44 buckets, então a
@@ -2191,6 +2233,8 @@ export default function BoldAvulsosView({
           </div>
         )}
       </div>
+      </>
+      )}
 
       {/* Batch toolbar (flutuante) */}
       {selected.size > 0 && (
