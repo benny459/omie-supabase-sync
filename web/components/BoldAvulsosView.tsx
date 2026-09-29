@@ -2205,7 +2205,7 @@ export default function BoldAvulsosView({
               <div className="flex items-baseline justify-between gap-3 px-2 pb-2">
                 <span className="text-[14px] font-bold text-ww-text">{b.pv_os_label}</span>
                 <span className="text-[11px] text-ww-textMuted">
-                  {b.cliente ?? "—"} · {b.rows.length} lote{b.rows.length === 1 ? "" : "s"}
+                  {b.cliente ?? "—"} · {new Set(b.rows.map((r) => String(r.pc_numero ?? r.pc_numero_manual ?? `x${r.ncod_ped}`))).size} lote(s)
                 </span>
               </div>
               <ArvoreLotes

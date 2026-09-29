@@ -78,9 +78,25 @@ export default function ArvoreLotes({
     }
   }, [empresa, itens, carregando]);
 
+  /* Um PC e um PC, como na grade e no Kanban. Sem isto a arvore listava as
+     duas copias do mesmo PC — a manual e a do Omie — e a manual, por nao ter
+     item nenhum, abria o drawer em vez de expandir. Fica a do Omie (ncod
+     positivo), que e a que tem itens. */
+  const lotes = (() => {
+    const porPc = new Map<string, AnyRow>();
+    const semPc: AnyRow[] = [];
+    for (const r of bucket.rows) {
+      const pc = String(r.pc_numero ?? r.pc_numero_manual ?? "").trim();
+      if (!pc) { semPc.push(r); continue; }
+      const anterior = porPc.get(pc);
+      if (!anterior || (n(r.ncod_ped) > 0 && n(anterior.ncod_ped) < 0)) porPc.set(pc, r);
+    }
+    return [...porPc.values(), ...semPc];
+  })();
+
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-      {bucket.rows.map((r, i) => {
+      {lotes.map((r, i) => {
         const ncod = Number(r.ncod_ped ?? 0);
         const chave = String(ncod);
         const aberto = abertos[chave] ?? false;
