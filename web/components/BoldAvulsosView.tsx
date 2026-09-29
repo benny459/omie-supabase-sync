@@ -1929,100 +1929,10 @@ export default function BoldAvulsosView({
         </span>
       </div>
 
-      {/* KPIs agregados — colapsáveis */}
-      <div className="space-y-1.5">
-        <div className="flex items-center justify-between px-0.5">
-          <span className="text-[11px] uppercase tracking-[0.6px] font-bold text-ww-textMuted">Métricas</span>
-          <button onClick={() => setKpisOpen((o) => !o)}
-            className="text-[11px] font-semibold text-ww-textMuted hover:text-ww-text transition flex items-center gap-1">
-            <span>{kpisOpen ? "Ocultar" : "Mostrar"}</span>
-            <span className="text-[8px] opacity-70">{kpisOpen ? "▲" : "▼"}</span>
-          </button>
-        </div>
-        {kpisOpen && (
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-2.5">
-            {/* Total Valor */}
-            <div className="rounded-xl border border-indigo-200 dark:border-indigo-800 bg-indigo-50/60 dark:bg-indigo-950/30 p-3 text-indigo-900 dark:text-indigo-100">
-              <div className="text-[9px] uppercase tracking-[0.5px] font-semibold opacity-70">Volume Total</div>
-              <div className="text-[18px] font-semibold tabular-nums tracking-[-0.4px] mt-1">{gateBRL(kpis.totalValor, userCanViewValues)}</div>
-              <div className="text-[10px] opacity-65 mt-0.5 tabular-nums">{kpis.total} itens · {kpis.pvUnicos} PV/OS</div>
-            </div>
-            {/* Ticket Médio */}
-            <div className="rounded-xl border border-cyan-200 dark:border-cyan-800 bg-cyan-50/60 dark:bg-cyan-950/30 p-3 text-cyan-900 dark:text-cyan-100">
-              <div className="text-[9px] uppercase tracking-[0.5px] font-semibold opacity-70">Ticket Médio (PV/OS)</div>
-              <div className="text-[18px] font-semibold tabular-nums tracking-[-0.4px] mt-1">{gateBRL(kpis.ticketMedio, userCanViewValues)}</div>
-              <div className="text-[10px] opacity-65 mt-0.5 tabular-nums">média por PV/OS</div>
-            </div>
-            {/* Total Aprovado */}
-            <div className="rounded-xl border border-emerald-200 dark:border-emerald-800 bg-emerald-50/60 dark:bg-emerald-950/30 p-3 text-emerald-900 dark:text-emerald-100">
-              <div className="text-[9px] uppercase tracking-[0.5px] font-semibold opacity-70">Volume Aprovado</div>
-              <div className="text-[18px] font-semibold tabular-nums tracking-[-0.4px] mt-1">{gateBRL(kpis.aprovValor, userCanViewValues)}</div>
-              <div className="text-[10px] opacity-65 mt-0.5 tabular-nums">{kpis.aprovados} itens aprovados</div>
-            </div>
-            {/* % Conversão */}
-            <div className="rounded-xl border border-fuchsia-200 dark:border-fuchsia-800 bg-fuchsia-50/60 dark:bg-fuchsia-950/30 p-3 text-fuchsia-900 dark:text-fuchsia-100">
-              <div className="text-[9px] uppercase tracking-[0.5px] font-semibold opacity-70">Taxa de Aprovação</div>
-              <div className="text-[18px] font-semibold tabular-nums tracking-[-0.4px] mt-1">{kpis.conversao.toFixed(1).replace(".", ",")}%</div>
-              <div className="text-[10px] opacity-65 mt-0.5 tabular-nums">{kpis.aprovados} de {kpis.total}</div>
-            </div>
-            {/* Sem Fornecedor */}
-            <div className={`rounded-xl border p-3 ${kpis.semFornecedor > 0
-              ? "border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/40 text-amber-900 dark:text-amber-100"
-              : "border-ww-border bg-ww-rowHover text-ww-textMuted "}`}>
-              <div className="text-[9px] uppercase tracking-[0.5px] font-semibold opacity-70">Sem Fornecedor</div>
-              <div className="text-[18px] font-semibold tabular-nums tracking-[-0.4px] mt-1 flex items-center gap-1">
-                {kpis.semFornecedor > 0 && <span>⚠</span>}
-                {fmtNum(kpis.semFornecedor)}
-              </div>
-              <div className="text-[10px] opacity-65 mt-0.5">{kpis.semFornecedor > 0 ? "PCs incompletos no Omie" : "tudo OK no Omie"}</div>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* CABEÇALHO DE FILTROS UNIFICADO — 6 painéis (grid 6-col). Cada um com
-          hue distinto pra facilitar leitura visual. Alarmes ficam separados
-          na filter bar embaixo. */}
-      {modulo !== "pcs" && (
-      <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7 gap-3">
-        <FacetDistribution facetKey="pv_etapa_texto"         label="Status PV"       accent="blue"     side="V" canViewValues={userCanViewValues}
-          buckets={pseudoPvStatusBuckets} selected={pseudoPvStatusSelected} onToggle={pseudoPvStatusToggle} onClear={() => setPvEtapaSel(new Set())} />
-        <FacetDistribution facetKey="pc_etapa_texto"         label="Aprovação PC"    accent="emerald"  side="C" canViewValues={userCanViewValues}
-          buckets={pseudoPcAprovBuckets}  selected={pseudoPcAprovSelected}  onToggle={pseudoPcAprovToggle}  onClear={() => setStatusFilter("todos")} />
-        <FacetDistribution facetKey="tipo_omie"              label="Tipo Omie"       accent="violet"   side="V" single canViewValues={userCanViewValues}
-          buckets={facetDistributions.tipo_omie}
-          selected={facets.tipo_omie ?? new Set()}                 onToggle={(v) => toggleFacet("tipo_omie", v)}              onClear={() => clearFacet("tipo_omie")} />
-        <FacetDistribution facetKey="pv_etapa_texto"         label="Status Serviços" accent="teal"     side="V" canViewValues={userCanViewValues}
-          buckets={pseudoServicosStatusBuckets} selected={servicosStatusFilter} onToggle={pseudoServicosStatusToggle} onClear={pseudoServicosStatusClear} />
-        <FacetDistribution facetKey="pv_etapa_texto"         label="Etapa Venda"     accent="amber"    side="V" single canViewValues={userCanViewValues}
-          buckets={facetDistributions.pv_etapa_texto}
-          selected={facets.pv_etapa_texto ?? new Set()}            onToggle={(v) => toggleFacet("pv_etapa_texto", v)}         onClear={() => clearFacet("pv_etapa_texto")} />
-        <FacetDistribution facetKey="mt_status_fornecimento" label="Entrega"         accent="fuchsia"  side="C" single canViewValues={userCanViewValues}
-          buckets={facetDistributions.mt_status_fornecimento}
-          selected={facets.mt_status_fornecimento ?? new Set()}    onToggle={(v) => toggleFacet("mt_status_fornecimento", v)} onClear={() => clearFacet("mt_status_fornecimento")} />
-        <FacetDistribution facetKey="tipo_omie"              label="Margem"          accent="rose"     side="V" canViewValues={userCanViewValues}
-          buckets={pseudoMargemBuckets} selected={margens} onToggle={margemToggle} onClear={margemClear} />
-      </div>
-      )}
-
-      {/* /pcs (standalones): grid próprio de 4 facet cards adaptados — sem PV
-          Status / Etapa Venda / Status Serviços (não fazem sentido pra PCs sem
-          PV origem). Foca no ciclo de aprovação + dimensões de compra. */}
-      {modulo === "pcs" && (
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
-        <FacetDistribution facetKey="pc_etapa_texto"         label="Aprovação PC"    accent="emerald"  side="C" canViewValues={userCanViewValues}
-          buckets={pseudoPcAprovBuckets}  selected={pseudoPcAprovSelected}  onToggle={pseudoPcAprovToggle}  onClear={() => setStatusFilter("todos")} />
-        <FacetDistribution facetKey="projeto_nome"           label="Projeto"         accent="violet"   side="C" canViewValues={userCanViewValues}
-          buckets={facetDistributions.projeto_nome}
-          selected={facets.projeto_nome ?? new Set()}              onToggle={(v) => toggleFacet("projeto_nome", v)}           onClear={() => clearFacet("projeto_nome")} />
-        <FacetDistribution facetKey="contato_fornecedor"     label="Fornecedor"      accent="amber"    side="C" canViewValues={userCanViewValues}
-          buckets={facetDistributions.contato_fornecedor}
-          selected={facets.contato_fornecedor ?? new Set()}        onToggle={(v) => toggleFacet("contato_fornecedor", v)}     onClear={() => clearFacet("contato_fornecedor")} />
-        <FacetDistribution facetKey="codigo_categoria"       label="Categoria"       accent="fuchsia"  side="C" canViewValues={userCanViewValues}
-          buckets={facetDistributions.codigo_categoria}
-          selected={facets.codigo_categoria ?? new Set()}          onToggle={(v) => toggleFacet("codigo_categoria", v)}       onClear={() => clearFacet("codigo_categoria")} />
-      </div>
-      )}
+      {/* A faixa de metricas saiu a pedido: com os KPIs do Navy em baixo eram
+          tres bandas de numeros empilhadas, e o modelo tem uma. Os cartoes
+          eram tambem filtro — essas dimensoes viraram dropdowns na barra
+          abaixo, para nao se perder o filtro junto com o cartao. */}
 
       {/* ═══ FILTROS SECUNDÁRIOS — 2 linhas ═══
           Linha 1: MOLDURA "ALARMES" — os 5 dropdowns coloridos por grupo.
@@ -2072,6 +1982,25 @@ export default function BoldAvulsosView({
           selected={facets.codigo_categoria ?? new Set()}
           onToggle={(v) => toggleFacet("codigo_categoria", v)}
           onClear={() => clearFacet("codigo_categoria")} />
+        {/* Estas quatro so existiam nos cartoes de metricas. Os cartoes sairam
+            a pedido, mas eram a UNICA porta para estes filtros — remove-los
+            junto teria tirado quatro dimensoes sem ninguem pedir. */}
+        <FacetDropdown label="Etapa Venda" values={facetValues.pv_etapa_texto}
+          selected={facets.pv_etapa_texto ?? new Set()}
+          onToggle={(v) => toggleFacet("pv_etapa_texto", v)}
+          onClear={() => clearFacet("pv_etapa_texto")} />
+        <FacetDropdown label="Tipo Omie" values={facetValues.tipo_omie}
+          selected={facets.tipo_omie ?? new Set()}
+          onToggle={(v) => toggleFacet("tipo_omie", v)}
+          onClear={() => clearFacet("tipo_omie")} />
+        <FacetDropdown label="Etapa PC" values={facetValues.pc_etapa_texto}
+          selected={facets.pc_etapa_texto ?? new Set()}
+          onToggle={(v) => toggleFacet("pc_etapa_texto", v)}
+          onClear={() => clearFacet("pc_etapa_texto")} />
+        <FacetDropdown label="Entrega" values={facetValues.mt_status_fornecimento}
+          selected={facets.mt_status_fornecimento ?? new Set()}
+          onToggle={(v) => toggleFacet("mt_status_fornecimento", v)}
+          onClear={() => clearFacet("mt_status_fornecimento")} />
         {/* Margem saiu daqui: virou card "Por Margem" na grade de métricas, no
             mesmo padrão dos outros — com contagem, valor e barra proporcional. */}
         {modulo !== "pcs" && <RelatorioMenu />}
@@ -2177,7 +2106,6 @@ export default function BoldAvulsosView({
       })()}
 
       {/* Total visível — painel com soma RC/PC/PV reagindo ao filtro atual */}
-      <GrandTotalBar grand={grandTotal} modulo={modulo} count={filtered.length} canViewValues={userCanViewValues} />
 
       {/* KPIs com as definicoes do handoff — calculados sobre o que esta filtrado. */}
       <KpisNavy
