@@ -49,12 +49,28 @@ export default function KanbanRaias({
 }) {
   const [abertas, setAbertas] = useState<Record<string, boolean>>({});
 
+  /* Um PC e um PC, mesma regra da grade. Sem isto o PC duplicado (a copia
+     manual e a linha do Omie) aparecia em DUAS colunas ao mesmo tempo, e a
+     contagem de cada coluna inflava. Fica a copia mais avancada no fluxo:
+     recebido diz mais sobre o estado real do pedido do que "por aprovar". */
+  const ORDEM: ColunaKanban[] = ["compra", "aprovacao", "materiais", "recebido"];
+
   const raias = useMemo(() => buckets.map((b) => {
+    const porPc = new Map<string, AnyRow>();
+    const semPc: AnyRow[] = [];
+    for (const r of b.rows) {
+      const pc = String(r.pc_numero ?? r.pc_numero_manual ?? "").trim();
+      if (!pc) { semPc.push(r); continue; }
+      const anterior = porPc.get(pc);
+      if (!anterior || ORDEM.indexOf(colunaDoLote(r)) > ORDEM.indexOf(colunaDoLote(anterior))) {
+        porPc.set(pc, r);
+      }
+    }
     const porColuna: Record<ColunaKanban, AnyRow[]> = {
       compra: [], aprovacao: [], materiais: [], recebido: [],
     };
-    for (const r of b.rows) porColuna[colunaDoLote(r)].push(r);
-    return { bucket: b, porColuna };
+    for (const r of [...semPc, ...porPc.values()]) porColuna[colunaDoLote(r)].push(r);
+    return { bucket: b, porColuna, lotes: semPc.length + porPc.size };
   }), [buckets]);
 
   const totalColuna = (linhas: AnyRow[]) =>
@@ -82,7 +98,7 @@ export default function KanbanRaias({
         ))}
       </div>
 
-      {raias.map(({ bucket, porColuna }) => {
+      {raias.map(({ bucket, porColuna, lotes }) => {
         const aberta = abertas[bucket.pv_os_label] ?? false;
         return (
           <div key={bucket.pv_os_label} style={{
@@ -107,7 +123,7 @@ export default function KanbanRaias({
                   display: "block", fontSize: "var(--text-meta)", color: "var(--ww-text-muted)",
                   overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
                 }}>
-                  {bucket.cliente ?? "—"} · {bucket.rows.length} lote{bucket.rows.length === 1 ? "" : "s"}
+                  {bucket.cliente ?? "—"} · {lotes} lote{lotes === 1 ? "" : "s"}
                 </span>
               </span>
             </button>
