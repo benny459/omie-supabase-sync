@@ -29,6 +29,7 @@ import AddRowButton from "./AddRowButton";
 import GlobalSearch from "./GlobalSearch";
 import PcsExcluidosButton, { type PcEscondido } from "./PcsExcluidosButton";
 import KanbanRaias from "./navy/KanbanRaias";
+import ArvoreLotes from "./navy/ArvoreLotes";
 import { SegmentedControl } from "./navy/primitivos";
 import { AtribuicaoModal } from "./AtribuirClienteView";
 import { Virtuoso, type VirtuosoHandle } from "react-virtuoso";
@@ -572,15 +573,15 @@ export default function BoldAvulsosView({
   /* Vista escolhida. O handoff pede Lista · Linha do tempo · Tabela · Kanban;
      entram as que existem, e a lista continua a ser o default — quem abre a
      tela hoje encontra o que encontrava. Fica no browser por modulo. */
-  const [vista, setVista] = useState<"lista" | "kanban">("lista");
+  const [vista, setVista] = useState<"lista" | "arvore" | "kanban">("lista");
   useEffect(() => {
     try {
       const v = window.localStorage.getItem(`painel.vista.${modulo}`);
-      if (v === "kanban" || v === "lista") setVista(v);
+      if (v === "kanban" || v === "lista" || v === "arvore") setVista(v);
     } catch { /* preferencia corrompida: fica a lista */ }
   }, [modulo]);
   const trocarVista = useCallback((v: string) => {
-    const alvo = v === "kanban" ? "kanban" : "lista";
+    const alvo = v === "kanban" ? "kanban" : v === "arvore" ? "arvore" : "lista";
     setVista(alvo);
     try { window.localStorage.setItem(`painel.vista.${modulo}`, alvo); } catch { /* quota */ }
   }, [modulo]);
@@ -2179,7 +2180,7 @@ export default function BoldAvulsosView({
       {/* Seletor de vista — mesmos dados, leituras diferentes. */}
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <SegmentedControl
-          options={[{ value: "lista", label: "Lista" }, { value: "kanban", label: "Kanban" }]}
+          options={[{ value: "lista", label: "Lista" }, { value: "arvore", label: "Árvore" }, { value: "kanban", label: "Kanban" }]}
           value={vista}
           onChange={trocarVista}
         />
@@ -2188,9 +2189,34 @@ export default function BoldAvulsosView({
             Uma raia por {modulo === "projetos" ? "projeto" : "pedido"} · colunas pelo estado do lote · leitura, sem arrastar
           </span>
         )}
+        {vista === "arvore" && (
+          <span className="text-[11px] text-ww-textMuted">
+            {modulo === "projetos" ? "Projeto" : "Pedido"} → lote → item · itens do Omie carregam ao abrir o lote
+          </span>
+        )}
       </div>
 
-      {vista === "kanban" ? (
+      {vista === "arvore" ? (
+        <div className="pb-20 min-w-0 space-y-3">
+          {buckets.length === 0 ? (
+            <div className="text-center py-16 text-ww-textFaint text-sm">Nada com estes filtros.</div>
+          ) : buckets.map((b) => (
+            <div key={b.pv_os_label} className="rounded-[var(--radius-panel)] border border-ww-border bg-ww-panel p-3">
+              <div className="flex items-baseline justify-between gap-3 px-2 pb-2">
+                <span className="text-[14px] font-bold text-ww-text">{b.pv_os_label}</span>
+                <span className="text-[11px] text-ww-textMuted">
+                  {b.cliente ?? "—"} · {b.rows.length} lote{b.rows.length === 1 ? "" : "s"}
+                </span>
+              </div>
+              <ArvoreLotes
+                bucket={b}
+                formatarValor={(v) => gateBRL(v, userCanViewValues)}
+                onLoteClick={(r) => setDrawerItem({ ...r })}
+              />
+            </div>
+          ))}
+        </div>
+      ) : vista === "kanban" ? (
         <div className="pb-20 min-w-0 overflow-x-auto">
           <KanbanRaias
             buckets={buckets}
