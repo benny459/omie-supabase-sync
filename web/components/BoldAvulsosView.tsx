@@ -30,6 +30,8 @@ import GlobalSearch from "./GlobalSearch";
 import PcsExcluidosButton, { type PcEscondido } from "./PcsExcluidosButton";
 import KanbanRaias from "./navy/KanbanRaias";
 import ArvoreLotes from "./navy/ArvoreLotes";
+import LinhaDoTempo from "./navy/LinhaDoTempo";
+import KpisNavy from "./navy/KpisNavy";
 import { SegmentedControl } from "./navy/primitivos";
 import { AtribuicaoModal } from "./AtribuirClienteView";
 import { Virtuoso, type VirtuosoHandle } from "react-virtuoso";
@@ -573,15 +575,15 @@ export default function BoldAvulsosView({
   /* Vista escolhida. O handoff pede Lista · Linha do tempo · Tabela · Kanban;
      entram as que existem, e a lista continua a ser o default — quem abre a
      tela hoje encontra o que encontrava. Fica no browser por modulo. */
-  const [vista, setVista] = useState<"lista" | "arvore" | "kanban">("lista");
+  const [vista, setVista] = useState<"lista" | "arvore" | "tempo" | "kanban">("lista");
   useEffect(() => {
     try {
       const v = window.localStorage.getItem(`painel.vista.${modulo}`);
-      if (v === "kanban" || v === "lista" || v === "arvore") setVista(v);
+      if (v === "kanban" || v === "lista" || v === "arvore" || v === "tempo") setVista(v);
     } catch { /* preferencia corrompida: fica a lista */ }
   }, [modulo]);
   const trocarVista = useCallback((v: string) => {
-    const alvo = v === "kanban" ? "kanban" : v === "arvore" ? "arvore" : "lista";
+    const alvo = v === "kanban" ? "kanban" : v === "arvore" ? "arvore" : v === "tempo" ? "tempo" : "lista";
     setVista(alvo);
     try { window.localStorage.setItem(`painel.vista.${modulo}`, alvo); } catch { /* quota */ }
   }, [modulo]);
@@ -2177,16 +2179,28 @@ export default function BoldAvulsosView({
       {/* Total visível — painel com soma RC/PC/PV reagindo ao filtro atual */}
       <GrandTotalBar grand={grandTotal} modulo={modulo} count={filtered.length} canViewValues={userCanViewValues} />
 
+      {/* KPIs com as definicoes do handoff — calculados sobre o que esta filtrado. */}
+      <KpisNavy
+        buckets={buckets}
+        formatarValor={(v) => gateBRL(v, userCanViewValues)}
+        rotuloPedido={modulo === "projetos" ? "projeto" : modulo === "pcs" ? "PC" : "pedido"}
+      />
+
       {/* Seletor de vista — mesmos dados, leituras diferentes. */}
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <SegmentedControl
-          options={[{ value: "lista", label: "Lista" }, { value: "arvore", label: "Árvore" }, { value: "kanban", label: "Kanban" }]}
+          options={[{ value: "lista", label: "Lista" }, { value: "arvore", label: "Árvore" }, { value: "tempo", label: "Linha do tempo" }, { value: "kanban", label: "Kanban" }]}
           value={vista}
           onChange={trocarVista}
         />
         {vista === "kanban" && (
           <span className="text-[11px] text-ww-textMuted">
             Uma raia por {modulo === "projetos" ? "projeto" : "pedido"} · colunas pelo estado do lote · leitura, sem arrastar
+          </span>
+        )}
+        {vista === "tempo" && (
+          <span className="text-[11px] text-ww-textMuted">
+            Quando · faixa do prazo e marcos do lote na mesma escala
           </span>
         )}
         {vista === "arvore" && (
@@ -2196,7 +2210,15 @@ export default function BoldAvulsosView({
         )}
       </div>
 
-      {vista === "arvore" ? (
+      {vista === "tempo" ? (
+        <div className="pb-20 min-w-0">
+          <LinhaDoTempo
+            buckets={buckets}
+            formatarValor={(v) => gateBRL(v, userCanViewValues)}
+            onLoteClick={(r) => setDrawerItem({ ...r })}
+          />
+        </div>
+      ) : vista === "arvore" ? (
         <div className="pb-20 min-w-0 space-y-3">
           {buckets.length === 0 ? (
             <div className="text-center py-16 text-ww-textFaint text-sm">Nada com estes filtros.</div>
