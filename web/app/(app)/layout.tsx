@@ -1,4 +1,5 @@
 import AppSidebar from "@/components/AppSidebar";
+import TopNav from "@/components/navy/TopNav";
 import SyncStatusBar from "@/components/SyncStatusBar";
 import ThemeToggle from "@/components/ThemeToggle";
 import SeletorPaleta from "@/components/viz/SeletorPaleta";
@@ -15,6 +16,12 @@ import type { AreaAccess, ModuleRole, PermsOverride, Role, UserPerms } from "@/l
    para true e está de volta, nada mais. (Já tinha sido desligado antes e
    reativado em 12/09/2026, junto do upgrade do Cesar.) */
 const SUPORTE_VISIVEL = false;
+
+/* Navegacao horizontal do Allka Navy. O handoff escolhe-a como padrao e o
+   AppSidebar fica como alternativa — mas a troca mexe em quem ve o que, por
+   isso vive num interruptor: false devolve a sidebar de sempre, sem deploy.
+   As duas leem as MESMAS listas e o MESMO canViewArea; o que muda e o layout. */
+const NAV_HORIZONTAL = true;
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const supa = await supaServer();
@@ -44,8 +51,10 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   return (
     <UserPermsProvider user={perms}>
-      <AppSidebar userEmail={user?.email} />
-      <main className="ml-[54px] min-h-screen bg-ww-bg text-ww-text overflow-x-hidden">
+      {NAV_HORIZONTAL ? <TopNav userEmail={user?.email} /> : <AppSidebar userEmail={user?.email} />}
+      {/* A margem de 54px existe para o trilho da sidebar; sem sidebar nao ha
+          trilho, e mante-la deixava uma faixa morta a esquerda. */}
+      <main className={`${NAV_HORIZONTAL ? "" : "ml-[54px]"} min-h-screen bg-ww-bg text-ww-text overflow-x-hidden`}>
         {/* Barra superior: versão sempre visível + último sync + paleta + theme */}
         <div className="border-b border-ww-border bg-ww-panel/70 backdrop-blur px-4 md:px-6 py-1.5 flex items-center justify-end gap-3">
           <VersionWatcher />

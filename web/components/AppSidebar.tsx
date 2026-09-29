@@ -7,7 +7,7 @@ import { supaBrowser } from "@/lib/supabase";
 import { useUserPerms } from "./UserPermsProvider";
 import { AREA_LABELS, AREAS, canViewArea, type Area } from "@/lib/permissions";
 
-type NavItem = {
+export type NavItem = {
   href: string;
   label: string;
   icon: React.ReactNode;
@@ -18,7 +18,7 @@ type NavItem = {
   area?: Area;
 };
 
-const MODULES: NavItem[] = [
+export const MODULES: NavItem[] = [
   {
     href: "/avulsos",
     area: "operacao",
@@ -152,7 +152,7 @@ const MODULES: NavItem[] = [
 
 // Área BI — preenchida conforme os dashboards do Metabase são portados.
 // Só aparece pra admin ou pra quem tem row em platform.user_area_access.
-const BI: NavItem[] = [
+export const BI: NavItem[] = [
   {
     href: "/bi/visao-geral",
     area: "bi",
@@ -191,7 +191,7 @@ const BI: NavItem[] = [
 ];
 
 // Área FINANCEIRO — nasce fechada no AREA_DEFAULT.
-const FINANCEIRO: NavItem[] = [
+export const FINANCEIRO: NavItem[] = [
   {
     // Primeiro da área de propósito: é a tela que responde a pergunta inteira.
     // As três abaixo continuam porque a consolidação ainda está em avaliação —
@@ -325,7 +325,7 @@ const FINANCEIRO: NavItem[] = [
   },
 ];
 
-const ADMIN: NavItem[] = [
+export const ADMIN: NavItem[] = [
   {
     href: "/configuracoes",
     label: "Configurações",
