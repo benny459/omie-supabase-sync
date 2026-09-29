@@ -48,8 +48,24 @@ export default function TopNav({ userEmail }: { userEmail?: string | null }) {
     [perms, todos],
   );
 
+  /* O sidebar tinha um link Owner visivel so para o benny. Sem isto, mudar de
+     menu tirava-lhe uma tela — e em silencio, que e o pior jeito de perder
+     uma funcao. Mesma condicao, mesmo destino. */
+  const OWNER: NavItem = {
+    href: "/owner",
+    label: "Owner",
+    tone: "text-emerald-700",
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8}
+           style={{ width: 18, height: 18 }} strokeLinecap="round" strokeLinejoin="round">
+        <path d="M3 3v18h18" /><path d="M7 14l4-4 4 4 5-5" /><circle cx="20" cy="5" r="2" />
+      </svg>
+    ),
+  };
+  const ehOwner = (userEmail ?? "").toLowerCase() === "benny@waterworks.com.br";
+
   const itensDaArea = (a: Area | "sistema"): NavItem[] =>
-    a === "sistema" ? ADMIN : todos.filter((m) => m.area === a);
+    a === "sistema" ? (ehOwner ? [...ADMIN, OWNER] : ADMIN) : todos.filter((m) => m.area === a);
 
   /* Área activa: a do item que está aberto. Se o utilizador tiver clicado numa
      pill, essa manda até navegar — senão clicar numa área e não ver nada
