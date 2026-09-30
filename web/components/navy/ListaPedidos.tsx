@@ -44,6 +44,53 @@ export type Pedido = {
   rail: Tom[];
 };
 
+/* Grelha da mini-tabela. Sem `gap`: o espaçamento vem do padding das células,
+   para o `borderLeft` poder desenhar uma régua contínua de cima a baixo. Com
+   gap a linha ficava interrompida entre colunas e não guiava o olho. */
+const GRID_LOTE = "52px minmax(0,1.3fr) minmax(0,1.1fr) minmax(0,1fr) minmax(0,1.3fr) 118px";
+
+const CAB: React.CSSProperties = {
+  display: "grid", gridTemplateColumns: GRID_LOTE,
+  background: "var(--ww-panel-sunken)",
+  borderTop: "1px solid var(--ww-border)",
+  borderBottom: "1px solid var(--ww-border)",
+  borderRadius: "var(--radius-row) var(--radius-row) 0 0",
+  fontSize: "var(--text-chip)", fontWeight: 700,
+  letterSpacing: "var(--tracking-label)", textTransform: "uppercase",
+  color: "var(--ww-text-2)",
+};
+const CEL_CAB_1: React.CSSProperties = { padding: "8px 10px" };
+const CEL_CAB: React.CSSProperties = {
+  padding: "8px 12px", borderLeft: "1px solid var(--ww-border-subtle)",
+};
+
+const LINHA: React.CSSProperties = {
+  display: "grid", gridTemplateColumns: GRID_LOTE, alignItems: "stretch",
+  borderBottom: "1px solid var(--ww-border-subtle)", cursor: "pointer",
+};
+/** Célula de dados: a régua da esquerda é o que deixa seguir a linha até ao fim. */
+const CEL: React.CSSProperties = {
+  padding: "10px 12px", minWidth: 0,
+  borderLeft: "1px solid var(--ww-border-subtle)",
+  display: "flex", flexDirection: "column", justifyContent: "center", gap: 3,
+};
+
+/** Número da compra em círculo — substitui a coluna "Compra 1, Compra 2, …".
+ *  Tom mais forte quando a requisição já virou PC: reforça de relance o que
+ *  as células vazias já dizem. */
+function Ordinal({ n: num, temPc }: { n: number; temPc: boolean }) {
+  return (
+    <span style={{
+      width: 22, height: 22, borderRadius: "50%", flex: "0 0 auto",
+      display: "grid", placeItems: "center",
+      fontSize: 11, fontWeight: 700, fontVariantNumeric: "tabular-nums",
+      color: temPc ? "var(--ww-accent-text)" : "var(--ww-text-faint)",
+      background: temPc ? "var(--ww-accent-soft)" : "transparent",
+      border: `1px solid ${temPc ? "var(--ww-accent)" : "var(--ww-border-strong)"}`,
+    }}>{num}</span>
+  );
+}
+
 function estadoItem(it: ItemPc): { tom: Tom; rotulo: string; pct: number } {
   const q = n(it.nqtde), r = n(it.nqtde_rec);
   if (q <= 0) return { tom: "off", rotulo: "—", pct: 0 };
@@ -154,14 +201,16 @@ export default function ListaPedidos({
             {/* Mini-tabela de lotes */}
             {aberto && (
               <div style={{ padding: "0 18px 14px" }}>
-                <div style={{
-                  display: "grid", gridTemplateColumns: "112px 1.3fr 1.1fr 1fr 1.3fr 110px",
-                  gap: 16, padding: "8px 10px", fontSize: "var(--text-chip)",
-                  color: "var(--ww-text-faint)", borderBottom: "1px solid var(--ww-border-subtle)",
-                }}>
-                  <span>Compra</span><span>RC</span><span>PC · fornecedor</span>
-                  <span>Aprovação</span><span>Materiais</span>
-                  <span style={{ textAlign: "right" }}>Valor PC</span>
+                <div style={{ ...CAB }}>
+                  {/* A coluna do número não tem rótulo: "Compra" repetido em
+                      cada linha era a maior mancha de texto da tabela e não
+                      dizia nada que a ordem já não dissesse. */}
+                  <span style={CEL_CAB_1} />
+                  <span style={CEL_CAB}>RC</span>
+                  <span style={CEL_CAB}>PC · fornecedor</span>
+                  <span style={CEL_CAB}>Aprovação</span>
+                  <span style={CEL_CAB}>Materiais</span>
+                  <span style={{ ...CEL_CAB, textAlign: "right" }}>Valor PC</span>
                 </div>
 
                 {p.lotes.length === 0 && (
@@ -188,26 +237,25 @@ export default function ListaPedidos({
                   return (
                     <div key={chave}>
                       <div onClick={() => (temItens ? abrirLote(chave, ncod) : onLoteClick?.(r))}
-                        style={{
-                          display: "grid", gridTemplateColumns: "112px 1.3fr 1.1fr 1fr 1.3fr 110px",
-                          gap: 16, alignItems: "center", padding: "10px",
-                          borderBottom: "1px dashed var(--ww-border-subtle)", cursor: "pointer",
+                        style={LINHA}>
+                        <span style={{
+                          padding: "10px", display: "flex", alignItems: "center",
+                          justifyContent: "flex-end", gap: 4,
                         }}>
-                        <span style={{ display: "flex", alignItems: "center", gap: 6, fontWeight: 600, color: "var(--ww-text)" }}>
                           <Chevron open={loteAberto} hidden={!temItens} />
-                          Compra {i + 1}
+                          <Ordinal n={i + 1} temPc={!!pc} />
                         </span>
-                        <span style={{ minWidth: 0 }}>
-                          <span style={{ display: "block", color: "var(--ww-text)" }}>{s(r.rc_numero) || "—"}</span>
+                        <span style={CEL}>
+                          <span style={{ color: "var(--ww-text)" }}>{s(r.rc_numero) || "—"}</span>
                           <span style={{
-                            display: "block", fontSize: "var(--text-chip)", color: "var(--ww-text-faint)",
+                            fontSize: "var(--text-chip)", color: "var(--ww-text-faint)",
                             overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
                           }}>{s(r.rc_descricao) || ""}</span>
                         </span>
-                        <span style={{ minWidth: 0 }}>
-                          <span style={{ display: "block", color: "var(--ww-text)" }}>{pc ? `PC ${pc}` : "—"}</span>
+                        <span style={CEL}>
+                          <span style={{ color: "var(--ww-text)" }}>{pc ? `PC ${pc}` : "—"}</span>
                           <span style={{
-                            display: "block", fontSize: "var(--text-chip)", color: "var(--ww-text-faint)",
+                            fontSize: "var(--text-chip)", color: "var(--ww-text-faint)",
                             overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
                           }}>{s(r.nome_fornecedor) || ""}</span>
                         </span>
@@ -220,32 +268,36 @@ export default function ListaPedidos({
                             células ficam vazias: a ausência é a informação. */}
                         {pc ? (
                           <>
-                            <span style={{ display: "flex", flexDirection: "column", gap: 3, alignItems: "flex-start" }}>
+                            <span style={{ ...CEL, alignItems: "flex-start" }}>
                               {meta
                                 ? <StatusPill tone={meta.isApproved ? "ok" : s(r.status) === "PENDENTE" || s(r.status) === "PRE_SELECAO" ? "warn" : "crit"}>
                                     {meta.label}
                                   </StatusPill>
                                 : <span style={{ color: "var(--ww-text-faint)" }}>—</span>}
-                              <span style={{ fontSize: "var(--text-chip)", color: "var(--ww-text-faint)" }}>
-                                {s(r.aprovador_email) ? `${s(r.aprovador_email).split("@")[0]} · ${s(r.aprovado_em).slice(0, 10)}` : ""}
-                              </span>
+                              {s(r.aprovador_email) && (
+                                <span style={{ fontSize: "var(--text-chip)", color: "var(--ww-text-faint)" }}>
+                                  {`${s(r.aprovador_email).split("@")[0]} · ${s(r.aprovado_em).slice(0, 10)}`}
+                                </span>
+                              )}
                             </span>
-                            <span style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                            <span style={CEL}>
                               <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
                                 <StatusPill tone={mat.tom}>{mat.rotulo}</StatusPill>
                                 <span style={{ flex: 1, minWidth: 40 }}><ProgressBar value={mat.pct} tone={mat.tom} height={4} /></span>
                               </span>
                               {mat.sub && <span style={{ fontSize: "var(--text-chip)", color: "var(--ww-text-faint)" }}>{mat.sub}</span>}
                             </span>
-                            <span style={{ textAlign: "right", fontWeight: 600, color: "var(--ww-text)" }}>
+                            <span style={{ ...CEL, alignItems: "flex-end", fontWeight: 600, color: "var(--ww-text)" }}>
                               {dinheiro(n(r.valor_total))}
                             </span>
                           </>
                         ) : (
                           <>
-                            <span />
-                            <span />
-                            <span style={{ textAlign: "right", color: "var(--ww-text-faint)" }}>
+                            {/* Células vazias mas COM régua: sem a borda a linha
+                                partia-se ao meio e deixava de se seguir até ao fim. */}
+                            <span style={CEL} />
+                            <span style={CEL} />
+                            <span style={{ ...CEL, alignItems: "flex-end", color: "var(--ww-text-faint)" }}>
                               {/* Nem "R$ 0,00": zero é um valor, e aqui não há valor. */}
                               —
                             </span>
