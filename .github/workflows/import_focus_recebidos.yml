@@ -7,8 +7,8 @@ on:
         description: "Não manifestar (só listar)"
         required: false
         default: ""
-  schedule:
-    - cron: "15 10-23/2 * * *"   # a cada 2h, 07:15–21:15 BRT (SEFAZ: evitar consulta em excesso)
+  # schedule: ligar depois da 1ª conferência
+  #   - cron: "15 10-23/2 * * *"   # a cada 2h, 07:15–21:15 BRT (SEFAZ: evitar consulta em excesso)
 
 concurrency:
   group: focus-recebidos
