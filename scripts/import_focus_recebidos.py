@@ -36,7 +36,7 @@ TIPOS = {
     # tipo : (endpoint, campo da chave)
     "nfe":  ("nfes_recebidas",  "chave_nfe"),
     "cte":  ("ctes_recebidas",  "chave_cte"),
-    "nfse": ("nfsens_recebidas", "chave"),
+    "nfse": ("nfsens_recebidas", "chave_nfse"),
 }
 
 PAUSA = 0.7            # 100 req/min por token → folga
@@ -87,7 +87,7 @@ def primeiro(d, *campos):
 
 def mapear(tipo, item, sigla, cnpj):
     campo_chave = TIPOS[tipo][1]
-    chave = primeiro(item, campo_chave, "chave", "chave_nfe", "chave_cte", "chave_acesso", "codigo_verificacao")
+    chave = primeiro(item, campo_chave, "chave", "chave_nfe", "chave_cte", "chave_nfse")
     if not chave:
         return None
     completa = primeiro(item, "nfe_completa", "cte_completo", "completa")
@@ -99,7 +99,7 @@ def mapear(tipo, item, sigla, cnpj):
         "versao": item.get("versao"),
         "emitente_nome": primeiro(item, "nome_emitente", "razao_social_emitente", "nome_prestador"),
         "emitente_doc": primeiro(item, "documento_emitente", "cnpj_emitente", "cnpj_prestador", "documento_prestador"),
-        "numero": str(primeiro(item, "numero", "numero_nfe", "numero_cte", "numero_nfse") or "") or None,
+        "numero": _numero(tipo, str(chave), item),
         "emissao": primeiro(item, "data_emissao", "data_emissao_nfse"),
         "valor": to_float(primeiro(item, "valor_total", "valor_servicos", "valor_liquido")),
         "situacao": primeiro(item, "situacao", "status"),
@@ -108,6 +108,16 @@ def mapear(tipo, item, sigla, cnpj):
         "raw": item,
         "synced_at": agora(),
     }
+
+
+def _numero(tipo, chave, item):
+    n = primeiro(item, "numero", "numero_nfse")
+    if n:
+        return str(n)
+    # NF-e/CT-e: chave de 44 dígitos traz o número nas posições 26–34 (nNF/nCT)
+    if tipo in ("nfe", "cte") and len(chave) == 44 and chave.isdigit():
+        return str(int(chave[25:34]))
+    return None
 
 
 def cursor_atual(tipo, cnpj):
