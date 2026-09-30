@@ -15,7 +15,7 @@
  */
 
 import { useState, type ReactNode } from "react";
-import { Chevron, ProgressBar, StatusPill, type Tom } from "./primitivos";
+import { Chevron, ProgressBar, StatusPill, tom, type Tom } from "./primitivos";
 
 const FUNDO = ["var(--ww-row-l0)", "var(--ww-row-l1)", "var(--ww-row-l2)"];
 
@@ -30,6 +30,10 @@ export type NoArvore = {
 };
 
 export type ColunaArvore = { label: string; align?: "left" | "right"; width?: string };
+
+/** Faixa de grupo do cabeçalho duplo. `span` conta colunas de dados (a coluna
+ *  do nome fica sempre de fora — é a árvore, não pertence a grupo nenhum). */
+export type GrupoArvore = { label: string; span: number; tone: Tom };
 
 /** Célula com pílula de estado — o formato que o modelo usa em Aprovação. */
 export function CelulaPill({ tone, children, sub }: { tone: Tom; children: ReactNode; sub?: string }) {
@@ -71,11 +75,13 @@ export function CelulaTexto({ t, sub, tone }: { t: ReactNode; sub?: string; tone
 }
 
 export default function TreeTable({
-  columns, rows, grid, defaultExpanded = [], minWidth = 1000,
+  columns, rows, grid, groups, defaultExpanded = [], minWidth = 1000,
 }: {
   columns: ColunaArvore[];
   rows: NoArvore[];
   grid?: string;
+  /** Cabeçalho duplo: faixas coloridas por grupo, como no modelo. */
+  groups?: GrupoArvore[];
   defaultExpanded?: string[];
   minWidth?: number;
 }) {
@@ -103,6 +109,20 @@ export default function TreeTable({
   return (
     <div style={{ overflowX: "auto" }}>
       <div style={{ minWidth }}>
+        {groups && groups.length > 0 && (
+          <div style={{ display: "grid", gridTemplateColumns: tpl }}>
+            <div />
+            {groups.map((g, i) => (
+              <div key={i} style={{
+                gridColumn: `span ${g.span}`, padding: "6px 12px",
+                fontSize: "var(--text-chip)", fontWeight: 700,
+                letterSpacing: "var(--tracking-label)", textTransform: "uppercase",
+                color: tom(g.tone).fg, background: tom(g.tone).bg,
+                borderLeft: "1px solid var(--ww-border-subtle)",
+              }}>{g.label}</div>
+            ))}
+          </div>
+        )}
         <div style={{
           display: "grid", gridTemplateColumns: tpl, background: "var(--ww-panel-sunken)",
           borderBottom: "1px solid var(--ww-border)", fontSize: "var(--text-chip)",

@@ -83,8 +83,29 @@ export default function LinhaDoTempo({
     <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
       {/* Régua */}
       <div style={{ display: "grid", gridTemplateColumns: "320px 1fr", gap: 12, alignItems: "center" }}>
-        <span style={{ fontSize: "var(--text-micro)", color: "var(--ww-text-faint)" }}>
-          hoje em ciano · limite do PV em coral
+        {/* Legenda do modelo: sem ela os marcos sao pontos sem significado. */}
+        <span style={{ display: "flex", flexWrap: "wrap", gap: 10, fontSize: "var(--text-micro)", color: "var(--ww-text-faint)" }}>
+          {([
+            ["RC criada", "circulo", "var(--ww-text-faint)"],
+            ["PC emitido", "quadrado", "var(--ww-info)"],
+            ["Aprovado", "quadrado", "var(--ww-ok)"],
+            ["Recebido", "circuloCheio", "var(--ww-ok)"],
+            ["Aguardando / previsto", "circulo", "var(--ww-warn)"],
+          ] as [string, string, string][]).map(([rot, forma, cor]) => (
+            <span key={rot} style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
+              <span style={{
+                width: forma === "quadrado" ? 8 : 9, height: forma === "quadrado" ? 8 : 9,
+                borderRadius: forma === "quadrado" ? 2 : "50%",
+                background: forma === "circulo" ? "transparent" : cor,
+                border: `1.5px solid ${cor}`,
+              }} />
+              {rot}
+            </span>
+          ))}
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
+            <span style={{ width: 10, height: 2, background: "var(--ww-crit)" }} />
+            Previsão limite do PV
+          </span>
         </span>
         <span style={{ position: "relative", height: 16 }}>
           <span style={{

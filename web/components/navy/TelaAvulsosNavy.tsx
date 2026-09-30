@@ -50,16 +50,28 @@ const GRUPOS: { chave: string; rotulo: string; tom: Tom; kinds: AlarmKind[] }[] 
   { chave: "faturamento", rotulo: "Faturamento", tom: "ok",     kinds: ["pode_faturar"] },
 ];
 
+/* Colunas e grupos do modelo: RC (1) · PC (2) · Aprovação (1) · Materiais (3).
+   A grelha é a do handoff, ao pixel. */
 const COLUNAS = [
   { label: "Pedido › compra › item" },
-  { label: "RC", width: "110px" },
-  { label: "PC · fornecedor", width: "minmax(150px,1.1fr)" },
-  { label: "Valor", width: "110px", align: "right" as const },
-  { label: "Aprovação", width: "150px" },
-  { label: "Materiais", width: "130px" },
-  { label: "Recebimento", width: "minmax(160px,1.2fr)" },
-  { label: "Total", width: "90px", align: "right" as const },
+  { label: "Custo", align: "right" as const },
+  { label: "PC · fornecedor" },
+  { label: "Valor PC", align: "right" as const },
+  { label: "Status" },
+  { label: "Recebido" },
+  { label: "Status · previsão" },
+  { label: "NF fornec.", align: "right" as const },
 ];
+
+const GRUPOS_COL: { label: string; span: number; tone: Tom }[] = [
+  { label: "RC",        span: 1, tone: "warn" },
+  { label: "PC",        span: 2, tone: "info" },
+  { label: "Aprovação", span: 1, tone: "ok" },
+  { label: "Materiais", span: 3, tone: "violet" },
+];
+
+const GRID_TABELA =
+  "minmax(280px,1.6fr) 110px minmax(150px,1.1fr) 110px 150px 130px minmax(160px,1.2fr) 90px";
 
 export default function TelaAvulsosNavy() {
   const perms = useUserPerms();
@@ -141,70 +153,10 @@ export default function TelaAvulsosNavy() {
 
   /* Árvore: Pedido → Lote. Um PC é um PC — a dedupe vive aqui, e não em cada
      vista, porque foi o erro que se repetiu três vezes hoje. */
-  const arvore: NoArvore[] = useMemo(() => visiveis.map((b) => {
-    const porPc = new Map<string, AnyRow>();
-    const semPc: AnyRow[] = [];
-    for (const r of b.rows) {
-      const pc = s(r.pc_numero) || s(r.pc_numero_manual);
-      if (!pc) { semPc.push(r); continue; }
-      const ant = porPc.get(pc);
-      if (!ant || (n(r.ncod_ped) > 0 && n(ant.ncod_ped) < 0)) porPc.set(pc, r);
-    }
-    const lotes = [...porPc.values(), ...semPc];
-    const head = b.rows[0] ?? {};
-    const totalPc = lotes.reduce((t, r) => t + n(r.valor_total), 0);
-    const recebidos = lotes.filter((r) => s(r.mt_data_recebimento_nf)).length;
-    const aprovados = lotes.filter((r) => STATUS_META[s(r.status)]?.isApproved).length;
-    const comPc = lotes.filter((r) => s(r.pc_numero) || s(r.pc_numero_manual)).length;
-
-    return {
-      id: b.pv_os_label,
-      name: b.pv_os_label,
-      sub: `${b.cliente ?? "—"} · ${lotes.length} compra${lotes.length === 1 ? "" : "s"}`,
-      cells: [
-        <CelulaTexto key="rc" t={`${lotes.filter((r) => s(r.rc_numero)).length}/${lotes.length}`} />,
-        <CelulaTexto key="pc" t={`${comPc} com PC`} sub={s(head.tipo_omie) || undefined} />,
-        dinheiro(n(head.pv_valor_total)),
-        <CelulaBarra key="ap" valor={`${aprovados}/${comPc || 0}`}
-          pct={comPc ? (aprovados / comPc) * 100 : 0} tone={aprovados === comPc && comPc > 0 ? "ok" : "warn"} />,
-        <CelulaBarra key="mat" valor={`${recebidos}/${lotes.length}`}
-          pct={lotes.length ? (recebidos / lotes.length) * 100 : 0}
-          tone={recebidos === lotes.length && lotes.length > 0 ? "ok" : "info"} />,
-        <CelulaTexto key="rec" t={s(head.pv_dt_fat) ? `faturado ${s(head.pv_dt_fat)}` : "—"} />,
-        dinheiro(totalPc),
-      ],
-      children: lotes.map((r, i) => {
-        const pc = s(r.pc_numero) || s(r.pc_numero_manual);
-        const st = s(r.status);
-        const meta = STATUS_META[st];
-        return {
-          id: `${b.pv_os_label}:${s(r.ncod_ped)}:${i}`,
-          name: pc ? `PC ${pc}` : s(r.rc_numero) ? `RC ${s(r.rc_numero)}` : "lote",
-          sub: s(r.nome_fornecedor) || s(r.rc_descricao) || undefined,
-          cells: [
-            <CelulaTexto key="rc" t={s(r.rc_numero) || "—"} />,
-            <CelulaTexto key="pc" t={pc || "—"} sub={s(r.codigo_categoria) || undefined} />,
-            dinheiro(n(r.valor_total)),
-            meta
-              ? <CelulaPill key="ap" tone={meta.isApproved ? "ok" : st === "PENDENTE" || st === "PRE_SELECAO" ? "warn" : "crit"}
-                  sub={s(r.aprovador_email) || undefined}>{meta.label}</CelulaPill>
-              : <CelulaTexto key="ap" t="—" />,
-            s(r.mt_status_fornecimento)
-              ? <StatusPill key="mat" tone="ok">{s(r.mt_status_fornecimento)}</StatusPill>
-              : <CelulaTexto key="mat" t="—" />,
-            <CelulaTexto key="rec"
-              t={s(r.mt_data_recebimento_nf) ? `NF ${s(r.mt_nf_fornecedor) || "—"}` : "—"}
-              sub={s(r.mt_data_recebimento_nf) || s(r.dt_previsao) || undefined} />,
-            dinheiro(n(r.valor_total)),
-          ],
-        };
-      }),
-    };
-  }), [visiveis, dinheiro]);
-
-  /* Trilho e chips do cartao. O trilho espelha o Pipeline da tela antiga; a
-     leitura devia ser uma so, e quando esta tela substituir a outra as duas
-     tem de se fundir — por agora esta anotado para nao passar despercebido. */
+  /* Pedidos para as vistas. A dedupe por PC vive AQUI, num sítio só — foi o
+     erro que hoje se repetiu três vezes por estar espalhado por cada vista.
+     O trilho espelha o Pipeline da tela antiga; quando esta substituir a
+     outra, as duas leituras têm de se fundir numa só. */
   const pedidos: Pedido[] = useMemo(() => visiveis.map((b) => {
     const porPc = new Map<string, AnyRow>();
     const semPc: AnyRow[] = [];
@@ -242,7 +194,6 @@ export default function TelaAvulsosNavy() {
       { texto: `${aprov}/${comPc || 0} aprovados`, tom: aprov >= comPc && comPc > 0 ? "ok" : "warn" },
       { texto: `${receb}/${lotes.length} recebidos`, tom: receb >= lotes.length ? "ok" : "info" },
     ];
-    // Alarmes viram chip com o tom que o handoff mapeia.
     const mapa: Partial<Record<AlarmKind, { t: string; tom: Tom }>> = {
       venda: { t: "venda em atraso", tom: "crit" },
       pvos_incompl: { t: "PV incompleto", tom: "crit" },
@@ -257,10 +208,51 @@ export default function TelaAvulsosNavy() {
       aprov_pend: { t: "aprovação pendente", tom: "warn" },
       pode_faturar: { t: "pode faturar", tom: "ok" },
     };
-    for (const k of al) { const m = mapa[k]; if (m) chips.push({ texto: m.t, tom: m.tom }); }
+    for (const kind of al) { const m = mapa[kind]; if (m) chips.push({ texto: m.t, tom: m.tom }); }
 
     return { pv_os_label: b.pv_os_label, cliente: b.cliente, rows: b.rows, lotes, head, chips, rail };
   }), [visiveis, alarmesPorBucket]);
+
+  const arvore: NoArvore[] = useMemo(() => pedidos.map((p) => ({
+    id: p.pv_os_label,
+    name: p.pv_os_label,
+    sub: `${p.cliente ?? "—"} · ${p.lotes.length} compra${p.lotes.length === 1 ? "" : "s"}`,
+    cells: [
+      dinheiro(p.lotes.reduce((t, r) => t + n(r.rc_custo) * (n(r.rc_qtd) || 1), 0)),
+      <CelulaTexto key="pc" t={`${p.lotes.filter((r) => s(r.pc_numero) || s(r.pc_numero_manual)).length} PC(s)`}
+        sub={s(p.head.tipo_omie) || undefined} />,
+      dinheiro(p.lotes.reduce((t, r) => t + n(r.valor_total), 0)),
+      <CelulaTexto key="ap"
+        t={`${p.lotes.filter((r) => STATUS_META[s(r.status)]?.isApproved).length}/${p.lotes.length}`} />,
+      <CelulaTexto key="rec"
+        t={`${p.lotes.filter((r) => s(r.mt_data_recebimento_nf)).length}/${p.lotes.length}`} />,
+      <CelulaTexto key="prev" t={s(p.head.pv_data_previsao) ? `limite ${s(p.head.pv_data_previsao)}` : "—"} />,
+      <CelulaTexto key="nf" t={s(p.head.pv_num_nfe) || "—"} />,
+    ],
+    children: p.lotes.map((r, i) => {
+      const meta = STATUS_META[s(r.status)];
+      const pc = s(r.pc_numero) || s(r.pc_numero_manual);
+      return {
+        id: `${p.pv_os_label}:${s(r.ncod_ped)}:${i}`,
+        name: `Compra ${i + 1}`,
+        sub: s(r.rc_numero) ? `RC ${s(r.rc_numero)}` : undefined,
+        cells: [
+          dinheiro(n(r.rc_custo) * (n(r.rc_qtd) || 1)),
+          <CelulaTexto key="pc" t={pc ? `PC ${pc}` : "—"} sub={s(r.nome_fornecedor) || undefined} />,
+          dinheiro(n(r.valor_total)),
+          meta
+            ? <CelulaPill key="ap" tone={meta.isApproved ? "ok" : "warn"}
+                sub={s(r.aprovador_email).split("@")[0] || undefined}>{meta.label}</CelulaPill>
+            : <CelulaTexto key="ap" t="—" />,
+          <CelulaTexto key="rec" t={s(r.mt_data_recebimento_nf) || "—"} />,
+          <CelulaTexto key="prev"
+            t={s(r.mt_status_fornecimento) || "—"}
+            sub={s(r.nova_prev_materiais) || s(r.dt_previsao) || undefined} />,
+          <CelulaTexto key="nf" t={s(r.mt_nf_fornecedor) || "—"} />,
+        ],
+      };
+    }),
+  })), [pedidos, dinheiro]);
 
   const totalGeral = useMemo(
     () => visiveis.reduce((t, b) => t + n(b.rows[0]?.pv_valor_total), 0), [visiveis]);
@@ -372,7 +364,7 @@ export default function TelaAvulsosNavy() {
                 <KanbanRaias buckets={visiveis} formatarValor={dinheiro} />
               </div>
             ) : (
-              <TreeTable columns={COLUNAS} rows={arvore} minWidth={1180} />
+              <TreeTable columns={COLUNAS} groups={GRUPOS_COL} grid={GRID_TABELA} rows={arvore} minWidth={1240} />
             )}
           </section>
         </>

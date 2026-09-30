@@ -85,7 +85,11 @@ export default function KanbanRaias({
       {/* Cabeçalho das colunas — fica fora das raias para não repetir 40 vezes. */}
       <div style={{ display: "grid", gridTemplateColumns: "270px repeat(4, 1fr)", gap: 10, position: "sticky", top: 0, zIndex: 5 }}>
         <div />
-        {COLUNAS.map((c) => (
+        {COLUNAS.map((c) => {
+          const totalCol = raias.reduce((x, r) => x + r.porColuna[c.chave].length, 0);
+          const valorCol = raias.reduce((x, r) =>
+            x + r.porColuna[c.chave].reduce((y, l) => y + Number(l.valor_total ?? 0), 0), 0);
+          return (
           <div key={c.chave} style={{
             padding: "6px 12px", borderRadius: "var(--radius-row)",
             background: "var(--ww-panel-sunken)", border: "1px solid var(--ww-border-subtle)",
@@ -93,9 +97,14 @@ export default function KanbanRaias({
             display: "flex", alignItems: "center", gap: 7,
           }}>
             <span style={{ width: 7, height: 7, borderRadius: 2, background: `var(--ww-${c.tom === "off" ? "off" : c.tom})` }} />
-            {c.titulo}
+            <span style={{ flex: 1 }}>{c.titulo}</span>
+            {/* Contagem e valor da coluna inteira — o modelo mostra-os aqui,
+                e sem eles cada raia obriga a somar de cabeca. */}
+            <span style={{ color: "var(--ww-text-faint)", fontWeight: 600 }}>{totalCol}</span>
+            <span style={{ color: "var(--ww-text-faint)", fontWeight: 500 }}>{formatarValor(valorCol)}</span>
           </div>
-        ))}
+          );
+        })}
       </div>
 
       {raias.map(({ bucket, porColuna, lotes }) => {
