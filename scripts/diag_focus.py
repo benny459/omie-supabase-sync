@@ -50,5 +50,9 @@ for sigla, cnpj in EMPRESAS.items():
     tok = env(f"FOCUS_TOKEN_{sigla}")
     if tok:
         testar(tok, cnpj)
+        for chave in (env("FOCUS_CHAVES") or "").split(","):
+            if chave.strip():
+                st, data, _ = focus(tok, "GET", f"/v2/nfes_recebidas/{chave.strip()}.json")
+                print(f"GET /v2/nfes_recebidas/{chave.strip()}.json → HTTP {st}: {str(data)[:300]}")
     else:
         print(f"sem FOCUS_TOKEN_{sigla}")

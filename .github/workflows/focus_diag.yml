@@ -2,6 +2,11 @@ name: Focus NFe — diagnóstico (só leitura)
 
 on:
   workflow_dispatch:
+    inputs:
+      chaves:
+        description: "Chaves de NF-e para consultar na Focus (separadas por vírgula)"
+        required: false
+        default: ""
 
 jobs:
   diag:
@@ -18,5 +23,6 @@ jobs:
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           FOCUS_TOKEN_MASTER: ${{ secrets.FOCUS_TOKEN_MASTER }}
           FOCUS_TOKEN_SF: ${{ secrets.FOCUS_TOKEN_SF }}
+          FOCUS_CHAVES: ${{ github.event.inputs.chaves }}
           PYTHONUNBUFFERED: "1"
         run: python3 scripts/diag_focus.py
