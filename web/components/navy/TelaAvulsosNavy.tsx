@@ -27,7 +27,7 @@ import { STATUS_META } from "@/lib/columns";
 import { estadoDoPipeline, ORDEM_TRILHO, type EstadoEtapa } from "@/lib/pipeline-estado";
 import { canViewValues } from "@/lib/permissions";
 import { useUserPerms } from "../UserPermsProvider";
-import KpisNavy from "./KpisNavy";
+import KpisNavy, { pedidoEncerrado } from "./KpisNavy";
 import TreeTable, { CelulaBarra, CelulaPill, CelulaTexto, type NoArvore } from "./TreeTable";
 import ListaPedidos, { type Pedido } from "./ListaPedidos";
 import LinhaDoTempo from "./LinhaDoTempo";
@@ -86,6 +86,18 @@ export default function TelaAvulsosNavy() {
   const [grupoSel, setGrupoSel] = useState<string | null>(null);
   const [busca, setBusca] = useState("");
   const [vista, setVista] = useState("lista");
+  /* Lembra a escolha entre sessões: quem trabalha o histórico não quer voltar
+     a "em aberto" a cada reload. O default na primeira visita é "aberto". */
+  const [escopo, setEscopo] = useState<"aberto" | "faturado" | "todos">("aberto");
+  useEffect(() => {
+    const g = localStorage.getItem("navy:avulsos:escopo");
+    if (g === "aberto" || g === "faturado" || g === "todos") setEscopo(g);
+  }, []);
+  const mudarEscopo = (v: string) => {
+    const e = v as "aberto" | "faturado" | "todos";
+    setEscopo(e);
+    localStorage.setItem("navy:avulsos:escopo", e);
+  };
   const [sinalExpandir, setSinalExpandir] = useState<number | null>(null);
 
   useEffect(() => {
@@ -107,7 +119,7 @@ export default function TelaAvulsosNavy() {
   const hoje = useMemo(() => Date.now(), []);
 
   /* Buckets por PV/OS — mesmo agrupamento do painel. */
-  const buckets = useMemo(() => {
+  const todosBuckets = useMemo(() => {
     const m = new Map<string, { pv_os_label: string; cliente: string | null; rows: AnyRow[] }>();
     for (const r of rows ?? []) {
       const k = s(r.pv_os_label) || "—";
@@ -117,6 +129,26 @@ export default function TelaAvulsosNavy() {
     }
     return [...m.values()];
   }, [rows]);
+
+  /* Escopo de faturamento. A vista tem ~1428 PV/OS mas só ~113 em aberto: sem
+     isto a tela abria numa página inteira de pedidos fechados de 2024, porque
+     a ordem é alfabética e os antigos vêm primeiro. O default é "em aberto" —
+     é o que a operação precisa de ver — e o faturado fica a um clique.
+
+     O corte é feito AQUI, antes dos alarmes e dos KPIs, para que a faixa de
+     alarmes, os cartões e a lista falem todos do mesmo conjunto. Se filtrasse
+     só a lista, clicar em "Vendas 42" mostraria menos de 42. */
+  const contagemEscopo = useMemo(() => {
+    let aberto = 0;
+    for (const b of todosBuckets) if (!pedidoEncerrado(b.rows[0] ?? {})) aberto += 1;
+    return { aberto, faturado: todosBuckets.length - aberto, todos: todosBuckets.length };
+  }, [todosBuckets]);
+
+  const buckets = useMemo(() => {
+    if (escopo === "todos") return todosBuckets;
+    const querAberto = escopo === "aberto";
+    return todosBuckets.filter((b) => !pedidoEncerrado(b.rows[0] ?? {}) === querAberto);
+  }, [todosBuckets, escopo]);
 
   /* Alarmes por bucket — uma vez, reaproveitados pela faixa e pelos chips. */
   const alarmesPorBucket = useMemo(() => {
@@ -314,6 +346,26 @@ export default function TelaAvulsosNavy() {
         }}>Erro ao carregar: {erro}</div>
       )}
 
+      {/* Escopo de faturamento — a primeira decisão de leitura da tela, por
+          isso vive acima dos alarmes: define sobre que conjunto tudo o resto
+          (contagens, KPIs, lista) se refere. */}
+      <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+        <SegmentedControl
+          value={escopo}
+          onChange={mudarEscopo}
+          options={[
+            { value: "aberto",   label: `Em aberto · ${contagemEscopo.aberto}` },
+            { value: "faturado", label: `Faturados · ${contagemEscopo.faturado}` },
+            { value: "todos",    label: `Todos · ${contagemEscopo.todos}` },
+          ]}
+        />
+        <span style={{ fontSize: "var(--text-micro)", color: "var(--ww-text-faint)" }}>
+          {escopo === "aberto"   ? "Só o que ainda não faturou — é o que a operação tem em mãos."
+         : escopo === "faturado" ? "PV/OS já faturados ou cancelados — histórico, não carteira."
+         : "Tudo, aberto e fechado."}
+        </span>
+      </div>
+
       {/* Faixa de grupos de alarme — clicar aplica o filtro do grupo */}
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
         {GRUPOS.map((g) => (
@@ -341,7 +393,7 @@ export default function TelaAvulsosNavy() {
         </div>
       ) : (
         <>
-          <KpisNavy buckets={visiveis} formatarValor={dinheiro} />
+          <KpisNavy buckets={visiveis} formatarValor={dinheiro} escopo={escopo} />
 
           {/* Tabela em árvore */}
           <section style={{

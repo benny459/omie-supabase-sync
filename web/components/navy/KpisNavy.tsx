@@ -42,12 +42,16 @@ const CARD: React.CSSProperties = {
 };
 
 export default function KpisNavy({
-  buckets, formatarValor, rotuloPedido = "pedido",
+  buckets, formatarValor, rotuloPedido = "pedido", escopo = "aberto",
 }: {
   buckets: Bucket[];
   formatarValor: (v: number) => string;
   rotuloPedido?: string;
+  /** Qual metade do faturamento a tela está a mostrar — muda o cartão-herói. */
+  escopo?: "aberto" | "faturado" | "todos";
 }) {
+  const contarEncerrados = escopo === "faturado";
+  const tituloHero = contarEncerrados ? "Faturado" : "Carteira em aberto";
   const k = useMemo(() => {
     let carteira = 0, abertos = 0, compras = 0;
     let apr = 0, pend = 0, bloq = 0, semPc = 0;
@@ -58,7 +62,11 @@ export default function KpisNavy({
 
     for (const b of buckets) {
       const head = b.rows[0] ?? {};
-      if (!pedidoEncerrado(head)) {
+      /* O cartão-herói soma o lado do faturamento que se está a ver. Em
+         "Em aberto"/"Todos" é a carteira (não encerrados); em "Faturados"
+         seriam zero pedidos e o cartão ficava a mostrar R$ 0,00 com o
+         gráfico vazio — um zero que parece um dado e não é. */
+      if (pedidoEncerrado(head) === contarEncerrados) {
         carteira += n(head.pv_valor_total);
         abertos += 1;
         const em = s(head.pv_emissao);
@@ -113,7 +121,7 @@ export default function KpisNavy({
              aReceber, aguardaAprov, recebidas, semanas, meses,
              totalPc: apr + pend + bloq,
              recTot: semanas.reduce((t, [, v]) => t + v, 0) };
-  }, [buckets]);
+  }, [buckets, contarEncerrados]);
 
   /* Donut por conic-gradient, como no modelo — sem biblioteca de gráfico para
      um anel de quatro fatias. */
@@ -149,7 +157,7 @@ export default function KpisNavy({
     <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(270px, 1fr))", gap: 16 }}>
       {/* 1 — Carteira, com sparkline */}
       <div style={{ ...CARD, background: "var(--ww-hero-grad)", color: "var(--ww-hero-text)" }}>
-        <div style={{ fontSize: "var(--text-body-sm)", fontWeight: 700 }}>Carteira em aberto</div>
+        <div style={{ fontSize: "var(--text-body-sm)", fontWeight: 700 }}>{tituloHero}</div>
         <div style={{
           fontSize: "var(--text-kpi-hero)", fontWeight: 700,
           letterSpacing: "var(--tracking-tight)", marginTop: 4,
