@@ -188,3 +188,24 @@ export async function cpmcExiste(url: string): Promise<boolean> {
     return false;
   }
 }
+
+/** Todas as propostas do CRM com fechamento ligado a um projeto do painel —
+ *  a lista que a importação automática do plano varre. */
+export async function fetchPropostasLigadas(): Promise<Array<{ numero: string; valor: number; codigo: number; cpmcUrl: string }>> {
+  const url = `${CRM_URL}/rest/v1/propostas?select=numero,valor,pp:dados_json->recebimento->projetoPainel`
+    + `&empresa_id=eq.${CRM_EMPRESA}&dados_json->recebimento->projetoPainel->>codigo=not.is.null&limit=1000`;
+  const r = await fetch(url, {
+    headers: { apikey: CRM_ANON, Authorization: `Bearer ${CRM_ANON}` },
+    cache: "no-store",
+  });
+  if (!r.ok) throw new Error(`CRM respondeu ${r.status}`);
+  const rows = (await r.json()) as Array<{ numero: string; valor?: number; pp?: { codigo?: number | string } }>;
+  return rows
+    .map((p) => ({
+      numero: p.numero,
+      valor: Number(p.valor) || 0,
+      codigo: Number(p.pp?.codigo),
+      cpmcUrl: `${CRM_URL}/storage/v1/object/public/propostas-pdfs/${CRM_EMPRESA}/${encodeURIComponent(p.numero)}/cpmc.xlsx`,
+    }))
+    .filter((p) => Number.isFinite(p.codigo) && p.codigo > 0);
+}

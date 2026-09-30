@@ -189,8 +189,29 @@ export default function FluxoSimples({
   if (!data) return <div className="text-[12px] text-ww-textMuted">Carregando o fluxo…</div>;
 
   const ex = data.execucao;
-  const entradas = (data.linhas ?? []).filter((l) => l.tipo === "entrada");
-  const saidas = (data.linhas ?? []).filter((l) => l.tipo === "saida");
+  /* A agenda vem do PLANO importado (parcelas e saídas do CP/MC). Desde
+     21/09 esta tela lia só approval.projeto_fluxo_linha — a grade de
+     digitação antiga, que a importação do plano não preenche — e por isso
+     dizia "nada na agenda" em todo projeto com plano. Linhas digitadas na
+     grade antiga, se houver, continuam a somar. Data da parcela: a ajustada
+     manda sobre a do plano, como no bloco de premissas. */
+  const doPlano: Linha[] = [
+    ...(plano?.parcelas ?? []).map((pp) => ({
+      id: -1000 - pp.parcela, tipo: "entrada" as const,
+      descricao: pp.evento || `Parcela ${pp.parcela}`, categoria: "Parcela do fechamento",
+      data_prevista: pp.dt_ajustada ?? pp.dt_plano ?? "", valor: Number(pp.valor || 0), origem: "plano",
+    })),
+    ...(plano?.saidas ?? []).filter((x) => x.no_fluxo).map((x) => ({
+      id: -1 - x.id, tipo: "saida" as const,
+      descricao: x.descricao || x.fornecedor || "Saída do plano",
+      categoria: x.origem === "sem_pc" ? "Sem pedido de compra" : (x.etapa || "Material"),
+      data_prevista: x.dt_prevista ?? "", valor: Number(x.valor || 0), origem: "plano",
+    })),
+  ];
+  const agenda = [...doPlano, ...(data.linhas ?? [])]
+    .sort((a, b) => (a.data_prevista || "9").localeCompare(b.data_prevista || "9"));
+  const entradas = agenda.filter((l) => l.tipo === "entrada");
+  const saidas = agenda.filter((l) => l.tipo === "saida");
   /* O que entrou e o que saiu vêm do ERP — título baixado e pedido pago. A
      agenda é previsão; caixa é o que o banco confirma. */
   const recebido = Number(ex?.recebido ?? 0);

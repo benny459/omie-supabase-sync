@@ -80,6 +80,31 @@ export default function ProjetoWorkspace({
   }, [empresa, codigoProjeto]);
   useEffect(() => { void carregarPlano(); }, [carregarPlano, chave]);
 
+  /* O CRM publicou um CP/MC novo? Importa ao abrir, sem esperar o botão nem
+     o cron de 15 min (regras em lib/plano-auto.ts). Se entrou, recarrega o
+     plano e remonta o fluxo para ninguém ver a versão velha. */
+  const [versaoPlano, setVersaoPlano] = useState(0);
+  const [avisoCrm, setAvisoCrm] = useState<string | null>(null);
+  useEffect(() => {
+    let vivo = true;
+    (async () => {
+      try {
+        const r = await fetch("/api/rc-projetos/plano/auto", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ empresa, codigo_projeto: codigoProjeto }),
+        });
+        if (!r.ok || !vivo) return;
+        const j = await r.json() as { acao?: string; proposta?: string; detalhe?: string };
+        if (j.acao === "importado") {
+          setAvisoCrm(`Plano atualizado sozinho com o CP/MC que o CRM publicou (${j.proposta}${j.detalhe ? ` · ${j.detalhe}` : ""}).`);
+          setVersaoPlano((v) => v + 1);
+          void carregarPlano();
+        }
+      } catch { /* sem CRM, fica o plano que já havia */ }
+    })();
+    return () => { vivo = false; };
+  }, [empresa, codigoProjeto, carregarPlano]);
+
   /** O teto vigente. Aqui o manual não é conhecido (vive no payload do fluxo),
    *  então vale o do plano — e a aba Resumo, que tem os dois, corrige. */
   const cab = plano?.plano ?? null;
@@ -103,6 +128,13 @@ export default function ProjetoWorkspace({
       {/* Os três números que não mudam de aba para aba. */}
       <KpisProjeto plano={plano} teto={tetoPlano > 0 ? tetoPlano : null}
         podeEditar={false} />
+
+      {avisoCrm && (
+        <div className="flex items-start justify-between gap-3 px-3 py-2 rounded-md border border-emerald-300 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/40 text-[12px] text-emerald-900 dark:text-emerald-200">
+          <span>↻ {avisoCrm}</span>
+          <button type="button" onClick={() => setAvisoCrm(null)} className="opacity-60 hover:opacity-100" aria-label="Fechar">×</button>
+        </div>
+      )}
 
       {/* Abas como sublinhado, não como pílulas coloridas: seis pílulas com
           ponto de cor cada uma competiriam com os KPIs logo acima. A cor fica
@@ -143,12 +175,12 @@ export default function ProjetoWorkspace({
       {aba === "resumo" && <FechamentoCrmBloco codigoProjeto={codigoProjeto} onCarregado={setTemCrm} />}
 
       {aba === "fluxo" && (
-        <FluxoSimples empresa={empresa} codigoProjeto={codigoProjeto}
+        <FluxoSimples key={`fluxo-${versaoPlano}`} empresa={empresa} codigoProjeto={codigoProjeto}
           tetoPlano={tetoPlano} />
       )}
 
       {aba === "resumo" && (
-        <FluxoProjetoView empresa={empresa} codigoProjeto={codigoProjeto}
+        <FluxoProjetoView key={`resumo-${versaoPlano}`} empresa={empresa} codigoProjeto={codigoProjeto}
           nomeProjeto={nomeProjeto}
           abas={(temCrm === false
             ? (["resumo", "premissas", "condicoes"] as AbaProjeto[])

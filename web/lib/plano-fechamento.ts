@@ -128,6 +128,13 @@ function data(v: unknown): string | null {
     const p = (n: number) => String(n).padStart(2, "0");
     return `${v.getFullYear()}-${p(v.getMonth() + 1)}-${p(v.getDate())}`;
   }
+  // O CP/MC que o CRM gera desde 21/09 grava datas como número de série do
+  // Excel, sem formato de data — o leitor não as converte e chegava aqui 46276.
+  // Só se aceita a faixa 1954–2119: fora dela é valor, não data.
+  if (typeof v === "number" && Number.isFinite(v) && v > 20000 && v < 80000) {
+    const d = new Date(Date.UTC(1899, 11, 30) + Math.round(v) * 86400000);
+    return d.toISOString().slice(0, 10);
+  }
   const s = txt(v);
   const br = s.match(/^(\d{2})\/(\d{2})\/(\d{4})/);
   if (br) return `${br[3]}-${br[2]}-${br[1]}`;
@@ -169,15 +176,28 @@ export function lerPlanoFechamento(buf: ArrayBuffer): PlanoFechamento {
     return XLSX.utils.sheet_to_json<unknown[]>(ws, { header: 1, blankrows: true, defval: null });
   };
 
+  /* Dois formatos de CP/MC convivem:
+       antigo (até 14/09): CP | MC | Condições | Fluxo
+       novo   (CRM, 21/09): Premissas | Margem | Lotes | Lista final | Fluxo
+     No novo, a MC virou "Margem"; condições, efetivo e despesas moram na
+     Premissas; e os materiais com vencimento só têm VALOR na Lotes — a
+     "Agenda de pagamentos" e a "Lista final" são fórmulas que o arquivo gerado
+     pelo CRM traz sem resultado calculado (ninguém o abriu no Excel). */
+  const formatoNovo = !!wb.Sheets["Premissas"] || !!wb.Sheets["Margem"];
   const fluxo = matriz("Fluxo");
-  const mc = matriz("MC");
+  const mc = formatoNovo && !wb.Sheets["MC"] ? matriz("Margem") : matriz("MC");
+  const premissas: Matriz = wb.Sheets["Premissas"]
+    ? XLSX.utils.sheet_to_json<unknown[]>(wb.Sheets["Premissas"], { header: 1, blankrows: true, defval: null })
+    : [];
   // A aba Condições virou a autoridade do fechamento na revisão de 14/09; antes
   // só existia o resumo espelhado na aba Fluxo. Lê-se dela quando existe e cai
   // para o espelho quando não — planilha antiga continua importando.
+  // No formato novo os mesmos blocos (FECHAMENTO, POR CONTA DE QUEM, ENTREGA E
+  // PRAZOS, PARCELAS ACORDADAS, TEXTO DA PROPOSTA) estão na aba Premissas.
   const condAba = wb.Sheets["Condições"]
     ? XLSX.utils.sheet_to_json<unknown[]>(wb.Sheets["Condições"],
         { header: 1, blankrows: true, defval: null })
-    : [];
+    : premissas;
 
   /** Lê um bloco "Item | Confirmado | (vazio) | Observação" num mapa. */
   const mapaBloco = (m: Matriz, marcador: string) => {
@@ -210,7 +230,8 @@ export function lerPlanoFechamento(buf: ArrayBuffer): PlanoFechamento {
   for (const l of bloco(fluxo, "CONDIÇÕES DE FECHAMENTO")) {
     const chave = semAcento(txt(l[0]));
     if (!chave) continue;
-    cond.set(chave, { conf: txt(l[1]), prop: txt(l[3]) });
+    // Antigo: Item | Confirmado | (merge) | Proposta. Novo: Item | Confirmado | Proposta.
+    cond.set(chave, { conf: txt(l[1]), prop: txt(l[3]) || txt(l[2]) });
   }
   const condicao = (k: string): string | null => {
     const c = cond.get(semAcento(k));
@@ -256,7 +277,26 @@ export function lerPlanoFechamento(buf: ArrayBuffer): PlanoFechamento {
   //   Fluxo:     # | Evento | % | Previsão | Valor
   const parcelas: ParcelaPlano[] = [];
   const linhasCond = bloco(condAba, "PARCELAS ACORDADAS");
-  if (linhasCond.length) {
+  const iParc = acharLinha(condAba, "PARCELAS ACORDADAS");
+  const parcFormatoNovo = iParc >= 0 && semAcento(txt(condAba[iParc + 1]?.[0])).startsWith("tipo de nf");
+  if (linhasCond.length && parcFormatoNovo) {
+    // Novo: Tipo de NF | Evento | % | Faturamento | Pagamento | Valor — sem "#".
+    // A data que conta para o caixa é o PAGAMENTO, não o faturamento.
+    for (const l of linhasCond) {
+      const valor = num(l[5]);
+      // A linha TOTAL tem o rótulo em qualquer das duas primeiras colunas (merge).
+      if (valor == null || [l[0], l[1]].some((c) => semAcento(txt(c)) === "total")) continue;
+      const n = parcelas.length + 1;
+      parcelas.push({
+        parcela: n,
+        evento: txt(l[1]) || `Parcela ${n}`,
+        pct: num(l[2]),
+        dias: null,
+        dt_plano: data(l[4]),
+        valor,
+      });
+    }
+  } else if (linhasCond.length) {
     for (const l of linhasCond) {
       const n = num(l[0]);
       const valor = num(l[5]);
@@ -269,6 +309,18 @@ export function lerPlanoFechamento(buf: ArrayBuffer): PlanoFechamento {
         dias: num(l[3]) != null ? Math.trunc(num(l[3])!) : null,
         dt_plano: data(l[4]),
         valor,
+      });
+    }
+  } else if (formatoNovo) {
+    // Novo, espelho da Fluxo: Evento | Tipo de NF | % | Faturamento | Prazo | Pagamento | Valor
+    for (const l of bloco(fluxo, "ENTRADAS")) {
+      const valor = num(l[6]);
+      if (!txt(l[0]) || valor == null) continue;
+      const n = parcelas.length + 1;
+      parcelas.push({
+        parcela: n, evento: txt(l[0]), pct: num(l[2]),
+        dias: num(l[4]) != null ? Math.trunc(num(l[4])!) : null,
+        dt_plano: data(l[5]), valor,
       });
     }
   } else {
@@ -328,6 +380,41 @@ export function lerPlanoFechamento(buf: ArrayBuffer): PlanoFechamento {
       no_fluxo: true,
     });
   }
+
+  // Formato novo: a agenda veio vazia (só fórmula). Monta-se a mesma
+  // agregação — fornecedor × etapa × vencimento — a partir dos itens da Lotes,
+  // que têm valor. Colunas pelo NOME do cabeçalho, não pela posição.
+  const temMaterial = saidas.some((x) => x.origem === "material");
+  if (!temMaterial && wb.Sheets["Lotes"]) {
+    const lotes = XLSX.utils.sheet_to_json<unknown[]>(wb.Sheets["Lotes"], { header: 1, blankrows: true, defval: null });
+    const iCab = acharLinha(lotes, "ITENS POR FORNECEDOR");
+    const cab = (lotes[iCab + 1] ?? []).map((c) => semAcento(txt(c)));
+    const col = (nome: string) => cab.findIndex((c) => c.startsWith(semAcento(nome)));
+    const cForn = col("Fornecedor provável"), cEtapa = col("Etapa");
+    const cVenc = col("Vencimento"), cSaida = col("Saída de caixa"), cTotal = col("Custo total");
+    if (iCab >= 0 && cForn >= 0 && cVenc >= 0) {
+      const agenda = new Map<string, SaidaPlano>();
+      for (const l of bloco(lotes, "ITENS POR FORNECEDOR")) {
+        const venc = data(l[cVenc]);
+        const valor = num(l[cSaida >= 0 ? cSaida : cTotal]) ?? num(l[cTotal]);
+        if (!venc || !valor) continue;
+        const bruto = txt(l[cForn]);
+        const forn = !bruto || bruto.startsWith("—") ? "Sem fornecedor definido" : bruto;
+        const etapa = cEtapa >= 0 ? txt(l[cEtapa]) || null : null;
+        const k = `${venc}|${forn}|${etapa ?? ""}`;
+        const ja = agenda.get(k);
+        if (ja) { ja.valor += valor; continue; }
+        agenda.set(k, {
+          origem: "material",
+          descricao: `${forn}${etapa ? ` · ${etapa}` : ""}`,
+          fornecedor: forn, etapa, dias_apos_base: null,
+          dt_prevista: venc, valor, no_fluxo: true,
+        });
+      }
+      saidas.push(...[...agenda.values()].sort((a, b) =>
+        String(a.dt_prevista).localeCompare(String(b.dt_prevista))));
+    }
+  }
   if (!saidas.length) avisos.push("Nenhuma saída encontrada (nem agenda, nem mão de obra).");
 
   // ── Margem de contribuição ───────────────────────────────────────────────
@@ -343,7 +430,7 @@ export function lerPlanoFechamento(buf: ArrayBuffer): PlanoFechamento {
   const custo_despesas = mcLinha(19);
   const margem_pct = mcLinha(24);
   const margem_valor = mcLinha(25);
-  if (valor_venda == null) avisos.push("Não achei o faturamento total na aba MC.");
+  if (valor_venda == null) avisos.push(`Não achei o faturamento total na aba ${formatoNovo ? "Margem" : "MC"}.`);
 
   const brl = (n: number) =>
     n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -356,7 +443,9 @@ export function lerPlanoFechamento(buf: ArrayBuffer): PlanoFechamento {
   // A linha TOTAL de cada bloco fica de fora: o total já está no cabeçalho, e
   // repeti-lo como linha faria qualquer soma na tela dar o dobro.
   const custos: CustoPlano[] = [];
-  for (const l of bloco(mc, "EFETIVO TÉCNICO")) {
+  // Efetivo e despesas: na MC antiga; no formato novo, na Premissas.
+  const abaCustos = acharLinha(mc, "EFETIVO TÉCNICO") >= 0 ? mc : premissas;
+  for (const l of bloco(abaCustos, "EFETIVO TÉCNICO")) {
     const desc = txt(l[0]);
     if (!desc || semAcento(desc) === "total") continue;
     const sub = num(l[8]);
@@ -373,7 +462,7 @@ export function lerPlanoFechamento(buf: ArrayBuffer): PlanoFechamento {
       ordem: custos.length,
     });
   }
-  for (const l of bloco(mc, "DESPESAS CONSIDERADAS")) {
+  for (const l of bloco(abaCustos, "DESPESAS CONSIDERADAS")) {
     const desc = txt(l[0]);
     if (!desc || semAcento(desc) === "total") continue;
     const sub = num(l[4]);
