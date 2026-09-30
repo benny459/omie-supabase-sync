@@ -53,27 +53,34 @@ export default function LinhaDoTempo({
   }, []);
 
   /* Janela comum a todos: sem isto cada linha teria a sua escala e a
-     comparação visual entre pedidos — que é o ponto da vista — perdia-se. */
+     comparação visual entre pedidos — que é o ponto da vista — perdia-se.
+     Mas a janela é *rolante*, não o intervalo todo dos dados: há PV de 2024
+     ainda em aberto, e deixá-los mandar na escala esmagava dois anos num
+     ecrã — todas as barras ficavam cotos de 20px à esquerda e o "hoje"
+     encostado à direita. Prende-se em [hoje−8sem, hoje+16sem] e quem cai
+     fora ganha uma seta no bordo. */
   const janela = useMemo(() => {
-    let min = hoje, max = hoje;
-    for (const b of buckets) {
-      for (const r of b.rows) {
-        for (const v of [r.pv_emissao, r.pv_data_previsao, r.dt_inclusao, r.dt_previsao,
-                         r.nova_prev_materiais, r.mt_data_recebimento_nf, r.aprovado_em]) {
-          const d = dia(v);
-          if (d == null) continue;
-          if (d < min) min = d;
-          if (d > max) max = d;
-        }
-      }
-    }
-    // Margem de uma semana de cada lado, para os marcos das pontas respirarem.
-    min -= 7 * DIA_MS; max += 7 * DIA_MS;
-    if (max - min < 30 * DIA_MS) max = min + 30 * DIA_MS;
+    const min = hoje - 56 * DIA_MS;
+    const max = hoje + 112 * DIA_MS;
     return { min, max, span: max - min };
-  }, [buckets, hoje]);
+  }, [hoje]);
 
-  const pos = (t: number) => ((t - janela.min) / janela.span) * 100;
+  /** Posição em %, presa ao intervalo visível. */
+  const pos = (t: number) =>
+    Math.max(0, Math.min(100, ((t - janela.min) / janela.span) * 100));
+  const antes = (t: number | null) => t != null && t < janela.min;
+  const depois = (t: number | null) => t != null && t > janela.max;
+
+  /* Marcas de semana ao fundo — sem elas a barra é um traço sem unidade.
+     Uma a cada 4 semanas, para não virar grade. */
+  const marcasSemana = useMemo(() => {
+    const out: { em: number; rot: string }[] = [];
+    for (let t = hoje - 56 * DIA_MS; t <= janela.max; t += 28 * DIA_MS) {
+      const d = new Date(t);
+      out.push({ em: t, rot: `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}` });
+    }
+    return out;
+  }, [hoje, janela.max]);
 
   if (buckets.length === 0) {
     return <div className="py-14 text-center text-[12px] text-ww-textFaint">Nada para mostrar com estes filtros.</div>;
@@ -108,6 +115,13 @@ export default function LinhaDoTempo({
           </span>
         </span>
         <span style={{ position: "relative", height: 16 }}>
+          {marcasSemana.map((m) => (
+            <span key={m.em} style={{
+              position: "absolute", left: `${pos(m.em)}%`, top: 2,
+              transform: "translateX(-50%)", fontSize: "var(--text-micro)",
+              color: "var(--ww-text-faint)", whiteSpace: "nowrap",
+            }}>{m.rot}</span>
+          ))}
           <span style={{
             position: "absolute", left: `${pos(hoje)}%`, top: 0, bottom: 0, width: 2,
             background: "var(--ww-ok)", boxShadow: "var(--ww-glow-ok)",
@@ -115,7 +129,8 @@ export default function LinhaDoTempo({
           <span style={{
             position: "absolute", left: `${pos(hoje)}%`, top: 0,
             transform: "translateX(-50%)", fontSize: "var(--text-micro)",
-            color: "var(--ww-ok-text)", whiteSpace: "nowrap",
+            fontWeight: 700, color: "var(--ww-ok-text)", whiteSpace: "nowrap",
+            background: "var(--ww-panel)", padding: "0 4px",
           }}>hoje</span>
         </span>
       </div>
@@ -156,6 +171,12 @@ export default function LinhaDoTempo({
 
               {/* Faixa do pedido */}
               <span style={{ position: "relative", height: 22 }}>
+                {marcasSemana.map((m) => (
+                  <span key={m.em} style={{
+                    position: "absolute", left: `${pos(m.em)}%`, top: 0, bottom: 0,
+                    width: 1, background: "var(--ww-border-subtle)", opacity: 0.5,
+                  }} />
+                ))}
                 {emissao != null && limite != null && (
                   <>
                     <span style={{
@@ -174,6 +195,24 @@ export default function LinhaDoTempo({
                       position: "absolute", left: `${pos(limite)}%`, top: 2, bottom: 2,
                       width: 2, background: "var(--ww-crit)",
                     }} />
+                    {/* Fora da janela: a seta diz que a barra continua para lá
+                        do bordo, em vez de mentir que começa/acaba ali. */}
+                    {antes(emissao) && (
+                      <span title={`emitido em ${new Date(emissao).toLocaleDateString("pt-BR")}`}
+                        style={{
+                          position: "absolute", left: 0, top: 4, fontSize: "var(--text-micro)",
+                          color: "var(--ww-text-faint)", background: "var(--ww-row-l0)",
+                          paddingRight: 3,
+                        }}>◀</span>
+                    )}
+                    {depois(limite) && (
+                      <span title={`limite em ${new Date(limite).toLocaleDateString("pt-BR")}`}
+                        style={{
+                          position: "absolute", right: 0, top: 4, fontSize: "var(--text-micro)",
+                          color: "var(--ww-text-faint)", background: "var(--ww-row-l0)",
+                          paddingLeft: 3,
+                        }}>▶</span>
+                    )}
                   </>
                 )}
                 {(emissao == null || limite == null) && (
@@ -222,7 +261,20 @@ export default function LinhaDoTempo({
                       position: "absolute", left: 0, right: 0, top: 7, height: 1,
                       background: "var(--ww-border-subtle)",
                     }} />
-                    {marcos.map((m, k) => (
+                    {/* Marco fora da janela vira contagem no bordo: encostá-lo
+                        ao limite punha-o a fingir uma data que não tem. */}
+                    {(() => {
+                      const fora = marcos.filter((m) => antes(m.em));
+                      if (fora.length === 0) return null;
+                      return (
+                        <span title={fora.map((m) => `${m.titulo} · ${new Date(m.em).toLocaleDateString("pt-BR")}`).join("\n")}
+                          style={{
+                            position: "absolute", left: 0, top: 1, fontSize: "var(--text-micro)",
+                            color: "var(--ww-text-faint)", background: "var(--ww-row-l0)", paddingRight: 4,
+                          }}>◀ {fora.length}</span>
+                      );
+                    })()}
+                    {marcos.filter((m) => !antes(m.em) && !depois(m.em)).map((m, k) => (
                       <span key={k} title={`${m.titulo} · ${new Date(m.em).toLocaleDateString("pt-BR")}`}
                         style={{
                           position: "absolute", left: `${pos(m.em)}%`, top: m.forma === "quadrado" ? 4 : 3.5,

@@ -22,6 +22,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { computeBucketAlarms, type AlarmKind } from "@/lib/alarmes";
 import { STATUS_META } from "@/lib/columns";
+/* ORDEM_TRILHO casa 1:1 com o `ETAPAS` do PipelineRail — os rótulos do
+   tooltip vêm de lá, a ordem vem daqui, e as duas listas têm de bater. */
+import { estadoDoPipeline, ORDEM_TRILHO, type EstadoEtapa } from "@/lib/pipeline-estado";
 import { canViewValues } from "@/lib/permissions";
 import { useUserPerms } from "../UserPermsProvider";
 import KpisNavy from "./KpisNavy";
@@ -155,8 +158,9 @@ export default function TelaAvulsosNavy() {
      vista, porque foi o erro que se repetiu três vezes hoje. */
   /* Pedidos para as vistas. A dedupe por PC vive AQUI, num sítio só — foi o
      erro que hoje se repetiu três vezes por estar espalhado por cada vista.
-     O trilho espelha o Pipeline da tela antiga; quando esta substituir a
-     outra, as duas leituras têm de se fundir numa só. */
+     O trilho vem de `estadoDoPipeline`, as mesmas regras que a tela antiga
+     usa nos dots — antes eu tinha aqui uma aproximação minha e o trilho lia
+     quase tudo igual. */
   const pedidos: Pedido[] = useMemo(() => visiveis.map((b) => {
     const porPc = new Map<string, AnyRow>();
     const semPc: AnyRow[] = [];
@@ -174,20 +178,18 @@ export default function TelaAvulsosNavy() {
     const comRc = lotes.filter((r) => s(r.rc_numero)).length;
     const aprov = lotes.filter((r) => STATUS_META[s(r.status)]?.isApproved).length;
     const receb = lotes.filter((r) => s(r.mt_data_recebimento_nf)).length;
-    const encerrado = s(head.pv_dt_fat) !== "" || s(head.pv_num_nfe) !== "";
-
-    const estado = (feito: number, total: number): Tom =>
-      total === 0 ? "off" : feito >= total ? "ok" : feito > 0 ? "warn" : "crit";
-
-    const rail: Tom[] = [
-      al.has("pvos_incompl") ? "crit" : "ok",
-      estado(comRc, lotes.length),
-      estado(comPc, lotes.length),
-      al.has("aprov_bloq") ? "crit" : estado(aprov, comPc),
-      estado(receb, lotes.length),
-      al.has("sem_vinculo") || al.has("agend_vazio") || al.has("agend_venc") ? "warn" : "ok",
-      encerrado ? "ok" : "off",
-    ];
+    /* Trilho: as regras do pipeline da tela antiga, agora partilhadas.
+       Avalia sobre `b.rows` (não sobre `lotes`) porque as regras de RC/PC
+       contam cadastro incompleto, e a dedupe podia esconder uma cópia
+       incompleta. `aprov_bloq` continua a mandar: um bloqueio explícito é
+       pior do que a média que a regra de aprovação produz. */
+    const pipe = estadoDoPipeline(b.rows, { modulo: "avulsos" });
+    const traduz: Record<EstadoEtapa, Tom> =
+      { green: "ok", yellow: "warn", red: "crit", off: "off" };
+    const rail: Tom[] = ORDEM_TRILHO.map((etapa) => {
+      if (etapa === "aprovacao" && al.has("aprov_bloq")) return "crit";
+      return traduz[pipe[etapa]];
+    });
 
     const chips: { texto: string; tom: Tom }[] = [
       { texto: `${comPc}/${lotes.length} PCs`, tom: comPc >= lotes.length ? "ok" : "warn" },
