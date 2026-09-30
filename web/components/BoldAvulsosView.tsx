@@ -1917,6 +1917,18 @@ export default function BoldAvulsosView({
         </span>
         <div className="self-center"><GlobalSearch /></div>
         <div className="self-center"><SyncNowButton /></div>
+        {/* Atalho para a recriacao Navy, so para o Benny e so em /avulsos.
+            E rascunho: fica fora do menu e invisivel para os outros ate ele
+            decidir se substitui a tela. O id em vez do email porque UserPerms
+            nao carrega email — e o id nao muda se o endereco mudar. */}
+        {modulo === "avulsos" && user?.id === "44de386a-1bd0-4fd9-a769-08cb33d3be70" && (
+          <a href="/avulsos-navy"
+            className="self-center inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold
+                       border border-ww-accent/60 text-ww-accentText hover:bg-ww-accent hover:text-white transition"
+            title="Recriacao Navy desta tela — rascunho, so voce ve">
+            ✦ Ver em Navy
+          </a>
+        )}
         {/* Só aparece se houver PC escondido — é a porta de volta da exclusão. */}
         <div className="self-center">
           <PcsExcluidosButton linhas={pcsEscondidos} onMudou={carregarEscondidos} />
