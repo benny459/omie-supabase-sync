@@ -1,9 +1,12 @@
 "use client";
 
 /**
- * Lista — a vista por omissão do modelo, e a que eu tinha feito errado:
- * não é uma tabela, é um cartão por pedido que abre em lotes e o lote abre
- * em itens.
+ * Lista — a vista por omissão do modelo: um cartão por pedido que abre nas
+ * suas COMPRAS, e cada compra abre nos itens.
+ *
+ * "Lote" era o nome do mockup e não descreve o que a linha é: cada linha do
+ * segundo nível é uma compra — um par RC → PC, com fornecedor, aprovação e
+ * materiais próprios. As colunas já diziam isso; o rótulo é que não.
  *
  * Cartão do pedido:  chevron · id + tipo/nº lotes · cliente + previsão limite
  *                    · trilho de 7 segmentos · chips · valor
@@ -126,7 +129,7 @@ export default function ListaPedidos({
                   {p.pv_os_label}
                 </span>
                 <span style={{ display: "block", fontSize: "var(--text-chip)", color: "var(--ww-text-faint)" }}>
-                  {s(p.head.tipo_omie) || "—"} · {p.lotes.length} lote{p.lotes.length === 1 ? "" : "s"}
+                  {s(p.head.tipo_omie) || "—"} · {p.lotes.length} compra{p.lotes.length === 1 ? "" : "s"}
                 </span>
               </span>
               <span style={{ minWidth: 0 }}>
@@ -156,11 +159,22 @@ export default function ListaPedidos({
                   gap: 16, padding: "8px 10px", fontSize: "var(--text-chip)",
                   color: "var(--ww-text-faint)", borderBottom: "1px solid var(--ww-border-subtle)",
                 }}>
-                  <span>Lote</span><span>RC</span><span>PC · fornecedor</span>
+                  <span>Compra</span><span>RC</span><span>PC · fornecedor</span>
                   <span>Aprovação</span><span>Materiais</span>
                   <span style={{ textAlign: "right" }}>Valor PC</span>
                 </div>
 
+                {p.lotes.length === 0 && (
+                  <div style={{
+                    padding: "14px 10px", fontSize: "var(--text-body-sm)",
+                    color: "var(--ww-text-faint)", display: "flex", alignItems: "center", gap: 8,
+                  }}>
+                    <span style={{
+                      width: 6, height: 6, borderRadius: "50%", background: "var(--ww-off)",
+                    }} />
+                    Sem compras lançadas neste pedido — a venda existe, a compra ainda não.
+                  </div>
+                )}
                 {p.lotes.map((r, i) => {
                   const ncod = n(r.ncod_ped);
                   const chave = `${p.pv_os_label}:${ncod}:${i}`;
@@ -181,7 +195,7 @@ export default function ListaPedidos({
                         }}>
                         <span style={{ display: "flex", alignItems: "center", gap: 6, fontWeight: 600, color: "var(--ww-text)" }}>
                           <Chevron open={loteAberto} hidden={!temItens} />
-                          Lote {i + 1}
+                          Compra {i + 1}
                         </span>
                         <span style={{ minWidth: 0 }}>
                           <span style={{ display: "block", color: "var(--ww-text)" }}>{s(r.rc_numero) || "—"}</span>

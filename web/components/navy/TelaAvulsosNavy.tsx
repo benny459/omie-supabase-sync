@@ -51,7 +51,7 @@ const GRUPOS: { chave: string; rotulo: string; tom: Tom; kinds: AlarmKind[] }[] 
 ];
 
 const COLUNAS = [
-  { label: "Pedido › lote › item" },
+  { label: "Pedido › compra › item" },
   { label: "RC", width: "110px" },
   { label: "PC · fornecedor", width: "minmax(150px,1.1fr)" },
   { label: "Valor", width: "110px", align: "right" as const },
@@ -160,7 +160,7 @@ export default function TelaAvulsosNavy() {
     return {
       id: b.pv_os_label,
       name: b.pv_os_label,
-      sub: `${b.cliente ?? "—"} · ${lotes.length} lote${lotes.length === 1 ? "" : "s"}`,
+      sub: `${b.cliente ?? "—"} · ${lotes.length} compra${lotes.length === 1 ? "" : "s"}`,
       cells: [
         <CelulaTexto key="rc" t={`${lotes.filter((r) => s(r.rc_numero)).length}/${lotes.length}`} />,
         <CelulaTexto key="pc" t={`${comPc} com PC`} sub={s(head.tipo_omie) || undefined} />,
@@ -338,10 +338,10 @@ export default function TelaAvulsosNavy() {
             }}>
               <div style={{ flex: "1 1 240px" }}>
                 <div style={{ fontSize: "var(--text-h2)", fontWeight: 700, color: "var(--ww-text)" }}>
-                  Pedidos · lotes · itens
+                  Pedidos · compras · itens
                 </div>
                 <div style={{ fontSize: "var(--text-meta)", color: "var(--ww-text-muted)" }}>
-                  O que está em aberto — pedido resume, lote liga PC → aprovação → materiais, item mostra quanto chegou
+                  O que está em aberto — pedido resume, compra liga RC → PC → aprovação → materiais, item mostra quanto chegou
                 </div>
               </div>
               <SegmentedControl
