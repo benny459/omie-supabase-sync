@@ -119,8 +119,10 @@ const ABAS = [
     off: "text-ww-textMuted hover:text-emerald-700 dark:hover:text-emerald-300 hover:bg-emerald-500/[0.08]" },
 ];
 
-export default function FinanceiroView() {
-  const [aba, setAba] = useState<Aba>("fluxo");
+/** `abaInicial`: a Visão financeira Navy abre esta tela direto em Análise ou
+ *  Recebíveis. Sem o parâmetro, o comportamento de sempre (Fluxo). */
+export default function FinanceiroView({ abaInicial = "fluxo" }: { abaInicial?: Aba } = {}) {
+  const [aba, setAba] = useState<Aba>(abaInicial);
   const [lado, setLado] = useState<Lado>("ambos");
   const [data, setData] = useState<Payload | null>(null);
   const [loading, setLoading] = useState(true);

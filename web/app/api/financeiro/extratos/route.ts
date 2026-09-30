@@ -28,6 +28,16 @@ export async function GET(req: Request) {
   const url = new URL(req.url);
   const from = url.searchParams.get("from");
   const to = url.searchParams.get("to");
+  const soContas = url.searchParams.get("so_contas") === "1";
+
+  if (soContas) {
+    // Só o saldo por conta — a Visão financeira não precisa dos lançamentos.
+    const bi0 = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!,
+      { auth: { persistSession: false }, db: { schema: "bi" } });
+    const c = await bi0.rpc("saldo_por_conta", { p_empresas: null });
+    if (c.error) return NextResponse.json({ error: `saldo_por_conta: ${c.error.message}` }, { status: 500 });
+    return NextResponse.json({ contas: c.data ?? [] });
+  }
   if (!from || !to) return NextResponse.json({ error: "from e to obrigatórios (YYYY-MM-DD)" }, { status: 400 });
 
   const url0 = process.env.NEXT_PUBLIC_SUPABASE_URL!, key = process.env.SUPABASE_SERVICE_ROLE_KEY!;
