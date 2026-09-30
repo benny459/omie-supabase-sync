@@ -56,17 +56,18 @@ def map_nfe(n: dict, sigla: str):
 
 
 def map_nfse(n: dict, sigla: str):
-    cab = n.get("Cabecalho") or n.get("cabecalho") or n
+    cab = n.get("Cabecalho") or {}
+    num = cab.get("nNumeroNFSe") or cab.get("cNumeroNFSe") or g(n, "RPS", "nNumeroNFSe")
     return {
         "empresa": sigla,
-        "id_nfse": to_int(cab.get("nIdNFSe") or cab.get("nCodNFSe") or cab.get("nId")),
-        "numero": str(cab.get("cNumeroNFSe") or cab.get("nNumeroNFSe") or "") or None,
-        "emissao": br_to_iso(str(cab.get("dDataEmissao") or cab.get("dEmissao") or "")[:10]),
-        "cliente_nome": cab.get("cNomeCliente") or g(n, "Cliente", "cNome"),
-        "cliente_cnpj": cab.get("cCnpjCpfCliente") or g(n, "Cliente", "cnpj_cpf"),
-        "valor_total": to_float(cab.get("nValorTotal") or cab.get("nValorServicos")),
-        "cancelada": str(cab.get("cCancelada", "")).upper() == "S",
-        "numero_os": str(cab.get("cNumeroOS") or "") or None,
+        "id_nfse": to_int(cab.get("nCodNF")),
+        "numero": str(num) if num not in (None, "", 0) else None,
+        "emissao": br_to_iso(g(n, "Emissao", "cDataEmissao")),
+        "cliente_nome": cab.get("cRazaoDestinatario"),
+        "cliente_cnpj": cab.get("cCNPJDestinatario"),
+        "valor_total": to_float(cab.get("nValorNFSe") or g(n, "Valores", "nValorTotalServicos")),
+        "cancelada": bool(g(n, "Cancelamento", "cDataCancelamento")) or str(cab.get("cStatusNFSe", "")).upper() == "C",
+        "numero_os": str(g(n, "OrdemServico", "nNumeroOS") or "") or None,
         "raw": json.dumps(n, ensure_ascii=False),
     }
 
@@ -88,7 +89,7 @@ def importar_nfe(sigla: str):
 
 
 def importar_nfse(sigla: str):
-    print(f"\n▶️  {sigla} | NFS-e emitidas (best-effort)")
+    print(f"\n▶️  {sigla} | NFS-e emitidas")
     try:
         items = fetch_omie_paginated(
             url="https://app.omie.com.br/api/v1/servicos/nfse/",
