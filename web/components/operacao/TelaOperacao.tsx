@@ -759,12 +759,48 @@ function CartaoPedido(props: {
 
       {aberto && (
         <div className="pcs">
-          <div className="pcrow hd">
-            <span />
-            <span>Item / RC</span><span>Fornecedor</span><span style={{ textAlign: "right" }}>RC → PC</span>
-            <span>PC #</span><span>Status</span><span>Prev. materiais</span><span />
-          </div>
-          {compras.map((c) => <LinhaCompra key={c.key} c={c} {...props} />)}
+          {modulo !== "pcs" ? (() => {
+            /* Avulsos (pedido do Benny, 30/09): RC em destaque primeiro · item
+               (qtd × unitário = total embaixo) · valor da RC (soma dos itens
+               daquela RC, uma vez por RC) · PC · fornecedor · previsão. Linhas
+               da mesma RC ficam juntas; a soma das RCs fecha no rodapé. */
+            const ordenadas = [...compras].sort((a, b) =>
+              (Number(a.rcNumero) || Infinity) - (Number(b.rcNumero) || Infinity) || a.desc.localeCompare(b.desc, "pt-BR"));
+            const totalPorRc = new Map<string, number>();
+            for (const c of ordenadas) totalPorRc.set(c.rcNumero || c.key, (totalPorRc.get(c.rcNumero || c.key) ?? 0) + c.rcTotal);
+            const somaRcs = ordenadas.reduce((a, c) => a + c.rcTotal, 0);
+            let anterior = "";
+            return (
+              <>
+                <div className="pcrow rcrow hd">
+                  <span /><span>RC</span><span>Item</span><span style={{ textAlign: "right" }}>Valor RC</span>
+                  <span>PC</span><span>Fornecedor</span><span>Prev. materiais</span><span>Status</span><span />
+                </div>
+                {ordenadas.map((c) => {
+                  const chaveRc = c.rcNumero || c.key;
+                  const primeira = chaveRc !== anterior;
+                  anterior = chaveRc;
+                  return <LinhaCompraRc key={c.key} c={c} primeira={primeira} totalRc={totalPorRc.get(chaveRc) ?? c.rcTotal} {...props} />;
+                })}
+                {ordenadas.length > 0 && (
+                  <div className="pcrow rcrow rcsoma">
+                    <span /><span /><span style={{ textAlign: "right" }}>Soma das RCs</span>
+                    <span style={{ textAlign: "right" }} className="num"><b>{$(somaRcs)}</b></span>
+                    <span /><span /><span /><span /><span />
+                  </div>
+                )}
+              </>
+            );
+          })() : (
+            <>
+              <div className="pcrow hd">
+                <span />
+                <span>Item / RC</span><span>Fornecedor</span><span style={{ textAlign: "right" }}>RC → PC</span>
+                <span>PC #</span><span>Status</span><span>Prev. materiais</span><span />
+              </div>
+              {compras.map((c) => <LinhaCompra key={c.key} c={c} {...props} />)}
+            </>
+          )}
           {compras.length === 0 && <div className="pcrow"><span /><span style={{ color: "var(--ww-text-faint)" }}>Sem compras lançadas — a venda existe, a compra ainda não.</span></div>}
           <div className="pvfoot" onClick={(e) => e.stopPropagation()}>
             <span style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
@@ -857,6 +893,60 @@ function LinhaCompra({ c, sel, toggleSel, podeAprovar, podeEditar, ehAdmin, setS
         )}
       </div>
     </>
+  );
+}
+
+/** Linha de compra dos Avulsos: RC primeiro, em destaque, e o valor da RC. */
+function LinhaCompraRc({ c, primeira, totalRc, sel, toggleSel, podeAprovar, podeEditar, ehAdmin, setStatus, gravar, abrirDrawer, $ }: {
+  c: Compra; primeira: boolean; totalRc: number; sel: Set<string>; toggleSel: (k: string) => void;
+  podeAprovar: boolean; podeEditar: boolean; ehAdmin: boolean;
+  setStatus: (c: Compra, v: string) => void; gravar: Gravar; abrirDrawer: (k: string) => void; $: (v: number | null) => string;
+}) {
+  const prevLate = c.prev != null && c.estado !== "recebido" && (diasAte(c.prev) ?? 0) < 0;
+  return (
+    <div className={`pcrow rcrow ${sel.has(c.key) ? "sel" : ""} ${primeira ? "rcini" : ""}`}>
+      <input type="checkbox" className="cb" checked={sel.has(c.key)} onChange={() => toggleSel(c.key)} />
+      <div>{primeira ? (c.rcNumero ? <span className="rcnum">RC {c.rcNumero}</span> : <span className="rcnum vazio">sem RC</span>) : null}</div>
+      <div className="desc">{c.desc}
+        <small>{c.qtd} × {$(c.unit)} = <b style={{ color: "var(--ww-text-muted)" }}>{$(c.rcTotal)}</b></small></div>
+      <div style={{ textAlign: "right" }} className="num">{primeira ? <b>{$(totalRc)}</b> : null}</div>
+      <div>
+        {c.temPc && Number(c.row.ncod_ped) > 0
+          ? <span className="mono">{c.pc}
+              {c.pcValor != null && <small style={{ display: "block", fontSize: 11, color: "var(--ww-text-faint)" }}>{$(c.pcValor)} <SeloDif d={c.dif} compacto /></small>}
+            </span>
+          : podeEditar
+            ? <InputTexto mono className="in caixa" valor={s(c.row.pc_numero_manual)} placeholder=""
+                onSalvar={(v) => void gravar(c, "pc", v || null, { pc_numero_manual: v || null })} />
+            : <span className="mono">{c.pc}</span>}
+      </div>
+      <div className="desc">{c.temPc ? (c.fornecedor || "—") : ""}</div>
+      <div>
+        {c.temPc && c.estado !== "recebido" && podeEditar
+          ? <input type="date" className={`in ${prevLate ? "late" : ""}`} value={isoDia(c.prev)} onClick={(e) => e.stopPropagation()}
+              title={c.prevNova ? `Remarcada · original do PC ${dBR(c.prevOriginal)}` : "Previsão do PC"}
+              onChange={(e) => { const iso = e.target.value || null; void gravar(c, "prevMateriais", iso, { nova_prev_materiais: iso }); }} />
+          : <span className={prevLate ? "late" : ""}>{c.estado === "recebido" ? `recebido ${dBR(c.recebidoEm)}` : c.temPc && c.prev ? dBR(c.prev) : ""}</span>}
+      </div>
+      <div>{c.temPc ? <SeletorStatus c={c} podeAprovar={podeAprovar} ehAdmin={ehAdmin} setStatus={setStatus} /> : null}</div>
+      <div className="acts">
+        {c.estado === "pendente" && podeAprovar && (
+          <>
+            <button className="icon ok" title="Aprovar" onClick={() => setStatus(c, "APROVADO")}>✓</button>
+            <button className="icon" title="Recusar" onClick={() => setStatus(c, "NAO_APROVADO")}>✕</button>
+          </>
+        )}
+        <button className="icon" title="Todos os campos" onClick={() => abrirDrawer(c.key)}>⋯</button>
+      </div>
+      {c.estado === "recusado" && (
+        <div className="jrow">
+          <span>Motivo da recusa</span>
+          <InputTexto id={`jr-${c.key}`} className={`in ${!c.justificativa ? "need" : ""}`} valor={c.justificativa}
+            placeholder="Obrigatório — por que foi recusado?" disabled={!podeAprovar && !podeEditar}
+            onSalvar={(v) => void gravar(c, "justificativa", v || null, { justificativa: v || null })} />
+        </div>
+      )}
+    </div>
   );
 }
 

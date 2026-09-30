@@ -321,3 +321,15 @@
 /* Projeto tem nome longo: coluna do identificador mais larga */
 .op.op-projetos .pvh{grid-template-columns:22px 190px minmax(170px,1fr) 250px 78px 390px}
 @media (max-width:1180px){.op.op-projetos .pvh{grid-template-columns:22px 190px 1fr 390px}}
+/* Avulsos: RC em destaque · item · valor da RC · PC · fornecedor · previsão · status */
+.op .pcrow.rcrow{grid-template-columns:22px 92px minmax(200px,1.6fr) 118px 118px minmax(140px,1fr) 140px 160px 76px}
+.op .pcrow.rcrow.rcini{border-top:1px solid var(--ww-border-strong)}
+.op .pcrow.rcrow:not(.rcini):not(.hd){border-top:0}
+.op .rcnum{display:inline-block;font-weight:700;font-size:12.5px;padding:3px 8px;border-radius:7px;background:var(--ww-info-soft);color:var(--ww-info-text);white-space:nowrap}
+.op .rcnum.vazio{background:var(--ww-border);color:var(--ww-text-faint);font-weight:500}
+.op .pcrow.rcsoma{font-size:12px;color:var(--ww-text-muted);background:var(--ww-panel-sunken)}
+.op .pcrow.rcsoma b{color:var(--ww-text);font-size:13px}
+/* caixinha opcional do nº do PC quando ainda não há pedido */
+.op .in.caixa{border:1px dashed var(--ww-border-strong);height:28px;width:92px}
+.op .in.caixa:focus{border-style:solid}
+@media (max-width:1100px){.op .pcrow.rcrow{grid-template-columns:22px 80px 1fr 100px 100px 130px 76px}.op .pcrow.rcrow > :nth-child(6),.op .pcrow.rcrow > :nth-child(7){display:none}}
