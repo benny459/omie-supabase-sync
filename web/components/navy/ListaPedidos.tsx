@@ -211,26 +211,46 @@ export default function ListaPedidos({
                             overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
                           }}>{s(r.nome_fornecedor) || ""}</span>
                         </span>
-                        <span style={{ display: "flex", flexDirection: "column", gap: 3, alignItems: "flex-start" }}>
-                          {meta
-                            ? <StatusPill tone={meta.isApproved ? "ok" : s(r.status) === "PENDENTE" || s(r.status) === "PRE_SELECAO" ? "warn" : "crit"}>
-                                {meta.label}
-                              </StatusPill>
-                            : <span style={{ color: "var(--ww-text-faint)" }}>—</span>}
-                          <span style={{ fontSize: "var(--text-chip)", color: "var(--ww-text-faint)" }}>
-                            {s(r.aprovador_email) ? `${s(r.aprovador_email).split("@")[0]} · ${s(r.aprovado_em).slice(0, 10)}` : ""}
-                          </span>
-                        </span>
-                        <span style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                          <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                            <StatusPill tone={mat.tom}>{mat.rotulo}</StatusPill>
-                            <span style={{ flex: 1, minWidth: 40 }}><ProgressBar value={mat.pct} tone={mat.tom} height={4} /></span>
-                          </span>
-                          {mat.sub && <span style={{ fontSize: "var(--text-chip)", color: "var(--ww-text-faint)" }}>{mat.sub}</span>}
-                        </span>
-                        <span style={{ textAlign: "right", fontWeight: 600, color: "var(--ww-text)" }}>
-                          {dinheiro(n(r.valor_total))}
-                        </span>
+                        {/* Aprovação, Materiais e Valor são propriedades DO PC.
+                            Sem PC não há nada para aprovar nem para receber, e
+                            a view devolve "PENDENTE" por omissão — o que punha
+                            a linha a mostrar "Pendente · Aguarda aprov. · R$
+                            0,00" quando o que existe ali é só uma requisição.
+                            Três estados inventados numa linha. Sem PC, as três
+                            células ficam vazias: a ausência é a informação. */}
+                        {pc ? (
+                          <>
+                            <span style={{ display: "flex", flexDirection: "column", gap: 3, alignItems: "flex-start" }}>
+                              {meta
+                                ? <StatusPill tone={meta.isApproved ? "ok" : s(r.status) === "PENDENTE" || s(r.status) === "PRE_SELECAO" ? "warn" : "crit"}>
+                                    {meta.label}
+                                  </StatusPill>
+                                : <span style={{ color: "var(--ww-text-faint)" }}>—</span>}
+                              <span style={{ fontSize: "var(--text-chip)", color: "var(--ww-text-faint)" }}>
+                                {s(r.aprovador_email) ? `${s(r.aprovador_email).split("@")[0]} · ${s(r.aprovado_em).slice(0, 10)}` : ""}
+                              </span>
+                            </span>
+                            <span style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                              <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                                <StatusPill tone={mat.tom}>{mat.rotulo}</StatusPill>
+                                <span style={{ flex: 1, minWidth: 40 }}><ProgressBar value={mat.pct} tone={mat.tom} height={4} /></span>
+                              </span>
+                              {mat.sub && <span style={{ fontSize: "var(--text-chip)", color: "var(--ww-text-faint)" }}>{mat.sub}</span>}
+                            </span>
+                            <span style={{ textAlign: "right", fontWeight: 600, color: "var(--ww-text)" }}>
+                              {dinheiro(n(r.valor_total))}
+                            </span>
+                          </>
+                        ) : (
+                          <>
+                            <span />
+                            <span />
+                            <span style={{ textAlign: "right", color: "var(--ww-text-faint)" }}>
+                              {/* Nem "R$ 0,00": zero é um valor, e aqui não há valor. */}
+                              —
+                            </span>
+                          </>
+                        )}
                       </div>
 
                       {/* Itens */}

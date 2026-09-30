@@ -293,20 +293,30 @@ export default function TelaAvulsosNavy() {
         id: `${p.pv_os_label}:${s(r.ncod_ped)}:${i}`,
         name: `Compra ${i + 1}`,
         sub: s(r.rc_numero) ? `RC ${s(r.rc_numero)}` : undefined,
-        cells: [
-          dinheiro(n(r.rc_custo) * (n(r.rc_qtd) || 1)),
-          <CelulaTexto key="pc" t={pc ? `PC ${pc}` : "—"} sub={s(r.nome_fornecedor) || undefined} />,
-          dinheiro(n(r.valor_total)),
-          meta
-            ? <CelulaPill key="ap" tone={meta.isApproved ? "ok" : "warn"}
-                sub={s(r.aprovador_email).split("@")[0] || undefined}>{meta.label}</CelulaPill>
-            : <CelulaTexto key="ap" t="—" />,
-          <CelulaTexto key="rec" t={s(r.mt_data_recebimento_nf) || "—"} />,
-          <CelulaTexto key="prev"
-            t={s(r.mt_status_fornecimento) || "—"}
-            sub={s(r.nova_prev_materiais) || s(r.dt_previsao) || undefined} />,
-          <CelulaTexto key="nf" t={s(r.mt_nf_fornecedor) || "—"} />,
-        ],
+        /* Mesma regra da Lista: aprovação, materiais e valor pertencem ao PC.
+           Sem PC a view devolve status "PENDENTE" por omissão e a linha
+           passava a afirmar uma pendência que não existe — a requisição ainda
+           nem virou compra. Colunas do PC ficam vazias. */
+        cells: pc
+          ? [
+              dinheiro(n(r.rc_custo) * (n(r.rc_qtd) || 1)),
+              <CelulaTexto key="pc" t={`PC ${pc}`} sub={s(r.nome_fornecedor) || undefined} />,
+              dinheiro(n(r.valor_total)),
+              meta
+                ? <CelulaPill key="ap" tone={meta.isApproved ? "ok" : "warn"}
+                    sub={s(r.aprovador_email).split("@")[0] || undefined}>{meta.label}</CelulaPill>
+                : <CelulaTexto key="ap" t="—" />,
+              <CelulaTexto key="rec" t={s(r.mt_data_recebimento_nf) || "—"} />,
+              <CelulaTexto key="prev"
+                t={s(r.mt_status_fornecimento) || "—"}
+                sub={s(r.nova_prev_materiais) || s(r.dt_previsao) || undefined} />,
+              <CelulaTexto key="nf" t={s(r.mt_nf_fornecedor) || "—"} />,
+            ]
+          : [
+              dinheiro(n(r.rc_custo) * (n(r.rc_qtd) || 1)),
+              <CelulaTexto key="pc" t="—" sub="sem PC emitido" />,
+              null, null, null, null, null,
+            ],
       };
     }),
   })), [pedidos, dinheiro]);
