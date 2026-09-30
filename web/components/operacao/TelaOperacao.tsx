@@ -349,7 +349,7 @@ export default function TelaOperacao({ modulo, title, rows: rowsIniciais }: {
   const drawerCompra = drawer ? compraPorKey.get(drawer) ?? null : null;
 
   return (
-    <div className="op op-wrap" onClick={() => { setMenu(null); }}>
+    <div className={`op op-wrap op-${modulo}`} onClick={() => { setMenu(null); }}>
       {/* ── cabeçalho ── */}
       <div className="top">
         <div>
@@ -480,10 +480,10 @@ export default function TelaOperacao({ modulo, title, rows: rowsIniciais }: {
             </small>
           </p>
           <button className="btn sm" onClick={() => { setRapida("minha"); trocarVista("lista"); }}>Revisar fila</button>
-          <button className="btn sm ok" onClick={() => {
+          {fila.length <= 30 && <button className="btn sm ok" onClick={() => {
             if (!window.confirm(`Aprovar as ${fila.length} compras da fila? Cada uma passa pela mesma checagem de alçada e orçamento.`)) return;
             void emMassa("APROVADO", fila);
-          }}>✓ Aprovar todas</button>
+          }}>✓ Aprovar todas</button>}
         </div>
       )}
 

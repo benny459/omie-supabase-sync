@@ -318,3 +318,6 @@
 .op .kcard .t span:first-child{flex:0 0 auto}
 .op .kcard .t span:last-child{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:right}
 .op .chev{font-size:14px}
+/* Projeto tem nome longo: coluna do identificador mais larga */
+.op.op-projetos .pvh{grid-template-columns:22px 190px minmax(170px,1fr) 250px 78px 390px}
+@media (max-width:1180px){.op.op-projetos .pvh{grid-template-columns:22px 190px 1fr 390px}}

@@ -221,7 +221,10 @@ export function fases(p: Pedido, modulo: string): { lista: Fase[]; atual: Fase |
   if (modulo !== "pcs") {
     L.push({ k: "PV", s: "d", t: "Venda registrada no Omie" });
     const nRc = cnt((c) => !!c.rcNumero);
-    L.push({ k: "RC", s: nRc === total ? "d" : nRc ? "p" : "o", t: `${nRc}/${total} requisições criadas`, next: `criar ${total - nRc} RC${total - nRc > 1 ? "s" : ""}` });
+    // Projeto que não trabalha com RC (compra direto por PC) não tem essa etapa.
+    L.push(modulo === "projetos" && nRc === 0
+      ? { k: "RC", s: "na", t: "projeto sem requisições — compra direto por PC" }
+      : { k: "RC", s: nRc === total ? "d" : nRc ? "p" : "o", t: `${nRc}/${total} requisições criadas`, next: `criar ${total - nRc} RC${total - nRc > 1 ? "s" : ""}` });
   }
   L.push({ k: "PC", s: nPc === total ? "d" : nPc ? (atrasado ? "l" : "p") : (atrasado ? "l" : "o"),
     t: nPc === total ? `${total}/${total} com pedido de compra` : `${total - nPc} de ${total} sem PC`,
