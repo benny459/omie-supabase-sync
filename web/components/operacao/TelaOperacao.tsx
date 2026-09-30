@@ -909,7 +909,7 @@ function GruposRc({ compras, p, sel, toggleSel, podeAprovar, podeEditar, ehAdmin
     <>
       <div className={`${cls} rcg-hd`}>
         <div className="it"><span /><span>RC</span><span>Item</span><span style={{ textAlign: "right" }}>Valor RC</span></div>
-        <div className="pc"><span>PC</span><span>Fornecedor</span><span>Status</span><span>Prev. material</span><span>Material</span>{servico && <span>Serviço</span>}<span /></div>
+        <div className="pc"><span>PC</span><span>Fornecedor</span><span>Status</span><span>Prev. material</span><span>Material</span><span>NF entrada</span>{servico && <span>Serviço</span>}<span /></div>
       </div>
       {ordem.map(([k, itens]) => {
         const totalRc = itens.reduce((a, c) => a + c.rcTotal, 0);
@@ -940,7 +940,7 @@ function GruposRc({ compras, p, sel, toggleSel, podeAprovar, podeEditar, ehAdmin
                 const prev = cs.map((x) => x.prev).find((x) => x != null) ?? null;
                 const aprovado = cs.some((x) => x.estado === "aprovado" || x.estado === "recebido");
                 const late = !todosRecebidos && prev != null && (diasAte(prev) ?? 0) < 0;
-                const mat = todosRecebidos ? { t: `Recebido ${dBR(recebidoEm)}`, c: "recebido" }
+                const mat = todosRecebidos ? { t: "Recebido", c: "recebido" }
                   : !aprovado ? { t: "—", c: "" }
                   : late ? { t: "Atrasado", c: "recusado" } : prev ? { t: "A caminho", c: "aprovado" } : { t: "Sem previsão", c: "pendente" };
                 const pendente = cs.some((x) => x.estado === "pendente");
@@ -964,6 +964,7 @@ function GruposRc({ compras, p, sel, toggleSel, podeAprovar, podeEditar, ehAdmin
                         : <span className={late ? "late" : ""}>{prev ? dBR(prev) : "—"}</span>}
                     </span>
                     <span>{mat.c ? <span className={`st ${mat.c}`}>{mat.t}</span> : <span style={{ color: "var(--ww-text-faint)" }}>—</span>}</span>
+                    <NfEntrada cs={cs} late={late} aprovado={aprovado} />
                     {servico && <span className="desc">{servico.st}<small>{servico.prev ? `prev. ${dBR(servico.prev)}` : ""}</small></span>}
                     <span className="acts">
                       {pendente && podeAprovar && (
@@ -1005,6 +1006,24 @@ function GruposRc({ compras, p, sel, toggleSel, podeAprovar, podeEditar, ehAdmin
       )}
     </>
   );
+}
+
+/** Status da NF de entrada do PC (Omie, só leitura): número + data quando
+ *  chegou; senão aguardando — em vermelho se a previsão já venceu. */
+function NfEntrada({ cs, late, aprovado }: { cs: Compra[]; late: boolean; aprovado: boolean }) {
+  const nfs = [...new Set(cs.map((x) => x.nfFornecedor).filter(Boolean))];
+  const datas = cs.map((x) => x.recebidoEm).filter((x): x is number => x != null);
+  const todas = datas.length === cs.length;
+  if (datas.length) {
+    return (
+      <span className="nf">
+        <span className={`st ${todas ? "recebido" : "pendente"}`}>{todas ? "Recebida" : "Parcial"}</span>
+        <small>{nfs.length ? `NF ${nfs.join(", ")}` : "NF s/ nº"} · {dBR(Math.max(...datas))}</small>
+      </span>
+    );
+  }
+  if (!aprovado) return <span style={{ color: "var(--ww-text-faint)" }}>—</span>;
+  return <span className="nf"><span className={`st ${late ? "recusado" : "pendente"}`}>Aguardando NF</span></span>;
 }
 
 /** Status de um PC que cobre várias linhas: muda todas de uma vez. */

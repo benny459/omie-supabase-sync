@@ -333,15 +333,23 @@
 .op .in.caixa{border:1px dashed var(--ww-border-strong);height:28px;width:92px}
 .op .in.caixa:focus{border-style:solid}
 @media (max-width:1100px){.op .pcrow.rcrow{grid-template-columns:22px 80px 1fr 100px 100px 130px 76px}.op .pcrow.rcrow > :nth-child(6),.op .pcrow.rcrow > :nth-child(7){display:none}}
-/* ── Grupo por RC: itens à esquerda, PCs da RC à direita (alinhados ao topo) ── */
-.op .rcg{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.4fr);border-top:1px solid var(--ww-border-strong)}
+/* ── Grupo por RC: itens à esquerda, PCs da RC à direita (alinhados ao topo) ──
+   Colunas do PC: PC · Fornecedor · Status · Prev. material · Material · NF · [Serviço] · ações */
+.op .rcg{display:grid;grid-template-columns:minmax(0,.85fr) minmax(0,1.75fr);border-top:1px solid var(--ww-border-strong)}
 .op .rcg > .it-col,.op .rcg > .it{border-right:1px solid var(--ww-border)}
-.op .rcg .it{display:grid;grid-template-columns:22px 84px minmax(0,1fr) 108px;gap:10px;align-items:center;padding:7px 12px;min-height:46px}
+.op .rcg .it{display:grid;grid-template-columns:20px 74px minmax(0,1fr) 96px;gap:10px;align-items:center;padding:7px 12px;min-height:50px}
 .op .rcg .it + .it{border-top:1px dashed var(--ww-border)}
 .op .rcg .it.sel{background:var(--ww-info-soft)}
-.op .rcg .pc{display:grid;grid-template-columns:92px minmax(0,1fr) 150px 128px 118px 52px;gap:10px;align-items:center;padding:7px 12px;min-height:46px}
-.op .rcg.comserv .pc{grid-template-columns:92px minmax(0,1fr) 150px 128px 118px 118px 52px}
+.op .rcg .pc{display:grid;grid-template-columns:84px minmax(0,1fr) 128px 118px 100px 112px 40px;gap:10px;align-items:center;padding:7px 12px;min-height:50px}
+.op .rcg.comserv .pc{grid-template-columns:84px minmax(0,1fr) 128px 118px 100px 112px 104px 40px}
 .op .rcg .pc + .pc{border-top:1px dashed var(--ww-border)}
+.op .rcg .pc > *{min-width:0}
+.op .rcg .pc .desc{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.op .rcg .pc .desc small{overflow:hidden;text-overflow:ellipsis}
+.op .rcg .pc .stsel,.op .rcg .pc input.in{width:100%}
+.op .rcg .pc .st{white-space:nowrap}
+.op .rcg .nf{display:flex;flex-direction:column;gap:2px;font-size:12px;line-height:1.2}
+.op .rcg .nf small{font-size:11px;color:var(--ww-text-faint)}
 .op .rcg-hd{font-size:11px;color:var(--ww-text-faint);text-transform:uppercase;letter-spacing:.06em;border-top:0}
 .op .rcg-hd .it,.op .rcg-hd .pc{min-height:0;padding-top:10px;padding-bottom:8px}
 .op .rcg-soma{background:var(--ww-panel-sunken);font-size:12px;color:var(--ww-text-muted)}
@@ -349,21 +357,4 @@
 .op .rcg-soma b{color:var(--ww-text);font-size:13px}
 .op .rcnum.rep{opacity:.7}
 .op .rcg .jrow{grid-column:1 / -1}
-@media (max-width:1100px){.op .rcg{grid-template-columns:1fr}.op .rcg > .it-col,.op .rcg > .it{border-right:0}}
-/* ── Grupo por RC: itens à esquerda, PCs da RC à direita (alinhados ao topo) ── */
-.op .rcg{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.45fr);border-top:1px solid var(--ww-border-strong)}
-.op .rcg > .it-col,.op .rcg > .it{border-right:1px solid var(--ww-border)}
-.op .rcg .it{display:grid;grid-template-columns:22px 84px minmax(0,1fr) 108px;gap:10px;align-items:center;padding:7px 12px;min-height:46px}
-.op .rcg .it + .it{border-top:1px dashed var(--ww-border)}
-.op .rcg .it.sel{background:var(--ww-info-soft)}
-.op .rcg .pc{display:grid;grid-template-columns:92px minmax(0,1fr) 150px 128px 118px 52px;gap:10px;align-items:center;padding:7px 12px;min-height:46px}
-.op .rcg.comserv .pc{grid-template-columns:92px minmax(0,1fr) 150px 128px 118px 118px 52px}
-.op .rcg .pc + .pc{border-top:1px dashed var(--ww-border)}
-.op .rcg-hd{font-size:11px;color:var(--ww-text-faint);text-transform:uppercase;letter-spacing:.06em;border-top:0}
-.op .rcg-hd .it,.op .rcg-hd .pc{min-height:0;padding-top:10px;padding-bottom:8px}
-.op .rcg-soma{background:var(--ww-panel-sunken);font-size:12px;color:var(--ww-text-muted)}
-.op .rcg-soma .it{min-height:36px}
-.op .rcg-soma b{color:var(--ww-text);font-size:13px}
-.op .rcnum.rep{opacity:.7}
-.op .rcg .jrow{grid-column:1 / -1}
-@media (max-width:1100px){.op .rcg{grid-template-columns:1fr}.op .rcg > .it-col,.op .rcg > .it{border-right:0}}
+@media (max-width:1280px){.op .rcg{grid-template-columns:1fr}.op .rcg > .it-col,.op .rcg > .it{border-right:0}.op .rcg > .it-col{border-bottom:1px dashed var(--ww-border)}}
