@@ -354,11 +354,28 @@ function buildBuckets(rows: AnyRow[], groupBy: GroupBy): Bucket[] {
   }
 
   if (groupBy === "project") {
-    // Projetos: alfabético, "(Sem Projeto)" no fim
+    // Projetos: mais recentes primeiro (30/09/2026). Em ordem alfabética a
+    // página abria em 40_VS, PJ_123 e outros de 2019–2021, e o que está a
+    // andar ficava no fim. "Recente" = a data mais nova entre as linhas do
+    // projeto (inclusão ou emissão do PV); empate vai pelo número do PJ.
+    // Sem data vai para o fim; "(Sem Projeto)" sempre por último.
+    const recencia = new Map<Bucket, number>();
+    for (const b of map.values()) {
+      let max = 0;
+      for (const r of b.rows) max = Math.max(max, dataMaisRecenteDaLinha(r));
+      recencia.set(b, max);
+    }
     return [...map.values()].sort((a, b) => {
       const aSem = a.pv_os_label === "(Sem Projeto)";
       const bSem = b.pv_os_label === "(Sem Projeto)";
       if (aSem !== bSem) return aSem ? 1 : -1;
+      const ra = recencia.get(a) ?? 0;
+      const rb = recencia.get(b) ?? 0;
+      if (ra !== rb) return rb - ra;
+      // numericSortKey dá Infinity a rótulo sem número — aqui iria para o topo.
+      const na = Number.isFinite(numericSortKey(a.pv_os_label)) ? numericSortKey(a.pv_os_label) : -1;
+      const nb = Number.isFinite(numericSortKey(b.pv_os_label)) ? numericSortKey(b.pv_os_label) : -1;
+      if (na !== nb) return nb - na;
       return a.pv_os_label.localeCompare(b.pv_os_label, "pt-BR");
     });
   }
@@ -384,6 +401,25 @@ function buildBuckets(rows: AnyRow[], groupBy: GroupBy): Bucket[] {
   return [...map.values()].sort((a, b) =>
     numericSortKey(a.pv_os_label) - numericSortKey(b.pv_os_label)
   );
+}
+
+// A data mais nova de uma linha (inclusão ou emissão do PV), em ms; 0 se não há.
+function dataMaisRecenteDaLinha(r: AnyRow): number {
+  let max = 0;
+  const dtInc = r._dt_inclusao_d as string | null | undefined;
+  if (dtInc) {
+    const t = Date.parse(String(dtInc));
+    if (!isNaN(t)) max = Math.max(max, t);
+  }
+  const pvE = r.pv_emissao as string | null | undefined;
+  if (pvE) {
+    const m = String(pvE).match(/^(\d{2})\/(\d{2})\/(\d{4})/);
+    if (m) {
+      const t = Date.parse(`${m[3]}-${m[2]}-${m[1]}`);
+      if (!isNaN(t)) max = Math.max(max, t);
+    }
+  }
+  return max;
 }
 
 // Verifica se row está dentro de [fromMs, toMs) considerando _dt_inclusao_d
