@@ -162,15 +162,23 @@ export default function TelaAvulsosNavy() {
      usa nos dots — antes eu tinha aqui uma aproximação minha e o trilho lia
      quase tudo igual. */
   const pedidos: Pedido[] = useMemo(() => visiveis.map((b) => {
-    const porPc = new Map<string, AnyRow>();
-    const semPc: AnyRow[] = [];
+    /* Identidade de um lote: o PC, quando existe. Quando não existe, a RC —
+       mesma regra do IDENTIDADE_DO_BLOCO da grelha (rc_numero + descrição),
+       porque duas linhas com a mesma RC e a mesma descrição são a mesma
+       requisição vista duas vezes, não duas requisições. Sem isto, linhas
+       só-RC escapavam à dedupe e reapareciam a dobrar no tempo e no kanban.
+       Empate: ganha a linha do Omie (ncod_ped > 0) sobre a manual. */
+    const porChave = new Map<string, AnyRow>();
+    const soltas: AnyRow[] = [];
     for (const r of b.rows) {
       const pc = s(r.pc_numero) || s(r.pc_numero_manual);
-      if (!pc) { semPc.push(r); continue; }
-      const ant = porPc.get(pc);
-      if (!ant || (n(r.ncod_ped) > 0 && n(ant.ncod_ped) < 0)) porPc.set(pc, r);
+      const rc = s(r.rc_numero);
+      const chave = pc ? `pc:${pc}` : rc ? `rc:${rc}|${s(r.rc_descricao)}` : "";
+      if (!chave) { soltas.push(r); continue; }
+      const ant = porChave.get(chave);
+      if (!ant || (n(r.ncod_ped) > 0 && n(ant.ncod_ped) < 0)) porChave.set(chave, r);
     }
-    const lotes = [...porPc.values(), ...semPc];
+    const lotes = [...porChave.values(), ...soltas];
     const head = b.rows[0] ?? {};
     const al = alarmesPorBucket.get(b.pv_os_label) ?? new Set<AlarmKind>();
 
@@ -214,6 +222,15 @@ export default function TelaAvulsosNavy() {
 
     return { pv_os_label: b.pv_os_label, cliente: b.cliente, rows: b.rows, lotes, head, chips, rail };
   }), [visiveis, alarmesPorBucket]);
+
+  /* Os buckets que o tempo e o kanban recebem. Antes levavam `visiveis` — as
+     linhas cruas — e por isso o mesmo PC (ou a mesma RC) aparecia a dobrar
+     nessas duas vistas enquanto a lista e a tabela mostravam um só. A dedupe
+     só vale a pena se TODAS as vistas beberem dela. */
+  const bucketsLote = useMemo(
+    () => pedidos.map((p) => ({ pv_os_label: p.pv_os_label, cliente: p.cliente, rows: p.lotes })),
+    [pedidos],
+  );
 
   const arvore: NoArvore[] = useMemo(() => pedidos.map((p) => ({
     id: p.pv_os_label,
@@ -359,11 +376,11 @@ export default function TelaAvulsosNavy() {
               </div>
             ) : vista === "tempo" ? (
               <div style={{ padding: "0 18px 18px" }}>
-                <LinhaDoTempo buckets={visiveis} formatarValor={dinheiro} />
+                <LinhaDoTempo buckets={bucketsLote} formatarValor={dinheiro} />
               </div>
             ) : vista === "kanban" ? (
               <div style={{ padding: "0 18px 18px", overflowX: "auto" }}>
-                <KanbanRaias buckets={visiveis} formatarValor={dinheiro} />
+                <KanbanRaias buckets={bucketsLote} formatarValor={dinheiro} />
               </div>
             ) : (
               <TreeTable columns={COLUNAS} groups={GRUPOS_COL} grid={GRID_TABELA} rows={arvore} minWidth={1240} />
