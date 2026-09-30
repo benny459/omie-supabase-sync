@@ -142,7 +142,14 @@ def listar(token, tipo, sigla, cnpj):
         if not amostra_mostrada:
             print(f"   🔎 {tipo} campos: {sorted(itens[0].keys())}")
             amostra_mostrada = True
-        rows = [r for r in (mapear(tipo, i, sigla, cnpj) for i in itens) if r]
+        # a mesma chave pode vir repetida na página (um item por evento) → fica a maior versao
+        por_chave = {}
+        for r in (mapear(tipo, i, sigla, cnpj) for i in itens):
+            if r and (r["chave"] not in por_chave or (r["versao"] or 0) >= (por_chave[r["chave"]]["versao"] or 0)):
+                por_chave[r["chave"]] = r
+        rows = list(por_chave.values())
+        if len(rows) < len(itens):
+            print(f"   ℹ️  {sigla} {tipo}: {len(itens)} itens na página, {len(rows)} chaves distintas")
         if rows:
             supa_upsert("orders", "focus_recebidos", rows, "tipo,chave")
         total += len(rows)
