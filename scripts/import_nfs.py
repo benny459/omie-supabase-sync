@@ -3,7 +3,7 @@
 ═════════════════════════════════════════════════════════════════════════════
 🧾 IMPORT NFs EMITIDAS — Omie → Supabase
 NF-e de saída:  /produtos/nfconsultar/ ListarNF (tpNF=1)  → sales.nfe_saida
-NFS-e:          /servicos/nfse/ ListarNfse (best-effort)  → sales.nfse_saida
+NFS-e:          /servicos/nfse/ ListarNFSEs                → sales.nfse_saida
 Guarda colunas-chave + o objeto RAW inteiro (jsonb) — a base fica com tudo.
 ═════════════════════════════════════════════════════════════════════════════
 """
@@ -92,14 +92,17 @@ def importar_nfse(sigla: str):
     try:
         items = fetch_omie_paginated(
             url="https://app.omie.com.br/api/v1/servicos/nfse/",
-            call="ListarNfse", sigla=sigla,
+            call="ListarNFSEs", sigla=sigla,
             list_field="nfseEncontradas", page_size=100,
-            extra_param={},
+            page_key="nPagina", size_key="nRegPorPagina",
             label="NFS-e",
         )
     except Exception as e:
         print(f"   ⚠️ NFS-e indisponível neste layout ({e}) — segue sem")
         return 0
+    if items:
+        amostra = {k: (sorted(v.keys()) if isinstance(v, dict) else type(v).__name__) for k, v in items[0].items()}
+        print(f"   🔎 estrutura: {json.dumps(amostra, ensure_ascii=False)}")
     rows = [r for r in (map_nfse(i, sigla) for i in items) if r["id_nfse"]]
     if rows:
         supa_upsert("sales", "nfse_saida", rows, "empresa,id_nfse")
