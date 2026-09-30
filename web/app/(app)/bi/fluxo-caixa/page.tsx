@@ -7,7 +7,7 @@ export const dynamic = "force-dynamic";
 
 /* 30/09/26: tela Navy; a antiga em ?classica=1 para comparar. */
 export default async function FluxoCaixaPage({ searchParams }: { searchParams: Promise<{ classica?: string }> }) {
-  await requireArea("financeiro");
+  await requireArea("bi");
   const { classica } = await searchParams;
   if (!classica) return (<><TelaFluxoNavy /><LinkClassica href="/bi/fluxo-caixa?classica=1" /></>);
 

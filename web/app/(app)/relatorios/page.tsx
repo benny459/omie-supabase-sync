@@ -5,7 +5,7 @@ export const dynamic = "force-dynamic";
 
 export default async function RelatoriosPage() {
   // Esconder do menu não basta: sem isto a URL direta continua abrindo.
-  await requireArea("vendas");
+  await requireArea("bi");
 
   return <RelatoriosView />;
 }

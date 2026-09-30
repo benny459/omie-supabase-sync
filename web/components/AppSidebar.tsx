@@ -16,12 +16,31 @@ export type NavItem = {
   // cabeçalho do menu. Ver canViewArea em lib/permissions.ts. Itens de sistema
   // (seção Sistema) não pertencem a área nenhuma.
   area?: Area;
+  /** Botão do menu onde o item aparece. Separado de `area` de propósito:
+   *  `area` decide QUEM abre (permissão); `grupo` decide ONDE fica. Em 30/09/26
+   *  o ERP·Omie foi desmembrado em Compras/Vendas/Estoque/Financeiro sem mudar
+   *  quem tem acesso a essas telas. */
+  grupo?: Grupo;
+  /** Seção dentro do grupo (usado no BI: Geral, Compras, Vendas, Financeiro). */
+  secao?: string;
 };
+
+export type Grupo = "operacao" | "compras" | "vendas" | "estoque" | "financeiro" | "bi";
+export const GRUPOS: { id: Grupo; label: string; desc: string }[] = [
+  { id: "operacao",   label: "Operação",   desc: "Avulsos, Projetos, PCs — o dia a dia" },
+  { id: "compras",    label: "Compras",    desc: "Pedidos e requisições de compra (Omie)" },
+  { id: "vendas",     label: "Vendas",     desc: "Pedidos de venda e ordens de serviço (Omie)" },
+  { id: "estoque",    label: "Estoque",    desc: "Posição, movimentação e Kardex" },
+  { id: "financeiro", label: "Financeiro", desc: "Títulos a pagar e a receber" },
+  { id: "bi",         label: "BI",         desc: "Relatórios e dashboards — Geral, Compras, Vendas, Financeiro" },
+];
+export const SECOES_BI = ["Geral", "Compras", "Vendas", "Financeiro"];
 
 export const MODULES: NavItem[] = [
   {
     href: "/avulsos",
     area: "operacao",
+    grupo: "operacao",
     label: "Avulsos",
     tone: "text-sky-600",
     icon: (
@@ -34,6 +53,7 @@ export const MODULES: NavItem[] = [
   {
     href: "/projetos",
     area: "operacao",
+    grupo: "operacao",
     label: "Projetos",
     tone: "text-violet-600",
     icon: (
@@ -45,6 +65,7 @@ export const MODULES: NavItem[] = [
   {
     href: "/pcs",
     area: "operacao",
+    grupo: "operacao",
     label: "PCs Standalone",
     tone: "text-amber-600",
     icon: (
@@ -56,7 +77,9 @@ export const MODULES: NavItem[] = [
   },
   {
     href: "/relatorios",
-    area: "vendas",
+    area: "bi",
+    grupo: "bi",
+    secao: "Vendas",
     label: "Relatórios",
     tone: "text-emerald-600",
     icon: (
@@ -68,7 +91,9 @@ export const MODULES: NavItem[] = [
   },
   {
     href: "/relatorios/faturamento",
-    area: "vendas",
+    area: "bi",
+    grupo: "bi",
+    secao: "Vendas",
     label: "Faturamento",
     tone: "text-teal-600",
     icon: (
@@ -83,6 +108,8 @@ export const MODULES: NavItem[] = [
   {
     href: "/bi/faturamento",
     area: "bi",
+    grupo: "bi",
+    secao: "Vendas",
     label: "Faturamento analítico",
     tone: "text-teal-700",
     icon: (
@@ -93,7 +120,9 @@ export const MODULES: NavItem[] = [
   },
   {
     href: "/pcs/atribuir-cliente",
-    area: "compras",
+    area: "bi",
+    grupo: "bi",
+    secao: "Compras",
     label: "Atribuir PC → Cliente",
     tone: "text-rose-600",
     icon: (
@@ -105,7 +134,8 @@ export const MODULES: NavItem[] = [
   {
     href: "/erp/vendas",
     area: "erp",
-    label: "Vendas · PV/OS",
+    grupo: "vendas",
+    label: "Pedidos · PV/OS",
     tone: "text-teal-600",
     icon: (
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className="w-5 h-5" strokeLinecap="round" strokeLinejoin="round">
@@ -116,7 +146,8 @@ export const MODULES: NavItem[] = [
   {
     href: "/erp/compras",
     area: "erp",
-    label: "Compras · PC/RC",
+    grupo: "compras",
+    label: "Pedidos · PC/RC",
     tone: "text-amber-600",
     icon: (
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className="w-5 h-5" strokeLinecap="round" strokeLinejoin="round">
@@ -127,6 +158,7 @@ export const MODULES: NavItem[] = [
   {
     href: "/estoque",
     area: "erp",
+    grupo: "estoque",
     label: "Estoque",
     tone: "text-orange-600",
     icon: (
@@ -137,7 +169,9 @@ export const MODULES: NavItem[] = [
   },
   {
     href: "/relatorios/compras-por-cliente",
-    area: "compras",
+    area: "bi",
+    grupo: "bi",
+    secao: "Compras",
     label: "Compras × Cliente",
     tone: "text-amber-600",
     icon: (
@@ -156,6 +190,8 @@ export const BI: NavItem[] = [
   {
     href: "/bi/visao-geral",
     area: "bi",
+    grupo: "bi",
+    secao: "Geral",
     label: "Visão Geral",
     tone: "text-indigo-700",
     icon: (
@@ -168,6 +204,8 @@ export const BI: NavItem[] = [
   {
     href: "/bi/contratos-ct",
     area: "bi",
+    grupo: "bi",
+    secao: "Geral",
     label: "Contratos CT",
     tone: "text-cyan-600",
     icon: (
@@ -180,6 +218,8 @@ export const BI: NavItem[] = [
   {
     href: "/bi/margem-projeto",
     area: "bi",
+    grupo: "bi",
+    secao: "Geral",
     label: "Margem por Projeto",
     tone: "text-indigo-600",
     icon: (
@@ -197,8 +237,10 @@ export const FINANCEIRO: NavItem[] = [
     // As três abaixo continuam porque a consolidação ainda está em avaliação —
     // quando forem aposentadas, viram redirect pras abas daqui.
     href: "/bi/financeiro",
-    area: "financeiro",
-    label: "Financeiro",
+    area: "bi",
+    grupo: "bi",
+    secao: "Financeiro",
+    label: "Visão financeira",
     tone: "text-sky-700",
     icon: (
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className="w-5 h-5" strokeLinecap="round" strokeLinejoin="round">
@@ -211,6 +253,7 @@ export const FINANCEIRO: NavItem[] = [
     // que é a agenda analítica compra→venda→pagamento.
     href: "/financeiro/pagar",
     area: "erp",
+    grupo: "financeiro",
     label: "Títulos a Pagar",
     tone: "text-rose-600",
     icon: (
@@ -223,6 +266,7 @@ export const FINANCEIRO: NavItem[] = [
   {
     href: "/financeiro/receber",
     area: "erp",
+    grupo: "financeiro",
     label: "Títulos a Receber",
     tone: "text-emerald-600",
     icon: (
@@ -234,7 +278,9 @@ export const FINANCEIRO: NavItem[] = [
   },
   {
     href: "/bi/simples",
-    area: "financeiro",
+    area: "bi",
+    grupo: "bi",
+    secao: "Financeiro",
     label: "Simples Nacional",
     tone: "text-amber-700",
     icon: (
@@ -245,7 +291,9 @@ export const FINANCEIRO: NavItem[] = [
   },
   {
     href: "/bi/contas-pagar",
-    area: "financeiro",
+    area: "bi",
+    grupo: "bi",
+    secao: "Financeiro",
     label: "Contas a Pagar",
     tone: "text-rose-700",
     icon: (
@@ -256,7 +304,9 @@ export const FINANCEIRO: NavItem[] = [
   },
   {
     href: "/bi/contas-receber",
-    area: "financeiro",
+    area: "bi",
+    grupo: "bi",
+    secao: "Financeiro",
     label: "Contas a Receber",
     tone: "text-emerald-700",
     icon: (
@@ -267,7 +317,9 @@ export const FINANCEIRO: NavItem[] = [
   },
   {
     href: "/bi/conciliacao",
-    area: "financeiro",
+    area: "bi",
+    grupo: "bi",
+    secao: "Financeiro",
     label: "Conciliação",
     tone: "text-amber-700",
     icon: (
@@ -279,7 +331,9 @@ export const FINANCEIRO: NavItem[] = [
   },
   {
     href: "/bi/compras-cadeia",
-    area: "financeiro",
+    area: "bi",
+    grupo: "bi",
+    secao: "Compras",
     label: "Cadeia de Compras",
     tone: "text-sky-700",
     icon: (
@@ -290,7 +344,9 @@ export const FINANCEIRO: NavItem[] = [
   },
   {
     href: "/bi/margem-venda",
-    area: "financeiro",
+    area: "bi",
+    grupo: "bi",
+    secao: "Vendas",
     label: "Margem por Venda",
     tone: "text-lime-700",
     icon: (
@@ -302,7 +358,9 @@ export const FINANCEIRO: NavItem[] = [
   },
   {
     href: "/bi/custo-cliente",
-    area: "financeiro",
+    area: "bi",
+    grupo: "bi",
+    secao: "Financeiro",
     label: "Custo por Cliente",
     tone: "text-orange-700",
     icon: (
@@ -314,7 +372,9 @@ export const FINANCEIRO: NavItem[] = [
   },
   {
     href: "/bi/fluxo-caixa",
-    area: "financeiro",
+    area: "bi",
+    grupo: "bi",
+    secao: "Financeiro",
     label: "Fluxo de Caixa",
     tone: "text-violet-700",
     icon: (

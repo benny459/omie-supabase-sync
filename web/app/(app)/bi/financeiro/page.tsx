@@ -1,12 +1,15 @@
 import FinanceiroView from "@/components/bi/FinanceiroView";
 import TelaVisaoNavy from "@/components/navy/tela/TelaVisaoNavy";
 import LinkClassica from "@/components/navy/tela/LinkClassica";
+import { requireArea } from "@/lib/require-area";
 
 export const dynamic = "force-dynamic";
 
 /* 30/09/26: Visão financeira Navy (as abas Análise, Recebíveis e Fluxo da
    tela antiga continuam lá dentro). A antiga inteira em ?classica=1. */
 export default async function Page({ searchParams }: { searchParams: Promise<{ classica?: string }> }) {
+  // Não tinha trava: qualquer pessoa logada abria pelo endereço (30/09/26).
+  await requireArea("bi");
   const { classica } = await searchParams;
   if (!classica) return (<><TelaVisaoNavy /><LinkClassica href="/bi/financeiro?classica=1" /></>);
   return (

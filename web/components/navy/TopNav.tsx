@@ -18,9 +18,9 @@
 
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { AREAS, AREA_LABELS, canViewArea, type Area } from "@/lib/permissions";
+import { canViewArea } from "@/lib/permissions";
 import { useUserPerms } from "../UserPermsProvider";
-import { ADMIN, BI, FINANCEIRO, MODULES, type NavItem } from "../AppSidebar";
+import { ADMIN, BI, FINANCEIRO, GRUPOS, MODULES, SECOES_BI, type Grupo, type NavItem } from "../AppSidebar";
 import GlobalSearch from "../GlobalSearch";
 import { supaBrowser } from "@/lib/supabase";
 
@@ -31,7 +31,7 @@ export default function TopNav({ userEmail }: { userEmail?: string | null }) {
   const [pendingHref, setPendingHref] = useState<string | null>(null);
   const [menuAberto, setMenuAberto] = useState(false);
   const [, startTransition] = useTransition();
-  const escolhaManual = useRef<Area | "sistema" | null>(null);
+  const escolhaManual = useRef<Grupo | "sistema" | null>(null);
 
   useEffect(() => { setPendingHref(null); }, [pathname]);
 
@@ -57,8 +57,13 @@ export default function TopNav({ userEmail }: { userEmail?: string | null }) {
 
   /* Áreas visíveis — mesma filtragem do sidebar. Área sem item visível não
      aparece: mostrar um separador vazio seria pior que não o mostrar. */
+  /* Grupos visíveis: um item aparece se a pessoa pode abrir a área dele
+     (permissão) — o grupo só decide em que botão ele fica. Grupo sem item
+     visível não aparece. */
+  const visivel = (m: NavItem) => !m.area || canViewArea(perms, m.area);
   const areasVisiveis = useMemo(
-    () => AREAS.filter((a) => canViewArea(perms, a) && todos.some((m) => m.area === a)),
+    () => GRUPOS.map((g) => g.id)
+      .filter((g) => todos.some((m) => (m.grupo ?? m.area) === g && (!m.area || canViewArea(perms, m.area)))),
     [perms, todos],
   );
 
@@ -78,20 +83,27 @@ export default function TopNav({ userEmail }: { userEmail?: string | null }) {
   };
   const ehOwner = (userEmail ?? "").toLowerCase() === "benny@waterworks.com.br";
 
-  const itensDaArea = (a: Area | "sistema"): NavItem[] =>
-    a === "sistema" ? (ehOwner ? [...ADMIN, OWNER] : ADMIN) : todos.filter((m) => m.area === a);
+  const itensDaArea = (a: Grupo | "sistema"): NavItem[] =>
+    a === "sistema" ? (ehOwner ? [...ADMIN, OWNER] : ADMIN)
+      : todos.filter((m) => (m.grupo ?? m.area) === a && visivel(m));
 
   /* Área activa: a do item que está aberto. Se o utilizador tiver clicado numa
      pill, essa manda até navegar — senão clicar numa área e não ver nada
      acontecer parecia um botão partido. */
-  const areaDaRota = useMemo<Area | "sistema" | null>(() => {
+  /* O item da rota é o de href MAIS LONGO que casa — /pcs/atribuir-cliente é
+     do BI, /pcs é da Operação; sem isso o primeiro da lista ganhava. */
+  const itemDaRota = useMemo(() => todos
+    .filter((m) => pathname === m.href || pathname.startsWith(m.href + "/"))
+    .sort((a, b) => b.href.length - a.href.length)[0] ?? null, [pathname, todos]);
+  const areaDaRota = useMemo<Grupo | "sistema" | null>(() => {
     if (ADMIN.some((m) => pathname.startsWith(m.href))) return "sistema";
-    const item = todos.find((m) => pathname.startsWith(m.href));
-    return (item?.area as Area) ?? null;
-  }, [pathname, todos]);
+    return ((itemDaRota?.grupo ?? itemDaRota?.area) as Grupo) ?? null;
+  }, [pathname, itemDaRota]);
 
   useEffect(() => { escolhaManual.current = null; }, [pathname]);
-  const [areaSel, setAreaSel] = useState<Area | "sistema" | null>(null);
+  const [areaSel, setAreaSel] = useState<Grupo | "sistema" | null>(null);
+  const [secaoSel, setSecaoSel] = useState<string | null>(null);
+  useEffect(() => { setSecaoSel(null); }, [pathname]);
   const areaActiva = areaSel ?? areaDaRota ?? areasVisiveis[0] ?? "sistema";
 
   /* Mesmo caminho do sidebar: nao ha rota /api/auth/signout, a sessao fecha
@@ -108,7 +120,14 @@ export default function TopNav({ userEmail }: { userEmail?: string | null }) {
     startTransition(() => { router.push(href); });
   }
 
-  const abas = itensDaArea(areaActiva);
+  const doGrupo = itensDaArea(areaActiva);
+  /* BI: relatórios agrupados em seções (Geral, Compras, Vendas, Financeiro) —
+     uma linha de seções e, abaixo, só os relatórios da seção escolhida. */
+  const secoes = areaActiva === "bi"
+    ? SECOES_BI.filter((sc) => doGrupo.some((m) => (m.secao ?? "Geral") === sc)) : [];
+  const secaoActiva = secaoSel ?? (itemDaRota?.grupo === "bi" ? itemDaRota.secao ?? "Geral" : null) ?? secoes[0] ?? null;
+  const abas = areaActiva === "bi" ? doGrupo.filter((m) => (m.secao ?? "Geral") === secaoActiva) : doGrupo;
+  const labelGrupo = (g: Grupo) => GRUPOS.find((x) => x.id === g)!;
 
   return (
     <header style={{ position: "sticky", top: 0, zIndex: 30, padding: "14px 28px 0" }}>
@@ -134,7 +153,7 @@ export default function TopNav({ userEmail }: { userEmail?: string | null }) {
               <button key={a} type="button"
                 onClick={() => setAreaSel(a)}
                 onMouseEnter={() => itensDaArea(a).forEach((m) => aquecer(m.href))}
-                title={AREA_LABELS[a].desc}
+                title={labelGrupo(a).desc}
                 style={{
                   padding: "6px 13px", borderRadius: "var(--radius-pill)",
                   fontSize: "var(--text-body-sm)", fontWeight: activa ? 600 : 500, cursor: "pointer",
@@ -143,7 +162,7 @@ export default function TopNav({ userEmail }: { userEmail?: string | null }) {
                   background: activa ? "var(--ww-accent-soft)" : "transparent",
                   boxShadow: activa ? "var(--ww-glow-chip)" : "none",
                 }}>
-                {AREA_LABELS[a].label}
+                {labelGrupo(a).label}
               </button>
             );
           })}
@@ -204,13 +223,36 @@ export default function TopNav({ userEmail }: { userEmail?: string | null }) {
         </span>
       </div>
 
+      {secoes.length > 0 && (
+        <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "10px 8px 0" }}>
+          <span style={{ fontSize: "var(--text-micro)", color: "var(--ww-text-faint)", textTransform: "uppercase", letterSpacing: "var(--tracking-label)", marginRight: 4 }}>
+            Relatórios
+          </span>
+          {secoes.map((sc) => {
+            const activa = sc === secaoActiva;
+            return (
+              <button key={sc} type="button" onClick={() => setSecaoSel(sc)}
+                style={{
+                  padding: "4px 11px", borderRadius: "var(--radius-pill)", cursor: "pointer",
+                  fontSize: "var(--text-meta)", fontWeight: activa ? 600 : 500,
+                  border: "1px solid " + (activa ? "var(--ww-accent)" : "var(--ww-border)"),
+                  color: activa ? "var(--ww-accent-text)" : "var(--ww-text-muted)",
+                  background: activa ? "var(--ww-accent-soft)" : "transparent",
+                }}>
+                {sc}
+              </button>
+            );
+          })}
+        </div>
+      )}
+
       {/* Abas dos módulos da área activa */}
       <div style={{
         display: "flex", alignItems: "center", gap: 4, padding: "8px 8px 0",
         borderBottom: "1px solid var(--ww-border-subtle)", overflowX: "auto",
       }}>
         {abas.map((m) => {
-          const activo = pathname.startsWith(m.href);
+          const activo = itemDaRota?.href === m.href;
           const pendente = pendingHref === m.href;
           return (
             <button key={m.href} type="button" onClick={() => navegar(m.href)}
