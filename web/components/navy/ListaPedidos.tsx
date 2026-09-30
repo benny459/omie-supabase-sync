@@ -117,8 +117,20 @@ function materiaisDoLote(r: AnyRow): { tom: Tom; rotulo: string; pct: number; su
 }
 
 export default function ListaPedidos({
-  pedidos, dinheiro, empresa, abrirTudo, onLoteClick,
+  pedidos, dinheiro, empresa, abrirTudo, onLoteClick, extra, onEditar, limiteInicial = 150,
+  valorDoPedido, larguraId = 104,
 }: {
+  /** Valor à direita do cartão. Default: valor do PV (Projetos somam os PVs). */
+  valorDoPedido?: (p: Pedido) => number;
+  /** Largura da coluna do identificador — nome de projeto é bem maior que "PV1820". */
+  larguraId?: number;
+  /** Faixa sempre visível sob a cabeça do cartão (Projetos: Budget · Aprovado
+   *  · Falta e "Abrir projeto"). */
+  extra?: (p: Pedido) => React.ReactNode;
+  /** "✎ Editar": leva o pedido à grade de Edição (aprovar, editar, + linha). */
+  onEditar?: (p: Pedido) => void;
+  /** Cartões montados de início — /avulsos e /pcs passam de mil pedidos. */
+  limiteInicial?: number;
   pedidos: Pedido[];
   dinheiro: (v: number) => string;
   empresa: string;
@@ -129,6 +141,7 @@ export default function ListaPedidos({
   const [abertos, setAbertos] = useState<Record<string, boolean>>({});
   const [lotesAbertos, setLotesAbertos] = useState<Record<string, boolean>>({});
   const [itens, setItens] = useState<Record<string, ItemPc[]>>({});
+  const [limite, setLimite] = useState(limiteInicial);
 
   // Expandir tudo / Recolher: o chamador muda o sinal, aqui reage.
   const chaveSinal = `${abrirTudo}`;
@@ -155,7 +168,7 @@ export default function ListaPedidos({
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-      {pedidos.map((p) => {
+      {pedidos.slice(0, limite).map((p) => {
         const aberto = abertos[p.pv_os_label] ?? false;
         return (
           <div key={p.pv_os_label} style={{
@@ -167,7 +180,7 @@ export default function ListaPedidos({
             <div onClick={() => setAbertos((o) => ({ ...o, [p.pv_os_label]: !aberto }))}
               style={{
                 display: "grid",
-                gridTemplateColumns: "22px 104px 1.3fr 240px 1.7fr 120px",
+                gridTemplateColumns: `22px ${larguraId}px 1.3fr 240px 1.7fr 120px`,
                 gap: 16, alignItems: "center", padding: "14px 18px", cursor: "pointer",
               }}>
               <Chevron open={aberto} />
@@ -192,11 +205,44 @@ export default function ListaPedidos({
               <span style={{ display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center" }}>
                 {p.chips.map((c, i) => <StatusPill key={i} tone={c.tom}>{c.texto}</StatusPill>)}
               </span>
-              <span style={{
-                fontSize: 15, fontWeight: 700, textAlign: "right", color: "var(--ww-text)",
-                letterSpacing: "var(--tracking-tight)",
-              }}>{dinheiro(n(p.head.pv_valor_total))}</span>
+              <span style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4 }}>
+                <span style={{
+                  fontSize: 15, fontWeight: 700, textAlign: "right", color: "var(--ww-text)",
+                  letterSpacing: "var(--tracking-tight)",
+                }}>{dinheiro(valorDoPedido ? valorDoPedido(p) : n(p.head.pv_valor_total))}</span>
+                {onEditar && !extra && (
+                  <button type="button" onClick={(e) => { e.stopPropagation(); onEditar(p); }}
+                    title="Abre este pedido na grade de Edição — editar células, aprovar/recusar, + Nova linha"
+                    style={{
+                      padding: "2px 9px", borderRadius: "var(--radius-pill)", cursor: "pointer",
+                      fontSize: "var(--text-micro)", fontWeight: 600,
+                      border: "1px solid var(--ww-border-strong)", background: "transparent",
+                      color: "var(--ww-text-2)",
+                    }}>✎ Editar</button>
+                )}
+              </span>
             </div>
+
+            {extra && (
+              <div onClick={(e) => e.stopPropagation()} style={{
+                display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap",
+                padding: "0 18px 12px 56px",
+              }}>
+                {extra?.(p)}
+                {onEditar && (
+                  <button type="button" onClick={() => onEditar(p)}
+                    title="Abre este pedido na grade de Edição — editar células, aprovar/recusar, + Nova linha"
+                    style={{
+                      marginLeft: "auto", padding: "4px 11px", borderRadius: "var(--radius-pill)",
+                      fontSize: "var(--text-meta)", fontWeight: 600, cursor: "pointer",
+                      border: "1px solid var(--ww-border-strong)", background: "transparent",
+                      color: "var(--ww-text-2)",
+                    }}>
+                    ✎ Editar
+                  </button>
+                )}
+              </div>
+            )}
 
             {/* Mini-tabela de lotes */}
             {aberto && (
@@ -354,6 +400,16 @@ export default function ListaPedidos({
           </div>
         );
       })}
+      {pedidos.length > limite && (
+        <button type="button" onClick={() => setLimite((l) => l + 150)}
+          style={{
+            alignSelf: "center", padding: "8px 18px", borderRadius: "var(--radius-pill)", cursor: "pointer",
+            border: "1px solid var(--ww-border-strong)", background: "transparent",
+            color: "var(--ww-text-2)", fontSize: "var(--text-body-sm)",
+          }}>
+          Mostrar mais {Math.min(150, pedidos.length - limite)} de {pedidos.length - limite} restantes
+        </button>
+      )}
     </div>
   );
 }

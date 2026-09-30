@@ -29,7 +29,9 @@ import AddRowButton from "./AddRowButton";
 import GlobalSearch from "./GlobalSearch";
 import PcsExcluidosButton, { type PcEscondido } from "./PcsExcluidosButton";
 import KanbanRaias from "./navy/KanbanRaias";
-import ArvoreLotes from "./navy/ArvoreLotes";
+import TreeTable from "./navy/TreeTable";
+import ListaPedidos from "./navy/ListaPedidos";
+import { montarPedidos, bucketsDosPedidos, montarArvore, COLUNAS_TABELA, GRUPOS_TABELA, GRID_TABELA } from "@/lib/navy-pedidos";
 import LinhaDoTempo from "./navy/LinhaDoTempo";
 import KpisNavy from "./navy/KpisNavy";
 import { SegmentedControl } from "./navy/primitivos";
@@ -608,20 +610,26 @@ export default function BoldAvulsosView({
   /* PCs escondidos. Buscados uma vez e distribuídos: o chip do topo mostra o
      total e cada projeto mostra os seus. Os PCs escondidos NÃO vêm em `rows`
      (a lista já os filtra), por isso o projeto de cada um vem da própria API. */
-  /* Vista escolhida. O handoff pede Lista · Linha do tempo · Tabela · Kanban;
-     entram as que existem, e a lista continua a ser o default — quem abre a
-     tela hoje encontra o que encontrava. Fica no browser por modulo. */
-  const [vista, setVista] = useState<"lista" | "arvore" | "tempo" | "kanban">("lista");
+  /* Vista escolhida. Desde 30/09/2026 o Navy é definitivo: Lista (cartão por
+     pedido, o default) · Linha do tempo · Tabela · Kanban, como no modelo — e
+     "Edição", a grade de trabalho de sempre (editar, aprovar/recusar, + Nova
+     linha), para nenhuma função se perder na troca. Chave nova no browser
+     (vista2) para todos abrirem na Lista Navy uma vez; a escolha fica. */
+  type Vista = "lista" | "tempo" | "tabela" | "kanban" | "edicao";
+  const VISTAS: Vista[] = ["lista", "tempo", "tabela", "kanban", "edicao"];
+  const [vista, setVista] = useState<Vista>("lista");
   useEffect(() => {
     try {
-      const v = window.localStorage.getItem(`painel.vista.${modulo}`);
-      if (v === "kanban" || v === "lista" || v === "arvore" || v === "tempo") setVista(v);
+      const v = window.localStorage.getItem(`painel.vista2.${modulo}`) as Vista | null;
+      if (v && VISTAS.includes(v)) setVista(v);
     } catch { /* preferencia corrompida: fica a lista */ }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [modulo]);
   const trocarVista = useCallback((v: string) => {
-    const alvo = v === "kanban" ? "kanban" : v === "arvore" ? "arvore" : v === "tempo" ? "tempo" : "lista";
+    const alvo = (VISTAS as string[]).includes(v) ? (v as Vista) : "lista";
     setVista(alvo);
-    try { window.localStorage.setItem(`painel.vista.${modulo}`, alvo); } catch { /* quota */ }
+    try { window.localStorage.setItem(`painel.vista2.${modulo}`, alvo); } catch { /* quota */ }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [modulo]);
 
   const [pcsEscondidos, setPcsEscondidos] = useState<PcEscondido[]>([]);
@@ -1474,6 +1482,17 @@ export default function BoldAvulsosView({
     modulo === "pcs"      ? "pc"      : "pvos";
   const buckets = useMemo(() => buildBuckets(filtered, groupBy), [filtered, groupBy]);
 
+  /* Vistas Navy (Lista, Tabela, Linha do tempo, Kanban) — mesmas regras da
+     recriação Navy (lib/navy-pedidos): um PC é um PC em todas as vistas. */
+  const bucketPorLabel = useMemo(() => new Map(buckets.map((b) => [b.pv_os_label, b])), [buckets]);
+  const pedidosNavy = useMemo(
+    () => montarPedidos(buckets, { modulo, hoje: Date.now() }),
+    [buckets, modulo]);
+  const bucketsNavy = useMemo(() => bucketsDosPedidos(pedidosNavy), [pedidosNavy]);
+  const arvoreNavy = useMemo(
+    () => montarArvore(pedidosNavy, (v) => gateBRL(v, userCanViewValues)),
+    [pedidosNavy, userCanViewValues]);
+
   // Virtualização só onde paga: /pcs (1368 buckets) e /avulsos (1227) montam ~40x
   // menos componentes. /projetos tem 44 buckets — virtualizar ali não ganharia
   // nada e ainda traria pulo de scroll ao expandir cards de ~33 linhas.
@@ -1953,18 +1972,6 @@ export default function BoldAvulsosView({
         </span>
         <div className="self-center"><GlobalSearch /></div>
         <div className="self-center"><SyncNowButton /></div>
-        {/* Atalho para a recriacao Navy, so para o Benny e so em /avulsos.
-            E rascunho: fica fora do menu e invisivel para os outros ate ele
-            decidir se substitui a tela. O id em vez do email porque UserPerms
-            nao carrega email — e o id nao muda se o endereco mudar. */}
-        {modulo === "avulsos" && user?.id === "44de386a-1bd0-4fd9-a769-08cb33d3be70" && (
-          <a href="/avulsos-navy"
-            className="self-center inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold
-                       border border-ww-accent/60 text-ww-accentText hover:bg-ww-accent hover:text-white transition"
-            title="Recriacao Navy desta tela — rascunho, so voce ve">
-            ✦ Ver em Navy
-          </a>
-        )}
         {/* Só aparece se houver PC escondido — é a porta de volta da exclusão. */}
         <div className="self-center">
           <PcsExcluidosButton linhas={pcsEscondidos} onMudou={carregarEscondidos} />
@@ -2165,7 +2172,7 @@ export default function BoldAvulsosView({
       {/* Seletor de vista — mesmos dados, leituras diferentes. */}
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <SegmentedControl
-          options={[{ value: "lista", label: "Lista" }, { value: "arvore", label: "Árvore" }, { value: "tempo", label: "Linha do tempo" }, { value: "kanban", label: "Kanban" }]}
+          options={[{ value: "lista", label: "Lista" }, { value: "tempo", label: "Linha do tempo" }, { value: "tabela", label: "Tabela" }, { value: "kanban", label: "Kanban" }, { value: "edicao", label: "✎ Edição" }]}
           value={vista}
           onChange={trocarVista}
         />
@@ -2179,56 +2186,97 @@ export default function BoldAvulsosView({
             Quando · faixa do prazo e marcos do lote na mesma escala
           </span>
         )}
-        {vista === "arvore" && (
+        {vista === "tabela" && (
           <span className="text-[11px] text-ww-textMuted">
-            {modulo === "projetos" ? "Projeto" : "Pedido"} → lote → item · itens do Omie carregam ao abrir o lote
+            {modulo === "projetos" ? "Projeto" : "Pedido"} › compra › item · colunas da cadeia RC · PC · Aprovação · Materiais
+          </span>
+        )}
+        {vista === "lista" && (
+          <span className="text-[11px] text-ww-textMuted">
+            Um cartão por {modulo === "projetos" ? "projeto" : modulo === "pcs" ? "PC" : "pedido"} · abre nas compras e nos itens · ✎ Editar leva à grade de Edição
+          </span>
+        )}
+        {vista === "edicao" && (
+          <span className="text-[11px] text-ww-textMuted">
+            Grade de trabalho — editar células, aprovar/recusar, + Nova linha
           </span>
         )}
       </div>
 
-      {vista === "tempo" ? (
+      {vista === "lista" ? (
+        <div className="pb-20 min-w-0">
+          {pedidosNavy.length === 0 ? (
+            <div className="text-center py-16 text-ww-textFaint text-sm">Nada com estes filtros.</div>
+          ) : (
+            <ListaPedidos
+              pedidos={pedidosNavy}
+              dinheiro={(v) => gateBRL(v, userCanViewValues)}
+              empresa={String(pedidosNavy[0]?.head?.empresa ?? "SF")}
+              abrirTudo={null}
+              onLoteClick={(r) => setDrawerItem({ ...r })}
+              extra={modulo === "projetos" ? (pd) => {
+                const b = bucketPorLabel.get(pd.pv_os_label);
+                if (!b) return null;
+                const p = projetoDoBucket(modulo, b);
+                return (
+                  <>
+                    {p && <LinkAbrirProjeto {...p} />}
+                    <div className="min-w-[360px] flex-1 max-w-[720px]">
+                      <BucketTotals bucket={b} items={b.rows} modulo={modulo}
+                        canViewValues={userCanViewValues} canViewMargin={userCanViewMargin} budgetMap={budgetMap} />
+                    </div>
+                  </>
+                );
+              } : undefined}
+              onEditar={(pd) => {
+                setQuery(pd.pv_os_label);
+                setOpenBuckets((prev) => new Set(prev).add(pd.pv_os_label));
+                trocarVista("edicao");
+              }}
+              larguraId={modulo === "projetos" ? 230 : modulo === "pcs" ? 120 : 104}
+              valorDoPedido={modulo === "projetos" ? (pd) => {
+                // Projeto: soma dos PV/OS distintos (o de cabeça é só o primeiro).
+                const vistos = new Map<string, number>();
+                for (const r of pd.rows) {
+                  const k = String(r.pv_os_label ?? "");
+                  if (k && !vistos.has(k)) vistos.set(k, Number(r.pv_valor_total ?? 0) || 0);
+                }
+                return [...vistos.values()].reduce((a, v) => a + v, 0);
+              } : undefined}
+            />
+          )}
+        </div>
+      ) : vista === "tempo" ? (
         <div className="pb-20 min-w-0">
           <LinhaDoTempo
-            buckets={buckets}
+            buckets={bucketsNavy}
             formatarValor={(v) => gateBRL(v, userCanViewValues)}
             onLoteClick={(r) => setDrawerItem({ ...r })}
             acaoBucket={modulo === "projetos" ? (b) => {
-              const p = projetoDoBucket(modulo, b as Bucket);
+              const orig = bucketPorLabel.get(b.pv_os_label);
+              const p = orig ? projetoDoBucket(modulo, orig) : null;
               return p ? <LinkAbrirProjeto {...p} /> : null;
             } : undefined}
           />
         </div>
-      ) : vista === "arvore" ? (
-        <div className="pb-20 min-w-0 space-y-3">
-          {buckets.length === 0 ? (
+      ) : vista === "tabela" ? (
+        <div className="pb-20 min-w-0 overflow-x-auto rounded-[var(--radius-panel)] border border-ww-border">
+          {arvoreNavy.length === 0 ? (
             <div className="text-center py-16 text-ww-textFaint text-sm">Nada com estes filtros.</div>
-          ) : buckets.map((b) => (
-            <div key={b.pv_os_label} className="rounded-[var(--radius-panel)] border border-ww-border bg-ww-panel p-3">
-              <div className="flex items-baseline justify-between gap-3 px-2 pb-2">
-                <span className="flex items-baseline gap-3 min-w-0">
-                  <span className="text-[14px] font-bold text-ww-text">{b.pv_os_label}</span>
-                  {(() => { const p = projetoDoBucket(modulo, b); return p ? <LinkAbrirProjeto {...p} /> : null; })()}
-                </span>
-                <span className="text-[11px] text-ww-textMuted">
-                  {b.cliente ?? "—"} · {new Set(b.rows.map((r) => String(r.pc_numero ?? r.pc_numero_manual ?? `x${r.ncod_ped}`))).size} lote(s)
-                </span>
-              </div>
-              <ArvoreLotes
-                bucket={b}
-                formatarValor={(v) => gateBRL(v, userCanViewValues)}
-                onLoteClick={(r) => setDrawerItem({ ...r })}
-              />
-            </div>
-          ))}
+          ) : (
+            <TreeTable columns={COLUNAS_TABELA} groups={GRUPOS_TABELA} grid={GRID_TABELA}
+              rows={arvoreNavy} minWidth={1240} />
+          )}
         </div>
       ) : vista === "kanban" ? (
         <div className="pb-20 min-w-0 overflow-x-auto">
           <KanbanRaias
-            buckets={buckets}
+            buckets={bucketsNavy}
             formatarValor={(v) => gateBRL(v, userCanViewValues)}
             onLoteClick={(r) => setDrawerItem({ ...r })}
             acaoBucket={modulo === "projetos" ? (b) => {
-              const p = projetoDoBucket(modulo, b as Bucket);
+              const orig = bucketPorLabel.get(b.pv_os_label);
+              const p = orig ? projetoDoBucket(modulo, orig) : null;
               return p ? <LinkAbrirProjeto {...p} /> : null;
             } : undefined}
           />

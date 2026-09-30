@@ -24,7 +24,7 @@
 
 import { useMemo, useState } from "react";
 import { resumoDoTempo, type ResumoTempo } from "@/lib/etapas-tempo";
-import { Chevron, StatusPill, type Tom } from "./primitivos";
+import { Chevron, SegmentedControl, StatusPill, type Tom } from "./primitivos";
 
 type AnyRow = Record<string, unknown>;
 
@@ -46,7 +46,7 @@ const dBR = (t: number) => new Date(t).toLocaleDateString("pt-BR");
 type Forma = "circulo" | "circuloCheio" | "quadrado" | "losango";
 type Marco = { em: number; forma: Forma; cor: string; titulo: string };
 
-function Simbolo({ forma, cor, tam = 9 }: { forma: Forma; cor: string; tam?: number }) {
+function Simbolo({ forma, cor, tam = 11 }: { forma: Forma; cor: string; tam?: number }) {
   const base: React.CSSProperties = {
     width: tam, height: tam, border: `1.5px solid ${cor}`,
     background: forma === "circulo" ? "transparent" : cor,
@@ -84,12 +84,23 @@ export default function LinhaDoTempo({
   }, []);
 
   /* Janela rolante, não o intervalo todo dos dados: há PV de 2024 ainda
-     listados, e deixá-los mandar na escala esmagava dois anos num ecrã. */
+     listados, e deixá-los mandar na escala esmagava dois anos num ecrã.
+     30/09/2026: o default passa a 6 semanas em volta de hoje, como no modelo
+     — com 24 semanas as barras ficavam num canto e os marcos ilegíveis
+     ("não dá pra ver"). As janelas largas continuam a um clique. */
+  const JANELAS = {
+    "6s": { antes: 21, depois: 28, passo: 7 },
+    "3m": { antes: 28, depois: 63, passo: 14 },
+    "6m": { antes: 56, depois: 112, passo: 28 },
+  } as const;
+  const [zoom, setZoom] = useState<keyof typeof JANELAS>("6s");
   const janela = useMemo(() => {
-    const min = hoje - 56 * DIA_MS;
-    const max = hoje + 112 * DIA_MS;
-    return { min, max, span: max - min };
-  }, [hoje]);
+    const j = JANELAS[zoom];
+    const min = hoje - j.antes * DIA_MS;
+    const max = hoje + j.depois * DIA_MS;
+    return { min, max, span: max - min, passo: j.passo };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hoje, zoom]);
 
   const pos = (t: number) => Math.max(0, Math.min(100, ((t - janela.min) / janela.span) * 100));
   const antes = (t: number | null) => t != null && t < janela.min;
@@ -98,12 +109,12 @@ export default function LinhaDoTempo({
 
   const marcasSemana = useMemo(() => {
     const out: { em: number; rot: string }[] = [];
-    for (let t = hoje - 56 * DIA_MS; t <= janela.max; t += 28 * DIA_MS) {
+    for (let t = janela.min; t <= janela.max; t += janela.passo * DIA_MS) {
       const d = new Date(t);
       out.push({ em: t, rot: `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}` });
     }
     return out;
-  }, [hoje, janela.max]);
+  }, [janela]);
 
   const dados = useMemo(() => buckets.map((b) => ({
     ...b,
@@ -116,6 +127,11 @@ export default function LinhaDoTempo({
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+        <span style={{ fontSize: "var(--text-micro)", color: "var(--ww-text-faint)" }}>Janela</span>
+        <SegmentedControl value={zoom} onChange={(v) => setZoom(v as keyof typeof JANELAS)}
+          options={[{ value: "6s", label: "6 semanas" }, { value: "3m", label: "3 meses" }, { value: "6m", label: "6 meses" }]} />
+      </div>
       {/* Legenda + régua */}
       <div style={{ display: "grid", gridTemplateColumns: COL, gap: 12, alignItems: "end" }}>
         <span style={{
@@ -213,7 +229,7 @@ export default function LinhaDoTempo({
               </span>
 
               {/* Trilha */}
-              <span style={{ position: "relative", height: 26 }}>
+              <span style={{ position: "relative", height: 40 }}>
                 {marcasSemana.map((m) => (
                   <span key={m.em} style={{
                     position: "absolute", left: `${pos(m.em)}%`, top: 0, bottom: 0,
@@ -240,22 +256,31 @@ export default function LinhaDoTempo({
                     {r.emissao != null && r.limite != null && (
                       <>
                         <span style={{
-                          position: "absolute", top: 10, height: 6, borderRadius: "var(--radius-bar)",
+                          position: "absolute", top: 9, height: 12, borderRadius: "var(--radius-bar)",
                           left: `${pos(r.emissao)}%`,
-                          width: `${Math.max(0.4, pos(r.limite) - pos(r.emissao))}%`,
+                          width: `${Math.max(0.4, Math.max(pos(r.limite), pos(hoje)) - pos(r.emissao))}%`,
                           background: "var(--ww-track)",
                         }} />
                         <span style={{
-                          position: "absolute", top: 10, height: 6, borderRadius: "var(--radius-bar)",
+                          position: "absolute", top: 9, height: 12, borderRadius: "var(--radius-bar)",
                           left: `${pos(r.emissao)}%`,
-                          width: `${Math.max(0, Math.min(pos(r.limite), pos(hoje)) - pos(r.emissao))}%`,
-                          background: atrasado ? "var(--ww-crit)" : "var(--ww-ok)",
+                          width: `${Math.max(0, pos(hoje) - pos(r.emissao))}%`,
+                          background: atrasado
+                            ? "linear-gradient(90deg, color-mix(in srgb, var(--ww-crit) 45%, transparent), var(--ww-crit))"
+                            : "linear-gradient(90deg, color-mix(in srgb, var(--ww-info) 35%, transparent), var(--ww-info))",
                           boxShadow: atrasado ? "none" : "var(--ww-glow-ok)",
                         }} />
                         <span title={`limite do PV · ${dBR(r.limite)}`} style={{
-                          position: "absolute", left: `${pos(r.limite)}%`, top: 3, bottom: 3,
+                          position: "absolute", left: `${pos(r.limite)}%`, top: 2, height: 26,
                           width: 2, background: "var(--ww-crit)",
                         }} />
+                        {dentro(r.limite) && (
+                          <span style={{
+                            position: "absolute", left: `${pos(r.limite)}%`, top: 27,
+                            transform: "translateX(-50%)", whiteSpace: "nowrap",
+                            fontSize: "var(--text-micro)", fontWeight: 700, color: "var(--ww-crit-text)",
+                          }}>limite {dBR(r.limite).slice(0, 5)}</span>
+                        )}
                       </>
                     )}
                     {foraAtras > 0 && (
@@ -267,7 +292,7 @@ export default function LinhaDoTempo({
                     {marcos.filter((m) => dentro(m.em)).map((m, k) => (
                       <span key={k} title={`${m.titulo} · ${dBR(m.em)}`}
                         style={{
-                          position: "absolute", left: `${pos(m.em)}%`, top: m.forma === "quadrado" ? 8.5 : 8,
+                          position: "absolute", left: `${pos(m.em)}%`, top: 9.5,
                           transform: "translateX(-50%)", lineHeight: 0,
                         }}>
                         <Simbolo forma={m.forma} cor={m.cor} />
@@ -367,11 +392,41 @@ export default function LinhaDoTempo({
                            : s(row.rc_numero) ? `RC ${s(row.rc_numero)} · ${s(row.rc_descricao) || "sem descrição"}`
                            : "sem RC nem PC"}
                       </span>
-                      <span style={{ position: "relative", height: 16 }}>
-                        <span style={{
-                          position: "absolute", left: 0, right: 0, top: 7, height: 1,
-                          background: "var(--ww-border-subtle)",
-                        }} />
+                      <span style={{ position: "relative", height: 26 }}>
+                        {(() => {
+                          /* Barra própria do PC, como no modelo: cheia do PC
+                             até o recebimento (ou até hoje) e tracejada até a
+                             previsão que ainda falta. */
+                          const ini = dia(row.dt_inclusao);
+                          if (ini == null) return null;
+                          const rec = dia(row.mt_data_recebimento_nf);
+                          const prev = dia(row.nova_prev_materiais) ?? dia(row.dt_previsao);
+                          const fimCheio = rec ?? Math.min(hoje, prev ?? hoje);
+                          const cor = rec ? "var(--ww-info)" : prev != null && prev < hoje ? "var(--ww-crit)" : "var(--ww-warn)";
+                          return (
+                            <>
+                              <span style={{
+                                position: "absolute", top: 5, height: 6, borderRadius: "var(--radius-bar)",
+                                left: `${pos(ini)}%`, width: `${Math.max(0.4, pos(fimCheio) - pos(ini))}%`,
+                                background: `linear-gradient(90deg, color-mix(in srgb, ${cor} 30%, transparent), ${cor})`,
+                              }} />
+                              {!rec && prev != null && prev > fimCheio && (
+                                <span style={{
+                                  position: "absolute", top: 5, height: 6,
+                                  left: `${pos(fimCheio)}%`, width: `${Math.max(0, pos(prev) - pos(fimCheio))}%`,
+                                  border: `1.5px dashed ${cor}`, borderRadius: "var(--radius-bar)",
+                                }} />
+                              )}
+                              {(rec ?? prev) != null && dentro((rec ?? prev) as number) && (
+                                <span style={{
+                                  position: "absolute", top: 13, left: `${pos((rec ?? prev) as number)}%`,
+                                  transform: "translateX(-50%)", whiteSpace: "nowrap",
+                                  fontSize: "var(--text-micro)", color: rec ? "var(--ww-text-muted)" : cor,
+                                }}>{rec ? "recebido" : s(row.nova_prev_materiais) ? "nova" : "prev."} {dBR((rec ?? prev) as number).slice(0, 5)}</span>
+                              )}
+                            </>
+                          );
+                        })()}
                         {foraMc > 0 && (
                           <span title={mc.filter((m) => antes(m.em)).map((m) => `${m.titulo} · ${dBR(m.em)}`).join("\n")}
                             style={{
@@ -382,7 +437,7 @@ export default function LinhaDoTempo({
                         {mc.filter((m) => dentro(m.em)).map((m, k) => (
                           <span key={k} title={`${m.titulo} · ${dBR(m.em)}`}
                             style={{
-                              position: "absolute", left: `${pos(m.em)}%`, top: 3.5,
+                              position: "absolute", left: `${pos(m.em)}%`, top: 2.5,
                               transform: "translateX(-50%)", lineHeight: 0,
                             }}>
                             <Simbolo forma={m.forma} cor={m.cor} />

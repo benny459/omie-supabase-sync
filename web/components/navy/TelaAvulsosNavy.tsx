@@ -28,7 +28,8 @@ import { estadoDoPipeline, ORDEM_TRILHO, type EstadoEtapa } from "@/lib/pipeline
 import { canViewValues } from "@/lib/permissions";
 import { useUserPerms } from "../UserPermsProvider";
 import KpisNavy, { pedidoEncerrado } from "./KpisNavy";
-import TreeTable, { CelulaBarra, CelulaPill, CelulaTexto, type NoArvore } from "./TreeTable";
+import TreeTable from "./TreeTable";
+import { montarPedidos, bucketsDosPedidos, montarArvore, COLUNAS_TABELA as COLUNAS, GRUPOS_TABELA as GRUPOS_COL, GRID_TABELA } from "@/lib/navy-pedidos";
 import ListaPedidos, { type Pedido } from "./ListaPedidos";
 import LinhaDoTempo from "./LinhaDoTempo";
 import KanbanRaias from "./KanbanRaias";
@@ -52,29 +53,6 @@ const GRUPOS: { chave: string; rotulo: string; tom: Tom; kinds: AlarmKind[] }[] 
   { chave: "servicos",    rotulo: "Serviços",    tom: "info",   kinds: ["sem_vinculo", "agend_vazio", "agend_venc"] },
   { chave: "faturamento", rotulo: "Faturamento", tom: "ok",     kinds: ["pode_faturar"] },
 ];
-
-/* Colunas e grupos do modelo: RC (1) · PC (2) · Aprovação (1) · Materiais (3).
-   A grelha é a do handoff, ao pixel. */
-const COLUNAS = [
-  { label: "Pedido › compra › item" },
-  { label: "Custo", align: "right" as const },
-  { label: "PC · fornecedor" },
-  { label: "Valor PC", align: "right" as const },
-  { label: "Status" },
-  { label: "Recebido" },
-  { label: "Status · previsão" },
-  { label: "NF fornec.", align: "right" as const },
-];
-
-const GRUPOS_COL: { label: string; span: number; tone: Tom }[] = [
-  { label: "RC",        span: 1, tone: "warn" },
-  { label: "PC",        span: 2, tone: "info" },
-  { label: "Aprovação", span: 1, tone: "ok" },
-  { label: "Materiais", span: 3, tone: "violet" },
-];
-
-const GRID_TABELA =
-  "minmax(280px,1.6fr) 110px minmax(150px,1.1fr) 110px 150px 130px minmax(160px,1.2fr) 90px";
 
 export default function TelaAvulsosNavy() {
   const perms = useUserPerms();
@@ -193,133 +171,11 @@ export default function TelaAvulsosNavy() {
      O trilho vem de `estadoDoPipeline`, as mesmas regras que a tela antiga
      usa nos dots — antes eu tinha aqui uma aproximação minha e o trilho lia
      quase tudo igual. */
-  const pedidos: Pedido[] = useMemo(() => visiveis.map((b) => {
-    /* Identidade de um lote: o PC, quando existe. Quando não existe, a RC —
-       mesma regra do IDENTIDADE_DO_BLOCO da grelha (rc_numero + descrição),
-       porque duas linhas com a mesma RC e a mesma descrição são a mesma
-       requisição vista duas vezes, não duas requisições. Sem isto, linhas
-       só-RC escapavam à dedupe e reapareciam a dobrar no tempo e no kanban.
-       Empate: ganha a linha do Omie (ncod_ped > 0) sobre a manual. */
-    const porChave = new Map<string, AnyRow>();
-    const soltas: AnyRow[] = [];
-    for (const r of b.rows) {
-      const pc = s(r.pc_numero) || s(r.pc_numero_manual);
-      const rc = s(r.rc_numero);
-      const chave = pc ? `pc:${pc}` : rc ? `rc:${rc}|${s(r.rc_descricao)}` : "";
-      if (!chave) { soltas.push(r); continue; }
-      const ant = porChave.get(chave);
-      if (!ant || (n(r.ncod_ped) > 0 && n(ant.ncod_ped) < 0)) porChave.set(chave, r);
-    }
-    const lotes = [...porChave.values(), ...soltas];
-    const head = b.rows[0] ?? {};
-    const al = alarmesPorBucket.get(b.pv_os_label) ?? new Set<AlarmKind>();
-
-    /* Aprovação só conta sobre quem tem PC — é o PC que entra no workflow.
-       Contar sobre todos os lotes produzia chips impossíveis como "1/0
-       aprovados" (o PV1929 tem uma linha só-RC marcada APROVADO e nenhum PC). */
-    const comPcLotes = lotes.filter((r) => s(r.pc_numero) || s(r.pc_numero_manual));
-    const comPc = comPcLotes.length;
-    const comRc = lotes.filter((r) => s(r.rc_numero)).length;
-    const aprov = comPcLotes.filter((r) => STATUS_META[s(r.status)]?.isApproved).length;
-    const receb = lotes.filter((r) => s(r.mt_data_recebimento_nf)).length;
-    /* Trilho: as regras do pipeline da tela antiga, agora partilhadas.
-       Avalia sobre `b.rows` (não sobre `lotes`) porque as regras de RC/PC
-       contam cadastro incompleto, e a dedupe podia esconder uma cópia
-       incompleta. `aprov_bloq` continua a mandar: um bloqueio explícito é
-       pior do que a média que a regra de aprovação produz. */
-    const pipe = estadoDoPipeline(b.rows, { modulo: "avulsos" });
-    const traduz: Record<EstadoEtapa, Tom> =
-      { green: "ok", yellow: "warn", red: "crit", off: "off" };
-    const rail: Tom[] = ORDEM_TRILHO.map((etapa) => {
-      if (etapa === "aprovacao" && al.has("aprov_bloq")) return "crit";
-      return traduz[pipe[etapa]];
-    });
-
-    const chips: { texto: string; tom: Tom }[] = [
-      { texto: `${comPc}/${lotes.length} PCs`, tom: comPc >= lotes.length ? "ok" : "warn" },
-      ...(comPc > 0
-        ? [{ texto: `${aprov}/${comPc} aprovados`, tom: (aprov >= comPc ? "ok" : "warn") as Tom }]
-        : []),
-      { texto: `${receb}/${lotes.length} recebidos`, tom: receb >= lotes.length ? "ok" : "info" },
-    ];
-    const mapa: Partial<Record<AlarmKind, { t: string; tom: Tom }>> = {
-      venda: { t: "venda em atraso", tom: "crit" },
-      pvos_incompl: { t: "PV incompleto", tom: "crit" },
-      sem_projeto: { t: "sem projeto", tom: "crit" },
-      aguarda_liberacao: { t: "aguarda liberação", tom: "warn" },
-      retido_cliente: { t: "retido no cliente", tom: "warn" },
-      sem_rc: { t: "sem RC", tom: "crit" },
-      sem_pc: { t: "sem PC", tom: "crit" },
-      compra: { t: "compra em atraso", tom: "warn" },
-      defas_omie: { t: "defasado Omie", tom: "warn" },
-      aprov_bloq: { t: "aprovação bloqueada", tom: "crit" },
-      aprov_pend: { t: "aprovação pendente", tom: "warn" },
-      pode_faturar: { t: "pode faturar", tom: "ok" },
-    };
-    for (const kind of al) { const m = mapa[kind]; if (m) chips.push({ texto: m.t, tom: m.tom }); }
-
-    return { pv_os_label: b.pv_os_label, cliente: b.cliente, rows: b.rows, lotes, head, chips, rail };
-  }), [visiveis, alarmesPorBucket]);
-
-  /* Os buckets que o tempo e o kanban recebem. Antes levavam `visiveis` — as
-     linhas cruas — e por isso o mesmo PC (ou a mesma RC) aparecia a dobrar
-     nessas duas vistas enquanto a lista e a tabela mostravam um só. A dedupe
-     só vale a pena se TODAS as vistas beberem dela. */
-  const bucketsLote = useMemo(
-    () => pedidos.map((p) => ({ pv_os_label: p.pv_os_label, cliente: p.cliente, rows: p.lotes })),
-    [pedidos],
-  );
-
-  const arvore: NoArvore[] = useMemo(() => pedidos.map((p) => ({
-    id: p.pv_os_label,
-    name: p.pv_os_label,
-    sub: `${p.cliente ?? "—"} · ${p.lotes.length} compra${p.lotes.length === 1 ? "" : "s"}`,
-    cells: [
-      dinheiro(p.lotes.reduce((t, r) => t + n(r.rc_custo) * (n(r.rc_qtd) || 1), 0)),
-      <CelulaTexto key="pc" t={`${p.lotes.filter((r) => s(r.pc_numero) || s(r.pc_numero_manual)).length} PC(s)`}
-        sub={s(p.head.tipo_omie) || undefined} />,
-      dinheiro(p.lotes.reduce((t, r) => t + n(r.valor_total), 0)),
-      <CelulaTexto key="ap"
-        t={`${p.lotes.filter((r) => STATUS_META[s(r.status)]?.isApproved).length}/${p.lotes.length}`} />,
-      <CelulaTexto key="rec"
-        t={`${p.lotes.filter((r) => s(r.mt_data_recebimento_nf)).length}/${p.lotes.length}`} />,
-      <CelulaTexto key="prev" t={s(p.head.pv_data_previsao) ? `limite ${s(p.head.pv_data_previsao)}` : "—"} />,
-      <CelulaTexto key="nf" t={s(p.head.pv_num_nfe) || "—"} />,
-    ],
-    children: p.lotes.map((r, i) => {
-      const meta = STATUS_META[s(r.status)];
-      const pc = s(r.pc_numero) || s(r.pc_numero_manual);
-      return {
-        id: `${p.pv_os_label}:${s(r.ncod_ped)}:${i}`,
-        name: `Compra ${i + 1}`,
-        sub: s(r.rc_numero) ? `RC ${s(r.rc_numero)}` : undefined,
-        /* Mesma regra da Lista: aprovação, materiais e valor pertencem ao PC.
-           Sem PC a view devolve status "PENDENTE" por omissão e a linha
-           passava a afirmar uma pendência que não existe — a requisição ainda
-           nem virou compra. Colunas do PC ficam vazias. */
-        cells: pc
-          ? [
-              dinheiro(n(r.rc_custo) * (n(r.rc_qtd) || 1)),
-              <CelulaTexto key="pc" t={`PC ${pc}`} sub={s(r.nome_fornecedor) || undefined} />,
-              dinheiro(n(r.valor_total)),
-              meta
-                ? <CelulaPill key="ap" tone={meta.isApproved ? "ok" : "warn"}
-                    sub={s(r.aprovador_email).split("@")[0] || undefined}>{meta.label}</CelulaPill>
-                : <CelulaTexto key="ap" t="—" />,
-              <CelulaTexto key="rec" t={s(r.mt_data_recebimento_nf) || "—"} />,
-              <CelulaTexto key="prev"
-                t={s(r.mt_status_fornecimento) || "—"}
-                sub={s(r.nova_prev_materiais) || s(r.dt_previsao) || undefined} />,
-              <CelulaTexto key="nf" t={s(r.mt_nf_fornecedor) || "—"} />,
-            ]
-          : [
-              dinheiro(n(r.rc_custo) * (n(r.rc_qtd) || 1)),
-              <CelulaTexto key="pc" t="—" sub="sem PC emitido" />,
-              null, null, null, null, null,
-            ],
-      };
-    }),
-  })), [pedidos, dinheiro]);
+  const pedidos: Pedido[] = useMemo(
+    () => montarPedidos(visiveis, { modulo: "avulsos", hoje, alarmes: alarmesPorBucket }),
+    [visiveis, hoje, alarmesPorBucket]);
+  const bucketsLote = useMemo(() => bucketsDosPedidos(pedidos), [pedidos]);
+  const arvore = useMemo(() => montarArvore(pedidos, dinheiro), [pedidos, dinheiro]);
 
   const totalGeral = useMemo(
     () => visiveis.reduce((t, b) => t + n(b.rows[0]?.pv_valor_total), 0), [visiveis]);

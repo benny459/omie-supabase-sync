@@ -1,11 +1,8 @@
-// Rota paralela: a recriação Navy de Vendas avulsas, para comparar lado a
-// lado com /avulsos antes de substituir. Não está no menu de propósito —
-// enquanto for rascunho, quem lá chega é quem sabe o endereço.
+import { redirect } from "next/navigation";
 
-import TelaAvulsosNavy from "@/components/navy/TelaAvulsosNavy";
-
-export const dynamic = "force-dynamic";
-
+// A recriação Navy virou a tela principal em 30/09/2026 (BoldAvulsosView com as
+// vistas Lista · Linha do tempo · Tabela · Kanban · Edição). O endereço antigo
+// continua a levar ao sítio certo.
 export default function AvulsosNavyPage() {
-  return <TelaAvulsosNavy />;
+  redirect("/avulsos");
 }
