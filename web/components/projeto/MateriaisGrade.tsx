@@ -23,7 +23,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import * as XLSX from "xlsx";
-import GradeEditavel, { linhaVazia, num, type ColunaGrade, type LinhaGrade } from "./GradeEditavel";
+import GradeEditavel, { linhaVazia, num, type ColunaGrade, type LinhaGrade, type SugestaoGrade } from "./GradeEditavel";
 import PcPickerModal, { type PcSearchResult } from "./PcPickerModal";
 import { supaBrowser } from "@/lib/supabase";
 
@@ -36,7 +36,47 @@ type ItemRow = {
   nova_prev_materiais: string | null;
   mt_data_recebimento_nf: string | null;
   pc_etapa_texto: string | null;
+  cat_ncod_prod: number | null; cat_codigo: string | null; cat_valor_unit: number | null;
+  cat_fornecedor: string | null; cat_entrega_dias: number | null; cat_fat_dias: number | null;
 };
+
+/** Item do catálogo de compras do Omie (orders.mv_catalogo_compra). */
+type Cat = {
+  ncod_prod: number; codigo: string | null; descricao: string; unidade: string | null;
+  ultimo_preco: number | null; ultima_compra: string | null; fornecedor: string | null;
+  qtd_compras: number | null; entrega_dias: number | null; entrega_fonte: string | null;
+  fat_dias: number | null; score?: number; medidas_ok?: boolean;
+};
+type Casamento = { idx: number; status: "ok" | "conferir" | "sem"; melhor: Cat | null; alternativas: Cat[] };
+
+/** Campos que o catálogo preenche na linha. `_match` e `_alts` só vivem na tela. */
+const CAT_CAMPOS = ["cat_ncod_prod", "cat_codigo", "cat_valor_unit", "cat_fornecedor",
+                    "cat_entrega_dias", "cat_fat_dias", "_match", "_alts"];
+
+const s = (v: unknown) => (v == null ? "" : String(v));
+/** Preenche a linha com um item do catálogo. O valor vem do ÚLTIMO PREÇO PAGO
+ *  (decisão do Benny, 30/09/2026); sem compra anterior, o que já havia fica. */
+function camposDoCatalogo(c: Cat, match: "ok" | "conferir", alts: Cat[] = [], valorAtual = ""): Record<string, string> {
+  return {
+    cat_ncod_prod: s(c.ncod_prod), cat_codigo: s(c.codigo),
+    cat_valor_unit: c.ultimo_preco != null ? String(c.ultimo_preco) : valorAtual,
+    cat_fornecedor: s(c.fornecedor), cat_entrega_dias: s(c.entrega_dias), cat_fat_dias: s(c.fat_dias),
+    _match: match, _alts: alts.length ? JSON.stringify(alts) : "",
+  };
+}
+function sugestao(c: Cat): SugestaoGrade {
+  const partes = [
+    c.codigo ? `cód ${c.codigo}` : "só cadastro",
+    c.fornecedor, c.qtd_compras ? `${c.qtd_compras} compra(s)` : null,
+    c.entrega_dias != null ? `entrega ~${c.entrega_dias}d` : null,
+    c.fat_dias != null ? `fatura ${c.fat_dias}d` : null,
+    c.medidas_ok === false ? "⚠ medida diferente" : null,
+  ].filter(Boolean);
+  return {
+    chave: String(c.ncod_prod), titulo: c.descricao, detalhe: partes.join(" · "),
+    direita: c.ultimo_preco != null ? brl(c.ultimo_preco) : "sem preço", dados: c,
+  };
+}
 type Resumo = {
   valor_budget: number | null; valor_comprometido: number | null;
   valor_restante: number | null; qtd_itens: number | null; qtd_itens_com_pc: number | null;
@@ -90,11 +130,54 @@ export default function MateriaisGrade({
   // A fronteira é visível: célula de leitura tem fundo próprio.
   const COLS: ColunaGrade[] = useMemo(() => [
     { key: "equipamento", label: "Equipamento", w: 150 },
-    { key: "item",        label: "Item",        w: 300 },
+    { key: "item",        label: "Item",        w: 300,
+      // Digitar busca no catálogo do Omie; linha amarela ("conferir") mostra
+      // as alternativas assim que a célula recebe o foco.
+      limpaAoEditar: CAT_CAMPOS,
+      autocompletar: {
+        buscar: async (q) => {
+          const r = await fetch(`/api/catalogo/buscar?q=${encodeURIComponent(q)}&lim=12`);
+          if (!r.ok) return [];
+          const j = (await r.json()) as { itens?: Cat[] };
+          return (j.itens ?? []).map(sugestao);
+        },
+        aoEscolher: (sg, linha) => {
+          const c = sg.dados as Cat;
+          return { item: c.descricao, ...camposDoCatalogo(c, "ok", [], linha.cat_valor_unit ?? "") };
+        },
+        iniciais: (linha) => {
+          if (linha._match !== "conferir" || !linha._alts) return [];
+          try { return (JSON.parse(linha._alts) as Cat[]).map(sugestao); } catch { return []; }
+        },
+      } },
     { key: "qtd",         label: "Qtd",         w: 62, tipo: "num", alinhaDireita: true },
     { key: "modelo",      label: "Modelo",      w: 140 },
     { key: "pc_numero",   label: "PC",          w: 84 },
-    { key: "observacao",  label: "Observação",  w: 170 },
+    { key: "observacao",  label: "Observação",  w: 150 },
+    // ── Do catálogo do Omie (último preço pago, fornecedor, prazos médios) ──
+    { key: "cat_valor_unit", label: "Valor unit.", w: 92, tipo: "moeda", alinhaDireita: true },
+    { key: "_total", label: "Total", w: 96, alinhaDireita: true,
+      calculada: (l) => {
+        const t = num(l.qtd) * num(l.cat_valor_unit);
+        return t ? brl(t) : "";
+      } },
+    { key: "_cat", label: "Fornecedor sugerido", w: 190,
+      render: (l) => {
+        if (l._match === "conferir") return (
+          <span className="text-amber-700 dark:text-amber-300" title="O texto é parecido, mas não é certeza — clique no Item e escolha na lista">
+            ⚠ conferir · <span className="text-ww-textMuted">{l.cat_fornecedor || "—"}</span>
+          </span>);
+        if (l._match === "sem") return <span className="text-ww-textFaint" title="Nada parecido no catálogo do Omie">sem correspondência</span>;
+        if (!l.cat_ncod_prod) return <span className="text-ww-textFaint">—</span>;
+        return (
+          <span className="text-ww-textMuted" title={l.cat_codigo ? `Código Omie ${l.cat_codigo}` : undefined}>
+            <span className="text-emerald-600 dark:text-emerald-400">✓</span> {l.cat_fornecedor || "sem compra anterior"}
+          </span>);
+      } },
+    { key: "_prazos", label: "Entrega · Fatura", w: 100,
+      render: (l) => (l.cat_entrega_dias || l.cat_fat_dias
+        ? <span className="text-ww-textMuted tabular-nums">{l.cat_entrega_dias ? `${l.cat_entrega_dias}d` : "—"} · {l.cat_fat_dias ? `${l.cat_fat_dias}d` : "—"}</span>
+        : <span className="text-ww-textFaint">—</span>) },
     { key: "_fornecedor", label: "Fornecedor",  w: 180,
       render: (l) => <span className="text-ww-textMuted">{l._fornecedor || "—"}</span> },
     { key: "_prev",       label: "Prev. PC",    w: 90,
@@ -125,7 +208,7 @@ export default function MateriaisGrade({
       const approval = supa.schema("approval" as never);
       const [itens, res] = await Promise.all([
         approval.from("v_rc_projetos_itens")
-          .select("id, equipamento, item, qtd, modelo, observacao, pc_numero, nome_fornecedor, dt_previsao, nova_prev_materiais, mt_data_recebimento_nf, pc_etapa_texto")
+          .select("id, equipamento, item, qtd, modelo, observacao, pc_numero, nome_fornecedor, dt_previsao, nova_prev_materiais, mt_data_recebimento_nf, pc_etapa_texto, cat_ncod_prod, cat_codigo, cat_valor_unit, cat_fornecedor, cat_entrega_dias, cat_fat_dias")
           .eq("empresa", empresa).eq("codigo_projeto", codigoProjeto)
           .order("equipamento", { ascending: true }).order("item", { ascending: true }),
         approval.from("v_rc_projetos_resumo")
@@ -153,6 +236,10 @@ export default function MateriaisGrade({
           _prev_efetiva: r.nova_prev_materiais ?? r.dt_previsao ?? "",
           _nova_prev: r.nova_prev_materiais ?? "",
           _recebido: r.mt_data_recebimento_nf ?? "",
+          cat_ncod_prod: s(r.cat_ncod_prod), cat_codigo: s(r.cat_codigo),
+          cat_valor_unit: s(r.cat_valor_unit), cat_fornecedor: s(r.cat_fornecedor),
+          cat_entrega_dias: s(r.cat_entrega_dias), cat_fat_dias: s(r.cat_fat_dias),
+          _match: r.cat_ncod_prod ? "ok" : "", _alts: "",
         })) as LinhaGrade[],
         linhaVazia(COLS),
       ]);
@@ -239,6 +326,12 @@ export default function MateriaisGrade({
             modelo: String(l.modelo ?? "").trim() || null,
             observacao: String(l.observacao ?? "").trim() || null,
             pc_numero: String(l.pc_numero ?? "").trim() || null,
+            cat_ncod_prod: l.cat_ncod_prod ? Number(l.cat_ncod_prod) : null,
+            cat_codigo: l.cat_codigo || null,
+            cat_valor_unit: String(l.cat_valor_unit ?? "").trim() ? num(l.cat_valor_unit) : null,
+            cat_fornecedor: l.cat_fornecedor || null,
+            cat_entrega_dias: l.cat_entrega_dias ? Number(l.cat_entrega_dias) : null,
+            cat_fat_dias: l.cat_fat_dias ? Number(l.cat_fat_dias) : null,
           })),
         }),
       });
@@ -269,6 +362,118 @@ export default function MateriaisGrade({
    *  entrar na lista de dependências do próprio useCallback. */
   const salvarRef = useRef<((c?: boolean) => Promise<void>) | null>(null);
   salvarRef.current = salvar;
+
+  // ── Catálogo do Omie ────────────────────────────────────────────────────
+  const [casando, setCasando] = useState(false);
+
+  /** Casa com o catálogo as linhas com texto e sem vínculo. Aceita sozinho só o
+   *  que é muito parecido E tem as mesmas medidas; o resto fica "conferir". */
+  const casarLinhas = useCallback(async (base: LinhaGrade[]) => {
+    const alvo = base.map((l, i) => ({ l, i }))
+      .filter(({ l }) => String(l.item ?? "").trim() && !l.cat_ncod_prod && l._match !== "sem");
+    if (!alvo.length) return base;
+    const r = await fetch("/api/catalogo/casar", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ itens: alvo.map(({ l }) => [l.item, l.modelo].filter(Boolean).join(" ")) }),
+    });
+    const j = (await r.json()) as { casamentos?: Casamento[]; error?: string };
+    if (!r.ok || !j.casamentos) throw new Error(j.error ?? r.statusText);
+    const novas = [...base];
+    let ok = 0, conf = 0, sem = 0;
+    alvo.forEach(({ l, i }, k) => {
+      const c = j.casamentos![k];
+      if (!c?.melhor) { novas[i] = { ...l, _match: "sem" }; sem++; return; }
+      novas[i] = { ...l, ...camposDoCatalogo(c.melhor, c.status === "ok" ? "ok" : "conferir",
+        c.status === "ok" ? [] : c.alternativas, l.cat_valor_unit ?? "") };
+      if (c.status === "ok") ok++; else conf++;
+    });
+    setAviso(`Catálogo do Omie: ${ok} item(ns) casado(s)`
+      + (conf ? ` · ${conf} para CONFERIR (amarelo — clique no Item e escolha)` : "")
+      + (sem ? ` · ${sem} sem correspondência` : "") + ". Nada foi gravado ainda: confira e clique em Salvar lista.");
+    return novas;
+  }, []);
+
+  const casarAgora = useCallback(async () => {
+    setCasando(true); setErro(null);
+    try {
+      const novas = await casarLinhas(linhas);
+      if (novas !== linhas) { setLinhas(novas); setSujo(true); }
+      else setAviso("Todas as linhas já estão ligadas ao catálogo.");
+    } catch (e) { setErro(`Não consegui casar com o catálogo: ${e instanceof Error ? e.message : String(e)}`); }
+    finally { setCasando(false); }
+  }, [casarLinhas, linhas]);
+
+  /** Depois de colar do Excel, casa sozinho — o paste chega ao estado no
+   *  próximo render, então o efeito espera a lista nova. */
+  const [casarAposColar, setCasarAposColar] = useState(false);
+  useEffect(() => {
+    if (!casarAposColar) return;
+    setCasarAposColar(false);
+    void casarAgora();
+  }, [casarAposColar, casarAgora]);
+
+  // ── Aba "Itens da CP" ───────────────────────────────────────────────────
+  // A CP (composição de preço da proposta no CRM) fica SEPARADA da lista: é
+  // referência, não compromisso. Quem monta escolhe o que entra — "meio
+  // caminho andado" sem colocar na lista o que não vai ser comprado.
+  type ItemCp = { equipamento: string; item: string; qtd: number | null; modelo: string | null;
+                  custo_cp: number | null; casamento: Casamento };
+  const [subAba, setSubAba] = useState<"lista" | "cp">("lista");
+  const [cp, setCp] = useState<{ proposta: string | null; itens: ItemCp[] } | null>(null);
+  const [cpMarcados, setCpMarcados] = useState<Set<number>>(new Set());
+  const [cpCarregando, setCpCarregando] = useState(false);
+  const [cpErro, setCpErro] = useState<string | null>(null);
+
+  const chaveItem = (eq: string, item: string) =>
+    `${String(eq || "Geral").trim().toLowerCase()}|${String(item).trim().toLowerCase()}`;
+  const naLista = useMemo(() => new Set(validas.map((l) => chaveItem(l.equipamento, l.item))), [validas]);
+
+  const carregarCp = useCallback(async () => {
+    setCpCarregando(true); setCpErro(null);
+    try {
+      const r = await fetch(`/api/rc-projetos/itens-cp?codigo_projeto=${codigoProjeto}`);
+      const j = (await r.json()) as { proposta?: string | null; itens?: ItemCp[]; error?: string };
+      if (!r.ok) throw new Error(j.error ?? r.statusText);
+      setCp({ proposta: j.proposta ?? null, itens: j.itens ?? [] });
+      setCpMarcados(new Set());
+    } catch (e) {
+      setCpErro(e instanceof Error ? e.message : String(e));
+    } finally { setCpCarregando(false); }
+  }, [codigoProjeto]);
+  useEffect(() => { if (subAba === "cp" && !cp && !cpCarregando) void carregarCp(); },
+    [subAba, cp, cpCarregando, carregarCp]);
+
+  const adicionarDaCp = useCallback(() => {
+    if (!cp) return;
+    const novas: LinhaGrade[] = [];
+    for (const k of [...cpMarcados].sort((a, b) => a - b)) {
+      const it = cp.itens[k];
+      if (!it || naLista.has(chaveItem(it.equipamento, it.item))) continue;
+      const c = it.casamento;
+      const base: LinhaGrade = {
+        ...linhaVazia(COLS), equipamento: it.equipamento, item: it.item,
+        qtd: it.qtd != null ? String(it.qtd) : "", modelo: it.modelo ?? "",
+        // Sem compra anterior no Omie, o custo usado na CP é o melhor valor que há.
+        cat_valor_unit: it.custo_cp != null ? String(it.custo_cp) : "",
+        observacao: `CP ${cp.proposta ?? ""}`.trim(),
+      };
+      novas.push(c?.melhor
+        ? { ...base, ...camposDoCatalogo(c.melhor, c.status === "ok" ? "ok" : "conferir",
+              c.status === "ok" ? [] : c.alternativas, base.cat_valor_unit) }
+        : { ...base, _match: "sem" });
+    }
+    if (!novas.length) { setAviso("Nada novo para adicionar — os marcados já estão na lista."); return; }
+    setLinhas([...linhas.filter((l) => String(l.item ?? "").trim()), ...novas, linhaVazia(COLS)]);
+    setSujo(true);
+    setCpMarcados(new Set());
+    setSubAba("lista");
+    const conf = novas.filter((l) => l._match === "conferir").length;
+    setAviso(`${novas.length} item(ns) da CP adicionados à lista`
+      + (conf ? ` · ${conf} para CONFERIR (amarelo)` : "") + ". Nada foi gravado ainda: clique em Salvar lista.");
+  }, [cp, cpMarcados, naLista, linhas, COLS]);
+
+  const totalLista = useMemo(
+    () => validas.reduce((a, l) => a + num(l.qtd) * num(l.cat_valor_unit), 0), [validas]);
 
   /** Vincula as marcadas a um PC. Escreve direto pela rota de vínculo em vez de
    *  mexer na grade: são itens que já existem no banco, e passar por um salvar
@@ -327,6 +532,10 @@ export default function MateriaisGrade({
     const wb = XLSX.utils.book_new();
     const dados = validas.map((l) => ({
       Equipamento: l.equipamento, Item: l.item, Qtd: l.qtd, Modelo: l.modelo,
+      "Valor unit.": l.cat_valor_unit ? num(l.cat_valor_unit) : "",
+      Total: num(l.qtd) * num(l.cat_valor_unit) || "",
+      "Código Omie": l.cat_codigo, "Fornecedor sugerido": l.cat_fornecedor,
+      "Entrega (d)": l.cat_entrega_dias, "Fatura (d)": l.cat_fat_dias,
       PC: l.pc_numero, Fornecedor: l._fornecedor,
       "Prev. PC": dia(l._prev_efetiva), Status: statusDe(l).rot,
       Observação: l.observacao,
@@ -347,17 +556,30 @@ export default function MateriaisGrade({
             Lista de materiais
           </h3>
           <p className="text-[11px] text-ww-textMuted mt-0.5">
-            Digite ou cole do Excel as colunas <strong>Equipamento · Item · Qtd · Modelo · PC · Observação</strong>.
-            As três últimas colunas vêm do pedido vinculado e são só de leitura.
+            Digite ou cole do Excel as colunas <strong>Equipamento · Item · Qtd · Modelo · PC · Observação</strong> (e, se quiser, Valor unit.).
+            Ao digitar o Item, o catálogo do Omie sugere o produto com <strong>último preço pago, fornecedor e prazos médios</strong>;
+            ao colar, casa sozinho — o que não for certeza fica amarelo para conferir.
           </p>
         </div>
         <div className="ml-auto flex items-center gap-2 flex-wrap">
+          {totalLista > 0 && (
+            <span className="text-[11px] font-semibold text-ww-text tabular-nums" title="Soma de Qtd × Valor unit. da lista">
+              Total da lista {brl(totalLista)}
+            </span>
+          )}
           {resumo && (
             <span className="text-[10.5px] text-ww-textFaint tabular-nums">
               Budget {brl(resumo.valor_budget)} · comprometido {brl(resumo.valor_comprometido)} ·
               resta {brl(resumo.valor_restante)}
             </span>
           )}
+          <button type="button" onClick={() => void casarAgora()} disabled={salvando || casando}
+            title="Liga cada linha ao item do catálogo do Omie: último preço pago, fornecedor e prazos médios"
+            className="px-2 py-1 text-[11px] rounded-lg border border-emerald-400 dark:border-emerald-700
+                       bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-200
+                       hover:bg-emerald-100 dark:hover:bg-emerald-900/50 transition disabled:opacity-40">
+            {casando ? "…" : "⚡ Casar com o Omie"}
+          </button>
           <button type="button" onClick={() => void vincularAuto()} disabled={salvando}
             title="Procura, nos pedidos de compra deste projeto, o item que corresponde a cada linha — e grava o número do PC"
             className="px-2 py-1 text-[11px] rounded-lg border border-sky-400 dark:border-sky-700
@@ -448,9 +670,105 @@ export default function MateriaisGrade({
         </div>
       )}
 
-      {carregando
+      {/* Minha lista × Itens da CP: a CP é referência, a lista é o que se compra. */}
+      <div className="flex items-center gap-1 border-b border-ww-border">
+        {([["lista", `Minha lista (${validas.length})`], ["cp", `Itens da CP${cp ? ` (${cp.itens.length})` : ""}`]] as const).map(([k, rot]) => (
+          <button key={k} type="button" onClick={() => setSubAba(k)}
+            className={`px-3 py-1.5 text-[11.5px] -mb-px border-b-2 transition ${
+              subAba === k ? "border-ww-accent text-ww-text font-semibold" : "border-transparent text-ww-textMuted hover:text-ww-text"}`}>
+            {rot}
+          </button>
+        ))}
+        {subAba === "cp" && cp?.proposta && (
+          <span className="ml-auto text-[10.5px] text-ww-textFaint pb-1">
+            composição de preço da proposta <strong>{cp.proposta}</strong> · marque o que vai usar e clique em Adicionar
+          </span>
+        )}
+      </div>
+
+      {subAba === "cp" ? (
+        <div className="space-y-2">
+          {cpCarregando && <p className="text-[11.5px] text-ww-textFaint py-3">Lendo a CP no CRM e casando com o catálogo do Omie…</p>}
+          {cpErro && <div className="p-2.5 rounded-lg border border-rose-500/40 bg-rose-500/10 text-[12px] text-rose-700 dark:text-rose-300">Não consegui trazer a CP: {cpErro}</div>}
+          {cp && !cp.proposta && (
+            <p className="text-[12px] text-ww-textMuted py-3">
+              Este projeto não tem proposta ligada no CRM. No CRM, ligue a proposta ao projeto no fechamento (Recebimento → projeto do painel).
+            </p>
+          )}
+          {cp?.proposta && (
+            <>
+              <div className="flex items-center gap-2 flex-wrap">
+                <button type="button" onClick={adicionarDaCp} disabled={!cpMarcados.size}
+                  className="px-3 py-1 rounded-lg bg-ww-accent text-white text-[11.5px] font-semibold hover:brightness-110 transition disabled:opacity-40">
+                  Adicionar {cpMarcados.size || ""} à minha lista
+                </button>
+                <button type="button" className="text-[11px] text-ww-textMuted hover:text-ww-text"
+                  onClick={() => setCpMarcados(new Set(cp.itens.map((it, k) => [it, k] as const)
+                    .filter(([it]) => !naLista.has(chaveItem(it.equipamento, it.item))).map(([, k]) => k)))}>
+                  marcar todos os que faltam
+                </button>
+                <button type="button" className="text-[11px] text-ww-textMuted hover:text-ww-text" onClick={() => setCpMarcados(new Set())}>limpar</button>
+                <button type="button" className="ml-auto text-[11px] text-ww-textMuted hover:text-ww-text" onClick={() => void carregarCp()}>↻ reler a CP</button>
+              </div>
+              <div className="border border-ww-border rounded-lg overflow-auto" style={{ maxHeight: 480 }}>
+                <table className="w-full text-[11.5px] border-collapse">
+                  <thead className="sticky top-0 bg-ww-panel text-ww-textMuted">
+                    <tr className="text-left">
+                      <th className="p-1.5 w-7"></th>
+                      <th className="p-1.5">Equipamento</th>
+                      <th className="p-1.5">Item da CP</th>
+                      <th className="p-1.5 text-right">Qtd</th>
+                      <th className="p-1.5 text-right">Custo CP</th>
+                      <th className="p-1.5">No Omie</th>
+                      <th className="p-1.5 text-right">Últ. preço</th>
+                      <th className="p-1.5">Fornecedor</th>
+                      <th className="p-1.5">Entrega · Fatura</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {cp.itens.map((it, k) => {
+                      const ja = naLista.has(chaveItem(it.equipamento, it.item));
+                      const m = it.casamento?.melhor;
+                      const st = it.casamento?.status ?? "sem";
+                      return (
+                        <tr key={k} className={`border-t border-ww-border/50 ${ja ? "opacity-50" : ""}`}>
+                          <td className="p-1.5 text-center">
+                            {ja ? <span title="Já está na minha lista">✓</span>
+                              : <input type="checkbox" checked={cpMarcados.has(k)}
+                                  onChange={() => setCpMarcados((prev) => { const n = new Set(prev); if (n.has(k)) n.delete(k); else n.add(k); return n; })} />}
+                          </td>
+                          <td className="p-1.5 text-ww-textMuted">{it.equipamento}</td>
+                          <td className="p-1.5 text-ww-text">{it.item}{it.modelo ? <span className="text-ww-textFaint"> · {it.modelo}</span> : null}</td>
+                          <td className="p-1.5 text-right tabular-nums">{it.qtd ?? "—"}</td>
+                          <td className="p-1.5 text-right tabular-nums">{brl(it.custo_cp)}</td>
+                          <td className="p-1.5">
+                            {!m ? <span className="text-ww-textFaint">sem correspondência</span>
+                              : <span className={st === "ok" ? "text-ww-textMuted" : "text-amber-700 dark:text-amber-300"} title={m.descricao}>
+                                  {st === "ok" ? "✓ " : "⚠ conferir · "}{m.descricao.length > 48 ? `${m.descricao.slice(0, 48)}…` : m.descricao}
+                                </span>}
+                          </td>
+                          <td className="p-1.5 text-right tabular-nums">{m ? brl(m.ultimo_preco) : "—"}</td>
+                          <td className="p-1.5 text-ww-textMuted">{m?.fornecedor ?? "—"}</td>
+                          <td className="p-1.5 text-ww-textMuted tabular-nums">
+                            {m ? `${m.entrega_dias != null ? `${m.entrega_dias}d` : "—"} · ${m.fat_dias != null ? `${m.fat_dias}d` : "—"}` : "—"}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+              <p className="text-[10.5px] text-ww-textFaint">
+                Ao adicionar, o valor vem do último preço pago no Omie (sem compra anterior, o custo da CP). O que ficar
+                amarelo na lista é casamento incerto: clique no Item e escolha o produto certo.
+              </p>
+            </>
+          )}
+        </div>
+      ) : carregando
         ? <p className="text-[11.5px] text-ww-textFaint py-3">Carregando a lista…</p>
         : <GradeEditavel cols={COLS} linhas={visiveis}
+            aoColar={() => setCasarAposColar(true)}
             onChange={(l) => {
               // Com filtro ativo, o que volta é só o pedaço visível — recompõe
               // com o resto para não apagar o que está escondido.

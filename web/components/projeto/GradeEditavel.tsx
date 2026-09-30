@@ -17,6 +17,12 @@
 // bundle e em manutenção do que o teclado que ela resolveria.
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+
+/** Uma sugestão do autocompletar. `dados` volta intacto para aoEscolher. */
+export type SugestaoGrade = {
+  chave: string; titulo: string; detalhe?: string; direita?: string; dados: unknown;
+};
 
 export type ColunaGrade = {
   key: string;
@@ -32,6 +38,17 @@ export type ColunaGrade = {
    *  relance, não depois de ler. */
   render?: (linha: Record<string, string>) => React.ReactNode;
   alinhaDireita?: boolean;
+  /** Autocompletar enquanto se digita: setas navegam, Enter escolhe, Esc fecha.
+   *  `iniciais` mostra sugestões já prontas ao entrar na célula (ex.: as
+   *  alternativas de um casamento duvidoso). */
+  autocompletar?: {
+    buscar: (texto: string) => Promise<SugestaoGrade[]>;
+    aoEscolher: (s: SugestaoGrade, linha: LinhaGrade) => Record<string, string>;
+    iniciais?: (linha: LinhaGrade) => SugestaoGrade[];
+  };
+  /** Chaves da linha zeradas quando o usuário digita nesta coluna (ex.: o
+   *  vínculo com o catálogo deixa de valer se o texto do item mudou). */
+  limpaAoEditar?: string[];
 };
 
 export type LinhaGrade = Record<string, string> & { _id: string };
@@ -66,8 +83,10 @@ export const brl = (v: number) =>
 
 export default function GradeEditavel({
   cols, linhas, onChange, altura = 340, vazioMsg = "Digite, cole do Excel ou suba a planilha.",
-  selecao,
+  selecao, aoColar,
 }: {
+  /** Chamado depois de um paste que trouxe linhas (ex.: casar com o catálogo). */
+  aoColar?: () => void;
   cols: ColunaGrade[];
   linhas: LinhaGrade[];
   onChange: (linhas: LinhaGrade[]) => void;
@@ -90,7 +109,9 @@ export default function GradeEditavel({
   const editaveis = cols.filter((c) => !c.calculada && !c.render);
 
   const setCel = useCallback((li: number, key: string, valor: string) => {
-    const novas = linhas.map((l, i) => (i === li ? { ...l, [key]: valor } : l));
+    const limpa = cols.find((c) => c.key === key)?.limpaAoEditar ?? [];
+    const novas = linhas.map((l, i) => (i === li
+      ? { ...l, ...Object.fromEntries(limpa.map((k) => [k, ""])), [key]: valor } : l));
     // Digitou na última linha? Cria a próxima. Planilha nunca "acaba" — ter que
     // clicar em "+ linha" a cada item quebra o ritmo de quem está digitando.
     if (li === linhas.length - 1 && valor.trim()) novas.push(linhaVazia(cols));
@@ -125,7 +146,8 @@ export default function GradeEditavel({
       novas.push(linhaVazia(cols));
     }
     onChange(novas);
-  }, [linhas, cols, editaveis, onChange]);
+    aoColar?.();
+  }, [linhas, cols, editaveis, onChange, aoColar]);
 
   /** Paste capturado no CONTÊINER: o navegador entrega o evento ao input, e
    *  tratar só lá faria o bloco inteiro cair numa célula. */
@@ -157,7 +179,49 @@ export default function GradeEditavel({
     alvo?.select();
   };
 
+  // ── Autocompletar ────────────────────────────────────────────────────────
+  const [ac, setAc] = useState<{
+    li: number; key: string; itens: SugestaoGrade[]; ativo: number; rect: DOMRect;
+  } | null>(null);
+  const buscaSeq = useRef(0);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const abrirAc = (li: number, key: string, itens: SugestaoGrade[], el: HTMLElement) => {
+    if (!itens.length) { setAc(null); return; }
+    setAc({ li, key, itens, ativo: 0, rect: el.getBoundingClientRect() });
+  };
+  const buscarAc = (li: number, col: ColunaGrade, texto: string, el: HTMLElement) => {
+    if (!col.autocompletar) return;
+    if (timer.current) clearTimeout(timer.current);
+    if (texto.trim().length < 2) { setAc(null); return; }
+    const seq = ++buscaSeq.current;
+    timer.current = setTimeout(async () => {
+      try {
+        const itens = await col.autocompletar!.buscar(texto.trim());
+        if (seq === buscaSeq.current) abrirAc(li, col.key, itens, el);
+      } catch { /* sem sugestão, segue digitando */ }
+    }, 220);
+  };
+  const escolherAc = (s: SugestaoGrade) => {
+    if (!ac) return;
+    const col = cols.find((c) => c.key === ac.key);
+    if (!col?.autocompletar) return;
+    const alvo = linhas[ac.li];
+    const patch = col.autocompletar.aoEscolher(s, alvo);
+    const novas = linhas.map((l, i) => (i === ac.li ? { ...l, ...patch } : l));
+    if (ac.li === linhas.length - 1) novas.push(linhaVazia(cols));
+    onChange(novas);
+    setAc(null);
+  };
+
   const tecla = (e: React.KeyboardEvent, l: number, c: number) => {
+    if (ac && ac.li === l && ac.key === editaveis[c]?.key) {
+      if (e.key === "ArrowDown") { e.preventDefault(); setAc({ ...ac, ativo: Math.min(ac.ativo + 1, ac.itens.length - 1) }); return; }
+      if (e.key === "ArrowUp") { e.preventDefault(); setAc({ ...ac, ativo: Math.max(ac.ativo - 1, 0) }); return; }
+      if (e.key === "Enter") { e.preventDefault(); escolherAc(ac.itens[ac.ativo]); setTimeout(() => irPara(l, c + 1), 0); return; }
+      if (e.key === "Escape") { e.preventDefault(); setAc(null); return; }
+      if (e.key === "Tab") setAc(null);
+    }
     const ultimaCol = editaveis.length - 1;
     if (e.key === "Enter" || (e.key === "Tab" && !e.shiftKey && c === ultimaCol)) {
       e.preventDefault();
@@ -177,6 +241,26 @@ export default function GradeEditavel({
 
   return (
     <div ref={wrapRef} className="border border-ww-border rounded-lg overflow-hidden">
+      {ac && typeof document !== "undefined" && createPortal(
+        <div
+          style={{ position: "fixed", left: ac.rect.left, top: ac.rect.bottom + 2, width: Math.max(ac.rect.width, 560), zIndex: 300 }}
+          className="max-h-[320px] overflow-auto rounded-lg border border-ww-border bg-ww-panel shadow-2xl text-[11.5px]"
+          onMouseDown={(e) => e.preventDefault()}>
+          {ac.itens.map((s, i) => (
+            <button key={s.chave} type="button" onClick={() => escolherAc(s)}
+              onMouseEnter={() => setAc({ ...ac, ativo: i })}
+              className={`w-full text-left px-2.5 py-1.5 flex items-start gap-2 border-b border-ww-border/40 last:border-0 ${
+                i === ac.ativo ? "bg-ww-accentSoft" : ""}`}>
+              <span className="min-w-0 flex-1">
+                <span className="block text-ww-text truncate">{s.titulo}</span>
+                {s.detalhe && <span className="block text-[10.5px] text-ww-textMuted truncate">{s.detalhe}</span>}
+              </span>
+              {s.direita && <span className="shrink-0 tabular-nums text-ww-text font-semibold">{s.direita}</span>}
+            </button>
+          ))}
+          <div className="px-2.5 py-1 text-[10px] text-ww-textFaint">↑↓ escolhe · Enter aplica · Esc fecha</div>
+        </div>,
+        document.body)}
       <div className="overflow-auto" style={{ maxHeight: altura }}>
         <table className="w-full text-[11.5px] border-collapse">
           <thead className="sticky top-0 z-10 bg-ww-panel">
@@ -243,8 +327,13 @@ export default function GradeEditavel({
                       <input
                         data-cel={`${li}-${ci}`}
                         value={linha[c.key] ?? ""}
-                        onChange={(e) => setCel(li, c.key, e.target.value)}
-                        onFocus={() => setFoco({ l: li, c: ci })}
+                        onChange={(e) => { setCel(li, c.key, e.target.value); buscarAc(li, c, e.target.value, e.currentTarget); }}
+                        onFocus={(e) => {
+                          setFoco({ l: li, c: ci });
+                          const ini = c.autocompletar?.iniciais?.(linha) ?? [];
+                          if (ini.length) abrirAc(li, c.key, ini, e.currentTarget);
+                        }}
+                        onBlur={() => setTimeout(() => setAc((a) => (a && a.li === li && a.key === c.key ? null : a)), 180)}
                         onKeyDown={(e) => tecla(e, li, ci)}
                         type={c.tipo === "data" ? "date" : "text"}
                         inputMode={c.tipo === "num" || c.tipo === "moeda" ? "decimal" : undefined}

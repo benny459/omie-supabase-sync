@@ -26,7 +26,20 @@ type Item = {
   modelo?: string | null;
   observacao?: string | null;
   pc_numero?: string | null;
+  /** Vindos do catálogo do Omie (autocompletar ou casamento). Ausentes = a
+   *  origem não sabe deles (planilha pelo botão Lista RC) e o que já estava
+   *  gravado é preservado. */
+  cat_ncod_prod?: number | null;
+  cat_codigo?: string | null;
+  cat_valor_unit?: number | null;
+  cat_fornecedor?: string | null;
+  cat_entrega_dias?: number | null;
+  cat_fat_dias?: number | null;
 };
+
+const CAT_KEYS = ["cat_ncod_prod", "cat_codigo", "cat_valor_unit", "cat_fornecedor",
+                  "cat_entrega_dias", "cat_fat_dias"] as const;
+type Cat = { [K in (typeof CAT_KEYS)[number]]: string | number | null };
 
 type Body = {
   empresa: string;
@@ -70,7 +83,8 @@ export async function POST(req: Request) {
   const codigoProjeto = Number(body.codigo_projeto);
 
   // Dedup local pelo natural key antes do upsert
-  const dedup = new Map<string, Required<Omit<Item, "pc_numero">> & { pc_numero: string | null }>();
+  const dedup = new Map<string, Required<Omit<Item, "pc_numero" | (typeof CAT_KEYS)[number]>> & { pc_numero: string | null }>();
+  const catPorChave = new Map<string, Cat>();
   for (const raw of body.items) {
     const equipamento = String(raw.equipamento ?? "").trim();
     const item = String(raw.item ?? "").trim();
@@ -85,6 +99,17 @@ export async function POST(req: Request) {
       observacao: raw.observacao ?? null,
       pc_numero: pcRaw || null,
     });
+    if (CAT_KEYS.some((k) => k in raw)) {
+      const numOuNull = (v: unknown) => (v == null || v === "" || !Number.isFinite(Number(v)) ? null : Number(v));
+      catPorChave.set(key, {
+        cat_ncod_prod: numOuNull(raw.cat_ncod_prod),
+        cat_codigo: raw.cat_codigo ? String(raw.cat_codigo).slice(0, 60) : null,
+        cat_valor_unit: numOuNull(raw.cat_valor_unit),
+        cat_fornecedor: raw.cat_fornecedor ? String(raw.cat_fornecedor).slice(0, 200) : null,
+        cat_entrega_dias: numOuNull(raw.cat_entrega_dias),
+        cat_fat_dias: numOuNull(raw.cat_fat_dias),
+      });
+    }
   }
   const deduped = [...dedup.values()];
   if (deduped.length === 0) {
@@ -101,7 +126,7 @@ export async function POST(req: Request) {
   // segunda ida ao banco para ler o que já esteve na mão.
   const { data: existing, error: fetchErr } = await approval
     .from("rc_projetos_itens")
-    .select("id, equipamento, item, item_norm, qtd, modelo, observacao, pc_numero, criado_em, criado_por")
+    .select("id, equipamento, item, item_norm, qtd, modelo, observacao, pc_numero, criado_em, criado_por, cat_ncod_prod, cat_codigo, cat_valor_unit, cat_fornecedor, cat_entrega_dias, cat_fat_dias")
     .eq("empresa", empresa)
     .eq("codigo_projeto", codigoProjeto);
   if (fetchErr) return NextResponse.json({ error: fetchErr.message }, { status: 500 });
@@ -110,7 +135,7 @@ export async function POST(req: Request) {
     id: string; equipamento: string; item: string | null; item_norm: string;
     qtd: number | null; modelo: string | null; observacao: string | null;
     pc_numero: string | null; criado_em: string | null; criado_por: string | null;
-  };
+  } & Cat;
   const existingByKey = new Map<string, ExistingRow>();
   for (const r of (existing ?? []) as ExistingRow[]) {
     existingByKey.set(`${r.equipamento}\x01${r.item_norm}`, r);
@@ -132,6 +157,7 @@ export async function POST(req: Request) {
       modelo: d.modelo,
       observacao: d.observacao,
       pc_numero: pcFinal,
+      ...(catPorChave.get(key) ?? Object.fromEntries(CAT_KEYS.map((k) => [k, prior?.[k] ?? null])) as Cat),
       criado_por: userEmail,
       atualizado_por: userEmail,
     };
@@ -211,6 +237,7 @@ export async function POST(req: Request) {
         equipamento: r.equipamento, item: r.item, item_norm: r.item_norm,
         qtd: r.qtd, modelo: r.modelo, observacao: r.observacao,
         pc_numero: r.pc_numero, criado_em: r.criado_em, criado_por: r.criado_por,
+        ...Object.fromEntries(CAT_KEYS.map((k) => [k, r[k] ?? null])),
         apagado_por: userEmail,
         apagado_por_upload: `${rows.length} item(ns) de ${equipEntrando.size} equipamento(s)`,
       })));

@@ -51,7 +51,7 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
   // ao DELETE, sem rastro — a única porta de remoção que escapava da lixeira.
   const { data: r, error: lerErr } = await approval
     .from("rc_projetos_itens")
-    .select("id, empresa, codigo_projeto, equipamento, item, item_norm, qtd, modelo, observacao, pc_numero, criado_em, criado_por")
+    .select("id, empresa, codigo_projeto, equipamento, item, item_norm, qtd, modelo, observacao, pc_numero, criado_em, criado_por, cat_ncod_prod, cat_codigo, cat_valor_unit, cat_fornecedor, cat_entrega_dias, cat_fat_dias")
     .eq("id", id).maybeSingle();
   if (lerErr) return NextResponse.json({ error: lerErr.message }, { status: 500 });
   if (!r) return NextResponse.json({ ok: true });
@@ -61,6 +61,8 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
     equipamento: it.equipamento, item: it.item, item_norm: it.item_norm,
     qtd: it.qtd, modelo: it.modelo, observacao: it.observacao,
     pc_numero: it.pc_numero, criado_em: it.criado_em, criado_por: it.criado_por,
+    cat_ncod_prod: it.cat_ncod_prod, cat_codigo: it.cat_codigo, cat_valor_unit: it.cat_valor_unit,
+    cat_fornecedor: it.cat_fornecedor, cat_entrega_dias: it.cat_entrega_dias, cat_fat_dias: it.cat_fat_dias,
     apagado_por: user.email || user.id,
     apagado_por_upload: "item apagado individualmente",
   });

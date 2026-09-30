@@ -209,3 +209,41 @@ export async function fetchPropostasLigadas(): Promise<Array<{ numero: string; v
     }))
     .filter((p) => Number.isFinite(p.codigo) && p.codigo > 0);
 }
+
+export type ItemCp = {
+  equipamento: string; item: string; qtd: number | null;
+  modelo: string | null; marca: string | null; custo_cp: number | null;
+};
+
+/** Itens da composição de preço (CP) das propostas ligadas ao projeto — o ponto
+ *  de partida da lista de materiais. Com mais de uma proposta, a de maior valor. */
+export async function fetchItensCp(codigoProjeto: number): Promise<{ proposta: string | null; itens: ItemCp[] }> {
+  const filtro = `dados_json->recebimento->projetoPainel->>codigo=eq.${encodeURIComponent(String(codigoProjeto))}`;
+  const url = `${CRM_URL}/rest/v1/propostas?select=numero,valor,cp:dados_json->formacaoCusto->equipamentos`
+    + `&empresa_id=eq.${CRM_EMPRESA}&${filtro}&order=valor.desc.nullslast&limit=1`;
+  const r = await fetch(url, {
+    headers: { apikey: CRM_ANON, Authorization: `Bearer ${CRM_ANON}` },
+    cache: "no-store",
+  });
+  if (!r.ok) throw new Error(`CRM respondeu ${r.status}`);
+  const rows = (await r.json()) as Array<{ numero: string; cp?: Array<{ nome?: string; rows?: Array<Record<string, unknown>> }> }>;
+  const p = rows[0];
+  if (!p) return { proposta: null, itens: [] };
+  const itens: ItemCp[] = [];
+  for (const eq of p.cp ?? []) {
+    for (const row of eq.rows ?? []) {
+      const desc = String(row.desc ?? "").trim();
+      if (!desc || desc === "—") continue;
+      const n = (v: unknown) => (Number.isFinite(Number(v)) && Number(v) !== 0 ? Number(v) : null);
+      itens.push({
+        equipamento: String(eq.nome ?? "").trim() || "Geral",
+        item: desc,
+        qtd: n(row.qty),
+        modelo: String(row.model ?? "").trim() || null,
+        marca: String(row.marca ?? "").trim() || null,
+        custo_cp: n(row.custoUnit),
+      });
+    }
+  }
+  return { proposta: p.numero, itens };
+}
