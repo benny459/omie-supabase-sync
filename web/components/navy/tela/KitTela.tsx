@@ -433,7 +433,7 @@ export function MeioTela({ grafico, lado }: { grafico?: ReactNode; lado?: ReactN
   if (!grafico && !lado) return null;
   return (
     <section style={{
-      display: "grid", gap: 14,
+      display: "grid", gap: 14, alignItems: "start",
       gridTemplateColumns: grafico && lado ? "repeat(auto-fit,minmax(min(100%,520px),1fr))" : "minmax(0,1fr)",
     }}>
       {grafico}{lado}
