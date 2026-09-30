@@ -181,14 +181,24 @@ export default function GradeEditavel({
 
   // ── Autocompletar ────────────────────────────────────────────────────────
   const [ac, setAc] = useState<{
-    li: number; key: string; itens: SugestaoGrade[]; ativo: number; rect: DOMRect;
+    li: number; key: string; itens: SugestaoGrade[]; ativo: number; el: HTMLElement;
   } | null>(null);
+  // A posição é medida a cada render (e a cada rolagem): a grade muda de
+  // altura enquanto se digita, e uma posição guardada deixava o menu fora da tela.
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    if (!ac) return;
+    const f = () => setTick((t) => t + 1);
+    window.addEventListener("scroll", f, true);
+    window.addEventListener("resize", f);
+    return () => { window.removeEventListener("scroll", f, true); window.removeEventListener("resize", f); };
+  }, [ac]);
   const buscaSeq = useRef(0);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const abrirAc = (li: number, key: string, itens: SugestaoGrade[], el: HTMLElement) => {
     if (!itens.length) { setAc(null); return; }
-    setAc({ li, key, itens, ativo: 0, rect: el.getBoundingClientRect() });
+    setAc({ li, key, itens, ativo: 0, el });
   };
   const buscarAc = (li: number, col: ColunaGrade, texto: string, el: HTMLElement) => {
     if (!col.autocompletar) return;
@@ -243,8 +253,17 @@ export default function GradeEditavel({
     <div ref={wrapRef} className="border border-ww-border rounded-lg overflow-hidden">
       {ac && typeof document !== "undefined" && createPortal(
         <div
-          style={{ position: "fixed", left: ac.rect.left, top: ac.rect.bottom + 2, width: Math.max(ac.rect.width, 560), zIndex: 300 }}
-          className="max-h-[320px] overflow-auto rounded-lg border border-ww-border bg-ww-panel shadow-2xl text-[11.5px]"
+          style={(() => {
+            const r = ac.el.getBoundingClientRect();
+            const embaixo = window.innerHeight - r.bottom;
+            const largura = Math.min(Math.max(r.width, 560), window.innerWidth - 16);
+            const left = Math.max(8, Math.min(r.left, window.innerWidth - largura - 8));
+            // Sem espaço embaixo, abre para cima da célula.
+            return embaixo < 240 && r.top > embaixo
+              ? { position: "fixed" as const, left, bottom: window.innerHeight - r.top + 2, width: largura, zIndex: 300, maxHeight: Math.min(320, r.top - 8) }
+              : { position: "fixed" as const, left, top: r.bottom + 2, width: largura, zIndex: 300, maxHeight: Math.min(320, embaixo - 8) };
+          })()}
+          className="overflow-auto rounded-lg border border-ww-border bg-ww-panel shadow-2xl text-[11.5px]"
           onMouseDown={(e) => e.preventDefault()}>
           {ac.itens.map((s, i) => (
             <button key={s.chave} type="button" onClick={() => escolherAc(s)}

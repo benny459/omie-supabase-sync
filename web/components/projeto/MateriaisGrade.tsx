@@ -54,12 +54,15 @@ const CAT_CAMPOS = ["cat_ncod_prod", "cat_codigo", "cat_valor_unit", "cat_fornec
                     "cat_entrega_dias", "cat_fat_dias", "_match", "_alts"];
 
 const s = (v: unknown) => (v == null ? "" : String(v));
+/** Valor para a célula no padrão brasileiro ("574,11"); num() lê de volta. */
+const moeda = (v: number | null | undefined) =>
+  v == null ? "" : Number(v).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 /** Preenche a linha com um item do catálogo. O valor vem do ÚLTIMO PREÇO PAGO
  *  (decisão do Benny, 30/09/2026); sem compra anterior, o que já havia fica. */
 function camposDoCatalogo(c: Cat, match: "ok" | "conferir", alts: Cat[] = [], valorAtual = ""): Record<string, string> {
   return {
     cat_ncod_prod: s(c.ncod_prod), cat_codigo: s(c.codigo),
-    cat_valor_unit: c.ultimo_preco != null ? String(c.ultimo_preco) : valorAtual,
+    cat_valor_unit: c.ultimo_preco != null ? moeda(c.ultimo_preco) : valorAtual,
     cat_fornecedor: s(c.fornecedor), cat_entrega_dias: s(c.entrega_dias), cat_fat_dias: s(c.fat_dias),
     _match: match, _alts: alts.length ? JSON.stringify(alts) : "",
   };
@@ -237,7 +240,7 @@ export default function MateriaisGrade({
           _nova_prev: r.nova_prev_materiais ?? "",
           _recebido: r.mt_data_recebimento_nf ?? "",
           cat_ncod_prod: s(r.cat_ncod_prod), cat_codigo: s(r.cat_codigo),
-          cat_valor_unit: s(r.cat_valor_unit), cat_fornecedor: s(r.cat_fornecedor),
+          cat_valor_unit: moeda(r.cat_valor_unit), cat_fornecedor: s(r.cat_fornecedor),
           cat_entrega_dias: s(r.cat_entrega_dias), cat_fat_dias: s(r.cat_fat_dias),
           _match: r.cat_ncod_prod ? "ok" : "", _alts: "",
         })) as LinhaGrade[],
@@ -454,7 +457,7 @@ export default function MateriaisGrade({
         ...linhaVazia(COLS), equipamento: it.equipamento, item: it.item,
         qtd: it.qtd != null ? String(it.qtd) : "", modelo: it.modelo ?? "",
         // Sem compra anterior no Omie, o custo usado na CP é o melhor valor que há.
-        cat_valor_unit: it.custo_cp != null ? String(it.custo_cp) : "",
+        cat_valor_unit: it.custo_cp != null ? moeda(it.custo_cp) : "",
         observacao: `CP ${cp.proposta ?? ""}`.trim(),
       };
       novas.push(c?.melhor
