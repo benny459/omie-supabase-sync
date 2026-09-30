@@ -1,0 +1,35 @@
+name: Focus NFe — documentos recebidos (NF-e, CT-e, NFS-e)
+
+on:
+  workflow_dispatch:
+    inputs:
+      sem_ciencia:
+        description: "Não manifestar (só listar)"
+        required: false
+        default: ""
+  schedule:
+    - cron: "15 10-23/2 * * *"   # a cada 2h, 07:15–21:15 BRT (SEFAZ: evitar consulta em excesso)
+
+concurrency:
+  group: focus-recebidos
+  cancel-in-progress: false
+
+jobs:
+  import:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Run
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          FOCUS_TOKEN_SF: ${{ secrets.FOCUS_TOKEN_SF }}
+          FOCUS_SEM_CIENCIA: ${{ github.event.inputs.sem_ciencia }}
+          PYTHONUNBUFFERED: "1"
+        run: python3 scripts/import_focus_recebidos.py
