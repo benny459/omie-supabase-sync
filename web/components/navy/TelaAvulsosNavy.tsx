@@ -410,7 +410,11 @@ export default function TelaAvulsosNavy() {
                   Pedidos · compras · itens
                 </div>
                 <div style={{ fontSize: "var(--text-meta)", color: "var(--ww-text-muted)" }}>
-                  O que está em aberto — pedido resume, compra liga RC → PC → aprovação → materiais, item mostra quanto chegou
+                  {/* Acompanha o escopo: dizer "o que está em aberto" com o
+                      filtro em Faturados descrevia a tela errada. */}
+                  {escopo === "aberto" ? "O que está em aberto" :
+                   escopo === "faturado" ? "O que já faturou" : "Aberto e faturado"}
+                  {" "}— pedido resume, compra liga RC → PC → aprovação → materiais, item mostra quanto chegou
                 </div>
               </div>
               <SegmentedControl
