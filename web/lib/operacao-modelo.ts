@@ -200,7 +200,7 @@ export function sinais(p: Pedido, modulo: string): Pedido["flags"] {
   if (a.has("compra")) f.push({ tom: "r", t: "compra em atraso" });
   if (p.compras.some((c) => c.estado === "pendente")) f.push({ tom: "a", t: "aprovação pendente" });
   if (p.compras.some((c) => c.estado === "recusado")) f.push({ tom: "r", t: "recusa a resolver" });
-  if (modulo !== "pcs" && p.compras.some((c) => c.estado === "sem_pc")) f.push({ tom: "g", t: "sem PC" });
+  if (modulo !== "pcs" && estrutura(p).rcsSemPc > 0) f.push({ tom: "g", t: "RC sem PC" });
   if (modulo === "avulsos" && a.has("sem_projeto")) f.push({ tom: "v", t: "sem projeto" });
   if (modulo !== "pcs" && a.has("pvos_incompl")) f.push({ tom: "v", t: "PV incompleto" });
   if (a.has("defas_omie")) f.push({ tom: "v", t: "defasado Omie" });
@@ -208,40 +208,69 @@ export function sinais(p: Pedido, modulo: string): Pedido["flags"] {
   return f;
 }
 
+/** Agrupa as compras do pedido: RCs (uma linha sem RC conta como uma) e PCs
+ *  distintos. NÃO há relação 1:1 entre itens e PCs — um PC pode atender
+ *  várias RCs (Benny, 30/09/2026); então as fases contam RCs e PCs, não itens. */
+export function estrutura(p: Pedido) {
+  const rcs = new Map<string, Compra[]>();
+  for (const c of p.compras) {
+    const k = c.rcNumero ? `rc:${c.rcNumero}` : `x:${c.key}`;
+    rcs.set(k, [...(rcs.get(k) ?? []), c]);
+  }
+  const pcs = new Map<string, Compra[]>();
+  for (const c of p.compras) if (c.pc) pcs.set(c.pc, [...(pcs.get(c.pc) ?? []), c]);
+  const rcsSemPc = [...rcs.values()].filter((cs) => !cs.some((c) => c.pc)).length;
+  const estadoPc = (cs: Compra[]) =>
+    cs.every((c) => c.estado === "recebido") ? "recebido"
+      : cs.some((c) => c.estado === "recusado") ? "recusado"
+      : cs.some((c) => c.estado === "pendente") ? "pendente" : "aprovado";
+  const pcsLista = [...pcs.entries()].map(([pc, cs]) => ({ pc, cs, estado: estadoPc(cs) }));
+  return { rcs, nRcs: rcs.size, rcsSemPc, pcs: pcsLista };
+}
+
 /** Fases nomeadas + a etapa travada (a primeira não concluída). */
 export function fases(p: Pedido, modulo: string): { lista: Fase[]; atual: Fase | null } {
-  const it = p.compras, total = it.length || 1;
+  const it = p.compras;
   const atrasado = (diasAte(p.lim) ?? 1) < 0;
-  const cnt = (f: (c: Compra) => boolean) => it.filter(f).length;
-  const nPc = cnt((c) => c.temPc), nPend = cnt((c) => c.estado === "pendente"), nRec = cnt((c) => c.estado === "recusado");
-  const nAp = cnt((c) => c.estado === "aprovado" || c.estado === "recebido"), nRcb = cnt((c) => c.estado === "recebido");
-  const matLate = cnt((c) => c.prev != null && c.estado !== "recebido" && (diasAte(c.prev) ?? 0) < 0);
+  const E = estrutura(p);
+  const nPcs = E.pcs.length;
+  const nPend = E.pcs.filter((x) => x.estado === "pendente").length;
+  const nRec = E.pcs.filter((x) => x.estado === "recusado").length;
+  const nAp = E.pcs.filter((x) => x.estado === "aprovado" || x.estado === "recebido").length;
+  const nRcb = E.pcs.filter((x) => x.estado === "recebido").length;
+  const matLate = E.pcs.filter((x) => x.estado !== "recebido" && x.cs.some((c) => c.prev != null && (diasAte(c.prev) ?? 0) < 0)).length;
   const srv = it.filter((c) => c.servico), srvOk = srv.filter((c) => c.estado === "recebido").length;
+  const rcsCom = E.nRcs - E.rcsSemPc;
+  const plural = (n: number, a: string, b: string) => `${n} ${n === 1 ? a : b}`;
   const L: Fase[] = [];
   if (modulo !== "pcs") {
     L.push({ k: "PV", s: "d", t: "Venda registrada no Omie" });
-    const nRc = cnt((c) => !!c.rcNumero);
-    // Projeto que não trabalha com RC (compra direto por PC) não tem essa etapa.
-    L.push(modulo === "projetos" && nRc === 0
+    const nRcNum = [...E.rcs.keys()].filter((k) => k.startsWith("rc:")).length;
+    // Linha sem RC conta como um item solto; sem nenhuma RC, fala-se em itens.
+    const alvoTxt = (n: number) => nRcNum ? plural(n, "RC", "RCs") : plural(n, "item", "itens");
+    L.push(modulo === "projetos" && nRcNum === 0
       ? { k: "RC", s: "na", t: "projeto sem requisições — compra direto por PC" }
-      : { k: "RC", s: nRc === total ? "d" : nRc ? "p" : "o", t: `${nRc}/${total} requisições criadas`, next: `criar ${total - nRc} RC${total - nRc > 1 ? "s" : ""}` });
+      : { k: "RC", s: it.length ? "d" : "o", t: plural(nRcNum, "requisição", "requisições"), next: "criar requisição" });
+    L.push({ k: "PC", s: !E.nRcs ? "o" : E.rcsSemPc === 0 ? "d" : rcsCom ? (atrasado ? "l" : "p") : (atrasado ? "l" : "o"),
+      t: E.rcsSemPc === 0 ? `${plural(nPcs, "pedido de compra", "pedidos de compra")} atendendo ${alvoTxt(E.nRcs)}`
+        : `${E.rcsSemPc} de ${alvoTxt(E.nRcs)} sem pedido de compra`,
+      next: `${alvoTxt(E.rcsSemPc)} sem pedido de compra` });
+  } else {
+    L.push({ k: "PC", s: nPcs ? "d" : "o", t: plural(nPcs, "pedido de compra", "pedidos de compra") });
   }
-  L.push({ k: "PC", s: nPc === total ? "d" : nPc ? (atrasado ? "l" : "p") : (atrasado ? "l" : "o"),
-    t: nPc === total ? `${total}/${total} com pedido de compra` : `${total - nPc} de ${total} sem PC`,
-    next: `emitir ${total - nPc} PC${total - nPc > 1 ? "s" : ""}` });
-  L.push({ k: "Aprov", s: nRec ? "l" : nPend ? "p" : nPc && nAp === nPc ? (nPc === total ? "d" : "p") : "o",
-    t: nRec ? `${nRec} recusado(s)` : nPend ? `${nPend} aguardando aprovação` : nPc ? `${nAp}/${nPc} PCs aprovados` : "nenhum PC para aprovar",
-    next: nRec ? `resolver ${nRec} recusa${nRec > 1 ? "s" : ""}` : `aprovar ${nPend} PC${nPend > 1 ? "s" : ""}` });
-  L.push({ k: "Mat", s: nRcb === total ? "d" : matLate ? "l" : nRcb || nAp ? "p" : "o",
-    t: nRcb === total ? "tudo recebido" : `${nRcb}/${total} recebidos${matLate ? ` · ${matLate} com previsão vencida` : ""}`,
-    next: `receber ${total - nRcb} ite${total - nRcb > 1 ? "ns" : "m"}` });
+  L.push({ k: "Aprov", s: nRec ? "l" : nPend ? "p" : nPcs && nAp === nPcs ? (E.rcsSemPc === 0 ? "d" : "p") : "o",
+    t: nRec ? `${plural(nRec, "PC recusado", "PCs recusados")}` : nPend ? `${plural(nPend, "PC aguardando", "PCs aguardando")} aprovação` : nPcs ? `${nAp}/${nPcs} PCs aprovados` : "nenhum PC para aprovar",
+    next: nRec ? `resolver ${plural(nRec, "recusa", "recusas")}` : `aprovar ${plural(nPend, "PC", "PCs")}` });
+  L.push({ k: "Mat", s: nPcs && nRcb === nPcs && E.rcsSemPc === 0 ? "d" : matLate ? "l" : nRcb || nAp ? "p" : "o",
+    t: nPcs ? `${nRcb}/${nPcs} PCs recebidos${matLate ? ` · ${matLate} com previsão vencida` : ""}` : "nada comprado ainda",
+    next: nPcs ? `receber ${plural(nPcs - nRcb, "PC", "PCs")}` : "aguardando compra" });
   if (modulo !== "pcs") {
     L.push(srv.length
       ? { k: "Serv", s: srvOk === srv.length ? "d" : srvOk ? "p" : "o", t: `${srvOk}/${srv.length} serviços concluídos`, next: "concluir serviços" }
       : { k: "Serv", s: "na", t: "sem serviço neste pedido" });
     L.push(p.faturado
       ? { k: "NF", s: "d", t: `NF ${p.nfSaida || "emitida"}` }
-      : { k: "NF", s: nRcb === total ? (atrasado ? "l" : "p") : "o", t: "NF de saída não emitida", next: "emitir NF de saída" });
+      : { k: "NF", s: nPcs && nRcb === nPcs ? (atrasado ? "l" : "p") : "o", t: "NF de saída não emitida", next: "emitir NF de saída" });
   }
   const atual = L.find((x) => x.s !== "d" && x.s !== "na") ?? null;
   return { lista: L, atual };
@@ -260,7 +289,7 @@ export function financeiro(p: Pedido) {
   const custo = pc + it.filter((c) => c.pcValor == null).reduce((a, c) => a + c.rcTotal, 0);
   const mb = p.valorPv > 0 ? (p.valorPv - custo) / p.valorPv : null;
   return {
-    rc, pc, pcN: comPc.length, total: it.length,
+    rc, pc, pcN: valorPorPc.size, total: it.length,
     dif: comPc.length && rcDosPcs > 0 ? pc / rcDosPcs - 1 : null,
     mb, estimada: comPc.length < it.length,
   };
@@ -302,7 +331,7 @@ export function passa(p: Pedido, c: Compra | null, q: string, per: Periodo, f: F
   if (rap === "minha" && c?.estado !== "pendente") return false;
   if (rap === "atrasados" && !p.flags.some((x) => x.t === "venda em atraso" || x.t === "compra em atraso")) return false;
   if (rap === "sem_pc" && c?.estado !== "sem_pc") return false;
-  if (rap === "alarme" && !p.flags.some((x) => x.t !== "sem PC")) return false;
+  if (rap === "alarme" && !p.flags.some((x) => x.t !== "RC sem PC")) return false;
   return true;
 }
 

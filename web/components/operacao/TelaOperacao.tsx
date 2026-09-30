@@ -211,7 +211,7 @@ export default function TelaOperacao({ modulo, title, rows: rowsIniciais }: {
       minha: it.filter((c) => c.estado === "pendente").length,
       atrasados: noScope.filter((p) => p.flags.some((f) => f.tom === "r" && f.t.includes("atraso"))).length,
       sem_pc: it.filter((c) => c.estado === "sem_pc").length,
-      alarme: noScope.filter((p) => p.flags.some((f) => f.t !== "sem PC")).length,
+      alarme: noScope.filter((p) => p.flags.some((f) => f.t !== "RC sem PC")).length,
     };
   }, [noScope]);
   const fila = useMemo(() => noScope.flatMap((p) => p.compras.filter((c) => c.estado === "pendente")), [noScope]);
@@ -515,7 +515,8 @@ export default function TelaOperacao({ modulo, title, rows: rowsIniciais }: {
               setStatus={setStatus} gravar={gravar} abrirDrawer={setDrawer} abrirAtrib={abrirAtrib} atrib={atrib}
               bucket={bucketPorId.get(p.id)} budgetMap={budgetMap} verValores={verValores}
               liberacao={modulo === "avulsos" ? { ativo: liberacao.has(p.id), pode: podeLiberar, alternar: () => void liberar(p) } : null}
-              excluirPv={ehAdmin && modulo !== "pcs" ? () => void excluirPv(p) : null} />
+              excluirPv={ehAdmin && modulo !== "pcs" ? () => void excluirPv(p) : null}
+              statusLote={(lista, st) => { if (lista.length === 1) void setStatus(lista[0], st); else void emMassa(st, lista); }} />
           ))}
           {visiveis.length > limite && (
             <div style={{ textAlign: "center", margin: 14 }}>
@@ -678,7 +679,7 @@ export function FinStrip({ p, $ }: { p: Pedido; $: (v: number | null) => string 
   return (
     <div className="fin" title="M.B. = (PV − custo) ÷ PV · custo usa o valor do PC quando existe, senão o da RC">
       <div><label>RC</label><b>{$(F.rc)}</b></div>
-      <div><label>PC <span>{F.pcN}/{F.total}</span></label><b>{F.pcN ? $(F.pc) : "—"}</b>{F.pcN ? <SeloDif d={F.dif} compacto /> : null}</div>
+      <div><label>PC <span>{F.pcN} {F.pcN === 1 ? "pedido" : "pedidos"}</span></label><b>{F.pcN ? $(F.pc) : "—"}</b>{F.pcN ? <SeloDif d={F.dif} compacto /> : null}</div>
       <div><label>PV</label><b>{$(p.valorPv)}</b></div>
       <div className={`mb ${mbCls(F.mb)}`}><label>M.B.{F.estimada ? "*" : ""}</label><b>{F.mb == null ? "—" : pct(F.mb)}</b></div>
     </div>
@@ -726,6 +727,7 @@ function CartaoPedido(props: {
   bucket?: Bucket; budgetMap: Map<string, BudgetSummary>; verValores: boolean;
   liberacao: { ativo: boolean; pode: boolean; alternar: () => void } | null;
   excluirPv: (() => void) | null;
+  statusLote: (lista: Compra[], status: string) => void;
 }) {
   const { p, compras, modulo, aberto, $ } = props;
   const d = diasAte(p.lim);
@@ -759,39 +761,9 @@ function CartaoPedido(props: {
 
       {aberto && (
         <div className="pcs">
-          {modulo !== "pcs" ? (() => {
-            /* Avulsos (pedido do Benny, 30/09): RC em destaque primeiro · item
-               (qtd × unitário = total embaixo) · valor da RC (soma dos itens
-               daquela RC, uma vez por RC) · PC · fornecedor · previsão. Linhas
-               da mesma RC ficam juntas; a soma das RCs fecha no rodapé. */
-            const ordenadas = [...compras].sort((a, b) =>
-              (Number(a.rcNumero) || Infinity) - (Number(b.rcNumero) || Infinity) || a.desc.localeCompare(b.desc, "pt-BR"));
-            const totalPorRc = new Map<string, number>();
-            for (const c of ordenadas) totalPorRc.set(c.rcNumero || c.key, (totalPorRc.get(c.rcNumero || c.key) ?? 0) + c.rcTotal);
-            const somaRcs = ordenadas.reduce((a, c) => a + c.rcTotal, 0);
-            let anterior = "";
-            return (
-              <>
-                <div className="pcrow rcrow hd">
-                  <span /><span>RC</span><span>Item</span><span style={{ textAlign: "right" }}>Valor RC</span>
-                  <span>PC</span><span>Fornecedor</span><span>Prev. materiais</span><span>Status</span><span />
-                </div>
-                {ordenadas.map((c) => {
-                  const chaveRc = c.rcNumero || c.key;
-                  const primeira = chaveRc !== anterior;
-                  anterior = chaveRc;
-                  return <LinhaCompraRc key={c.key} c={c} primeira={primeira} totalRc={totalPorRc.get(chaveRc) ?? c.rcTotal} {...props} />;
-                })}
-                {ordenadas.length > 0 && (
-                  <div className="pcrow rcrow rcsoma">
-                    <span /><span /><span style={{ textAlign: "right" }}>Soma das RCs</span>
-                    <span style={{ textAlign: "right" }} className="num"><b>{$(somaRcs)}</b></span>
-                    <span /><span /><span /><span /><span />
-                  </div>
-                )}
-              </>
-            );
-          })() : (
+          {modulo !== "pcs" ? (
+            <GruposRc {...props} />
+          ) : (
             <>
               <div className="pcrow hd">
                 <span />
@@ -896,57 +868,157 @@ function LinhaCompra({ c, sel, toggleSel, podeAprovar, podeEditar, ehAdmin, setS
   );
 }
 
-/** Linha de compra dos Avulsos: RC primeiro, em destaque, e o valor da RC. */
-function LinhaCompraRc({ c, primeira, totalRc, sel, toggleSel, podeAprovar, podeEditar, ehAdmin, setStatus, gravar, abrirDrawer, $ }: {
-  c: Compra; primeira: boolean; totalRc: number; sel: Set<string>; toggleSel: (k: string) => void;
+/** Pedido aberto em Avulsos/Projetos (pedido do Benny, 30/09/2026):
+ *  cada RC é um grupo. À esquerda os itens — RC repetida em toda linha,
+ *  item com qtd × unitário = total, e o valor da RC uma vez, no topo. À
+ *  direita, alinhados ao topo do grupo, os PCs que atendem aquela RC:
+ *  PC · fornecedor · status (aprovação) · previsão · status do material
+ *  e, se o pedido tem serviço, o estado do serviço. Não há relação 1:1
+ *  entre itens e PCs: um PC pode atender várias RCs e vice-versa. */
+function GruposRc({ compras, p, sel, toggleSel, podeAprovar, podeEditar, ehAdmin, statusLote, gravar, abrirDrawer, $ }: {
+  compras: Compra[]; p: Pedido; sel: Set<string>; toggleSel: (k: string) => void;
   podeAprovar: boolean; podeEditar: boolean; ehAdmin: boolean;
-  setStatus: (c: Compra, v: string) => void; gravar: Gravar; abrirDrawer: (k: string) => void; $: (v: number | null) => string;
+  statusLote: (lista: Compra[], status: string) => void;
+  gravar: Gravar; abrirDrawer: (k: string) => void; $: (v: number | null) => string;
 }) {
-  const prevLate = c.prev != null && c.estado !== "recebido" && (diasAte(c.prev) ?? 0) < 0;
+  // Serviço: vem do app de serviços por PV/OS (custom_fields.ww_os_status).
+  const servico = (() => {
+    for (const r of p.bucket.rows) {
+      const cf = (r.custom_fields as Record<string, unknown> | null) ?? {};
+      const st = s(cf.ww_os_status);
+      const prev = dataMs(r.nova_prev_servicos);
+      if (st || prev != null) return { st: st || "Agendar", prev };
+    }
+    return p.compras.some((c) => c.servico) ? { st: "Sem OS", prev: null as number | null } : null;
+  })();
+
+  const grupos = new Map<string, Compra[]>();
+  for (const c of compras) {
+    const k = c.rcNumero ? `rc:${c.rcNumero}` : `x:${c.key}`;
+    grupos.set(k, [...(grupos.get(k) ?? []), c]);
+  }
+  const ordem = [...grupos.entries()].sort(([a], [b]) => {
+    const na = a.startsWith("rc:") ? Number(a.slice(3)) || Infinity : Infinity;
+    const nb = b.startsWith("rc:") ? Number(b.slice(3)) || Infinity : Infinity;
+    return na - nb;
+  });
+  const somaRcs = compras.reduce((a, c) => a + c.rcTotal, 0);
+  const cls = `rcg ${servico ? "comserv" : ""}`;
+
   return (
-    <div className={`pcrow rcrow ${sel.has(c.key) ? "sel" : ""} ${primeira ? "rcini" : ""}`}>
-      <input type="checkbox" className="cb" checked={sel.has(c.key)} onChange={() => toggleSel(c.key)} />
-      <div>{primeira ? (c.rcNumero ? <span className="rcnum">RC {c.rcNumero}</span> : <span className="rcnum vazio">sem RC</span>) : null}</div>
-      <div className="desc">{c.desc}
-        <small>{c.qtd} × {$(c.unit)} = <b style={{ color: "var(--ww-text-muted)" }}>{$(c.rcTotal)}</b></small></div>
-      <div style={{ textAlign: "right" }} className="num">{primeira ? <b>{$(totalRc)}</b> : null}</div>
-      <div>
-        {c.temPc && Number(c.row.ncod_ped) > 0
-          ? <span className="mono">{c.pc}
-              {c.pcValor != null && <small style={{ display: "block", fontSize: 11, color: "var(--ww-text-faint)" }}>{$(c.pcValor)} <SeloDif d={c.dif} compacto /></small>}
-            </span>
-          : podeEditar
-            ? <InputTexto mono className="in caixa" valor={s(c.row.pc_numero_manual)} placeholder=""
-                onSalvar={(v) => void gravar(c, "pc", v || null, { pc_numero_manual: v || null })} />
-            : <span className="mono">{c.pc}</span>}
+    <>
+      <div className={`${cls} rcg-hd`}>
+        <div className="it"><span /><span>RC</span><span>Item</span><span style={{ textAlign: "right" }}>Valor RC</span></div>
+        <div className="pc"><span>PC</span><span>Fornecedor</span><span>Status</span><span>Prev. material</span><span>Material</span>{servico && <span>Serviço</span>}<span /></div>
       </div>
-      <div className="desc">{c.temPc ? (c.fornecedor || "—") : ""}</div>
-      <div>
-        {c.temPc && c.estado !== "recebido" && podeEditar
-          ? <input type="date" className={`in ${prevLate ? "late" : ""}`} value={isoDia(c.prev)} onClick={(e) => e.stopPropagation()}
-              title={c.prevNova ? `Remarcada · original do PC ${dBR(c.prevOriginal)}` : "Previsão do PC"}
-              onChange={(e) => { const iso = e.target.value || null; void gravar(c, "prevMateriais", iso, { nova_prev_materiais: iso }); }} />
-          : <span className={prevLate ? "late" : ""}>{c.estado === "recebido" ? `recebido ${dBR(c.recebidoEm)}` : c.temPc && c.prev ? dBR(c.prev) : ""}</span>}
-      </div>
-      <div>{c.temPc ? <SeletorStatus c={c} podeAprovar={podeAprovar} ehAdmin={ehAdmin} setStatus={setStatus} /> : null}</div>
-      <div className="acts">
-        {c.estado === "pendente" && podeAprovar && (
-          <>
-            <button className="icon ok" title="Aprovar" onClick={() => setStatus(c, "APROVADO")}>✓</button>
-            <button className="icon" title="Recusar" onClick={() => setStatus(c, "NAO_APROVADO")}>✕</button>
-          </>
-        )}
-        <button className="icon" title="Todos os campos" onClick={() => abrirDrawer(c.key)}>⋯</button>
-      </div>
-      {c.estado === "recusado" && (
-        <div className="jrow">
-          <span>Motivo da recusa</span>
-          <InputTexto id={`jr-${c.key}`} className={`in ${!c.justificativa ? "need" : ""}`} valor={c.justificativa}
-            placeholder="Obrigatório — por que foi recusado?" disabled={!podeAprovar && !podeEditar}
-            onSalvar={(v) => void gravar(c, "justificativa", v || null, { justificativa: v || null })} />
+      {ordem.map(([k, itens]) => {
+        const totalRc = itens.reduce((a, c) => a + c.rcTotal, 0);
+        const rc = itens[0].rcNumero;
+        // PCs que atendem esta RC — um por número de PC.
+        const porPc = new Map<string, Compra[]>();
+        for (const c of itens) if (c.pc) porPc.set(c.pc, [...(porPc.get(c.pc) ?? []), c]);
+        const pcs = [...porPc.entries()];
+        const semPc = itens.filter((c) => !c.pc);
+        return (
+          <div key={k} className={cls}>
+            <div className="it-col">
+              {itens.map((c, idx) => (
+                <div key={c.key} className={`it ${sel.has(c.key) ? "sel" : ""}`}>
+                  <input type="checkbox" className="cb" checked={sel.has(c.key)} onChange={() => toggleSel(c.key)} />
+                  <span>{rc ? <span className={`rcnum ${idx ? "rep" : ""}`}>RC {rc}</span> : <span className="rcnum vazio">sem RC</span>}</span>
+                  <div className="desc">{c.desc}
+                    <small>{c.qtd} × {$(c.unit)} = <b style={{ color: "var(--ww-text-muted)" }}>{$(c.rcTotal)}</b></small></div>
+                  <div style={{ textAlign: "right" }} className="num">{idx === 0 ? <b>{$(totalRc)}</b> : null}</div>
+                </div>
+              ))}
+            </div>
+            <div className="pc-col">
+              {pcs.map(([pc, cs]) => {
+                const c = cs[0];
+                const todosRecebidos = cs.every((x) => x.estado === "recebido");
+                const recebidoEm = todosRecebidos ? Math.max(...cs.map((x) => x.recebidoEm ?? 0)) : null;
+                const prev = cs.map((x) => x.prev).find((x) => x != null) ?? null;
+                const aprovado = cs.some((x) => x.estado === "aprovado" || x.estado === "recebido");
+                const late = !todosRecebidos && prev != null && (diasAte(prev) ?? 0) < 0;
+                const mat = todosRecebidos ? { t: `Recebido ${dBR(recebidoEm)}`, c: "recebido" }
+                  : !aprovado ? { t: "—", c: "" }
+                  : late ? { t: "Atrasado", c: "recusado" } : prev ? { t: "A caminho", c: "aprovado" } : { t: "Sem previsão", c: "pendente" };
+                const pendente = cs.some((x) => x.estado === "pendente");
+                const recusado = cs.find((x) => x.estado === "recusado");
+                return (
+                  <div key={pc} className="pc">
+                    <span className="mono">{pc}
+                      {c.pcValor != null && <small style={{ display: "block", fontSize: 11, color: "var(--ww-text-faint)" }}>{$(c.pcValor)} <SeloDif d={c.dif} compacto /></small>}
+                    </span>
+                    <span className="desc">{c.fornecedor || "—"}<small>{c.categoria}</small></span>
+                    <span>
+                      {c.estado === "recebido"
+                        ? <span className="st aprovado">Aprovado</span>
+                        : <SeletorStatusLote cs={cs} podeAprovar={podeAprovar} ehAdmin={ehAdmin} statusLote={statusLote} />}
+                    </span>
+                    <span>
+                      {!todosRecebidos && podeEditar
+                        ? <input type="date" className={`in ${late ? "late" : ""}`} value={isoDia(prev)}
+                            title={c.prevNova ? `Remarcada · original do PC ${dBR(c.prevOriginal)}` : "Previsão do PC"}
+                            onChange={(e) => { const iso = e.target.value || null; for (const x of cs) void gravar(x, "prevMateriais", iso, { nova_prev_materiais: iso }); }} />
+                        : <span className={late ? "late" : ""}>{prev ? dBR(prev) : "—"}</span>}
+                    </span>
+                    <span>{mat.c ? <span className={`st ${mat.c}`}>{mat.t}</span> : <span style={{ color: "var(--ww-text-faint)" }}>—</span>}</span>
+                    {servico && <span className="desc">{servico.st}<small>{servico.prev ? `prev. ${dBR(servico.prev)}` : ""}</small></span>}
+                    <span className="acts">
+                      {pendente && podeAprovar && (
+                        <>
+                          <button className="icon ok" title="Aprovar" onClick={() => statusLote(cs, "APROVADO")}>✓</button>
+                          <button className="icon" title="Recusar" onClick={() => statusLote(cs, "NAO_APROVADO")}>✕</button>
+                        </>
+                      )}
+                      <button className="icon" title="Todos os campos" onClick={() => abrirDrawer(c.key)}>⋯</button>
+                    </span>
+                    {recusado && (
+                      <div className="jrow">
+                        <span>Motivo da recusa</span>
+                        <InputTexto id={`jr-${recusado.key}`} className={`in ${!recusado.justificativa ? "need" : ""}`} valor={recusado.justificativa}
+                          placeholder="Obrigatório — por que foi recusado?" disabled={!podeAprovar && !podeEditar}
+                          onSalvar={(v) => { for (const x of cs) void gravar(x, "justificativa", v || null, { justificativa: v || null }); }} />
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+              {pcs.length === 0 && podeEditar && semPc.length > 0 && (
+                <div className="pc">
+                  <span>
+                    <InputTexto mono className="in caixa" valor="" placeholder="nº PC"
+                      onSalvar={(v) => { if (v) for (const x of semPc) void gravar(x, "pc", v, { pc_numero_manual: v }); }} />
+                  </span>
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      })}
+      {compras.length > 0 && (
+        <div className={`${cls} rcg-soma`}>
+          <div className="it"><span /><span /><span style={{ textAlign: "right" }}>Soma das RCs</span><span style={{ textAlign: "right" }} className="num"><b>{$(somaRcs)}</b></span></div>
+          <div className="pc" />
         </div>
       )}
-    </div>
+    </>
+  );
+}
+
+/** Status de um PC que cobre várias linhas: muda todas de uma vez. */
+function SeletorStatusLote({ cs, podeAprovar, ehAdmin, statusLote }: {
+  cs: Compra[]; podeAprovar: boolean; ehAdmin: boolean; statusLote: (lista: Compra[], status: string) => void;
+}) {
+  const c = cs.find((x) => x.estado === "recusado") ?? cs.find((x) => x.estado === "pendente") ?? cs[0];
+  if (!podeAprovar) return <span className={`st ${c.estado}`}>{ESTADO_LABEL[c.estado]}</span>;
+  const atual = c.statusCodigo || "PENDENTE";
+  return (
+    <select className={`stsel ${c.estado}`} value={atual} onChange={(e) => statusLote(cs, e.target.value)}>
+      {OPCOES_STATUS.filter((o) => !o.admin || ehAdmin || o.v === atual).map((o) => <option key={o.v} value={o.v}>{o.l}</option>)}
+      {!OPCOES_STATUS.some((o) => o.v === atual) && <option value={atual}>{STATUS_META[atual]?.label ?? atual}</option>}
+    </select>
   );
 }
 
