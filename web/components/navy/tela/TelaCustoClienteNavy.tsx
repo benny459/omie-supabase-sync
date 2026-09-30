@@ -140,7 +140,7 @@ export default function TelaCustoClienteNavy() {
       </FaixaFiltros>
 
       {!data ? <Carregando /> : (<>
-        <GradeKpis kpis={kpis} min={170} />
+        <GradeKpis kpis={kpis} min={150} />
         <MeioTela
           grafico={<GraficoBarras titulo="Custo mês a mês · a altura é o total, as faixas dizem de que é feito" colunas={colGraf}
             legenda={PARC.map((p) => ({ nome: p.rotulo, cor: p.cor }))} />}
