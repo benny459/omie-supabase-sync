@@ -6,6 +6,15 @@
 
 import { useEffect, useState } from "react";
 import BoldAvulsosView from "./BoldAvulsosViewClient";
+import dynamic from "next/dynamic";
+
+/* Tela de Operação no desenho do mockup de 30/09/2026 (Lista, Tabela-planilha,
+   Kanban, Linha do tempo, edição na linha). A grade antiga continua em
+   ?classica=1 até a conferência final. Sem SSR pelo mesmo motivo da antiga. */
+const TelaOperacao = dynamic(() => import("./operacao/TelaOperacao"), {
+  ssr: false,
+  loading: () => <div className="p-8 text-center text-sm text-ww-textMuted">Carregando…</div>,
+});
 
 type Modulo = "avulsos" | "pcs" | "projetos";
 
@@ -51,6 +60,8 @@ export default function BoldAvulsosLoader({ view, modulo, title, countMode = "ex
   if (rows == null) {
     return <ListSkeleton title={title} />;
   }
+  const classica = typeof window !== "undefined" && new URLSearchParams(window.location.search).has("classica");
+  if (!classica) return <TelaOperacao modulo={modulo} title={title} rows={rows} />;
   return (
     <BoldAvulsosView modulo={modulo} title={title} rows={rows as never} totalCount={count} />
   );

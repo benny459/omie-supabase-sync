@@ -145,7 +145,7 @@ const gateBRL = (v: number | null | undefined, canView: boolean) =>
 // Tipos do bucket agrupado
 // ─────────────────────────────────────────────────────────────────────────
 
-type GroupBy = "pvos" | "project" | "etapa" | "pc";
+export type GroupBy = "pvos" | "project" | "etapa" | "pc";
 
 // Filtro de período aplicado a _dt_inclusao_d (PC criado no Omie) ou pv_emissao
 // (avulsos/projetos). "off" = todos os pedidos; presets ou range custom.
@@ -213,7 +213,7 @@ type CronogramaSummary = {
 // rc_projetos_budget (Fluxo Financeiro importado à mão). Total lançado +
 // aprovado são derivados dos rows (não dos totais do budget) porque essa
 // comparação é o quanto do orçamento já virou compromisso.
-type BudgetSummary = {
+export type BudgetSummary = {
   budget_custos: number | null;
   valor_total_projeto: number | null;
   resultado_bruto_esperado: number | null;
@@ -221,7 +221,7 @@ type BudgetSummary = {
   origem?: string;
 };
 
-type Bucket = {
+export type Bucket = {
   groupKind: GroupBy;
   // pv_os_label guarda a chave do bucket: PV/OS label (modo "pvos") OU nome do
   // projeto (modo "project"). Mantido com este nome pra reaproveitar todo o
@@ -264,7 +264,7 @@ function isNumericFmt(col: import("@/lib/columns").Column): boolean {
   return f === "number" || f === "money" || f === "pct" || f === "days";
 }
 
-function buildBuckets(rows: AnyRow[], groupBy: GroupBy): Bucket[] {
+export function buildBuckets(rows: AnyRow[], groupBy: GroupBy): Bucket[] {
   const map = new Map<string, Bucket>();
   for (const r of rows) {
     let key: string;
@@ -2414,7 +2414,7 @@ function Sparkline({ data }: { data: readonly number[] }) {
    (Lista, Árvore, Linha do tempo, Kanban) precisam da MESMA porta — quando
    só a Lista a tinha, quem ficou na Árvore perdeu o acesso a materiais,
    cronograma e fluxo financeiro sem saber que eles continuavam lá. */
-function projetoDoBucket(
+export function projetoDoBucket(
   modulo: "avulsos" | "projetos" | "pcs",
   bucket: { groupKind?: GroupBy; rows: AnyRow[] },
 ): { codProj: number; empresaProj: string } | null {
@@ -2429,7 +2429,7 @@ function projetoDoBucket(
   return { codProj, empresaProj };
 }
 
-function LinkAbrirProjeto({ codProj, empresaProj }: { codProj: number; empresaProj: string }) {
+export function LinkAbrirProjeto({ codProj, empresaProj }: { codProj: number; empresaProj: string }) {
   return (
     <a href={`/projetos/${codProj}/materiais?empresa=${encodeURIComponent(empresaProj)}`}
       onClick={(e) => e.stopPropagation()}
@@ -4866,7 +4866,7 @@ function GrandTotalCell({ label, value, highlight, canView = true }: { label: st
 // da venda depois de pagar a compra. Verde >0, vermelho <0, cinza sem dado.
 // ─────────────────────────────────────────────────────────────────────────
 
-function BucketTotals({
+export function BucketTotals({
   bucket, items, modulo, canViewValues = true, canViewMargin = true, budgetMap,
 }: {
   bucket: Bucket; items: AnyRow[]; modulo: "avulsos" | "projetos" | "pcs";
