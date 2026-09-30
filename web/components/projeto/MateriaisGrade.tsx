@@ -81,6 +81,9 @@ export default function MateriaisGrade({
   const [marcadas, setMarcadas] = useState<Set<string>>(new Set());
   const [picker, setPicker] = useState(false);
   const [equipFiltro, setEquipFiltro] = useState<string | null>(null);
+  /** Rascunho não salvo encontrado neste navegador ao abrir (ms de quando foi feito). */
+  const [rascunhoDe, setRascunhoDe] = useState<number | null>(null);
+  const chaveRascunho = `painel.materiais.rascunho.${empresa}.${codigoProjeto}`;
 
   // ── Colunas ───────────────────────────────────────────────────────────────
   // As quatro primeiras se editam; as três últimas vêm do PC e são de leitura.
@@ -154,6 +157,21 @@ export default function MateriaisGrade({
         linhaVazia(COLS),
       ]);
       setSujo(false); setErro(null); setMarcadas(new Set()); setCarregouOk(true);
+      /* Lista colada e não salva sumia no primeiro recarregar — "Atualizar
+         versão", F5, fechar a aba. Aconteceu mais de uma vez (PJ359, PJ362–364,
+         set/2026): o banco nunca recebeu essas listas. Agora o que não foi
+         salvo fica guardado neste navegador e volta aqui, à vista. */
+      try {
+        const bruto = window.localStorage.getItem(`painel.materiais.rascunho.${empresa}.${codigoProjeto}`);
+        if (bruto) {
+          const r = JSON.parse(bruto) as { em: number; linhas: LinhaGrade[] };
+          if (Array.isArray(r.linhas) && r.linhas.some((l) => String(l.item ?? "").trim())) {
+            setLinhas(r.linhas);
+            setSujo(true);
+            setRascunhoDe(r.em);
+          }
+        }
+      } catch { /* storage bloqueado: segue sem rascunho */ }
     } catch (e) {
       setErro(e instanceof Error ? e.message : String(e));
       setCarregouOk(false);
@@ -161,6 +179,29 @@ export default function MateriaisGrade({
   }, [empresa, codigoProjeto, COLS]);
 
   useEffect(() => { void carregar(); }, [carregar]);
+
+  // Guarda o que não foi salvo, a cada mudança.
+  useEffect(() => {
+    if (!sujo) return;
+    try {
+      window.localStorage.setItem(chaveRascunho, JSON.stringify({ em: Date.now(), linhas }));
+    } catch { /* cota cheia ou storage bloqueado */ }
+  }, [sujo, linhas, chaveRascunho]);
+
+  // Sair, recarregar ou clicar "Atualizar versão" com lista não salva: o
+  // navegador pergunta antes.
+  useEffect(() => {
+    if (!sujo) return;
+    const h = (e: BeforeUnloadEvent) => { e.preventDefault(); e.returnValue = ""; };
+    window.addEventListener("beforeunload", h);
+    return () => window.removeEventListener("beforeunload", h);
+  }, [sujo]);
+
+  const descartarRascunho = useCallback(() => {
+    try { window.localStorage.removeItem(chaveRascunho); } catch { /* */ }
+    setRascunhoDe(null);
+    void carregar();
+  }, [chaveRascunho, carregar]);
 
   const validas = useMemo(() => linhas.filter((l) => String(l.item ?? "").trim()), [linhas]);
   const comPc = validas.filter((l) => String(l.pc_numero ?? "").trim()).length;
@@ -215,6 +256,8 @@ export default function MateriaisGrade({
       const removidos = Number(j.total_deletados ?? 0);
       setAviso(`${validas.length} item(ns) gravado(s)${comPc ? `, ${comPc} com PC vinculado` : ""}`
         + (removidos > 0 ? ` · ${removidos} removido(s), recuperável em "Itens removidos"` : "") + ".");
+      try { window.localStorage.removeItem(`painel.materiais.rascunho.${empresa}.${codigoProjeto}`); } catch { /* */ }
+      setRascunhoDe(null);
       await carregar();
       onGravado?.();
     } catch (e) {
@@ -381,6 +424,21 @@ export default function MateriaisGrade({
       {aviso && (
         <div className="p-2.5 rounded-lg border border-emerald-500/40 bg-emerald-500/10 text-[12px] text-emerald-700 dark:text-emerald-300">
           {aviso}
+        </div>
+      )}
+      {rascunhoDe != null && (
+        <div className="flex items-center gap-3 flex-wrap p-2.5 rounded-lg border border-amber-500/50 bg-amber-500/15 text-[12px] text-amber-900 dark:text-amber-100">
+          <span>
+            <strong>Lista NÃO salva recuperada</strong> — feita neste navegador em{" "}
+            {new Date(rascunhoDe).toLocaleString("pt-BR")}. Ainda não está no sistema: confira e clique em <strong>Salvar lista</strong>.
+          </span>
+          <button type="button" onClick={descartarRascunho}
+            className="ml-auto text-[11px] underline opacity-80 hover:opacity-100">descartar rascunho</button>
+        </div>
+      )}
+      {sujo && rascunhoDe == null && validas.length >= original && (
+        <div className="p-2 rounded-lg border border-amber-500/40 bg-amber-500/10 text-[11.5px] text-amber-800 dark:text-amber-200">
+          Alterações <strong>ainda não salvas</strong> — clique em <strong>Salvar lista</strong> para gravar no sistema.
         </div>
       )}
       {sujo && validas.length < original && (

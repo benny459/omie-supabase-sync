@@ -45,8 +45,30 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { id } = await params;
-  const { error } = await supa
-    .schema("approval" as never)
+  const approval = supa.schema("approval" as never);
+
+  // Arquiva ANTES de apagar, como o upload faz. Apagar item a item ia direto
+  // ao DELETE, sem rastro — a única porta de remoção que escapava da lixeira.
+  const { data: r, error: lerErr } = await approval
+    .from("rc_projetos_itens")
+    .select("id, empresa, codigo_projeto, equipamento, item, item_norm, qtd, modelo, observacao, pc_numero, criado_em, criado_por")
+    .eq("id", id).maybeSingle();
+  if (lerErr) return NextResponse.json({ error: lerErr.message }, { status: 500 });
+  if (!r) return NextResponse.json({ ok: true });
+  const it = r as Record<string, unknown>;
+  const { error: arqErr } = await approval.from("rc_projetos_itens_lixeira").insert({
+    item_id: it.id, empresa: it.empresa, codigo_projeto: it.codigo_projeto,
+    equipamento: it.equipamento, item: it.item, item_norm: it.item_norm,
+    qtd: it.qtd, modelo: it.modelo, observacao: it.observacao,
+    pc_numero: it.pc_numero, criado_em: it.criado_em, criado_por: it.criado_por,
+    apagado_por: user.email || user.id,
+    apagado_por_upload: "item apagado individualmente",
+  });
+  if (arqErr) {
+    return NextResponse.json({ error: `não consegui arquivar o item — nada foi apagado: ${arqErr.message}` }, { status: 500 });
+  }
+
+  const { error } = await approval
     .from("rc_projetos_itens")
     .delete()
     .eq("id", id);

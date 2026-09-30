@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import * as XLSX from "xlsx";
 
@@ -45,6 +45,22 @@ export default function RcProjetoUploadButton({
   const [diff, setDiff] = useState<{ novos: number; atualizados: number; removidos: number; total_atual: number } | null>(null);
   const [preflighting, setPreflighting] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  /* A prévia mostra a lista inteira, mas só grava no "Confirmar". Fechar no ×,
+     clicar fora ou recarregar a página com a prévia aberta descartava tudo em
+     silêncio — e quem viu a lista na tela achava que ela estava no sistema. */
+  const fechar = () => {
+    if (busy) return;
+    if (parsed && parsed.length > 0 && !window.confirm(
+      `A lista de "${fileName}" (${parsed.length} itens) ainda NÃO foi gravada.\n\nFechar e descartar?`)) return;
+    setOpen(false);
+  };
+  useEffect(() => {
+    if (!open || !parsed?.length) return;
+    const h = (e: BeforeUnloadEvent) => { e.preventDefault(); e.returnValue = ""; };
+    window.addEventListener("beforeunload", h);
+    return () => window.removeEventListener("beforeunload", h);
+  }, [open, parsed]);
 
   function parseNum(v: unknown): number | null {
     if (v == null || v === "") return null;
@@ -296,7 +312,7 @@ export default function RcProjetoUploadButton({
                // Só fecha se o click for no backdrop (não em elementos internos).
                // Evita que o click sintético do file input (que borbulha) feche
                // o modal antes do file picker abrir.
-               if (e.target === e.currentTarget && !busy) setOpen(false);
+               if (e.target === e.currentTarget) fechar();
              }}>
           <div onClick={(e) => e.stopPropagation()}
                className="bg-ww-panel rounded-xl shadow-2xl max-w-2xl w-full max-h-[90vh] flex flex-col">
@@ -315,7 +331,7 @@ export default function RcProjetoUploadButton({
                   nova não trouxer PC; se trouxer coluna "PC Associado", o valor é aplicado.
                 </p>
               </div>
-              <button onClick={() => !busy && setOpen(false)} className="text-ww-textFaint hover:text-ww-text text-lg leading-none">×</button>
+              <button onClick={fechar} className="text-ww-textFaint hover:text-ww-text text-lg leading-none">×</button>
             </div>
 
             <div className="px-5 py-4 overflow-y-auto flex-1">
@@ -405,7 +421,7 @@ export default function RcProjetoUploadButton({
             </div>
 
             <div className="px-5 py-3 border-t border-ww-border flex justify-end gap-2">
-              <button onClick={() => !busy && setOpen(false)}
+              <button onClick={fechar}
                 className="px-3 py-1.5 text-xs font-medium text-ww-textMuted hover:bg-ww-bg rounded-md">Cancelar</button>
               {parsed && (
                 <button onClick={apply} disabled={busy || preflighting}
