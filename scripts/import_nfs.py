@@ -51,7 +51,7 @@ def map_nfe(n: dict, sigla: str):
         "valor_total": to_float(g(n, "total", "ICMSTot", "vNF")),
         "cancelada": bool(g(n, "infoCancelada") or str(g(n, "ide", "cancelada", default="")).upper() == "S"),
         "num_pedido": str(g(n, "pedido", "cNumPedido", default="") or "") or None,
-        "raw": json.dumps(n, ensure_ascii=False),
+        "raw": n,
     }
 
 
@@ -68,7 +68,7 @@ def map_nfse(n: dict, sigla: str):
         "valor_total": to_float(cab.get("nValorNFSe") or g(n, "Valores", "nValorTotalServicos")),
         "cancelada": bool(g(n, "Cancelamento", "cDataCancelamento")) or str(cab.get("cStatusNFSe", "")).upper() == "C",
         "numero_os": str(g(n, "OrdemServico", "nNumeroOS") or "") or None,
-        "raw": json.dumps(n, ensure_ascii=False),
+        "raw": n,
     }
 
 
