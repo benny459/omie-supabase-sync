@@ -49,7 +49,10 @@ export function montarPedidos(
   const visiveis = buckets;
   return visiveis.map((b0) => {
     /* Bucket de projeto chega sem cliente — vem da primeira linha que tiver. */
-    const b = b0.cliente ? b0 : {
+    // PC Standalone: a segunda coluna é o fornecedor — não há cliente.
+    const b = opts.modulo === "pcs"
+      ? { ...b0, cliente: (b0.rows.map((r) => s(r.nome_fornecedor).replace(/&amp;/g, "&")).find(Boolean) ?? null) }
+      : b0.cliente ? b0 : {
       ...b0,
       cliente: (b0.rows.map((r) => s(r.pv_cliente_fantasia) || s(r.pv_cliente) || s(r.cliente_fantasia))
         .find(Boolean) ?? null),
@@ -116,7 +119,14 @@ export function montarPedidos(
       aprov_pend: { t: "aprovação pendente", tom: "warn" },
       pode_faturar: { t: "pode faturar", tom: "ok" },
     };
-    for (const kind of al) { const m = mapa[kind]; if (m) chips.push({ texto: m.t, tom: m.tom }); }
+    /* PC Standalone não tem venda, RC nem projeto por definição — os alarmes
+       de venda eram ruído em todos os 1.452 cartões. Ficam compra, aprovação
+       e defasagem. */
+    const soCompra = new Set<AlarmKind>(["compra", "defas_omie", "aprov_bloq", "aprov_pend"]);
+    for (const kind of al) {
+      if (opts.modulo === "pcs" && !soCompra.has(kind)) continue;
+      const m = mapa[kind]; if (m) chips.push({ texto: m.t, tom: m.tom });
+    }
 
     return { pv_os_label: b.pv_os_label, cliente: b.cliente, rows: b.rows, lotes, head, chips, rail };
   });

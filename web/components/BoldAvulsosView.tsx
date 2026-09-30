@@ -394,10 +394,14 @@ function buildBuckets(rows: AnyRow[], groupBy: GroupBy): Bucket[] {
     });
   }
   if (groupBy === "pc") {
-    // Cada bucket = 1 PC. Ordena por número do PC ASC.
-    return [...map.values()].sort((a, b) =>
-      numericSortKey(a.pv_os_label) - numericSortKey(b.pv_os_label)
-    );
+    // Cada bucket = 1 PC. Mais recentes primeiro (30/09/2026): em ordem
+    // crescente a tela abria nos PCs 2, 3, 4 de anos atrás. Sem número vai
+    // para o fim.
+    return [...map.values()].sort((a, b) => {
+      const na = numericSortKey(a.pv_os_label), nb = numericSortKey(b.pv_os_label);
+      const fa = Number.isFinite(na) ? na : -1, fb = Number.isFinite(nb) ? nb : -1;
+      return fb - fa;
+    });
   }
   // PV/OS: ordena por número
   return [...map.values()].sort((a, b) =>
@@ -2234,7 +2238,9 @@ export default function BoldAvulsosView({
                 trocarVista("edicao");
               }}
               larguraId={modulo === "projetos" ? 230 : modulo === "pcs" ? 120 : 104}
-              valorDoPedido={modulo === "projetos" ? (pd) => {
+              rotuloId={modulo === "pcs" ? (pd) => `PC ${pd.pv_os_label}` : undefined}
+              valorDoPedido={modulo === "pcs" ? (pd) => pd.lotes.reduce((a, r) => a + (Number(r.valor_total ?? 0) || 0), 0)
+                : modulo === "projetos" ? (pd) => {
                 // Projeto: soma dos PV/OS distintos (o de cabeça é só o primeiro).
                 const vistos = new Map<string, number>();
                 for (const r of pd.rows) {

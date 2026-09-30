@@ -67,13 +67,19 @@ export default function KpisNavy({
          seriam zero pedidos e o cartão ficava a mostrar R$ 0,00 com o
          gráfico vazio — um zero que parece um dado e não é. */
       if (pedidoEncerrado(head) === contarEncerrados) {
-        carteira += n(head.pv_valor_total);
+        /* PC Standalone não tem venda: a "carteira" é o valor dos PCs ainda
+           não recebidos, datada pela emissão do PC. */
+        const ehPc = rotuloPedido === "PC";
+        const valor = ehPc
+          ? b.rows.filter((r) => !s(r.mt_data_recebimento_nf)).reduce((a, r) => a + n(r.valor_total), 0)
+          : n(head.pv_valor_total);
+        carteira += valor;
         abertos += 1;
-        const em = s(head.pv_emissao);
+        const em = ehPc ? s(head.dt_inclusao) : s(head.pv_emissao);
         const mes = em.length >= 10
           ? (em.includes("/") ? `${em.slice(6, 10)}-${em.slice(3, 5)}` : em.slice(0, 7))
           : "";
-        if (mes) porMes.set(mes, (porMes.get(mes) ?? 0) + n(head.pv_valor_total));
+        if (mes) porMes.set(mes, (porMes.get(mes) ?? 0) + valor);
       }
 
       // Um PC é um PC — a mesma dedupe do resto da tela.

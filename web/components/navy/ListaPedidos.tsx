@@ -118,8 +118,10 @@ function materiaisDoLote(r: AnyRow): { tom: Tom; rotulo: string; pct: number; su
 
 export default function ListaPedidos({
   pedidos, dinheiro, empresa, abrirTudo, onLoteClick, extra, onEditar, limiteInicial = 150,
-  valorDoPedido, larguraId = 104,
+  valorDoPedido, larguraId = 104, rotuloId,
 }: {
+  /** Rótulo do identificador (PCs: "PC 7289" em vez de "7289"). */
+  rotuloId?: (p: Pedido) => string;
   /** Valor à direita do cartão. Default: valor do PV (Projetos somam os PVs). */
   valorDoPedido?: (p: Pedido) => number;
   /** Largura da coluna do identificador — nome de projeto é bem maior que "PV1820". */
@@ -186,7 +188,7 @@ export default function ListaPedidos({
               <Chevron open={aberto} />
               <span style={{ minWidth: 0 }}>
                 <span style={{ display: "block", fontWeight: 700, fontSize: 14, color: "var(--ww-text)" }}>
-                  {p.pv_os_label}
+                  {rotuloId ? rotuloId(p) : p.pv_os_label}
                 </span>
                 <span style={{ display: "block", fontSize: "var(--text-chip)", color: "var(--ww-text-faint)" }}>
                   {s(p.head.tipo_omie) || "—"} · {p.lotes.length} compra{p.lotes.length === 1 ? "" : "s"}
