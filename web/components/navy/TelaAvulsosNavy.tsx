@@ -182,9 +182,13 @@ export default function TelaAvulsosNavy() {
     const head = b.rows[0] ?? {};
     const al = alarmesPorBucket.get(b.pv_os_label) ?? new Set<AlarmKind>();
 
-    const comPc = lotes.filter((r) => s(r.pc_numero) || s(r.pc_numero_manual)).length;
+    /* Aprovação só conta sobre quem tem PC — é o PC que entra no workflow.
+       Contar sobre todos os lotes produzia chips impossíveis como "1/0
+       aprovados" (o PV1929 tem uma linha só-RC marcada APROVADO e nenhum PC). */
+    const comPcLotes = lotes.filter((r) => s(r.pc_numero) || s(r.pc_numero_manual));
+    const comPc = comPcLotes.length;
     const comRc = lotes.filter((r) => s(r.rc_numero)).length;
-    const aprov = lotes.filter((r) => STATUS_META[s(r.status)]?.isApproved).length;
+    const aprov = comPcLotes.filter((r) => STATUS_META[s(r.status)]?.isApproved).length;
     const receb = lotes.filter((r) => s(r.mt_data_recebimento_nf)).length;
     /* Trilho: as regras do pipeline da tela antiga, agora partilhadas.
        Avalia sobre `b.rows` (não sobre `lotes`) porque as regras de RC/PC
@@ -201,7 +205,9 @@ export default function TelaAvulsosNavy() {
 
     const chips: { texto: string; tom: Tom }[] = [
       { texto: `${comPc}/${lotes.length} PCs`, tom: comPc >= lotes.length ? "ok" : "warn" },
-      { texto: `${aprov}/${comPc || 0} aprovados`, tom: aprov >= comPc && comPc > 0 ? "ok" : "warn" },
+      ...(comPc > 0
+        ? [{ texto: `${aprov}/${comPc} aprovados`, tom: (aprov >= comPc ? "ok" : "warn") as Tom }]
+        : []),
       { texto: `${receb}/${lotes.length} recebidos`, tom: receb >= lotes.length ? "ok" : "info" },
     ];
     const mapa: Partial<Record<AlarmKind, { t: string; tom: Tom }>> = {

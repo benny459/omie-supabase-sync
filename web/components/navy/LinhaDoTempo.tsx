@@ -270,7 +270,13 @@ export default function LinhaDoTempo({
                     color: "var(--ww-text-muted)", overflow: "hidden",
                     textOverflow: "ellipsis", whiteSpace: "nowrap",
                   }}>
-                    {pc ? `PC ${pc}` : s(r.rc_numero) ? `RC ${s(r.rc_numero)}` : "lote"} · {s(r.nome_fornecedor) || "—"}
+                    {/* Sem PC ainda não há fornecedor, e duas linhas da mesma
+                        RC liam ambas "RC 7299 · —" — indistinguíveis, pareciam
+                        a mesma repetida. Quem as separa é a descrição do item,
+                        por isso é ela que entra no rótulo. */}
+                    {pc ? `PC ${pc} · ${s(r.nome_fornecedor) || "—"}`
+                       : s(r.rc_numero) ? `RC ${s(r.rc_numero)} · ${s(r.rc_descricao) || "sem descrição"}`
+                       : "lote sem RC nem PC"}
                   </span>
                   <span style={{ position: "relative", height: 16 }}>
                     <span style={{
