@@ -177,7 +177,23 @@ export default function LinhaDoTempo({
                     width: 1, background: "var(--ww-border-subtle)", opacity: 0.5,
                   }} />
                 ))}
-                {emissao != null && limite != null && (
+                {/* Pedido inteiramente atrás da janela: a barra colapsava a
+                    zero e sobrava uma seta muda. O que importa nesse caso não
+                    é o intervalo — é há quanto tempo o prazo rebentou. */}
+                {emissao != null && limite != null && limite < janela.min && (
+                  <span style={{
+                    position: "absolute", left: 0, top: 3,
+                    display: "inline-flex", alignItems: "center", gap: 6,
+                    fontSize: "var(--text-micro)", fontWeight: 600,
+                    color: "var(--ww-crit-text)", background: "var(--ww-crit-soft)",
+                    border: "1px solid var(--ww-crit)",
+                    borderRadius: "var(--radius-pill)", padding: "2px 8px",
+                  }}>
+                    ◀ limite {new Date(limite).toLocaleDateString("pt-BR")} ·
+                    {" "}{Math.floor((hoje - limite) / DIA_MS)}d de atraso
+                  </span>
+                )}
+                {emissao != null && limite != null && limite >= janela.min && (
                   <>
                     <span style={{
                       position: "absolute", top: 8, height: 6, borderRadius: "var(--radius-bar)",
