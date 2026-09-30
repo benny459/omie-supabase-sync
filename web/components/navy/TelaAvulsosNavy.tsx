@@ -346,46 +346,10 @@ export default function TelaAvulsosNavy() {
         }}>Erro ao carregar: {erro}</div>
       )}
 
-      {/* Escopo de faturamento — a primeira decisão de leitura da tela, por
-          isso vive acima dos alarmes: define sobre que conjunto tudo o resto
-          (contagens, KPIs, lista) se refere. */}
-      <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-        <SegmentedControl
-          value={escopo}
-          onChange={mudarEscopo}
-          options={[
-            { value: "aberto",   label: `Em aberto · ${contagemEscopo.aberto}` },
-            { value: "faturado", label: `Faturados · ${contagemEscopo.faturado}` },
-            { value: "todos",    label: `Todos · ${contagemEscopo.todos}` },
-          ]}
-        />
-        <span style={{ fontSize: "var(--text-micro)", color: "var(--ww-text-faint)" }}>
-          {escopo === "aberto"   ? "Só o que ainda não faturou — é o que a operação tem em mãos."
-         : escopo === "faturado" ? "PV/OS já faturados ou cancelados — histórico, não carteira."
-         : "Tudo, aberto e fechado."}
-        </span>
-      </div>
-
-      {/* Faixa de grupos de alarme — clicar aplica o filtro do grupo */}
-      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-        {GRUPOS.map((g) => (
-          <FilterChip key={g.chave} active={grupoSel === g.chave}
-            onClick={() => setGrupoSel(grupoSel === g.chave ? null : g.chave)}>
-            <span style={{ display: "inline-flex", alignItems: "center", gap: 7 }}>
-              {g.rotulo}
-              <StatusPill tone={g.tom}>{contagemGrupo[g.chave] ?? 0}</StatusPill>
-            </span>
-          </FilterChip>
-        ))}
-        <input value={busca} onChange={(e) => setBusca(e.target.value)}
-          placeholder="Buscar PV/OS, cliente, PC, fornecedor…"
-          style={{
-            flex: "1 1 260px", minWidth: 200, padding: "7px 13px",
-            borderRadius: "var(--radius-pill)", fontSize: "var(--text-body-sm)",
-            background: "var(--ww-panel-sunken)", color: "var(--ww-text)",
-            border: "1px solid var(--ww-border-subtle)", outline: "none",
-          }} />
-      </div>
+      {/* Os filtros já não vivem aqui. Estavam em duas faixas entaladas entre
+          o cabeçalho e os KPIs, e era isso que fazia a página ler pesada: o
+          modelo vai do cabeçalho DIRECTO aos KPIs. Passaram para dentro da
+          secção da lista, encostados ao que filtram — ver a barra lá abaixo. */}
 
       {rows === null ? (
         <div style={{ padding: 40, textAlign: "center", color: "var(--ww-text-muted)", fontSize: "var(--text-body-sm)" }}>
@@ -428,6 +392,55 @@ export default function TelaAvulsosNavy() {
               <Button variant="ghost" onClick={() => setSinalExpandir(Date.now())}>Expandir tudo</Button>
               <Button variant="ghost" onClick={() => setSinalExpandir(-Date.now())}>Recolher</Button>
             </div>
+
+            {/* Barra de filtros — dentro da secção, encostada à lista que
+                governa. A primeira coisa da barra é o escopo de faturamento,
+                porque é a primeira decisão: ver o que está por fazer ou o que
+                já saiu. Depois os alarmes, depois a busca — do mais grosso
+                para o mais fino. */}
+            <div style={{
+              display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap",
+              padding: "10px 18px 12px",
+              borderTop: "1px solid var(--ww-border-subtle)",
+              borderBottom: "1px solid var(--ww-border-subtle)",
+              background: "var(--ww-panel-sunken)",
+            }}>
+              <SegmentedControl
+                value={escopo}
+                onChange={mudarEscopo}
+                options={[
+                  { value: "aberto",   label: `Em aberto · ${contagemEscopo.aberto}` },
+                  { value: "faturado", label: `Faturados · ${contagemEscopo.faturado}` },
+                  { value: "todos",    label: `Todos · ${contagemEscopo.todos}` },
+                ]}
+              />
+              <span aria-hidden style={{
+                width: 1, alignSelf: "stretch", margin: "2px 4px",
+                background: "var(--ww-border-subtle)",
+              }} />
+              {GRUPOS.map((g) => (
+                <FilterChip key={g.chave} active={grupoSel === g.chave}
+                  onClick={() => setGrupoSel(grupoSel === g.chave ? null : g.chave)}>
+                  <span style={{ display: "inline-flex", alignItems: "center", gap: 7 }}>
+                    {g.rotulo}
+                    <StatusPill tone={g.tom}>{contagemGrupo[g.chave] ?? 0}</StatusPill>
+                  </span>
+                </FilterChip>
+              ))}
+              <input value={busca} onChange={(e) => setBusca(e.target.value)}
+                placeholder="Buscar PV/OS, cliente, PC, fornecedor…"
+                style={{
+                  flex: "1 1 220px", minWidth: 180, padding: "7px 13px",
+                  borderRadius: "var(--radius-pill)", fontSize: "var(--text-body-sm)",
+                  background: "var(--ww-panel)", color: "var(--ww-text)",
+                  border: "1px solid var(--ww-border-subtle)", outline: "none",
+                }} />
+              {(grupoSel || busca) && (
+                <Button variant="ghost"
+                  onClick={() => { setGrupoSel(null); setBusca(""); }}>Limpar</Button>
+              )}
+            </div>
+
             {vista === "lista" ? (
               <div style={{ padding: "0 18px 18px" }}>
                 <ListaPedidos

@@ -155,7 +155,7 @@ export default function ListaPedidos({
             {aberto && (
               <div style={{ padding: "0 18px 14px" }}>
                 <div style={{
-                  display: "grid", gridTemplateColumns: "86px 1.3fr 1.1fr 1fr 1.3fr 110px",
+                  display: "grid", gridTemplateColumns: "112px 1.3fr 1.1fr 1fr 1.3fr 110px",
                   gap: 16, padding: "8px 10px", fontSize: "var(--text-chip)",
                   color: "var(--ww-text-faint)", borderBottom: "1px solid var(--ww-border-subtle)",
                 }}>
@@ -189,7 +189,7 @@ export default function ListaPedidos({
                     <div key={chave}>
                       <div onClick={() => (temItens ? abrirLote(chave, ncod) : onLoteClick?.(r))}
                         style={{
-                          display: "grid", gridTemplateColumns: "86px 1.3fr 1.1fr 1fr 1.3fr 110px",
+                          display: "grid", gridTemplateColumns: "112px 1.3fr 1.1fr 1fr 1.3fr 110px",
                           gap: 16, alignItems: "center", padding: "10px",
                           borderBottom: "1px dashed var(--ww-border-subtle)", cursor: "pointer",
                         }}>
