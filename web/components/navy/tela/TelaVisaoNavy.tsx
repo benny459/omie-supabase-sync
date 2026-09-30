@@ -18,7 +18,8 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import FinanceiroView from "../../bi/FinanceiroView";
+import TelaFluxoNavy from "./TelaFluxoNavy";
+import { AnaliseNavy, RecebiveisNavy, useFinanceiro } from "./TelaFinAnaliseNavy";
 import { SegmentedControl, type Tom } from "../primitivos";
 import {
   ArvoreNavy, Aviso, CabecalhoTela, Carregando, ChipFiltro, FaixaFiltros, GradeKpis, GraficoLinha,
@@ -49,9 +50,18 @@ export default function TelaVisaoNavy() {
           { value: "visao", label: "Visão" }, { value: "analise", label: "Análise" },
           { value: "recebiveis", label: "Recebíveis" }, { value: "fluxo", label: "Fluxo" },
         ]} />} />
-      {aba === "visao" ? <Visao /> : <FinanceiroView key={aba} abaInicial={aba} />}
+      {aba === "visao" ? <Visao /> : aba === "fluxo" ? <TelaFluxoNavy embutida /> : <AbaFin aba={aba} />}
     </PaginaNavy>
   );
+}
+
+/* Análise e Recebíveis carregam /api/bi/financeiro uma vez, como na tela
+   antiga, e trocam de aba sem voltar ao servidor. */
+function AbaFin({ aba }: { aba: "analise" | "recebiveis" }) {
+  const { data, erro } = useFinanceiro();
+  if (erro) return <Aviso>{erro}</Aviso>;
+  if (!data) return <Carregando />;
+  return aba === "analise" ? <AnaliseNavy data={data} /> : <RecebiveisNavy data={data} />;
 }
 
 function Visao() {

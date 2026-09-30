@@ -55,7 +55,9 @@ function diaUtil(iso: string) {
 
 type Linha = { t: Titulo; dia: string; semana: number };
 
-export default function TelaFluxoNavy() {
+/** `embutida`: dentro da Visão financeira, sem o cabeçalho da página (a Visão
+ *  já tem o seu) — o botão da mesa passa para a faixa de filtros. */
+export default function TelaFluxoNavy({ embutida = false }: { embutida?: boolean } = {}) {
   const [semanas, setSemanas] = useState(8);
   const [comAtraso, setComAtraso] = useState(false);
   const [data, setData] = useState<Payload | null>(null);
@@ -94,8 +96,8 @@ export default function TelaFluxoNavy() {
     return s;
   }, [linhas, semanas, hoje, saldo0]);
 
-  if (erro) return <PaginaNavy><Cab /><Aviso>{erro}</Aviso></PaginaNavy>;
-  if (!data) return <PaginaNavy><Cab /><Carregando texto="Projetando…" /></PaginaNavy>;
+  if (erro) return <PaginaNavy>{!embutida && <Cab />}<Aviso>{erro}</Aviso></PaginaNavy>;
+  if (!data) return <PaginaNavy>{!embutida && <Cab />}<Carregando texto="Projetando…" /></PaginaNavy>;
 
   const d30 = somaDias(hoje, 30);
   const ent30 = linhas.filter((l) => l.t.natureza === "R" && l.dia <= d30), sai30 = linhas.filter((l) => l.t.natureza === "P" && l.dia <= d30);
@@ -124,8 +126,9 @@ export default function TelaFluxoNavy() {
 
   return (
     <PaginaNavy>
-      <Cab acoes={<BotaoTela onClick={() => setMesa((v) => !v)} primario={!mesa}>{mesa ? "Fechar mesa" : "Reagendar títulos"}</BotaoTela>} />
+      {!embutida && <Cab acoes={<BotaoTela onClick={() => setMesa((v) => !v)} primario={!mesa}>{mesa ? "Fechar mesa" : "Reagendar títulos"}</BotaoTela>} />}
       <FaixaFiltros>
+        {embutida && <BotaoTela onClick={() => setMesa((v) => !v)} primario={!mesa}>{mesa ? "Fechar mesa" : "Reagendar títulos"}</BotaoTela>}
         {[4, 8, 13, 26].map((n) => <ChipFiltro key={n} ativo={semanas === n} onClick={() => setSemanas(n)}>{n} semanas</ChipFiltro>)}
         <ChipFiltro ativo={comAtraso} onClick={() => setComAtraso((v) => !v)}
           title="Simula receber hoje tudo que está vencido a receber da Safe. Não altera nada — é só a curva.">

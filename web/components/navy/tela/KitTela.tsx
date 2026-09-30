@@ -23,6 +23,7 @@
 
 import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react";
 import { Chevron, ProgressBar, tom, type Tom } from "../primitivos";
+import { useCesar } from "@/components/cesar/CesarProvider";
 
 // ── Moeda e números ─────────────────────────────────────────────────────────
 const BRL0 = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 });
@@ -236,11 +237,47 @@ export function GradeKpis({ kpis, min = 190 }: { kpis: Kpi[]; min?: number }) {
 // ── Gráficos ────────────────────────────────────────────────────────────────
 export type Legenda = { nome: string; cor: string };
 
-function CabecalhoGrafico({ titulo, legenda, extra }: { titulo: ReactNode; legenda?: Legenda[]; extra?: ReactNode }) {
+/** Os dois botões que todo gráfico da tela antiga tinha (ChartFrame): perguntar
+ *  ao Cesar sobre ele, levando os números que estão na tela, e ver os mesmos
+ *  números como tabela. Tirá-los seria perder função, não só enfeite. */
+function BotoesGrafico({ titulo, contexto, tabela, setTabela }: {
+  titulo: string; contexto: string; tabela?: boolean; setTabela?: (v: boolean) => void;
+}) {
+  const cesar = useCesar();
+  const b: CSSProperties = {
+    display: "inline-flex", alignItems: "center", gap: 5, height: 24, padding: "0 8px", borderRadius: 7, fontSize: 11, fontWeight: 600,
+    cursor: "pointer", border: "1px solid var(--ww-border-strong)", background: "transparent", color: "var(--ww-text-muted)", whiteSpace: "nowrap",
+  };
+  return (<>
+    <button type="button" style={b} title="Perguntar ao Cesar sobre este gráfico"
+      onClick={() => cesar.abrir({ origem: titulo, contexto })}>
+      <span style={{ width: 13, height: 13, borderRadius: "50%", background: "linear-gradient(135deg,#0ea5e9,#8b5cf6)", color: "#fff", fontSize: 8, fontWeight: 700, display: "grid", placeItems: "center" }}>C</span>
+      Cesar
+    </button>
+    {setTabela && <button type="button" style={{ ...b, color: tabela ? "var(--ww-accent-text)" : b.color, borderColor: tabela ? "var(--ww-brand-3)" : undefined }}
+      onClick={() => setTabela(!tabela)} aria-pressed={tabela}>Tabela</button>}
+  </>);
+}
+
+const textoDe = (x: ReactNode) => (typeof x === "string" || typeof x === "number" ? String(x) : "");
+
+function TabelaDoGrafico({ cab, linhas }: { cab: string[]; linhas: (string | number)[][] }) {
+  return (
+    <div style={{ overflow: "auto", maxHeight: 260, border: "1px solid var(--ww-border-subtle)", borderRadius: 10 }}>
+      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12, fontVariantNumeric: "tabular-nums" }}>
+        <thead><tr>{cab.map((c, i) => <th key={i} style={{ padding: "6px 10px", textAlign: i ? "right" : "left", color: "var(--ww-text-faint)", fontWeight: 600, background: "var(--ww-panel-sunken)", position: "sticky", top: 0 }}>{c}</th>)}</tr></thead>
+        <tbody>{linhas.map((l, i) => <tr key={i}>{l.map((v, j) => <td key={j} style={{ padding: "5px 10px", textAlign: j ? "right" : "left", borderTop: "1px dashed var(--ww-border-subtle)" }}>
+          {typeof v === "number" ? brl0(v) : v}</td>)}</tr>)}</tbody>
+      </table>
+    </div>
+  );
+}
+
+function CabecalhoGrafico({ titulo, legenda, extra, botoes }: { titulo: ReactNode; legenda?: Legenda[]; extra?: ReactNode; botoes?: ReactNode }) {
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap", marginBottom: 14 }}>
-      <div style={{ fontSize: 14, fontWeight: 700, flex: "1 1 100%", minWidth: 220, display: "flex", gap: 10, alignItems: "center" }}>
-        <span style={{ flex: 1 }}>{titulo}</span>{extra}
+      <div style={{ fontSize: 14, fontWeight: 700, flex: "1 1 100%", minWidth: 220, display: "flex", gap: 8, alignItems: "center" }}>
+        <span style={{ flex: 1 }}>{titulo}</span>{extra}{botoes}
       </div>
       {(legenda ?? []).map((l) => (
         <span key={l.nome} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11.5, color: "var(--ww-text-muted)" }}>
@@ -266,22 +303,34 @@ export type ColunaBarra = {
 };
 
 /** Barras empilhadas do modelo: 200px de altura, segmentos de baixo para cima. */
-export function GraficoBarras({ titulo, colunas, legenda, extra, altura = 200 }: {
+export function GraficoBarras({ titulo, colunas, legenda, extra, altura = 200, agrupado = false }: {
   titulo: ReactNode; colunas: ColunaBarra[]; legenda?: Legenda[]; extra?: ReactNode; altura?: number;
+  /** Segmentos lado a lado em vez de empilhados — para séries que não se
+   *  somam (a receber × a pagar). A escala passa a ser a do maior segmento. */
+  agrupado?: boolean;
 }) {
-  const somaCol = (c: ColunaBarra) => c.segs.reduce((a, s) => a + Math.max(0, s.v), 0);
+  const somaCol = (c: ColunaBarra) => agrupado
+    ? Math.max(0, ...c.segs.map((s) => s.v))
+    : c.segs.reduce((a, s) => a + Math.max(0, s.v), 0);
   const naEscala = colunas.filter((c) => !c.foraEscala);
   const mx = Math.max(1e-9, ...(naEscala.length ? naEscala : colunas).map(somaCol));
   const util = altura - 18;
   const passoRotulo = Math.max(1, Math.ceil(colunas.length / 14));
   /* Rótulo de topo só nas colunas maiores — trinta rótulos em cima de trinta
      barras finas atropelam-se e não se lê nenhum. */
+  const [tabela, setTabela] = useState(false);
+  const nomes = (i: number) => legenda?.[i]?.nome ?? `série ${i + 1}`;
+  const nSeg = Math.max(0, ...colunas.map((c) => c.segs.length));
+  const cabT = ["", ...Array.from({ length: nSeg }, (_, i) => nomes(i)), ...(nSeg > 1 ? ["Total"] : [])];
+  const linT = colunas.map((c) => [c.title ?? c.rotulo, ...c.segs.map((s) => s.v), ...(nSeg > 1 ? [c.segs.reduce((a, s) => a + s.v, 0)] : [])]);
+  const contexto = [`Gráfico: ${textoDe(titulo)}`, cabT.join(" | "), ...linT.slice(0, 40).map((l) => l.map((v) => (typeof v === "number" ? v.toFixed(2) : v)).join(" | "))].join("\n");
+  const botoes = <BotoesGrafico titulo={textoDe(titulo) || "Gráfico"} contexto={contexto} tabela={tabela} setTabela={setTabela} />;
   const maiores = new Set(colunas.map((c, i) => [somaCol(c), i] as const)
     .sort((a, b) => b[0] - a[0]).slice(0, Math.max(6, Math.ceil(14 / passoRotulo))).map(([, i]) => i));
   return (
     <div style={{ ...cartao, padding: "18px 20px" }}>
-      <CabecalhoGrafico titulo={titulo} legenda={legenda} extra={extra} />
-      {colunas.length === 0 ? (
+      <CabecalhoGrafico titulo={titulo} legenda={legenda} extra={extra} botoes={botoes} />
+      {tabela ? <TabelaDoGrafico cab={cabT} linhas={linT} /> : colunas.length === 0 ? (
         <div style={{ height: altura, display: "grid", placeItems: "center", color: "var(--ww-text-faint)", fontSize: 12.5 }}>Sem dados no período</div>
       ) : (
         <>
@@ -295,8 +344,15 @@ export function GraficoBarras({ titulo, colunas, legenda, extra, altura = 200 }:
                   justifyContent: "flex-end", alignItems: "center", gap: 2, cursor: c.onClick ? "pointer" : "default",
                 }}>
                   <span style={{ fontSize: 10, color: c.topoCor ?? "var(--ww-text-faint)", whiteSpace: "nowrap", height: 13 }}>{colunas.length <= 14 || maiores.has(i) || c.foraEscala ? (c.topo ?? "") : ""}</span>
+                  {agrupado ? (
+                    <div style={{ display: "flex", alignItems: "flex-end", gap: 3, width: "100%", maxWidth: 64, justifyContent: "center" }}>
+                      {c.segs.map((s, j) => (
+                        <span key={j} style={{ flex: 1, height: Math.max(s.v > 0 ? 2 : 0, (s.v / mx) * util), background: s.cor, borderRadius: "4px 4px 0 0" }} />
+                      ))}
+                    </div>
+                  ) : null}
                   {/* De cima para baixo: o último segmento é o do topo. */}
-                  {[...segs].reverse().map((s, j) => (
+                  {!agrupado && [...segs].reverse().map((s, j) => (
                     <span key={j} style={{
                       width: "100%", maxWidth: 44,
                       height: Math.max(2, Math.min(util, (c.foraEscala ? (s.v / somaCol(c)) * util : (s.v / mx) * util))),
@@ -348,12 +404,17 @@ export function GraficoLinha({ titulo, rotulos, series, extra, formatar }: {
     return d;
   };
   const zero = mn < 0 ? y(0) : null;
+  const [tabela, setTabela] = useState(false);
+  const cabT = ["", ...series.map((s) => s.nome)];
+  const linT = rotulos.map((r, i) => [r, ...series.map((s) => s.vals[i] ?? 0)]);
+  const contexto = [`Gráfico: ${textoDe(titulo)}`, cabT.join(" | "), ...linT.slice(0, 40).map((l) => l.map((v) => (typeof v === "number" ? v.toFixed(2) : v)).join(" | "))].join("\n");
   // Rótulos: no máximo ~12, para não se atropelarem.
   const passo = Math.max(1, Math.ceil(rotulos.length / 12));
   return (
     <div style={{ ...cartao, padding: "18px 20px" }}>
-      <CabecalhoGrafico titulo={titulo} legenda={series.map((s) => ({ nome: s.nome, cor: s.cor }))} extra={extra} />
-      {rotulos.length === 0 ? (
+      <CabecalhoGrafico titulo={titulo} legenda={series.map((s) => ({ nome: s.nome, cor: s.cor }))} extra={extra}
+        botoes={<BotoesGrafico titulo={textoDe(titulo) || "Gráfico"} contexto={contexto} tabela={tabela} setTabela={setTabela} />} />
+      {tabela ? <TabelaDoGrafico cab={cabT} linhas={linT} /> : rotulos.length === 0 ? (
         <div style={{ height: 200, display: "grid", placeItems: "center", color: "var(--ww-text-faint)", fontSize: 12.5 }}>Sem dados no período</div>
       ) : (
         <>
@@ -395,8 +456,10 @@ export function PainelLateral({ titulo, blocos, extra, children }: {
 }) {
   return (
     <div style={{ ...cartao, padding: "18px 20px", display: "flex", flexDirection: "column", gap: 12 }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
         <div style={{ fontSize: 14, fontWeight: 700, flex: 1 }}>{titulo}</div>{extra}
+        <BotoesGrafico titulo={textoDe(titulo) || "Painel"} contexto={[`Painel: ${textoDe(titulo)}`,
+          ...(blocos ?? []).map((b) => (b.k === "m" ? `${b.rotulo} | ${textoDe(b.valor)}${b.title ? ` | ${b.title}` : ""}` : b.k === "i" ? `${textoDe(b.t)} | ${textoDe(b.s)}` : textoDe(b.t)))].join("\n")} />
       </div>
       {(blocos ?? []).map((b, i) => {
         if (b.k === "m") return (
@@ -641,6 +704,17 @@ export function ArvoreNavy<R>({
         )}
         {toolbar}
         <div style={{ display: "flex", gap: 6 }}>
+          <button type="button" title="Baixar o que está filtrado, com as colunas à vista" onClick={() => {
+            // Mesma exportação das tabelas antigas (VizTable): ponto e vírgula e
+            // BOM, para o Excel em português abrir sem mexer em nada.
+            const cab = [colunas[0]?.label ?? "", ...colunas.slice(1).map((c) => c.label)];
+            const lin = filtrados.map((r) => [buscaNome ? buscaNome(r) : "", ...colunas.slice(1).map((c) => c.texto?.(r) ?? "")]);
+            const csv = "\ufeff" + [cab, ...lin].map((l) => l.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(";")).join("\n");
+            const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
+            const a = document.createElement("a"); a.href = url;
+            a.download = `${textoDe(titulo).toLowerCase().normalize("NFD").replace(/[^a-z0-9]+/g, "-") || "lista"}.csv`;
+            a.click(); URL.revokeObjectURL(url);
+          }} style={{ ...btnFp(false), height: 32, borderRadius: 9, padding: "7px 12px", fontSize: 12.5 }}>CSV</button>
           <button type="button" onClick={() => setAbertos((o) => ({ ...o, ...todosPais }))} style={{ ...btnFp(false), height: 32, borderRadius: 9, padding: "7px 12px", fontSize: 12.5 }}>Expandir tudo</button>
           <button type="button" onClick={() => setAbertos({})} style={{ ...btnFp(false), height: 32, borderRadius: 9, padding: "7px 12px", fontSize: 12.5 }}>Recolher</button>
         </div>
