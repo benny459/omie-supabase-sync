@@ -21,7 +21,7 @@
  * grupo é sempre a soma do que está à vista.
  */
 
-import { useMemo, useState, type CSSProperties, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react";
 import { Chevron, ProgressBar, tom, type Tom } from "../primitivos";
 
 // ── Moeda e números ─────────────────────────────────────────────────────────
@@ -787,3 +787,71 @@ const DIAS_SEMANA = ["dom", "seg", "ter", "qua", "qui", "sex", "sáb"];
 export const diaSemana = (iso: string) => DIAS_SEMANA[new Date(iso + "T12:00:00Z").getUTCDay()];
 export const diffDias = (a: string, b: string) =>
   Math.round((Date.parse(a + "T12:00:00Z") - Date.parse(b + "T12:00:00Z")) / 86_400_000);
+
+// ── Seletor de colunas ──────────────────────────────────────────────────────
+/** "Colunas · x/y" com painel de caixas por grupo e "voltar ao padrão".
+ *  Tudo o que a tela conhece fica disponível; o padrão é só o que vem ligado.
+ *  A escolha fica no browser (chave), porque é preferência de quem opera. */
+export function useColunasEscolhidas<K extends string>(chave: string, todas: K[], padrao: K[]) {
+  const [sel, setSel] = useState<K[]>(padrao);
+  const [ok, setOk] = useState(false);
+  useEffect(() => {
+    try {
+      const g = window.localStorage.getItem(chave);
+      if (g) { const l = (JSON.parse(g) as K[]).filter((k) => todas.includes(k)); if (l.length) setSel(l); }
+    } catch { /* preferência corrompida: fica o padrão */ }
+    setOk(true);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chave]);
+  useEffect(() => {
+    if (!ok) return;
+    try { window.localStorage.setItem(chave, JSON.stringify(sel)); } catch { /* quota */ }
+  }, [sel, chave, ok]);
+  return [sel, setSel] as const;
+}
+
+export function SeletorColunas<K extends string>({ colunas, sel, setSel, padrao, titulo = "Colunas" }: {
+  colunas: { key: K; label: string; grupo?: string }[];
+  sel: K[]; setSel: (v: K[]) => void; padrao: K[]; titulo?: string;
+}) {
+  const [aberto, setAberto] = useState(false);
+  const grupos = [...new Set(colunas.map((c) => c.grupo ?? ""))];
+  return (
+    <div style={{ position: "relative" }}>
+      <button type="button" onClick={() => setAberto((v) => !v)} style={{
+        height: 32, padding: "0 12px", borderRadius: 9, fontSize: 12.5, cursor: "pointer", background: "transparent",
+        border: "1px solid var(--ww-border-strong)", color: "var(--ww-text-2)",
+      }}>Colunas · {sel.length}/{colunas.length}</button>
+      {aberto && (<>
+        <div style={{ position: "fixed", inset: 0, zIndex: 30 }} onClick={() => setAberto(false)} />
+        <div style={{
+          position: "absolute", right: 0, top: "100%", marginTop: 6, zIndex: 40, width: 560, maxWidth: "90vw",
+          maxHeight: 460, overflowY: "auto", padding: 14, borderRadius: 14, background: "var(--ww-panel)",
+          border: "1px solid var(--ww-border-strong)", boxShadow: "var(--shadow-float)",
+        }}>
+          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
+            <span style={{ fontSize: 12, fontWeight: 700 }}>{titulo}</span>
+            <span style={{ display: "flex", gap: 10 }}>
+              <button type="button" onClick={() => setSel(colunas.map((c) => c.key))} style={{ fontSize: 11, background: "none", border: 0, color: "var(--ww-text-muted)", textDecoration: "underline", cursor: "pointer" }}>todas</button>
+              <button type="button" onClick={() => setSel(padrao)} style={{ fontSize: 11, background: "none", border: 0, color: "var(--ww-text-muted)", textDecoration: "underline", cursor: "pointer" }}>voltar ao padrão</button>
+            </span>
+          </div>
+          {grupos.map((g) => (
+            <div key={g} style={{ marginBottom: 10 }}>
+              {g && <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: ".06em", color: "var(--ww-text-faint)", marginBottom: 4 }}>{g}</div>}
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(3,minmax(0,1fr))", gap: "2px 12px" }}>
+                {colunas.filter((c) => (c.grupo ?? "") === g).map((c) => (
+                  <label key={c.key} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "var(--ww-text-2)", cursor: "pointer" }}>
+                    <input type="checkbox" checked={sel.includes(c.key)}
+                      onChange={() => setSel(sel.includes(c.key) ? sel.filter((k) => k !== c.key) : [...sel, c.key])} />
+                    <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.label}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      </>)}
+    </div>
+  );
+}
