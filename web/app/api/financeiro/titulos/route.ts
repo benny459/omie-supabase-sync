@@ -38,6 +38,9 @@ export type TituloRow = {
   observacao: string | null;
   boleto_gerado: string | null;
   boleto_numero: string | null;
+  chave_nfe: string | null;
+  codigo_categoria: string | null;
+  codigo_projeto: number | string | null;
 
   // ── Campos do Omie que a fonte antiga nao trazia ────────────────────────
   contraparte_razao: string | null;
@@ -83,6 +86,22 @@ export type TituloRow = {
   info_d_alt: string | null;
   cod_tit_repet: number | null;
   synced_at: string | null;
+  cod_titulo: number | null;
+  cod_int_titulo: string | null;
+  num_titulo: string | null;
+  cod_contrato: number | string | null;
+  cod_os: number | string | null;
+  /** Status cru do Omie (status_titulo é o calculado). */
+  status: string | null;
+  status_pago_d: string | null;
+  info_h_inc: string | null;
+  info_h_alt: string | null;
+  ret_ir: string | null;
+  ret_pis: string | null;
+  ret_cofins: string | null;
+  ret_csll: string | null;
+  ret_inss: string | null;
+  ret_iss: string | null;
 };
 
 /* Todos os campos do titulo. A fonte passou de finance.v_titulos (que le
@@ -101,7 +120,12 @@ const COLS =
   "projeto, codigo_projeto, conta_corrente, cod_cc, operacao, origem, tipo_documento, " +
   "cod_comprador, cod_vendedor, observacao, boleto_gerado, boleto_numero, " +
   "valor_ir, valor_pis, valor_cofins, valor_csll, valor_inss, valor_iss, " +
-  "info_u_inc, info_d_inc, info_u_alt, info_d_alt, cod_tit_repet, synced_at";
+  "info_u_inc, info_d_inc, info_u_alt, info_d_alt, cod_tit_repet, synced_at, " +
+  // 30/09/26: o resto do que a view traz e ainda nao vinha — a tela Navy
+  // oferece todos os campos no controlo Colunas. "Cód. Omie" (cod_titulo)
+  // aparecia na tela antiga mas nunca era pedido, por isso vinha sempre vazio.
+  "cod_titulo, cod_int_titulo, num_titulo, cod_contrato, cod_os, status, status_pago_d, " +
+  "info_h_inc, info_h_alt, ret_ir, ret_pis, ret_cofins, ret_csll, ret_inss, ret_iss";
 
 function num(v: number | string | null): number {
   const n = Number(v ?? 0);

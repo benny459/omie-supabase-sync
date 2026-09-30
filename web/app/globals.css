@@ -351,3 +351,7 @@ code, kbd, samp, pre, .font-mono {
 .cesar-md blockquote     { border-left: 2px solid rgb(var(--color-ww-border));
                            padding-left: .6rem; color: rgb(var(--color-ww-textMuted)); }
 .cesar-md a              { color: rgb(var(--color-ww-accent)); text-decoration: underline; }
+
+/* Linha da árvore das telas Navy (KitTela): hover sem translação, como pede o
+   design system. Vive aqui porque style inline não tem :hover. */
+.navy-linha:hover { background: var(--ww-row-hover) !important; }
