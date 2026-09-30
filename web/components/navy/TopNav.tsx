@@ -35,11 +35,25 @@ export default function TopNav({ userEmail }: { userEmail?: string | null }) {
 
   useEffect(() => { setPendingHref(null); }, [pathname]);
 
-  useEffect(() => {
-    [...MODULES, ...FINANCEIRO, ...BI, ...ADMIN].forEach((m) => router.prefetch(m.href));
-  }, [router]);
-
   const todos = useMemo(() => [...MODULES, ...FINANCEIRO, ...BI], []);
+
+  /* Prefetch sob demanda. Herdei do sidebar um prefetch de TODAS as rotas do
+     menu à entrada — ~26 páginas renderizadas no servidor a cada carregamento
+     de qualquer tela. Medido em produção: uma boa parte devolvia 503, porque
+     são páginas dinâmicas pesadas a bater todas na mesma base ao mesmo tempo,
+     a competir com o pedido de dados da tela que a pessoa está mesmo a ver.
+     Prefetch que devolve 503 não aquece nada — só consome.
+
+     Agora: nada à entrada; a rota é buscada quando o rato passa por cima dela
+     (ou pela pill da área). O ganho de velocidade fica onde importa — o rato
+     chega ao botão antes do clique — e o custo passa a ser de uma rota, não
+     de vinte e seis. `jaPedidas` evita repetir ao passar o rato duas vezes. */
+  const jaPedidas = useRef(new Set<string>());
+  const aquecer = (href: string) => {
+    if (jaPedidas.current.has(href)) return;
+    jaPedidas.current.add(href);
+    router.prefetch(href);
+  };
 
   /* Áreas visíveis — mesma filtragem do sidebar. Área sem item visível não
      aparece: mostrar um separador vazio seria pior que não o mostrar. */
@@ -119,6 +133,7 @@ export default function TopNav({ userEmail }: { userEmail?: string | null }) {
             return (
               <button key={a} type="button"
                 onClick={() => setAreaSel(a)}
+                onMouseEnter={() => itensDaArea(a).forEach((m) => aquecer(m.href))}
                 title={AREA_LABELS[a].desc}
                 style={{
                   padding: "6px 13px", borderRadius: "var(--radius-pill)",
@@ -134,6 +149,7 @@ export default function TopNav({ userEmail }: { userEmail?: string | null }) {
           })}
           {ADMIN.length > 0 && (
             <button type="button" onClick={() => setAreaSel("sistema")}
+              onMouseEnter={() => itensDaArea("sistema").forEach((m) => aquecer(m.href))}
               style={{
                 padding: "6px 13px", borderRadius: "var(--radius-pill)",
                 fontSize: "var(--text-body-sm)", fontWeight: areaActiva === "sistema" ? 600 : 500,
@@ -198,6 +214,8 @@ export default function TopNav({ userEmail }: { userEmail?: string | null }) {
           const pendente = pendingHref === m.href;
           return (
             <button key={m.href} type="button" onClick={() => navegar(m.href)}
+              onMouseEnter={() => aquecer(m.href)}
+              onFocus={() => aquecer(m.href)}
               style={{
                 display: "inline-flex", alignItems: "center", gap: 7,
                 padding: "9px 13px", border: 0, background: "transparent",
