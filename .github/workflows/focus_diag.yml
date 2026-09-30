@@ -1,0 +1,22 @@
+name: Focus NFe — diagnóstico (só leitura)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  diag:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Run
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          FOCUS_TOKEN_MASTER: ${{ secrets.FOCUS_TOKEN_MASTER }}
+          FOCUS_TOKEN_SF: ${{ secrets.FOCUS_TOKEN_SF }}
+          PYTHONUNBUFFERED: "1"
+        run: python3 scripts/diag_focus.py
