@@ -26,6 +26,10 @@ import { canViewValues } from "@/lib/permissions";
 import { useUserPerms } from "../UserPermsProvider";
 import KpisNavy from "./KpisNavy";
 import TreeTable, { CelulaBarra, CelulaPill, CelulaTexto, type NoArvore } from "./TreeTable";
+import ListaPedidos, { type Pedido } from "./ListaPedidos";
+import LinhaDoTempo from "./LinhaDoTempo";
+import KanbanRaias from "./KanbanRaias";
+import { SegmentedControl } from "./primitivos";
 import { Button, FilterChip, StatusPill, type Tom } from "./primitivos";
 
 type AnyRow = Record<string, unknown>;
@@ -66,6 +70,8 @@ export default function TelaAvulsosNavy() {
   const [erro, setErro] = useState<string | null>(null);
   const [grupoSel, setGrupoSel] = useState<string | null>(null);
   const [busca, setBusca] = useState("");
+  const [vista, setVista] = useState("lista");
+  const [sinalExpandir, setSinalExpandir] = useState<number | null>(null);
 
   useEffect(() => {
     const ctrl = new AbortController();
@@ -196,6 +202,66 @@ export default function TelaAvulsosNavy() {
     };
   }), [visiveis, dinheiro]);
 
+  /* Trilho e chips do cartao. O trilho espelha o Pipeline da tela antiga; a
+     leitura devia ser uma so, e quando esta tela substituir a outra as duas
+     tem de se fundir — por agora esta anotado para nao passar despercebido. */
+  const pedidos: Pedido[] = useMemo(() => visiveis.map((b) => {
+    const porPc = new Map<string, AnyRow>();
+    const semPc: AnyRow[] = [];
+    for (const r of b.rows) {
+      const pc = s(r.pc_numero) || s(r.pc_numero_manual);
+      if (!pc) { semPc.push(r); continue; }
+      const ant = porPc.get(pc);
+      if (!ant || (n(r.ncod_ped) > 0 && n(ant.ncod_ped) < 0)) porPc.set(pc, r);
+    }
+    const lotes = [...porPc.values(), ...semPc];
+    const head = b.rows[0] ?? {};
+    const al = alarmesPorBucket.get(b.pv_os_label) ?? new Set<AlarmKind>();
+
+    const comPc = lotes.filter((r) => s(r.pc_numero) || s(r.pc_numero_manual)).length;
+    const comRc = lotes.filter((r) => s(r.rc_numero)).length;
+    const aprov = lotes.filter((r) => STATUS_META[s(r.status)]?.isApproved).length;
+    const receb = lotes.filter((r) => s(r.mt_data_recebimento_nf)).length;
+    const encerrado = s(head.pv_dt_fat) !== "" || s(head.pv_num_nfe) !== "";
+
+    const estado = (feito: number, total: number): Tom =>
+      total === 0 ? "off" : feito >= total ? "ok" : feito > 0 ? "warn" : "crit";
+
+    const rail: Tom[] = [
+      al.has("pvos_incompl") ? "crit" : "ok",
+      estado(comRc, lotes.length),
+      estado(comPc, lotes.length),
+      al.has("aprov_bloq") ? "crit" : estado(aprov, comPc),
+      estado(receb, lotes.length),
+      al.has("sem_vinculo") || al.has("agend_vazio") || al.has("agend_venc") ? "warn" : "ok",
+      encerrado ? "ok" : "off",
+    ];
+
+    const chips: { texto: string; tom: Tom }[] = [
+      { texto: `${comPc}/${lotes.length} PCs`, tom: comPc >= lotes.length ? "ok" : "warn" },
+      { texto: `${aprov}/${comPc || 0} aprovados`, tom: aprov >= comPc && comPc > 0 ? "ok" : "warn" },
+      { texto: `${receb}/${lotes.length} recebidos`, tom: receb >= lotes.length ? "ok" : "info" },
+    ];
+    // Alarmes viram chip com o tom que o handoff mapeia.
+    const mapa: Partial<Record<AlarmKind, { t: string; tom: Tom }>> = {
+      venda: { t: "venda em atraso", tom: "crit" },
+      pvos_incompl: { t: "PV incompleto", tom: "crit" },
+      sem_projeto: { t: "sem projeto", tom: "crit" },
+      aguarda_liberacao: { t: "aguarda liberação", tom: "warn" },
+      retido_cliente: { t: "retido no cliente", tom: "warn" },
+      sem_rc: { t: "sem RC", tom: "crit" },
+      sem_pc: { t: "sem PC", tom: "crit" },
+      compra: { t: "compra em atraso", tom: "warn" },
+      defas_omie: { t: "defasado Omie", tom: "warn" },
+      aprov_bloq: { t: "aprovação bloqueada", tom: "crit" },
+      aprov_pend: { t: "aprovação pendente", tom: "warn" },
+      pode_faturar: { t: "pode faturar", tom: "ok" },
+    };
+    for (const k of al) { const m = mapa[k]; if (m) chips.push({ texto: m.t, tom: m.tom }); }
+
+    return { pv_os_label: b.pv_os_label, cliente: b.cliente, rows: b.rows, lotes, head, chips, rail };
+  }), [visiveis, alarmesPorBucket]);
+
   const totalGeral = useMemo(
     () => visiveis.reduce((t, b) => t + n(b.rows[0]?.pv_valor_total), 0), [visiveis]);
 
@@ -272,14 +338,42 @@ export default function TelaAvulsosNavy() {
             }}>
               <div style={{ flex: "1 1 240px" }}>
                 <div style={{ fontSize: "var(--text-h2)", fontWeight: 700, color: "var(--ww-text)" }}>
-                  Pedido › lote
+                  Pedidos · lotes · itens
                 </div>
                 <div style={{ fontSize: "var(--text-meta)", color: "var(--ww-text-muted)" }}>
-                  {visiveis.length} pedido{visiveis.length === 1 ? "" : "s"} · {dinheiro(totalGeral)} em PV
+                  O que está em aberto — pedido resume, lote liga PC → aprovação → materiais, item mostra quanto chegou
                 </div>
               </div>
+              <SegmentedControl
+                options={[
+                  { value: "lista", label: "Lista" },
+                  { value: "tempo", label: "Linha do tempo" },
+                  { value: "tabela", label: "Tabela" },
+                  { value: "kanban", label: "Kanban" },
+                ]}
+                value={vista} onChange={setVista} />
+              <Button variant="ghost" onClick={() => setSinalExpandir(Date.now())}>Expandir tudo</Button>
+              <Button variant="ghost" onClick={() => setSinalExpandir(-Date.now())}>Recolher</Button>
             </div>
-            <TreeTable columns={COLUNAS} rows={arvore} minWidth={1180} />
+            {vista === "lista" ? (
+              <div style={{ padding: "0 18px 18px" }}>
+                <ListaPedidos
+                  pedidos={pedidos} dinheiro={dinheiro}
+                  empresa={s(pedidos[0]?.head?.empresa) || "SF"}
+                  abrirTudo={sinalExpandir}
+                />
+              </div>
+            ) : vista === "tempo" ? (
+              <div style={{ padding: "0 18px 18px" }}>
+                <LinhaDoTempo buckets={visiveis} formatarValor={dinheiro} />
+              </div>
+            ) : vista === "kanban" ? (
+              <div style={{ padding: "0 18px 18px", overflowX: "auto" }}>
+                <KanbanRaias buckets={visiveis} formatarValor={dinheiro} />
+              </div>
+            ) : (
+              <TreeTable columns={COLUNAS} rows={arvore} minWidth={1180} />
+            )}
           </section>
         </>
       )}
