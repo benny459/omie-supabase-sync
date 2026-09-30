@@ -2156,6 +2156,10 @@ export default function BoldAvulsosView({
             buckets={buckets}
             formatarValor={(v) => gateBRL(v, userCanViewValues)}
             onLoteClick={(r) => setDrawerItem({ ...r })}
+            acaoBucket={modulo === "projetos" ? (b) => {
+              const p = projetoDoBucket(modulo, b as Bucket);
+              return p ? <LinkAbrirProjeto {...p} /> : null;
+            } : undefined}
           />
         </div>
       ) : vista === "arvore" ? (
@@ -2165,7 +2169,10 @@ export default function BoldAvulsosView({
           ) : buckets.map((b) => (
             <div key={b.pv_os_label} className="rounded-[var(--radius-panel)] border border-ww-border bg-ww-panel p-3">
               <div className="flex items-baseline justify-between gap-3 px-2 pb-2">
-                <span className="text-[14px] font-bold text-ww-text">{b.pv_os_label}</span>
+                <span className="flex items-baseline gap-3 min-w-0">
+                  <span className="text-[14px] font-bold text-ww-text">{b.pv_os_label}</span>
+                  {(() => { const p = projetoDoBucket(modulo, b); return p ? <LinkAbrirProjeto {...p} /> : null; })()}
+                </span>
                 <span className="text-[11px] text-ww-textMuted">
                   {b.cliente ?? "—"} · {new Set(b.rows.map((r) => String(r.pc_numero ?? r.pc_numero_manual ?? `x${r.ncod_ped}`))).size} lote(s)
                 </span>
@@ -2184,6 +2191,10 @@ export default function BoldAvulsosView({
             buckets={buckets}
             formatarValor={(v) => gateBRL(v, userCanViewValues)}
             onLoteClick={(r) => setDrawerItem({ ...r })}
+            acaoBucket={modulo === "projetos" ? (b) => {
+              const p = projetoDoBucket(modulo, b as Bucket);
+              return p ? <LinkAbrirProjeto {...p} /> : null;
+            } : undefined}
           />
         </div>
       ) : (
@@ -2301,6 +2312,41 @@ function Sparkline({ data }: { data: readonly number[] }) {
     <svg width={w} height={h} className="block">
       <polyline points={pts} fill="none" stroke="currentColor" strokeWidth={1.4} strokeLinejoin="round" strokeLinecap="round" opacity={0.85} />
     </svg>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Porta para a tela do projeto (Resumo · Fluxo de caixa · Lista de materiais)
+// ─────────────────────────────────────────────────────────────────────────
+
+/* Um projeto só tem tela própria quando o bucket é de projeto e alguma linha
+   traz o código do Omie. Mora aqui, fora do card, porque as quatro vistas
+   (Lista, Árvore, Linha do tempo, Kanban) precisam da MESMA porta — quando
+   só a Lista a tinha, quem ficou na Árvore perdeu o acesso a materiais,
+   cronograma e fluxo financeiro sem saber que eles continuavam lá. */
+function projetoDoBucket(
+  modulo: "avulsos" | "projetos" | "pcs",
+  bucket: { groupKind?: GroupBy; rows: AnyRow[] },
+): { codProj: number; empresaProj: string } | null {
+  if (modulo !== "projetos" || bucket.groupKind !== "project") return null;
+  const codProj = Number(
+    bucket.rows.find(r => r.codigo_projeto)?.codigo_projeto
+    ?? bucket.rows.find(r => r.pv_codigo_projeto)?.pv_codigo_projeto
+    ?? 0
+  );
+  if (!codProj) return null;
+  const empresaProj = String(bucket.rows[0]?.empresa ?? "SF");
+  return { codProj, empresaProj };
+}
+
+function LinkAbrirProjeto({ codProj, empresaProj }: { codProj: number; empresaProj: string }) {
+  return (
+    <a href={`/projetos/${codProj}/materiais?empresa=${encodeURIComponent(empresaProj)}`}
+      onClick={(e) => e.stopPropagation()}
+      title="Fechamento do CRM, fluxo de caixa e lista de materiais deste projeto"
+      className="inline-flex items-center gap-1 px-3 py-1 rounded-md text-[11.5px] font-semibold border border-sky-400 dark:border-sky-700 bg-sky-50 dark:bg-sky-950/40 text-sky-800 dark:text-sky-200 hover:bg-sky-100 dark:hover:bg-sky-900/50 transition whitespace-nowrap">
+      📂 <span>Abrir projeto</span> <span className="opacity-60">→</span>
+    </a>
   );
 }
 
@@ -2830,17 +2876,9 @@ function BucketCard({
   // Ações do projeto (só /projetos com codigo_projeto): faixa horizontal no
   // topo do card, separada do bloco de metadata + alarmes pra não conflitar
   // visualmente. codigo_projeto pode vir de qualquer row do bucket.
-  const projetoActions = useMemo(() => {
-    if (modulo !== "projetos" || bucket.groupKind !== "project") return null;
-    const codProj = Number(
-      bucket.rows.find(r => r.codigo_projeto)?.codigo_projeto
-      ?? bucket.rows.find(r => r.pv_codigo_projeto)?.pv_codigo_projeto
-      ?? 0
-    );
-    if (!codProj) return null;
-    const empresaProj = String(bucket.rows[0]?.empresa ?? "SF");
-    return { codProj, empresaProj };
-  }, [modulo, bucket.groupKind, bucket.rows]);
+  const projetoActions = useMemo(() => projetoDoBucket(modulo, bucket),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [modulo, bucket.groupKind, bucket.rows]);
 
   return (
     <div className="group/bucket bg-ww-panel border-2 border-ww-borderStrong rounded-[12px] overflow-hidden shadow-md min-w-0 max-w-full">
@@ -2853,11 +2891,7 @@ function BucketCard({
               diferentes — o quarto (Escopo) é um assunto do Resumo e mudou-se
               para lá. Quem abre o projeto quer o projeto; qual aba ver é
               decisão de dentro, não da porta. */}
-          <a href={`/projetos/${projetoActions.codProj}/materiais?empresa=${encodeURIComponent(projetoActions.empresaProj)}`}
-            title="Fechamento do CRM, fluxo de caixa e lista de materiais deste projeto"
-            className="inline-flex items-center gap-1 px-3 py-1 rounded-md text-[11.5px] font-semibold border border-sky-400 dark:border-sky-700 bg-sky-50 dark:bg-sky-950/40 text-sky-800 dark:text-sky-200 hover:bg-sky-100 dark:hover:bg-sky-900/50 transition">
-            📂 <span>Abrir projeto</span> <span className="opacity-60">→</span>
-          </a>
+          <LinkAbrirProjeto {...projetoActions} />
         </div>
       )}
       {/* Header card — usamos <div role="button"> em vez de <button> porque o

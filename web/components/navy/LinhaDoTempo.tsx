@@ -69,11 +69,13 @@ const LEGENDA: { rot: string; forma: Forma; cor: string }[] = [
 const COL = "300px 1fr 210px";
 
 export default function LinhaDoTempo({
-  buckets, formatarValor, onLoteClick,
+  buckets, formatarValor, onLoteClick, acaoBucket,
 }: {
   buckets: { pv_os_label: string; cliente: string | null; rows: AnyRow[] }[];
   formatarValor: (v: number) => string;
   onLoteClick?: (r: AnyRow) => void;
+  /** Ação do pedido (ex.: "Abrir projeto"), fora do botão da coluna fixa. */
+  acaoBucket?: (b: { pv_os_label: string; cliente: string | null; rows: AnyRow[] }) => React.ReactNode;
 }) {
   const [abertos, setAbertos] = useState<Record<string, boolean>>({});
   const hoje = useMemo(() => {
@@ -186,6 +188,7 @@ export default function LinhaDoTempo({
           }}>
             <div style={{ display: "grid", gridTemplateColumns: COL, gap: 12, alignItems: "center" }}>
               {/* Coluna fixa */}
+              <span style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 4, minWidth: 0 }}>
               <button type="button"
                 onClick={() => setAbertos((x) => ({ ...x, [b.pv_os_label]: !aberto }))}
                 style={{
@@ -206,6 +209,8 @@ export default function LinhaDoTempo({
                   </span>
                 </span>
               </button>
+              {acaoBucket?.(b)}
+              </span>
 
               {/* Trilha */}
               <span style={{ position: "relative", height: 26 }}>

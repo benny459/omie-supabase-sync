@@ -39,13 +39,16 @@ export function colunaDoLote(r: AnyRow): ColunaKanban {
 }
 
 export default function KanbanRaias({
-  buckets, formatarValor, onLoteClick, rotuloBucket,
+  buckets, formatarValor, onLoteClick, rotuloBucket, acaoBucket,
 }: {
   buckets: { pv_os_label: string; cliente: string | null; rows: AnyRow[] }[];
   /** Vem de fora para respeitar canViewValues — aqui não se decide permissão. */
   formatarValor: (v: number) => string;
   onLoteClick?: (r: AnyRow) => void;
   rotuloBucket?: (b: { pv_os_label: string }) => string;
+  /** Ação da raia (ex.: "Abrir projeto"). Fica FORA do botão da cabeça —
+   *  um <a> dentro de <button> é HTML inválido e o browser desmonta-o. */
+  acaoBucket?: (b: { pv_os_label: string; cliente: string | null; rows: AnyRow[] }) => React.ReactNode;
 }) {
   const [abertas, setAbertas] = useState<Record<string, boolean>>({});
 
@@ -115,6 +118,7 @@ export default function KanbanRaias({
             alignItems: "start",
           }}>
             {/* Cabeça da raia */}
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 6, minWidth: 0 }}>
             <button type="button"
               onClick={() => setAbertas((s) => ({ ...s, [bucket.pv_os_label]: !aberta }))}
               style={{
@@ -136,6 +140,8 @@ export default function KanbanRaias({
                 </span>
               </span>
             </button>
+            {acaoBucket?.(bucket)}
+            </div>
 
             {COLUNAS.map((c) => {
               const linhas = porColuna[c.chave];
