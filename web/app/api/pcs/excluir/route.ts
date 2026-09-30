@@ -126,9 +126,28 @@ export async function GET() {
       process.env.SUPABASE_SERVICE_ROLE_KEY!,
       { auth: { persistSession: false }, db: { schema: "sales" } },
     );
-    const { data: ctx } = await mv.from("mv_pc_projetos")
-      .select("empresa, pc_numero, projeto_nome, valor_total")
-      .in("pc_numero", numeros);
+    /* Duas MVs, não uma. Só se consultava mv_pc_projetos, e por isso todo o PC
+       de venda avulsa aparecia no painel sem projeto e sem valor — só o número
+       nu. É o pior sítio para faltar contexto: é exactamente o ecrã onde se
+       decide se se traz de volta. Provado com o PC 6948 (PV1813), que lia
+       "— · —" enquanto um PC de projeto lia projeto e valor. */
+    const [proj, avul] = await Promise.all([
+      mv.from("mv_pc_projetos")
+        .select("empresa, pc_numero, projeto_nome, valor_total")
+        .in("pc_numero", numeros),
+      mv.from("mv_pc_avulsos")
+        .select("empresa, pc_numero, pv_os_label, valor_total")
+        .in("pc_numero", numeros),
+    ]);
+    const ctx = [
+      ...(proj.data ?? []),
+      // O avulso não tem projeto; o que o identifica é o PV/OS.
+      ...((avul.data ?? []) as { empresa: string; pc_numero: string; pv_os_label: string | null; valor_total: number | null }[])
+        .map((a) => ({
+          empresa: a.empresa, pc_numero: a.pc_numero,
+          projeto_nome: a.pv_os_label, valor_total: a.valor_total,
+        })),
+    ];
     /* Um PC pode aparecer em MAIS DE UM projeto — é o caso de quem digitou o
        número no PV errado: o PC real fica no projeto dele e a cópia manual
        noutro. Como a exclusão é por número, ele sai dos dois; então os dois

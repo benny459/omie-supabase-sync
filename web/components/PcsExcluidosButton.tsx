@@ -135,7 +135,9 @@ export default function PcsExcluidosButton({
                 <thead className="sticky top-0 bg-ww-panel">
                   <tr className="text-ww-textMuted text-left">
                     <th className="py-1.5 pr-3 font-semibold">PC</th>
-                    <th className="py-1.5 pr-3 font-semibold">Projeto</th>
+                    {/* A coluna serve as duas origens: um PC de projeto traz o
+                        nome do projeto, um de venda avulsa traz o PV/OS. */}
+                    <th className="py-1.5 pr-3 font-semibold">Projeto · PV/OS</th>
                     <th className="py-1.5 pr-3 font-semibold text-right">Valor</th>
                     <th className="py-1.5 pr-3 font-semibold">Motivo</th>
                     <th className="py-1.5 pr-3 font-semibold">Quando</th>
