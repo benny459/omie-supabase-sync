@@ -520,9 +520,18 @@ begin
   create temp table _ref on commit drop as select * from _it where ref;
   create index on _ref using gist (norm gist_trgm_ops);
   analyze _ref;
-  create temp table _cand on commit drop as select * from _it where not ref
-    and not exists (select 1 from platform.estoque_familia_sugestao s
-                    where s.empresa = p_empresa and s.n_cod_prod = _it.n_cod_prod and s.status <> 'pendente');
+  -- candidatos: sem família / família que não é material, MAIS os "fora do lugar": item numa família de
+  -- material cuja 1ª palavra aponta com ≥ 70% (mín. 5 itens) para outra família (ex.: membrana em HIDRAULICA)
+  create temp table _cand on commit drop as
+    select * from _it where not ref
+    union
+    select i.* from _it i
+    join (select x.w1, x.familia_id, x.qtd::numeric / sum(x.qtd) over (partition by x.w1) as fatia, sum(x.qtd) over (partition by x.w1) as tot
+          from (select r.w1, r.familia_id, count(*) as qtd from _ref r where length(r.w1) >= 3 group by 1, 2) x) w
+      on w.w1 = i.w1 and w.fatia >= 0.7 and w.tot >= 5 and w.familia_id <> i.familia_id
+    where i.ref;
+  delete from _cand c where exists (select 1 from platform.estoque_familia_sugestao s
+                    where s.empresa = p_empresa and s.n_cod_prod = c.n_cod_prod and s.status <> 'pendente');
 
   create temp table _sig (n_cod_prod bigint, familia_id bigint, conf numeric, motivo text) on commit drop;
   insert into _sig
@@ -549,9 +558,15 @@ begin
   join platform.estoque_familia f on f.id = r.familia_id
   order by c.n_cod_prod, similarity(c.norm, r.norm) desc;
 
+  delete from _sig g using _cand c where g.n_cod_prod = c.n_cod_prod and g.familia_id = c.familia_id;
+  -- "fora do lugar" só vira candidato se houver de facto outra família para sugerir
+  delete from _cand c where c.ref and not exists (select 1 from _sig g where g.n_cod_prod = c.n_cod_prod);
   delete from platform.estoque_familia_sugestao s where s.empresa = p_empresa and s.status = 'pendente';
   insert into platform.estoque_familia_sugestao (empresa, n_cod_prod, familia_atual_id, familia_sugerida_id, confianca, motivo)
-  select p_empresa, c.n_cod_prod, c.familia_id, b.familia_id, coalesce(b.conf, 0), b.motivo
+  -- item já numa família de material: nunca "alta" (não entra no aceitar-em-lote das altas)
+  select p_empresa, c.n_cod_prod, c.familia_id, b.familia_id,
+         case when c.ref then least(coalesce(b.conf, 0), 0.79) else coalesce(b.conf, 0) end,
+         case when c.ref then 'fora do lugar? ' || b.motivo else b.motivo end
   from _cand c
   left join lateral (
     select s.familia_id, least(0.99, max(s.conf) + 0.08 * (count(*) - 1)) as conf,

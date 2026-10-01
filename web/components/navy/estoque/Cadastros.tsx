@@ -171,7 +171,7 @@ function AbaRevisao({ d, mudou, avisar }: { d: { familias: Familia[]; revisao_co
   const [abertas, setAbertas] = useState<Set<string>>(new Set());
   const [indo, setIndo] = useState(false);
   const [paraFam, setParaFam] = useState("");
-  const fams = d.familias.filter((f) => f.ativo && !f.sistema);
+  const fams = d.familias.filter((f) => f.ativo && !f.sistema && f.material);
   const nome = (id: number | null) => (id == null ? "Sem família" : d.familias.find((f) => f.id === id)?.nome ?? "—");
 
   const carregar = useCallback(async () => {
@@ -270,7 +270,7 @@ function AbaRevisao({ d, mudou, avisar }: { d: { familias: Familia[]; revisao_co
                     <tr key={s.n_cod_prod}>
                       {d.admin && <td style={{ width: 30 }}><input type="checkbox" checked={sel.has(s.n_cod_prod)} onChange={() => alterna(s.n_cod_prod)} aria-label="Selecionar" /></td>}
                       <td><b>{s.item.descricao}</b><div className="mini">{s.item.codigo_novo ? `${s.item.codigo_novo} · ` : ""}{s.item.codigo}{s.item.ncm ? ` · NCM ${s.item.ncm}` : ""} · hoje: {nome(s.familia_atual_id)}</div></td>
-                      <td className="opt" style={{ maxWidth: 360 }}><span className="mini">{s.motivo ?? "sem sinal suficiente"}</span></td>
+                      <td style={{ maxWidth: 360, minWidth: 160 }}><span className="mini">{s.motivo ?? "sem sinal suficiente"}</span></td>
                       <td>{s.familia_sugerida_id ? <Pill t={`${bd} ${Math.round(s.confianca * 100)}%`} tom={tm} /> : <Pill t="sem sugestão" tom="off" />}
                         {s.status !== "pendente" && <div className="mini">{s.status} · {s.decidido_por_email}</div>}</td>
                       <td style={{ whiteSpace: "nowrap" }}>
