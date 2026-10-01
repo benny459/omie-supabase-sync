@@ -216,3 +216,25 @@ $$;
 
 revoke all on function orders.estoque_item_pcs(text, bigint), orders.estoque_busca_pcs(text) from public, anon, authenticated;
 grant execute on function orders.estoque_item_pcs(text, bigint), orders.estoque_busca_pcs(text) to service_role;
+
+-- ⌘K do Estoque: clientes que usaram itens nos últimos 12 meses (filtra as saídas antes do join — ~12 ms).
+create or replace function orders.estoque_busca_clientes(p_q text default null, p_cliente text default null) returns jsonb
+language sql stable security definer set search_path = orders, public as $$
+  with s as (
+    select m.empresa, m.id_prod, coalesce(nullif(c.nome_fantasia, ''), c.razao_social) as cliente
+    from orders.estoque_movimentos m
+    join sales.pedidos_venda pv on pv.empresa = m.empresa and pv.codigo_pedido = m.id_pedido
+    join finance.clientes c on c.empresa = pv.empresa and c.codigo_cliente_omie = pv.codigo_cliente
+    where m.tipo = 'saida' and coalesce(m.cancelamento, 'N') <> 'S' and m.dt_mov >= current_date - 365
+  )
+  select case
+    when p_cliente is not null then
+      (select coalesce(jsonb_agg(distinct id_prod), '[]'::jsonb) from s where cliente = p_cliente)
+    else
+      (select coalesce(jsonb_agg(jsonb_build_object('nome', cliente, 'itens', n) order by n desc), '[]'::jsonb)
+       from (select cliente, count(distinct id_prod) as n from s
+             where cliente ilike '%' || p_q || '%' group by cliente order by n desc limit 5) x)
+  end
+$$;
+revoke all on function orders.estoque_busca_clientes(text, text) from public, anon, authenticated;
+grant execute on function orders.estoque_busca_clientes(text, text) to service_role;

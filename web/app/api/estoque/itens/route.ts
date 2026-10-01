@@ -4,7 +4,7 @@
 // mais os pares de possível duplicidade (orders.v_estoque_duplicidade) para a aba Duplicidades.
 
 import { NextResponse } from "next/server";
-import { exigirEstoque, orders, todas } from "@/lib/estoque-server";
+import { exigirEstoque, orders, todas, todasParalelo } from "@/lib/estoque-server";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -14,7 +14,7 @@ export async function GET() {
   if (negado) return negado;
   try {
     const [rows, dups] = await Promise.all([
-      todas((de, ate) => orders().from("v_estoque_item").select("*").order("descricao").order("n_cod_prod").range(de, ate)),
+      todasParalelo((de, ate) => orders().from("v_estoque_item").select("*").order("descricao").order("n_cod_prod").range(de, ate)),
       todas((de, ate) => orders().from("v_estoque_duplicidade").select("*").range(de, ate)),
     ]);
     return NextResponse.json({ rows, dups, count: rows.length });
