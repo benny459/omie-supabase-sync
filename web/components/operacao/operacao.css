@@ -456,3 +456,11 @@
 :root[data-theme="light"] .op .srv-l1 .svc-os{color:#1d4ed8}
 /* Botão de limpar todos os filtros */
 .op .chip.limpar{border-color:var(--ww-crit);color:var(--ww-crit-text);background:var(--ww-crit-soft);font-weight:600}
+/* bolinha de status de serviço nos filtros (mesmas cores do selo na coluna Serviço) */
+.op .pip-st{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:3px;background:var(--ww-text-faint)}
+.op .pip-st.ok{background:var(--ww-ok)}
+.op .pip-st.warn{background:var(--ww-warn)}
+.op .pip-st.info{background:var(--ww-info)}
+.op .pip-st.crit{background:var(--ww-crit)}
+.op .pip-st.mute{background:var(--ww-text-muted)}
+.op .srv-mais{font-size:11px;color:#fb923c;font-weight:600;border-bottom:1px dotted #fb923c;align-self:flex-start;cursor:help}

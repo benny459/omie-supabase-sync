@@ -28,7 +28,7 @@ import {
   montarPedido, fases, financeiro, passa, noEscopo, dataMs, diasAte, dBR, isoDia, brl, pct,
   ESTADO_LABEL, FILTRO_LABEL,
   type Compra, type Escopo, type Estado, type Filtros, type Pedido, type Periodo, type Rapida,
-  servicoDoPedido, servicoAtrasado, tipoVenda, type Servico,
+  servicoDoPedido, servicoAtrasado, tipoVenda, STATUS_SERVICO, type Servico,
 } from "@/lib/operacao-modelo";
 import { mudarStatus, mudarStatusEmMassa, salvarCampo, CAMPOS, type Modulo } from "@/lib/approvals-write";
 import { buildBuckets, BucketTotals, projetoDoBucket, LinkAbrirProjeto, type Bucket, type BudgetSummary } from "../BoldAvulsosView";
@@ -247,7 +247,14 @@ export default function TelaOperacao({ modulo, title, rows: rowsIniciais, parcia
     const qq = q.trim().toLowerCase();
     const lista: Rapida[] = raps.length ? raps : ["todos"];
     const soCompra = !!((filtros.estado && filtros.estado !== "sem_pc") || filtros.fornecedor || filtros.categoria) || lista.includes("minha");
-    const ok = (p: Pedido, c: Compra | null) => lista.every((r) => passa(p, c, qq, periodo, filtros, r));
+    // Status de serviço são exclusivos entre si: marcados juntos somam (OU);
+    // com os demais filtros, estreitam (E).
+    const status = lista.filter((r) => r.startsWith("serv_st:"));
+    const resto = lista.filter((r) => !r.startsWith("serv_st:"));
+    const restoOk = resto.length ? resto : (["todos"] as Rapida[]);
+    const ok = (p: Pedido, c: Compra | null) =>
+      restoOk.every((r) => passa(p, c, qq, periodo, filtros, r))
+      && (!status.length || status.some((r) => passa(p, c, qq, periodo, filtros, r)));
     const out: { p: Pedido; compras: Compra[] }[] = [];
     for (const p of noScope) {
       const cs = p.compras.filter((c) => ok(p, c));
@@ -275,6 +282,12 @@ export default function TelaOperacao({ modulo, title, rows: rowsIniciais, parcia
     const k: Rapida[] = ["minha", "atrasados", "sem_pc", "alarme", "pode_fat", "venda_atraso", "compra_atraso",
       "recusa", "serv_exec", "serv_atraso", "serv_agend", "serv_semos"];
     const r = Object.fromEntries(k.map((x) => [x, filtrarPor(marcados.includes(x) ? marcados : [...marcados, x]).length])) as Record<Rapida, number>;
+    // Status de serviço: o número é o daquele status sozinho, com os demais filtros marcados.
+    const semStatus = marcados.filter((x) => !x.startsWith("serv_st:"));
+    for (const st of STATUS_SERVICO) {
+      const key = `serv_st:${st.rotulo}` as Rapida;
+      r[key] = filtrarPor([...semStatus, key]).length;
+    }
     r.todos = filtrarPor([]).length;
     return r;
   }, [filtrarPor, marcados]);
@@ -548,8 +561,8 @@ export default function TelaOperacao({ modulo, title, rows: rowsIniciais, parcia
             ]],
             ["Serviços", [
               ["serv_atraso", "Serviço em atraso", rapidas.serv_atraso, ALARME_SERV.atraso],
-              ["serv_agend", "Agendado", rapidas.serv_agend, ALARME_SERV.agend],
-              ["serv_exec", "Executado", rapidas.serv_exec, ALARME_SERV.exec],
+              ...STATUS_SERVICO.map((st) => [`serv_st:${st.rotulo}` as Rapida, st.rotulo, rapidas[`serv_st:${st.rotulo}` as Rapida] ?? 0,
+                { l: "", s: "", tom: st.tom, desc: `Serviço: ${st.desc}`, rap: `serv_st:${st.rotulo}` as Rapida } as AlarmeIcone] as [Rapida, string, number, AlarmeIcone]),
               ["serv_semos", "Sem OS", rapidas.serv_semos, ALARME_SERV.semos],
             ]],
           ];
@@ -561,7 +574,7 @@ export default function TelaOperacao({ modulo, title, rows: rowsIniciais, parcia
           const chip = ([k, l, n, ic]: [Rapida, string, number, AlarmeIcone]) => (
             <button key={k} className={`chip ${marcados.includes(k) ? "on" : ""}`} onClick={() => alternar(k)}
               title={`${ic.desc}${marcados.length && !marcados.includes(k) ? " · combina com os filtros marcados" : ""}`}>
-              <Alm a={ic} chip />{l} <b>{n}</b>
+              {k.startsWith("serv_st:") ? <span className={`pip-st ${ic.tom}`} /> : <Alm a={ic} chip />}{l} <b>{n}</b>
             </button>
           );
           return (
@@ -882,6 +895,11 @@ function CelServico({ sv }: { sv: Servico | null }) {
           : sv.prev != null ? <>prev. {dBR(sv.prev)}{d != null && d < 0 ? <b> ⚠ {-d}d</b> : null}</> : "sem previsão"}
         {sv.alteracoes > 0 && <span className="svc-h"> · {sv.alteracoes}×</span>}
       </div>
+      {sv.todos.length > 1 && (
+        <span className="srv-mais" title={sv.todos.map((x) => `${x.pv || "sem PV"}: ${x.rotulo}${x.os ? ` · ${x.os}` : " · sem OS"}${x.prev && x.st !== "Concluída" ? ` · prev. ${dBR(x.prev)}` : ""}`).join("\n")}>
+          +{sv.todos.length - 1} OS neste projeto
+        </span>
+      )}
     </div>
   );
 }
