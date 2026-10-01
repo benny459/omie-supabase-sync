@@ -389,17 +389,28 @@ export default function TelaOperacao({ modulo, title, rows: rowsIniciais, parcia
 
   /* Status do material por item, marcado à mão (01/10/2026). Grava pelo
      servidor — quem marcou e quando vêm da sessão. */
-  const marcarMaterial: MarcarMaterial = useCallback(async (c, status, qtd) => {
+  const marcarMaterial: MarcarMaterial = useCallback(async (c, status, qtd, silencioso) => {
     const r = await fetch("/api/pedidos/material", { method: "POST", headers: { "content-type": "application/json" },
       body: JSON.stringify({ empresa: s(c.row.empresa), ncod_ped: c.row.ncod_ped, modulo, status, qtd }) });
     const j = await r.json().catch(() => ({}));
-    if (!r.ok) { mostrar({ msg: `Não gravou: ${j.error ?? r.statusText}`, erro: true }); return false; }
+    if (!r.ok) { if (!silencioso) mostrar({ msg: `Não gravou: ${j.error ?? r.statusText}`, erro: true }); return false; }
     const cf: Record<string, unknown> = { ...((c.row.custom_fields as Record<string, unknown> | null) ?? {}) };
     if (j.mat_status) cf.mat_status = j.mat_status; else delete cf.mat_status;
     aplicar(c.key, { custom_fields: cf });
-    mostrar({ msg: status ? `Material: ${MAT_MANUAL.find((x) => x.v === status)?.t}` : "Material volta ao automático" });
+    if (!silencioso) mostrar({ msg: status ? `Material: ${MAT_MANUAL.find((x) => x.v === status)?.t}` : "Material volta ao automático" });
     return true;
   }, [aplicar, modulo, mostrar]);
+  /* Mesmo material para vários itens de uma vez (título da coluna ou barra de
+     seleção). Item já recebido pela NF de entrada fica de fora. */
+  const marcarMaterialLote: MarcarMaterialLote = useCallback(async (lista, status) => {
+    const alvo = lista.filter((c) => c.recebidoEm == null && (c.matManual?.v ?? null) !== status);
+    if (!alvo.length) { mostrar({ msg: "Nada a mudar — os itens já estão assim (ou já chegaram pela NF)." }); return; }
+    let ok = 0; const fila = [...alvo];
+    await Promise.all(Array.from({ length: 4 }, async () => { for (let c = fila.shift(); c; c = fila.shift()) if (await marcarMaterial(c, status, undefined, true)) ok++; }));
+    const rot = status ? MAT_MANUAL.find((x) => x.v === status)?.t : "automático";
+    mostrar(ok === alvo.length ? { msg: `${ok} ite${ok === 1 ? "m" : "ns"}: material ${rot}` }
+      : { msg: `${ok} de ${alvo.length} itens gravados — os outros foram recusados (sem permissão?)`, erro: true });
+  }, [marcarMaterial, mostrar]);
 
   const selCompras = useMemo(() => [...sel].map((k) => compraPorKey.get(k)).filter(Boolean) as Compra[], [sel, compraPorKey]);
   const emMassa = async (status: string, lista?: Compra[]) => {
@@ -708,7 +719,7 @@ export default function TelaOperacao({ modulo, title, rows: rowsIniciais, parcia
               statusLote={(lista, st) => { if (lista.length === 1) void setStatus(lista[0], st); else void emMassa(st, lista); }}
               incluirPc={(rc, itens, numero) => incluirPc(p, rc, itens, numero)}
               filtrarRapida={(r) => { setMarcados((m) => (m.includes(r) ? m : [...m, r])); window.scrollTo({ top: 0, behavior: "smooth" }); }}
-              notas={notas[p.id] ?? []} abrirNotas={() => setNotasDe(p)} marcarMaterial={marcarMaterial} />
+              notas={notas[p.id] ?? []} abrirNotas={() => setNotasDe(p)} marcarMaterial={marcarMaterial} marcarMaterialLote={marcarMaterialLote} />
           ))}
           {visiveis.length > limite && (
             <div style={{ textAlign: "center", margin: 14 }}>
@@ -745,6 +756,7 @@ export default function TelaOperacao({ modulo, title, rows: rowsIniciais, parcia
         temManual={selCompras.some((c) => Number(c.row.ncod_ped) < 0)}
         onAprovar={() => void emMassa("APROVADO")} onRecusar={() => void emMassa("NAO_APROVADO")}
         onPrevisao={(iso) => void previsaoEmMassa(iso)} onEsconder={() => void esconderPcs()} onApagar={() => void apagarManuais()}
+        onMaterial={modulo !== "pcs" && podeEditar ? (st) => { void marcarMaterialLote(selCompras, st); setSel(new Set()); } : undefined}
         onCancelar={() => setSel(new Set())} />
 
       {/* ── gaveta ── */}
@@ -862,7 +874,8 @@ export function FasesBar({ p, modulo }: { p: Pedido; modulo: string }) {
   );
 }
 
-type MarcarMaterial = (c: Compra, status: MatManual["v"] | null, qtd?: number) => Promise<boolean>;
+type MarcarMaterial = (c: Compra, status: MatManual["v"] | null, qtd?: number, silencioso?: boolean) => Promise<boolean>;
+type MarcarMaterialLote = (lista: Compra[], status: MatManual["v"] | null) => Promise<void>;
 
 /** Material do item: a NF de entrada do Omie manda (só leitura); senão o time
  *  marca Em estoque / Recebido sem NF / Parcial (com qtd) / Não vai mais. */
@@ -1136,6 +1149,7 @@ function CartaoPedido(props: {
   incluirPc: (rc: string, itens: Compra[], numero: string) => Promise<void>;
   filtrarRapida: (r: Rapida) => void;
   marcarMaterial: MarcarMaterial;
+  marcarMaterialLote: MarcarMaterialLote;
   notas: Nota[];
   abrirNotas: () => void;
 }) {
@@ -1310,12 +1324,13 @@ function LinhaCompra({ c, sel, toggleSel, podeAprovar, podeEditar, ehAdmin, setS
  *  PC · fornecedor · status (aprovação) · previsão · status do material
  *  e, se o pedido tem serviço, o estado do serviço. Não há relação 1:1
  *  entre itens e PCs: um PC pode atender várias RCs e vice-versa. */
-function GruposRc({ compras, p, sel, toggleSel, podeAprovar, podeEditar, ehAdmin, statusLote, incluirPc, marcarMaterial, gravar, abrirDrawer, $ }: {
+function GruposRc({ compras, p, sel, toggleSel, podeAprovar, podeEditar, ehAdmin, statusLote, incluirPc, marcarMaterial, marcarMaterialLote, gravar, abrirDrawer, $ }: {
   compras: Compra[]; p: Pedido; sel: Set<string>; toggleSel: (k: string) => void;
   podeAprovar: boolean; podeEditar: boolean; ehAdmin: boolean;
   statusLote: (lista: Compra[], status: string) => void;
   incluirPc: (rc: string, itens: Compra[], numero: string) => Promise<void>;
   marcarMaterial: MarcarMaterial;
+  marcarMaterialLote: MarcarMaterialLote;
   gravar: Gravar; abrirDrawer: (k: string) => void; $: (v: number | null) => string;
 }) {
   // Serviço é do pedido inteiro: aparece uma vez na faixa acima (FaixaServico).
@@ -1332,13 +1347,48 @@ function GruposRc({ compras, p, sel, toggleSel, podeAprovar, podeEditar, ehAdmin
     return na - nb;
   });
   const somaRcs = compras.reduce((a, c) => a + c.rcTotal, 0);
+  const comPcVis = compras.filter((c) => c.pc);
   const cls = `rcg ${servico ? "comserv" : ""}`;
 
   return (
     <>
       <div className={`${cls} rcg-hd`}>
-        <div className="it"><span /><span>RC</span><span>Item</span><span>Material</span><span style={{ textAlign: "right" }}>Valor RC</span></div>
-        <div className="pc"><span>PC</span><span>Fornecedor</span><span style={{ textAlign: "right" }}>Valor PC</span><span>Status</span><span>Prev. material</span><span>Material</span><span>NF entrada</span>{servico && <span>Serviço</span>}<span /></div>
+        <div className="it"><span /><span>RC</span><span>Item</span>
+          <span className="hd-lote">Material
+            {podeEditar && compras.some((c) => c.recebidoEm == null) && (
+              <select className="todos" value="" title="Mudar o material de todos os itens deste pedido"
+                onChange={(e) => { const v = e.target.value; if (v) void marcarMaterialLote(compras, v === "auto" ? null : (v as MatManual["v"])); }}>
+                <option value="">todos ▾</option>
+                {MAT_MANUAL.filter((x) => x.v !== "parcial").map((x) => <option key={x.v} value={x.v}>{x.t}</option>)}
+                <option value="auto">↺ Automático</option>
+              </select>
+            )}
+          </span>
+          <span style={{ textAlign: "right" }}>Valor RC</span></div>
+        <div className="pc"><span>PC</span><span>Fornecedor</span><span style={{ textAlign: "right" }}>Valor PC</span>
+          <span className="hd-lote">Status
+            {podeAprovar && comPcVis.length > 1 && (
+              <select className="todos" value="" title="Mudar o status de todos os PCs deste pedido"
+                onChange={(e) => {
+                  const v = e.target.value; if (!v) return;
+                  const alvo = comPcVis.filter((c) => c.statusCodigo !== v && c.estado !== "recebido");
+                  if (!alvo.length) return;
+                  const rot = OPCOES_STATUS.find((o) => o.v === v)?.l ?? v;
+                  if (!window.confirm(`Mudar ${alvo.length} linha(s) de PC deste pedido para "${rot}"? Cada uma passa pela mesma checagem de alçada e orçamento.`)) return;
+                  statusLote(alvo, v);
+                }}>
+                <option value="">todos ▾</option>
+                {OPCOES_STATUS.filter((o) => !o.admin || ehAdmin).map((o) => <option key={o.v} value={o.v}>{o.l}</option>)}
+              </select>
+            )}
+          </span>
+          <span className="hd-lote">Prev. material
+            {podeEditar && comPcVis.some((c) => c.estado !== "recebido") && comPcVis.length > 1 && (
+              <input type="date" className="todos" title="Mesma previsão para todos os PCs deste pedido ainda não recebidos"
+                onChange={(e) => { const iso = e.target.value || null; if (!iso) return;
+                  for (const c of comPcVis.filter((x) => x.estado !== "recebido")) void gravar(c, "prevMateriais", iso, { nova_prev_materiais: iso }); }} />
+            )}
+          </span><span>Material</span><span>NF entrada</span>{servico && <span>Serviço</span>}<span /></div>
       </div>
       {ordem.map(([k, itens]) => {
         const totalRc = itens.reduce((a, c) => a + c.rcTotal, 0);
@@ -1535,8 +1585,9 @@ function Kanban({ visiveis, $, nomeId, podeAprovar, podeEditar, setStatus, grava
 }
 
 // ─────────────────────────────────────────────────────────────────────────
-function BarraMassa({ n, podeAprovar, podeEditar, temManual, onAprovar, onRecusar, onPrevisao, onEsconder, onApagar, onCancelar }: {
+function BarraMassa({ n, podeAprovar, podeEditar, temManual, onAprovar, onRecusar, onPrevisao, onMaterial, onEsconder, onApagar, onCancelar }: {
   n: number; podeAprovar: boolean; podeEditar: boolean; temManual: boolean;
+  onMaterial?: (status: MatManual["v"] | null) => void;
   onAprovar: () => void; onRecusar: () => void; onPrevisao: (iso: string) => void; onEsconder: () => void; onApagar: () => void; onCancelar: () => void;
 }) {
   const [data, setData] = useState("");
@@ -1550,6 +1601,14 @@ function BarraMassa({ n, podeAprovar, podeEditar, temManual, onAprovar, onRecusa
           <span className="vsep" />
           <input type="date" className="in" style={{ width: 150, borderColor: "var(--ww-border-strong)" }} value={data} onChange={(e) => setData(e.target.value)} />
           <button className="btn sm" disabled={!data} onClick={() => { onPrevisao(data); setData(""); }}>Previsão</button>
+          {onMaterial && (
+            <select className="in" style={{ width: 150, borderColor: "var(--ww-border-strong)" }} value=""
+              onChange={(e) => { const v = e.target.value; if (v) onMaterial(v === "auto" ? null : (v as MatManual["v"])); }}>
+              <option value="">Material ▾</option>
+              {MAT_MANUAL.filter((x) => x.v !== "parcial").map((x) => <option key={x.v} value={x.v}>{x.t}</option>)}
+              <option value="auto">↺ Automático</option>
+            </select>
+          )}
           <span className="vsep" />
           <button className="btn sm ghost" onClick={onEsconder} title="Some da lista; volta pelo menu ⋯ › PCs escondidos">🚫 Esconder PC</button>
           {temManual && <button className="btn sm no" onClick={onApagar}>🗑 Apagar manuais</button>}

@@ -501,3 +501,8 @@
 .op .st.mat.mute{background:var(--ww-border);color:var(--ww-text-muted)}
 .op .mat-qtd{display:inline-flex;align-items:center;gap:3px;font-size:11.5px;color:var(--ww-text-muted)}
 .op .mat-qtd input{width:48px;height:24px;padding:0 4px}
+/* "todos ▾" no título da coluna: mesma opção para todas as linhas do pedido */
+.op .hd-lote{display:inline-flex;align-items:center;gap:6px;min-width:0}
+.op .rcg-hd .todos{text-transform:none;letter-spacing:0;font-size:11px;height:22px;max-width:96px;border-radius:6px;border:1px dashed var(--ww-border-strong);background:transparent;color:var(--ww-text-muted);padding:0 4px;cursor:pointer}
+.op .rcg-hd .todos:hover{border-style:solid;color:var(--ww-text)}
+.op .rcg-hd input.todos{max-width:118px}
