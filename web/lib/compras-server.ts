@@ -9,7 +9,7 @@ import { canViewArea, type UserPerms } from "@/lib/permissions";
 // orders.compras_* (security definer, só service_role). Estas rotas validam
 // a sessão e a área ERP antes de chamar.
 
-export type Quem = { perms: UserPerms; email: string; uid: string | null };
+export type Quem = { perms: UserPerms; email: string; uid: string | null; nome: string };
 
 export async function exigirCompras(): Promise<Quem | NextResponse> {
   const perms = await loadPerms();
@@ -17,7 +17,9 @@ export async function exigirCompras(): Promise<Quem | NextResponse> {
   if (!canViewArea(perms, "erp")) return NextResponse.json({ error: "Sem acesso à área ERP" }, { status: 403 });
   const supa = await supaServer("platform");
   const { data: { user } } = await supa.auth.getUser();
-  return { perms, email: user?.email ?? "painel", uid: perms.id ?? null };
+  const { data: prof } = await supaAdmin().schema("platform").from("user_profiles").select("nome").eq("id", perms.id ?? "").maybeSingle();
+  const email = user?.email ?? "painel";
+  return { perms, email, uid: perms.id ?? null, nome: (prof as { nome?: string } | null)?.nome || email };
 }
 
 export async function rpc<T = unknown>(fn: string, args: Record<string, unknown> = {}): Promise<T> {
@@ -45,4 +47,13 @@ export async function podeAprovar(q: Quem, valor: number): Promise<string | null
     return `Acima da sua alçada (R$ ${Number(r.approval_ceiling_brl).toLocaleString("pt-BR", { minimumFractionDigits: 2 })})`;
   }
   return null;
+}
+
+/** Depois de gravar: previsões a pagar do pedido e RCs nos baldes de PV/OS
+ *  (Avulsos/Projetos). Idempotentes; falha aqui não desfaz o que foi gravado. */
+export async function posGravar(id: number, tipo?: string) {
+  await Promise.all([
+    tipo !== "RC" ? rpc("compras_gerar_previsoes", { p_id: id }).catch(() => null) : null,
+    tipo !== "PC" ? rpc("compras_publicar_rcs").catch(() => null) : null,
+  ]);
 }

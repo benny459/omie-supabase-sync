@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Pedido de Compra P0004 · Safe Water Brasil</title>
+<style>
+  :root {
+    --ink: #10324A;
+    --water: #1C7FA0;
+    --mist: #EEF4F7;
+    --line: #DCE5EA;
+    --text: #1A2731;
+    --muted: #6A7B86;
+    --paper: #FFFFFF;
+    --desk: #E6ECEF;
+    --amber: #B9770E;
+    --amber-bg: #FFF5E3;
+    box-sizing: border-box;
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) { --desk: #1B2328; }
+  }
+  :root[data-theme="dark"] { --desk: #1B2328; }
+  *, *::before, *::after { box-sizing: inherit; }
+
+  html, body { margin: 0; }
+  body {
+    background: var(--desk);
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "Inter", "Helvetica Neue", Helvetica, Arial, sans-serif;
+    color: var(--text);
+    -webkit-font-smoothing: antialiased;
+    font-feature-settings: "tnum" 1;
+    padding: 32px 16px;
+  }
+
+  .sheet {
+    background: var(--paper);
+    max-width: 210mm;
+    margin: 0 auto;
+    padding: 18mm 16mm 14mm;
+    border-radius: 6px;
+    box-shadow: 0 1px 2px rgba(16,50,74,.08), 0 12px 40px rgba(16,50,74,.10);
+    position: relative;
+    overflow: hidden;
+  }
+  /* faixa d'água no topo */
+  .sheet::before {
+    content: "";
+    position: absolute; inset: 0 0 auto 0; height: 5px;
+    background: linear-gradient(90deg, var(--ink), var(--water));
+  }
+
+  /* Cabeçalho */
+  .head {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 24px;
+    align-items: start;
+    padding-bottom: 22px;
+    border-bottom: 1px solid var(--line);
+  }
+  .brand h1 {
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Inter", "Helvetica Neue", Arial, sans-serif;
+    font-size: 26px; font-weight: 700; letter-spacing: -0.02em;
+    color: var(--ink); margin: 0 0 6px;
+  }
+  .brand p { margin: 0; font-size: 11.5px; line-height: 1.6; color: var(--muted); }
+  .brand p strong { color: var(--text); font-weight: 500; }
+
+  .doc { text-align: right; }
+  .doc .kind { font-size: 12px; color: var(--muted); margin-bottom: 2px; }
+  .doc .num {
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Inter", "Helvetica Neue", Arial, sans-serif;
+    font-size: 40px; font-weight: 700; letter-spacing: -0.035em;
+    color: var(--ink); line-height: 1;
+  }
+  .status {
+    display: inline-flex; align-items: center; gap: 6px;
+    margin-top: 10px; padding: 4px 10px; border-radius: 999px;
+    background: var(--amber-bg); color: var(--amber);
+    font-size: 11px; font-weight: 600;
+  }
+  .status::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+
+  /* Datas */
+  .dates {
+    display: flex; flex-wrap: wrap; gap: 8px 32px;
+    padding: 16px 0 22px;
+  }
+  .date small { display: block; font-size: 11px; color: var(--muted); margin-bottom: 2px; }
+  .date span { font-size: 15px; font-weight: 600; color: var(--text); }
+
+  /* Fornecedor + condições */
+  .parties {
+    display: grid; grid-template-columns: 1.4fr 1fr; gap: 14px;
+    margin-bottom: 26px;
+  }
+  .box { background: var(--mist); border-radius: 10px; padding: 16px 18px; }
+  .box h2 { font-size: 12px; font-weight: 600; color: var(--water); margin: 0 0 10px; }
+  .box .name { font-size: 15px; font-weight: 600; color: var(--ink); margin-bottom: 6px; }
+  .box p { margin: 0; font-size: 11.5px; line-height: 1.65; color: var(--muted); }
+
+  dl.kv { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 7px 14px; font-size: 12px; }
+  dl.kv dt { color: var(--muted); }
+  dl.kv dd { margin: 0; color: var(--text); font-weight: 500; text-align: right; }
+  .pending { color: var(--amber) !important; }
+
+  /* Itens */
+  .items-wrap { overflow-x: auto; }
+  table.items { width: 100%; border-collapse: collapse; font-size: 12px; min-width: 560px; }
+  .items thead th {
+    font-size: 11px; font-weight: 500; color: var(--muted);
+    text-align: left; padding: 0 8px 10px; border-bottom: 1.5px solid var(--ink); white-space: nowrap;
+  }
+  .items thead th.r, .items td.r { text-align: right; }
+  .items td { padding: 14px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  .items .idx { color: var(--muted); width: 22px; }
+  .items .desc strong { display: block; font-weight: 600; color: var(--text); margin-bottom: 3px; line-height: 1.4; }
+  .items .desc span { font-size: 11px; color: var(--muted); }
+  .items .total { font-weight: 600; color: var(--ink); white-space: nowrap; }
+  .items td.r { white-space: nowrap; }
+  .dash { color: #B6C3CA; }
+
+  /* Rodapé financeiro */
+  .bottom {
+    display: grid; grid-template-columns: 1.3fr 1fr; gap: 28px;
+    margin-top: 24px; align-items: start;
+  }
+  .pay h3, .sum h3 { font-size: 12px; font-weight: 600; color: var(--water); margin: 0 0 10px; }
+  .inst {
+    display: grid; grid-template-columns: auto 1fr auto; gap: 4px 16px;
+    font-size: 12px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 10px;
+  }
+  .inst .h { font-size: 11px; color: var(--muted); }
+  .inst .v { font-weight: 500; }
+  .inst .r { text-align: right; }
+  .methods { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+  .chip {
+    font-size: 11px; padding: 4px 10px; border-radius: 999px;
+    border: 1px solid var(--line); color: var(--muted);
+  }
+  .note-small { font-size: 11px; color: var(--muted); margin-top: 8px; line-height: 1.5; }
+
+  .sum .row { display: flex; justify-content: space-between; font-size: 12.5px; padding: 6px 0; color: var(--muted); }
+  .sum .row span:last-child { color: var(--text); }
+  .grand {
+    margin-top: 10px; padding: 16px 18px; border-radius: 10px;
+    background: var(--ink); color: #fff;
+    display: flex; justify-content: space-between; align-items: baseline;
+  }
+  .grand small { font-size: 12px; opacity: .8; }
+  .grand strong {
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Inter", "Helvetica Neue", Arial, sans-serif;
+    font-size: 24px; font-weight: 700; letter-spacing: -0.02em;
+  }
+
+  /* Aviso NF-e */
+  .nfe {
+    margin-top: 26px; padding: 12px 16px; border-left: 3px solid var(--water);
+    background: var(--mist); border-radius: 0 8px 8px 0;
+    font-size: 11.5px; line-height: 1.55; color: var(--text);
+  }
+  .nfe b { color: var(--ink); }
+
+  /* Assinaturas */
+  .signs { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; margin-top: 46px; }
+  .sign { border-top: 1px solid var(--text); padding-top: 8px; font-size: 11.5px; }
+  .sign small { display: block; color: var(--muted); margin-top: 2px; font-size: 10.5px; }
+
+  .foot {
+    margin-top: 30px; padding-top: 12px; border-top: 1px solid var(--line);
+    display: flex; justify-content: space-between; flex-wrap: wrap; gap: 6px;
+    font-size: 10px; color: var(--muted);
+  }
+
+  @media (max-width: 640px) {
+    body { padding: 12px 8px; }
+    .sheet { padding: 24px 18px; }
+    .head, .parties, .bottom, .signs { grid-template-columns: 1fr; }
+    .doc { text-align: left; }
+    .doc .num { font-size: 32px; }
+  }
+
+  @page { size: A4; margin: 0; }
+  @media print {
+    body { background: #fff; padding: 0; }
+    .sheet { box-shadow: none; border-radius: 0; max-width: none; height: 297mm; padding: 15mm 15mm 12mm; display: flex; flex-direction: column; }
+    .foot { margin-top: auto; }
+    .signs { margin-top: 36px; }
+    * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  }
+</style>
+</head>
+<body>
+<main class="sheet">
+
+  <header class="head">
+    <div class="brand">
+      <h1>Safe Water Brasil Ltda</h1>
+      <p>
+        CNPJ <strong>15.766.003/0001-08</strong> &nbsp; IE 206.878.808.115 &nbsp; IM 4AY5076<br>
+        Av. Tucunaré, 550, Galpão AMJ/AMI, Tamboré, Barueri/SP, CEP 06460-020<br>
+        (11) 4705-4848 &nbsp; contasareceber@waterworks.com.br
+      </p>
+    </div>
+    <div class="doc">
+      <div class="kind">Pedido de compra</div>
+      <div class="num">P0004</div>
+      <div class="status">Aguardando aprovação</div>
+    </div>
+  </header>
+
+  <section class="dates">
+    <div class="date"><small>Emissão</small><span>01/10/2026</span></div>
+    <div class="date"><small>Entrega prevista</small><span>15/10/2026</span></div>
+    <div class="date"><small>Comprador</small><span class="pending">Não definido</span></div>
+  </section>
+
+  <section class="parties">
+    <div class="box">
+      <h2>Fornecedor</h2>
+      <div class="name">Safe Water Brasil Ltda</div>
+      <p>
+        CNPJ 15.766.003/0001-08 &nbsp; IE 206.878.808.115<br>
+        Av. Tucunaré, 550, Galpão AMI/AMJ, Unidade Auto<br>
+        Tamboré, Barueri/SP, CEP 06460-020<br>
+        (11) 4705-4848
+      </p>
+    </div>
+    <div class="box">
+      <h2>Condições</h2>
+      <dl class="kv">
+        <dt>Prazo</dt><dd>15 dias</dd>
+        <dt>Forma de pagamento</dt><dd class="pending">A definir</dd>
+        <dt>Frete</dt><dd>Sem transporte</dd>
+      </dl>
+    </div>
+  </section>
+
+  <div class="items-wrap">
+    <table class="items">
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Produto</th>
+          <th>NCM</th>
+          <th class="r">Qtde</th>
+          <th class="r">Valor unit.</th>
+          <th class="r">Desc.</th>
+          <th class="r">IPI</th>
+          <th class="r">ICMS ST</th>
+          <th class="r">Total</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="idx">1</td>
+          <td class="desc">
+            <strong>Bomba Schneider VME-5840 trifásica 4,0 CV 220/380 V, inox, 60 Hz, 6,0 m³/h, 100 mca</strong>
+            <span>Cód. 3014099</span>
+          </td>
+          <td><span class="dash">—</span></td>
+          <td class="r">1 UN</td>
+          <td class="r">R$ 9.870,00</td>
+          <td class="r"><span class="dash">—</span></td>
+          <td class="r"><span class="dash">—</span></td>
+          <td class="r"><span class="dash">—</span></td>
+          <td class="r total">R$ 9.870,00</td>
+        </tr>
+        <tr>
+          <td class="idx">2</td>
+          <td class="desc">
+            <strong>Curva 90° PVC soldável 32 mm</strong>
+            <span>Cód. 3040015</span>
+          </td>
+          <td><span class="dash">—</span></td>
+          <td class="r">1 UN</td>
+          <td class="r">R$ 9,69</td>
+          <td class="r"><span class="dash">—</span></td>
+          <td class="r"><span class="dash">—</span></td>
+          <td class="r"><span class="dash">—</span></td>
+          <td class="r total">R$ 9,69</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <section class="bottom">
+    <div class="pay">
+      <h3>Pagamento</h3>
+      <div class="inst">
+        <span class="h">Parcela</span><span class="h">Vencimento</span><span class="h r">Valor</span>
+        <span class="v">1 de 1</span><span class="v">30/10/2026</span><span class="v r">R$ 9.879,69</span>
+      </div>
+      <div class="methods">
+        <span class="chip">PIX</span>
+        <span class="chip">Transferência</span>
+        <span class="chip">Boleto</span>
+        <span class="chip">Cartão corporativo</span>
+      </div>
+      <p class="note-small">A forma de pagamento é definida na aprovação do pedido.</p>
+    </div>
+    <div class="sum">
+      <h3>Resumo</h3>
+      <div class="row"><span>Mercadorias</span><span>R$ 9.879,69</span></div>
+      <div class="row"><span>Descontos</span><span>R$ 0,00</span></div>
+      <div class="row"><span>Impostos (IPI + ST)</span><span>R$ 0,00</span></div>
+      <div class="row"><span>Frete</span><span>R$ 0,00</span></div>
+      <div class="grand"><small>Total do pedido</small><strong>R$ 9.879,69</strong></div>
+    </div>
+  </section>
+
+  <div class="nfe">
+    Informe o número <b>P0004</b> na NF-e, no campo “Pedido de compra” (xPed) de cada item. É por ele que conferimos o recebimento.
+  </div>
+
+  <section class="signs">
+    <div class="sign">Aprovação do comprador<small>Nome, data e assinatura</small></div>
+    <div class="sign">De acordo do fornecedor<small>Nome, data e assinatura</small></div>
+  </section>
+
+  <footer class="foot">
+    <span>Safe Water Brasil Ltda, pedido de compra P0004</span>
+    <span>Emitido em 01/10/2026 às 14:08</span>
+  </footer>
+
+</main>
+</body>
+</html>
