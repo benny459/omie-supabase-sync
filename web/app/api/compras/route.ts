@@ -26,10 +26,12 @@ export async function GET(req: Request) {
       rpc("compras_conciliar_previsoes").catch(() => null),
       rpc("compras_publicar_rcs").catch(() => null),
     ]);
-    const [pedidos, nfSug] = await Promise.all([
+    const [pedidos, nfSug, nfsPorPedido, semPedido] = await Promise.all([
       rpc("compras_lista", { p_desde: desde }),
       rpc("compras_nfs_sugeridas"),
+      rpc("compras_nfs_por_pedido"),
+      rpc("compras_nfs_sem_pedido", { p_empresa: "SF" }),
     ]);
-    return NextResponse.json({ pedidos, nfSug, desde });
+    return NextResponse.json({ pedidos, nfSug, nfsPorPedido, semPedido, desde });
   } catch (e) { return erro(e); }
 }

@@ -67,6 +67,14 @@ async function executar(q: Quem, req: Request, b: Record<string, unknown>): Prom
       case "nf": return rpc("compras_nf_decidir", {
         p_chave: String(b.chave), p_pedido: Number(b.pedido), p_status: String(b.status), p_por: q.email,
       });
+      // NF ↔ pedido (caixa "NF sem pedido" e cartões do Faturado)
+      case "nf_casar": return rpc("compras_nf_casar", { p_chave: String(b.chave), p_pedido: Number(b.pedido), p_por: q.email });
+      case "nf_descasar": return rpc("compras_nf_descasar", { p_chave: String(b.chave), p_pedido: Number(b.pedido), p_por: q.email });
+      case "nf_dispensar": {
+        const nao = await podeAprovar(q, 0); // mesma permissão de aprovar compra
+        if (nao) throw new Error("Só quem aprova compras pode dispensar NF de pedido");
+        return rpc("compras_nf_dispensar", { p_chave: String(b.chave), p_motivo: String(b.motivo ?? ""), p_por: q.email });
+      }
       default: throw new Error("ação inválida");
     }
   }
@@ -80,8 +88,8 @@ async function mover(q: Quem, id: number, etapa: string) {
     throw new Error("Pedido ainda não aprovado — aprove antes de avançar");
   }
   if (etapa === "60" && !p.nf) throw new Error("Registre o recebimento com a NF-e");
-  if (etapa === "35" && p.aprov !== "aprovado") throw new Error("Só pedido aprovado vai para Enviado ao fornecedor");
-  if (etapa === "35") return rpc("compras_marcar_enviado", { p_id: id, p_para: "", p_meio: "outro", p_por: q.email });
+  if (etapa === "35") throw new Error("Não há mais etapa Enviado: aprovado = enviado ao fornecedor");
+  if (["40", "60", "80"].includes(etapa) && p.aprov !== "aprovado") throw new Error("Só pedido aprovado avança para Faturado");
   if (etapa === "15" && p.origem === "omie" && p.aprov !== "aprovado") {
     // Solicitar aprovação de pedido do Omie = status PENDENTE em approval.approvals.
     await gravarAprovacaoOmie(q, null, [p], "aguardando");

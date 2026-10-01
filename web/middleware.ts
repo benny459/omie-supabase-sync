@@ -5,7 +5,7 @@ import { NextResponse, type NextRequest } from "next/server";
 // desenho, sem dado real. Em produção ela cai no login como qualquer outra —
 // deixar aberta em prod seria expor layout interno sem motivo.
 // /api/compras/rc: servidor-a-servidor (CRM), protegida por COMPRAS_RC_SECRET na própria rota.
-const PUBLIC_PATHS = ["/login", "/auth/callback", "/recover", "/reset", "/api/cron", "/api/compras/rc",
+const PUBLIC_PATHS = ["/login", "/auth/callback", "/recover", "/reset", "/api/cron", "/api/compras/rc", "/api/compras/alerta",
   ...(process.env.NODE_ENV === "development" ? ["/mockup"] : [])];
 
 export async function middleware(request: NextRequest) {
