@@ -1261,7 +1261,7 @@ function LinhaCompra({ c, sel, toggleSel, podeAprovar, podeEditar, ehAdmin, setS
     <>
       <div className={`pcrow ${sel.has(c.key) ? "sel" : ""}`}>
         <input type="checkbox" className="cb" checked={sel.has(c.key)} onChange={() => toggleSel(c.key)} />
-        <div className="desc">{c.desc}
+        <div className="desc item-nome" title={c.desc}>{c.desc}
           <small>{c.rcNumero ? `RC ${c.rcNumero} · ` : ""}{c.qtd} × {$(c.unit)}</small></div>
         <div className="desc">{c.fornecedor || <span style={{ color: "var(--ww-text-faint)" }}>—</span>}<small>{c.categoria}</small></div>
         <div style={{ textAlign: "right" }} className="num">
@@ -1405,7 +1405,7 @@ function GruposRc({ compras, p, sel, toggleSel, podeAprovar, podeEditar, ehAdmin
                 <div key={c.key} className={`it ${sel.has(c.key) ? "sel" : ""}`}>
                   <input type="checkbox" className="cb" checked={sel.has(c.key)} onChange={() => toggleSel(c.key)} />
                   <span>{rc ? <span className={`rcnum ${idx ? "rep" : ""}`}>RC {rc}</span> : <span className="rcnum vazio">sem RC</span>}</span>
-                  <div className="desc">{c.desc}
+                  <div className="desc item-nome" title={c.desc}>{c.desc}
                     <small>{c.qtd} × {$(c.unit)} = <b style={{ color: "var(--ww-text-muted)" }}>{$(c.rcTotal)}</b></small></div>
                   <MatCelula c={c} podeEditar={podeEditar} marcar={marcarMaterial} />
                   <div style={{ textAlign: "right" }} className="num">{idx === 0 ? <b>{$(totalRc)}</b> : null}</div>
