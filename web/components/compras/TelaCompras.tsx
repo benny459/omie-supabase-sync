@@ -275,8 +275,9 @@ export default function TelaCompras() {
         {p.enviadoEm && naColPc ? <div className="ent">✉ enviado {dBR(p.enviadoEm.slice(0, 10), true)}
           {p.enviadoMeio === "whatsapp" ? " · WhatsApp" : p.enviadoMeio === "email" ? " · e-mail" : ""}</div> : null}
         {["40", "60", "80"].includes(p.etapa) && (nfsDele.length ? nfsDele.map((n) => (
-          <div key={n.chave} className="nfl" title={`${n.como ?? ""}${n.por ? " · " + n.por : ""}`}>📄 NF-e <span className="num">{n.n}</span> · {money(n.valor)}
-            <span className="faint">· {(n.como ?? "casada").replace(/^casada automaticamente por /, "auto · ")} {n.em ? dBR(String(n.em).slice(0, 10), true) : ""}</span>
+          <div key={n.chave} className="nfl" title={`${n.como ?? ""}${n.por ? " · " + n.por : ""}`}>
+            <span className="nfn">📄 NF-e <span className="num">{String(n.n).replace(/^0+/, "")}</span> · {money(n.valor)}</span>
+            <span className="faint como">{(n.como ?? "casada").replace(/^casada automaticamente por /, "auto · ").split(" · ").slice(0, 2).join(" · ")}</span>
             <button className="linkbtn" title="Desfazer o casamento desta NF com o pedido" onClick={(ev) => { ev.stopPropagation();
               setConfirma({ texto: `Desfazer o casamento da NF-e ${n.n} com o pedido ${p.num}? A NF volta para "NF sem pedido".`,
                 acao: async () => { await acaoNf({ acao: "nf_descasar", chave: n.chave, pedido: p.id }, `NF-e ${n.n} descasada do pedido ${p.num}`); } }); }}>desfazer</button>
