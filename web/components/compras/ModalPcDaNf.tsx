@@ -75,8 +75,8 @@ export default function ModalPcDaNf({ chave, refs, onClose, onGerado, toast }: {
               <div><small className="faint">NF-e</small><b className="num">Nº {d.numero}</b><span className="faint" style={{ fontSize: 12 }}>emitida {dBR(d.emissao, true)} · {money(Number(d.valorNf))}</span></div>
             </div>
 
-            <div className="tbl-wrap" style={{ maxHeight: 260 }}>
-              <table className="grid">
+            <div className="pcnf-tabw">
+              <table className="pcnf-tab">
                 <thead><tr><th>Item</th><th>NCM</th><th className="r">Qtd</th><th className="r">Valor unit.</th><th className="r">Desc.</th><th className="r">IPI</th><th className="r">ST</th><th className="r">Total</th></tr></thead>
                 <tbody>
                   {d.itens.map((i, k) => (
