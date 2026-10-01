@@ -81,7 +81,7 @@
 .op .section-h{display:flex;justify-content:space-between;align-items:center;margin:24px 0 10px;color:var(--ww-text-muted);font-size:12.5px}
 .op .pv{background:var(--ww-panel);border:1px solid var(--ww-border);border-radius:12px;margin-bottom:8px;overflow:hidden}
 .op .pv.open{border-color:var(--ww-border-strong)}
-.op .pvh{display:grid;grid-template-columns:22px 124px minmax(170px,1fr) 270px 78px 390px;gap:14px;align-items:center;padding:12px 14px;cursor:pointer}
+.op .pvh{display:grid;grid-template-columns:22px 110px minmax(170px,1fr) 270px 78px 196px 390px;gap:14px;align-items:center;padding:12px 14px;cursor:pointer}
 .op .pvh:hover{background:var(--ww-row-hover)}
 .op .chev{color:var(--ww-text-faint);transition:transform .15s}
 .op .pv.open .chev{transform:rotate(90deg)}
@@ -323,7 +323,7 @@
 .op .kcard .t span:last-child{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:right}
 .op .chev{font-size:14px}
 /* Projeto tem nome longo: coluna do identificador mais larga */
-.op.op-projetos .pvh{grid-template-columns:22px 190px minmax(170px,1fr) 270px 78px 390px}
+.op.op-projetos .pvh{grid-template-columns:22px 190px minmax(170px,1fr) 270px 78px 196px 390px}
 @media (max-width:1180px){.op.op-projetos .pvh{grid-template-columns:22px 190px 1fr 390px}}
 /* Avulsos: RC em destaque · item · valor da RC · PC · fornecedor · previsão · status */
 .op .pcrow.rcrow{grid-template-columns:22px 92px minmax(200px,1.6fr) 118px 118px minmax(140px,1fr) 140px 160px 76px}
@@ -403,3 +403,37 @@
 .op .svc-d.late{color:var(--ww-crit)}
 .op .svc-h{color:var(--ww-text-faint);border-bottom:1px dotted var(--ww-text-faint);cursor:help}
 .op .svc-f{margin-left:auto;color:var(--ww-text-faint);font-size:11px}
+/* PCs Standalone não tem serviço: sem a coluna */
+.op.op-pcs .pvh{grid-template-columns:22px 110px minmax(170px,1fr) 270px 78px 390px}
+/* Títulos das colunas da lista (mesma grade do cabeçalho do pedido) */
+.op .pvh.pvcols{cursor:default;padding-top:4px;padding-bottom:6px;font-size:10.5px;text-transform:uppercase;letter-spacing:.07em;color:var(--ww-text-faint)}
+.op .pvh.pvcols:hover{background:none}
+@media (max-width:1180px){.op .pvh.pvcols{display:none}.op .pvh > .srv{grid-column:2 / -1;order:6}}
+/* Alarmes como ícones: letra + símbolo; texto no hover, clique filtra */
+.op .alms{display:inline-flex;gap:4px;align-items:center;flex-wrap:wrap}
+.op .alm{position:relative;display:inline-flex;align-items:center;justify-content:center;gap:1px;height:22px;min-width:26px;padding:0 5px;border-radius:6px;font-size:12px;line-height:1;border:1px solid transparent;cursor:default;user-select:none}
+.op .alm b{font-weight:800}
+.op .alm i{font-style:normal;font-size:9.5px;margin-top:-7px;margin-left:1px}
+.op .alm.clk{cursor:pointer}
+.op .alm.clk:hover{filter:brightness(1.25);transform:translateY(-1px)}
+.op .alm.crit{background:var(--ww-crit-soft);color:var(--ww-crit-text);border-color:rgba(239,68,68,.35)}
+.op .alm.warn{background:rgba(245,166,35,.12);color:var(--ww-warn);border-color:rgba(245,166,35,.35)}
+.op .alm.violet{background:var(--ww-violet-soft);color:var(--ww-violet-text)}
+.op .alm.mute{background:var(--ww-border);color:var(--ww-text-muted)}
+.op .alm.ok{background:var(--ww-ok-soft);color:var(--ww-ok)}
+.op .alm.okb{background:var(--ww-ok);color:#06281a;border-color:var(--ww-ok)}
+.op .chip .alm{height:18px;min-width:22px;font-size:10.5px;margin-right:2px}
+.op .nf-num{font-size:11.5px;color:var(--ww-ok);font-weight:600;white-space:nowrap}
+/* "Pode faturar": a barra inteira do pedido em verde discreto + filete */
+.op .pv.podefat{border-color:rgba(52,199,123,.45)}
+.op .pv.podefat > .pvh{background:linear-gradient(90deg,rgba(52,199,123,.13),rgba(52,199,123,.04) 60%);box-shadow:inset 4px 0 0 var(--ww-ok)}
+.op .pv.podefat > .pvh:hover{background:linear-gradient(90deg,rgba(52,199,123,.18),rgba(52,199,123,.07) 60%)}
+/* Coluna Serviço no cabeçalho do pedido */
+.op .srv{display:flex;flex-direction:column;gap:4px;min-width:0;font-size:12px;cursor:help}
+.op .srv.vazio{color:var(--ww-text-faint);align-items:flex-start;cursor:default}
+.op .srv-l1{display:flex;align-items:center;gap:6px;min-width:0}
+.op .srv-l1 .st{font-size:11px;padding:2px 7px}
+.op .srv-l1 .svc-os{font-size:11.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.op .srv-l2{color:var(--ww-text-muted);font-size:11.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.op .srv-l2.late{color:var(--ww-crit)}
+.op .srv-l2 .svc-h{color:var(--ww-text-faint)}

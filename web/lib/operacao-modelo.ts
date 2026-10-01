@@ -323,7 +323,7 @@ export function servicoDoPedido(p: Pedido): Servico | null {
     const podeFat = cf.ww_pode_faturar === true;
     const [rotulo, tom]: [string, Servico["tom"]] =
       st === "Cancelada" ? ["Cancelada", "mute"]
-      : st === "Concluída" ? (podeFat ? ["Pode faturar", "ok"] : ["OS pendente", "warn"])
+      : st === "Concluída" ? (podeFat ? ["Concluída", "ok"] : ["OS pendente", "warn"])
       : st === "Em Execução" ? ["Em execução", "info"]
       : st === "Parcial" ? ["Parcial", "info"]
       : st === "Aberta" ? ["Aberta", "mute"]
@@ -365,7 +365,8 @@ export function financeiro(p: Pedido) {
 export type Escopo = "aberto" | "faturado" | "todos";
 export type Periodo = "tudo" | "7" | "30" | "vencidos";
 export type Rapida = "todos" | "minha" | "atrasados" | "sem_pc" | "alarme"
-  | "serv_exec" | "serv_agend" | "serv_semos" | "pode_fat";
+  | "serv_exec" | "serv_agend" | "serv_semos" | "pode_fat"
+  | "venda_atraso" | "compra_atraso" | "recusa" | "sem_projeto";
 export type Filtros = {
   tipo?: string; etapaVenda?: string; projeto?: string;
   estado?: Estado; fornecedor?: string; categoria?: string;
@@ -399,6 +400,10 @@ export function passa(p: Pedido, c: Compra | null, q: string, per: Periodo, f: F
   if (rap === "atrasados" && !p.flags.some((x) => x.t === "venda em atraso" || x.t === "compra em atraso")) return false;
   if (rap === "sem_pc" && !p.flags.some((x) => x.t === "sem PC")) return false;
   if (rap === "alarme" && !p.flags.some((x) => x.t !== "sem PC")) return false;
+  if (rap === "venda_atraso" && !p.flags.some((x) => x.t === "venda em atraso")) return false;
+  if (rap === "compra_atraso" && !p.flags.some((x) => x.t === "compra em atraso")) return false;
+  if (rap === "recusa" && !p.flags.some((x) => x.t === "recusa a resolver")) return false;
+  if (rap === "sem_projeto" && !p.flags.some((x) => x.t === "sem projeto")) return false;
   if (rap.startsWith("serv_") || rap === "pode_fat") {
     const sv = servicoDoPedido(p);
     if (rap === "serv_exec" && sv?.st !== "Concluída") return false;

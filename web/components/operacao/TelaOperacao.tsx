@@ -265,6 +265,9 @@ export default function TelaOperacao({ modulo, title, rows: rowsIniciais, parcia
       sem_pc: noScope.filter((p) => p.flags.some((f) => f.t === "sem PC")).length,
       alarme: noScope.filter((p) => p.flags.some((f) => f.t !== "sem PC")).length,
       pode_fat: noScope.filter((p) => p.flags.some((f) => f.t === "pode faturar")).length,
+      venda_atraso: noScope.filter((p) => p.flags.some((f) => f.t === "venda em atraso")).length,
+      compra_atraso: noScope.filter((p) => p.flags.some((f) => f.t === "compra em atraso")).length,
+      recusa: noScope.filter((p) => p.flags.some((f) => f.t === "recusa a resolver")).length,
       serv_exec: svs.filter((x) => x?.st === "Concluída").length,
       serv_agend: svs.filter((x) => x?.os && x.st !== "Concluída" && x.st !== "Cancelada").length,
       serv_semos: svs.filter((x) => x && !x.os && !x.st).length,
@@ -526,18 +529,25 @@ export default function TelaOperacao({ modulo, title, rows: rowsIniciais, parcia
 
       {/* ── visões rápidas + salvas ── */}
       <div className="qv">
-        {([["todos", "Todos", rapidas.todos, ""], ["minha", "Minha aprovação", rapidas.minha, "var(--ww-warn)"],
-           ["atrasados", "Atrasados", rapidas.atrasados, "var(--ww-crit)"], ["sem_pc", "Sem PC", rapidas.sem_pc, "var(--ww-text-faint)"],
-           ["alarme", "Com alarme", rapidas.alarme, "var(--ww-violet)"],
-           ["pode_fat", "Pode faturar", rapidas.pode_fat, "var(--ww-ok)"],
-           ["serv_exec", "Serviço executado", rapidas.serv_exec, "var(--ww-ok)"],
-           ["serv_agend", "Serviço agendado", rapidas.serv_agend, "var(--ww-info)"],
-           ["serv_semos", "Sem OS", rapidas.serv_semos, "var(--ww-warn)"]] as const)
-          .filter(([k]) => !(modulo === "pcs" && k === "sem_pc"))
+        {([
+          ["todos", "Todos", rapidas.todos, null],
+          ["pode_fat", "Pode faturar", rapidas.pode_fat, ALARME_PODE_FAT],
+          ["venda_atraso", "Venda em atraso", rapidas.venda_atraso, ALARMES["venda em atraso"]],
+          ["compra_atraso", "Compra em atraso", rapidas.compra_atraso, ALARMES["compra em atraso"]],
+          ["minha", "Minha aprovação", rapidas.minha, ALARMES["aprovação pendente"]],
+          ["recusa", "Recusados", rapidas.recusa, ALARMES["recusa a resolver"]],
+          ["sem_pc", "Sem PC", rapidas.sem_pc, ALARMES["sem PC"]],
+          ["serv_exec", "Serviço executado", rapidas.serv_exec, null],
+          ["serv_agend", "Serviço agendado", rapidas.serv_agend, null],
+          ["serv_semos", "Sem OS", rapidas.serv_semos, null],
+        ] as [Rapida, string, number, AlarmeIcone | null][])
+          .filter(([k]) => !(modulo === "pcs" && (k === "sem_pc" || k === "venda_atraso" || k === "pode_fat")))
           .filter(([k]) => modulo === "avulsos" || !(k === "pode_fat" || k.startsWith("serv_")))
-          .map(([k, l, n, cor]) => (
-            <button key={k} className={`chip ${rapida === k ? "on" : ""}`} onClick={() => setRapida(k)}>
-              {cor && <span className="pip" style={{ background: cor }} />}{l} <b>{n}</b>
+          .filter(([k, , n]) => k === "todos" || k === rapida || n > 0)
+          .map(([k, l, n, ic]) => (
+            <button key={k} className={`chip ${rapida === k ? "on" : ""}`} onClick={() => setRapida(rapida === k ? "todos" : k)}
+              title={ic ? ic.desc : undefined}>
+              {ic ? <Alm a={ic} chip /> : k.startsWith("serv_") ? <span className="pip" style={{ background: "#fb923c" }} /> : null}{l} <b>{n}</b>
             </button>
           ))}
         <span className="spacer" />
@@ -607,6 +617,12 @@ export default function TelaOperacao({ modulo, title, rows: rowsIniciais, parcia
 
       {vista === "lista" && (
         <>
+          {visiveis.length > 0 && (
+            <div className="pvh pvcols">
+              <span /><span>{rotulo}</span><span>{modulo === "pcs" ? "Fornecedor · alertas" : "Cliente · alertas"}</span><span>Etapas</span><span>Prazo</span>
+              {modulo !== "pcs" && <span>Serviço</span>}<span style={{ textAlign: "center" }}>RC · PC · PV · M.B.</span>
+            </div>
+          )}
           {visiveis.slice(0, limite).map(({ p, compras }) => (
             <CartaoPedido key={p.id} p={p} compras={compras} modulo={modulo} aberto={abertos.has(p.id)}
               onToggle={() => toggleAberto(p.id)} nomeId={nomeId(p)} $={$}
@@ -616,7 +632,8 @@ export default function TelaOperacao({ modulo, title, rows: rowsIniciais, parcia
               liberacao={modulo === "avulsos" ? { ativo: liberacao.has(p.id), pode: podeLiberar, alternar: () => void liberar(p) } : null}
               excluirPv={ehAdmin && modulo !== "pcs" ? () => void excluirPv(p) : null}
               statusLote={(lista, st) => { if (lista.length === 1) void setStatus(lista[0], st); else void emMassa(st, lista); }}
-              incluirPc={(rc, itens, numero) => incluirPc(p, rc, itens, numero)} />
+              incluirPc={(rc, itens, numero) => incluirPc(p, rc, itens, numero)}
+              filtrarRapida={(r) => { setRapida(r); window.scrollTo({ top: 0, behavior: "smooth" }); }} />
           ))}
           {visiveis.length > limite && (
             <div style={{ textAlign: "center", margin: 14 }}>
@@ -771,28 +788,61 @@ function TipoVenda({ t }: { t: string }) {
   return <span className={`tipo ${tv === "Mix" ? "mix" : tv === "Serviço" ? "serv" : "merc"}`}>{tv}</span>;
 }
 
-/** Faixa do serviço — uma vez por pedido. Só leitura: quem manda é o app de
- *  serviços (OS, status, previsão), como na tela antiga. */
-function FaixaServico({ sv }: { sv: Servico }) {
+/** Alarmes do pedido como ícone (letra + símbolo, cor pelo tipo); o texto
+ *  aparece ao passar o mouse e o clique filtra a lista por aquele alarme. */
+type AlarmeIcone = { l: string; s: string; tom: "crit" | "warn" | "violet" | "mute" | "ok" | "okb"; desc: string; rap?: Rapida };
+const ALARMES: Record<string, AlarmeIcone> = {
+  "venda em atraso": { l: "V", s: "⚠", tom: "crit", desc: "Venda em atraso — o prazo da venda já passou", rap: "venda_atraso" },
+  "compra em atraso": { l: "C", s: "⚠", tom: "crit", desc: "Compra em atraso — material com previsão vencida", rap: "compra_atraso" },
+  "aprovação pendente": { l: "A", s: "…", tom: "warn", desc: "PC aguardando aprovação", rap: "minha" },
+  "recusa a resolver": { l: "R", s: "✕", tom: "crit", desc: "PC recusado — falta resolver", rap: "recusa" },
+  "sem PC": { l: "P", s: "∅", tom: "mute", desc: "Nenhum pedido de compra emitido ainda", rap: "sem_pc" },
+  "sem projeto": { l: "J", s: "?", tom: "violet", desc: "Venda sem projeto no Omie", rap: "sem_projeto" },
+  "PV incompleto": { l: "I", s: "!", tom: "violet", desc: "PV/OS incompleto no Omie" },
+  "defasado Omie": { l: "O", s: "↻", tom: "violet", desc: "Dados defasados em relação ao Omie — rode o Sync" },
+};
+const ALARME_PODE_FAT: AlarmeIcone = { l: "F", s: "$", tom: "okb", desc: "Pode faturar — falta só emitir a NF de saída", rap: "pode_fat" };
+function alarmeFaturamento(p: Pedido): AlarmeIcone {
+  if (p.faturado) {
+    if (p.etapaVenda === "Cancelado" && !p.nfSaida) return { l: "F", s: "✕", tom: "mute", desc: "Venda cancelada" };
+    return { l: "F", s: "✓", tom: "ok", desc: `Faturado — NF de saída ${p.nfSaida || "emitida"}${p.fatEm ? ` em ${dBR(p.fatEm)}` : ""}` };
+  }
+  if (p.flags.some((f) => f.t === "pode faturar")) return ALARME_PODE_FAT;
+  return { l: "F", s: "○", tom: "warn", desc: "Não faturado — NF de saída ainda não emitida" };
+}
+function Alm({ a, onFiltrar, chip }: { a: AlarmeIcone; onFiltrar?: (r: Rapida) => void; chip?: boolean }) {
+  const clicavel = !!(a.rap && onFiltrar && !chip);
+  return (
+    <span className={`alm ${a.tom} ${clicavel ? "clk" : ""}`} title={chip ? undefined : `${a.desc}${clicavel ? " · clique para filtrar" : ""}`}
+      onClick={clicavel ? (e) => { e.stopPropagation(); onFiltrar!(a.rap!); } : undefined}>
+      <b>{a.l}</b><i>{a.s}</i>
+    </span>
+  );
+}
+
+/** Serviço como coluna do pedido (visível fechado): OS com link, status no
+ *  critério da tela antiga, previsão/atraso e histórico. Só leitura — quem
+ *  manda é o app de serviços. */
+function CelServico({ sv }: { sv: Servico | null }) {
+  if (!sv) return <div className="srv vazio" title="Pedido sem serviço">—</div>;
   const d = sv.prev != null && sv.st !== "Concluída" && sv.st !== "Cancelada" ? diasAte(sv.prev) : null;
   const hist = sv.historico.length
-    ? sv.historico.map((h) => `${h.data ? dBR(dataMs(h.data)) : "sem data"} · ${dBR(dataMs(h.em))}${h.por ? ` por ${h.por}` : ""}`).join("\n")
+    ? "Mudanças da previsão:\n" + sv.historico.map((h) => `• ${h.data ? dBR(dataMs(h.data)) : "sem data"} (em ${dBR(dataMs(h.em))}${h.por ? ` por ${h.por}` : ""})`).join("\n")
     : "";
   return (
-    <div className="svc" onClick={(e) => e.stopPropagation()}>
-      <span className="svc-k">Serviço</span>
-      {sv.os
-        ? <a className="mono svc-os" href={`https://app.waterworks.com.br/ordens-de-servico/${encodeURIComponent(sv.os)}`} target="_blank" rel="noopener noreferrer" title="Abrir a OS no app de serviços">{sv.os.replace(/-/g, "")} ↗</a>
-        : <span className="svc-os mute">sem OS vinculada</span>}
-      <span className={`st svc-st ${sv.tom}`}>{sv.rotulo}</span>
-      {sv.st === "Concluída" && sv.concluidoEm && <span className="svc-d">concluída em {dBR(sv.concluidoEm)}</span>}
-      {sv.prev != null && sv.st !== "Concluída" && (
-        <span className={`svc-d ${d != null && d < 0 ? "late" : ""}`}>
-          previsão {dBR(sv.prev)}{d != null && d < 0 ? <b> · ⚠ {-d}d de atraso</b> : null}
-        </span>
-      )}
-      {sv.alteracoes > 0 && <span className="svc-h" title={hist || undefined}>data alterada {sv.alteracoes}×</span>}
-      <span className="svc-f">vem do app de serviços</span>
+    <div className="srv" onClick={(e) => e.stopPropagation()}
+      title={[sv.st === "Concluída" ? (sv.rotulo === "Concluída" ? "OS concluída e liberada no app de serviços" : "OS concluída, mas ainda não liberada para faturar no app de serviços") : `OS ${sv.rotulo}`, hist, "Vem do app de serviços"].filter(Boolean).join("\n\n")}>
+      <div className="srv-l1">
+        <span className={`st svc-st ${sv.tom}`}>{sv.rotulo}</span>
+        {sv.os
+          ? <a className="mono svc-os" href={`https://app.waterworks.com.br/ordens-de-servico/${encodeURIComponent(sv.os)}`} target="_blank" rel="noopener noreferrer" title="Abrir a OS no app de serviços">{sv.os.replace(/-/g, "")} ↗</a>
+          : <span className="svc-os mute">sem OS</span>}
+      </div>
+      <div className={`srv-l2 ${d != null && d < 0 ? "late" : ""}`}>
+        {sv.st === "Concluída" ? (sv.concluidoEm ? `concluída ${dBR(sv.concluidoEm)}` : "concluída")
+          : sv.prev != null ? <>prev. {dBR(sv.prev)}{d != null && d < 0 ? <b> ⚠ {-d}d</b> : null}</> : "sem previsão"}
+        {sv.alteracoes > 0 && <span className="svc-h"> · {sv.alteracoes}×</span>}
+      </div>
     </div>
   );
 }
@@ -873,12 +923,13 @@ function CartaoPedido(props: {
   excluirPv: (() => void) | null;
   statusLote: (lista: Compra[], status: string) => void;
   incluirPc: (rc: string, itens: Compra[], numero: string) => Promise<void>;
+  filtrarRapida: (r: Rapida) => void;
 }) {
   const { p, compras, modulo, aberto, $ } = props;
   const d = diasAte(p.lim);
   const empresa = s(p.bucket.rows[0]?.empresa) || "SF";
   return (
-    <div className={`pv ${aberto ? "open" : ""} ${p.faturado ? "isfat" : ""}`}>
+    <div className={`pv ${aberto ? "open" : ""} ${p.faturado ? "isfat" : ""} ${!p.faturado && p.flags.some((f) => f.t === "pode faturar") ? "podefat" : ""}`}>
       <div className="pvh" onClick={props.onToggle}>
         <span className="chev">▸</span>
         <div className="pvid">{props.nomeId}<small>{p.compras.length} compra{p.compras.length === 1 ? "" : "s"}</small></div>
@@ -887,8 +938,11 @@ function CartaoPedido(props: {
         <div className="cli">
           <div className="cli-l1">
             <span className="cli-nome" title={p.cliente}>{p.cliente || "—"}</span>
-            {modulo !== "pcs" && <NfSaida p={p} />}
-            {p.flags.map((f) => <span key={f.t} className={`tag ${f.tom}`}>{f.t}</span>)}
+            <span className="alms" onClick={(e) => e.stopPropagation()}>
+              {modulo !== "pcs" && <Alm a={alarmeFaturamento(p)} onFiltrar={props.filtrarRapida} />}
+              {p.flags.filter((f) => f.t !== "pode faturar").map((f) => <Alm key={f.t} a={ALARMES[f.t] ?? { l: "!", s: "", tom: "mute", desc: f.t }} onFiltrar={props.filtrarRapida} />)}
+            </span>
+            {p.faturado && p.nfSaida && <span className="nf-num">NF {p.nfSaida}</span>}
           </div>
           <div className="cli-l2">
             {modulo === "pcs" ? <span className="tipo">PC avulso</span> : <TipoVenda t={p.tipo} />}
@@ -901,6 +955,7 @@ function CartaoPedido(props: {
           {p.lim ? dBR(p.lim).slice(0, 5) : "—"}
           {d != null && !p.faturado && <small className={d < 0 ? "late" : d <= 7 ? "soon" : ""}>{d < 0 ? `${-d}d atrasado` : `${d}d de folga`}</small>}
         </div>
+        {modulo !== "pcs" && <CelServico sv={servicoDoPedido(p)} />}
         <FinStrip p={p} $={$} />
       </div>
 
@@ -915,7 +970,6 @@ function CartaoPedido(props: {
 
       {aberto && (
         <div className="pcs">
-          {modulo !== "pcs" && (() => { const sv = servicoDoPedido(p); return sv ? <FaixaServico sv={sv} /> : null; })()}
           {modulo !== "pcs" ? (
             <GruposRc {...props} />
           ) : (

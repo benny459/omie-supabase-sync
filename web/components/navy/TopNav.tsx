@@ -140,7 +140,7 @@ export default function TopNav({ userEmail }: { userEmail?: string | null }) {
   const labelGrupo = (g: Grupo) => GRUPOS.find((x) => x.id === g)!;
 
   return (
-    <header style={{ position: "sticky", top: 0, zIndex: 30, padding: "14px 28px 0" }}>
+    <header style={{ position: "sticky", top: 0, zIndex: 30, padding: "14px 28px 0", background: "var(--ww-bg)" }}>
       <div style={{
         display: "flex", alignItems: "center", gap: 18, flexWrap: "wrap",
         padding: "10px 16px", borderRadius: "var(--radius-panel)",
