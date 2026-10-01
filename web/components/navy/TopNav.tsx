@@ -35,6 +35,21 @@ export default function TopNav({ userEmail }: { userEmail?: string | null }) {
 
   useEffect(() => { setPendingHref(null); }, [pathname]);
 
+  /* Selo vermelho em Compras: NF-e que chegaram sem pedido (não pagar até casar). */
+  const [nfSemPedido, setNfSemPedido] = useState<{ n: number; valor: number }>({ n: 0, valor: 0 });
+  useEffect(() => {
+    if (!canViewArea(perms, "erp")) return;
+    let vivo = true;
+    fetch("/api/compras/alerta").then((r) => (r.ok ? r.json() : null))
+      .then((j) => { if (vivo && j && typeof j.n === "number") setNfSemPedido({ n: j.n, valor: Number(j.valor) || 0 }); }).catch(() => null);
+    return () => { vivo = false; };
+  }, [pathname, perms]);
+  const seloNf = (titulo?: boolean) => nfSemPedido.n > 0 ? (
+    <span title={titulo ? `${nfSemPedido.n} NF-e sem pedido · ${nfSemPedido.valor.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })} — não pagar até casar` : undefined}
+      style={{ marginLeft: 6, minWidth: 18, height: 18, padding: "0 5px", borderRadius: 999, display: "inline-grid", placeItems: "center",
+        background: "var(--ww-crit, #DC2626)", color: "#fff", fontSize: 11, fontWeight: 700, lineHeight: 1 }}>{nfSemPedido.n}</span>
+  ) : null;
+
   const todos = useMemo(() => [...MODULES, ...FINANCEIRO, ...BI], []);
 
   /* Prefetch sob demanda. Herdei do sidebar um prefetch de TODAS as rotas do
@@ -172,7 +187,7 @@ export default function TopNav({ userEmail }: { userEmail?: string | null }) {
                   background: activa ? "var(--ww-accent-soft)" : "transparent",
                   boxShadow: activa ? "var(--ww-glow-chip)" : "none",
                 }}>
-                {labelGrupo(a).label}
+                {labelGrupo(a).label}{a === "compras" && seloNf(true)}
               </button>
             );
           })}
@@ -284,7 +299,7 @@ export default function TopNav({ userEmail }: { userEmail?: string | null }) {
               <span style={{ display: "grid", placeItems: "center", width: 18, height: 18 }}>
                 {m.icon}
               </span>
-              {m.label}
+              {m.label}{m.href === "/erp/compras" && seloNf(true)}
             </button>
           );
         })}

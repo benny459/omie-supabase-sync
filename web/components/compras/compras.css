@@ -298,3 +298,32 @@
 .cmp .segap button.on.todos { background: var(--sunken); color: var(--tx); }
 .cmp .segap button.on.pendente { background: color-mix(in srgb, #8B5CF6 18%, transparent); color: color-mix(in srgb, #7C3AED 80%, var(--tx)); }
 .cmp .segap button.on.aprovado { background: color-mix(in srgb, #22C55E 18%, transparent); color: color-mix(in srgb, #15803D 80%, var(--tx)); }
+
+/* ── NF sem pedido (alarme, cartões vermelhos, caixa) ── */
+.cmp .alarme-nf { display: flex; align-items: center; gap: 10px; width: 100%; padding: 11px 16px; border-radius: 12px; cursor: pointer;
+  border: 1px solid color-mix(in srgb, var(--ww-crit) 55%, transparent); background: var(--ww-crit-soft); color: var(--ww-crit-text);
+  font: inherit; font-size: 14px; font-weight: 700; text-align: left; }
+.cmp .alarme-nf:hover { border-color: var(--ww-crit); }
+.cmp .alarme-nf small { font-weight: 500; margin-left: auto; opacity: .85; }
+.cmp .chipf.semped { border-color: color-mix(in srgb, var(--ww-crit) 55%, transparent); color: var(--ww-crit-text); }
+.cmp .card.nfsem { border-left: 4px solid var(--ww-crit); background: color-mix(in srgb, var(--ww-crit) 9%, var(--panel)); cursor: default; }
+.cmp .card.nfsem .acts { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+.cmp .card.nfsem .acts .btn { height: 24px; padding: 0 9px; font-size: 11.5px; }
+.cmp .badge-ap.crit { background: var(--ww-crit); color: #fff; }
+.cmp .nfl { display: flex; align-items: center; gap: 6px; font-size: 11.5px; color: var(--tx-2); margin-top: 3px; }
+.cmp .nfl .num { font-weight: 600; }
+.cmp .nfl .linkbtn { display: inline; font-size: 11px; margin-left: auto; }
+.cmp .modal.nfsp { width: min(1040px, 100%); }
+.cmp .nfsp-body { display: grid; grid-template-columns: 280px minmax(0, 1fr); min-height: 380px; }
+@media (max-width: 760px) { .cmp .nfsp-body { grid-template-columns: 1fr; } }
+.cmp .nfsp-lista { list-style: none; margin: 0; padding: 8px; border-right: 1px solid var(--line); overflow: auto; max-height: 70vh; }
+.cmp .nfsp-lista button { display: grid; grid-template-columns: 1fr auto; gap: 2px 8px; width: 100%; text-align: left; padding: 9px 10px;
+  border-radius: 9px; border: 1px solid transparent; background: transparent; color: var(--tx); font: inherit; font-size: 13px; cursor: pointer; }
+.cmp .nfsp-lista button small { grid-column: 1 / -1; color: var(--tx-3); font-size: 11.5px; }
+.cmp .nfsp-lista button small.sug { color: var(--ww-crit-text); }
+.cmp .nfsp-lista button.on { border-color: color-mix(in srgb, var(--ww-crit) 55%, transparent); background: var(--ww-crit-soft); }
+.cmp .nfsp-det { padding: 14px 18px; overflow: auto; max-height: 70vh; }
+.cmp .nfsp-det h4 { margin: 16px 0 6px; font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--tx-3); }
+.cmp .nfsp-cab { display: grid; gap: 3px; }
+.cmp .nfsp-sug { display: flex; align-items: center; gap: 10px; justify-content: space-between; padding: 8px 10px; border: 1px solid var(--line);
+  border-radius: 9px; margin-bottom: 6px; font-size: 13px; background: var(--panel); }

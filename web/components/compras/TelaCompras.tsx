@@ -16,6 +16,7 @@ import { CabecalhoTela, PaginaNavy, Carregando, Aviso } from "@/components/navy/
 import FolhaPedido from "./FolhaPedido";
 import FolhaRecebimento from "./FolhaRecebimento";
 import ModalEnviar from "./ModalEnviar";
+import CaixaNfSemPedido, { type NfSemPedido, type NfDoPedido } from "./CaixaNfSemPedido";
 import {
   ETAPAS, ETAPA, ETAPA_AJUDA, APROV_LABEL, money, dBR, rel, hoje, diffDias, situacao, atrasado, rcAtendida,
   type PedidoLista, type Etapa, type Refs,
@@ -33,6 +34,10 @@ export default function TelaCompras() {
   const emp = "SF";
   const [lista, setLista] = useState<PedidoLista[] | null>(null);
   const [nfSug, setNfSug] = useState<Record<string, number>>({});
+  const [nfsPed, setNfsPed] = useState<Record<string, NfDoPedido[]>>({});
+  const [semPedido, setSemPedido] = useState<NfSemPedido[]>([]);
+  const [soSemPedido, setSoSemPedido] = useState(false);
+  const [caixa, setCaixa] = useState<{ foco: string | null } | null>(null);
   const [erro, setErro] = useState<string | null>(null);
   const [refs, setRefs] = useState<Refs | null>(null);
   const [historico, setHistorico] = useState("365");
@@ -81,7 +86,7 @@ export default function TelaCompras() {
       const r = await fetch(`/api/compras?desde=${historico}`);
       const j = await r.json();
       if (!r.ok) throw new Error(j.error ?? r.statusText);
-      setLista(j.pedidos); setNfSug(j.nfSug ?? {}); setErro(null);
+      setLista(j.pedidos); setNfSug(j.nfSug ?? {}); setNfsPed(j.nfsPorPedido ?? {}); setSemPedido(j.semPedido ?? []); setErro(null);
     } catch (e) { setErro((e as Error).message); }
   }, [historico]);
   useEffect(() => { carregar(); }, [carregar]);
@@ -99,6 +104,8 @@ export default function TelaCompras() {
     return () => document.removeEventListener("mousedown", fechar);
   }, []);
 
+  const idsSugeridos = useMemo(() => new Set(semPedido.flatMap((n) => (n.sugestoes ?? []).map((x) => x.pedidoId))), [semPedido]);
+  const totSemPedido = semPedido.reduce((a, n) => a + Number(n.valor || 0), 0);
   const parcDesc = useCallback((cod?: string) => refs?.parcelas.find((p) => p.cod === cod)?.desc ?? cod ?? "", [refs]);
   const todos = lista ?? [];
   const filtrados = useMemo(() => {
@@ -110,6 +117,7 @@ export default function TelaCompras() {
       if (soAtraso && !atrasado(p)) return false;
       if (soNf && !nfSug[p.id]) return false;
       if (origem && p.origem !== origem) return false;
+      if (soSemPedido && !idsSugeridos.has(p.id)) return false;
       if (t) {
         const hay = [p.num, p.forn, p.proj, p.cat, p.comprador, p.contato, p.nf, p.cnpj, p.pv, p.pvCliente, p.busca,
           ...(p.rcs ?? []), ...(p.cobPcs ?? [])].join(" ").toLowerCase();
@@ -117,7 +125,7 @@ export default function TelaCompras() {
       }
       return true;
     });
-  }, [todos, q, comprador, projeto, periodo, soAtraso, soNf, nfSug, origem]);
+  }, [todos, q, comprador, projeto, periodo, soAtraso, soNf, nfSug, origem, soSemPedido, idsSugeridos]);
 
   // ── ações ────────────────────────────────────────────────────────────────
   const acao = useCallback(async (body: Record<string, unknown>) => {
@@ -140,18 +148,16 @@ export default function TelaCompras() {
     if (p.etapa === cod) return;
     if (p.etapa === "20") { setFolha({ id: null, tipo: "PC", fromRC: p.id }); toast(`Novo pedido a partir da Requisição ${p.num} — escolha o fornecedor`); return; }
     if (cod === "20") { toast("Pedido não volta a ser requisição", true); return; }
-    if (cod === "15") cod = "10"; // não há mais coluna de Aprovação
-    if (cod === "10" && (p.etapa === "10" || p.etapa === "15")) return;
-    if (cod === "35" && p.aprov !== "aprovado") { toast("Só pedido APROVADO vai para Enviado ao fornecedor — aprove primeiro", true); return; }
-    if (["40", "60", "80"].includes(cod) && p.origem === "painel" && p.aprov !== "aprovado") { toast("Pedido ainda não aprovado — aprove antes de avançar", true); return; }
-    if (cod === "60" && !p.nf) { setReceb({ id: p.id }); return; }
-    if (cod === "35") { setEnviar(p.id); return; }
+    if (cod === "15" || cod === "35") cod = "10"; // aprovação e envio vivem dentro da coluna Pedido de Compra
+    if (cod === "10" && ["10", "15", "35"].includes(p.etapa)) return;
+    if (["40", "60", "80"].includes(cod) && p.aprov !== "aprovado") { toast("Pedido ainda não aprovado — só pedido aprovado avança", true); return; }
+    if (cod === "60" && !p.nf && !nfsPed[p.id]?.length) { setReceb({ id: p.id }); return; }
     try {
       await acao({ acao: "mover", id: p.id, etapa: cod });
       toast(`${p.tipo === "RC" ? "Requisição" : "Pedido"} ${p.num} movido para ${ETAPA[cod].nome}`);
       carregar();
     } catch (e) { toast((e as Error).message, true); }
-  }, [acao, carregar, toast]);
+  }, [acao, carregar, toast, nfsPed]);
 
   const duplicar = useCallback(async (id: number) => {
     try {
@@ -160,6 +166,11 @@ export default function TelaCompras() {
     } catch (e) { toast((e as Error).message, true); }
   }, [acao, carregar, toast]);
 
+
+  const acaoNf = useCallback(async (body: Record<string, unknown>, msg: string) => {
+    try { await acao(body); toast(msg); carregar(); return true; }
+    catch (e) { toast((e as Error).message, true); return false; }
+  }, [acao, carregar, toast]);
 
   const ctxAct = async (k: string, p: PedidoLista) => {
     setCtx(null);
@@ -229,22 +240,22 @@ export default function TelaCompras() {
 
   // ── kanban: cartão ───────────────────────────────────────────────────────
   const cartao = (p: PedidoLista) => {
-    const isNF = ["40", "60", "80"].includes(p.etapa) && p.nf;
+    const naColPc = p.tipo === "PC" && ["10", "15", "35"].includes(p.etapa);
+    const nfsDele = nfsPed[p.id] ?? [];
     const late = atrasado(p);
     const cond = p.tipo === "RC" ? `com ${p.nItens} ${p.nItens === 1 ? "item" : "itens"}` : (parcDesc(p.parc) || "").toLowerCase();
     return (
-      <article key={p.id} className={`card${p.tipo === "PC" && (p.etapa === "10" || p.etapa === "15") ? (p.aprov === "aprovado" ? " aprovado" : " pendente") : late ? " late" : ""}${arrasto === String(p.id) ? " dragging" : ""}`} draggable tabIndex={0}
-        style={{ ["--c" as string]: p.tipo === "PC" && (p.etapa === "10" || p.etapa === "15") ? (p.aprov === "aprovado" ? "#22C55E" : "#8B5CF6") : ETAPA[p.etapa]?.cor }}
+      <article key={p.id} className={`card${naColPc ? (p.aprov === "aprovado" ? " aprovado" : " pendente") : late ? " late" : ""}${arrasto === String(p.id) ? " dragging" : ""}`} draggable tabIndex={0}
+        style={{ ["--c" as string]: naColPc ? (p.aprov === "aprovado" ? "#22C55E" : "#8B5CF6") : ETAPA[p.etapa]?.cor }}
         aria-label={`${p.tipo} ${p.num}`}
         onClick={(e) => { if ((e.target as HTMLElement).closest(".kebab")) return; setFolha({ id: p.id }); }}
         onKeyDown={(e) => { if (e.key === "Enter") setFolha({ id: p.id }); }}
         onDragStart={(e) => { e.dataTransfer.setData("text/plain", String(p.id)); setArrasto(String(p.id)); }}
         onDragEnd={() => setArrasto(null)}>
         <div className="l1">
-          <span className="no">{p.tipo === "PC" && (p.etapa === "10" || p.etapa === "15") && (p.aprov === "aprovado"
+          <span className="no">{naColPc && (p.aprov === "aprovado"
               ? <span className="badge-ap ok">✓ Aprovado</span> : <span className="badge-ap pend">Pendente</span>)}
-            {p.tipo === "RC" ? `Requisição Nº ${p.num}` : isNF
-            ? <>NF-e Nº {String(p.nf).split(",")[0].padStart(9, "0")} <span className="faint">· Pedido {p.num}</span></> : `Pedido Nº ${p.num}`}</span>
+            {p.tipo === "RC" ? `Requisição Nº ${p.num}` : `Pedido Nº ${p.num}`}</span>
           <button className="kebab" aria-label="Ações" onClick={(e) => { e.stopPropagation(); const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
             setCtx({ p, x: Math.min(r.left, window.innerWidth - 250), y: Math.min(r.bottom + 4, window.innerHeight - 380) }); }}>⋮</button>
         </div>
@@ -256,13 +267,20 @@ export default function TelaCompras() {
           {p.tipo === "RC" && p.saldo != null && Math.abs((p.saldo ?? 0) - p.valor) > 0.005 && <span className="faint" title="Saldo a comprar / valor original">saldo de {money(p.valor)}</span>}
           <span className="muted">{cond}</span>
 </div>
-        {p.tipo === "PC" && (p.etapa === "10" || p.etapa === "15") && p.aprov === "aprovado" && (p.aprovEm || p.aprovPor) &&
+        {naColPc && p.aprov === "aprovado" && (p.aprovEm || p.aprovPor) &&
           <div className="ent">{p.aprovEm ? dBR(p.aprovEm.slice(0, 10), true) : ""}{p.aprovPor ? ` por ${p.aprovPor.split("@")[0]}` : ""}</div>}
-        {p.tipo === "PC" && (p.etapa === "10" || p.etapa === "15") && p.aprov !== "aprovado" &&
+        {naColPc && p.aprov !== "aprovado" &&
           <div className="ent"><button className="btn sm ok" style={{ height: 24, padding: "0 10px", fontSize: 11.5 }}
             onClick={(ev) => { ev.stopPropagation(); aprovar([p.id]); }}>✓ Aprovar</button></div>}
-        {p.enviadoEm && p.tipo === "PC" && p.etapa === "35" ? <div className="ent">✉ {dBR(p.enviadoEm.slice(0, 10), true)}
+        {p.enviadoEm && naColPc ? <div className="ent">✉ enviado {dBR(p.enviadoEm.slice(0, 10), true)}
           {p.enviadoMeio === "whatsapp" ? " · WhatsApp" : p.enviadoMeio === "email" ? " · e-mail" : ""}</div> : null}
+        {["40", "60", "80"].includes(p.etapa) && (nfsDele.length ? nfsDele.map((n) => (
+          <div key={n.chave} className="nfl" title={`${n.como ?? ""}${n.por ? " · " + n.por : ""}`}>📄 NF-e <span className="num">{n.n}</span> · {money(n.valor)}
+            <span className="faint">· {(n.como ?? "casada").replace(/^casada automaticamente por /, "auto · ")} {n.em ? dBR(String(n.em).slice(0, 10), true) : ""}</span>
+            <button className="linkbtn" title="Desfazer o casamento desta NF com o pedido" onClick={(ev) => { ev.stopPropagation();
+              setConfirma({ texto: `Desfazer o casamento da NF-e ${n.n} com o pedido ${p.num}? A NF volta para "NF sem pedido".`,
+                acao: async () => { await acaoNf({ acao: "nf_descasar", chave: n.chave, pedido: p.id }, `NF-e ${n.n} descasada do pedido ${p.num}`); } }); }}>desfazer</button>
+          </div>)) : p.nf ? <div className="nfl">📄 NF-e <span className="num">{String(p.nf).split(",").map((x) => x.trim()).join(", ")}</span></div> : null)}
         {nfSug[p.id] ? <div className="ent"><span className="pill p-sky">📄 NF chegou pela Focus</span><span className="faint">confira no recebimento</span></div> : null}
         {p.tipo === "RC"
           ? <div className="ent">{p.cobPcs?.length ? <><span className="pill p-sky">{p.cobDone}/{p.cobTotal} itens atendidos{p.parciais ? ` · ${p.parciais} parcial` : ""}</span> {p.cobPcs.map((n) => "PC " + n).join(", ")}</> : <span className="faint">Nenhum item comprado ainda</span>}</div>
@@ -289,7 +307,7 @@ export default function TelaCompras() {
     <div className="cmp">
       <PaginaNavy>
         <CabecalhoTela area="Compras · Pedidos" titulo="Compras — Requisições e Pedidos"
-          sub="Requisição → Pedido de Compra → Aprovação → Faturado pelo Fornecedor → Recebido → Conferido. Arraste os cartões para mudar de etapa. Pedidos novos nascem aqui; os do Omie ficam como histórico."
+          sub="Requisição → Pedido de Compra (pendente ou aprovado) → Faturado pelo Fornecedor → Recebido → Conferido. Só pedido aprovado avança. Arraste os cartões para mudar de etapa. Pedidos novos nascem aqui; os do Omie ficam como histórico."
           acoes={<>
             <div className="seg">
               <button className={view === "kanban" ? "on" : ""} onClick={() => { setView("kanban"); lsSet("cmp-view", "kanban"); }}>▦ Kanban</button>
@@ -309,6 +327,13 @@ export default function TelaCompras() {
 
         {erro && <Aviso>Não carregou: {erro}</Aviso>}
 
+        {semPedido.length > 0 && (
+          <button className="alarme-nf" onClick={() => setCaixa({ foco: null })}>
+            ⛔ {semPedido.length} NF-e sem pedido · {money(totSemPedido)} — não pagar até casar
+            <small>abrir a caixa para casar ou dispensar ›</small>
+          </button>
+        )}
+
         <div className="filtros">
           <select className="sel" value={comprador} onChange={(e) => setComprador(e.target.value)} aria-label="Comprador">
             <option value="">Todos os compradores</option>{compradores.map((c) => <option key={c}>{c}</option>)}</select>
@@ -322,6 +347,8 @@ export default function TelaCompras() {
             <option value="365">Histórico: último ano</option><option value="1095">Histórico: 3 anos</option><option value="todos">Histórico: tudo</option></select>
           <select className="sel" value={origem} onChange={(e) => setOrigem(e.target.value as "" | "painel" | "omie")} aria-label="Origem">
             <option value="">Todas as origens</option><option value="painel">Emitidos pela plataforma</option><option value="omie">Histórico do Omie</option></select>
+          {semPedido.length > 0 && <button className={`chipf semped${soSemPedido ? " on" : ""}`} title="Mostra só as NF-e sem pedido e os pedidos sugeridos para elas"
+            onClick={() => setSoSemPedido((v) => !v)}>⛔ NF sem pedido ({semPedido.length})</button>}
           <button className={`chipf${soAtraso ? " on" : ""}`} onClick={() => setSoAtraso((v) => !v)}>⚠ Entrega atrasada{lista ? ` · ${atrasados.length}` : ""}</button>
           <button className={`chipf${soNf ? " on" : ""}`} style={soNf ? { borderColor: "#0EA5E9", color: "#0369A1", background: "color-mix(in srgb,#0EA5E9 14%,transparent)" } : undefined}
             onClick={() => setSoNf((v) => !v)}>📄 NF chegou (Focus){lista ? ` · ${comNf.length}` : ""}</button>
@@ -366,10 +393,11 @@ export default function TelaCompras() {
 
         {lista && view === "kanban" && (
           <div className="board">
-            {ETAPAS.filter((e) => e.cod !== "15").map((e) => {
+            {ETAPAS.filter((e) => e.cod !== "15" && e.cod !== "35").map((e) => {
               const ocultas = e.cod === "20" ? filtrados.filter((p) => p.etapa === "20" && rcAtendida(p)).length : 0;
               // Aprovação vive DENTRO da coluna Pedido de Compra (01/10/26): etapa 15 entra aqui
-              const daColuna = (p: PedidoLista) => e.cod === "10" ? (p.etapa === "10" || p.etapa === "15") : p.etapa === e.cod;
+              // (01/10/26) e Enviado também: aprovado = enviado; o envio só fica registrado
+              const daColuna = (p: PedidoLista) => e.cod === "10" ? ["10", "15", "35"].includes(p.etapa) : p.etapa === e.cod;
               const itens = filtrados.filter((p) => daColuna(p) && !rcAtendida(p))
                 .filter((p) => e.cod !== "10" || !filtroAprov || (filtroAprov === "aprovado" ? p.aprov === "aprovado" : p.aprov !== "aprovado"))
                 .sort((a, b) => (b.emissao ?? "").localeCompare(a.emissao ?? "") || b.id - a.id);
@@ -384,7 +412,7 @@ export default function TelaCompras() {
                     <div className="t"><b><span className="badge-n">{itens.length}</span>{e.nome}</b><span className="tot num">{money(soma(itens))}</span></div>
                     <span className="n">{ETAPA_AJUDA[e.cod] ?? (e.cod === "20" ? "saldo a comprar" : e.cod === "10" ? "pendente ou aprovado" : e.plural)}{ocultas ? ` · ${ocultas} atendida(s) ocultas` : ""}</span>
                     {e.cod === "10" && (() => {
-                      const base = filtrados.filter((p) => (p.etapa === "10" || p.etapa === "15") && p.tipo === "PC");
+                      const base = filtrados.filter((p) => ["10", "15", "35"].includes(p.etapa) && p.tipo === "PC");
                       const apr = base.filter((p) => p.aprov === "aprovado"), pen = base.filter((p) => p.aprov !== "aprovado");
                       return (
                         <div className="segap" role="tablist" aria-label="Aprovação">
@@ -399,14 +427,27 @@ export default function TelaCompras() {
                     })()}
                   </div>
                   <div className="cards">
+                    {e.cod === "40" && semPedido.map((n) => (
+                      <article key={n.chave} className="card nfsem" aria-label={`NF-e ${n.numero} sem pedido`}>
+                        <div className="l1"><span className="no"><span className="badge-ap crit">⛔ Sem pedido</span>NF-e Nº {n.numero}</span></div>
+                        <div className="forn">{n.emitente ?? "Emitente?"}</div>
+                        <div className="ent">Emitida {dBR(String(n.emissao).slice(0, 10), true)} · não pagar até casar</div>
+                        <div className="val"><b className="num">{money(Number(n.valor))}</b>
+                          {n.sugestoes?.length ? <span className="muted">{n.sugestoes.length} sugestão(ões): {n.sugestoes.slice(0, 2).map((x) => "PC " + x.num).join(", ")}</span> : <span className="muted">sem sugestão</span>}</div>
+                        <div className="acts">
+                          <button className="btn sm crit" onClick={() => setCaixa({ foco: n.chave })}>Casar</button>
+                          <button className="btn sm" onClick={() => setCaixa({ foco: n.chave })}>Ver sugestões</button>
+                          <button className="btn sm ghost" onClick={() => setCaixa({ foco: n.chave })}>Dispensar</button>
+                        </div>
+                      </article>
+                    ))}
                     {itens.slice(0, lim).map((p) => cartao(p))}
                     {itens.length > lim && <button className="btn sm ghost" onClick={() => setMais((m) => ({ ...m, [e.cod]: lim + LIMITE_COLUNA }))}>
                       Mostrar mais {Math.min(LIMITE_COLUNA, itens.length - lim)} de {itens.length - lim}</button>}
-                    {!itens.length && <div className="empty">Nenhum registro nesta etapa</div>}
+                    {!itens.length && !(e.cod === "40" && semPedido.length) && <div className="empty">Nenhum registro nesta etapa</div>}
                   </div>
                   {e.cod === "20" && <div className="colf"><button className="btn sm" onClick={() => setFolha({ id: null, tipo: "RC" })}>＋ Nova Requisição</button></div>}
                   {e.cod === "10" && <div className="colf"><button className="btn sm" onClick={() => setFolha({ id: null, tipo: "PC" })}>＋ Novo Pedido de Compra</button></div>}
-                  {e.cod === "35" && <div className="colf"><span className="hint" style={{ display: "block", textAlign: "center" }}>Arraste um pedido aprovado para cá para enviar</span></div>}
                   {e.cod === "60" && <div className="colf"><button className="btn sm" onClick={() => setReceb({ id: null })}>＋ Novo Recebimento</button></div>}
                 </div>
               );
@@ -524,6 +565,8 @@ export default function TelaCompras() {
       )}
       {enviar != null && <ModalEnviar id={enviar} toast={toast} onClose={() => setEnviar(null)}
         onEnviado={(m) => { setEnviar(null); toast(m); carregar(); }} />}
+      {caixa && <CaixaNfSemPedido nfs={semPedido} pedidos={todos} foco={caixa.foco} onClose={() => setCaixa(null)}
+        onAcao={async (b, m) => { const ok = await acaoNf(b, m); if (ok && semPedido.length <= 1) setCaixa(null); return ok; }} />}
       {toastMsg && <div className={`cmp-toast${toastMsg.erro ? " erro" : ""}`} role="status">{toastMsg.m}</div>}
     </div>
   );

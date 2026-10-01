@@ -6,7 +6,7 @@
  * assunto, texto complementar, prévia do e-mail, variante do PDF (completo /
  * sem valores), "Visualizar o arquivo" e "Enviar agora". Sem e-mail
  * configurado no painel, oferece baixar o PDF e "Marcar como enviado"
- * (WhatsApp, entregue em mãos…), que move o pedido para "Enviado ao fornecedor".
+ * (WhatsApp, entregue em mãos…), que só registra o envio (aprovado = enviado; o cartão não muda de coluna).
  */
 
 import { useEffect, useState } from "react";
@@ -166,7 +166,7 @@ export default function ModalEnviar({ id, onClose, onEnviado, toast }: {
                         <option value="whatsapp">WhatsApp</option><option value="outro">Outro (em mãos, portal…)</option></select>
                       <button className="btn" disabled={ocupado || !!bloqueio} onClick={marcar}>✓ Marcar como enviado</button>
                     </div>
-                    <span className="hint">Move o pedido para “Enviado ao fornecedor” e registra quem, quando e para quem.</span>
+                    <span className="hint">Só registra quem, quando e para quem — o pedido continua na coluna Pedido de Compra (Aprovados).</span>
                   </div>
                 </div>
               </div>
