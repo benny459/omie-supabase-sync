@@ -2,17 +2,26 @@
 // folha de incluir/alterar e pelo documento do pedido. A fonte da verdade é o
 // schema compras (sql/23); aqui só se calcula o que a tela mostra.
 
-export type Etapa = "20" | "10" | "15" | "40" | "60" | "80";
+export type Etapa = "20" | "10" | "15" | "35" | "40" | "60" | "80";
 export type Aprov = "na" | "nao_solicitada" | "aguardando" | "aprovado" | "nao_aprovado";
 
 export const ETAPAS: { cod: Etapa; nome: string; plural: string; cor: string }[] = [
-  { cod: "20", nome: "Requisição", plural: "Requisições", cor: "var(--ww-text-faint)" },
-  { cod: "10", nome: "Pedido de Compra", plural: "Pedidos de Compra", cor: "var(--ww-brand-2)" },
-  { cod: "15", nome: "Aprovação", plural: "em aprovação", cor: "var(--ww-violet)" },
-  { cod: "40", nome: "Faturado pelo Fornecedor", plural: "faturados", cor: "var(--ww-warn)" },
-  { cod: "60", nome: "Recebido", plural: "recebidos", cor: "var(--ww-info)" },
-  { cod: "80", nome: "Conferido", plural: "conferidos", cor: "var(--ww-ok)" },
-];
+  { cod: "20", nome: "Requisição", plural: "requisições", cor: "#94A3B8" },
+  { cod: "10", nome: "Pedido de Compra", plural: "pedidos de compra", cor: "#3B82F6" },
+  { cod: "15", nome: "Aprovação", plural: "em aprovação", cor: "#8B5CF6" },
+  { cod: "35", nome: "Enviado ao fornecedor", plural: "enviados", cor: "#06B6D4" },
+  { cod: "40", nome: "Faturado pelo Fornecedor", plural: "faturados", cor: "#F59E0B" },
+  { cod: "60", nome: "Recebido", plural: "recebidos", cor: "#0EA5E9" },
+  { cod: "80", nome: "Conferido", plural: "conferidos", cor: "#22C55E" },
+]
+/** Texto curto que explica a etapa (Benny pode ressignificar depois). */
+export const ETAPA_AJUDA: Partial<Record<Etapa, string>> = {
+  "15": "aprovação interna",
+  "35": "pedido mandado ao fornecedor",
+  "40": "NF emitida, a caminho",
+  "60": "mercadoria chegou fisicamente",
+  "80": "itens, qtd e valores batidos com pedido e NF — liberado para pagar",
+};
 export const ETAPA = Object.fromEntries(ETAPAS.map((e) => [e.cod, e])) as Record<Etapa, (typeof ETAPAS)[number]>;
 export const ordemEtapa = (e: string) => ETAPAS.findIndex((x) => x.cod === e);
 
@@ -43,6 +52,7 @@ export type PedidoLista = {
   contrato?: string; nf?: string; dtRec?: string; dtFat?: string; pv?: string; pvCliente?: string; obsInt?: string;
   valor: number; nItens: number; busca?: string; aprov: Aprov; aprovPor?: string; aprovEm?: string;
   origem: "painel" | "omie"; sync?: string; rcs?: string[]; cobDone?: number; cobTotal?: number; cobPcs?: string[];
+  saldo?: number; parciais?: number; enviadoEm?: string; enviadoPara?: string; enviadoMeio?: string;
 };
 
 // ── Pedido completo (folha) ─────────────────────────────────────────────────
@@ -67,6 +77,8 @@ export type Pedido = {
   pv: string; pvCliente: string; nf: string; chave: string; dtFat?: string | null; dtRec?: string | null;
   aprov: Aprov; aprovPor?: string | null; aprovEm?: string | null; frete: Frete; valor: number;
   origem: "painel" | "omie"; ncodPed?: number | null; itens: Item[]; parcelas: Parcela[]; deptos: Depto[];
+  criadoEm?: string | null; enviadoEm?: string | null; enviadoPor?: string | null; enviadoPara?: string | null;
+  enviadoMeio?: string | null; pcsDaRc?: string[];
   hist: { t: string; em: string; por?: string }[];
 };
 

@@ -1,7 +1,7 @@
 // GET  /api/compras/pedido?id=  — pedido completo (folha)
 // POST /api/compras/pedido      — incluir/alterar (só o que nasceu no painel)
 import { NextResponse } from "next/server";
-import { exigirCompras, rpc, erro } from "@/lib/compras-server";
+import { exigirCompras, rpc, erro, posGravar } from "@/lib/compras-server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -33,6 +33,8 @@ export async function POST(req: Request) {
   if (itens.some((i) => !(Number(i.qtd) > 0))) return NextResponse.json({ error: "Há item com quantidade zerada." }, { status: 400 });
   try {
     const r = await rpc<{ id: number; num: string }>("compras_salvar", { p: body, p_por: q.email, p_uid: q.uid });
+    await posGravar(r.id, String(body.tipo));
     return NextResponse.json(r);
   } catch (e) { return erro(e); }
 }
+

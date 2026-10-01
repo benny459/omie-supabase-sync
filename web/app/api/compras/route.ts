@@ -18,7 +18,14 @@ export async function GET(req: Request) {
     desde = new Date(Date.now() - dias * 86_400_000).toISOString().slice(0, 10);
   }
   try {
-    await rpc("compras_casar_nfs").catch(() => null); // sem Focus, a lista segue
+    // Rotinas idempotentes e baratas que mantêm o resto do sistema em dia:
+    // NF da Focus → pedido; previsões a pagar substituídas pela conta real;
+    // RCs publicadas nos baldes de PV/OS (Avulsos/Projetos).
+    await Promise.all([
+      rpc("compras_casar_nfs").catch(() => null),
+      rpc("compras_conciliar_previsoes").catch(() => null),
+      rpc("compras_publicar_rcs").catch(() => null),
+    ]);
     const [pedidos, nfSug] = await Promise.all([
       rpc("compras_lista", { p_desde: desde }),
       rpc("compras_nfs_sugeridas"),

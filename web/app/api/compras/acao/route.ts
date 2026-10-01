@@ -10,7 +10,7 @@
 // (/api/approvals/set-status, com alçada e teto semanal) e etapa avança pela
 // etapa_manual. Nada aqui chama o Omie.
 import { NextResponse } from "next/server";
-import { exigirCompras, rpc, erro, podeAprovar, type Quem } from "@/lib/compras-server";
+import { exigirCompras, rpc, erro, podeAprovar, posGravar, type Quem } from "@/lib/compras-server";
 import { supaAdmin } from "@/lib/supabase-admin";
 import { ordemEtapa, type Pedido } from "@/lib/compras";
 
@@ -32,33 +32,44 @@ export async function POST(req: Request) {
   let b: Record<string, unknown>;
   try { b = await req.json(); } catch { return NextResponse.json({ error: "JSON inválido" }, { status: 400 }); }
   try {
+    const r = await executar(q, req, b);
+    // previsões a pagar e RCs na operação acompanham qualquer mudança
+    const ids = [b.id, b.pedido, ...((b.ids as unknown[]) ?? []), (r as { id?: unknown })?.id].map(Number).filter(Boolean);
+    for (const id of [...new Set(ids)]) await posGravar(id);
+    return NextResponse.json(r);
+  } catch (e) { return erro(e); }
+}
+
+async function executar(q: Quem, req: Request, b: Record<string, unknown>): Promise<unknown> {
+  {
     switch (b.acao) {
-      case "mover": return NextResponse.json(await mover(q, Number(b.id), String(b.etapa)));
-      case "aprovar": return NextResponse.json(await aprovar(q, req, (b.ids as number[]) ?? [], String(b.status)));
+      case "mover": return mover(q, Number(b.id), String(b.etapa));
+      case "aprovar": return aprovar(q, req, (b.ids as number[]) ?? [], String(b.status));
+      case "venda": return rpc("compras_vincular_venda", { p_id: Number(b.id), p_pv: String(b.pv ?? ""), p_cliente: String(b.cliente ?? ""), p_por: q.email });
       case "receber": {
         const p = await pedido(Number(b.id));
         if (p.tipo !== "PC") throw new Error("Só pedido de compra é recebido");
         if (b.chaveFocus) {
           await rpc("compras_nf_decidir", { p_chave: String(b.chaveFocus), p_pedido: p.id, p_status: "confirmado", p_por: q.email });
         }
-        return NextResponse.json(await rpc("compras_receber", {
+        return rpc("compras_receber", {
           p_id: p.id, p_nf: String(b.nf ?? ""), p_chave: b.chave ? String(b.chave) : null,
           p_dt: String(b.dt ?? new Date().toISOString().slice(0, 10)), p_qtds: b.qtds ?? [], p_final: !!b.final, p_por: q.email,
-        }));
+        });
       }
-      case "cancelar": return NextResponse.json(await rpc("compras_cancelar", { p_id: Number(b.id), p_por: q.email }));
+      case "cancelar": return rpc("compras_cancelar", { p_id: Number(b.id), p_por: q.email });
       case "excluir": {
         // Exclusão definitiva (some sem rastro) só para admin; o time usa Cancelar.
         if (!q.perms.is_admin) throw new Error("Só administrador exclui; use Cancelar");
-        return NextResponse.json(await rpc("compras_excluir", { p_id: Number(b.id) }));
+        return rpc("compras_excluir", { p_id: Number(b.id) });
       }
-      case "duplicar": return NextResponse.json(await rpc("compras_duplicar", { p_id: Number(b.id), p_por: q.email, p_uid: q.uid }));
-      case "nf": return NextResponse.json(await rpc("compras_nf_decidir", {
+      case "duplicar": return rpc("compras_duplicar", { p_id: Number(b.id), p_por: q.email, p_uid: q.uid });
+      case "nf": return rpc("compras_nf_decidir", {
         p_chave: String(b.chave), p_pedido: Number(b.pedido), p_status: String(b.status), p_por: q.email,
-      }));
-      default: return NextResponse.json({ error: "ação inválida" }, { status: 400 });
+      });
+      default: throw new Error("ação inválida");
     }
-  } catch (e) { return erro(e); }
+  }
 }
 
 async function mover(q: Quem, id: number, etapa: string) {
@@ -69,6 +80,7 @@ async function mover(q: Quem, id: number, etapa: string) {
     throw new Error("Pedido ainda não aprovado — aprove antes de avançar");
   }
   if (etapa === "60" && !p.nf) throw new Error("Registre o recebimento com a NF-e");
+  if (etapa === "35") return rpc("compras_marcar_enviado", { p_id: id, p_para: "", p_meio: "outro", p_por: q.email });
   if (etapa === "15" && p.origem === "omie" && p.aprov !== "aprovado") {
     // Solicitar aprovação de pedido do Omie = status PENDENTE em approval.approvals.
     await gravarAprovacaoOmie(q, null, [p], "aguardando");

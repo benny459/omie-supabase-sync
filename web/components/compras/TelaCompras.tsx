@@ -15,8 +15,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CabecalhoTela, PaginaNavy, Carregando, Aviso } from "@/components/navy/tela/KitTela";
 import FolhaPedido from "./FolhaPedido";
 import FolhaRecebimento from "./FolhaRecebimento";
+import ModalEnviar from "./ModalEnviar";
 import {
-  ETAPAS, ETAPA, APROV_LABEL, money, dBR, rel, hoje, diffDias, situacao, atrasado, rcAtendida,
+  ETAPAS, ETAPA, ETAPA_AJUDA, APROV_LABEL, money, dBR, rel, hoje, diffDias, situacao, atrasado, rcAtendida,
   type PedidoLista, type Etapa, type Refs,
 } from "@/lib/compras";
 
@@ -42,6 +43,8 @@ export default function TelaCompras() {
   const [periodo, setPeriodo] = useState("");
   const [soAtraso, setSoAtraso] = useState(false);
   const [soNf, setSoNf] = useState(false);
+  const [origem, setOrigem] = useState<"" | "painel" | "omie">("");
+  const [enviar, setEnviar] = useState<number | null>(null);
   const [sort, setSort] = useState<{ k: string; dir: 1 | -1 }>({ k: "emissao", dir: -1 });
   const [group, setGroup] = useState("");
   const [sel, setSel] = useState<Set<number>>(new Set());
@@ -103,6 +106,7 @@ export default function TelaCompras() {
       if (periodo && p.emissao && diffDias(hoje(), p.emissao) > Number(periodo)) return false;
       if (soAtraso && !atrasado(p)) return false;
       if (soNf && !nfSug[p.id]) return false;
+      if (origem && p.origem !== origem) return false;
       if (t) {
         const hay = [p.num, p.forn, p.proj, p.cat, p.comprador, p.contato, p.nf, p.cnpj, p.pv, p.pvCliente, p.busca,
           ...(p.rcs ?? []), ...(p.cobPcs ?? [])].join(" ").toLowerCase();
@@ -110,7 +114,7 @@ export default function TelaCompras() {
       }
       return true;
     });
-  }, [todos, q, comprador, projeto, periodo, soAtraso, soNf, nfSug]);
+  }, [todos, q, comprador, projeto, periodo, soAtraso, soNf, nfSug, origem]);
 
   // ── ações ────────────────────────────────────────────────────────────────
   const acao = useCallback(async (body: Record<string, unknown>) => {
@@ -135,6 +139,7 @@ export default function TelaCompras() {
     if (cod === "20") { toast("Pedido não volta a ser requisição", true); return; }
     if (["40", "60", "80"].includes(cod) && p.origem === "painel" && p.aprov !== "aprovado") { toast("Pedido ainda não aprovado — aprove antes de avançar", true); return; }
     if (cod === "60" && !p.nf) { setReceb({ id: p.id }); return; }
+    if (cod === "35") { setEnviar(p.id); return; }
     try {
       await acao({ acao: "mover", id: p.id, etapa: cod });
       toast(`${p.tipo === "RC" ? "Requisição" : "Pedido"} ${p.num} movido para ${ETAPA[cod].nome}`);
@@ -149,7 +154,7 @@ export default function TelaCompras() {
     } catch (e) { toast((e as Error).message, true); }
   }, [acao, carregar, toast]);
 
-  const imprimir = (id: number) => window.open(`/imprimir/compras/${id}`, "_blank", "noopener");
+  const imprimir = (id: number) => setEnviar(id);
 
   const ctxAct = async (k: string, p: PedidoLista) => {
     setCtx(null);
@@ -169,17 +174,20 @@ export default function TelaCompras() {
   };
 
   // ── resumo ───────────────────────────────────────────────────────────────
-  const soma = (l: PedidoLista[]) => l.reduce((a, p) => a + (Number(p.valor) || 0), 0);
+  /** Requisição vale o SALDO (o que falta comprar); pedido vale o total. */
+  const valorDe = (p: PedidoLista) => Number(p.tipo === "RC" ? (p.saldo ?? p.valor) : p.valor) || 0;
+  const soma = (l: PedidoLista[]) => l.reduce((a, p) => a + valorDe(p), 0);
   const porEtapa = (c: Etapa) => filtrados.filter((p) => p.etapa === c);
   const atrasados = filtrados.filter(atrasado);
   const comNf = filtrados.filter((p) => nfSug[p.id]);
   const blocos = [
-    { k: "Requisições", l: porEtapa("20").filter((p) => !rcAtendida(p)), f: "20" },
+    { k: "Requisições (saldo)", l: porEtapa("20").filter((p) => !rcAtendida(p)), f: "20" },
     { k: "Pedidos em aberto", l: porEtapa("10"), f: "10" },
     { k: "Em aprovação", l: porEtapa("15"), f: "15" },
+    { k: "Enviados ao fornecedor", l: porEtapa("35"), f: "35" },
     { k: "Faturado pelo fornecedor", l: porEtapa("40"), f: "40" },
-    { k: "NF chegou (Focus)", l: comNf, f: "nf", cls: comNf.length ? "" : "" },
-    { k: "Entrega atrasada", l: atrasados, f: "atraso", cls: atrasados.length ? "crit" : "" },
+    { k: "NF chegou (Focus)", l: comNf, f: "nf", c: "#0EA5E9" },
+    { k: "Entrega atrasada", l: atrasados, f: "atraso", cls: atrasados.length ? "crit" : "", c: "#EF4444" },
   ];
 
   // ── tabela ───────────────────────────────────────────────────────────────
@@ -295,7 +303,8 @@ export default function TelaCompras() {
 
         <div className="summary">
           {blocos.map((b) => (
-            <button key={b.k} className={(b.f === "atraso" && soAtraso) || (b.f === "nf" && soNf) ? "on" : ""} onClick={() => {
+            <button key={b.k} className={(b.f === "atraso" && soAtraso) || (b.f === "nf" && soNf) ? "on" : ""}
+              style={{ ["--c" as string]: (b as { c?: string }).c ?? ETAPA[b.f as Etapa]?.cor ?? "transparent" }} onClick={() => {
               if (b.f === "atraso") { setSoAtraso((v) => !v); return; }
               if (b.f === "nf") { setSoNf((v) => !v); return; }
               if (view === "kanban") document.querySelector(`.cmp .col[data-cod="${b.f}"]`)?.scrollIntoView({ behavior: "smooth", inline: "center", block: "nearest" });
@@ -317,6 +326,8 @@ export default function TelaCompras() {
           <select className="sel" value={historico} aria-label="Histórico carregado" title="Quanto do histórico do Omie carregar"
             onChange={(e) => { setHistorico(e.target.value); lsSet("cmp-historico", e.target.value); setLista(null); }}>
             <option value="365">Histórico: último ano</option><option value="1095">Histórico: 3 anos</option><option value="todos">Histórico: tudo</option></select>
+          <select className="sel" value={origem} onChange={(e) => setOrigem(e.target.value as "" | "painel" | "omie")} aria-label="Origem">
+            <option value="">Todas as origens</option><option value="painel">Emitidos pela plataforma</option><option value="omie">Histórico do Omie</option></select>
           <button className={`chipf${soAtraso ? " on" : ""}`} onClick={() => setSoAtraso((v) => !v)}>⚠ Entrega atrasada</button>
           {view === "tabela" && (
             <>

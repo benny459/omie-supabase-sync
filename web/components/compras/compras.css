@@ -230,3 +230,55 @@
 .cmp-toast { position: fixed; bottom: 22px; left: 50%; transform: translateX(-50%); z-index: 120; background: var(--ww-navy, #0B1530);
   color: #fff; padding: 10px 16px; border-radius: 10px; font-size: 13px; box-shadow: 0 10px 30px rgba(0,0,0,.35); max-width: 90vw; }
 .cmp-toast.erro { background: var(--ww-crit); }
+
+/* ── Cores (01/10/26: "muito monocromático") — cada etapa com a sua cor ── */
+.cmp .col { border-top: 3px solid var(--c); background: color-mix(in srgb, var(--c) 7%, var(--sunken)); }
+.cmp .colh::before { display: none; }
+.cmp .colh b { color: color-mix(in srgb, var(--c) 70%, var(--tx)); }
+.cmp .colh .badge-n { display: inline-flex; min-width: 22px; height: 18px; padding: 0 6px; border-radius: 999px; align-items: center;
+  justify-content: center; font-size: 11px; font-weight: 700; background: color-mix(in srgb, var(--c) 20%, transparent);
+  color: color-mix(in srgb, var(--c) 75%, var(--tx)); margin-right: 4px; }
+.cmp .card { border-left: 4px solid var(--c, var(--line)); }
+.cmp .card.late { box-shadow: none; border-left-color: var(--ww-crit); background: color-mix(in srgb, var(--ww-crit) 4%, var(--panel)); }
+.cmp .summary button { border-top: 3px solid var(--c, transparent); }
+.cmp .summary .v { color: color-mix(in srgb, var(--c, var(--tx)) 70%, var(--tx)); }
+.cmp .p-env { background: color-mix(in srgb, #3B82F6 16%, transparent); color: color-mix(in srgb, #3B82F6 80%, var(--tx)); }
+.cmp .p-fat { background: color-mix(in srgb, #F59E0B 18%, transparent); color: color-mix(in srgb, #B45309 85%, var(--tx)); }
+.cmp .p-rec { background: color-mix(in srgb, #0EA5E9 16%, transparent); color: color-mix(in srgb, #0369A1 85%, var(--tx)); }
+.cmp .p-conf { background: color-mix(in srgb, #22C55E 18%, transparent); color: color-mix(in srgb, #15803D 85%, var(--tx)); }
+.cmp .orig-painel { background: color-mix(in srgb, #10B981 16%, transparent); color: color-mix(in srgb, #047857 85%, var(--tx));
+  border: 1px solid color-mix(in srgb, #10B981 40%, transparent); }
+.cmp .orig-omie { background: color-mix(in srgb, #64748B 14%, transparent); color: var(--tx-3); border: 1px solid var(--line); }
+.cmp .stepper span { background: color-mix(in srgb, var(--c) 10%, var(--sunken)); color: color-mix(in srgb, var(--c) 55%, var(--tx-4)); }
+.cmp .stepper span.done { background: color-mix(in srgb, var(--c) 22%, transparent); color: color-mix(in srgb, var(--c) 80%, var(--tx)); }
+.cmp .stepper span.cur { background: var(--c); color: #fff; box-shadow: 0 0 10px color-mix(in srgb, var(--c) 45%, transparent); }
+.cmp .card2 h4, .cmp .side h4 { color: var(--accent-strong); }
+.cmp .tabs button.on { border-bottom-color: var(--ww-brand-3); color: var(--accent-strong); }
+.cmp .secao-t { font-size: 12px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; color: var(--accent-strong);
+  display: flex; align-items: center; gap: 8px; margin: 0 0 10px; }
+.cmp .secao-t::before { content: ""; width: 4px; height: 14px; border-radius: 2px; background: linear-gradient(180deg, var(--ww-brand-2), var(--ww-brand-3)); }
+
+/* folha em TELA CHEIA */
+.cmp-scrim.cheia { justify-content: stretch; }
+.cmp-scrim.cheia .sheet { width: 100%; }
+.cmp .sheet .sh-head { position: sticky; top: 0; z-index: 3; border-top: 4px solid var(--c, var(--ww-brand-2)); }
+
+/* modal de envio */
+.cmp .modal { width: min(980px, 100%); max-height: 92vh; overflow: auto; background: var(--ww-bg); border-radius: 16px;
+  border: 1px solid var(--line-2); box-shadow: 0 30px 80px rgba(0,0,0,.45); display: flex; flex-direction: column; }
+.cmp .modal .mh { display: flex; align-items: center; gap: 10px; padding: 14px 18px; border-bottom: 1px solid var(--line); background: var(--panel); }
+.cmp .modal .mb { padding: 16px 18px; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; }
+@media (max-width: 860px) { .cmp .modal .mb { grid-template-columns: 1fr; } }
+.cmp .modal .mf { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; padding: 12px 18px; border-top: 1px solid var(--line); background: var(--panel); }
+.cmp .email-prev { background: #fff; color: #1A2731; border-radius: 10px; padding: 16px; font-size: 13px; line-height: 1.55; border: 1px solid var(--line); }
+.cmp .email-prev .faixa { height: 4px; background: linear-gradient(90deg, #10324A, #1C7FA0); margin: -16px -16px 14px; border-radius: 10px 10px 0 0; }
+.cmp .email-prev .nfe { background: #EEF4F7; border-left: 3px solid #1C7FA0; padding: 8px 10px; font-size: 12px; }
+.cmp .tags-in { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; min-height: 34px; padding: 4px 6px; border: 1px solid var(--line-2);
+  border-radius: 8px; background: var(--panel); }
+.cmp .tags-in .tg { display: inline-flex; gap: 4px; align-items: center; font-size: 12px; background: var(--accent-soft); color: var(--accent-strong);
+  border-radius: 999px; padding: 2px 4px 2px 9px; }
+.cmp .tags-in .tg button { border: 0; background: none; color: inherit; cursor: pointer; }
+.cmp .tags-in input { flex: 1; min-width: 140px; border: 0; outline: none; background: transparent; color: var(--tx); font-size: 12.5px; }
+.cmp .seg2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.cmp .seg2 label { border: 1px solid var(--line-2); border-radius: 10px; padding: 10px; cursor: pointer; display: flex; gap: 8px; font-size: 12.5px; }
+.cmp .seg2 label.on { border-color: var(--ww-brand-3); background: var(--accent-soft); }
