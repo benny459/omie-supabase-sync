@@ -350,3 +350,13 @@
 .cmp table.pcnf-tab td { padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
 .cmp table.pcnf-tab .r { text-align: right; white-space: nowrap; }
 .cmp table.pcnf-tab tr:last-child td { border-bottom: 0; }
+
+/* ── Ciclo do pagar na aba Parcelas ── */
+.cmp .pagar-ciclo { margin-bottom: 12px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); }
+.cmp .pagar-linhas { display: grid; gap: 6px; }
+.cmp .pagar-linha { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; font-size: 12.5px; }
+.cmp .fase-pill { display: inline-flex; font-size: 11px; font-weight: 700; padding: 2px 9px; border-radius: 999px; white-space: nowrap; }
+.cmp .fase-pill.previsto { background: var(--ww-violet-soft); color: var(--ww-violet-text); }
+.cmp .fase-pill.aguardando_recebimento { background: var(--ww-warn-soft); color: var(--ww-warn-text); }
+.cmp .fase-pill.aguardando_conferencia { background: var(--ww-info-soft); color: var(--ww-info-text); }
+.cmp .fase-pill.liberado { background: #16A34A; color: #fff; }

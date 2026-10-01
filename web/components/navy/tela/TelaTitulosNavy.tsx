@@ -54,7 +54,32 @@ const STATUS: Record<string, { label: string; tom: Tom }> = {
   "CANCELADO":  { label: "Cancelado",  tom: "off" },
   // previsão vinda de pedido de compra do painel (finance.v_pagar_previsto)
   "PREVISTO":   { label: "Previsto (PC)", tom: "violet" },
+  // contas a pagar do painel (Compras, sql/36)
+  "AGUARD_RECEB": { label: "Aguardando recebimento", tom: "warn" },
+  "AGUARD_CONF":  { label: "Aguardando conferência", tom: "info" },
+  "LIBERADO":     { label: "Liberado para pagar", tom: "ok" },
 };
+
+/* Ciclo do pagar a partir de Compras (Benny, 01/10/26): "só pago o que recebi
+   e conferi". Só "Liberado para pagar" é pagável. */
+type FasePagar = NonNullable<Row["fase_pagar"]>;
+const FASES: { k: FasePagar; label: string; tom: Tom; dica: string }[] = [
+  { k: "previsto", label: "Previsto", tom: "violet", dica: "Pedido de compra aprovado; a NF ainda não chegou" },
+  { k: "aguardando_recebimento", label: "Aguardando recebimento", tom: "warn", dica: "NF casada com o pedido aprovado — a mercadoria ainda não chegou. Não pagar." },
+  { k: "aguardando_conferencia", label: "Aguardando conferência", tom: "info", dica: "Recebido, falta conferir itens/qtd/valores. Não pagar." },
+  { k: "liberado", label: "Liberado para pagar", tom: "ok", dica: "Recebido e conferido — pode pagar" },
+  { k: "bloqueado", label: "⛔ Bloqueado", tom: "crit", dica: "NF sem pedido ou pedido ainda não aprovado — não pagar" },
+];
+const faseDe = (k?: string | null) => FASES.find((f) => f.k === k);
+/* O "ok" do tema é azul — o sinal verde do Benny precisa ser verde de verdade. */
+const VERDE = "#16A34A";
+const pillLiberado = (sub?: string) => (
+  <span style={{ display: "flex", flexDirection: "column", gap: 3, alignItems: "flex-start", minWidth: 0 }}>
+    <span style={{ fontSize: 11.5, fontWeight: 700, padding: "2px 9px", borderRadius: 999, whiteSpace: "nowrap",
+      background: VERDE, color: "#fff" }}>✓ Liberado para pagar</span>
+    {sub ? <span style={{ fontSize: 11, color: "var(--ww-text-faint)", whiteSpace: "nowrap" }}>{sub}</span> : null}
+  </span>
+);
 const statusDe = (s: string | null) => STATUS[s ?? ""] ?? { label: s || "—", tom: "off" as Tom };
 
 /* Conferência do receber com o Omie (finance.receber, desde 01/10/26): as
@@ -243,7 +268,7 @@ export default function TelaTitulosNavy({ tipo }: { tipo: Tipo }) {
   const [empresaSel, setEmpresaSel] = useState("");
   const [statusSel, setStatusSel] = useState("");
   const [conferenciaSel, setConferenciaSel] = useState("");
-  const [soNfSemPedido, setSoNfSemPedido] = useState(false);
+  const [faseSel, setFaseSel] = useState<FasePagar | "">("");
   const [excluindo, setExcluindo] = useState<string | null>(null);
   const [horizSel, setHorizSel] = useState<Horizonte[]>([]);
   const [ladoAba, setLadoAba] = useState<"categoria" | "contraparte" | "projeto">("categoria");
@@ -321,7 +346,7 @@ export default function TelaTitulosNavy({ tipo }: { tipo: Tipo }) {
     if (empresaSel) rs = rs.filter((r) => r.empresa === empresaSel);
     if (statusSel) rs = rs.filter((r) => (r.status_titulo ?? "") === statusSel);
     if (conferenciaSel) rs = rs.filter((r) => (r.conferencia ?? "") === conferenciaSel);
-    if (soNfSemPedido) rs = rs.filter((r) => r.nf_sem_pedido || r.nf_aguardando_pedido);
+    if (faseSel) rs = rs.filter((r) => r.fase_pagar === faseSel);
     if (horizSel.length && modo === "aberto")
       rs = rs.filter((r) => horizSel.includes(horizonteDe(r, hoje, amanha, d7, d30)));
     const n = q.trim().toLowerCase();
@@ -329,8 +354,18 @@ export default function TelaTitulosNavy({ tipo }: { tipo: Tipo }) {
       [r.contraparte, r.numero_documento, r.numero_documento_fiscal, r.numero_pedido, r.categoria, r.projeto, r.observacao]
         .some((v) => (v ?? "").toLowerCase().includes(n)));
     return rs;
-  }, [rows, empresaSel, statusSel, conferenciaSel, soNfSemPedido, horizSel, modo, q, hoje, amanha, d7, d30]);
-  const nNfSemPedido = useMemo(() => (rows ?? []).filter((r) => r.nf_sem_pedido || r.nf_aguardando_pedido).length, [rows]);
+  }, [rows, empresaSel, statusSel, conferenciaSel, faseSel, horizSel, modo, q, hoje, amanha, d7, d30]);
+  /* Totais por fase do ciclo do pagar (só títulos ligados a Compras). */
+  const porFase = useMemo(() => {
+    const m = new Map<FasePagar, { n: number; v: number }>();
+    for (const r of rows ?? []) {
+      if (!r.fase_pagar || r.status_titulo === "CANCELADO") continue;
+      const a = m.get(r.fase_pagar) ?? { n: 0, v: 0 };
+      a.n += 1; a.v += r.fase_pagar === "liberado" && r.valor_liberado != null ? num(r.valor_liberado) : num(r.valor_documento);
+      m.set(r.fase_pagar, a);
+    }
+    return m;
+  }, [rows]);
 
   // ── Resumo (a mesma regra da API, sobre o que está filtrado) ────────────
   const resumo = useMemo(() => {
@@ -466,6 +501,14 @@ export default function TelaTitulosNavy({ tipo }: { tipo: Tipo }) {
       const s = statusDe(r.status_titulo);
       if (r.nf_sem_pedido) return cPill("⛔ NF sem pedido — não pagar", "crit", s.label);
       if (r.nf_aguardando_pedido) return cPill("⛔ aguardando aprovação do pedido — não pagar", "crit", `${s.label} · PC ${r.nf_aguardando_pedido}`);
+      const f = faseDe(r.fase_pagar);
+      if (f) {
+        const ehPainel = (r.codigo_lancamento_omie ?? 0) < 0;
+        const sub = [r.fase_pedido ? `PC ${r.fase_pedido}` : "", !ehPainel ? `Omie: ${s.label}` : "", r.parcial ? "parcial" : "",
+          f.k === "liberado" && r.parcial && r.valor_liberado != null ? `libera ${brl(num(r.valor_liberado))}` : ""].filter(Boolean).join(" · ");
+        if (f.k === "liberado") return pillLiberado(sub);
+        return cPill(f.k === "previsto" ? "Previsto" : `${f.label} — não pagar`, f.tom, sub);
+      }
       return cPill(s.label, s.tom);
     }
     if (c.key === "conferencia") { const k = conferenciaDe(r.conferencia); return cPill(k.label, k.tom); }
@@ -620,10 +663,17 @@ export default function TelaTitulosNavy({ tipo }: { tipo: Tipo }) {
         {statusChips.map((s) => (
           <ChipFiltro key={s} ativo={statusSel === s} onClick={() => setStatusSel(statusSel === s ? "" : s)}>{statusDe(s).label}</ChipFiltro>
         ))}
-        {(nNfSemPedido > 0 || soNfSemPedido) && (
-          <ChipFiltro ativo={soNfSemPedido} title="Títulos cuja NF chegou sem pedido de compra — não pagar até casar em Compras"
-            onClick={() => setSoNfSemPedido((v) => !v)}>⛔ NF sem pedido · {nNfSemPedido}</ChipFiltro>
-        )}
+        {tipo === "pagar" && FASES.filter((f) => porFase.has(f.k) || faseSel === f.k).map((f) => {
+          const a = porFase.get(f.k) ?? { n: 0, v: 0 };
+          return (
+            <ChipFiltro key={f.k} ativo={faseSel === f.k} title={f.dica} onClick={() => setFaseSel(faseSel === f.k ? "" : f.k)}>
+              <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                <span style={{ width: 8, height: 8, borderRadius: 99, background: f.k === "liberado" ? VERDE : `var(--ww-${f.tom})` }} />
+                {f.label} · {a.n} · {brl(a.v)}
+              </span>
+            </ChipFiltro>
+          );
+        })}
         {conferencias.map(({ k, n }) => (
           <ChipFiltro key={k} ativo={conferenciaSel === k} title={conferenciaDe(k).dica}
             onClick={() => setConferenciaSel(conferenciaSel === k ? "" : k)}>{conferenciaDe(k).label} · {n.toLocaleString("pt-BR")}</ChipFiltro>

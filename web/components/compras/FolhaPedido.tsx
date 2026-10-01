@@ -27,6 +27,15 @@ type ItemCat = { ncod_prod: number; codigo: string | null; descricao: string; un
   fornecedor: string | null; ultima_compra: string | null };
 
 type Tab = "itens" | "deptos" | "frete" | "parcelas" | "info" | "obs";
+type PagarLinha = { n: number; total: number; venc: string | null; valor: number; fase: string; parcial: boolean;
+  liberado: number | null; nf: string | null; status: string; omie: string | null; origem: string };
+/* Ciclo do pagar (sql/36): só "Liberado para pagar" é pagável. */
+const FASE_PAGAR: Record<string, { label: string; dica: string }> = {
+  previsto: { label: "Previsto", dica: "Pedido aprovado; a NF ainda não chegou" },
+  aguardando_recebimento: { label: "Aguardando recebimento", dica: "NF casada — falta receber. Não pagar." },
+  aguardando_conferencia: { label: "Aguardando conferência", dica: "Recebido — falta conferir. Não pagar." },
+  liberado: { label: "✓ Liberado para pagar", dica: "Recebido e conferido" },
+};
 
 const json = async <T,>(r: Response): Promise<T> => {
   const j = await r.json().catch(() => ({}));
@@ -67,6 +76,7 @@ export default function FolhaPedido({
   toast: (m: string, erro?: boolean) => void;
 }) {
   const [D, setD] = useState<Pedido | null>(null);
+  const [pagar, setPagar] = useState<PagarLinha[]>([]);
   const [tab, setTab] = useState<Tab>("itens");
   const [errs, setErrs] = useState<Record<string, string>>({});
   const [salvando, setSalvando] = useState(false);
@@ -96,6 +106,7 @@ export default function FolhaPedido({
           salvosRc.current = s;
           setRcLigadas([...new Set(p.itens.filter((i) => i.rc).map((i) => i.rc!.num))]);
           setParcEditadas(p.parcelas.length > 0);
+          setPagar((p as Pedido & { pagar?: PagarLinha[] }).pagar ?? []);
           setD(p);
         } else {
           const base = vazio(tipoNovo ?? "PC", emp);
@@ -667,6 +678,26 @@ export default function FolhaPedido({
                     {errs.parcelas && <div className="errmsg" style={{ marginBottom: 8 }}>{errs.parcelas}</div>}
                     <div className="muted" style={{ marginBottom: 6 }}>Contas a Pagar — condição <b>{refs?.parcelas.find((p) => p.cod === D.parc)?.desc ?? D.parc}</b> a partir da previsão de entrega
                       {parcEditadas && !ro && <span className="pill p-warn" style={{ marginLeft: 8 }}>editadas à mão</span>}</div>
+                    {pagar.length > 0 && (
+                      <div className="pagar-ciclo">
+                        <div className="muted" style={{ marginBottom: 6 }}>No Contas a Pagar{pagar[0].origem === "nf" ? " — parcelas das duplicatas da NF" : ""}
+                          <span className="hint"> · só “Liberado para pagar” pode ser pago (recebido e conferido)</span></div>
+                        <div className="pagar-linhas">{pagar.map((x) => {
+                          const f = FASE_PAGAR[x.fase] ?? FASE_PAGAR.previsto;
+                          return (
+                            <div key={x.n} className="pagar-linha">
+                              <span className="num">{x.n}/{x.total}</span>
+                              <span>{x.venc ? dBR(String(x.venc).slice(0, 10), true) : "—"}</span>
+                              <b className="num">{money(Number(x.valor))}</b>
+                              {x.nf && <span className="faint">NF {x.nf}</span>}
+                              <span className={`fase-pill ${x.fase}`} title={f.dica}>{f.label}{x.parcial ? " · parcial" : ""}
+                                {x.fase === "liberado" && x.parcial && x.liberado != null ? ` (${money(Number(x.liberado))})` : ""}</span>
+                              {x.status === "substituido" && <span className="faint" title={`Título(s) do Omie: ${x.omie ?? ""}`}>título do Omie</span>}
+                            </div>
+                          );
+                        })}</div>
+                      </div>
+                    )}
                     <div className="items-wrap">
                       <table className="items" style={{ minWidth: 620 }}>
                         <thead><tr><th>Situação</th><th>Parcela</th><th>Vencimento</th><th className="r">Valor</th><th className="r">Percentual</th><th>Tipo de Documento</th></tr></thead>
@@ -674,7 +705,9 @@ export default function FolhaPedido({
                           const setP = (p: Partial<Parcela>) => { setParcEditadas(true); set({ parcelas: D.parcelas.map((y, k) => (k === i ? { ...y, ...p } : y)) }); };
                           return (
                             <tr key={i}>
-                              <td style={{ paddingTop: 11 }}><span className="pill p-off">A pagar</span></td>
+                              <td style={{ paddingTop: 11 }}>{pagar.length && D.aprov === "aprovado"
+                                ? <span className={`fase-pill ${pagar[0].fase}`}>{(FASE_PAGAR[pagar[0].fase] ?? FASE_PAGAR.previsto).label}</span>
+                                : <span className="pill p-off" title="Só pedido aprovado vira conta a pagar">{D.aprov === "aprovado" ? "A pagar" : "Aguarda aprovação"}</span>}</td>
                               <td style={{ paddingTop: 11 }}>{x.n}/{D.parcelas.length}</td>
                               <td style={{ width: 160 }}><input className="in" type="date" disabled={ro} value={x.venc ?? ""} onChange={(e) => setP({ venc: e.target.value })} /></td>
                               <td style={{ width: 140 }}><input className="in r" disabled={ro} key={`${i}-${x.valor}`} defaultValue={num2(x.valor)} onBlur={(e) => setP({ valor: parseNum(e.target.value) })} /></td>
