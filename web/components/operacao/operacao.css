@@ -341,7 +341,7 @@
    Colunas do PC: PC · Fornecedor · Status · Prev. material · Material · NF · [Serviço] · ações */
 .op .rcg{display:grid;grid-template-columns:minmax(0,.85fr) minmax(0,1.75fr);border-top:1px solid var(--ww-border-strong)}
 .op .rcg > .it-col,.op .rcg > .it{border-right:1px solid var(--ww-border)}
-.op .rcg .it{display:grid;grid-template-columns:20px 74px minmax(0,1fr) 96px;gap:10px;align-items:center;padding:7px 12px;min-height:50px}
+.op .rcg .it{display:grid;grid-template-columns:20px 74px minmax(0,1fr) 124px 92px;gap:10px;align-items:center;padding:7px 12px;min-height:50px}
 .op .rcg .it + .it{border-top:1px dashed var(--ww-border)}
 .op .rcg .it.sel{background:var(--ww-info-soft)}
 .op .rcg .pc{display:grid;grid-template-columns:62px minmax(0,1fr) 96px 124px 118px 96px 112px 34px;gap:10px;align-items:center;padding:7px 12px;min-height:50px}
@@ -486,3 +486,18 @@
 .op .notas-acoes{display:flex;justify-content:flex-end;align-items:center;gap:10px}
 .op .notas-acoes .erro{color:var(--ww-crit-text);font-size:12px;flex:1}
 .op .pvid small{white-space:nowrap}
+/* Material por item (marcado à mão ou automático) */
+.op .matsel{width:100%;height:26px;font-size:11.5px;border-radius:7px;border:1px solid var(--ww-border-strong);background:var(--ww-panel-sunken);color:var(--ww-text-muted);padding:0 4px}
+.op .matsel.manual{font-weight:600}
+.op .matsel.info.manual{color:var(--ww-info-text);border-color:var(--ww-info)}
+.op .matsel.warn.manual{color:var(--ww-warn);border-color:var(--ww-warn)}
+.op .matsel.mute.manual{color:var(--ww-text-faint);text-decoration:line-through}
+.op .matsel.crit{color:var(--ww-crit-text)}
+.op .st.mat{font-size:11px;white-space:nowrap}
+.op .st.mat.ok{background:var(--ww-ok-soft);color:var(--ww-ok)}
+.op .st.mat.info{background:var(--ww-info-soft);color:var(--ww-info-text)}
+.op .st.mat.warn{background:rgba(245,166,35,.14);color:var(--ww-warn)}
+.op .st.mat.crit{background:var(--ww-crit-soft);color:var(--ww-crit-text)}
+.op .st.mat.mute{background:var(--ww-border);color:var(--ww-text-muted)}
+.op .mat-qtd{display:inline-flex;align-items:center;gap:3px;font-size:11.5px;color:var(--ww-text-muted)}
+.op .mat-qtd input{width:48px;height:24px;padding:0 4px}

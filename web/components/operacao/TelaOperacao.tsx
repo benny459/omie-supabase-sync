@@ -30,6 +30,7 @@ import {
   ESTADO_LABEL, FILTRO_LABEL,
   type Compra, type Escopo, type Estado, type Filtros, type Pedido, type Periodo, type Rapida,
   servicoDoPedido, servicoAtrasado, tipoVenda, STATUS_SERVICO, type Servico,
+  materialDoItem, MAT_MANUAL, type MatManual,
 } from "@/lib/operacao-modelo";
 import { mudarStatus, mudarStatusEmMassa, salvarCampo, CAMPOS, type Modulo } from "@/lib/approvals-write";
 import { buildBuckets, BucketTotals, projetoDoBucket, LinkAbrirProjeto, type Bucket, type BudgetSummary } from "../BoldAvulsosView";
@@ -254,7 +255,7 @@ export default function TelaOperacao({ modulo, title, rows: rowsIniciais, parcia
   const filtrarPor = useCallback((raps: Rapida[]) => {
     const qq = q.trim().toLowerCase();
     const lista: Rapida[] = raps.length ? raps : ["todos"];
-    const soCompra = !!((filtros.estado && filtros.estado !== "sem_pc") || filtros.fornecedor || filtros.categoria) || lista.includes("minha");
+    const soCompra = !!((filtros.estado && filtros.estado !== "sem_pc") || filtros.fornecedor || filtros.categoria) || lista.includes("minha") || lista.some((r) => r.startsWith("mat_"));
     // Status de serviço são exclusivos entre si: marcados juntos somam (OU);
     // com os demais filtros, estreitam (E).
     const status = lista.filter((r) => r.startsWith("serv_st:"));
@@ -288,7 +289,7 @@ export default function TelaOperacao({ modulo, title, rows: rowsIniciais, parcia
   // Número de cada botão = quantos ficariam ao somar aquele filtro aos já marcados.
   const rapidas = useMemo(() => {
     const k: Rapida[] = ["minha", "atrasados", "sem_pc", "alarme", "pode_fat", "venda_atraso", "compra_atraso",
-      "recusa", "serv_exec", "serv_atraso", "serv_agend", "serv_semos"];
+      "recusa", "serv_exec", "serv_atraso", "serv_agend", "serv_semos", "mat_estoque", "mat_sem_nf", "mat_parcial", "mat_alarme"];
     const r = Object.fromEntries(k.map((x) => [x, filtrarPor(marcados.includes(x) ? marcados : [...marcados, x]).length])) as Record<Rapida, number>;
     // Status de serviço: o número é o daquele status sozinho, com os demais filtros marcados.
     const semStatus = marcados.filter((x) => !x.startsWith("serv_st:"));
@@ -385,6 +386,20 @@ export default function TelaOperacao({ modulo, title, rows: rowsIniciais, parcia
       mostrar({ msg: `PC ${pc} gravado; recarregue a página para ver os dados (${e instanceof Error ? e.message : e}).`, erro: true });
     }
   }, [gravar, mostrar, modulo, recarregarPedido]);
+
+  /* Status do material por item, marcado à mão (01/10/2026). Grava pelo
+     servidor — quem marcou e quando vêm da sessão. */
+  const marcarMaterial: MarcarMaterial = useCallback(async (c, status, qtd) => {
+    const r = await fetch("/api/pedidos/material", { method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ empresa: s(c.row.empresa), ncod_ped: c.row.ncod_ped, modulo, status, qtd }) });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) { mostrar({ msg: `Não gravou: ${j.error ?? r.statusText}`, erro: true }); return false; }
+    const cf: Record<string, unknown> = { ...((c.row.custom_fields as Record<string, unknown> | null) ?? {}) };
+    if (j.mat_status) cf.mat_status = j.mat_status; else delete cf.mat_status;
+    aplicar(c.key, { custom_fields: cf });
+    mostrar({ msg: status ? `Material: ${MAT_MANUAL.find((x) => x.v === status)?.t}` : "Material volta ao automático" });
+    return true;
+  }, [aplicar, modulo, mostrar]);
 
   const selCompras = useMemo(() => [...sel].map((k) => compraPorKey.get(k)).filter(Boolean) as Compra[], [sel, compraPorKey]);
   const emMassa = async (status: string, lista?: Compra[]) => {
@@ -527,8 +542,33 @@ export default function TelaOperacao({ modulo, title, rows: rowsIniciais, parcia
         </div>
       )}
 
+      {/* ── KPIs (os de antes) ── */}
+      <div style={{ marginTop: 14 }}>
+        <KpisNavy buckets={kpiBuckets} formatarValor={(v) => $(v)} rotuloPedido={rotulo} escopo={escopo === "faturado" ? "faturado" : escopo} />
+      </div>
+
+      {/* ── fila de aprovação ── */}
+      {podeAprovar && fila.length > 0 && (
+        <div className="banner">
+          <div className="ic">!</div>
+          <p>
+            <b>{fila.length} compra{fila.length > 1 ? "s" : ""} aguardando sua aprovação</b> · {$(fila.reduce((a, c) => a + (c.pcValor ?? c.rcTotal), 0))}
+            <small>
+              {(() => { const d = fila.map((c) => c.aprovarAte).filter((x): x is number => x != null).sort((a, b) => a - b)[0];
+                return d ? `Mais antiga vence em ${dBR(d)} — aprove direto na lista ou selecione várias.` : "Aprove direto na lista ou selecione várias."; })()}
+            </small>
+          </p>
+          <button className="btn sm" onClick={() => { setMarcados(["minha"]); trocarVista("lista"); }}>Revisar fila</button>
+          {fila.length <= 30 && <button className="btn sm ok" onClick={() => {
+            if (!window.confirm(`Aprovar as ${fila.length} compras da fila? Cada uma passa pela mesma checagem de alçada e orçamento.`)) return;
+            void emMassa("APROVADO", fila);
+          }}>✓ Aprovar todas</button>}
+        </div>
+      )}
+
+      {/* Busca e filtros logo acima da lista que eles filtram (01/10/2026). */}
       {/* ── barra de topo: busca · período · filtros · vista ── */}
-      <div className="toolbar" onClick={(e) => e.stopPropagation()}>
+      <div className="toolbar" style={{ marginTop: 22 }} onClick={(e) => e.stopPropagation()}>
         <div className="search">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></svg>
           <input ref={buscaRef} value={q} onChange={(e) => setQ(e.target.value)} placeholder={modulo === "pcs" ? "Buscar PC, fornecedor ou descrição…" : "Buscar PV, OS, PC, cliente ou fornecedor…"} />
@@ -566,6 +606,10 @@ export default function TelaOperacao({ modulo, title, rows: rowsIniciais, parcia
               ["minha", "Minha aprovação", rapidas.minha, ALARMES["aprovação pendente"]],
               ["recusa", "Recusados", rapidas.recusa, ALARMES["recusa a resolver"]],
               ["sem_pc", "Sem PC", rapidas.sem_pc, ALARMES["sem PC"]],
+              ["mat_alarme", "Sem NF há +5d", rapidas.mat_alarme, ALARMES["material sem NF"]],
+              ["mat_sem_nf", "Recebido sem NF", rapidas.mat_sem_nf, { l: "", s: "", tom: "warn", desc: "Itens com material recebido, NF de entrada ainda não lançada", rap: "mat_sem_nf" }],
+              ["mat_parcial", "Parcial", rapidas.mat_parcial, { l: "", s: "", tom: "warn", desc: "Itens recebidos em parte", rap: "mat_parcial" }],
+              ["mat_estoque", "Em estoque", rapidas.mat_estoque, { l: "", s: "", tom: "info", desc: "Itens atendidos do estoque (não precisam de compra)", rap: "mat_estoque" }],
             ]],
             ["Serviços", [
               ["serv_atraso", "Serviço em atraso", rapidas.serv_atraso, ALARME_SERV.atraso],
@@ -582,7 +626,7 @@ export default function TelaOperacao({ modulo, title, rows: rowsIniciais, parcia
           const chip = ([k, l, n, ic]: [Rapida, string, number, AlarmeIcone]) => (
             <button key={k} className={`chip ${marcados.includes(k) ? "on" : ""}`} onClick={() => alternar(k)}
               title={`${ic.desc}${marcados.length && !marcados.includes(k) ? " · combina com os filtros marcados" : ""}`}>
-              {k.startsWith("serv_st:") ? <span className={`pip-st ${ic.tom}`} /> : <Alm a={ic} chip />}{l} <b>{n}</b>
+              {k.startsWith("serv_st:") || (k.startsWith("mat_") && k !== "mat_alarme") ? <span className={`pip-st ${ic.tom}`} /> : <Alm a={ic} chip />}{l} <b>{n}</b>
             </button>
           );
           return (
@@ -626,30 +670,6 @@ export default function TelaOperacao({ modulo, title, rows: rowsIniciais, parcia
         </div>
       )}
 
-      {/* ── KPIs (os de antes) ── */}
-      <div style={{ marginTop: 18 }}>
-        <KpisNavy buckets={kpiBuckets} formatarValor={(v) => $(v)} rotuloPedido={rotulo} escopo={escopo === "faturado" ? "faturado" : escopo} />
-      </div>
-
-      {/* ── fila de aprovação ── */}
-      {podeAprovar && fila.length > 0 && (
-        <div className="banner">
-          <div className="ic">!</div>
-          <p>
-            <b>{fila.length} compra{fila.length > 1 ? "s" : ""} aguardando sua aprovação</b> · {$(fila.reduce((a, c) => a + (c.pcValor ?? c.rcTotal), 0))}
-            <small>
-              {(() => { const d = fila.map((c) => c.aprovarAte).filter((x): x is number => x != null).sort((a, b) => a - b)[0];
-                return d ? `Mais antiga vence em ${dBR(d)} — aprove direto na lista ou selecione várias.` : "Aprove direto na lista ou selecione várias."; })()}
-            </small>
-          </p>
-          <button className="btn sm" onClick={() => { setMarcados(["minha"]); trocarVista("lista"); }}>Revisar fila</button>
-          {fila.length <= 30 && <button className="btn sm ok" onClick={() => {
-            if (!window.confirm(`Aprovar as ${fila.length} compras da fila? Cada uma passa pela mesma checagem de alçada e orçamento.`)) return;
-            void emMassa("APROVADO", fila);
-          }}>✓ Aprovar todas</button>}
-        </div>
-      )}
-
       {/* ── cabeçalho da lista ── */}
       <div className="section-h">
         <span>
@@ -688,7 +708,7 @@ export default function TelaOperacao({ modulo, title, rows: rowsIniciais, parcia
               statusLote={(lista, st) => { if (lista.length === 1) void setStatus(lista[0], st); else void emMassa(st, lista); }}
               incluirPc={(rc, itens, numero) => incluirPc(p, rc, itens, numero)}
               filtrarRapida={(r) => { setMarcados((m) => (m.includes(r) ? m : [...m, r])); window.scrollTo({ top: 0, behavior: "smooth" }); }}
-              notas={notas[p.id] ?? []} abrirNotas={() => setNotasDe(p)} />
+              notas={notas[p.id] ?? []} abrirNotas={() => setNotasDe(p)} marcarMaterial={marcarMaterial} />
           ))}
           {visiveis.length > limite && (
             <div style={{ textAlign: "center", margin: 14 }}>
@@ -842,6 +862,44 @@ export function FasesBar({ p, modulo }: { p: Pedido; modulo: string }) {
   );
 }
 
+type MarcarMaterial = (c: Compra, status: MatManual["v"] | null, qtd?: number) => Promise<boolean>;
+
+/** Material do item: a NF de entrada do Omie manda (só leitura); senão o time
+ *  marca Em estoque / Recebido sem NF / Parcial (com qtd) / Não vai mais. */
+function MatCelula({ c, podeEditar, marcar }: { c: Compra; podeEditar: boolean; marcar: MarcarMaterial }) {
+  const m = materialDoItem(c);
+  const [qtdAberta, setQtdAberta] = useState(false);
+  const [qtd, setQtd] = useState<string>(String(c.matManual?.qtd ?? ""));
+  const quem = c.matManual?.por ? `Marcado por ${c.matManual.por}${c.matManual.em ? ` em ${dataHora(c.matManual.em)}` : ""}` : "";
+  if (m.k === "recebido" || !podeEditar) {
+    return <span className={`st mat ${m.tom}`} title={m.k === "recebido" ? (c.recebidoEm != null ? `NF de entrada ${c.nfFornecedor || ""} · ${dBR(c.recebidoEm)}` : `Recebido pela NF de entrada dos PCs ${(c.pcsRef ?? []).map((x) => x.pc).join(", ")}`) : quem || undefined}>{m.t}</span>;
+  }
+  if (qtdAberta) {
+    return (
+      <span className="mat-qtd" onClick={(e) => e.stopPropagation()}>
+        <input type="number" min={0.01} step="any" className="in" value={qtd} autoFocus placeholder="qtd"
+          onChange={(e) => setQtd(e.target.value)}
+          onKeyDown={(e) => { if (e.key === "Enter") (e.currentTarget.nextSibling as HTMLButtonElement | null)?.click(); if (e.key === "Escape") setQtdAberta(false); }} />
+        <span>/{c.qtd}</span>
+        <button className="icon ok" title="Gravar parcial" onClick={async () => { const n = Number(qtd.replace(",", ".")); if (n > 0 && await marcar(c, "parcial", n)) setQtdAberta(false); }}>✓</button>
+        <button className="icon" title="Cancelar" onClick={() => setQtdAberta(false)}>✕</button>
+      </span>
+    );
+  }
+  return (
+    <select className={`matsel ${m.tom} ${m.manual ? "manual" : ""}`} value={c.matManual?.v ?? ""} title={quem || "Automático pelo PC/NF do Omie — escolha para marcar à mão"}
+      onClick={(e) => e.stopPropagation()}
+      onChange={(e) => {
+        const v = e.target.value as MatManual["v"] | "";
+        if (v === "parcial") { setQtdAberta(true); return; }
+        void marcar(c, v || null);
+      }}>
+      <option value="">{m.manual ? "↺ Automático" : `${m.t} (auto)`}</option>
+      {MAT_MANUAL.map((x) => <option key={x.v} value={x.v}>{x.v === "parcial" && c.matManual?.v === "parcial" ? m.t : x.t}</option>)}
+    </select>
+  );
+}
+
 type Nota = { id: number; pedido: string; texto: string; autor_id: string | null; autor_nome: string | null; autor_email: string | null; criado_em: string };
 const dataHora = (iso: string) => new Date(iso).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo", day: "2-digit", month: "2-digit", year: "2-digit", hour: "2-digit", minute: "2-digit" });
 
@@ -930,7 +988,7 @@ function TipoVenda({ t }: { t: string }) {
 
 /** Alarmes do pedido como ícone (letra + símbolo, cor pelo tipo); o texto
  *  aparece ao passar o mouse e o clique filtra a lista por aquele alarme. */
-type AlarmeIcone = { l: string; s: string; tom: "crit" | "warn" | "violet" | "mute" | "ok" | "okb"; desc: string; rap?: Rapida };
+type AlarmeIcone = { l: string; s: string; tom: "crit" | "warn" | "violet" | "mute" | "ok" | "okb" | "info"; desc: string; rap?: Rapida };
 const ALARMES: Record<string, AlarmeIcone> = {
   "venda em atraso": { l: "V", s: "⚠", tom: "crit", desc: "Venda em atraso — o prazo da venda já passou", rap: "venda_atraso" },
   "compra em atraso": { l: "C", s: "⚠", tom: "crit", desc: "Compra em atraso — material com previsão vencida", rap: "compra_atraso" },
@@ -940,6 +998,7 @@ const ALARMES: Record<string, AlarmeIcone> = {
   "sem projeto": { l: "J", s: "?", tom: "violet", desc: "Venda sem projeto no Omie", rap: "sem_projeto" },
   "PV incompleto": { l: "I", s: "!", tom: "violet", desc: "PV/OS incompleto no Omie" },
   "defasado Omie": { l: "O", s: "↻", tom: "violet", desc: "Dados defasados em relação ao Omie — rode o Sync" },
+  "material sem NF": { l: "M", s: "⚠", tom: "crit", desc: "Material recebido sem NF de entrada há mais de 5 dias", rap: "mat_alarme" },
 };
 const ALARME_SERV: Record<"atraso" | "exec" | "agend" | "semos", AlarmeIcone> = {
   atraso: { l: "S", s: "⚠", tom: "crit", desc: "Serviço em atraso — previsão vencida e OS não concluída", rap: "serv_atraso" },
@@ -1076,6 +1135,7 @@ function CartaoPedido(props: {
   statusLote: (lista: Compra[], status: string) => void;
   incluirPc: (rc: string, itens: Compra[], numero: string) => Promise<void>;
   filtrarRapida: (r: Rapida) => void;
+  marcarMaterial: MarcarMaterial;
   notas: Nota[];
   abrirNotas: () => void;
 }) {
@@ -1250,11 +1310,12 @@ function LinhaCompra({ c, sel, toggleSel, podeAprovar, podeEditar, ehAdmin, setS
  *  PC · fornecedor · status (aprovação) · previsão · status do material
  *  e, se o pedido tem serviço, o estado do serviço. Não há relação 1:1
  *  entre itens e PCs: um PC pode atender várias RCs e vice-versa. */
-function GruposRc({ compras, p, sel, toggleSel, podeAprovar, podeEditar, ehAdmin, statusLote, incluirPc, gravar, abrirDrawer, $ }: {
+function GruposRc({ compras, p, sel, toggleSel, podeAprovar, podeEditar, ehAdmin, statusLote, incluirPc, marcarMaterial, gravar, abrirDrawer, $ }: {
   compras: Compra[]; p: Pedido; sel: Set<string>; toggleSel: (k: string) => void;
   podeAprovar: boolean; podeEditar: boolean; ehAdmin: boolean;
   statusLote: (lista: Compra[], status: string) => void;
   incluirPc: (rc: string, itens: Compra[], numero: string) => Promise<void>;
+  marcarMaterial: MarcarMaterial;
   gravar: Gravar; abrirDrawer: (k: string) => void; $: (v: number | null) => string;
 }) {
   // Serviço é do pedido inteiro: aparece uma vez na faixa acima (FaixaServico).
@@ -1276,7 +1337,7 @@ function GruposRc({ compras, p, sel, toggleSel, podeAprovar, podeEditar, ehAdmin
   return (
     <>
       <div className={`${cls} rcg-hd`}>
-        <div className="it"><span /><span>RC</span><span>Item</span><span style={{ textAlign: "right" }}>Valor RC</span></div>
+        <div className="it"><span /><span>RC</span><span>Item</span><span>Material</span><span style={{ textAlign: "right" }}>Valor RC</span></div>
         <div className="pc"><span>PC</span><span>Fornecedor</span><span style={{ textAlign: "right" }}>Valor PC</span><span>Status</span><span>Prev. material</span><span>Material</span><span>NF entrada</span>{servico && <span>Serviço</span>}<span /></div>
       </div>
       {ordem.map(([k, itens]) => {
@@ -1296,6 +1357,7 @@ function GruposRc({ compras, p, sel, toggleSel, podeAprovar, podeEditar, ehAdmin
                   <span>{rc ? <span className={`rcnum ${idx ? "rep" : ""}`}>RC {rc}</span> : <span className="rcnum vazio">sem RC</span>}</span>
                   <div className="desc">{c.desc}
                     <small>{c.qtd} × {$(c.unit)} = <b style={{ color: "var(--ww-text-muted)" }}>{$(c.rcTotal)}</b></small></div>
+                  <MatCelula c={c} podeEditar={podeEditar} marcar={marcarMaterial} />
                   <div style={{ textAlign: "right" }} className="num">{idx === 0 ? <b>{$(totalRc)}</b> : null}</div>
                 </div>
               ))}
@@ -1371,7 +1433,7 @@ function GruposRc({ compras, p, sel, toggleSel, podeAprovar, podeEditar, ehAdmin
       })}
       {compras.length > 0 && (
         <div className={`${cls} rcg-soma`}>
-          <div className="it"><span /><span /><span style={{ textAlign: "right" }}>Soma das RCs</span><span style={{ textAlign: "right" }} className="num"><b>{$(somaRcs)}</b></span></div>
+          <div className="it"><span /><span /><span /><span style={{ textAlign: "right" }}>Soma das RCs</span><span style={{ textAlign: "right" }} className="num"><b>{$(somaRcs)}</b></span></div>
           <div className="pc" />
         </div>
       )}

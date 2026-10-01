@@ -73,7 +73,62 @@ export type Compra = {
   servico: boolean;
   /** Quantas linhas de RC dividem este PC (um PC do Omie cobre vários itens). */
   pcLinhas: number;
+  /** Status do material marcado à mão pelo time (custom_fields.mat_status). */
+  matManual: MatManual | null;
+  /** Item sem PC próprio: PCs que atendem a RC dele (ou o pedido) — o material segue esses PCs. */
+  pcsRef?: Compra[];
 };
+
+export type MatManual = { v: "estoque" | "recebido_sem_nf" | "parcial" | "cancelado"; qtd?: number; por?: string; em?: string };
+export type MatItem = { k: "recebido" | "estoque" | "recebido_sem_nf" | "parcial" | "cancelado" | "atrasado" | "a_caminho" | "sem_previsao" | "sem_pc" | "aguarda";
+  t: string; tom: "ok" | "info" | "warn" | "crit" | "mute"; manual: boolean };
+export const MAT_MANUAL: { v: MatManual["v"]; t: string }[] = [
+  { v: "estoque", t: "Em estoque" },
+  { v: "recebido_sem_nf", t: "Recebido sem NF" },
+  { v: "parcial", t: "Recebido parcial" },
+  { v: "cancelado", t: "Não vai mais" },
+];
+const DIAS_SEM_NF = 5;
+
+/** Situação do material de UM item: a NF de entrada do Omie manda; senão vale
+ *  o que o time marcou; senão o automático (previsão do PC). */
+export function materialDoItem(c: Compra): MatItem {
+  if (c.recebidoEm != null) return { k: "recebido", t: "Recebido", tom: "ok", manual: false };
+  const m = c.matManual;
+  if (m?.v === "estoque") return { k: "estoque", t: "Em estoque", tom: "info", manual: true };
+  if (m?.v === "recebido_sem_nf") return { k: "recebido_sem_nf", t: "Recebido sem NF", tom: "warn", manual: true };
+  if (m?.v === "parcial") return { k: "parcial", t: `Parcial ${m.qtd ?? "?"}/${c.qtd}`, tom: "warn", manual: true };
+  if (m?.v === "cancelado") return { k: "cancelado", t: "Não vai mais", tom: "mute", manual: true };
+  if (!c.pc) {
+    const ref = c.pcsRef ?? [];
+    if (!ref.length) return { k: "sem_pc", t: "Sem PC", tom: "mute", manual: false };
+    // Segue os PCs da RC: todos com NF = recebido; senão o pior entre eles.
+    const ms = ref.map(materialDoPc);
+    if (ms.every((m) => m.k === "recebido")) return { k: "recebido", t: "Recebido", tom: "ok", manual: false };
+    for (const k of ["atrasado", "aguarda", "a_caminho", "sem_previsao"] as const) {
+      const m = ms.find((x) => x.k === k); if (m) return m;
+    }
+    return ms[0];
+  }
+  return materialDoPc(c);
+}
+
+function materialDoPc(c: Compra): MatItem {
+  if (c.recebidoEm != null) return { k: "recebido", t: "Recebido", tom: "ok", manual: false };
+  if (c.estado === "pendente" || c.estado === "recusado") return { k: "aguarda", t: "Aguarda aprovação", tom: "mute", manual: false };
+  if (c.prev != null && (diasAte(c.prev) ?? 0) < 0) return { k: "atrasado", t: "Atrasado", tom: "crit", manual: false };
+  if (c.prev != null) return { k: "a_caminho", t: "A caminho", tom: "info", manual: false };
+  return { k: "sem_previsao", t: "Sem previsão", tom: "mute", manual: false };
+}
+
+/** Material recebido (total ou parcial) sem NF de entrada há mais de 5 dias. */
+export function materialSemNfAtrasado(c: Compra): boolean {
+  const m = c.matManual;
+  if (c.recebidoEm != null || !m || (m.v !== "recebido_sem_nf" && m.v !== "parcial") || !m.em) return false;
+  return (Date.now() - new Date(m.em).getTime()) / 86_400_000 > DIAS_SEM_NF;
+}
+/** Item que não precisa de compra (veio do estoque ou saiu do escopo). */
+export const naoPrecisaComprar = (c: Compra) => c.matManual?.v === "estoque" || c.matManual?.v === "cancelado";
 
 export type Fase = { k: string; s: "d" | "p" | "l" | "o" | "na"; t: string; next?: string };
 
@@ -128,6 +183,10 @@ export function compraDaLinha(r: AnyRow, pedidoId: string): Compra {
     prevServicos: dataMs(r.nova_prev_servicos),
     servico: /servi/i.test(cat) || s(r.tipo_omie) === "Serviços",
     pcLinhas: 1,
+    matManual: (() => {
+      const m = ((r.custom_fields as Record<string, unknown> | null) ?? {}).mat_status as MatManual | undefined;
+      return m && typeof m === "object" && m.v ? m : null;
+    })(),
   };
 }
 
@@ -185,6 +244,14 @@ export function montarPedido(
       c.dif = c.pcValor != null && rcSoma > 0 ? c.pcValor / rcSoma - 1 : null;
     }
   }
+  // Item sem PC próprio herda o material dos PCs da RC dele (ou do pedido,
+  // se o item não tem RC): um PC atende a RC inteira, não item a item.
+  const comPc = compras.filter((c) => c.pc);
+  for (const c of compras) {
+    if (c.pc) continue;
+    const daRc = c.rcNumero ? comPc.filter((x) => x.rcNumero === c.rcNumero) : [];
+    c.pcsRef = daRc.length ? daRc : comPc;
+  }
   const alarmes = computeBucketAlarms(bucket.rows, hojeMs());
   // Projeto: o valor é a soma dos PV/OS distintos, não só o primeiro.
   let valorPv = n(head.pv_valor_total);
@@ -222,7 +289,9 @@ export function sinais(p: Pedido, modulo: string): Pedido["flags"] {
   if (p.compras.some((c) => c.estado === "recusado")) f.push({ tom: "r", t: "recusa a resolver" });
   // Um PC pode atender qualquer número de RCs: "sem PC" só quando o pedido
   // tem compra/RC e nenhum PC ainda (Benny, 01/10/2026).
-  if (modulo !== "pcs" && p.compras.length > 0 && estrutura(p).pcs.length === 0) f.push({ tom: "g", t: "sem PC" });
+  // Item do estoque ou fora do escopo não precisa de PC.
+  if (modulo !== "pcs" && p.compras.some((c) => !naoPrecisaComprar(c)) && estrutura(p).pcs.length === 0) f.push({ tom: "g", t: "sem PC" });
+  if (modulo !== "pcs" && p.compras.some(materialSemNfAtrasado)) f.push({ tom: "r", t: "material sem NF" });
   if (modulo === "avulsos" && a.has("sem_projeto")) f.push({ tom: "v", t: "sem projeto" });
   if (modulo !== "pcs" && a.has("pvos_incompl")) f.push({ tom: "v", t: "PV incompleto" });
   if (a.has("defas_omie")) f.push({ tom: "v", t: "defasado Omie" });
@@ -285,9 +354,17 @@ export function fases(p: Pedido, modulo: string): { lista: Fase[]; atual: Fase |
     next: nRec ? `resolver ${plural(nRec, "recusa", "recusas")}` : `aprovar ${plural(nPend, "PC", "PCs")}` });
   const soServico = it.length > 0 && it.every((c) => c.servico);
   if (soServico) L.push({ k: "Mat", s: "na", t: "sem material — pedido só de serviço" });
-  else L.push({ k: "Mat", s: nPcs && nRcb === nPcs ? "d" : matLate ? "l" : nRcb || nAp ? "p" : "o",
-    t: nPcs ? `${nRcb}/${nPcs} PCs recebidos${matLate ? ` · ${matLate} com previsão vencida` : ""}` : "nada comprado ainda",
-    next: nPcs ? `receber ${plural(nPcs - nRcb, "PC", "PCs")}` : "aguardando compra" });
+  else {
+    // Por item (01/10/2026): conta como "tem o material" recebido pela NF,
+    // recebido sem NF e em estoque; "não vai mais" sai da conta.
+    const rel = it.filter((c) => c.matManual?.v !== "cancelado").map(materialDoItem);
+    const tem = rel.filter((m) => m.k === "recebido" || m.k === "recebido_sem_nf" || m.k === "estoque").length;
+    const semNf = rel.filter((m) => m.k === "recebido_sem_nf" || m.k === "parcial").length;
+    const late = rel.filter((m) => m.k === "atrasado").length || matLate;
+    L.push({ k: "Mat", s: rel.length && tem === rel.length ? "d" : late ? "l" : tem || nRcb || nAp ? "p" : "o",
+      t: rel.length ? `${tem}/${rel.length} itens com o material${semNf ? ` · ${semNf} sem NF de entrada` : ""}${late ? ` · ${late} com previsão vencida` : ""}` : "nada comprado ainda",
+      next: rel.length ? `material de ${plural(rel.length - tem, "item", "itens")}` : "aguardando compra" });
+  }
   if (modulo !== "pcs") {
     // A OS do app de serviços (custom_fields.ww_os_status) manda: se existe,
     // o pedido tem serviço — mesmo que nenhuma compra seja de categoria serviço.
@@ -302,7 +379,7 @@ export function fases(p: Pedido, modulo: string): { lista: Fase[]; atual: Fase |
       : { k: "Serv", s: "na", t: "sem serviço neste pedido" });
     L.push(p.faturado
       ? { k: "NF saída", s: "d", t: `NF ${p.nfSaida || "emitida"}` }
-      : { k: "NF saída", s: nPcs && nRcb === nPcs ? (atrasado ? "l" : "p") : "o", t: "NF de saída não emitida", next: "emitir NF de saída" });
+      : { k: "NF saída", s: L.find((x) => x.k === "Mat")?.s === "d" || (nPcs && nRcb === nPcs) ? (atrasado ? "l" : "p") : "o", t: "NF de saída não emitida", next: "emitir NF de saída" });
   }
   const atual = L.find((x) => x.s !== "d" && x.s !== "na") ?? null;
   return { lista: L, atual };
@@ -425,7 +502,8 @@ export type Periodo = "tudo" | "7" | "30" | "vencidos";
 export type Rapida = "todos" | "minha" | "atrasados" | "sem_pc" | "alarme"
   | "serv_exec" | "serv_agend" | "serv_semos" | "pode_fat"
   | "venda_atraso" | "compra_atraso" | "recusa" | "sem_projeto" | "serv_atraso"
-  | `serv_st:${string}`;
+  | `serv_st:${string}`
+  | "mat_estoque" | "mat_sem_nf" | "mat_parcial" | "mat_alarme";
 
 /** Status de serviço, na ordem em que aparecem nos filtros (rótulos da tela). */
 export const STATUS_SERVICO: { rotulo: string; tom: Servico["tom"]; desc: string }[] = [
@@ -476,6 +554,15 @@ export function passa(p: Pedido, c: Compra | null, q: string, per: Periodo, f: F
   if (rap === "atrasados" && !p.flags.some((x) => x.t === "venda em atraso" || x.t === "compra em atraso")) return false;
   if (rap === "sem_pc" && !p.flags.some((x) => x.t === "sem PC")) return false;
   if (rap === "alarme" && !p.flags.some((x) => x.t !== "sem PC")) return false;
+  if (rap.startsWith("mat_")) {
+    // Filtros de material são por item: no pedido aberto ficam só os itens que batem.
+    if (!c) return false;
+    const m = c.matManual?.v;
+    if (rap === "mat_estoque" && m !== "estoque") return false;
+    if (rap === "mat_sem_nf" && !(m === "recebido_sem_nf" && c.recebidoEm == null)) return false;
+    if (rap === "mat_parcial" && !(m === "parcial" && c.recebidoEm == null)) return false;
+    if (rap === "mat_alarme" && !materialSemNfAtrasado(c)) return false;
+  }
   if (rap === "venda_atraso" && !p.flags.some((x) => x.t === "venda em atraso")) return false;
   if (rap === "compra_atraso" && !p.flags.some((x) => x.t === "compra em atraso")) return false;
   if (rap === "recusa" && !p.flags.some((x) => x.t === "recusa a resolver")) return false;
