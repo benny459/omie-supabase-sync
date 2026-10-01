@@ -226,7 +226,7 @@ const PADRAO: Col["key"][] = [
   "conta_corrente", "status_titulo", "val_aberto", "valor_documento",
 ];
 const LARGURA: Partial<Record<Col["key"], string>> = {
-  empresa: "88px", status_titulo: "118px", numero_documento: "minmax(110px,1fr)", numero_documento_fiscal: "90px",
+  empresa: "88px", status_titulo: "210px", numero_documento: "minmax(110px,1fr)", numero_documento_fiscal: "90px",
   categoria: "minmax(140px,1.1fr)", projeto: "minmax(110px,1fr)", conta_corrente: "minmax(110px,1fr)",
   observacao: "minmax(180px,1.4fr)", contraparte_razao: "minmax(180px,1.3fr)", chave_nfe: "minmax(160px,1.2fr)",
   codigo_barras: "minmax(160px,1.2fr)", valor_documento: "140px", val_aberto: "140px", valor_pago: "130px", val_liquido: "130px",
