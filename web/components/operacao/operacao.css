@@ -370,3 +370,7 @@
 .op .pvid{display:flex;flex-direction:column;align-items:flex-start}
 /* previsão vencida marcada na própria data */
 .op .rcg .atraso{display:block;margin-top:3px;font-size:11px;font-weight:600;color:var(--ww-crit)}
+/* espaço fixo para incluir mais um PC na RC */
+.op .rcg .pc.pc-novo{min-height:40px;grid-template-columns:auto 1fr}
+.op .rcg .pc.pc-novo .in.caixa{width:92px;opacity:.75}
+.op .rcg .pc.pc-novo .in.caixa:focus{opacity:1}

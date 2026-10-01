@@ -62,6 +62,27 @@ type Vista = "lista" | "tabela" | "kanban" | "tempo";
 type Toast = { msg: string; desfazer?: () => void; erro?: boolean } | null;
 type Visao = { nome: string; escopo: Escopo; periodo: Periodo; filtros: Filtros; rapida: Rapida; q: string };
 
+const VIEW_DO_MODULO: Record<Modulo, string> = { avulsos: "v_pc_avulsos", projetos: "v_pc_projetos", pcs: "v_pc_pcs" };
+
+/** Linha manual só com RC + nº do PC (quando todas as linhas da RC já têm PC).
+ *  Mesmo esquema do AddRowButton: ncod_ped negativo abaixo do menor existente. */
+async function novaLinhaPc(head: AnyRow, rc: string, pc: string, modulo: Modulo): Promise<string | null> {
+  const approval = supaBrowser().schema("approval" as never);
+  const { data: minRows, error: mErr } = await approval.from("approvals")
+    .select("ncod_ped").order("ncod_ped", { ascending: true }).limit(1);
+  if (mErr) return mErr.message;
+  const min = Number((minRows?.[0] as { ncod_ped?: number } | undefined)?.ncod_ped ?? 0);
+  const linha: AnyRow = {
+    empresa: s(head.empresa) || "SF", ncod_ped: Math.min(min, -1) - 1, modulo,
+    source: "native", status: "PENDENTE",
+    pv_os_label: s(head.pv_os_label) || null,
+    rc_numero: rc || null, pc_numero_manual: pc,
+    ...(head.codigo_projeto != null ? { codigo_projeto: head.codigo_projeto } : {}),
+  };
+  const { error } = await approval.from("approvals").insert(linha);
+  return error?.message ?? null;
+}
+
 export default function TelaOperacao({ modulo, title, rows: rowsIniciais, parcial = false, avisoErro = null }: {
   modulo: Modulo; title: string; rows: AnyRow[];
   /** Só os não faturados chegaram até agora — o resto vem em segundo plano. */
@@ -122,10 +143,36 @@ export default function TelaOperacao({ modulo, title, rows: rowsIniciais, parcia
   }, []);
 
   // ── dados ─────────────────────────────────────────────────────────────
-  const rows = useMemo(() => rowsIniciais.map((r) => {
-    const p = patches.get(`${s(r.empresa)}|${s(r.ncod_ped)}`);
-    return p ? { ...r, ...p } : r;
-  }), [rowsIniciais, patches]);
+  /* Linhas recarregadas da view viva para um pedido (depois de digitar um
+     nº de PC): substituem as da carga inicial pela chave e acrescentam as
+     novas — o PC aparece com fornecedor, valor e status sem recarregar tudo. */
+  const [vivas, setVivas] = useState<Map<string, AnyRow>>(new Map());
+  const rows = useMemo(() => {
+    const base = vivas.size
+      ? [...rowsIniciais.map((r) => vivas.get(`${s(r.empresa)}|${s(r.ncod_ped)}`) ?? r),
+         ...[...vivas.entries()].filter(([k]) => !rowsIniciais.some((r) => `${s(r.empresa)}|${s(r.ncod_ped)}` === k)).map(([, r]) => r)]
+      : rowsIniciais;
+    return base.map((r) => {
+      const p = patches.get(`${s(r.empresa)}|${s(r.ncod_ped)}`);
+      return p ? { ...r, ...p } : r;
+    });
+  }, [rowsIniciais, vivas, patches]);
+  const recarregarPedido = useCallback(async (p: Pedido) => {
+    const pvsDoPedido = [...new Set(p.bucket.rows.map((r) => s(r.pv_os_label)).filter(Boolean))];
+    const proj = modulo === "projetos" ? Number(p.bucket.rows.find((r) => r.codigo_projeto)?.codigo_projeto ?? 0) || 0 : 0;
+    const qs = new URLSearchParams({ view: VIEW_DO_MODULO[modulo] });
+    if (pvsDoPedido.length) qs.set("pv", pvsDoPedido.join(","));
+    if (proj) qs.set("projeto", String(proj));
+    const r = await fetch(`/api/list/rows?${qs}`, { cache: "no-store" });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(j.error ?? r.statusText);
+    const novas = (j.rows ?? []) as AnyRow[];
+    setVivas((m) => { const n = new Map(m); for (const x of novas) n.set(`${s(x.empresa)}|${s(x.ncod_ped)}`, x); return n; });
+    // O que veio da view viva já reflete o gravado — descarta patches locais dessas linhas.
+    setPatches((m) => { const n = new Map(m); for (const x of novas) n.delete(`${s(x.empresa)}|${s(x.ncod_ped)}`); return n; });
+    return novas;
+  }, [modulo]);
+
   const aplicar = useCallback((key: string, patch: AnyRow) =>
     setPatches((m) => { const n = new Map(m); n.set(key, { ...(n.get(key) ?? {}), ...patch }); return n; }), []);
 
@@ -272,6 +319,38 @@ export default function TelaOperacao({ modulo, title, rows: rowsIniciais, parcia
     if (erro) { aplicar(c.key, antes); mostrar({ msg: `Não gravou: ${erro}`, erro: true }); return false; }
     return true;
   }, [aplicar, modulo, mostrar]);
+
+  /* Incluir um PC numa RC (01/10/2026): vai para as linhas da RC ainda sem
+     PC; se todas já têm, cria uma linha manual só com RC + nº do PC. Depois
+     recarrega o pedido — o PC entra na lista logo abaixo dos outros, já com
+     fornecedor/valor/status do Omie, sem deixar buraco. */
+  const incluirPc = useCallback(async (p: Pedido, rc: string, itens: Compra[], numero: string) => {
+    const pc = numero.trim();
+    if (!pc) return;
+    if (itens.some((c) => c.pc === pc)) { mostrar({ msg: `O PC ${pc} já está nesta RC.`, erro: true }); return; }
+    const semPc = itens.filter((c) => !c.pc);
+    // PC que já está no pedido sem RC (ex.: PC do Omie ligado ao PV): só
+    // pendura-o nesta RC, em vez de duplicar a linha.
+    const solto = p.compras.find((c) => c.pc === pc && !c.rcNumero);
+    if (solto && rc) {
+      if (!(await gravar(solto, "rcNumero", rc, { rc_numero: rc }))) return;
+    } else if (semPc.length) {
+      for (const c of semPc) if (!(await gravar(c, "pc", pc, { pc_numero_manual: pc }))) return;
+    } else {
+      const head = itens[0]?.row ?? p.bucket.rows[0] ?? {};
+      const erro = await novaLinhaPc(head, rc, pc, modulo);
+      if (erro) { mostrar({ msg: `Não gravou: ${erro}`, erro: true }); return; }
+    }
+    mostrar({ msg: `PC ${pc} incluído — buscando dados no Omie…` });
+    try {
+      const novas = await recarregarPedido(p);
+      const achou = novas.some((x) => s(x.pc_numero_manual) === pc && s(x.nome_fornecedor));
+      mostrar(achou ? { msg: `PC ${pc} incluído.` }
+        : { msg: `PC ${pc} gravado, mas não foi encontrado no Omie ainda — confira o número ou clique em Sync agora.`, erro: true });
+    } catch (e) {
+      mostrar({ msg: `PC ${pc} gravado; recarregue a página para ver os dados (${e instanceof Error ? e.message : e}).`, erro: true });
+    }
+  }, [gravar, mostrar, modulo, recarregarPedido]);
 
   const selCompras = useMemo(() => [...sel].map((k) => compraPorKey.get(k)).filter(Boolean) as Compra[], [sel, compraPorKey]);
   const emMassa = async (status: string, lista?: Compra[]) => {
@@ -526,7 +605,8 @@ export default function TelaOperacao({ modulo, title, rows: rowsIniciais, parcia
               bucket={bucketPorId.get(p.id)} budgetMap={budgetMap} verValores={verValores}
               liberacao={modulo === "avulsos" ? { ativo: liberacao.has(p.id), pode: podeLiberar, alternar: () => void liberar(p) } : null}
               excluirPv={ehAdmin && modulo !== "pcs" ? () => void excluirPv(p) : null}
-              statusLote={(lista, st) => { if (lista.length === 1) void setStatus(lista[0], st); else void emMassa(st, lista); }} />
+              statusLote={(lista, st) => { if (lista.length === 1) void setStatus(lista[0], st); else void emMassa(st, lista); }}
+              incluirPc={(rc, itens, numero) => incluirPc(p, rc, itens, numero)} />
           ))}
           {visiveis.length > limite && (
             <div style={{ textAlign: "center", margin: 14 }}>
@@ -750,6 +830,7 @@ function CartaoPedido(props: {
   liberacao: { ativo: boolean; pode: boolean; alternar: () => void } | null;
   excluirPv: (() => void) | null;
   statusLote: (lista: Compra[], status: string) => void;
+  incluirPc: (rc: string, itens: Compra[], numero: string) => Promise<void>;
 }) {
   const { p, compras, modulo, aberto, $ } = props;
   const d = diasAte(p.lim);
@@ -898,10 +979,11 @@ function LinhaCompra({ c, sel, toggleSel, podeAprovar, podeEditar, ehAdmin, setS
  *  PC · fornecedor · status (aprovação) · previsão · status do material
  *  e, se o pedido tem serviço, o estado do serviço. Não há relação 1:1
  *  entre itens e PCs: um PC pode atender várias RCs e vice-versa. */
-function GruposRc({ compras, p, sel, toggleSel, podeAprovar, podeEditar, ehAdmin, statusLote, gravar, abrirDrawer, $ }: {
+function GruposRc({ compras, p, sel, toggleSel, podeAprovar, podeEditar, ehAdmin, statusLote, incluirPc, gravar, abrirDrawer, $ }: {
   compras: Compra[]; p: Pedido; sel: Set<string>; toggleSel: (k: string) => void;
   podeAprovar: boolean; podeEditar: boolean; ehAdmin: boolean;
   statusLote: (lista: Compra[], status: string) => void;
+  incluirPc: (rc: string, itens: Compra[], numero: string) => Promise<void>;
   gravar: Gravar; abrirDrawer: (k: string) => void; $: (v: number | null) => string;
 }) {
   // Serviço: vem do app de serviços por PV/OS (custom_fields.ww_os_status).
@@ -937,7 +1019,7 @@ function GruposRc({ compras, p, sel, toggleSel, podeAprovar, podeEditar, ehAdmin
         return (
           <div key={k} className={cls}>
             <div className="it-col">
-              {itens.map((c, idx) => (
+              {itensVisiveis(itens).map((c, idx) => (
                 <div key={c.key} className={`it ${sel.has(c.key) ? "sel" : ""}`}>
                   <input type="checkbox" className="cb" checked={sel.has(c.key)} onChange={() => toggleSel(c.key)} />
                   <span>{rc ? <span className={`rcnum ${idx ? "rep" : ""}`}>RC {rc}</span> : <span className="rcnum vazio">sem RC</span>}</span>
@@ -1001,12 +1083,15 @@ function GruposRc({ compras, p, sel, toggleSel, podeAprovar, podeEditar, ehAdmin
                   </div>
                 );
               })}
-              {pcs.length === 0 && podeEditar && semPc.length > 0 && (
-                <div className="pc">
+              {/* Sempre um espaço para mais um PC, logo abaixo dos que já
+                  existem — o PC digitado entra na lista, sem deixar buraco. */}
+              {podeEditar && (
+                <div className="pc pc-novo">
                   <span>
-                    <InputTexto mono className="in caixa" valor="" placeholder="nº PC"
-                      onSalvar={(v) => { if (v) for (const x of semPc) void gravar(x, "pc", v, { pc_numero_manual: v }); }} />
+                    <InputTexto key={`novo-${pcs.map(([n]) => n).join(",")}`} mono className="in caixa" valor="" placeholder={pcs.length ? "+ PC" : "nº PC"}
+                      onSalvar={(v) => { if (v.trim()) void incluirPc(rc, itens, v); }} />
                   </span>
+                  {pcs.length === 0 && <span className="desc" style={{ color: "var(--ww-text-faint)", fontSize: 12 }}>digite o nº do pedido de compra — fornecedor, valor e status vêm do Omie</span>}
                 </div>
               )}
             </div>
@@ -1039,6 +1124,14 @@ function NfEntrada({ cs, late, aprovado }: { cs: Compra[]; late: boolean; aprova
   }
   if (!aprovado) return <span style={{ color: "var(--ww-text-faint)" }}>—</span>;
   return <span className="nf"><span className={`st ${late ? "recusado" : "pendente"}`}>Aguardando NF</span></span>;
+}
+
+/** Linha criada só para pendurar mais um PC numa RC (sem item nem custo)
+ *  não é item: some da coluna de itens quando a RC tem outras linhas. */
+function itensVisiveis(itens: Compra[]): Compra[] {
+  const soPc = (c: Compra) => !!c.pc && !s(c.row.rc_descricao) && c.rcTotal === 0 && Number(c.row.ncod_ped) < 0;
+  const vis = itens.filter((c) => !soPc(c));
+  return vis.length ? vis : itens;
 }
 
 /** Status de um PC que cobre várias linhas: muda todas de uma vez. */

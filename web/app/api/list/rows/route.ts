@@ -43,6 +43,39 @@ export async function GET(req: Request) {
   const soAberto = url.searchParams.get("aberto") === "1" && view !== "v_pc_pcs";
   const rapido = url.searchParams.get("rapido") === "1";
 
+  /* Recarga de UM pedido (01/10/2026): depois de digitar um nº de PC na
+     lista, a tela pede só as linhas desse pedido à view VIVA — que já casa o
+     PC manual com o Omie (fornecedor, valor, status, NF) — em vez de esperar o
+     refresh de 10 min da MV ou recarregar tudo. `pv` = lista de PV/OS,
+     `projeto` = código do projeto (linhas direto no projeto, sem PV). */
+  const pvs = (url.searchParams.get("pv") ?? "").split(",").map((x) => x.trim()).filter(Boolean).slice(0, 50);
+  const projeto = Number(url.searchParams.get("projeto") ?? 0) || null;
+  if (pvs.length || projeto) {
+    if (pvs.some((x) => !/^[\w .\-\/]+$/.test(x))) return NextResponse.json({ error: "pv inválido" }, { status: 400 });
+    const live = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!,
+      { auth: { persistSession: false }, db: { schema: "approval" } },
+    );
+    const conds = [
+      ...(pvs.length ? [`pv_os_label.in.(${pvs.map((x) => `"${x}"`).join(",")})`] : []),
+      ...(projeto ? [`codigo_projeto.eq.${projeto}`] : []),
+    ];
+    const { data, error } = await live.from(view).select("*").or(conds.join(",")).limit(2000);
+    if (error) return NextResponse.json({ error: `${view}: ${error.message}` }, { status: 500 });
+    let linhas = (data ?? []) as Record<string, unknown>[];
+    // Mesmo filtro de PCs escondidos da carga completa (ver abaixo).
+    const { data: esc } = await live.schema("platform" as never).from("excluded_pc").select("empresa, pc_numero");
+    if (esc?.length) {
+      const ch = new Set((esc as { empresa: string; pc_numero: string }[]).map((e) => `${e.empresa}|${String(e.pc_numero).trim()}`));
+      linhas = linhas.filter((r) => {
+        const pc = String(r.pc_numero ?? r.pc_numero_manual ?? "").trim();
+        return !pc || !ch.has(`${String(r.empresa ?? "")}|${pc}`);
+      });
+    }
+    return NextResponse.json({ rows: linhas, count: linhas.length, parcial: true });
+  }
+
   // MVs vivem em sales.* — cliente service com schema sales
   const adm = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
