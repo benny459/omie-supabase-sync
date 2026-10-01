@@ -242,8 +242,7 @@ export default function TelaCompras() {
         onDragEnd={() => setArrasto(null)}>
         <div className="l1">
           <span className="no">{p.tipo === "PC" && (p.etapa === "10" || p.etapa === "15") && (p.aprov === "aprovado"
-              ? <span className="badge-ap ok">✓ Aprovado{p.aprovEm ? ` · ${dBR(p.aprovEm.slice(0, 10))}` : ""}{p.aprovPor ? ` · ${p.aprovPor.split("@")[0]}` : ""}</span>
-              : <span className="badge-ap pend">⏳ Pendente de aprovação</span>)}
+              ? <span className="badge-ap ok">✓ Aprovado</span> : <span className="badge-ap pend">Pendente</span>)}
             {p.tipo === "RC" ? `Requisição Nº ${p.num}` : isNF
             ? <>NF-e Nº {String(p.nf).split(",")[0].padStart(9, "0")} <span className="faint">· Pedido {p.num}</span></> : `Pedido Nº ${p.num}`}</span>
           <button className="kebab" aria-label="Ações" onClick={(e) => { e.stopPropagation(); const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
@@ -256,13 +255,14 @@ export default function TelaCompras() {
         <div className="val"><b className="num">{money(valorDe(p))}</b>
           {p.tipo === "RC" && p.saldo != null && Math.abs((p.saldo ?? 0) - p.valor) > 0.005 && <span className="faint" title="Saldo a comprar / valor original">saldo de {money(p.valor)}</span>}
           <span className="muted">{cond}</span>
-          {p.tipo === "PC" && (p.etapa === "80" ? <span className="pill p-conf">Conferido</span> : p.etapa === "60" ? <span className="pill p-rec">Recebido</span>
-            : p.etapa === "40" ? <span className="pill p-fat">Faturado</span> : p.etapa === "35" ? <span className="pill p-env">Enviado</span> : null)}</div>
+</div>
+        {p.tipo === "PC" && (p.etapa === "10" || p.etapa === "15") && p.aprov === "aprovado" && (p.aprovEm || p.aprovPor) &&
+          <div className="ent">{p.aprovEm ? dBR(p.aprovEm.slice(0, 10), true) : ""}{p.aprovPor ? ` por ${p.aprovPor.split("@")[0]}` : ""}</div>}
         {p.tipo === "PC" && (p.etapa === "10" || p.etapa === "15") && p.aprov !== "aprovado" &&
           <div className="ent"><button className="btn sm ok" style={{ height: 24, padding: "0 10px", fontSize: 11.5 }}
             onClick={(ev) => { ev.stopPropagation(); aprovar([p.id]); }}>✓ Aprovar</button></div>}
-        {p.enviadoEm && p.tipo === "PC" ? <div className="ent"><span className="pill p-env">✉ Enviado {dBR(p.enviadoEm.slice(0, 10))}</span>
-          <span className="faint">{p.enviadoMeio === "whatsapp" ? "WhatsApp" : p.enviadoMeio === "email" ? "e-mail" : ""}</span></div> : null}
+        {p.enviadoEm && p.tipo === "PC" && p.etapa === "35" ? <div className="ent">✉ {dBR(p.enviadoEm.slice(0, 10), true)}
+          {p.enviadoMeio === "whatsapp" ? " · WhatsApp" : p.enviadoMeio === "email" ? " · e-mail" : ""}</div> : null}
         {nfSug[p.id] ? <div className="ent"><span className="pill p-sky">📄 NF chegou pela Focus</span><span className="faint">confira no recebimento</span></div> : null}
         {p.tipo === "RC"
           ? <div className="ent">{p.cobPcs?.length ? <><span className="pill p-sky">{p.cobDone}/{p.cobTotal} itens atendidos{p.parciais ? ` · ${p.parciais} parcial` : ""}</span> {p.cobPcs.map((n) => "PC " + n).join(", ")}</> : <span className="faint">Nenhum item comprado ainda</span>}</div>
