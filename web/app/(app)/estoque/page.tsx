@@ -5,11 +5,12 @@ import LinkClassica from "@/components/navy/tela/LinkClassica";
 
 export const dynamic = "force-dynamic";
 
-/* 30/09/26: tela Navy; a antiga em ?classica=1 para comparar. */
-export default async function EstoquePage({ searchParams }: { searchParams: Promise<{ classica?: string }> }) {
+/* 30/09/26: tela Navy; a antiga em ?classica=1 para comparar.
+   01/10/26: Estoque v2 — lista + ⌘K + ficha do item (/estoque/[codigo]); ?cliente= filtra pelos itens que o cliente usou. */
+export default async function EstoquePage({ searchParams }: { searchParams: Promise<{ classica?: string; cliente?: string }> }) {
   await requireArea("erp");
-  const { classica } = await searchParams;
-  if (!classica) return (<><TelaEstoqueNavy /><LinkClassica href="/estoque?classica=1" /></>);
+  const { classica, cliente } = await searchParams;
+  if (!classica) return (<><TelaEstoqueNavy clienteInicial={cliente ?? null} /><LinkClassica href="/estoque?classica=1" /></>);
 
   return (
     <div className="space-y-4">
