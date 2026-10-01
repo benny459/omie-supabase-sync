@@ -181,3 +181,38 @@ select orders.refresh_estoque_duplicidade();
 -- Refresh dos pares (o import_estoque roda 3x/dia útil; 4x/dia sobra).
 select cron.schedule('refresh-estoque-duplicidade', '41 */6 * * *',
   $$select orders.refresh_estoque_duplicidade()$$);
+
+-- compras.* não é exposto no PostgREST: a ficha lê os PCs do item por RPC (só service role),
+-- no mesmo padrão das funções orders.compras_*.
+create or replace function orders.estoque_item_pcs(p_empresa text, p_prod bigint) returns jsonb
+language sql stable security definer set search_path = compras, public as $$
+  select coalesce(jsonb_agg(jsonb_build_object(
+           'pedido_id', p.id, 'numero', p.numero, 'emissao', p.emissao, 'etapa', p.etapa, 'origem', p.origem,
+           'fornecedor', p.fornecedor_nome, 'projeto', p.projeto_nome, 'dt_rec', p.dt_rec,
+           'qtd', i.qtd, 'qtd_recebida', i.qtd_recebida, 'valor_unit', i.valor_unit)
+         order by p.emissao desc nulls last, p.numero desc), '[]'::jsonb)
+  from compras.itens i join compras.pedidos p on p.id = i.pedido_id
+  where p.empresa = p_empresa and i.ncod_prod = p_prod and p.tipo = 'PC' and not coalesce(p.cancelado, false)
+$$;
+
+create or replace function orders.estoque_busca_pcs(p_q text) returns jsonb
+language sql stable security definer set search_path = compras, public as $$
+  with pcs as (
+    select p.id, p.empresa, p.numero, p.emissao, p.fornecedor_nome
+    from compras.pedidos p
+    where p.tipo = 'PC' and not coalesce(p.cancelado, false) and p.numero like regexp_replace(p_q, '\D', '', 'g') || '%'
+      and length(regexp_replace(p_q, '\D', '', 'g')) >= 3
+    order by p.emissao desc nulls last limit 6
+  )
+  select coalesce(jsonb_agg(jsonb_build_object('numero', pcs.numero, 'empresa', pcs.empresa, 'emissao', pcs.emissao,
+           'fornecedor', pcs.fornecedor_nome,
+           'itens', (select coalesce(jsonb_agg(jsonb_build_object('n_cod_prod', i.ncod_prod, 'descricao', orders.fn_html_unescape(i.descricao))
+                     order by i.seq), '[]'::jsonb)
+                     from compras.itens i where i.pedido_id = pcs.id
+                       and exists (select 1 from orders.estoque_posicao e where e.empresa = pcs.empresa and e.n_cod_prod = i.ncod_prod)))
+         order by pcs.emissao desc nulls last), '[]'::jsonb)
+  from pcs
+$$;
+
+revoke all on function orders.estoque_item_pcs(text, bigint), orders.estoque_busca_pcs(text) from public, anon, authenticated;
+grant execute on function orders.estoque_item_pcs(text, bigint), orders.estoque_busca_pcs(text) to service_role;
