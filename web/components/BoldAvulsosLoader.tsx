@@ -29,24 +29,45 @@ export default function BoldAvulsosLoader({ view, modulo, title, countMode = "ex
   const [rows, setRows] = useState<Record<string, unknown>[] | null>(null);
   const [count, setCount] = useState<number | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  const [parcial, setParcial] = useState(false);
+  const [avisoErro, setAvisoErro] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
-    (async () => {
-      try {
-        // Sem &limit — a rota pagina server-side e devolve a MV inteira. Passar
-        // limit=1000 era o que truncava /avulsos (1776 rows) e subestimava os
-        // alarmes, que são calculados client-side em cima desse dataset.
-        const r = await fetch(`/api/list/rows?view=${view}&count=${countMode}`, { cache: "no-store" });
-        const j = await r.json();
-        if (cancelled) return;
-        if (!r.ok) { setErr(j.error ?? r.statusText); setRows([]); return; }
-        setRows(j.rows ?? []);
-        setCount(j.count ?? null);
-      } catch (e) {
-        if (!cancelled) { setErr(e instanceof Error ? e.message : String(e)); setRows([]); }
-      }
-    })();
+    let completo = false;
+    // Sem &limit — a rota pagina server-side e devolve a MV inteira. Passar
+    // limit=1000 era o que truncava /avulsos (1776 rows) e subestimava os
+    // alarmes, que são calculados client-side em cima desse dataset.
+    const base = `/api/list/rows?view=${view}&count=${countMode}`;
+    const buscar = async (extra: string) => {
+      const r = await fetch(base + extra, { cache: "no-store" });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.error ?? r.statusText);
+      return j as { rows?: Record<string, unknown>[]; count?: number | null };
+    };
+    /* Duas etapas (01/10/2026): a tela abre em "Em aberto", então primeiro
+       vêm só os não faturados direto da MV (rápido) e a tela desenha; o
+       conjunto completo (faturados + linhas manuais frescas da view viva)
+       chega em segundo plano e substitui sem piscar. Se a rápida falhar, a
+       completa ainda decide; se a completa falhar depois da rápida, fica a
+       rápida e avisa. */
+    const tela = typeof window !== "undefined" && new URLSearchParams(window.location.search).has("classica");
+    if (!tela) {
+      buscar("&aberto=1&rapido=1").then((j) => {
+        if (cancelled || completo) return;
+        setRows(j.rows ?? []); setParcial(true);
+      }).catch(() => { /* a completa resolve */ });
+    }
+    buscar("").then((j) => {
+      completo = true;
+      if (cancelled) return;
+      setRows(j.rows ?? []); setCount(j.count ?? null); setParcial(false);
+    }).catch((e) => {
+      completo = true;
+      if (cancelled) return;
+      const msg = e instanceof Error ? e.message : String(e);
+      setRows((atual) => { if (atual == null) { setErr(msg); return []; } setAvisoErro(msg); return atual; });
+    });
     return () => { cancelled = true; };
   }, [view, countMode]);
 
@@ -61,7 +82,7 @@ export default function BoldAvulsosLoader({ view, modulo, title, countMode = "ex
     return <ListSkeleton title={title} />;
   }
   const classica = typeof window !== "undefined" && new URLSearchParams(window.location.search).has("classica");
-  if (!classica) return <TelaOperacao modulo={modulo} title={title} rows={rows} />;
+  if (!classica) return <TelaOperacao modulo={modulo} title={title} rows={rows} parcial={parcial} avisoErro={avisoErro} />;
   return (
     <BoldAvulsosView modulo={modulo} title={title} rows={rows as never} totalCount={count} />
   );

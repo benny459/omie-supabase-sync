@@ -28,6 +28,7 @@ import {
   montarPedido, fases, financeiro, passa, noEscopo, dataMs, diasAte, dBR, isoDia, brl, pct,
   ESTADO_LABEL, FILTRO_LABEL,
   type Compra, type Escopo, type Estado, type Filtros, type Pedido, type Periodo, type Rapida,
+  servicoDoPedido,
 } from "@/lib/operacao-modelo";
 import { mudarStatus, mudarStatusEmMassa, salvarCampo, CAMPOS, type Modulo } from "@/lib/approvals-write";
 import { buildBuckets, BucketTotals, projetoDoBucket, LinkAbrirProjeto, type Bucket, type BudgetSummary } from "../BoldAvulsosView";
@@ -61,8 +62,11 @@ type Vista = "lista" | "tabela" | "kanban" | "tempo";
 type Toast = { msg: string; desfazer?: () => void; erro?: boolean } | null;
 type Visao = { nome: string; escopo: Escopo; periodo: Periodo; filtros: Filtros; rapida: Rapida; q: string };
 
-export default function TelaOperacao({ modulo, title, rows: rowsIniciais }: {
+export default function TelaOperacao({ modulo, title, rows: rowsIniciais, parcial = false, avisoErro = null }: {
   modulo: Modulo; title: string; rows: AnyRow[];
+  /** Só os não faturados chegaram até agora — o resto vem em segundo plano. */
+  parcial?: boolean;
+  avisoErro?: string | null;
 }) {
   const user = useUserPerms();
   const podeAprovar = canApprove(user, modulo);
@@ -211,7 +215,7 @@ export default function TelaOperacao({ modulo, title, rows: rowsIniciais }: {
       minha: it.filter((c) => c.estado === "pendente").length,
       atrasados: noScope.filter((p) => p.flags.some((f) => f.tom === "r" && f.t.includes("atraso"))).length,
       sem_pc: it.filter((c) => c.estado === "sem_pc").length,
-      alarme: noScope.filter((p) => p.flags.some((f) => f.t !== "RC sem PC")).length,
+      alarme: noScope.filter((p) => p.flags.some((f) => f.t !== "sem PC")).length,
     };
   }, [noScope]);
   const fila = useMemo(() => noScope.flatMap((p) => p.compras.filter((c) => c.estado === "pendente")), [noScope]);
@@ -392,8 +396,8 @@ export default function TelaOperacao({ modulo, title, rows: rowsIniciais }: {
       <div className="scope">
         {(["aberto", "faturado", "todos"] as const).map((k) => (
           <button key={k} className={`${escopo === k ? "on" : ""} ${k === "faturado" ? "fat" : ""}`} onClick={() => setEscopo(k)}>
-            <span className="sl">{k === "faturado" ? "✓ Faturados" : k === "aberto" ? "Em aberto" : "Todos"} <b>{contagem[k][0]}</b></span>
-            <small>{$(contagem[k][1])}{k === "aberto" ? " · não faturados" : k === "faturado" ? " · NF de saída emitida" : ""}</small>
+            <span className="sl">{k === "faturado" ? "✓ Faturados" : k === "aberto" ? "Em aberto" : "Todos"} <b>{parcial && k !== "aberto" ? "…" : contagem[k][0]}</b></span>
+            <small>{parcial && k !== "aberto" ? "carregando…" : $(contagem[k][1])}{k === "aberto" ? " · não faturados" : k === "faturado" ? " · NF de saída emitida" : ""}</small>
           </button>
         ))}
       </div>
@@ -401,6 +405,12 @@ export default function TelaOperacao({ modulo, title, rows: rowsIniciais }: {
         <div className="scopeNote">
           Mostrando <b>{escopo === "faturado" ? "somente faturados" : "em aberto + faturados"}</b> —{" "}
           <button className="linkbtn" onClick={() => setEscopo("aberto")}>voltar para em aberto</button>
+        </div>
+      )}
+
+      {avisoErro && (
+        <div className="scopeNote" style={{ color: "var(--ww-danger-text, #f87171)" }}>
+          Mostrando só os não faturados — a carga completa falhou ({avisoErro}). Recarregue a página para tentar de novo.
         </div>
       )}
 
@@ -492,7 +502,7 @@ export default function TelaOperacao({ modulo, title, rows: rowsIniciais }: {
         <span>
           {visiveis.length} {rotulo === "PC" ? "PCs" : `${rotulo}s`} · {totalCompras} compras
           {vista === "lista" && " · clique no pedido para abrir as compras"}
-          <span className="legend"><i className="d" />concluído<i className="p" />em andamento<i className="l" />atrasado / bloqueado<i />não iniciado<i className="na" />não se aplica</span>
+          <span className="legend"><i className="d" />concluído<i className="p" />em andamento<i className="l" />atrasado / bloqueado<i className="o" />não iniciado<i className="na" />não se aplica</span>
         </span>
         {(vista === "lista" || vista === "tabela") && (
           <span>
@@ -665,6 +675,18 @@ export function FasesBar({ p, modulo }: { p: Pedido; modulo: string }) {
   );
 }
 
+/** NF de saída (faturamento ao cliente) — o que mais importa no pedido:
+ *  sempre visível no cabeçalho, faturado ou não. */
+function NfSaida({ p }: { p: Pedido }) {
+  if (!p.faturado) return <span className="nfs no" title="NF de saída ainda não emitida">Não faturado</span>;
+  if (p.etapaVenda === "Cancelado" && !p.nfSaida) return <span className="nfs cx">Cancelado</span>;
+  return (
+    <span className="nfs ok" title="NF de saída emitida">
+      ✓ NF {p.nfSaida || "emitida"}{p.fatEm ? ` · ${dBR(p.fatEm).slice(0, 5)}` : ""}
+    </span>
+  );
+}
+
 export function SeloDif({ d, compacto }: { d: number | null; compacto?: boolean }) {
   if (d == null) return <span className="fb mute">sem PC</span>;
   if (Math.abs(d) < 0.005) return <span className="fb eq">= RC</span>;
@@ -736,7 +758,8 @@ function CartaoPedido(props: {
     <div className={`pv ${aberto ? "open" : ""} ${p.faturado ? "isfat" : ""}`}>
       <div className="pvh" onClick={props.onToggle}>
         <span className="chev">▸</span>
-        <div className="pvid">{props.nomeId}<small>{p.tipo || (modulo === "pcs" ? "PC avulso" : "—")} · {p.compras.length} compra{p.compras.length === 1 ? "" : "s"}</small></div>
+        <div className="pvid">{props.nomeId}<small>{p.tipo || (modulo === "pcs" ? "PC avulso" : "—")} · {p.compras.length} compra{p.compras.length === 1 ? "" : "s"}</small>
+          {modulo !== "pcs" && <NfSaida p={p} />}</div>
         <div className="cli">
           {p.cliente || "—"}
           <small>{[p.projeto, p.etapaVenda].filter(Boolean).join(" · ") || (modulo === "pcs" ? "fornecedor" : "")}</small>
@@ -882,15 +905,7 @@ function GruposRc({ compras, p, sel, toggleSel, podeAprovar, podeEditar, ehAdmin
   gravar: Gravar; abrirDrawer: (k: string) => void; $: (v: number | null) => string;
 }) {
   // Serviço: vem do app de serviços por PV/OS (custom_fields.ww_os_status).
-  const servico = (() => {
-    for (const r of p.bucket.rows) {
-      const cf = (r.custom_fields as Record<string, unknown> | null) ?? {};
-      const st = s(cf.ww_os_status);
-      const prev = dataMs(r.nova_prev_servicos);
-      if (st || prev != null) return { st: st || "Agendar", prev };
-    }
-    return p.compras.some((c) => c.servico) ? { st: "Sem OS", prev: null as number | null } : null;
-  })();
+  const servico = servicoDoPedido(p) ?? (p.compras.some((c) => c.servico) ? { st: "Sem OS", prev: null as number | null } : null);
 
   const grupos = new Map<string, Compra[]>();
   for (const c of compras) {
@@ -909,7 +924,7 @@ function GruposRc({ compras, p, sel, toggleSel, podeAprovar, podeEditar, ehAdmin
     <>
       <div className={`${cls} rcg-hd`}>
         <div className="it"><span /><span>RC</span><span>Item</span><span style={{ textAlign: "right" }}>Valor RC</span></div>
-        <div className="pc"><span>PC</span><span>Fornecedor</span><span>Status</span><span>Prev. material</span><span>Material</span><span>NF entrada</span>{servico && <span>Serviço</span>}<span /></div>
+        <div className="pc"><span>PC</span><span>Fornecedor</span><span style={{ textAlign: "right" }}>Valor PC</span><span>Status</span><span>Prev. material</span><span>Material</span><span>NF entrada</span>{servico && <span>Serviço</span>}<span /></div>
       </div>
       {ordem.map(([k, itens]) => {
         const totalRc = itens.reduce((a, c) => a + c.rcTotal, 0);
@@ -947,10 +962,9 @@ function GruposRc({ compras, p, sel, toggleSel, podeAprovar, podeEditar, ehAdmin
                 const recusado = cs.find((x) => x.estado === "recusado");
                 return (
                   <div key={pc} className="pc">
-                    <span className="mono">{pc}
-                      {c.pcValor != null && <small style={{ display: "block", fontSize: 11, color: "var(--ww-text-faint)" }}>{$(c.pcValor)} <SeloDif d={c.dif} compacto /></small>}
-                    </span>
-                    <span className="desc">{c.fornecedor || "—"}<small>{c.categoria}</small></span>
+                    <span className="mono">{pc}</span>
+                    <span className="desc" title={c.fornecedor}>{c.fornecedor || "—"}<small>{c.categoria}</small></span>
+                    <span className="num" style={{ textAlign: "right" }}><b>{c.pcValor != null ? $(c.pcValor) : "—"}</b></span>
                     <span>
                       {c.estado === "recebido"
                         ? <span className="st aprovado">Aprovado</span>
@@ -962,6 +976,7 @@ function GruposRc({ compras, p, sel, toggleSel, podeAprovar, podeEditar, ehAdmin
                             title={c.prevNova ? `Remarcada · original do PC ${dBR(c.prevOriginal)}` : "Previsão do PC"}
                             onChange={(e) => { const iso = e.target.value || null; for (const x of cs) void gravar(x, "prevMateriais", iso, { nova_prev_materiais: iso }); }} />
                         : <span className={late ? "late" : ""}>{prev ? dBR(prev) : "—"}</span>}
+                      {late && <small className="atraso">⚠ {-(diasAte(prev) ?? 0)}d de atraso</small>}
                     </span>
                     <span>{mat.c ? <span className={`st ${mat.c}`}>{mat.t}</span> : <span style={{ color: "var(--ww-text-faint)" }}>—</span>}</span>
                     <NfEntrada cs={cs} late={late} aprovado={aprovado} />

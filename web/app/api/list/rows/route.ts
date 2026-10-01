@@ -36,6 +36,12 @@ export async function GET(req: Request) {
   const MAX_ROWS = 20_000;
   const limit = Math.min(MAX_ROWS, Math.max(1, Number(url.searchParams.get("limit") ?? MAX_ROWS)));
   const countMode = url.searchParams.get("count") === "exact" ? "exact" : "estimated";
+  /* Carga rápida (01/10/2026): a tela abre em "Em aberto", então a primeira
+     leitura traz só os não faturados, direto da MV e sem a consulta da view
+     viva (6s por página só ela). O loader busca o resto em segundo plano.
+     `aberto=1` filtra; `rapido=1` dispensa a view viva. */
+  const soAberto = url.searchParams.get("aberto") === "1" && view !== "v_pc_pcs";
+  const rapido = url.searchParams.get("rapido") === "1";
 
   // MVs vivem em sales.* — cliente service com schema sales
   const adm = createClient(
@@ -59,6 +65,12 @@ export async function GET(req: Request) {
       q = q.order("pv_os_label", { ascending: true, nullsFirst: false })
            .order("ncod_ped",    { ascending: true });
     }
+    // Mesmo critério do encerrado() do cliente: sem data/NF de faturamento e
+    // etapa que não seja Faturado/Cancelado.
+    if (soAberto) {
+      q = q.is("pv_dt_fat", null).is("pv_num_nfe", null)
+           .or("pv_etapa_texto.is.null,pv_etapa_texto.not.in.(Faturado,Cancelado)");
+    }
     return q.range(from, to);
   };
 
@@ -70,6 +82,7 @@ export async function GET(req: Request) {
   // resto — como o merge troca TODAS as manuais da MV, ~700 PVs sumiam de
   // /avulsos (ex: PV1931/PV1932). Qualquer falha devolve null → fica a MV.
   const liveManualPromise = (async (): Promise<Record<string, unknown>[] | null> => {
+    if (rapido) return null;
     try {
       const liveClient = createClient(
         process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -146,5 +159,6 @@ export async function GET(req: Request) {
     rows: merged,
     count: truncated ? (headerCount ?? merged.length) : merged.length,
     truncated,
+    parcial: soAberto || rapido,
   });
 }

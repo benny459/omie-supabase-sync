@@ -120,6 +120,16 @@ export default function TopNav({ userEmail }: { userEmail?: string | null }) {
     startTransition(() => { router.push(href); });
   }
 
+  /* Clicar numa área abre logo a primeira tela dela (pedido do Benny,
+     01/10/2026) — antes só trocava as abas e a pessoa ficava na tela antiga.
+     Se a rota atual já é dessa área, fica onde está. */
+  function abrirArea(a: Grupo | "sistema") {
+    setAreaSel(a);
+    if (a === areaDaRota) return;
+    const primeiro = itensDaArea(a)[0];
+    if (primeiro) navegar(primeiro.href);
+  }
+
   const doGrupo = itensDaArea(areaActiva);
   /* BI: relatórios agrupados em seções (Geral, Compras, Vendas, Financeiro) —
      uma linha de seções e, abaixo, só os relatórios da seção escolhida. */
@@ -151,7 +161,7 @@ export default function TopNav({ userEmail }: { userEmail?: string | null }) {
             const activa = a === areaActiva;
             return (
               <button key={a} type="button"
-                onClick={() => setAreaSel(a)}
+                onClick={() => abrirArea(a)}
                 onMouseEnter={() => itensDaArea(a).forEach((m) => aquecer(m.href))}
                 title={labelGrupo(a).desc}
                 style={{
@@ -167,7 +177,7 @@ export default function TopNav({ userEmail }: { userEmail?: string | null }) {
             );
           })}
           {ADMIN.length > 0 && (
-            <button type="button" onClick={() => setAreaSel("sistema")}
+            <button type="button" onClick={() => abrirArea("sistema")}
               onMouseEnter={() => itensDaArea("sistema").forEach((m) => aquecer(m.href))}
               style={{
                 padding: "6px 13px", borderRadius: "var(--radius-pill)",
@@ -231,7 +241,11 @@ export default function TopNav({ userEmail }: { userEmail?: string | null }) {
           {secoes.map((sc) => {
             const activa = sc === secaoActiva;
             return (
-              <button key={sc} type="button" onClick={() => setSecaoSel(sc)}
+              <button key={sc} type="button" onClick={() => {
+                  setSecaoSel(sc);
+                  const primeiro = doGrupo.find((m) => (m.secao ?? "Geral") === sc);
+                  if (primeiro && itemDaRota?.href !== primeiro.href) navegar(primeiro.href);
+                }}
                 style={{
                   padding: "4px 11px", borderRadius: "var(--radius-pill)", cursor: "pointer",
                   fontSize: "var(--text-meta)", fontWeight: activa ? 600 : 500,

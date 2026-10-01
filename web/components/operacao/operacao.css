@@ -81,7 +81,7 @@
 .op .section-h{display:flex;justify-content:space-between;align-items:center;margin:24px 0 10px;color:var(--ww-text-muted);font-size:12.5px}
 .op .pv{background:var(--ww-panel);border:1px solid var(--ww-border);border-radius:12px;margin-bottom:8px;overflow:hidden}
 .op .pv.open{border-color:var(--ww-border-strong)}
-.op .pvh{display:grid;grid-template-columns:22px 96px minmax(170px,1fr) 250px 78px 390px;gap:14px;align-items:center;padding:12px 14px;cursor:pointer}
+.op .pvh{display:grid;grid-template-columns:22px 124px minmax(170px,1fr) 270px 78px 390px;gap:14px;align-items:center;padding:12px 14px;cursor:pointer}
 .op .pvh:hover{background:var(--ww-row-hover)}
 .op .chev{color:var(--ww-text-faint);transition:transform .15s}
 .op .pv.open .chev{transform:rotate(90deg)}
@@ -228,7 +228,11 @@
 .op .stg.p i{background:var(--ww-warn)}
 .op .stg.l i{background:var(--ww-crit)}
 .op .stg.o i{background:var(--ww-border-strong)}
-.op .stg.na i{background:repeating-linear-gradient(90deg,var(--ww-border-strong) 0 3px,transparent 3px 6px)}
+/* Etapa que NÃO existe neste pedido (sem RC, sem material, sem serviço):
+   barra vazia tracejada e rótulo riscado — não pode parecer "não iniciada". */
+.op .stg.o i{background:color-mix(in srgb,var(--ww-text-faint) 45%,transparent)}
+.op .stg.na i{background:none;height:0;margin:2px 0 3px;border-top:1px dashed var(--ww-text-faint);opacity:.45}
+.op .stg.na span{text-decoration:line-through;opacity:.4}
 .op .stg.cur span{color:var(--ww-text);font-weight:600}
 .op .stg.cur i{box-shadow:0 0 0 2px rgba(255,255,255,.08)}
 .op .stg-next{font-size:11.5px;color:var(--ww-text-muted);margin-top:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -241,7 +245,8 @@
 .op .legend i.d{background:var(--ww-ok)}
 .op .legend i.p{background:var(--ww-warn)}
 .op .legend i.l{background:var(--ww-crit)}
-.op .legend i.na{background:repeating-linear-gradient(90deg,var(--ww-border-strong) 0 3px,transparent 3px 6px)}
+.op .legend i.na{background:none;height:0;border-top:1px dashed var(--ww-text-faint);opacity:.6}
+.op .legend i.o{background:color-mix(in srgb,var(--ww-text-faint) 45%,transparent)}
 .op .fin{display:grid;grid-template-columns:1fr 1.15fr 1fr .8fr;border:1px solid var(--ww-border);border-radius:10px;background:var(--ww-panel-sunken);padding:7px 0}
 .op .fin > div{padding:0 10px;text-align:center;border-left:1px solid var(--ww-border);display:flex;flex-direction:column;align-items:center;gap:2px;min-width:0}
 .op .fin > div:first-child{border-left:0}
@@ -276,7 +281,6 @@
 .op .scope button.fat .sl{color:inherit}
 .op .scopeNote{margin-top:10px;font-size:12.5px;color:var(--ww-ok-text);background:var(--ww-ok-soft);border:1px solid rgba(52,199,123,.3);border-radius:9px;padding:8px 12px}
 .op .pv.isfat{border-color:rgba(52,199,123,.28)}
-.op .pv.isfat .pvid::before{content:"FATURADO";display:inline-block;font-size:9px;letter-spacing:.08em;color:var(--ww-ok);background:var(--ww-ok-soft);border-radius:4px;padding:1px 5px;margin-bottom:3px}
 .op .pv.isfat .pvid{display:flex;flex-direction:column;align-items:flex-start}
 .op .stg-next.d b{color:var(--ww-ok)}
 @media (max-width:700px){
@@ -293,7 +297,7 @@
 .op .toast.show{transform:none}
 .op .toast button{background:none;border:0;color:var(--ww-info);font-weight:600}
 @media (max-width:1180px){
-.op .pvh{grid-template-columns:22px 96px 1fr 390px}
+.op .pvh{grid-template-columns:22px 124px 1fr 390px}
 .op .pvh > .stg-wrap{grid-column:2 / -1;order:5}
 .op .pvh > .date{display:none}
 }
@@ -319,7 +323,7 @@
 .op .kcard .t span:last-child{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:right}
 .op .chev{font-size:14px}
 /* Projeto tem nome longo: coluna do identificador mais larga */
-.op.op-projetos .pvh{grid-template-columns:22px 190px minmax(170px,1fr) 250px 78px 390px}
+.op.op-projetos .pvh{grid-template-columns:22px 190px minmax(170px,1fr) 270px 78px 390px}
 @media (max-width:1180px){.op.op-projetos .pvh{grid-template-columns:22px 190px 1fr 390px}}
 /* Avulsos: RC em destaque · item · valor da RC · PC · fornecedor · previsão · status */
 .op .pcrow.rcrow{grid-template-columns:22px 92px minmax(200px,1.6fr) 118px 118px minmax(140px,1fr) 140px 160px 76px}
@@ -340,8 +344,8 @@
 .op .rcg .it{display:grid;grid-template-columns:20px 74px minmax(0,1fr) 96px;gap:10px;align-items:center;padding:7px 12px;min-height:50px}
 .op .rcg .it + .it{border-top:1px dashed var(--ww-border)}
 .op .rcg .it.sel{background:var(--ww-info-soft)}
-.op .rcg .pc{display:grid;grid-template-columns:84px minmax(0,1fr) 128px 118px 100px 112px 40px;gap:10px;align-items:center;padding:7px 12px;min-height:50px}
-.op .rcg.comserv .pc{grid-template-columns:84px minmax(0,1fr) 128px 118px 100px 112px 104px 40px}
+.op .rcg .pc{display:grid;grid-template-columns:62px minmax(0,1fr) 96px 124px 118px 96px 112px 34px;gap:10px;align-items:center;padding:7px 12px;min-height:50px}
+.op .rcg.comserv .pc{grid-template-columns:62px minmax(0,1fr) 96px 124px 118px 96px 112px 100px 34px}
 .op .rcg .pc + .pc{border-top:1px dashed var(--ww-border)}
 .op .rcg .pc > *{min-width:0}
 .op .rcg .pc .desc{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -358,3 +362,11 @@
 .op .rcnum.rep{opacity:.7}
 .op .rcg .jrow{grid-column:1 / -1}
 @media (max-width:1280px){.op .rcg{grid-template-columns:1fr}.op .rcg > .it-col,.op .rcg > .it{border-right:0}.op .rcg > .it-col{border-bottom:1px dashed var(--ww-border)}}
+/* NF de saída no cabeçalho do pedido — faturado ou não, sempre à vista */
+.op .nfs{display:inline-block;margin-top:5px;font-size:11px;font-weight:600;padding:2px 7px;border-radius:6px;white-space:nowrap}
+.op .nfs.ok{color:var(--ww-ok);background:var(--ww-ok-soft)}
+.op .nfs.no{color:var(--ww-warn);background:rgba(245,166,35,.12);border:1px solid rgba(245,166,35,.35)}
+.op .nfs.cx{color:var(--ww-text-faint);background:var(--ww-border)}
+.op .pvid{display:flex;flex-direction:column;align-items:flex-start}
+/* previsão vencida marcada na própria data */
+.op .rcg .atraso{display:block;margin-top:3px;font-size:11px;font-weight:600;color:var(--ww-crit)}
