@@ -321,7 +321,7 @@ export default function TelaTitulosNavy({ tipo }: { tipo: Tipo }) {
     if (empresaSel) rs = rs.filter((r) => r.empresa === empresaSel);
     if (statusSel) rs = rs.filter((r) => (r.status_titulo ?? "") === statusSel);
     if (conferenciaSel) rs = rs.filter((r) => (r.conferencia ?? "") === conferenciaSel);
-    if (soNfSemPedido) rs = rs.filter((r) => r.nf_sem_pedido);
+    if (soNfSemPedido) rs = rs.filter((r) => r.nf_sem_pedido || r.nf_aguardando_pedido);
     if (horizSel.length && modo === "aberto")
       rs = rs.filter((r) => horizSel.includes(horizonteDe(r, hoje, amanha, d7, d30)));
     const n = q.trim().toLowerCase();
@@ -330,7 +330,7 @@ export default function TelaTitulosNavy({ tipo }: { tipo: Tipo }) {
         .some((v) => (v ?? "").toLowerCase().includes(n)));
     return rs;
   }, [rows, empresaSel, statusSel, conferenciaSel, soNfSemPedido, horizSel, modo, q, hoje, amanha, d7, d30]);
-  const nNfSemPedido = useMemo(() => (rows ?? []).filter((r) => r.nf_sem_pedido).length, [rows]);
+  const nNfSemPedido = useMemo(() => (rows ?? []).filter((r) => r.nf_sem_pedido || r.nf_aguardando_pedido).length, [rows]);
 
   // ── Resumo (a mesma regra da API, sobre o que está filtrado) ────────────
   const resumo = useMemo(() => {
@@ -464,7 +464,9 @@ export default function TelaTitulosNavy({ tipo }: { tipo: Tipo }) {
   const celsTitulo = useCallback((r: Row) => colsAtivas.map((c) => {
     if (c.key === "status_titulo") {
       const s = statusDe(r.status_titulo);
-      return r.nf_sem_pedido ? cPill("⛔ NF sem pedido — não pagar", "crit", s.label) : cPill(s.label, s.tom);
+      if (r.nf_sem_pedido) return cPill("⛔ NF sem pedido — não pagar", "crit", s.label);
+      if (r.nf_aguardando_pedido) return cPill("⛔ aguardando aprovação do pedido — não pagar", "crit", `${s.label} · PC ${r.nf_aguardando_pedido}`);
+      return cPill(s.label, s.tom);
     }
     if (c.key === "conferencia") { const k = conferenciaDe(r.conferencia); return cPill(k.label, k.tom); }
     if (c.key === "categoria") return cTexto(r.categoria || "—", { sub: r.tem_rateio ? `rateio: ${r.categorias_rateio ?? ""}` : undefined });

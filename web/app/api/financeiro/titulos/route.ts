@@ -21,6 +21,8 @@ export type TituloRow = {
   empresa: string;
   /** ⛔ a NF deste título está na caixa "NF sem pedido" de Compras — não pagar. */
   nf_sem_pedido?: boolean;
+  /** ⛔ a NF já tem pedido gerado/casado no painel, mas o pedido ainda não foi aprovado — não pagar. */
+  nf_aguardando_pedido?: string;
   codigo_lancamento_omie: number;
   contraparte: string | null;
   cnpj_cpf: string | null;
@@ -226,7 +228,19 @@ export async function GET(req: Request) {
   if (tipo === "pagar") {
     const { data: sp } = await createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!,
       { auth: { persistSession: false }, db: { schema: "orders" } }).rpc("compras_nf_sem_pedido_resumo");
-    const nfs = ((sp as { nfs?: { cnpj: string; numero: string; chave: string }[] } | null)?.nfs ?? []);
+    type NfRef = { cnpj: string; numero: string; chave: string; pedido?: string };
+    const nfs = ((sp as { nfs?: NfRef[] } | null)?.nfs ?? []);
+    const agu = ((sp as { aguardando?: NfRef[] } | null)?.aguardando ?? []);
+    if (agu.length) {
+      const porChave = new Map(agu.map((n) => [n.chave, n.pedido ?? ""]));
+      const porPar = new Map(agu.map((n) => [`${n.cnpj}|${n.numero}`, n.pedido ?? ""]));
+      const dig = (v: unknown) => String(v ?? "").replace(/\D/g, "");
+      for (const r of rows) {
+        const num = dig(r.numero_documento_fiscal).replace(/^0+/, "");
+        const ped = (r.chave_nfe && porChave.get(r.chave_nfe)) ?? (num ? porPar.get(`${dig(r.cnpj_cpf)}|${num}`) : undefined);
+        if (ped !== undefined) r.nf_aguardando_pedido = ped || "?";
+      }
+    }
     if (nfs.length) {
       const chaves = new Set(nfs.map((n) => n.chave));
       const pares = new Set(nfs.map((n) => `${n.cnpj}|${n.numero}`));
