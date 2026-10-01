@@ -41,7 +41,7 @@ const s = StyleSheet.create({
   faixaInk: { position: "absolute", top: 0, left: 0, width: "45%", height: 5, backgroundColor: INK },
   head: { flexDirection: "row", justifyContent: "space-between", paddingBottom: 16, borderBottom: `1 solid ${LINE}` },
   marca: { fontSize: 19, fontFamily: "Helvetica-Bold", color: INK, marginBottom: 5 },
-  brandP: { fontSize: 8.3, color: MUTED, lineHeight: 1.55 },
+  brandP: { fontSize: 8.3, color: MUTED, marginBottom: 1.5 },
   forte: { color: TEXT, fontFamily: "Helvetica-Bold" },
   doc: { alignItems: "flex-end" },
   kind: { fontSize: 8.8, color: MUTED, marginBottom: 2 },
@@ -55,7 +55,7 @@ const s = StyleSheet.create({
   box: { backgroundColor: MIST, borderRadius: 7, paddingVertical: 11, paddingHorizontal: 13 },
   boxH: { fontSize: 8.8, fontFamily: "Helvetica-Bold", color: WATER, marginBottom: 7 },
   boxName: { fontSize: 11, fontFamily: "Helvetica-Bold", color: INK, marginBottom: 4 },
-  boxP: { fontSize: 8.3, color: MUTED, lineHeight: 1.6 },
+  boxP: { fontSize: 8.3, color: MUTED, marginBottom: 2 },
   kv: { flexDirection: "row", justifyContent: "space-between", fontSize: 8.8, marginBottom: 5 },
   kvK: { color: MUTED }, kvV: { fontFamily: "Helvetica-Bold", color: TEXT, textAlign: "right", maxWidth: 130 },
   pend: { color: AMBER },
@@ -65,7 +65,7 @@ const s = StyleSheet.create({
   td: { fontSize: 8.8, paddingHorizontal: 4 },
   r: { textAlign: "right" },
   dash: { color: "#B6C3CA" },
-  descB: { fontFamily: "Helvetica-Bold", color: TEXT, lineHeight: 1.35, marginBottom: 2 },
+  descB: { fontFamily: "Helvetica-Bold", color: TEXT, marginBottom: 2 },
   descS: { fontSize: 7.8, color: MUTED },
   bottom: { flexDirection: "row", marginTop: 18 },
   h3: { fontSize: 8.8, fontFamily: "Helvetica-Bold", color: WATER, marginBottom: 7 },
@@ -74,11 +74,11 @@ const s = StyleSheet.create({
   chips: { flexDirection: "row", flexWrap: "wrap", marginTop: 7 },
   chip: { fontSize: 7.8, paddingVertical: 3, paddingHorizontal: 7, borderRadius: 999, border: `0.8 solid ${LINE}`, color: MUTED, marginRight: 4, marginBottom: 3 },
   chipOn: { borderColor: WATER, color: "#FFFFFF", backgroundColor: WATER },
-  noteS: { fontSize: 7.8, color: MUTED, marginTop: 5, lineHeight: 1.5 },
+  noteS: { fontSize: 7.8, color: MUTED, marginTop: 5 },
   sumRow: { flexDirection: "row", justifyContent: "space-between", fontSize: 9, paddingVertical: 4, color: MUTED },
   grand: { marginTop: 7, paddingVertical: 11, paddingHorizontal: 13, borderRadius: 7, backgroundColor: INK, color: "#FFFFFF",
     flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
-  nfe: { marginTop: 18, paddingVertical: 9, paddingHorizontal: 12, borderLeft: `2.4 solid ${WATER}`, backgroundColor: MIST, fontSize: 8.4, lineHeight: 1.55 },
+  nfe: { marginTop: 18, paddingVertical: 9, paddingHorizontal: 12, borderLeft: `2.4 solid ${WATER}`, backgroundColor: MIST, fontSize: 8.4 },
   signs: { flexDirection: "row", marginTop: 34 },
   sign: { flex: 1, borderTop: `0.8 solid ${TEXT}`, paddingTop: 6, fontSize: 8.6 },
   foot: { position: "absolute", bottom: 20, left: 44, right: 44, borderTop: `0.6 solid ${LINE}`, paddingTop: 7,
@@ -152,14 +152,14 @@ export function DocumentoPedido({ p, empresa, forn, condicao, variante, usuario,
           <View style={{ maxWidth: 330 }}>
             <Text style={s.marca}>{empNome}</Text>
             <Text style={s.brandP}>CNPJ <Text style={s.forte}>{empresa.cnpj ?? "—"}</Text>{empresa.ie ? `   IE ${empresa.ie}` : ""}{empresa.im ? `   IM ${empresa.im}` : ""}</Text>
-            <Text style={s.brandP}>{[linhaEnd(empresa.endereco, empresa.numero, empresa.complemento ? titulo(empresa.complemento) : undefined), empresa.bairro,
+            <Text style={s.brandP}>{[linhaEnd(empresa.endereco, empresa.numero, empresa.complemento || undefined), empresa.bairro,
               [titulo(semUf(empresa.cidade)), empresa.uf].filter(Boolean).join("/"), empresa.cep && `CEP ${cep(empresa.cep)}`].filter(Boolean).join(", ")}</Text>
             <Text style={s.brandP}>{[empresa.telefone, empresa.email].filter(Boolean).join("   ")}</Text>
           </View>
           <View style={s.doc}>
             <Text style={s.kind}>Pedido de compra</Text>
             <Text style={s.num}>{p.num}</Text>
-            <Text style={[s.status, { color: st.c, backgroundColor: st.bg }]}>● {st.t}</Text>
+            <Text style={[s.status, { color: st.c, backgroundColor: st.bg }]}>{st.t}</Text>
           </View>
         </View>
 
@@ -175,7 +175,7 @@ export function DocumentoPedido({ p, empresa, forn, condicao, variante, usuario,
             <Text style={s.boxH}>Fornecedor</Text>
             <Text style={s.boxName}>{fornNome}</Text>
             <Text style={s.boxP}>CNPJ {forn.cnpj_cpf || p.cnpj || "—"}{forn.inscricao_estadual ? `   IE ${forn.inscricao_estadual}` : ""}</Text>
-            {forn.endereco ? <Text style={s.boxP}>{linhaEnd(titulo(forn.endereco), forn.endereco_numero, forn.complemento ? titulo(forn.complemento) : undefined)}</Text> : null}
+            {forn.endereco ? <Text style={s.boxP}>{linhaEnd(titulo(forn.endereco), forn.endereco_numero, forn.complemento || undefined)}</Text> : null}
             {forn.cidade ? <Text style={s.boxP}>{[forn.bairro && titulo(forn.bairro), [titulo(semUf(forn.cidade)), forn.estado].filter(Boolean).join("/"), forn.cep && `CEP ${cep(forn.cep)}`].filter(Boolean).join(", ")}</Text> : null}
             {tel ? <Text style={s.boxP}>{tel}</Text> : null}
           </View>
