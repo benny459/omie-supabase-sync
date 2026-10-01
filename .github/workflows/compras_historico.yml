@@ -1,0 +1,72 @@
+name: Compras — histórico Omie + cadastros (só leitura no Omie)
+
+# Traz o histórico COMPLETO de pedidos de compra e NF de entrada de todas as
+# empresas para o espelho, confere o total contra o Omie e concilia em
+# compras.* (fonte da verdade do painel). Desde 01/10/2026 os pedidos novos
+# nascem no painel; o Omie é só histórico. Nada aqui escreve no Omie.
+# Execução manual (agendamento fica a critério do Benny).
+
+on:
+  workflow_dispatch:
+    inputs:
+      empresas:
+        description: "Empresas (CSV)"
+        required: false
+        default: "SF,CD,WW"
+      dias_nf:
+        description: "Dias de NF de entrada a buscar"
+        required: false
+        default: "2600"
+
+concurrency:
+  group: compras-historico
+  cancel-in-progress: false
+
+jobs:
+  historico:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      OMIE_APP_KEY_SF: ${{ secrets.OMIE_APP_KEY_SF }}
+      OMIE_APP_SECRET_SF: ${{ secrets.OMIE_APP_SECRET_SF }}
+      OMIE_APP_KEY_CD: ${{ secrets.OMIE_APP_KEY_CD }}
+      OMIE_APP_SECRET_CD: ${{ secrets.OMIE_APP_SECRET_CD }}
+      OMIE_APP_KEY_WW: ${{ secrets.OMIE_APP_KEY_WW }}
+      OMIE_APP_SECRET_WW: ${{ secrets.OMIE_APP_SECRET_WW }}
+      EMPRESAS_ALVO: ${{ github.event.inputs.empresas || 'SF,CD,WW' }}
+      PYTHONUNBUFFERED: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Cadastros + conferência (antes)
+        run: python3 scripts/import_cadastros_compras.py
+        continue-on-error: true
+
+      - name: Pedidos de compra — FULL, todas as situações
+        env:
+          MAX_PAGINAS_PEDCOMPRA: "0"
+          PURGE_ORFAOS: "true"
+          NORMALIZE_PC_CAB: "true"
+        run: python3 scripts/import_pedidos_compra.py
+        continue-on-error: true
+
+      - name: NF de entrada (recebimentos)
+        env:
+          DIAS_RETROAGIR: ${{ github.event.inputs.dias_nf || '2600' }}
+        run: python3 scripts/import_recebimento_nfe.py
+        continue-on-error: true
+
+      - name: Conciliar em compras.*
+        run: |
+          curl -sS -X POST "$SUPABASE_URL/rest/v1/rpc/compras_conciliar" \
+            -H "apikey: $SUPABASE_SERVICE_ROLE_KEY" -H "Authorization: Bearer $SUPABASE_SERVICE_ROLE_KEY" \
+            -H "Content-Type: application/json" -H "Content-Profile: orders" -d '{}'
+          echo
+
+      - name: Conferência (depois)
+        run: python3 scripts/import_cadastros_compras.py
