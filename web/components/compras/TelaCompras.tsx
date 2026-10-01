@@ -83,9 +83,14 @@ export default function TelaCompras() {
     fetch(`/api/compras/refs?emp=${emp}`).then((r) => r.json()).then((j) => { if (!j.error) setRefs(j); }).catch(() => null);
   }, []);
   useEffect(() => {
-    const fechar = () => { setMenuNovo(false); setMenuCols(false); setCtx(null); };
-    document.addEventListener("click", fechar);
-    return () => document.removeEventListener("click", fechar);
+    // Fecha menus ao apertar FORA deles (mousedown): com "click" no document o
+    // próprio clique que abre o menu do cartão já o fechava.
+    const fechar = (e: MouseEvent) => {
+      if ((e.target as HTMLElement | null)?.closest?.(".dropdown, .kebab, [data-menu]")) return;
+      setMenuNovo(false); setMenuCols(false); setCtx(null);
+    };
+    document.addEventListener("mousedown", fechar);
+    return () => document.removeEventListener("mousedown", fechar);
   }, []);
 
   const parcDesc = useCallback((cod?: string) => refs?.parcelas.find((p) => p.cod === cod)?.desc ?? cod ?? "", [refs]);
@@ -275,7 +280,7 @@ export default function TelaCompras() {
               <button className={view === "tabela" ? "on" : ""} onClick={() => { setView("tabela"); lsSet("cmp-view", "tabela"); }}>☰ Tabela</button>
             </div>
             <div style={{ position: "relative" }}>
-              <button className="btn pri" onClick={(e) => { e.stopPropagation(); setMenuNovo((v) => !v); }}>＋ Incluir ▾</button>
+              <button className="btn pri" data-menu onClick={(e) => { e.stopPropagation(); setMenuNovo((v) => !v); }}>＋ Incluir ▾</button>
               {menuNovo && (
                 <div className="dropdown abs" onClick={(e) => e.stopPropagation()}>
                   <button onClick={() => { setMenuNovo(false); setFolha({ id: null, tipo: "RC" }); }}>📝<span><b>Nova Requisição</b><small>Pedido interno, sem fornecedor obrigatório</small></span></button>
@@ -323,7 +328,7 @@ export default function TelaCompras() {
                 <button className="btn ok" onClick={() => { aprovar(todos.filter((p) => sel.has(p.id) && p.tipo === "PC" && p.aprov !== "aprovado").map((p) => p.id)); setSel(new Set()); }}>✓ Aprovar selecionados</button>
               </>}
               <div style={{ position: "relative" }}>
-                <button className="btn" onClick={(e) => { e.stopPropagation(); setMenuCols((v) => !v); }}>Colunas · {colsVis.length}/{COLS.length}</button>
+                <button className="btn" data-menu onClick={(e) => { e.stopPropagation(); setMenuCols((v) => !v); }}>Colunas · {colsVis.length}/{COLS.length}</button>
                 {menuCols && (
                   <div className="dropdown abs" style={{ width: 420 }} onClick={(e) => e.stopPropagation()}>
                     <div style={{ display: "flex", justifyContent: "space-between", padding: "4px 8px" }}>
