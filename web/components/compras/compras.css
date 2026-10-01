@@ -360,3 +360,13 @@
 .cmp .fase-pill.aguardando_recebimento { background: var(--ww-warn-soft); color: var(--ww-warn-text); }
 .cmp .fase-pill.aguardando_conferencia { background: var(--ww-info-soft); color: var(--ww-info-text); }
 .cmp .fase-pill.liberado { background: #16A34A; color: #fff; }
+
+/* ── Conferência com de-para de itens ── */
+.cmp .modal.confer { width: min(1080px, 100%); }
+.cmp .confer-linha { display: grid; grid-template-columns: minmax(0, 1fr) 28px minmax(0, 1.1fr); gap: 10px; align-items: start;
+  padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); }
+.cmp .confer-linha.falta { border-color: color-mix(in srgb, var(--ww-warn) 60%, transparent); }
+.cmp .confer-linha .lado { display: grid; gap: 4px; min-width: 0; }
+.cmp .confer-linha .lado.nf b { overflow-wrap: anywhere; }
+.cmp .confer-linha .seta { font-size: 18px; color: var(--tx-3); padding-top: 18px; text-align: center; }
+@media (max-width: 760px) { .cmp .confer-linha { grid-template-columns: 1fr; } .cmp .confer-linha .seta { display: none; } }

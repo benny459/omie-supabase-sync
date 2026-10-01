@@ -17,6 +17,7 @@ import FolhaPedido from "./FolhaPedido";
 import FolhaRecebimento from "./FolhaRecebimento";
 import ModalEnviar from "./ModalEnviar";
 import ModalPcDaNf from "./ModalPcDaNf";
+import FolhaConferencia from "./FolhaConferencia";
 import CaixaNfSemPedido, { type NfSemPedido, type NfDoPedido } from "./CaixaNfSemPedido";
 import {
   ETAPAS, ETAPA, ETAPA_AJUDA, APROV_LABEL, money, dBR, rel, hoje, diffDias, situacao, atrasado, rcAtendida,
@@ -40,6 +41,7 @@ export default function TelaCompras() {
   const [soSemPedido, setSoSemPedido] = useState(false);
   const [caixa, setCaixa] = useState<{ foco: string | null } | null>(null);
   const [pcDaNf, setPcDaNf] = useState<string | null>(null);
+  const [confer, setConfer] = useState<number | null>(null);
   const [erro, setErro] = useState<string | null>(null);
   const [refs, setRefs] = useState<Refs | null>(null);
   const [historico, setHistorico] = useState("365");
@@ -154,6 +156,8 @@ export default function TelaCompras() {
     if (cod === "10" && ["10", "15", "35"].includes(p.etapa)) return;
     if (["40", "60", "80"].includes(cod) && p.aprov !== "aprovado") { toast("Pedido ainda não aprovado — só pedido aprovado avança", true); return; }
     if (cod === "60" && !p.nf && !nfsPed[p.id]?.length) { setReceb({ id: p.id }); return; }
+    // Conferido passa pela conferência (item da NF ↔ nosso item, grava o de-para)
+    if (cod === "80" && p.tipo === "PC") { setConfer(p.id); return; }
     try {
       await acao({ acao: "mover", id: p.id, etapa: cod });
       toast(`${p.tipo === "RC" ? "Requisição" : "Pedido"} ${p.num} movido para ${ETAPA[cod].nome}`);
@@ -578,6 +582,8 @@ export default function TelaCompras() {
         onAcao={async (b, m) => { const ok = await acaoNf(b, m); if (ok && semPedido.length <= 1) setCaixa(null); return ok; }} />}
       {pcDaNf && <ModalPcDaNf chave={pcDaNf} refs={refs} toast={toast} onClose={() => setPcDaNf(null)}
         onGerado={(r) => { setPcDaNf(null); setCaixa(null); toast(`Pedido ${r.num} gerado da NF — aguardando aprovação`); carregar(); }} />}
+      {confer != null && <FolhaConferencia id={confer} toast={toast} onClose={() => setConfer(null)}
+        onConferido={(m) => { setConfer(null); toast(m); carregar(); }} />}
       {toastMsg && <div className={`cmp-toast${toastMsg.erro ? " erro" : ""}`} role="status">{toastMsg.m}</div>}
     </div>
   );
