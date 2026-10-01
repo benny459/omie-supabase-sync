@@ -154,7 +154,6 @@ export default function TelaCompras() {
     } catch (e) { toast((e as Error).message, true); }
   }, [acao, carregar, toast]);
 
-  const imprimir = (id: number) => setEnviar(id);
 
   const ctxAct = async (k: string, p: PedidoLista) => {
     setCtx(null);
@@ -166,7 +165,8 @@ export default function TelaCompras() {
       if (k === "aprovar") await aprovar([p.id]);
       if (k === "receb") setReceb({ id: p.id });
       if (k === "conf") await mover(p, "80");
-      if (k === "print") imprimir(p.id);
+      if (k === "print" || k === "enviar") setEnviar(p.id);
+      if (k === "venda") setFolha({ id: p.id });
       if (k === "cancel") setConfirma({ texto: `Cancelar o ${p.tipo === "RC" ? "requisição" : "pedido"} ${p.num}?`, acao: async () => {
         await acao({ acao: "cancelar", id: p.id }); toast(`${p.num} cancelado`); carregar();
       } });
@@ -192,13 +192,13 @@ export default function TelaCompras() {
 
   // ── tabela ───────────────────────────────────────────────────────────────
   const COLS: Col[] = useMemo(() => [
-    { k: "situacao", l: "Situação", v: situacao, h: (p) => { const s = situacao(p); const c = s === "Recebido" ? "p-ok" : s.includes("atrasada") ? "p-crit" : s.startsWith("Requisição") ? "p-off" : "p-warn"; return <span className={`pill ${c}`}>{s}</span>; } },
+    { k: "situacao", l: "Situação", v: situacao, h: (p) => { const s = situacao(p); const c = p.etapa === "80" ? "p-conf" : s === "Recebido" ? "p-rec" : s.includes("atrasada") ? "p-crit" : s.startsWith("Requisição") ? "p-off" : p.etapa === "35" ? "p-env" : p.etapa === "40" ? "p-fat" : "p-warn"; return <span className={`pill ${c}`}>{p.etapa === "80" ? "Conferido" : p.etapa === "35" ? "Enviado" : p.etapa === "40" ? "Faturado" : s}</span>; } },
     { k: "aprov", l: "Situação da Aprovação", v: (p) => APROV_LABEL[p.aprov], h: (p) => p.aprov === "aprovado" ? <span className="pill p-ok">✓ Aprovado</span> : p.aprov === "aguardando" ? <span className="pill p-vio">Aguardando</span> : <span className="faint">{APROV_LABEL[p.aprov]}</span> },
     { k: "num", l: "Número", v: (p) => p.num, h: (p) => <b>{p.num}</b> },
     { k: "tipo", l: "Tipo", v: (p) => p.tipo },
     { k: "forn", l: "Fornecedor", v: (p) => p.forn ?? "", tr: true },
     { k: "cnpj", l: "CNPJ/CPF", v: (p) => p.cnpj ?? "" },
-    { k: "valor", l: "Valor Total do Pedido", v: (p) => Number(p.valor) || 0, r: true, sum: true, h: (p) => <span className="num">{money(p.valor)}</span> },
+    { k: "valor", l: "Valor (RC = saldo)", v: (p) => valorDe(p), r: true, sum: true, h: (p) => <span className="num">{money(valorDe(p))}</span> },
     { k: "etapaNome", l: "Etapa", v: (p) => ETAPA[p.etapa]?.nome ?? p.etapa },
     { k: "emissao", l: "Inclusão", v: (p) => p.emissao ?? "", h: (p) => dBR(p.emissao) },
     { k: "previsao", l: "Previsão de Entrega", v: (p) => p.previsao ?? "", h: (p) => <span className={atrasado(p) ? "pill p-crit" : ""}>{dBR(p.previsao, true)}</span> },
@@ -216,7 +216,8 @@ export default function TelaCompras() {
     { k: "rcs", l: "Requisição ⇄ Pedido", v: (p) => p.tipo === "RC" ? (p.cobPcs ?? []).map((n) => "PC " + n).join(", ") : (p.rcs ?? []).map((n) => "RC " + n).join(", ") },
     { k: "pv", l: "Venda de origem (PV/OS)", v: (p) => p.pv ? `${p.pv}${p.pvCliente ? " · " + p.pvCliente : ""}` : "", tr: true },
     { k: "obsInt", l: "Obs. interna", v: (p) => p.obsInt ?? "", tr: true },
-    { k: "origem", l: "Origem", v: (p) => (p.origem === "omie" ? "Omie (histórico)" : "Painel") },
+    { k: "origem", l: "Origem", v: (p) => (p.origem === "omie" ? "Omie (histórico)" : "Painel"), h: (p) => <span className={`tag ${p.origem === "omie" ? "orig-omie" : "orig-painel"}`}>{p.origem === "omie" ? "Omie" : "Painel"}</span> },
+    { k: "enviado", l: "Enviado ao fornecedor", v: (p) => p.enviadoEm ?? "", h: (p) => p.enviadoEm ? <span className="pill p-env">{dBR(p.enviadoEm.slice(0, 10))}{p.enviadoMeio === "whatsapp" ? " · WhatsApp" : p.enviadoMeio === "email" ? " · e-mail" : ""}</span> : "" },
   ], [parcDesc, nfSug]);
   const COL = useMemo(() => Object.fromEntries(COLS.map((c) => [c.k, c])), [COLS]);
   const colsVis = cols.map((k) => COL[k]).filter(Boolean) as Col[];
@@ -236,6 +237,7 @@ export default function TelaCompras() {
     const cond = p.tipo === "RC" ? `com ${p.nItens} ${p.nItens === 1 ? "item" : "itens"}` : (parcDesc(p.parc) || "").toLowerCase();
     return (
       <article key={p.id} className={`card${late ? " late" : ""}${arrasto === String(p.id) ? " dragging" : ""}`} draggable tabIndex={0}
+        style={{ ["--c" as string]: ETAPA[p.etapa]?.cor }}
         aria-label={`${p.tipo} ${p.num}`}
         onClick={(e) => { if ((e.target as HTMLElement).closest(".kebab")) return; setFolha({ id: p.id }); }}
         onKeyDown={(e) => { if (e.key === "Enter") setFolha({ id: p.id }); }}
@@ -251,19 +253,24 @@ export default function TelaCompras() {
         {p.etapa === "60" || p.etapa === "80" ? <div className="ent">Recebido em: {rel(p.dtRec)}</div>
           : p.etapa === "40" ? <div className="ent">Faturado pelo fornecedor · entrega {rel(p.previsao)}</div>
           : <div className={`ent${late ? " late" : ""}`}>Entrega prevista para: {rel(p.previsao)}{late ? " · atrasada" : ""}</div>}
-        <div className="val"><b className="num">{money(p.valor)}</b><span className="muted">{cond}</span>
-          {p.tipo === "PC" && (p.etapa === "60" || p.etapa === "80" ? <span className="pill p-ok">Concluído</span> : <span className="pill p-off">Pendente</span>)}</div>
+        <div className="val"><b className="num">{money(valorDe(p))}</b>
+          {p.tipo === "RC" && p.saldo != null && Math.abs((p.saldo ?? 0) - p.valor) > 0.005 && <span className="faint" title="Saldo a comprar / valor original">saldo de {money(p.valor)}</span>}
+          <span className="muted">{cond}</span>
+          {p.tipo === "PC" && (p.etapa === "80" ? <span className="pill p-conf">Conferido</span> : p.etapa === "60" ? <span className="pill p-rec">Recebido</span>
+            : p.etapa === "40" ? <span className="pill p-fat">Faturado</span> : p.etapa === "35" ? <span className="pill p-env">Enviado</span> : <span className="pill p-off">Pendente</span>)}</div>
         {p.aprov === "aprovado" ? <div className="ent"><span className="pill p-ok">✓ Aprovado</span> {p.aprovEm ? dBR(p.aprovEm.slice(0, 10), true) : ""}{p.aprovPor ? ` por ${p.aprovPor.split("@")[0]}` : ""}</div>
           : p.aprov === "aguardando" ? <div className="ent"><span className="pill p-vio">⏳ Aguardando aprovação</span></div> : null}
+        {p.enviadoEm && p.tipo === "PC" ? <div className="ent"><span className="pill p-env">✉ Enviado {dBR(p.enviadoEm.slice(0, 10))}</span>
+          <span className="faint">{p.enviadoMeio === "whatsapp" ? "WhatsApp" : p.enviadoMeio === "email" ? "e-mail" : ""}</span></div> : null}
         {nfSug[p.id] ? <div className="ent"><span className="pill p-sky">📄 NF chegou pela Focus</span><span className="faint">confira no recebimento</span></div> : null}
         {p.tipo === "RC"
-          ? <div className="ent">{p.cobDone ? <><span className="pill p-sky">{p.cobDone}/{p.cobTotal} itens já em pedido</span> {(p.cobPcs ?? []).map((n) => "PC " + n).join(", ")}</> : <span className="faint">Nenhum item comprado ainda</span>}</div>
+          ? <div className="ent">{p.cobPcs?.length ? <><span className="pill p-sky">{p.cobDone}/{p.cobTotal} itens atendidos{p.parciais ? ` · ${p.parciais} parcial` : ""}</span> {p.cobPcs.map((n) => "PC " + n).join(", ")}</> : <span className="faint">Nenhum item comprado ainda</span>}</div>
           : p.rcs?.length ? <div className="ent">⇠ atende {p.rcs.map((n) => "RC " + n).join(", ")}</div> : null}
         <div className="meta">
           {p.proj && <span className="tag" title="Projeto">{p.proj}</span>}
           {p.comprador && <span className="tag" title="Comprador">👤 {p.comprador}</span>}
           {p.pv && <span className="tag" title="Venda de origem">↔ {p.pv}{p.pvCliente ? " · " + p.pvCliente : ""}</span>}
-          <span className="tag faint">Origem: {p.origem === "omie" ? "Omie" : "Painel"}</span>
+          <span className={`tag ${p.origem === "omie" ? "orig-omie" : "orig-painel"}`}>{p.origem === "omie" ? "Omie (histórico)" : "Painel"}</span>
         </div>
       </article>
     );
@@ -273,7 +280,7 @@ export default function TelaCompras() {
   const compradores = useMemo(() => [...new Set(todos.map((p) => p.comprador).filter(Boolean) as string[])].sort(), [todos]);
   /* Recebe: pedido em Aprovação/Faturado; também em "Pedido de Compra" quando
      a NF já chegou pela Focus ou ele já está aprovado. Do painel, só aprovado. */
-  const podeReceber = (p: PedidoLista) => p.tipo === "PC" && (["15", "40"].includes(p.etapa) ||
+  const podeReceber = (p: PedidoLista) => p.tipo === "PC" && (["15", "35", "40"].includes(p.etapa) ||
     (p.etapa === "10" && (!!nfSug[p.id] || p.aprov === "aprovado")));
   const candidatosReceb = todos.filter((p) => podeReceber(p) && (p.origem === "omie" || p.aprov === "aprovado"));
 
@@ -382,8 +389,8 @@ export default function TelaCompras() {
                   onDrop={(ev) => { ev.preventDefault(); ev.currentTarget.classList.remove("drop");
                     const p = todos.find((x) => String(x.id) === ev.dataTransfer.getData("text/plain")); if (p) mover(p, e.cod); }}>
                   <div className="colh">
-                    <div className="t"><b>{e.nome}</b><span className="tot num">{money(soma(itens))}</span></div>
-                    <span className="n">{itens.length} {e.cod === "20" ? "requisições" : e.cod === "10" ? "pedidos de compra" : e.plural}{ocultas ? ` · ${ocultas} atendida(s) ocultas` : ""}</span>
+                    <div className="t"><b><span className="badge-n">{itens.length}</span>{e.nome}</b><span className="tot num">{money(soma(itens))}</span></div>
+                    <span className="n">{ETAPA_AJUDA[e.cod] ?? (e.cod === "20" ? "saldo a comprar" : e.plural)}{ocultas ? ` · ${ocultas} atendida(s) ocultas` : ""}</span>
                   </div>
                   <div className="cards">
                     {itens.slice(0, lim).map((p) => cartao(p))}
@@ -398,6 +405,7 @@ export default function TelaCompras() {
                     if (!pend.length) { toast("Todos os pedidos desta etapa já estão aprovados"); return; }
                     setConfirma({ texto: `Aprovar ${pend.length} pedido(s) — ${money(soma(pend))}?`, acao: () => aprovar(pend.map((p) => p.id)) });
                   }}>✓ Aprovar todos</button></div>}
+                  {e.cod === "35" && <div className="colf"><span className="hint" style={{ display: "block", textAlign: "center" }}>Arraste um pedido aprovado para cá para enviar</span></div>}
                   {e.cod === "60" && <div className="colf"><button className="btn sm" onClick={() => setReceb({ id: null })}>＋ Novo Recebimento</button></div>}
                 </div>
               );
@@ -417,10 +425,11 @@ export default function TelaCompras() {
                     <th key={c.k} className={c.r ? "r" : ""} onClick={() => setSort((s) => (s.k === c.k ? { k: c.k, dir: (-s.dir) as 1 | -1 } : { k: c.k, dir: 1 }))}>
                       {c.l} {sort.k === c.k ? (sort.dir > 0 ? "↑" : "↓") : ""}</th>
                   ))}
+                  <th style={{ width: 70 }} />
                 </tr>
                 <tr className="flt"><th />{colsVis.map((c) => (
                   <th key={c.k}><input value={colf[c.k] ?? ""} placeholder="filtrar" aria-label={`Filtrar ${c.l}`}
-                    onChange={(e) => setColf((f) => ({ ...f, [c.k]: e.target.value }))} /></th>))}</tr>
+                    onChange={(e) => setColf((f) => ({ ...f, [c.k]: e.target.value }))} /></th>))}<th /></tr>
               </thead>
               <tbody>
                 {(() => {
@@ -432,9 +441,14 @@ export default function TelaCompras() {
                       {colsVis.map((c) => (
                         <td key={c.k} className={`${c.r ? "r" : ""}${c.tr ? " trunc" : ""}`} title={c.tr ? String(c.v(p) ?? "") : undefined}>
                           {c.h ? c.h(p) : String(c.v(p) ?? "")}</td>))}
+                      <td style={{ whiteSpace: "nowrap" }}>
+                        {p.tipo === "PC" && <button className="btn sm ghost" title="Imprimir / PDF / enviar ao fornecedor" onClick={(e) => { e.stopPropagation(); setEnviar(p.id); }}>🖨</button>}
+                        <button className="kebab" aria-label="Ações" onClick={(e) => { e.stopPropagation(); const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                          setCtx({ p, x: Math.min(r.left - 200, window.innerWidth - 250), y: Math.min(r.bottom + 4, window.innerHeight - 380) }); }}>⋮</button>
+                      </td>
                     </tr>
                   );
-                  if (!tabelaLinhas.length) return <tr><td colSpan={colsVis.length + 1} className="empty">Nenhum registro encontrado</td></tr>;
+                  if (!tabelaLinhas.length) return <tr><td colSpan={colsVis.length + 2} className="empty">Nenhum registro encontrado</td></tr>;
                   if (!group) return tabelaLinhas.slice(0, 2000).map(linha);
                   const g: Record<string, PedidoLista[]> = {};
                   tabelaLinhas.forEach((p) => {
@@ -450,7 +464,7 @@ export default function TelaCompras() {
               </tbody>
               <tfoot><tr><td />{colsVis.map((c, i) => (
                 <td key={c.k} className={c.r ? "r" : ""}>{c.sum ? <span className="num">Σ {money(tabelaLinhas.reduce((a, p) => a + (Number(c.v(p)) || 0), 0))}</span>
-                  : i === 0 ? `${tabelaLinhas.length} registros${tabelaLinhas.length > 2000 && !group ? " (2.000 à vista)" : ""}` : ""}</td>))}</tr></tfoot>
+                  : i === 0 ? `${tabelaLinhas.length} registros${tabelaLinhas.length > 2000 && !group ? " (2.000 à vista)" : ""}` : ""}</td>))}<td /></tr></tfoot>
             </table>
           </div>
         )}
@@ -461,10 +475,12 @@ export default function TelaCompras() {
         const it: [string, string, boolean?][] = [["open", "Abrir"], ["dup", p.tipo === "RC" ? "Duplicar Requisição" : "Duplicar Pedido"]];
         if (p.etapa === "20") it.push(["gerar", "Gerar Pedido de Compra"]);
         if (p.etapa === "10") it.push(["solic", "Solicitar aprovação"]);
+        if (p.tipo === "PC" && ["15", "10"].includes(p.etapa) && (p.aprov === "aprovado" || p.origem === "omie")) it.push(["enviar", "Enviar ao fornecedor (e-mail / marcar)"]);
         if (["10", "15"].includes(p.etapa) && p.tipo === "PC" && p.aprov !== "aprovado") it.push(["aprovar", "Aprovar"]);
         if (podeReceber(p)) it.push(["receb", nfSug[p.id] ? "Registrar recebimento (NF chegou)" : "Registrar recebimento"]);
         if (p.etapa === "60") it.push(["conf", "Marcar como conferido"]);
         if (p.tipo === "PC") it.push(["print", "Imprimir / PDF para fornecedor"]);
+        if (p.tipo === "RC") it.push(["venda", p.pv ? "Trocar venda vinculada" : "Vincular à venda (PV/OS)"]);
         it.push(["cancel", p.tipo === "RC" ? "Cancelar requisição" : "Cancelar pedido", p.origem !== "painel"]);
         const info = [p.contato && `👤 ${p.contato}`, p.proj && `📁 ${p.proj}`, p.cnpj && `🏷 ${p.cnpj}`].filter(Boolean) as string[];
         return (
@@ -499,12 +515,14 @@ export default function TelaCompras() {
           }}
           onReceber={(id) => { setFolha(null); setReceb({ id }); }}
           onDuplicar={(id) => { setFolha(null); duplicar(id); }}
-          onImprimir={imprimir} />
+          onImprimir={(id) => { setFolha(null); setEnviar(id); }} />
       )}
       {receb && (
         <FolhaRecebimento id={receb.id} candidatos={candidatosReceb} toast={toast} onClose={() => setReceb(null)}
           onFeito={(m) => { setReceb(null); toast(m); carregar(); }} />
       )}
+      {enviar != null && <ModalEnviar id={enviar} toast={toast} onClose={() => setEnviar(null)}
+        onEnviado={(m) => { setEnviar(null); toast(m); carregar(); }} />}
       {toastMsg && <div className={`cmp-toast${toastMsg.erro ? " erro" : ""}`} role="status">{toastMsg.m}</div>}
     </div>
   );

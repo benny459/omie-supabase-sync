@@ -260,18 +260,19 @@ export default function FolhaPedido({
   const rcAtual = rcView ? rcCache[rcView] : null;
 
   return (
-    <div className="cmp-scrim" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+    <div className="cmp-scrim cheia">
       <div className="cmp" style={{ display: "contents" }}>
-        <div className="sheet" role="dialog" aria-modal="true" aria-label={titulo}>
+        <div className="sheet" role="dialog" aria-modal="true" aria-label={titulo} style={{ ["--c" as string]: ETAPA[D.etapa]?.cor }}>
           <div className="sh-head">
             <h2>{titulo}</h2>
-            {D.id && <span className="pill p-acc">{ETAPA[D.etapa]?.nome}</span>}
-            {D.origem === "omie" && <span className="pill p-off" title="Importado do Omie — histórico, só leitura">Omie · histórico</span>}
+            {D.id && <span className="pill" style={{ background: ETAPA[D.etapa]?.cor, color: "#fff" }}>{ETAPA[D.etapa]?.nome}</span>}
+            {D.origem === "omie" ? <span className="tag orig-omie" title="Importado do Omie — histórico, só leitura">Omie · histórico</span>
+              : <span className="tag orig-painel">Emitido pela plataforma</span>}
             <span className="sp" />
             <div className="stepper" aria-label="Etapas">
               {ETAPAS.map((e, i) => (
                 <span key={e.cod} style={{ display: "contents" }}>
-                  <span className={i < idxEtapa ? "done" : i === idxEtapa ? "cur" : ""}>{e.nome}</span>
+                  <span className={i < idxEtapa ? "done" : i === idxEtapa ? "cur" : ""} style={{ ["--c" as string]: e.cor }}>{e.nome}</span>
                   {i < ETAPAS.length - 1 && <i>›</i>}
                 </span>
               ))}
@@ -327,14 +328,23 @@ export default function FolhaPedido({
                       {refs?.compradores.map((c) => <option key={c.nome}>{c.nome}</option>)}
                     </select></div>
                   {isRC ? (
-                    <div className="f s4"><label htmlFor="dPv">Venda de origem (PV/OS)</label>
-                      <Autocompletar<{ label: string; cliente: string; projeto?: string }> id="dPv" disabled={ro}
+                    <div className="f s4"><label htmlFor="dPv">Venda de origem (PV/OS) {ro && <span className="faint">— dá para vincular/trocar</span>}</label>
+                      <Autocompletar<{ label: string; cliente: string; projeto?: string }> id="dPv" disabled={false}
                         value={D.pv ? `${D.pv}${D.pvCliente ? " · " + D.pvCliente : ""}` : ""} placeholder="Busque PV/OS ou cliente"
                         onChange={(v) => { if (!v) set({ pv: "", pvCliente: "" }); }}
                         fonte={async (q) => (await json<{ label: string; cliente: string; projeto?: string }[]>(
                           await fetch(`/api/compras/buscar?tipo=venda&emp=${D.emp}&q=${encodeURIComponent(q)}`)))
                           .map((v) => ({ label: `${v.label} · ${v.cliente}`, sub: v.projeto || "sem projeto", v }))}
-                        onPick={(o) => set({ pv: o.v.label, pvCliente: o.v.cliente, proj: D.proj || o.v.projeto || "" })} />
+                        onPick={async (o) => {
+                          set({ pv: o.v.label, pvCliente: o.v.cliente, proj: D.proj || o.v.projeto || "" });
+                          if (D.id) { // RC existente: grava o vínculo na hora (vale também para as do Omie)
+                            try {
+                              const r = await fetch("/api/compras/acao", { method: "POST", headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({ acao: "venda", id: D.id, pv: o.v.label, cliente: o.v.cliente }) });
+                              if (!r.ok) throw new Error((await r.json()).error); toast(`Requisição vinculada a ${o.v.label}`);
+                            } catch (e) { toast((e as Error).message, true); }
+                          }
+                        }} />
                       <span className="hint">A RC nasce da venda fechada — o pedido herda esse vínculo.</span></div>
                   ) : (
                     <div className="f s4"><label htmlFor="dParc">Número de Parcelas</label>
@@ -676,7 +686,24 @@ export default function FolhaPedido({
                         {!D.parcelas.length && <tr><td colSpan={6} className="empty">Sem parcelas</td></tr>}</tbody>
                       </table>
                     </div>
-                    {!ro && <div className="addrow"><button className="btn sm" onClick={() => {
+                    {!ro && <div className="addrow" style={{ alignItems: "center" }}>
+                      <span className="hint">Parcelado direto:</span>
+                      <input className="in" style={{ width: 170 }} placeholder="ex.: 3x 15/45/75" onKeyDown={(e) => {
+                        if (e.key !== "Enter") return;
+                        const v = (e.target as HTMLInputElement).value;
+                        const m = v.match(/^\s*(\d+)\s*x?\s*([\d/ ,;]+)?\s*$/i);
+                        if (!m) { toast("Use o formato 3x 15/45/75 (ou só 15/45/75)", true); return; }
+                        let dias = (m[2] ?? "").split(/[\/ ,;]+/).map(Number).filter((n) => Number.isFinite(n) && n >= 0);
+                        const n = Number(m[1]);
+                        if (!m[2]) dias = [n]; // "30" = uma parcela a 30 dias
+                        else if (n && dias.length !== n) { toast(`Informou ${n} parcelas e ${dias.length} prazos`, true); return; }
+                        setParcEditadas(true);
+                        set({ parcelas: gerarParcelas(t.total, dias, D.previsao || hoje(), D.parcelas[0]?.doc ?? "Boleto") });
+                        (e.target as HTMLInputElement).value = ""; toast(`${dias.length} parcela(s) a ${dias.join("/")} dias da previsão de entrega`);
+                      }} />
+                      <span className="hint">Enter gera; dá para ajustar cada uma depois.</span>
+                      <span style={{ flex: 1 }} />
+                      <button className="btn sm" onClick={() => {
                       setParcEditadas(false);
                       set({ parcelas: gerarParcelas(t.total, diasDe(D.parc), D.previsao || hoje(), D.parcelas[0]?.doc ?? "Boleto") });
                       setErrs((e) => { const n = { ...e }; delete n.parcelas; return n; });
@@ -742,7 +769,7 @@ export default function FolhaPedido({
                 )}
                 {D.id && !isRC && (["15", "40"].includes(D.etapa) || (D.etapa === "10" && D.origem === "omie")) && <button className="btn" onClick={() => onReceber(D.id!)}>📦 Registrar recebimento</button>}
                 {D.id && <button className="btn ghost" onClick={() => onDuplicar(D.id!)}>⧉ Duplicar</button>}
-                {D.id && !isRC && <button className="btn ghost" onClick={() => onImprimir(D.id!)}>🖨 Imprimir / PDF para fornecedor</button>}
+                {D.id && !isRC && <button className="btn" style={{ borderColor: "#06B6D4" }} onClick={() => onImprimir(D.id!)}>🖨 Imprimir / PDF / enviar ao fornecedor</button>}
               </div></section>
               {!ro && (
                 <section className="card2"><h4>Pronto para salvar?</h4><div className="check">
@@ -759,6 +786,17 @@ export default function FolhaPedido({
                     ? <div><span className="pill p-ok">✓ Aprovado</span><small>{D.aprovEm ? dBR(D.aprovEm.slice(0, 10), true) : ""}{D.aprovPor ? ` por ${D.aprovPor}` : ""}</small></div>
                     : <div>{APROV_LABEL[D.aprov]}</div>}
                 </div></section>
+              )}
+              {D.enviadoEm && (
+                <section className="card2"><h4>Enviado ao fornecedor</h4><div className="hist">
+                  <div><span className="pill p-env">✉ {new Date(D.enviadoEm).toLocaleString("pt-BR")}</span>
+                    <small>{D.enviadoMeio === "email" ? "por e-mail" : D.enviadoMeio === "whatsapp" ? "por WhatsApp" : "marcado à mão"}{D.enviadoPara ? ` · ${D.enviadoPara}` : ""}{D.enviadoPor ? ` · ${D.enviadoPor}` : ""}</small></div>
+                </div></section>
+              )}
+              {isRC && (D.pcsDaRc ?? []).length > 0 && (
+                <section className="card2"><h4>Pedidos que atendem esta RC</h4><div className="chips">
+                  {(D.pcsDaRc ?? []).map((n) => <span key={n} className="pill p-acc">PC {n}</span>)}</div>
+                  <div className="hint" style={{ marginTop: 6 }}>O cartão da requisição mostra só o saldo ainda a comprar.</div></section>
               )}
               {(D.nf || D.dtRec) && (
                 <section className="card2"><h4>Nota fiscal</h4><div className="hist">
