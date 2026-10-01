@@ -1,0 +1,749 @@
+<!doctype html>
+<html lang="pt-BR" class="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Estoque · Ficha do item · Mockup</title>
+<!--
+  MOCKUP FUNCIONAL — Estoque v2 (ficha do item). Branch mockup/estoque-v2.
+  Gerado por docs/mockups/estoque-ficha-item/build.py a partir do omie-data ({{GERADO}}).
+  Tokens --ww-* copiados verbatim de web/app/globals.css (Allka Navy claro + .dark).
+  Mapa para o KitTela: .cartao→cartao · .kpis→GradeKpis · .chip→ChipFiltro · .seg→SegmentedControl · .pill→cPill · .barra→cBarra · .aviso→Aviso
+  O que o mockup grava (ajuste, alarme, foto, mesclagem, "não é duplicidade") fica no localStorage do navegador — nada vai ao Omie nem ao Supabase.
+  Especificação de implementação: docs/briefings/estoque-ficha-item.md
+-->
+<style>
+{{CSS}}
+.kpi .r{text-align:left}
+.grid2>div{min-width:0;overflow-x:auto}
+.painel{overflow-x:auto}
+.lista-barras .l{grid-template-columns:minmax(110px,1fr) 1fr auto}
+.goto{min-width:min(360px,100%)}
+.goto span:first-of-type{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.goto .kbd{flex:none}
+@media (max-width:700px){#geradoEm{display:none}}
+.th-sort{cursor:pointer;user-select:none}
+.th-sort:hover{color:var(--ww-text)}
+.th-sort.on{color:var(--ww-accent-text)}
+.mais{display:flex;justify-content:center;padding:12px}
+.locais{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+.locais .stat{padding:6px 10px}
+.tag-x{display:inline-flex;align-items:center;gap:6px;padding:4px 6px 4px 11px;border-radius:999px;background:var(--ww-accent-soft);color:var(--ww-accent-text);font-size:12px;font-weight:600}
+.tag-x button{border:0;background:none;color:inherit;width:18px;height:18px;border-radius:50%}
+.foto img{width:100%;height:100%;object-fit:cover;display:block}
+.fcand img{width:100%;height:100%;object-fit:cover}
+.mov-dia{display:flex;gap:12px;align-items:center;padding:10px 16px;background:var(--ww-row-l0);border-bottom:1px solid var(--ww-border);cursor:pointer;font-size:12.5px}
+.mov-dia b{font-size:13px}
+.vazio{padding:30px;text-align:center;color:var(--ww-text-faint)}
+.spin{width:22px;height:22px;border-radius:50%;border:3px solid var(--ww-track);border-top-color:var(--ww-accent);animation:sp 1s linear infinite;margin:20px auto}
+@keyframes sp{to{transform:rotate(360deg)}}
+@media print{.nav,.acoes-item,.subtabs,.crumbs,.foto .acoes{display:none!important}body{background:#fff}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <nav class="nav">
+    <div class="logo"><i>W</i>WaterWorks</div>
+    <a href="#">Operação</a><a href="#">Compras</a><a href="#">Vendas</a><a href="#" class="on">Estoque</a><a href="#">Financeiro</a><a href="#">BI</a>
+    <div class="sp"></div>
+    <span class="mini num" id="geradoEm"></span>
+    <button class="iconbtn" id="reset" title="Apagar o que foi gravado neste mockup"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg></button>
+    <button class="iconbtn" id="tema" title="Tema claro/escuro">☀</button>
+  </nav>
+
+  <!-- ================= LISTA ================= -->
+  <section id="vLista" style="display:flex;flex-direction:column;gap:14px">
+    <header class="cartao head">
+      <div style="flex:1;min-width:240px">
+        <div class="area">Estoque</div>
+        <h1>Estoque</h1>
+        <div class="sub" id="subTitulo"></div>
+      </div>
+      <div class="goto" data-open-pal>
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+        <span>Ir para item — código, nome, nº do PC, cliente…</span><span class="kbd">⌘K</span>
+      </div>
+      <div class="seg" id="abas">
+        <button data-aba="itens" class="on">Itens</button>
+        <button data-aba="dups">Duplicidades<span class="b" id="nDups"></span></button>
+        <button data-aba="movs">Movimentação</button>
+      </div>
+    </header>
+
+    <div id="abaItens" style="display:flex;flex-direction:column;gap:14px">
+      <section class="kpis" id="kpis"></section>
+      <div class="cartao">
+        <div class="head" style="padding:12px 16px;gap:10px">
+          <div class="filtros" id="chips" style="flex:1"></div>
+          <input class="inp" id="busca" placeholder="Filtrar a lista…" style="width:220px;height:34px">
+          <button class="btn sm" id="csvLista">CSV</button>
+        </div>
+        <div id="tagCliente" style="padding:0 16px 10px" class="hide"></div>
+        <div class="scroll">
+          <table class="tabela">
+            <thead><tr id="thead"></tr></thead>
+            <tbody id="linhas"></tbody>
+          </table>
+          <div class="mais" id="mais"></div>
+        </div>
+        <div class="tfoot"><span id="rodape"></span></div>
+      </div>
+    </div>
+
+    <div id="abaDups" class="hide" style="display:flex;flex-direction:column;gap:14px">
+      <div class="aviso t-info" style="display:block">
+        <b>Como achamos:</b> (1) <b>nome igual</b>: descrição sem acento, espaço e pontuação idêntica em códigos diferentes; (2) <b>parecido</b>: similaridade de trigramas ≥ 85% (pg_trgm), com as mesmas medidas/números e sem trocar códigos curtos (C×LR, AZ×PT). <b>Mesclar</b> = escolher o código que fica, transferir o saldo por ajuste e inativar o outro. <b>Não é duplicidade</b> fica gravado e o par não volta.
+      </div>
+      <div class="filtros" id="dupChips"></div>
+      <div class="cartao" id="dupsLista"></div>
+    </div>
+
+    <div id="abaMovs" class="hide" style="display:flex;flex-direction:column;gap:14px">
+      <div class="filtros">
+        <input type="date" class="inp" id="mvDe" style="width:auto;border-radius:999px;height:32px">
+        <span class="mini">→</span>
+        <input type="date" class="inp" id="mvAte" style="width:auto;border-radius:999px;height:32px">
+        <span id="mvChips" style="display:contents"></span>
+        <div class="sp"></div>
+        <input class="inp" id="mvBusca" placeholder="Produto, doc, cliente…" style="width:240px;height:34px">
+      </div>
+      <section class="kpis" id="mvKpis"></section>
+      <div class="cartao" id="mvLista" style="overflow:hidden"></div>
+    </div>
+  </section>
+
+  <!-- ================= FICHA ================= -->
+  <section id="vFicha" class="hide" style="display:flex;flex-direction:column;gap:14px"></section>
+</div>
+
+<div class="ov top" id="ovPal">
+  <div class="pal">
+    <input id="palIn" placeholder="Código, nome, nº do PC ou cliente…" autocomplete="off">
+    <div class="res" id="palRes"></div>
+    <div class="ft"><span>↑↓ navegar</span><span>↵ abrir</span><span>esc fechar</span><span style="margin-left:auto">também abre com /</span></div>
+  </div>
+</div>
+<div class="ov" id="ovModal"><div class="modal" id="modal"></div></div>
+<div class="toast" id="toast"></div>
+
+<script>{{DATA}}</script>
+<script>
+"use strict";
+/* ============================ DADOS ============================ */
+const RAW = window.__ESTOQUE__, D = RAW.D, HOJE = RAW.hoje;
+const Ds = i => (i == null || i < 0 ? null : D[i]);
+const LOCN = { "2264756939": "Principal", "12172796544": "Local 2" };
+const nomeLocal = l => LOCN[l] || "Local " + l;
+
+// Persistência do mockup (no app real: tabelas no Supabase + API do Omie)
+const KEY = "ww-estoque-mockup-v1";
+let ST = { alarmes: {}, fotos: {}, ajustes: {}, log: {}, ignorados: [], mesclados: {} };
+try { const s = localStorage.getItem(KEY); if (s) ST = Object.assign(ST, JSON.parse(s)); } catch (e) {}
+function salvar() { try { localStorage.setItem(KEY, JSON.stringify(ST)); } catch (e) { toast("Não deu para gravar no navegador (modo privado?) — vale só nesta aba"); } }
+function logar(id, txt) { (ST.log[id] = ST.log[id] || []).unshift([new Date().toISOString(), "Benny", txt]); salvar(); }
+
+// Produtos (uma ficha por código; locais agregados)
+const PROD = new Map();
+for (const r of RAW.itens) {
+  const [id, c, d, li, s, pend, cmc, q90, ult, n, un, ncm, mn, res] = r;
+  let p = PROD.get(id);
+  if (!p) { p = { id, c, d, u: un || "UN", ncm, cmc, cd: q90 / 90, ult, n, locais: [], s0: 0, pend: 0, res: 0, minOmie: mn }; PROD.set(id, p); }
+  p.locais.push({ loc: D[li], s, pend, cmc });
+  p.s0 += s; p.pend += pend; p.res += res;
+  if (ult && (!p.ult || ult > p.ult)) p.ult = ult;
+}
+const LISTA = [...PROD.values()];
+const MOV = RAW.mov, PCS = RAW.pcs, PRECOS = RAW.precos;
+const saldoLoc = (p, l) => { const a = ST.ajustes[p.id]; return a && typeof a === "object" && a[l.loc] != null ? a[l.loc] : l.s; };
+const saldo = p => p.locais.reduce((s, l) => s + saldoLoc(p, l), 0);
+const ajustado = p => !!ST.ajustes[p.id] && Object.keys(ST.ajustes[p.id]).length > 0;
+const valor = p => Math.max(saldo(p), 0) * p.cmc;
+// índices para a busca
+const PC_IDX = new Map(), CLI_IDX = new Map();
+for (const [id, l] of Object.entries(PCS)) for (const pc of l) { const k = pc[0]; if (!PC_IDX.has(k)) PC_IDX.set(k, []); PC_IDX.get(k).push(Number(id)); }
+for (const [id, l] of Object.entries(MOV)) for (const m of l) { const cli = Ds(m[7]); if (cli && m[2] < 0) { if (!CLI_IDX.has(cli)) CLI_IDX.set(cli, new Set()); CLI_IDX.get(cli).add(Number(id)); } }
+// duplicidades
+const DUPS = RAW.dups.map(([ids, sim, tipo]) => ({ ids, sim, tipo, k: ids.slice().sort().join("-") }));
+const DUP_DE = new Map();
+for (const g of DUPS) for (const id of g.ids) { if (!DUP_DE.has(id)) DUP_DE.set(id, []); DUP_DE.get(id).push(g); }
+const dupsAtivos = () => DUPS.filter(g => !ST.ignorados.includes(g.k) && !g.ids.some(i => ST.mesclados[i]));
+const temDup = p => (DUP_DE.get(p.id) || []).some(g => !ST.ignorados.includes(g.k) && !g.ids.some(i => ST.mesclados[i]));
+
+/* ============================ HELPERS ============================ */
+const $ = (s, el = document) => el.querySelector(s);
+const NUM = new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 2 });
+const q = v => NUM.format(v ?? 0);
+const brl = v => (v ?? 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+const kbrl = v => { const a = Math.abs(v), s = v < 0 ? "−" : ""; if (a >= 1e6) return `${s}R$ ${(a / 1e6).toFixed(2).replace(".", ",")} mi`; if (a >= 1e4) return `${s}R$ ${Math.round(a / 1e3)} mil`; return s + brl(a); };
+const ddmmaa = iso => (iso ? `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(2, 4)}` : "—");
+const ddmm = iso => (iso ? `${iso.slice(8, 10)}/${iso.slice(5, 7)}` : "—");
+const dias = iso => (iso ? Math.round((new Date(HOJE) - new Date(iso)) / 864e5) : null);
+const somaDias = (iso, n) => new Date(new Date(iso).getTime() + n * 864e5).toISOString().slice(0, 10);
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const pill = (t, tom) => `<span class="pill t-${tom}">${esc(t)}</span>`;
+const DSEM = ["dom", "seg", "ter", "qua", "qui", "sex", "sáb"];
+const dsem = iso => DSEM[new Date(iso + "T12:00:00Z").getUTCDay()];
+const agora = () => new Date().toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" });
+function toast(t) { const el = $("#toast"); el.textContent = t; el.classList.add("on"); clearTimeout(toast.h); toast.h = setTimeout(() => el.classList.remove("on"), 2800); }
+function baixarCSV(nome, linhas) {
+  const csv = linhas.map(l => l.map(v => { const s = String(v ?? ""); return /[;"\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; }).join(";")).join("\n");
+  const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8" })); a.download = nome; a.click();
+}
+
+/* ============================ REGRAS ============================ */
+function cobertura(p) { if (!p.cd) return null; const s = saldo(p); return s <= 0 ? 0 : Math.round(s / p.cd); }
+function situacao(p) {
+  const s = saldo(p);
+  if (ST.mesclados[p.id]) return ["Mesclado", "off"];
+  if (p.cd && s <= 0) return ["Ruptura", "crit"];
+  if (s < 0) return ["Negativo", "violet"];
+  const c = cobertura(p);
+  if (c !== null && c < 30) return ["Cobertura baixa", "warn"];
+  if (s > 0 && (dias(p.ult) ?? 9999) > 180) return ["Parado", "off"];
+  if (s === 0) return ["Zerado", "off"];
+  return ["Saudável", "ok"];
+}
+function alarme(p) {
+  const a = ST.alarmes[p.id], s = saldo(p);
+  if (!a) return ["sem alarme", "off"];
+  if (s <= a.min) return [`abaixo do mín. ${q(a.min)}`, "crit"];
+  if (s <= a.pp) return [`pedir (≤ ${q(a.pp)})`, "warn"];
+  if (a.max && s > a.max) return [`acima do máx. ${q(a.max)}`, "violet"];
+  return ["alarme ok", "ok"];
+}
+// quebras de sequência no Kardex: saldo anterior + qtde ≠ saldo (por local, ignorando cancelados)
+function quebras(id) {
+  const ult = {}, out = new Set();
+  (MOV[id] || []).forEach((m, i) => { if (m[6]) return; const l = m[10]; if (ult[l] != null && Math.abs(ult[l] + m[2] - m[3]) > 0.001) out.add(i); ult[l] = m[3]; });
+  return out;
+}
+function auditoria(p) {
+  const pts = [], s = saldo(p), movs = MOV[p.id] || [], pcs = PCS[p.id] || [], pr = PRECOS[p.id] || [];
+  const negLoc = p.locais.filter(l => saldoLoc(p, l) < 0);
+  if (s >= 0 && negLoc.length && p.locais.length > 1) pts.push(["crit", "alerta", `Saldo negativo no ${nomeLocal(negLoc[0].loc)}`, `${q(saldoLoc(p, negLoc[0]))} ${p.u.toLowerCase()} — o total parece certo, mas um local está negativo. Provável transferência entre locais não lançada.`, `<button class="btn sm pri" data-modal="ajuste">Ajustar local</button>`]);
+  if (s < 0) pts.push(["crit", "alerta", "Saldo negativo", `Saldo ${q(s)} ${p.u.toLowerCase()} — fisicamente impossível. Faça a contagem e ajuste.`, `<button class="btn sm pri" data-modal="ajuste">Ajustar saldo</button>`]);
+  const qb = quebras(p.id);
+  if (qb.size) { const i = [...qb][0], m = movs[i]; pts.push(["crit", "quebra", `Saldo não fecha em ${qb.size} movimento${qb.size > 1 ? "s" : ""}`, `Primeiro em ${ddmmaa(m[0])}: ${esc(Ds(m[1]))} ${esc(m[4])} (${m[2] > 0 ? "+" : ""}${q(m[2])}) registrou saldo ${q(m[3])}. Indica lançamento retroativo ou fora de ordem no Omie.`, `<button class="btn sm" data-sub="mov">Ver no Kardex</button>`]); }
+  if (movs.length) { const lastByLoc = {}; movs.forEach(m => { if (!m[6]) lastByLoc[m[10]] = m[3]; }); const k = Object.values(lastByLoc).reduce((a, b) => a + b, 0);
+    if (Math.abs(k - p.s0) > 0.001 && Object.keys(lastByLoc).length === p.locais.length) pts.push(["warn", "soma", "Posição ≠ último saldo do Kardex", `Posição do Omie ${q(p.s0)} × último saldo dos movimentos ${q(k)}.`, ""]); }
+  // preço fora da curva (12 meses)
+  const rec = pcs.filter(x => x[5] > 0 && x[1] >= somaDias(HOJE, -365)).map(x => x[5]).sort((a, b) => a - b);
+  if (rec.length >= 3) { const med = rec[Math.floor(rec.length / 2)], fora = pcs.filter(x => x[5] > 0 && x[1] >= somaDias(HOJE, -365) && (x[5] < med * 0.6 || x[5] > med * 1.5));
+    if (fora.length) pts.push(["warn", "preco", `${fora.length} preço${fora.length > 1 ? "s" : ""} fora da curva`, `Mediana de 12 meses ${brl(med)}. Ex.: PC ${esc(fora[0][0])} a ${brl(fora[0][5])} (${ddmmaa(fora[0][1])}). Pode ser bonificação, erro de unidade ou digitação.`, `<button class="btn sm" data-sub="forn">Ver preços</button>`]); }
+  const abertos = pcs.filter(x => x[4] < x[3]), velhos = abertos.filter(x => dias(x[1]) > 60), qAb = abertos.reduce((a, x) => a + x[3] - x[4], 0);
+  if (velhos.length) pts.push(["warn", "pc", `${velhos.length} PC${velhos.length > 1 ? "s" : ""} aberto${velhos.length > 1 ? "s" : ""} há mais de 60 dias`, `Saldo a receber pelos PCs: ${q(qAb)} × pendente no Omie: ${q(p.pend)}. Provavelmente PCs que nunca foram baixados ou cancelados.`, `<button class="btn sm" data-sub="compras">Ver PCs</button>`]);
+  const amais = pcs.filter(x => x[4] > x[3]);
+  if (amais.length) pts.push(["warn", "mais", "Recebido acima do pedido", `PC ${esc(amais[0][0])}: pedido ${q(amais[0][3])}, recebido ${q(amais[0][4])}.`, `<button class="btn sm" data-sub="compras">Ver PCs</button>`]);
+  const semCli = movs.filter(m => m[2] < 0 && !m[6] && Ds(m[7]) == null);
+  if (semCli.length) pts.push(["info", "semcli", `${semCli.length} saída${semCli.length > 1 ? "s" : ""} sem cliente`, `${q(semCli.reduce((a, m) => a - m[2], 0))} ${p.u.toLowerCase()} saíram sem vínculo com pedido de venda (remessas, ajustes manuais).`, `<button class="btn sm" data-sub="uso">Ver usos</button>`]);
+  if (temDup(p)) pts.push(["warn", "dup", "Possível duplicidade", "Outro código com descrição igual ou muito parecida.", `<button class="btn sm" data-dup-de="${p.id}">Ver grupo</button>`]);
+  if (!ST.alarmes[p.id] && p.cd) pts.push(["warn", "sino", "Sem alarme", `Item com consumo de ${q(Math.round(p.cd * 30))} ${p.u.toLowerCase()}/mês e nenhum mínimo definido.`, `<button class="btn sm" data-modal="alarme">Definir</button>`]);
+  if (s > 0 && p.cmc === 0) pts.push(["warn", "zero", "CMC zerado", "Item com saldo e custo médio zero — o valor do estoque fica subestimado.", ""]);
+  if (s > 0 && (dias(p.ult) ?? 9999) > 180) pts.push(["info", "parado", "Parado", `Sem movimento há ${dias(p.ult) ?? "mais de 1000"} dias com ${kbrl(valor(p))} em estoque.`, ""]);
+  if (!pts.some(x => x[0] === "crit" || x[0] === "warn")) pts.push(["ok", "ok", "Nada crítico", "Saldo positivo, sequência do Kardex fecha e sem duplicidade.", ""]);
+  return pts;
+}
+const nAlertas = p => auditoria(p).filter(x => x[0] === "crit" || x[0] === "warn").length;
+
+const AICO = { alerta: '<path d="M12 9v4M12 17h.01"/><path d="M10.3 3.9L1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/>', quebra: '<path d="M4 12h16M4 7h16M4 17h16M8 3l8 18"/>', soma: '<path d="M18 4H6l6 8-6 8h12"/>', preco: '<path d="M12 2v20M17 6H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>', pc: '<circle cx="9" cy="20" r="1.5"/><circle cx="18" cy="20" r="1.5"/><path d="M2 3h3l2.7 12.4a2 2 0 0 0 2 1.6h8.6a2 2 0 0 0 2-1.6L22 7H6"/>', mais: '<path d="M12 5v14M5 12h14"/>', semcli: '<circle cx="12" cy="8" r="4"/><path d="M4 21v-1a6 6 0 0 1 9-5.2M17 17l4 4M21 17l-4 4"/>', dup: '<rect x="8" y="8" width="13" height="13" rx="2"/><path d="M4 16V5a2 2 0 0 1 2-2h11"/>', sino: '<path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9M13.7 21a2 2 0 0 1-3.4 0"/>', zero: '<circle cx="12" cy="12" r="9"/><path d="M5 19L19 5"/>', parado: '<circle cx="12" cy="12" r="9"/><path d="M10 9v6M14 9v6"/>', ok: '<path d="M20 6L9 17l-5-5"/>' };
+const aico = k => `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${AICO[k] || ""}</svg>`;
+const ICONE = `<svg viewBox="0 0 40 40" width="100%" height="100%" fill="none" stroke="currentColor" stroke-width="1.8" opacity=".55"><rect x="8" y="10" width="24" height="20" rx="3"/><path d="M8 16h24M16 10v6M24 10v6"/></svg>`;
+const thumb = p => `<div class="thumb">${ST.fotos[p.id] ? `<img src="${esc(ST.fotos[p.id].src)}" style="width:100%;height:100%;object-fit:cover" alt="">` : ICONE}</div>`;
+
+/* ============================ LISTA ============================ */
+const FILTROS = [
+  ["todos", "Todos", () => true],
+  ["saldo", "Com saldo", p => saldo(p) !== 0],
+  ["ruptura", "Ruptura", p => situacao(p)[0] === "Ruptura"],
+  ["negativo", "Saldo negativo", p => saldo(p) < 0],
+  ["cobertura", "Cobertura < 30 d", p => { const c = cobertura(p); return c !== null && c < 30; }],
+  ["alarme", "Alarme disparado", p => ["crit", "warn"].includes(alarme(p)[1])],
+  ["semalarme", "Consumo sem alarme", p => p.cd > 0 && !ST.alarmes[p.id]],
+  ["dup", "Duplicidade", p => temDup(p)],
+  ["parado", "Parado +180 d", p => saldo(p) > 0 && (dias(p.ult) ?? 9999) > 180],
+  ["audit", "Com alerta de auditoria", p => nAlertas(p) > 0],
+];
+const COLS = [
+  ["item", "Item", p => p.d], ["sit", "Situação", p => situacao(p)[0]], ["saldo", "Saldo", p => saldo(p), "r"],
+  ["pend", "Pendente", p => p.pend, "r opt"], ["al", "Alarme", p => alarme(p)[0], "opt"], ["cob", "Cobertura", p => cobertura(p) ?? 1e9],
+  ["ult", "Última mov.", p => p.ult || "", "opt"], ["cmc", "CMC", p => p.cmc, "r opt"], ["valor", "Valor", valor, "r"],
+];
+let filtro = "saldo", busca = "", ordem = ["valor", -1], limite = 100, clienteFiltro = null;
+function base() {
+  const f = FILTROS.find(x => x[0] === filtro)[2], t = busca.trim().toLowerCase();
+  let rs = LISTA.filter(p => !ST.mesclados[p.id] || filtro === "todos").filter(f);
+  if (clienteFiltro) { const set = CLI_IDX.get(clienteFiltro) || new Set(); rs = rs.filter(p => set.has(p.id)); }
+  if (t) rs = rs.filter(p => (p.d + " " + p.c).toLowerCase().includes(t));
+  const col = COLS.find(c => c[0] === ordem[0])[2];
+  return rs.sort((a, b) => { const x = col(a), y = col(b); return (x > y ? 1 : x < y ? -1 : 0) * ordem[1]; });
+}
+function renderKpis() {
+  const vt = LISTA.reduce((s, p) => s + valor(p), 0), par = LISTA.filter(FILTROS[8][2]), vpar = par.reduce((s, p) => s + valor(p), 0);
+  const k = (f, r, v, s, tom, glow, hero) => `<button class="kpi ${hero ? "hero" : ""}" style="--glow:${glow}" ${f}><div class="r">${r}</div><div class="v">${v}</div><div class="s ${tom || ""}">${s}</div></button>`;
+  $("#kpis").innerHTML =
+    k('data-f="saldo"', "Valor em estoque", kbrl(vt), `${q(LISTA.filter(p => saldo(p) > 0).length)} itens com saldo · ao CMC`, "", "", true) +
+    k('data-f="ruptura"', "Em ruptura", q(LISTA.filter(FILTROS[2][2]).length), "têm consumo e saldo ≤ 0", "crit", "rgba(255,107,74,.26)") +
+    k('data-f="negativo"', "Saldo negativo", q(LISTA.filter(FILTROS[3][2]).length), "ajustar — saldo impossível", "crit", "rgba(154,130,255,.3)") +
+    k('data-f="semalarme"', "Consumo sem alarme", q(LISTA.filter(FILTROS[6][2]).length), `${q(Object.keys(ST.alarmes).length)} alarmes definidos`, "warn", "rgba(245,197,66,.26)") +
+    k('data-aba-go="dups"', "Possíveis duplicidades", q(dupsAtivos().length), "pares para revisar", "", "rgba(154,130,255,.3)") +
+    k('data-f="parado"', "Parado +180 dias", kbrl(vpar), `${q(par.length)} itens · ${Math.round(vpar / Math.max(vt, 1) * 100)}% do valor`, "warn", "rgba(59,184,255,.22)");
+}
+function renderLista() {
+  renderKpis();
+  $("#chips").innerHTML = FILTROS.map(([k, l, f]) => `<button class="chip ${filtro === k ? "on" : ""}" data-chip="${k}">${l} <b>${q(LISTA.filter(f).length)}</b></button>`).join("");
+  $("#thead").innerHTML = COLS.map(([k, l, , cls]) => `<th class="th-sort ${cls || ""} ${ordem[0] === k ? "on" : ""}" data-ord="${k}">${l}${ordem[0] === k ? (ordem[1] > 0 ? " ↑" : " ↓") : ""}</th>`).join("");
+  $("#tagCliente").classList.toggle("hide", !clienteFiltro);
+  if (clienteFiltro) $("#tagCliente").innerHTML = `<span class="tag-x">Usados por: ${esc(clienteFiltro)} <button data-limpa-cli>×</button></span>`;
+  const rs = base();
+  $("#linhas").innerHTML = rs.slice(0, limite).map(p => {
+    const [st, tom] = situacao(p), [al, atom] = alarme(p), cob = cobertura(p), s = saldo(p);
+    const cobTxt = cob === null ? `<span class="mini">sem consumo</span>` :
+      `<div style="display:flex;gap:8px;align-items:center"><div class="barra" style="width:70px"><i style="width:${Math.min(100, Math.max(3, cob / 1.8))}%;background:var(--ww-${cob === 0 ? "crit" : cob < 30 ? "warn" : "ok"})"></i></div><span class="num">${cob > 999 ? "999+" : q(cob)} d</span></div>`;
+    return `<tr class="click" data-id="${p.id}">
+      <td><div class="prod">${thumb(p)}<div><div class="n">${esc(p.d)}${temDup(p) ? `<span class="dup">duplicidade?</span>` : ""}</div><div class="c">${esc(p.c)} · ${p.locais.map(l => nomeLocal(l.loc)).join(" + ")}${ajustado(p) ? " · <span style='color:var(--ww-accent-text)'>ajustado</span>" : ""}</div></div></div></td>
+      <td>${pill(st, tom)}</td>
+      <td class="r" style="font-weight:600;color:${s < 0 ? "var(--ww-crit-text)" : "inherit"}">${q(s)}</td>
+      <td class="r opt">${p.pend ? q(p.pend) : `<span class="mini">—</span>`}</td>
+      <td class="opt">${pill(al, atom)}</td>
+      <td>${cobTxt}</td>
+      <td class="opt"><span class="num">${ddmmaa(p.ult)}</span>${p.ult ? ` <span class="mini">· ${dias(p.ult)} d</span>` : ""}</td>
+      <td class="r opt">${brl(p.cmc)}</td>
+      <td class="r" style="font-weight:600">${brl(valor(p))}</td></tr>`;
+  }).join("") || `<tr><td colspan="9" class="vazio">Nenhum item nesse filtro.</td></tr>`;
+  $("#mais").innerHTML = rs.length > limite ? `<button class="btn sm" data-mais>Mostrar mais ${Math.min(200, rs.length - limite)} de ${q(rs.length - limite)} restantes</button>` : "";
+  $("#rodape").innerHTML = `${q(rs.length)} itens · valor <b style="color:var(--ww-text)">${brl(rs.reduce((s, p) => s + valor(p), 0))}</b>`;
+}
+
+/* ============================ DUPLICIDADES ============================ */
+let dupFiltro = "todos";
+function renderDups() {
+  const at = dupsAtivos(), ex = at.filter(g => g.tipo === "exata"), si = at.filter(g => g.tipo !== "exata");
+  $("#nDups").textContent = at.length;
+  $("#dupChips").innerHTML = [["todos", "Todos", at.length], ["exata", "Nome igual", ex.length], ["similar", "Parecido", si.length], ["saldo", "Com saldo nos dois", at.filter(g => g.ids.every(i => saldo(PROD.get(i)) !== 0)).length]]
+    .map(([k, l, n]) => `<button class="chip ${dupFiltro === k ? "on" : ""}" data-dchip="${k}">${l} <b>${n}</b></button>`).join("");
+  let rs = dupFiltro === "exata" ? ex : dupFiltro === "similar" ? si : dupFiltro === "saldo" ? at.filter(g => g.ids.every(i => saldo(PROD.get(i)) !== 0)) : at;
+  rs = rs.slice().sort((a, b) => (b.tipo === "exata") - (a.tipo === "exata") || b.ids.reduce((s, i) => s + Math.abs(saldo(PROD.get(i))) * PROD.get(i).cmc, 0) - a.ids.reduce((s, i) => s + Math.abs(saldo(PROD.get(i))) * PROD.get(i).cmc, 0));
+  $("#dupsLista").innerHTML = rs.map(g => dupCard(g)).join("") || `<div class="vazio">Nada para revisar.</div>`;
+}
+function dupCard(g) {
+  const its = g.ids.map(i => PROD.get(i)).sort((a, b) => (b.n || 0) - (a.n || 0));
+  const cm = its.map(i => i.cmc).filter(x => x > 0), dif = cm.length > 1 && Math.max(...cm) / Math.min(...cm) > 1.5;
+  return `<div class="grupo" data-g="${g.k}">
+    <div class="grupo-h"><b>${esc(its[0].d)}</b>${pill(g.tipo === "exata" ? "nome igual" : `parecido ${Math.round(g.sim * 100)}%`, g.tipo === "exata" ? "violet" : "info")}${dif ? pill("CMC diferente", "warn") : ""}<div class="sp"></div>
+      <button class="btn sm" data-ign="${g.k}">Não é duplicidade</button><button class="btn sm pri" data-merge="${g.k}">Mesclar…</button></div>
+    <div class="cands">${its.map((p, i) => `<div class="cand ${i === 0 ? "princ" : ""}" data-id="${p.id}">
+      <div style="display:flex;gap:8px;align-items:center">${thumb(p)}<div style="min-width:0"><div style="font-weight:600">${esc(p.c)}</div><div class="mini" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(p.d)}</div></div>${i === 0 ? `<span style="margin-left:auto">${pill("mais usado", "info")}</span>` : ""}</div>
+      <div class="kv"><span>Saldo</span><b style="color:${saldo(p) < 0 ? "var(--ww-crit-text)" : "inherit"}">${q(saldo(p))} ${esc(p.u.toLowerCase())}</b></div>
+      <div class="kv"><span>CMC</span><b class="${dif ? "diff" : ""}">${brl(p.cmc)}</b></div>
+      <div class="kv"><span>Movimentos · última</span><b>${q(p.n)} · ${ddmmaa(p.ult)}</b></div>
+      <div class="kv"><span>PCs (24 meses)</span><b>${(PCS[p.id] || []).length}</b></div>
+    </div>`).join("")}</div></div>`;
+}
+
+/* ============================ MOVIMENTAÇÃO ============================ */
+const TODOS_MOV = []; for (const [id, l] of Object.entries(MOV)) l.forEach((m, i) => TODOS_MOV.push([Number(id), m, i]));
+TODOS_MOV.sort((a, b) => (b[1][0] > a[1][0] ? 1 : b[1][0] < a[1][0] ? -1 : 0));
+let mvDe = somaDias(HOJE, -30), mvAte = HOJE, mvTipo = "", mvBusca = "", mvAbertos = new Set();
+function renderMovs() {
+  $("#mvDe").value = mvDe; $("#mvAte").value = mvAte;
+  $("#mvChips").innerHTML = [["entrada", "Entradas"], ["saida", "Saídas"], ["semcli", "Saída sem cliente"]].map(([k, l]) => `<button class="chip ${mvTipo === k ? "on" : ""}" data-mvt="${k}">${l}</button>`).join("");
+  const t = mvBusca.trim().toLowerCase();
+  const rs = TODOS_MOV.filter(([id, m]) => m[0] >= mvDe && m[0] <= mvAte && (!mvTipo || (mvTipo === "entrada" ? m[2] > 0 : m[2] < 0)) && (mvTipo !== "semcli" || (!m[6] && Ds(m[7]) == null))
+    && (!t || [PROD.get(id)?.d, PROD.get(id)?.c, m[4], Ds(m[7]), Ds(m[8]), m[9]].some(v => (v || "").toLowerCase().includes(t))));
+  const vivos = rs.filter(x => !x[1][6]), ent = vivos.filter(x => x[1][2] > 0), sai = vivos.filter(x => x[1][2] < 0);
+  const v = l => l.reduce((s, [, m]) => s + Math.abs(m[2]) * (m[5] || 0), 0);
+  $("#mvKpis").innerHTML = `<div class="kpi hero"><div class="r">Movimentos no período</div><div class="v">${q(rs.length)}</div><div class="s">${ddmm(mvDe)} a ${ddmm(mvAte)} · ${rs.length - vivos.length} cancelados</div></div>
+    <div class="kpi"><div class="r">Entradas</div><div class="v">${kbrl(v(ent))}</div><div class="s">${ent.length} movimentos</div></div>
+    <div class="kpi" style="--glow:rgba(255,107,74,.26)"><div class="r">Saídas</div><div class="v">${kbrl(v(sai))}</div><div class="s">${sai.length} movimentos · ${sai.filter(x => Ds(x[1][7]) == null).length} sem cliente</div></div>
+    <div class="kpi"><div class="r">Itens movimentados</div><div class="v">${q(new Set(vivos.map(x => x[0])).size)}</div><div class="s">distintos</div></div>`;
+  const dias_ = new Map(); rs.forEach(x => { if (!dias_.has(x[1][0])) dias_.set(x[1][0], []); dias_.get(x[1][0]).push(x); });
+  if (!mvAbertos.size && rs.length) mvAbertos.add(rs[0][1][0]);
+  $("#mvLista").innerHTML = [...dias_.entries()].map(([d, l]) => {
+    const e = l.filter(x => x[1][2] > 0 && !x[1][6]), s = l.filter(x => x[1][2] < 0 && !x[1][6]), ab = mvAbertos.has(d);
+    return `<div class="mov-dia" data-dia="${d}"><span style="display:inline-flex;transform:rotate(${ab ? 90 : 0}deg);transition:.15s"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg></span><b>${ddmm(d)} · ${dsem(d)}</b><span class="mini">${l.length} movimentos · ${e.length} entradas · ${s.length} saídas</span><span style="margin-left:auto" class="num"><span style="color:var(--ww-ok-text)">+${kbrl(v(e))}</span> / <span style="color:var(--ww-crit-text)">−${kbrl(v(s))}</span></span></div>
+    ${ab ? `<table class="tabela"><tbody>${l.map(([id, m]) => { const p = PROD.get(id); return `<tr class="click" data-id="${id}" data-sub-ini="mov" style="opacity:${m[6] ? .45 : 1}">
+      <td><div class="prod" style="min-width:240px">${thumb(p)}<div><div class="n">${esc(p.d)}</div><div class="c">${esc(p.c)} · ${nomeLocal(Ds(m[10]))}</div></div></div></td>
+      <td>${esc(Ds(m[1]))}<div class="mini">${esc(m[4])}</div></td>
+      <td class="opt">${Ds(m[7]) ? `<b>${esc(Ds(m[7]))}</b><div class="mini">${esc(Ds(m[8]) || "")}</div>` : m[2] < 0 ? `<span class="mini" style="color:var(--ww-warn-text)">sem cliente</span>` : ""}</td>
+      <td class="r" style="font-weight:600;color:var(--ww-${m[6] ? "off" : m[2] < 0 ? "crit" : "ok"}-text)">${m[2] > 0 ? "+" : "−"}${q(Math.abs(m[2]))}</td>
+      <td class="r opt">${brl(m[5])}</td><td class="r">${q(m[3])}</td></tr>`; }).join("")}</tbody></table>` : ""}`;
+  }).join("") || `<div class="vazio">Nenhum movimento no período (o mockup traz os últimos 12 meses).</div>`;
+}
+
+/* ============================ FICHA ============================ */
+let atual = null, subtab = "uso", usoPor = "cliente";
+function abrirFicha(id, aba) {
+  atual = PROD.get(Number(id)); if (!atual) return;
+  subtab = aba || "uso";
+  $("#vLista").classList.add("hide"); $("#vFicha").classList.remove("hide");
+  history.replaceState(null, "", "#item=" + atual.c);
+  renderFicha(); window.scrollTo({ top: 0 });
+}
+function voltar() { $("#vFicha").classList.add("hide"); $("#vLista").classList.remove("hide"); history.replaceState(null, "", "#"); renderLista(); }
+
+function renderFicha() {
+  const p = atual, s = saldo(p), cob = cobertura(p), [st, tom] = situacao(p), a = ST.alarmes[p.id], foto = ST.fotos[p.id];
+  const movs = MOV[p.id] || [], pcs = PCS[p.id] || [], pr = PRECOS[p.id] || [], nA = nAlertas(p);
+  const usos = movs.filter(m => m[2] < 0 && !m[6]), ultPc = pcs.slice().sort((x, y) => (y[1] > x[1] ? 1 : -1))[0];
+  const idx = LISTA.indexOf(p);
+  $("#vFicha").innerHTML = `
+  <div class="crumbs"><button data-voltar style="display:inline-flex;align-items:center;gap:4px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>Estoque</button><span>/</span><span>${esc(p.c)}</span>
+    <span style="margin-left:auto;display:flex;gap:6px"><button class="btn sm" data-nav="-1" title="Item anterior"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg></button><button class="btn sm" data-nav="1" title="Próximo item"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg></button><button class="btn sm" data-open-pal>Ir para… <span class="kbd">⌘K</span></button></span></div>
+  ${ST.mesclados[p.id] ? `<div class="aviso t-warn">Este código foi mesclado em <b>${esc(PROD.get(ST.mesclados[p.id]).c)}</b>. <button class="btn sm" data-id="${ST.mesclados[p.id]}" style="margin-left:auto">Abrir o principal</button></div>` : ""}
+  <div class="cartao">
+    <div class="ficha-top">
+      <div class="foto">
+        ${foto ? `<img src="${esc(foto.src)}" alt="" onerror="this.replaceWith(document.createRange().createContextualFragment('<div style=&quot;position:absolute;inset:0;padding:40px;color:var(--ww-text-faint)&quot;>${ICONE.replace(/"/g, "&quot;")}</div>'))">` : `<div style="position:absolute;inset:0;padding:40px;color:var(--ww-text-faint)">${ICONE}</div>`}
+        <span class="src">${foto ? esc(foto.origem) : "sem foto"}</span>
+        <div class="acoes"><button class="btn sm" data-modal="foto">${foto ? "Trocar" : "Buscar na web"}</button><button class="btn sm" data-modal="upload">Enviar</button></div>
+      </div>
+      <div style="min-width:0">
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">${pill(st, tom)}${pill(...alarme(p))}${temDup(p) ? pill("possível duplicidade", "violet") : ""}${ajustado(p) ? pill("saldo ajustado no painel", "info") : ""}</div>
+        <div class="titulo-item">${esc(p.d)}</div>
+        <div class="meta"><span>Código ${esc(p.c)}</span><span>${esc(p.u)}</span>${p.ncm ? `<span>NCM ${esc(p.ncm)}</span>` : ""}<span>id Omie ${p.id}</span>${pr[0] ? `<span>Fornecedor principal: ${esc(Ds(pr[0][0]))}</span>` : ""}</div>
+        <div class="stats">
+          <div class="stat"><div class="r1">Saldo</div><div class="v1" style="color:${s < 0 ? "var(--ww-crit-text)" : "inherit"}">${q(s)}</div><div class="s1">${ajustado(p) ? `Omie: ${q(p.s0)}` : esc(p.u.toLowerCase()) + " · Omie"}</div></div>
+          <div class="stat"><div class="r1">Pendente</div><div class="v1">${q(p.pend)}</div><div class="s1">${pcs.filter(x => x[4] < x[3]).length} PCs abertos</div></div>
+          <div class="stat"><div class="r1">Consumo / mês</div><div class="v1">${p.cd ? q(Math.round(p.cd * 30)) : "—"}</div><div class="s1">média de 90 dias</div></div>
+          <div class="stat"><div class="r1">Cobertura</div><div class="v1">${cob === null ? "—" : (cob > 999 ? "999+" : q(cob)) + " d"}</div><div class="s1">${cob === null ? "sem consumo" : cob === 0 ? "em ruptura" : "até ~" + ddmmaa(somaDias(HOJE, Math.min(cob, 3650)))}</div></div>
+          <div class="stat"><div class="r1">CMC</div><div class="v1">${brl(p.cmc)}</div><div class="s1">${ultPc ? "últ. PC " + brl(ultPc[5]) : "custo médio"}</div></div>
+          <div class="stat"><div class="r1">Valor</div><div class="v1">${kbrl(valor(p))}</div><div class="s1">saldo × CMC</div></div>
+        </div>
+        ${p.locais.length > 1 ? `<div class="locais">${p.locais.map(l => `<div class="stat"><span class="mini">${nomeLocal(l.loc)}</span> <b class="num" style="color:${saldoLoc(p, l) < 0 ? "var(--ww-crit-text)" : "inherit"}">${q(saldoLoc(p, l))}</b></div>`).join("")}</div>` : ""}
+        <div class="acoes-item">
+          <button class="btn pri" data-modal="ajuste">Ajustar saldo</button>
+          <button class="btn" data-modal="alarme">${a ? "Editar alarme" : "Definir alarme"}</button>
+          <button class="btn" data-sub="auditoria">Auditoria${nA ? ` <span class="pill t-warn" style="padding:0 7px">${nA}</span>` : ""}</button>
+          <button class="btn" data-modal="rc">Pedir compra</button>
+          <button class="btn" style="margin-left:auto" data-toast="No app: abre o produto no Omie pelo id ${p.id}">Ver no Omie ↗</button>
+        </div>
+        ${a ? trilho(p, a) : ""}
+      </div>
+    </div>
+    <div class="subtabs">
+      ${[["uso", "Onde foi usado", usos.length], ["mov", "Movimentação", movs.length], ["compras", "Pedidos de compra", pcs.length], ["forn", "Fornecedores e preços", pr.length], ["auditoria", "Auditoria", nA]]
+        .map(([k, l, n]) => `<button class="${subtab === k ? "on" : ""}" data-sub="${k}">${l}<span class="cnt ${k === "auditoria" && n ? "w" : ""}">${n}</span></button>`).join("")}
+    </div>
+    <div class="painel" id="subPainel"></div>
+  </div>`;
+  renderSub();
+}
+function trilho(p, a) {
+  const s = Math.max(0, saldo(p)), top = Math.max(a.max || a.pp * 2, s, 1) * 1.15, P = v => Math.max(0, Math.min(100, v / top * 100));
+  return `<div class="alarme-bar"><div style="display:flex;justify-content:space-between;font-size:12px;gap:10px;flex-wrap:wrap"><b>Alarme</b><span class="mini">avisar: ${a.avisar.join(", ") || "só no painel"}${p.cd ? ` · consumo ${q(Math.round(p.cd * 30))}/mês` : ""}</span></div>
+    <div class="trilho"><div class="zona" style="left:0;width:${P(a.min)}%;background:var(--ww-crit-soft);border-radius:5px 0 0 5px"></div><div class="zona" style="left:${P(a.min)}%;width:${P(a.pp) - P(a.min)}%;background:var(--ww-warn-soft)"></div><div class="zona" style="left:${P(a.pp)}%;width:${P(a.max || top) - P(a.pp)}%;background:var(--ww-ok-soft)"></div>
+    <span class="mk" style="left:${P(a.min)}%">mín. ${q(a.min)}</span>${a.pp !== a.min ? `<span class="mk" style="left:${P(a.pp)}%">pedir ${q(a.pp)}</span>` : ""}${a.max ? `<span class="mk" style="left:${P(a.max)}%">máx. ${q(a.max)}</span>` : ""}
+    <span class="atual" style="left:${P(s)}%" title="Saldo ${q(saldo(p))}"></span></div></div>`;
+}
+
+function renderSub() {
+  const p = atual, el = $("#subPainel"), movs = MOV[p.id] || [], u = p.u.toLowerCase();
+  if (subtab === "uso") {
+    const usos = movs.filter(m => m[2] < 0 && !m[6]);
+    if (!usos.length) { el.innerHTML = `<div class="vazio">Sem saídas nos últimos 12 meses.</div>`; return; }
+    const por = new Map();
+    usos.forEach(m => { const k = (usoPor === "cliente" ? Ds(m[7]) : Ds(m[8])) || `Sem ${usoPor} vinculado`; por.set(k, (por.get(k) || 0) - m[2]); });
+    const lst = [...por.entries()].sort((a, b) => b[1] - a[1]), mx = lst[0][1], tot = lst.reduce((s, x) => s + x[1], 0);
+    el.innerHTML = `<div class="grid2">
+      <div><div style="display:flex;align-items:center;gap:10px;margin-bottom:10px"><h3 style="margin:0">Por ${usoPor} · 12 meses</h3><div class="seg" style="margin-left:auto"><button class="${usoPor === "cliente" ? "on" : ""}" data-uso="cliente">Cliente</button><button class="${usoPor === "projeto" ? "on" : ""}" data-uso="projeto">Projeto</button></div></div>
+        <div class="lista-barras">${lst.slice(0, 15).map(([n, v]) => { const sem = n.startsWith("Sem "); return `<div class="l" ${!sem && usoPor === "cliente" ? `data-cli="${esc(n)}" style="cursor:pointer" title="Ver todos os itens usados por ${esc(n)}"` : ""}><span class="nm" style="${sem ? "color:var(--ww-warn-text)" : ""}">${esc(n)}</span><div class="barra"><i style="width:${v / mx * 100}%;background:${sem ? "var(--ww-warn)" : "var(--ww-brand-3)"}"></i></div><span class="r num">${q(v)} ${esc(u)}</span></div>`; }).join("")}</div>
+        <div class="nota">${q(tot)} ${esc(u)} em ${usos.length} saídas. Clique num cliente para ver todos os itens que ele usou. Saídas sem cliente são remessas e ajustes: o vínculo da remessa vem da NF de remessa, a mapear no sync.</div></div>
+      <div><h3>Saídas</h3><div style="max-height:420px;overflow:auto"><table class="tabela"><thead><tr><th>Data</th><th>Cliente / projeto</th><th>Pedido</th><th class="r">Qtde</th></tr></thead><tbody>
+        ${usos.slice().reverse().map(m => `<tr><td class="num">${ddmmaa(m[0])}</td><td>${Ds(m[7]) ? `<div style="font-weight:600">${esc(Ds(m[7]))}</div><div class="mini">${esc(Ds(m[8]) || "sem projeto")}</div>` : `<span style="color:var(--ww-warn-text)">${esc(Ds(m[1]))} — sem cliente</span>`}</td><td class="mini">${esc(m[9] || m[4])}</td><td class="r num" style="color:var(--ww-crit-text)">−${q(-m[2])}</td></tr>`).join("")}
+      </tbody></table></div></div></div>`;
+  }
+  if (subtab === "mov") {
+    if (!movs.length) { el.innerHTML = `<div class="vazio">Sem movimentos nos últimos 12 meses.</div>`; return; }
+    const qb = quebras(p.id);
+    el.innerHTML = `<div style="display:flex;gap:10px;align-items:center;margin-bottom:8px"><h3 style="margin:0">Saldo ao longo do tempo</h3><span class="mini">pontos em coral = saldo que não fecha com o movimento anterior</span><button class="btn sm" style="margin-left:auto" data-csv-kardex>Exportar Kardex</button></div>${grafSaldo(p)}
+      <div style="max-height:460px;overflow:auto;margin-top:12px"><table class="tabela"><thead><tr><th>Data</th><th>Origem</th><th>Doc / pedido</th><th class="opt">Cliente</th><th class="r">Qtde</th><th class="r opt">Valor unit.</th><th class="r">Saldo</th><th></th></tr></thead><tbody>
+      ${movs.map((m, i) => [m, i]).reverse().map(([m, i]) => `<tr style="opacity:${m[6] ? .45 : 1};${m[6] ? "text-decoration:line-through" : ""}"><td class="num">${ddmmaa(m[0])}</td><td>${esc(Ds(m[1]))}${p.locais.length > 1 ? `<div class="mini">${nomeLocal(Ds(m[10]))}</div>` : ""}</td><td class="mini">${esc(m[4])}${m[9] ? `<div>${esc(m[9])}</div>` : ""}</td><td class="opt">${esc(Ds(m[7]) || "")}</td>
+        <td class="r num" style="font-weight:600;color:var(--ww-${m[2] < 0 ? "crit" : "ok"}-text)">${m[2] > 0 ? "+" : "−"}${q(Math.abs(m[2]))}</td><td class="r num opt">${brl(m[5])}</td><td class="r num" style="${qb.has(i) ? "color:var(--ww-crit-text);font-weight:700" : ""}">${q(m[3])}</td><td>${qb.has(i) ? pill("não fecha", "crit") : m[6] ? pill("cancelado", "off") : ""}</td></tr>`).join("")}
+      </tbody></table></div><div class="nota">Últimos 12 meses. No app, o Kardex completo vem de /api/estoque?view=movimentos&produto=${p.id}.</div>`;
+  }
+  if (subtab === "compras") {
+    const pcs = (PCS[p.id] || []).slice().sort((a, b) => (b[1] > a[1] ? 1 : -1));
+    if (!pcs.length) { el.innerHTML = `<div class="vazio">Nenhum pedido de compra nos últimos 24 meses.</div>`; return; }
+    const ab = pcs.filter(x => x[4] < x[3]), qAb = ab.reduce((s, x) => s + x[3] - x[4], 0);
+    el.innerHTML = `${ab.length && Math.abs(qAb - p.pend) > 0.001 ? `<div class="aviso t-warn" style="margin-bottom:12px">${ab.length} PC${ab.length > 1 ? "s" : ""} com saldo a receber (${q(qAb)} ${esc(u)}), mas o Omie mostra <b>${q(p.pend)} pendente</b>. Revise os PCs antigos: baixar ou cancelar.</div>` : ""}
+      <div style="max-height:480px;overflow:auto"><table class="tabela"><thead><tr><th>PC</th><th>Inclusão</th><th>Fornecedor</th><th class="opt">Projeto</th><th class="r">Pedido</th><th class="r">Recebido</th><th class="r">Unit.</th><th class="r opt">Total</th><th>Situação</th></tr></thead><tbody>
+      ${pcs.map(x => { const sit = x[4] > x[3] ? ["recebido a mais", "crit"] : x[4] >= x[3] ? ["recebido", "ok"] : x[4] > 0 ? ["parcial", "info"] : dias(x[1]) > 60 ? [`aberto há ${dias(x[1])} d`, "warn"] : ["aberto", "info"];
+        return `<tr class="click" data-toast="No app: abre o PC ${esc(x[0])} em Compras"><td style="font-weight:600">${esc(x[0])}</td><td class="num">${ddmmaa(x[1])}</td><td>${esc(Ds(x[2]) || "— fornecedor não cadastrado")}</td><td class="opt mini">${esc(Ds(x[7]) || "")}</td><td class="r num">${q(x[3])}</td><td class="r num">${q(x[4])}</td><td class="r num">${brl(x[5])}</td><td class="r num opt">${brl(x[3] * x[5])}</td><td>${pill(...sit)}</td></tr>`; }).join("")}
+      </tbody></table></div><div class="nota">Últimos 24 meses · orders.pedidos_compra por ncod_prod. dinc_data é texto dd/mm/aaaa no banco — converter antes de ordenar.</div>`;
+  }
+  if (subtab === "forn") {
+    const pr = PRECOS[p.id] || [];
+    if (!pr.length) { el.innerHTML = `<div class="vazio">Sem histórico de compra deste item.</div>`; return; }
+    const all = pr.reduce((a, x) => a.concat(Array(x[1]).fill(0)), []).length;
+    const mn = Math.min(...pr.map(x => x[2])), mx = Math.max(...pr.map(x => x[4])), med = pr.reduce((s, x) => s + x[3] * x[1], 0) / pr.reduce((s, x) => s + x[1], 0);
+    const pcs = (PCS[p.id] || []).filter(x => x[5] > 0).sort((a, b) => (a[1] > b[1] ? 1 : -1)), ult = pcs[pcs.length - 1];
+    el.innerHTML = `<div class="grid2"><div><h3>Por fornecedor · todo o histórico</h3>
+      <table class="tabela"><thead><tr><th>Fornecedor</th><th class="r">PCs</th><th class="r">Mín.</th><th class="r">Médio</th><th class="r">Máx.</th><th class="opt">Faixa</th><th>Último</th></tr></thead><tbody>
+      ${pr.map(x => `<tr><td style="font-weight:600">${esc(Ds(x[0]))}</td><td class="r num">${x[1]}</td><td class="r num">${brl(x[2])}</td><td class="r num" style="font-weight:600">${brl(x[3])}</td><td class="r num">${brl(x[4])}</td>
+        <td class="opt" style="min-width:110px"><div class="barra" style="position:relative"><i style="position:absolute;left:${x[2] / mx * 100}%;width:${Math.max(2, (x[4] - x[2]) / mx * 100)}%;background:var(--ww-brand-3)"></i></div></td><td class="num">${ddmmaa(x[5])}</td></tr>`).join("")}
+      </tbody></table></div>
+      <div><h3>Resumo</h3><div class="prev">Mínimo <b>${brl(mn)}</b> · médio <b>${brl(med)}</b> · máximo <b>${brl(mx)}</b> · ${all} PCs<br>
+        ${ult ? `Última compra <b>${brl(ult[5])}</b> em ${ddmmaa(ult[1])} (${esc(Ds(ult[2]) || "fornecedor não cadastrado")}) — <span style="color:var(--ww-${ult[5] > med * 1.1 ? "warn" : "ok"}-text)">${ult[5] >= med ? Math.round((ult[5] / med - 1) * 100) + "% acima" : Math.round((1 - ult[5] / med) * 100) + "% abaixo"} da média</span>` : ""}</div>
+        ${pcs.length > 1 ? `<h3 style="margin-top:14px">Preço unitário por PC · 24 meses</h3>${grafPreco(pcs, med)}` : ""}
+        <div class="nota">Fonte: orders.pedidos_compra.nval_unit + finance.clientes (fornecedor). Valores muito baixos costumam ser bonificação ou erro de unidade e puxam a média.</div></div></div>`;
+  }
+  if (subtab === "auditoria") {
+    const pts = auditoria(p), log = ST.log[p.id] || [];
+    el.innerHTML = `<div class="grid2"><div><h3>Verificações automáticas</h3>
+      ${pts.map(([t, ic, tt, dd, ac]) => `<div class="aud"><div class="ic t-${t}">${aico(ic)}</div><div><div class="tt">${tt}</div><div class="dd">${dd}</div></div><div class="ac">${ac}</div></div>`).join("")}</div>
+      <div><h3>Histórico de alterações no painel</h3>
+      ${log.map(l => `<div class="log"><span class="num">${new Date(l[0]).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}</span><b>${esc(l[1])}</b><span>${esc(l[2])}</span></div>`).join("") || `<div class="nota">Nenhuma alteração feita pelo painel ainda.</div>`}
+      <div class="nota">Grava ajuste de saldo, alarme, foto, mesclagem e “não é duplicidade”, com quem, quando, antes e depois (tabela nova platform.estoque_audit).</div>
+      <button class="btn sm" style="margin-top:10px" onclick="window.print()">Imprimir / PDF da auditoria</button></div></div>`;
+  }
+}
+
+function grafSaldo(p) {
+  const movs = (MOV[p.id] || []).filter(m => !m[6]); if (!movs.length) return "";
+  const W = 900, H = 220, P = { l: 52, r: 12, t: 14, b: 24 }, qb = quebras(p.id);
+  const x0 = new Date(somaDias(HOJE, -365)).getTime(), x1 = new Date(HOJE).getTime(), a = ST.alarmes[p.id];
+  // série por local somada no tempo
+  const porLoc = {}; const pts = [];
+  (MOV[p.id] || []).forEach((m, i) => { if (m[6]) return; porLoc[m[10]] = m[3]; pts.push([new Date(m[0]).getTime(), Object.values(porLoc).reduce((s, v) => s + v, 0), qb.has(i), m]); });
+  const ys = pts.map(x => x[1]); const y0 = Math.min(0, ...ys), y1 = Math.max(1, ...ys, a ? (a.max || a.pp) : 0) * 1.1;
+  const X = t => P.l + (t - x0) / (x1 - x0) * (W - P.l - P.r), Y = v => P.t + (1 - (v - y0) / (y1 - y0)) * (H - P.t - P.b);
+  let d = ""; pts.forEach((x, i) => { d += i ? `H${X(x[0]).toFixed(1)}V${Y(x[1]).toFixed(1)}` : `M${X(Math.max(x[0], x0)).toFixed(1)},${Y(x[1]).toFixed(1)}`; }); d += `H${X(x1)}`;
+  const tk = [y0, 0, (y1 / 2), y1 / 1.1].filter((v, i, ar) => ar.indexOf(v) === i);
+  const grid = tk.map(v => `<line x1="${P.l}" x2="${W - P.r}" y1="${Y(v)}" y2="${Y(v)}" stroke="var(--ww-border)" ${v ? 'stroke-dasharray="3 4"' : ""}/><text x="${P.l - 6}" y="${Y(v) + 4}" text-anchor="end" font-size="10.5" fill="var(--ww-text-faint)">${q(Math.round(v))}</text>`).join("");
+  const meses = [0, 3, 6, 9, 12].map(k => somaDias(HOJE, -365 + k * 30.4)).map(m => `<text x="${X(new Date(m).getTime())}" y="${H - 6}" font-size="10.5" text-anchor="middle" fill="var(--ww-text-faint)">${m.slice(5, 7)}/${m.slice(2, 4)}</text>`).join("");
+  const al = a ? `<rect x="${P.l}" y="${Y(a.min)}" width="${W - P.l - P.r}" height="${Math.max(0, Y(y0) - Y(a.min))}" fill="var(--ww-crit-soft)"/><line x1="${P.l}" x2="${W - P.r}" y1="${Y(a.pp)}" y2="${Y(a.pp)}" stroke="var(--ww-warn)" stroke-dasharray="5 4"/>` : "";
+  const bad = pts.filter(x => x[2]).map(x => `<circle cx="${X(x[0])}" cy="${Y(x[1])}" r="5" fill="var(--ww-crit)"><title>${ddmmaa(x[3][0])} · ${esc(Ds(x[3][1]))} ${esc(x[3][4])} · saldo ${q(x[3][3])} não fecha</title></circle>`).join("");
+  return `<svg class="chart" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="Saldo ao longo do tempo">${grid}${al}<path d="${d}" fill="none" stroke="var(--ww-brand-2)" stroke-width="2.2" vector-effect="non-scaling-stroke"/>${bad}${meses}</svg>`;
+}
+function grafPreco(pcs, med) {
+  const W = 560, H = 170, P = { l: 58, r: 10, t: 12, b: 20 };
+  const xs = pcs.map(x => new Date(x[1]).getTime()), x0 = Math.min(...xs), x1 = Math.max(...xs, x0 + 864e5);
+  const ys = pcs.map(x => x[5]), y1 = Math.max(...ys) * 1.1;
+  const X = t => P.l + (t - x0) / (x1 - x0) * (W - P.l - P.r), Y = v => P.t + (1 - v / y1) * (H - P.t - P.b);
+  return `<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto" role="img" aria-label="Preço por PC"><line x1="${P.l}" x2="${W - P.r}" y1="${Y(med)}" y2="${Y(med)}" stroke="var(--ww-text-faint)" stroke-dasharray="4 4"/><text x="${P.l + 4}" y="${Y(med) - 4}" text-anchor="start" font-size="10" fill="var(--ww-text-faint)">média ${brl(med)}</text>
+    <text x="${P.l - 6}" y="${Y(0) + 3}" text-anchor="end" font-size="10" fill="var(--ww-text-faint)">0</text><text x="${P.l - 6}" y="${Y(y1 / 1.1) + 3}" text-anchor="end" font-size="10" fill="var(--ww-text-faint)">${brl(y1 / 1.1)}</text>
+    ${pcs.map(x => `<circle cx="${X(new Date(x[1]).getTime())}" cy="${Y(x[5])}" r="4" fill="${x[5] < med * 0.6 || x[5] > med * 1.5 ? "var(--ww-warn)" : "var(--ww-brand-3)"}"><title>PC ${esc(x[0])} · ${ddmmaa(x[1])} · ${brl(x[5])} · ${esc(Ds(x[2]) || "")}</title></circle>`).join("")}</svg>`;
+}
+
+/* ============================ MODAIS ============================ */
+function abrirModal(html, lg) { const m = $("#modal"); m.className = "modal" + (lg ? " lg" : ""); m.innerHTML = html; $("#ovModal").classList.add("open"); const f = m.querySelector("input:not([disabled]),select"); f && f.focus(); }
+function fecharModal() { $("#ovModal").classList.remove("open"); }
+const MH = (t, s) => `<div class="mh"><div><div class="mini" style="font-weight:600">${esc(atual ? atual.c : "")}</div><div style="font-size:16px;font-weight:700">${t}</div>${s ? `<div class="mini" style="margin-top:2px">${s}</div>` : ""}</div><button class="x" data-fechar>×</button></div>`;
+
+function modalAjuste() {
+  const p = atual, s = saldo(p);
+  abrirModal(`${MH("Ajustar saldo", esc(p.d))}
+  <div class="mb">
+    <div class="row3">
+      <label class="f">Local<select class="inp" id="aj_loc">${p.locais.map((l, i) => `<option value="${i}" ${saldoLoc(p, l) < 0 && !p.locais.slice(0, i).some(x => saldoLoc(p, x) < 0) ? "selected" : ""}>${nomeLocal(l.loc)}</option>`).join("")}</select></label>
+      <label class="f">Saldo atual<input class="inp num" id="aj_atual" disabled></label>
+      <label class="f">Contagem física<input class="inp num" id="aj_cont" type="number" step="any"></label>
+    </div>
+    <div class="row2">
+      <label class="f">Motivo<select class="inp" id="aj_mot"><option>Inventário / contagem</option><option>Perda ou avaria</option><option>Erro de lançamento</option><option>Consumo interno não lançado</option><option>Transferência de código (mesclagem)</option></select></label>
+      <label class="f">Custo do ajuste<select class="inp"><option>CMC atual (${brl(p.cmc)})</option><option>Último preço de compra</option></select></label>
+    </div>
+    <label class="f">Observação<textarea class="inp" id="aj_obs" placeholder="Ex.: contagem do almoxarifado em ${ddmmaa(HOJE)}"></textarea></label>
+    <div class="prev" id="aj_prev"></div>
+  </div>
+  <div class="mf"><span class="sp">No app: lança “Movimento Manual de Estoque” no Omie (IncluirAjusteEstoque) e grava na auditoria.</span><button class="btn" data-fechar>Cancelar</button><button class="btn pri" id="aj_ok">Ajustar</button></div>`);
+  const loc = () => p.locais[Number($("#aj_loc").value)], sl = () => saldoLoc(p, loc());
+  const setLoc = () => { $("#aj_atual").value = q(sl()); $("#aj_cont").value = Math.max(0, sl()); upd(); };
+  const upd = () => { const s = sl(), c = Number($("#aj_cont").value || 0), d = c - s, v = Math.abs(d) * p.cmc;
+    $("#aj_prev").innerHTML = d === 0 ? "Sem diferença — nada a lançar." : `Vai lançar <b style="color:var(--ww-${d > 0 ? "ok" : "crit"}-text)">${d > 0 ? "entrada" : "saída"} de ${q(Math.abs(d))} ${esc(p.u.toLowerCase())}</b> · <b>${brl(v)}</b> ao CMC<br>Saldo do ${nomeLocal(loc().loc)} passa de <b>${q(s)}</b> para <b>${q(c)}</b> · total do item fica <b>${q(saldo(p) - s + c)}</b>${v > 5000 ? `<br><span style="color:var(--ww-warn-text)">Acima de R$ 5.000 — no app vai para aprovação do gestor antes do Omie.</span>` : ""}`;
+    $("#aj_ok").disabled = d === 0; };
+  $("#aj_cont").oninput = upd; $("#aj_loc").onchange = setLoc; setLoc();
+  $("#aj_ok").onclick = () => { const c = Number($("#aj_cont").value || 0), s = sl(), L = loc().loc;
+    ST.ajustes[p.id] = Object.assign({}, ST.ajustes[p.id], { [L]: c }); logar(p.id, `Ajuste de saldo (${nomeLocal(L)}) ${q(s)} → ${q(c)} · ${$("#aj_mot").value}${$("#aj_obs").value ? " · " + $("#aj_obs").value : ""}`);
+    fecharModal(); renderFicha(); toast("Saldo ajustado (no mockup)"); };
+}
+function modalAlarme() {
+  const p = atual, a = ST.alarmes[p.id] || {}, cm = Math.round((p.cd || 0) * 30);
+  const lead = (() => { const pcs = (PCS[p.id] || []).filter(x => x[4] > 0); return 15; })();
+  abrirModal(`${MH("Alarme de estoque", esc(p.d))}
+  <div class="mb">
+    ${cm ? `<div class="aviso t-info" style="align-items:center">Pelo consumo (${q(cm)} ${esc(p.u.toLowerCase())}/mês) e ~${lead} dias de entrega: mínimo <b>&nbsp;${q(Math.ceil(cm / 2))}</b>, pedir em <b>&nbsp;${q(cm)}</b>, máximo <b>&nbsp;${q(cm * 3)}</b>. <button class="btn sm" id="al_sug" style="margin-left:auto">Usar</button></div>` : `<div class="aviso t-warn">Sem consumo nos últimos 90 dias — defina só se for item crítico.</div>`}
+    <div class="row3">
+      <label class="f">Mínimo<input class="inp num" id="al_min" type="number" step="any" value="${a.min ?? ""}"></label>
+      <label class="f">Ponto de pedido<input class="inp num" id="al_pp" type="number" step="any" value="${a.pp ?? ""}" placeholder="= mínimo"></label>
+      <label class="f">Máximo<input class="inp num" id="al_max" type="number" step="any" value="${a.max ?? ""}" placeholder="opcional"></label>
+    </div>
+    <div class="row2">
+      <label class="check"><input type="checkbox" id="al_p" ${!a.avisar || a.avisar.includes("painel") ? "checked" : ""}> Avisar no painel</label>
+      <label class="check"><input type="checkbox" id="al_e" ${a.avisar?.includes("e-mail") ? "checked" : ""}> E-mail para Compras</label>
+      <label class="check"><input type="checkbox" id="al_w" ${a.avisar?.includes("Webex") ? "checked" : ""}> Webex (daily)</label>
+      <label class="check"><input type="checkbox" id="al_o" ${a.omie !== false ? "checked" : ""}> Gravar o mínimo também no Omie</label>
+    </div>
+    <div class="nota">Ponto de pedido gera sugestão de RC em Compras; mínimo vira alerta vermelho.</div>
+  </div>
+  <div class="mf">${a.min != null ? `<button class="btn crit" id="al_del">Remover</button>` : ""}<span class="sp"></span><button class="btn" data-fechar>Cancelar</button><button class="btn pri" id="al_ok">Salvar alarme</button></div>`);
+  $("#al_sug") && ($("#al_sug").onclick = () => { $("#al_min").value = Math.ceil(cm / 2); $("#al_pp").value = cm; $("#al_max").value = cm * 3; });
+  $("#al_ok").onclick = () => { const min = Number($("#al_min").value); if (!$("#al_min").value) { toast("Informe o mínimo"); return; }
+    const pp = Number($("#al_pp").value) || min, max = Number($("#al_max").value) || null;
+    if (pp < min) { toast("O ponto de pedido não pode ser menor que o mínimo"); return; }
+    if (max && max < pp) { toast("O máximo precisa ser maior que o ponto de pedido"); return; }
+    ST.alarmes[p.id] = { min, pp, max, omie: $("#al_o").checked, avisar: [$("#al_p").checked && "painel", $("#al_e").checked && "e-mail", $("#al_w").checked && "Webex"].filter(Boolean) };
+    logar(p.id, `Alarme: mín. ${q(min)} · pedir ${q(pp)}${max ? " · máx. " + q(max) : ""}`); fecharModal(); renderFicha(); toast("Alarme salvo"); };
+  $("#al_del") && ($("#al_del").onclick = () => { delete ST.alarmes[p.id]; logar(p.id, "Alarme removido"); fecharModal(); renderFicha(); });
+}
+function termoBusca(p) { return p.d.replace(/\(.*?\)/g, " ").replace(/[-–,.;]+\s*[A-Z]{2,}$/, "").replace(/\s+/g, " ").trim().split(" ").slice(0, 6).join(" "); }
+function modalFoto() {
+  const p = atual;
+  abrirModal(`${MH("Foto do item", "busca na web pelo nome")}
+  <div class="mb">
+    <div style="display:flex;gap:8px"><input class="inp" id="ft_q" value="${esc(termoBusca(p))}"><button class="btn" id="ft_go">Buscar</button></div>
+    <div id="ft_res"><div class="spin"></div></div>
+    <div class="row2"><a class="btn" id="ft_google" target="_blank" rel="noopener" style="justify-content:center;text-decoration:none">Abrir no Google Imagens ↗</a><input class="inp" id="ft_url" placeholder="ou cole a URL de uma imagem e tecle Enter"></div>
+    <div class="nota">O mockup busca no Wikimedia Commons (aberto, sem chave). No app: Google Custom Search ou Bing Image Search no servidor; a escolhida é baixada para o Supabase Storage (bucket produtos), nunca usada como link externo.</div>
+  </div>
+  <div class="mf"><button class="btn" data-modal="upload">Enviar arquivo</button><span class="sp"></span><button class="btn" data-fechar>Cancelar</button><button class="btn pri" id="ft_ok" disabled>Usar esta foto</button></div>`, true);
+  let sel = null;
+  const marcar = (src, origem, el) => { sel = { src, origem }; $("#modal").querySelectorAll(".fcand").forEach(x => x.classList.remove("on")); el && el.classList.add("on"); $("#ft_ok").disabled = false; };
+  const buscar = async () => {
+    const t = $("#ft_q").value.trim(); $("#ft_google").href = "https://www.google.com/search?tbm=isch&q=" + encodeURIComponent(t);
+    $("#ft_res").innerHTML = `<div class="spin"></div>`;
+    try {
+      const u = "https://commons.wikimedia.org/w/api.php?action=query&generator=search&gsrnamespace=6&gsrlimit=9&prop=imageinfo&iiprop=url&iiurlwidth=320&format=json&origin=*&gsrsearch=" + encodeURIComponent(t);
+      const j = await (await fetch(u)).json(), pages = Object.values(j.query?.pages || {}).filter(x => x.imageinfo);
+      if (!pages.length) throw new Error("vazio");
+      $("#ft_res").innerHTML = `<div class="fotos">${pages.map(x => `<div class="fcand" data-src="${esc(x.imageinfo[0].thumburl)}"><img src="${esc(x.imageinfo[0].thumburl)}" alt="" loading="lazy"><small>${esc(x.title.replace(/^File:/, ""))}</small></div>`).join("")}</div>`;
+      $("#ft_res").querySelectorAll(".fcand").forEach(el => el.onclick = () => marcar(el.dataset.src, "foto da web", el));
+    } catch (e) { $("#ft_res").innerHTML = `<div class="aviso t-warn">Nada encontrado (ou sem internet). Tente menos palavras, abra no Google Imagens e cole a URL, ou envie um arquivo.</div>`; }
+  };
+  $("#ft_go").onclick = buscar; $("#ft_q").onkeydown = e => { if (e.key === "Enter") buscar(); };
+  $("#ft_url").onkeydown = e => { if (e.key === "Enter" && $("#ft_url").value.trim()) { marcar($("#ft_url").value.trim(), "URL colada"); toast("URL selecionada — clique em Usar esta foto"); } };
+  $("#ft_ok").onclick = () => { ST.fotos[p.id] = sel; logar(p.id, `Foto ${ST.fotos[p.id] ? "trocada" : "definida"} (${sel.origem})`); fecharModal(); renderFicha(); toast("Foto salva"); };
+  buscar();
+}
+function modalUpload() {
+  const p = atual;
+  abrirModal(`${MH("Enviar foto", esc(p.d))}<div class="mb"><label id="up_drop" style="border:2px dashed var(--ww-border-strong);border-radius:14px;padding:40px;text-align:center;color:var(--ww-text-muted);cursor:pointer;display:block">Arraste a imagem aqui ou clique<br><span class="mini">JPG ou PNG · no celular abre a câmera</span><input type="file" accept="image/*" capture="environment" id="up_in" class="hide"></label></div><div class="mf"><button class="btn" data-fechar>Fechar</button></div>`);
+  const ler = f => { if (!f) return; const r = new FileReader(); r.onload = () => { const img = new Image(); img.onload = () => {
+      const c = document.createElement("canvas"), k = Math.min(1, 640 / Math.max(img.width, img.height)); c.width = img.width * k; c.height = img.height * k; c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
+      ST.fotos[p.id] = { src: c.toDataURL("image/jpeg", .82), origem: "enviada" }; logar(p.id, "Foto enviada"); fecharModal(); renderFicha(); toast("Foto salva"); }; img.src = r.result; }; r.readAsDataURL(f); };
+  $("#up_in").onchange = e => ler(e.target.files[0]);
+  const dz = $("#up_drop"); dz.ondragover = e => { e.preventDefault(); dz.style.borderColor = "var(--ww-accent)"; }; dz.ondrop = e => { e.preventDefault(); ler(e.dataTransfer.files[0]); };
+}
+function modalRC() {
+  const p = atual, cm = Math.round((p.cd || 0) * 30), a = ST.alarmes[p.id], sug = Math.max(0, Math.ceil((a?.max || cm * 2) - Math.max(saldo(p), 0) - p.pend));
+  const pr = PRECOS[p.id] || [];
+  abrirModal(`${MH("Pedir compra", esc(p.d))}<div class="mb">
+    <div class="row3"><label class="f">Quantidade<input class="inp num" id="rc_q" type="number" value="${sug || 1}"></label>
+      <label class="f">Fornecedor sugerido<select class="inp">${pr.map(x => `<option>${esc(Ds(x[0]))} · méd. ${brl(x[3])}</option>`).join("") || "<option>—</option>"}</select></label>
+      <label class="f">Necessidade<input class="inp" type="date" value="${somaDias(HOJE, 15)}"></label></div>
+    <div class="prev">Sugerido: ${a?.max ? `máximo do alarme (${q(a.max)})` : `2 meses de consumo (${q(cm * 2)})`} − saldo (${q(Math.max(saldo(p), 0))}) − pendente (${q(p.pend)}) = <b>${q(sug)}</b></div></div>
+    <div class="mf"><span class="sp">No app: cria a RC em Compras (fluxo de aprovação atual).</span><button class="btn" data-fechar>Cancelar</button><button class="btn pri" id="rc_ok">Criar RC</button></div>`);
+  $("#rc_ok").onclick = () => { logar(p.id, `RC solicitada: ${q(Number($("#rc_q").value))} ${p.u.toLowerCase()}`); fecharModal(); toast("RC criada (no mockup)"); if (subtab === "auditoria") renderSub(); };
+}
+function modalMerge(k) {
+  const g = DUPS.find(x => x.k === k), its = g.ids.map(i => PROD.get(i)).sort((a, b) => (b.n || 0) - (a.n || 0));
+  abrirModal(`<div class="mh"><div><div style="font-size:16px;font-weight:700">Mesclar duplicidade</div><div class="mini">${esc(its[0].d)}</div></div><button class="x" data-fechar>×</button></div>
+  <div class="mb"><label class="f">Código que fica<select class="inp" id="mg_p">${its.map(p => `<option value="${p.id}">${esc(p.c)} · saldo ${q(saldo(p))} · CMC ${brl(p.cmc)} · ${q(p.n)} movimentos</option>`).join("")}</select></label>
+  <div class="prev" id="mg_prev"></div></div>
+  <div class="mf"><span class="sp">No app: ajustes no Omie + inativa o duplicado + registra na auditoria dos dois.</span><button class="btn" data-fechar>Cancelar</button><button class="btn pri" id="mg_ok">Mesclar</button></div>`);
+  const upd = () => { const pid = Number($("#mg_p").value), pr = PROD.get(pid), out = its.filter(x => x.id !== pid), soma = its.reduce((s, x) => s + saldo(x), 0);
+    const cm = its.map(x => x.cmc).filter(x => x > 0);
+    $("#mg_prev").innerHTML = out.map(o => `• <b>${esc(o.c)}</b>: ${saldo(o) ? `${saldo(o) > 0 ? "saída" : "entrada"} de ${q(Math.abs(saldo(o)))} (ajuste) → ${saldo(o) > 0 ? "entrada" : "saída"} no <b>${esc(pr.c)}</b>` : "sem saldo para transferir"}, depois inativado`).join("<br>") +
+      `<br>• Saldo final do <b>${esc(pr.c)}</b>: <b>${q(soma)}</b>${soma < 0 ? ` <span style="color:var(--ww-crit-text)">(continua negativo — faça a contagem)</span>` : ""}<br>• Alarme, foto e histórico passam para o principal` +
+      (cm.length > 1 && Math.max(...cm) / Math.min(...cm) > 1.5 ? `<br><span style="color:var(--ww-warn-text)">CMC diferentes (${cm.map(brl).join(" × ")}) — o custo do principal será recalculado pelo Omie.</span>` : ""); };
+  $("#mg_p").onchange = upd; upd();
+  $("#mg_ok").onclick = () => { const pid = Number($("#mg_p").value), pr = PROD.get(pid), soma = its.reduce((s, x) => s + saldo(x), 0);
+    its.filter(x => x.id !== pid).forEach(o => { ST.mesclados[o.id] = pid; ST.ajustes[o.id] = Object.fromEntries(o.locais.map(l => [l.loc, 0])); if (!ST.fotos[pid] && ST.fotos[o.id]) ST.fotos[pid] = ST.fotos[o.id]; if (!ST.alarmes[pid] && ST.alarmes[o.id]) ST.alarmes[pid] = ST.alarmes[o.id]; logar(o.id, `Mesclado em ${pr.c}`); });
+    ST.ajustes[pid] = Object.assign({}, ST.ajustes[pid], { [pr.locais[0].loc]: saldoLoc(pr, pr.locais[0]) + (soma - saldo(pr)) }); logar(pid, `Recebeu a mesclagem de ${its.filter(x => x.id !== pid).map(x => x.c).join(", ")} · saldo ${q(soma)}`);
+    fecharModal(); renderDups(); toast("Mesclado (no mockup)"); };
+}
+
+/* ============================ PALETA ⌘K ============================ */
+let palSel = 0, palRes = [];
+const hl = (t, s) => { if (!s) return esc(t); const i = t.toLowerCase().indexOf(s.toLowerCase()); return i < 0 ? esc(t) : esc(t.slice(0, i)) + "<mark>" + esc(t.slice(i, i + s.length)) + "</mark>" + esc(t.slice(i + s.length)); };
+let recentes = []; try { recentes = JSON.parse(localStorage.getItem(KEY + "-rec") || "[]"); } catch (e) {}
+function renderPal() {
+  const s = $("#palIn").value.trim(), sl = s.toLowerCase(), toks = sl.split(/\s+/).filter(Boolean);
+  let its;
+  if (!sl) its = recentes.map(id => PROD.get(id)).filter(Boolean).slice(0, 6);
+  else its = LISTA.filter(p => { const h = (p.d + " " + p.c).toLowerCase(); return toks.every(t => h.includes(t)); })
+    .sort((a, b) => (b.c.toLowerCase() === sl) - (a.c.toLowerCase() === sl) || (b.c.toLowerCase().startsWith(sl)) - (a.c.toLowerCase().startsWith(sl)) || (b.n || 0) - (a.n || 0)).slice(0, 8);
+  const pcs = sl.length >= 3 && /^\d+$/.test(sl) ? [...PC_IDX.keys()].filter(k => k.startsWith(sl)).slice(0, 4) : [];
+  const clis = sl.length >= 3 ? [...CLI_IDX.keys()].filter(c => c.toLowerCase().includes(sl)).slice(0, 4) : [];
+  palRes = [...its.map(p => ({ k: "item", p })), ...pcs.map(n => ({ k: "pc", n })), ...clis.map(c => ({ k: "cli", c }))];
+  palSel = Math.min(palSel, Math.max(0, palRes.length - 1));
+  let i = 0, h = "";
+  if (its.length) h += `<div class="grp">${sl ? "Itens" : "Abertos recentemente"}</div>` + its.map(p => `<div class="it ${i === palSel ? "on" : ""}" data-pi="${i++}">${thumb(p)}<div class="sp"><div style="font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${hl(p.d, toks[0] || "")}</div><div class="mini">${hl(p.c, s)} · saldo ${q(saldo(p))} ${esc(p.u.toLowerCase())}</div></div>${pill(...situacao(p))}</div>`).join("");
+  if (pcs.length) h += `<div class="grp">Pedidos de compra</div>` + pcs.map(n => { const ids = PC_IDX.get(n); return `<div class="it ${i === palSel ? "on" : ""}" data-pi="${i++}"><div class="thumb">PC</div><div class="sp"><div style="font-weight:600">PC ${hl(n, s)}</div><div class="mini">${ids.length} item${ids.length > 1 ? "s" : ""}: ${esc(ids.slice(0, 2).map(x => PROD.get(x)?.d).join(", "))}</div></div></div>`; }).join("");
+  if (clis.length) h += `<div class="grp">Clientes — ver itens que usaram</div>` + clis.map(c => `<div class="it ${i === palSel ? "on" : ""}" data-pi="${i++}"><div class="thumb">CL</div><div class="sp"><div style="font-weight:600">${hl(c, s)}</div><div class="mini">${CLI_IDX.get(c).size} itens nos últimos 12 meses</div></div></div>`).join("");
+  $("#palRes").innerHTML = h || `<div class="vazio">${sl ? `Nada para “${esc(s)}”.` : "Digite código, nome, nº do PC ou cliente."}</div>`;
+  $("#palRes .it.on")?.scrollIntoView({ block: "nearest" });
+}
+function abrirPal() { $("#ovPal").classList.add("open"); $("#palIn").value = ""; palSel = 0; renderPal(); setTimeout(() => $("#palIn").focus(), 10); }
+function fecharPal() { $("#ovPal").classList.remove("open"); }
+function escolherPal(i) {
+  const r = palRes[i]; if (!r) return; fecharPal();
+  if (r.k === "item") { recentes = [r.p.id, ...recentes.filter(x => x !== r.p.id)].slice(0, 8); try { localStorage.setItem(KEY + "-rec", JSON.stringify(recentes)); } catch (e) {} abrirFicha(r.p.id); }
+  else if (r.k === "pc") abrirFicha(PC_IDX.get(r.n)[0], "compras");
+  else { clienteFiltro = r.c; filtro = "todos"; if (!$("#vFicha").classList.contains("hide")) voltar(); irAba("itens"); renderLista(); }
+}
+
+/* ============================ EVENTOS ============================ */
+function irAba(a) {
+  document.querySelectorAll("#abas button").forEach(b => b.classList.toggle("on", b.dataset.aba === a));
+  $("#abaItens").classList.toggle("hide", a !== "itens"); $("#abaDups").classList.toggle("hide", a !== "dups"); $("#abaMovs").classList.toggle("hide", a !== "movs");
+  if (a === "dups") renderDups(); if (a === "movs") renderMovs(); if (a === "itens") renderLista();
+}
+document.addEventListener("click", e => {
+  const t = e.target.closest("[data-chip],[data-ord],[data-mais],[data-limpa-cli],[data-id],[data-aba],[data-aba-go],[data-f],[data-sub],[data-modal],[data-voltar],[data-open-pal],[data-merge],[data-ign],[data-fechar],[data-pi],[data-uso],[data-cli],[data-dchip],[data-dup-de],[data-toast],[data-nav],[data-csv-kardex],[data-mvt],[data-dia]");
+  if (!t) return;
+  const d = t.dataset;
+  if (d.chip) { filtro = d.chip; limite = 100; renderLista(); }
+  else if (d.ord) { ordem = ordem[0] === d.ord ? [d.ord, -ordem[1]] : [d.ord, d.ord === "item" ? 1 : -1]; renderLista(); }
+  else if (d.mais !== undefined) { limite += 200; renderLista(); }
+  else if (d.limpaCli !== undefined) { clienteFiltro = null; renderLista(); }
+  else if (d.pi !== undefined) escolherPal(Number(d.pi));
+  else if (d.merge) modalMerge(d.merge);
+  else if (d.ign) { ST.ignorados.push(d.ign); salvar(); DUPS.find(g => g.k === d.ign).ids.forEach(i => logar(i, "Marcado: não é duplicidade")); renderDups(); toast("Par marcado como não duplicidade"); }
+  else if (d.dchip) { dupFiltro = d.dchip; renderDups(); }
+  else if (d.dupDe) { voltar(); irAba("dups"); setTimeout(() => { const g = DUP_DE.get(Number(d.dupDe))?.[0]; g && document.querySelector(`[data-g="${g.k}"]`)?.scrollIntoView({ behavior: "smooth", block: "center" }); }, 30); }
+  else if (d.cli) { clienteFiltro = d.cli; filtro = "todos"; voltar(); irAba("itens"); }
+  else if (d.uso) { usoPor = d.uso; renderSub(); }
+  else if (d.mvt) { mvTipo = mvTipo === d.mvt ? "" : d.mvt; mvAbertos.clear(); renderMovs(); }
+  else if (d.dia) { mvAbertos.has(d.dia) ? mvAbertos.delete(d.dia) : mvAbertos.add(d.dia); renderMovs(); }
+  else if (d.id && !t.closest("#ovModal")) abrirFicha(d.id, d.subIni);
+  else if (d.abaGo) { if (!$("#vFicha").classList.contains("hide")) voltar(); irAba(d.abaGo); }
+  else if (d.aba) irAba(d.aba);
+  else if (d.f) { filtro = d.f; limite = 100; irAba("itens"); }
+  else if (d.sub) { subtab = d.sub; renderFicha(); document.querySelector(".subtabs")?.scrollIntoView({ behavior: "smooth", block: "start" }); }
+  else if (d.modal) ({ ajuste: modalAjuste, alarme: modalAlarme, foto: modalFoto, upload: modalUpload, rc: modalRC })[d.modal]();
+  else if (d.voltar !== undefined) voltar();
+  else if (d.openPal !== undefined) abrirPal();
+  else if (d.fechar !== undefined) fecharModal();
+  else if (d.toast) toast(d.toast);
+  else if (d.nav) { const rs = base(), i = rs.indexOf(atual), n = rs[(i + Number(d.nav) + rs.length) % rs.length] || LISTA[0]; abrirFicha(n.id, subtab); }
+  else if (d.csvKardex !== undefined) baixarCSV(`kardex-${atual.c}.csv`, [["data", "origem", "doc", "pedido", "cliente", "projeto", "qtde", "valor_unit", "saldo", "cancelado"], ...(MOV[atual.id] || []).map(m => [m[0], Ds(m[1]), m[4], m[9], Ds(m[7]) || "", Ds(m[8]) || "", m[2], m[5], m[3], m[6] ? "S" : ""])]);
+});
+$("#ovModal").onclick = e => { if (e.target.id === "ovModal") fecharModal(); }; $("#ovPal").onclick = e => { if (e.target.id === "ovPal") fecharPal(); };
+$("#busca").oninput = e => { busca = e.target.value; limite = 100; renderLista(); };
+$("#palIn").oninput = () => { palSel = 0; renderPal(); };
+$("#mvDe").onchange = e => { mvDe = e.target.value; mvAbertos.clear(); renderMovs(); };
+$("#mvAte").onchange = e => { mvAte = e.target.value; mvAbertos.clear(); renderMovs(); };
+$("#mvBusca").oninput = e => { mvBusca = e.target.value; renderMovs(); };
+$("#csvLista").onclick = () => baixarCSV("estoque.csv", [["codigo", "descricao", "situacao", "saldo", "pendente", "consumo_mes", "cobertura_dias", "ultima_mov", "cmc", "valor", "alarme"], ...base().map(p => [p.c, p.d, situacao(p)[0], saldo(p), p.pend, Math.round((p.cd || 0) * 30), cobertura(p) ?? "", p.ult || "", p.cmc, valor(p).toFixed(2), alarme(p)[0]])]);
+$("#reset").onclick = () => { if (confirm("Apagar ajustes, alarmes, fotos e mesclagens feitos neste mockup?")) { try { localStorage.removeItem(KEY); } catch (e) {} location.hash = ""; location.reload(); } };
+document.addEventListener("keydown", e => {
+  if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") { e.preventDefault(); abrirPal(); return; }
+  if (e.key === "/" && !/INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName)) { e.preventDefault(); abrirPal(); return; }
+  if ($("#ovPal").classList.contains("open")) {
+    if (e.key === "Escape") fecharPal();
+    if (e.key === "ArrowDown") { palSel = Math.min(palSel + 1, palRes.length - 1); renderPal(); e.preventDefault(); }
+    if (e.key === "ArrowUp") { palSel = Math.max(palSel - 1, 0); renderPal(); e.preventDefault(); }
+    if (e.key === "Enter") escolherPal(palSel);
+  } else if (e.key === "Escape") { if ($("#ovModal").classList.contains("open")) fecharModal(); else if (!$("#vFicha").classList.contains("hide")) voltar(); }
+});
+$("#tema").onclick = () => { const d = document.documentElement.classList.toggle("dark"); $("#tema").textContent = d ? "☀" : "☾"; };
+$("#geradoEm").textContent = `dados de ${ddmmaa(HOJE)} · mockup`;
+$("#subTitulo").textContent = `Espelho do Omie · ${q(LISTA.length)} itens · posição de ${ddmmaa(HOJE)} · clique num item para abrir a ficha`;
+$("#nDups").textContent = dupsAtivos().length;
+renderLista();
+const h = location.hash.match(/item=([^&]+)/); if (h) { const p = LISTA.find(x => x.c === decodeURIComponent(h[1])); if (p) abrirFicha(p.id); }
+</script>
+</body>
+</html>
