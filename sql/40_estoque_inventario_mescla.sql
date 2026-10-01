@@ -193,6 +193,8 @@ begin
   select saldo, cmc into s, c from orders.v_estoque_saldo_local
    where empresa = p_empresa and n_cod_prod = p_prod and codigo_local_estoque = p_local;
   if not found then raise exception 'Item/local não encontrado na posição de estoque'; end if;
+  -- Local com CMC zerado no Omie (comum no Local 2): usa o maior CMC do item.
+  if coalesce(c, 0) = 0 then select max(cmc) into c from orders.estoque_posicao where empresa = p_empresa and n_cod_prod = p_prod; end if;
   if p_contagem = s then raise exception 'Sem diferença: contagem igual ao saldo'; end if;
   insert into platform.estoque_ajuste (empresa, n_cod_prod, codigo_local_estoque, tipo, janela_id, saldo_antes, contagem,
     diferenca, cmc, valor, motivo, obs, created_by, created_by_email)
@@ -243,8 +245,10 @@ begin
   end if;
   insert into platform.estoque_duplicidade_decisao (empresa, prod_a, prod_b, decisao, principal, secundario, created_by, created_by_email)
   values (p_empresa, a, b, 'mesclado', p_principal, p_secundario, p_user, p_email) returning * into d;
-  for l in select codigo_local_estoque, saldo, cmc from orders.v_estoque_saldo_local
-           where empresa = p_empresa and n_cod_prod = p_secundario and saldo <> 0 loop
+  for l in select v.codigo_local_estoque, v.saldo,
+                  coalesce(nullif(v.cmc, 0), (select max(x.cmc) from orders.estoque_posicao x where x.empresa = p_empresa and x.n_cod_prod = p_secundario)) as cmc
+           from orders.v_estoque_saldo_local v
+           where v.empresa = p_empresa and v.n_cod_prod = p_secundario and v.saldo <> 0 loop
     select coalesce((select saldo from orders.v_estoque_saldo_local where empresa = p_empresa and n_cod_prod = p_principal
                      and codigo_local_estoque = l.codigo_local_estoque), 0) into c_p;
     insert into platform.estoque_ajuste (empresa, n_cod_prod, codigo_local_estoque, tipo, mescla_id, saldo_antes, contagem, diferenca,
