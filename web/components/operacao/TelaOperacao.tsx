@@ -248,7 +248,7 @@ export default function TelaOperacao({ modulo, title, rows: rowsIniciais, parcia
   const opcoes = useMemo(() => {
     const uniq = (a: string[]) => [...new Set(a.filter(Boolean))].sort((x, y) => x.localeCompare(y, "pt-BR"));
     return {
-      tipo: uniq(noScope.map((p) => p.tipo)),
+      tipo: uniq(noScope.map((p) => tipoVenda(p.tipo) || p.tipo)),
       etapaVenda: uniq(noScope.map((p) => p.etapaVenda)),
       projeto: ["Sem projeto", ...uniq(noScope.map((p) => p.projeto))],
       fornecedor: uniq(noScope.flatMap((p) => p.compras.map((c) => c.fornecedor))),
@@ -519,7 +519,7 @@ export default function TelaOperacao({ modulo, title, rows: rowsIniciais, parcia
             ☰ Filtros {nFiltros > 0 && <span className="count">{nFiltros}</span>}
           </button>
           <PainelFiltros aberto={painelFiltro} filtros={filtros} opcoes={opcoes} modulo={modulo}
-            onAplicar={(f) => { setFiltros(f); setPainelFiltro(false); }} onFechar={() => setPainelFiltro(false)} />
+            onAplicar={(f) => { setFiltros(f); setPainelFiltro(false); }} onMudar={setFiltros} onFechar={() => setPainelFiltro(false)} />
         </div>
         <div className="seg">
           {([["lista", "Lista"], ["tabela", "Tabela"], ["kanban", "Kanban"], ["tempo", "Linha do tempo"]] as const).map(([k, l]) => (
@@ -743,17 +743,19 @@ async function enviarWebex(mostrar: (t: Toast) => void) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────
-function PainelFiltros({ aberto, filtros, opcoes, modulo, onAplicar, onFechar }: {
+/** Filtros aplicam na hora em que a opção é escolhida (01/10/2026) — antes
+ *  dependiam de um "Aplicar" que ficava fora da tela. */
+function PainelFiltros({ aberto, filtros, opcoes, modulo, onAplicar, onMudar, onFechar }: {
   aberto: boolean; filtros: Filtros; modulo: Modulo;
   opcoes: { tipo: string[]; etapaVenda: string[]; projeto: string[]; fornecedor: string[]; categoria: string[] };
-  onAplicar: (f: Filtros) => void; onFechar: () => void;
+  onAplicar: (f: Filtros) => void; onMudar: (f: Filtros) => void; onFechar: () => void;
 }) {
   const [f, setF] = useState<Filtros>(filtros);
   useEffect(() => { if (aberto) setF(filtros); }, [aberto, filtros]);
   const campo = (k: keyof Filtros, lab: string, ops: string[], todos = "Todos", labels?: (v: string) => string) => (
     <div className="field">
       <label>{lab}</label>
-      <select value={f[k] ?? ""} onChange={(e) => setF((x) => ({ ...x, [k]: e.target.value || undefined }))}>
+      <select value={f[k] ?? ""} onChange={(e) => { const n = { ...f, [k]: e.target.value || undefined }; setF(n); onMudar(n); }}>
         <option value="">{todos}</option>
         {ops.map((o) => <option key={o} value={o}>{labels ? labels(o) : o}</option>)}
       </select>
@@ -765,7 +767,7 @@ function PainelFiltros({ aberto, filtros, opcoes, modulo, onAplicar, onFechar }:
         {modulo !== "pcs" ? (
           <div>
             <h4>Venda (PV/OS)</h4>
-            {campo("tipo", "Tipo Omie", opcoes.tipo)}
+            {campo("tipo", "Tipo de venda", opcoes.tipo)}
             {campo("etapaVenda", "Etapa venda", opcoes.etapaVenda, "Todas")}
             {campo("projeto", "Projeto", opcoes.projeto)}
           </div>
@@ -779,10 +781,7 @@ function PainelFiltros({ aberto, filtros, opcoes, modulo, onAplicar, onFechar }:
       </div>
       <footer>
         <button className="btn ghost sm" onClick={() => { setF({}); onAplicar({}); }}>Limpar</button>
-        <span style={{ display: "flex", gap: 8 }}>
-          <button className="btn ghost sm" onClick={onFechar}>Cancelar</button>
-          <button className="btn primary sm" onClick={() => onAplicar(f)}>Aplicar</button>
-        </span>
+        <button className="btn primary sm" onClick={onFechar}>Fechar</button>
       </footer>
     </div>
   );
@@ -854,14 +853,15 @@ function Alm({ a, onFiltrar, chip }: { a: AlarmeIcone; onFiltrar?: (r: Rapida) =
  *  critério da tela antiga, previsão/atraso e histórico. Só leitura — quem
  *  manda é o app de serviços. */
 function CelServico({ sv }: { sv: Servico | null }) {
-  if (!sv) return <div className="srv vazio" title="Pedido sem serviço">—</div>;
+  if (!sv) return <div className="srv-nada" />;
   const d = sv.prev != null && sv.st !== "Concluída" && sv.st !== "Cancelada" ? diasAte(sv.prev) : null;
   const hist = sv.historico.length
     ? "Mudanças da previsão:\n" + sv.historico.map((h) => `• ${h.data ? dBR(dataMs(h.data)) : "sem data"} (em ${dBR(dataMs(h.em))}${h.por ? ` por ${h.por}` : ""})`).join("\n")
     : "";
   return (
-    <div className="srv" onClick={(e) => e.stopPropagation()}
+    <div className={`srv ${servicoAtrasado(sv) ? "atrasado" : ""}`} onClick={(e) => e.stopPropagation()}
       title={[sv.st === "Concluída" ? (sv.rotulo === "Concluída" ? "OS concluída e liberada no app de serviços" : "OS concluída, mas ainda não liberada para faturar no app de serviços") : `OS ${sv.rotulo}`, hist, "Vem do app de serviços"].filter(Boolean).join("\n\n")}>
+      <span className="srv-k">Serviço</span>
       <div className="srv-l1">
         <span className={`st svc-st ${sv.tom}`}>{sv.rotulo}</span>
         {sv.os

@@ -378,7 +378,7 @@ export type Filtros = {
   estado?: Estado; fornecedor?: string; categoria?: string;
 };
 export const FILTRO_LABEL: Record<keyof Filtros, string> = {
-  tipo: "Tipo Omie", etapaVenda: "Etapa venda", projeto: "Projeto",
+  tipo: "Tipo de venda", etapaVenda: "Etapa venda", projeto: "Projeto",
   estado: "Etapa PC", fornecedor: "Fornecedor", categoria: "Categoria",
 };
 
@@ -392,7 +392,8 @@ export function passa(p: Pedido, c: Compra | null, q: string, per: Periodo, f: F
     const alvo = `${p.id} ${p.cliente} ${p.projeto} ${c?.fornecedor ?? ""} ${c?.pc ?? ""} ${c?.rcNumero ?? ""} ${c?.desc ?? ""}`.toLowerCase();
     if (!alvo.includes(q)) return false;
   }
-  if (f.tipo && p.tipo !== f.tipo) return false;
+  // Tipo normalizado: o Omie grava "Mercantil" e "pedido_venda", "Serviços" e "ordem_servico".
+  if (f.tipo && (tipoVenda(p.tipo) || p.tipo) !== f.tipo) return false;
   if (f.etapaVenda && p.etapaVenda !== f.etapaVenda) return false;
   if (f.projeto && (f.projeto === "Sem projeto" ? !!p.projeto : p.projeto !== f.projeto)) return false;
   if (f.estado && c?.estado !== f.estado) return false;
