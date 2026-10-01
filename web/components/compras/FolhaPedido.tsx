@@ -259,7 +259,8 @@ export default function FolhaPedido({
   };
 
   // sem coluna de Aprovação: a etapa 15 aparece como "Pedido de Compra"
-  const idxEtapa = ETAPAS.filter((e) => e.cod !== "15").findIndex((e) => e.cod === (D.etapa === "15" ? "10" : D.etapa));
+  // sem Aprovação (fica no Pedido de Compra) e sem Enviado (aprovado = enviado) desde 01/10/26
+  const idxEtapa = ETAPAS.filter((e) => e.cod !== "15" && e.cod !== "35").findIndex((e) => e.cod === (D.etapa === "15" || D.etapa === "35" ? "10" : D.etapa));
   const titulo = !D.id ? (isRC ? "Incluir Requisição de Compra" : "Incluir Pedido de Compra")
     : isRC ? `Requisição Nº ${D.num}` : `Pedido de Compra Nº ${D.num}`;
   const tabs: [Tab, string, string | number, string?][] = isRC
@@ -282,7 +283,7 @@ export default function FolhaPedido({
               : <span className="tag orig-painel">Emitido pela plataforma</span>}
             <span className="sp" />
             <div className="stepper" aria-label="Etapas">
-              {ETAPAS.filter((e) => e.cod !== "15").map((e, i, arr) => (
+              {ETAPAS.filter((e) => e.cod !== "15" && e.cod !== "35").map((e, i, arr) => (
                 <span key={e.cod} style={{ display: "contents" }}>
                   <span className={i < idxEtapa ? "done" : i === idxEtapa ? "cur" : ""} style={{ ["--c" as string]: e.cor }}>{e.nome}</span>
                   {i < arr.length - 1 && <i>›</i>}
