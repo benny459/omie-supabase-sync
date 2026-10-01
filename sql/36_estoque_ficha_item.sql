@@ -1,4 +1,4 @@
--- 35 — Estoque v2, fase 1 (ficha do item, só leitura) · 01/10/2026
+-- 36 — Estoque v2, fase 1 (ficha do item, só leitura) · 01/10/2026
 -- Plano: docs/plans/ESTOQUE_FICHA_ITEM.md (branch mockup/estoque-v2).
 -- Só objetos NOVOS (o projeto omie-data é compartilhado com o ALLKA Portal):
 --   funções  orders.fn_html_unescape / fn_norm_desc / fn_chave_desc / fn_numeros / fn_variante
