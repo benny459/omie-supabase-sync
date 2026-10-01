@@ -86,6 +86,8 @@ export type Pedido = {
   projeto: string;
   lim: number | null;
   valorPv: number;
+  /** Data de emissão: do PV/OS (avulsos), a mais antiga dos PVs (projetos), do PC (PCs). */
+  emissao: number | null;
   faturado: boolean;
   nfSaida: string;
   fatEm: number | null;
@@ -200,6 +202,10 @@ export function montarPedido(
     projeto: s(head.projeto_nome),
     lim: dataMs(head.pv_data_previsao), valorPv,
     ...situacaoFaturamento(bucket.rows, head, modulo),
+    emissao: modulo === "pcs" ? dataMs(head.dt_inclusao)
+      : modulo === "projetos"
+        ? (bucket.rows.map((r) => dataMs(r.pv_emissao)).filter((x): x is number => x != null).sort((a, b) => a - b)[0] ?? null)
+        : dataMs(head.pv_emissao),
     compras, alarmes, flags: [],
   };
   p.flags = sinais(p, modulo);

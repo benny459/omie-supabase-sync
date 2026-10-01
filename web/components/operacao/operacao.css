@@ -464,3 +464,25 @@
 .op .pip-st.crit{background:var(--ww-crit)}
 .op .pip-st.mute{background:var(--ww-text-muted)}
 .op .srv-mais{font-size:11px;color:#fb923c;font-weight:600;border-bottom:1px dotted #fb923c;align-self:flex-start;cursor:help}
+/* Nº do pedido + balão de anotações; emissão embaixo */
+.op .pvid-l1{display:inline-flex;align-items:center;gap:6px}
+.op .pvid small b{color:var(--ww-text-2,#c9d6f2);font-weight:600}
+.op .balao{display:inline-flex;align-items:center;gap:3px;height:20px;padding:0 5px;border-radius:6px;border:1px solid var(--ww-border-strong);background:none;color:var(--ww-text-faint);cursor:pointer;font-size:11px;font-weight:700}
+.op .balao:hover{color:var(--ww-text);border-color:var(--ww-text-muted)}
+.op .balao.tem{color:#fbbf24;border-color:rgba(251,191,36,.45);background:rgba(251,191,36,.1)}
+/* Painel de anotações */
+.op .notas-fundo{position:fixed;inset:0;background:rgba(3,7,18,.55);z-index:90;display:flex;justify-content:flex-end}
+.op .notas{width:min(440px,100vw);height:100%;background:var(--ww-panel);border-left:1px solid var(--ww-border-strong);display:flex;flex-direction:column;box-shadow:-20px 0 60px rgba(0,0,0,.4)}
+.op .notas header{display:flex;align-items:center;gap:10px;padding:16px 18px;border-bottom:1px solid var(--ww-border)}
+.op .notas header span{color:var(--ww-text-muted);font-size:12.5px;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.op .notas-lista{flex:1;overflow-y:auto;padding:14px 18px;display:flex;flex-direction:column;gap:10px}
+.op .notas-lista .vazio{color:var(--ww-text-faint);font-size:13px}
+.op .nota{border:1px solid var(--ww-border);border-radius:10px;padding:9px 11px;background:var(--ww-panel-sunken)}
+.op .nota-cab{display:flex;gap:8px;align-items:baseline;font-size:12px;margin-bottom:4px}
+.op .nota-cab span{color:var(--ww-text-faint);flex:1}
+.op .nota-txt{white-space:pre-wrap;font-size:13.5px;line-height:1.45;color:var(--ww-text)}
+.op .notas footer{border-top:1px solid var(--ww-border);padding:12px 18px 16px;display:flex;flex-direction:column;gap:8px}
+.op .notas textarea{width:100%;resize:vertical;min-height:72px;border:1px solid var(--ww-border-strong);border-radius:10px;background:var(--ww-bg);color:var(--ww-text);padding:9px 11px;font:inherit;font-size:13.5px}
+.op .notas-acoes{display:flex;justify-content:flex-end;align-items:center;gap:10px}
+.op .notas-acoes .erro{color:var(--ww-crit-text);font-size:12px;flex:1}
+.op .pvid small{white-space:nowrap}

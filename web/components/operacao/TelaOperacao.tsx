@@ -21,6 +21,7 @@
 
 import "./operacao.css";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { STATUS_META } from "@/lib/columns";
 import { useUserPerms } from "../UserPermsProvider";
 import { canApprove, canEdit, canReleasePv, canViewValues } from "@/lib/permissions";
@@ -118,6 +119,13 @@ export default function TelaOperacao({ modulo, title, rows: rowsIniciais, parcia
   const [menu, setMenu] = useState<"mais" | "export" | null>(null);
   const [logAberto, setLogAberto] = useState(false);
   const [visoes, setVisoes] = useState<Visao[]>([]);
+  // Anotações por pedido (balãozinho): quem escreveu e quando ficam gravados no servidor.
+  const [notas, setNotas] = useState<Record<string, Nota[]>>({});
+  const [notasDe, setNotasDe] = useState<Pedido | null>(null);
+  useEffect(() => {
+    fetch(`/api/pedidos/notas?modulo=${modulo}`, { cache: "no-store" }).then((r) => r.json())
+      .then((j) => setNotas(j.notas ?? {})).catch(() => {});
+  }, [modulo]);
   const [limite, setLimite] = useState(120);
   const buscaRef = useRef<HTMLInputElement>(null);
   const chaveLS = `op:${modulo}`;
@@ -679,7 +687,8 @@ export default function TelaOperacao({ modulo, title, rows: rowsIniciais, parcia
               excluirPv={ehAdmin && modulo !== "pcs" ? () => void excluirPv(p) : null}
               statusLote={(lista, st) => { if (lista.length === 1) void setStatus(lista[0], st); else void emMassa(st, lista); }}
               incluirPc={(rc, itens, numero) => incluirPc(p, rc, itens, numero)}
-              filtrarRapida={(r) => { setMarcados((m) => (m.includes(r) ? m : [...m, r])); window.scrollTo({ top: 0, behavior: "smooth" }); }} />
+              filtrarRapida={(r) => { setMarcados((m) => (m.includes(r) ? m : [...m, r])); window.scrollTo({ top: 0, behavior: "smooth" }); }}
+              notas={notas[p.id] ?? []} abrirNotas={() => setNotasDe(p)} />
           ))}
           {visiveis.length > limite && (
             <div style={{ textAlign: "center", margin: 14 }}>
@@ -728,6 +737,12 @@ export default function TelaOperacao({ modulo, title, rows: rowsIniciais, parcia
         <AtribuicaoModal pc={atribEdit} onClose={() => setAtribEdit(null)} onSaved={() => { setAtribEdit(null); setAtribTick((t) => t + 1); }} />
       )}
 
+      {notasDe && (
+        <PainelNotas p={notasDe} modulo={modulo} notas={notas[notasDe.id] ?? []}
+          onFechar={() => setNotasDe(null)}
+          onMudou={(lista) => setNotas((m) => ({ ...m, [notasDe.id]: lista }))}
+          eu={user?.id ?? null} admin={ehAdmin} />
+      )}
       <div className={`toast ${toast ? "show" : ""}`} style={toast?.erro ? { background: "var(--ww-crit)", color: "#fff" } : undefined}>
         <span>{toast?.msg}</span>
         {toast?.desfazer && <button onClick={() => { const d = toast.desfazer; setToast(null); d?.(); }}>Desfazer</button>}
@@ -824,6 +839,86 @@ export function FasesBar({ p, modulo }: { p: Pedido; modulo: string }) {
         {atual ? <><b>{atual.k}</b> · {nx}</> : p.faturado ? <><b>✓ Faturado</b> · NF {p.nfSaida}{p.fatEm ? ` · ${dBR(p.fatEm)}` : ""}</> : "✓ ciclo completo"}
       </div>
     </div>
+  );
+}
+
+type Nota = { id: number; pedido: string; texto: string; autor_id: string | null; autor_nome: string | null; autor_email: string | null; criado_em: string };
+const dataHora = (iso: string) => new Date(iso).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo", day: "2-digit", month: "2-digit", year: "2-digit", hour: "2-digit", minute: "2-digit" });
+
+/** Balãozinho de anotações ao lado do nº do pedido: vazio = contorno; com
+ *  anotações = preenchido com a quantidade; hover mostra a última. */
+function Balao({ notas, onAbrir }: { notas: Nota[]; onAbrir: () => void }) {
+  const ult = notas[notas.length - 1];
+  return (
+    <button type="button" className={`balao ${notas.length ? "tem" : ""}`}
+      title={ult ? `${ult.autor_nome ?? "—"} · ${dataHora(ult.criado_em)}\n${ult.texto}${notas.length > 1 ? `\n(+${notas.length - 1} anteriores)` : ""}` : "Escrever uma anotação neste pedido"}
+      onClick={(e) => { e.stopPropagation(); onAbrir(); }}>
+      <svg viewBox="0 0 24 24" width="14" height="14" fill={notas.length ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2" strokeLinejoin="round">
+        <path d="M21 12a8 8 0 0 1-11.6 7.1L4 20.5l1.4-4.6A8 8 0 1 1 21 12z" />
+      </svg>
+      {notas.length > 0 && <span>{notas.length}</span>}
+    </button>
+  );
+}
+
+function PainelNotas({ p, modulo, notas, onFechar, onMudou, eu, admin }: {
+  p: Pedido; modulo: Modulo; notas: Nota[]; onFechar: () => void; onMudou: (l: Nota[]) => void; eu: string | null; admin: boolean;
+}) {
+  const [texto, setTexto] = useState("");
+  const [enviando, setEnviando] = useState(false);
+  const [erro, setErro] = useState<string | null>(null);
+  const fim = useRef<HTMLDivElement>(null);
+  useEffect(() => { fim.current?.scrollIntoView({ block: "end" }); }, [notas.length]);
+  useEffect(() => {
+    const h = (e: KeyboardEvent) => { if (e.key === "Escape") onFechar(); };
+    window.addEventListener("keydown", h); return () => window.removeEventListener("keydown", h);
+  }, [onFechar]);
+  const enviar = async () => {
+    const t = texto.trim(); if (!t) return;
+    setEnviando(true); setErro(null);
+    const r = await fetch("/api/pedidos/notas", { method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ modulo, pedido: p.id, empresa: s(p.bucket.rows[0]?.empresa) || "SF", texto: t }) });
+    const j = await r.json().catch(() => ({}));
+    setEnviando(false);
+    if (!r.ok) { setErro(j.error ?? "Não gravou"); return; }
+    setTexto(""); onMudou([...notas, j.nota]);
+  };
+  const apagar = async (n: Nota) => {
+    const r = await fetch(`/api/pedidos/notas?id=${n.id}`, { method: "DELETE" });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) { setErro(j.error ?? "Não apagou"); return; }
+    onMudou(notas.filter((x) => x.id !== n.id));
+  };
+  // Portal no <body>: um ancestral do layout cria contexto de posicionamento e
+  // o painel "fixed" ficava preso à altura da lista (só o rodapé aparecia).
+  return createPortal(
+    <div className="op"><div className="notas-fundo" onClick={onFechar}>
+      <div className="notas" onClick={(e) => e.stopPropagation()} role="dialog" aria-label={`Anotações de ${p.id}`}>
+        <header><b>Anotações · {p.id}</b><span>{p.cliente}</span><button className="icon" onClick={onFechar} title="Fechar">✕</button></header>
+        <div className="notas-lista">
+          {notas.length === 0 && <p className="vazio">Nenhuma anotação ainda. Escreva a primeira abaixo — fica gravado quem escreveu e quando.</p>}
+          {notas.map((n) => (
+            <div key={n.id} className="nota">
+              <div className="nota-cab"><b>{n.autor_nome ?? n.autor_email ?? "—"}</b><span>{dataHora(n.criado_em)}</span>
+                {(n.autor_id === eu || admin) && <button className="linkbtn" onClick={() => void apagar(n)} title="Apagar esta anotação">apagar</button>}
+              </div>
+              <div className="nota-txt">{n.texto}</div>
+            </div>
+          ))}
+          <div ref={fim} />
+        </div>
+        <footer>
+          <textarea value={texto} onChange={(e) => setTexto(e.target.value)} maxLength={2000} rows={3} autoFocus
+            placeholder="Escreva uma anotação… (Ctrl+Enter para gravar)"
+            onKeyDown={(e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); void enviar(); } }} />
+          <div className="notas-acoes">
+            {erro && <span className="erro">{erro}</span>}
+            <button className="btn primary sm" disabled={enviando || !texto.trim()} onClick={() => void enviar()}>{enviando ? "Gravando…" : "Gravar anotação"}</button>
+          </div>
+        </footer>
+      </div>
+    </div></div>,
+    document.body,
   );
 }
 
@@ -981,6 +1076,8 @@ function CartaoPedido(props: {
   statusLote: (lista: Compra[], status: string) => void;
   incluirPc: (rc: string, itens: Compra[], numero: string) => Promise<void>;
   filtrarRapida: (r: Rapida) => void;
+  notas: Nota[];
+  abrirNotas: () => void;
 }) {
   const { p, compras, modulo, aberto, $ } = props;
   const d = diasAte(p.lim);
@@ -989,7 +1086,13 @@ function CartaoPedido(props: {
     <div className={`pv ${aberto ? "open" : ""} ${p.faturado ? "isfat" : ""} ${!p.faturado && p.flags.some((f) => f.t === "pode faturar") ? "podefat" : ""}`}>
       <div className="pvh" onClick={props.onToggle}>
         <span className="chev">▸</span>
-        <div className="pvid">{props.nomeId}<small>{p.compras.length} compra{p.compras.length === 1 ? "" : "s"}</small></div>
+        <div className="pvid">
+          <span className="pvid-l1">{props.nomeId}<Balao notas={props.notas} onAbrir={props.abrirNotas} /></span>
+          <small title={modulo === "pcs" ? "Data de emissão do PC" : modulo === "projetos" ? "Emissão do PV/OS mais antigo do projeto" : "Data de emissão do PV/OS no Omie"}>
+            {p.emissao ? <>emitido <b>{dBR(p.emissao).replace(/\/(\d{2})(\d{2})$/, "/$2")}</b></> : "emissão —"}
+          </small>
+          <small>{p.compras.length} compra{p.compras.length === 1 ? "" : "s"}</small>
+        </div>
         {/* Cliente e, logo ao lado, a situação do pedido (NF de saída + alertas);
             embaixo, tipo da venda (cor por Mercantil/Serviço/Mix), projeto e etapa. */}
         <div className="cli">
