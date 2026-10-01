@@ -8,6 +8,7 @@ Freq:     Diária (movimentos janela de N dias) + posição do dia
 Env:      ESTOQUE_DIAS_JANELA (default 40) | ESTOQUE_FULL=1 → desde 01/01/2024
 ═════════════════════════════════════════════════════════════════════════════
 """
+import html
 import os
 import sys
 import time
@@ -23,6 +24,13 @@ from _common import (
 OMIE_URL = "https://app.omie.com.br/api/v1/estoque/consulta/"
 SCHEMA = "orders"  # PostgREST não expõe schema próprio; tabelas orders.estoque_*
 
+
+
+def _desc(v):
+    """Omie manda descrição com entidades HTML (às vezes duplas: &amp;quot;)."""
+    if not v:
+        return None
+    return html.unescape(html.unescape(str(v))).strip() or None
 
 def br(d: date) -> str:
     return d.strftime("%d/%m/%Y")
@@ -45,7 +53,7 @@ def map_posicao(p: dict, sigla: str, data_pos: date):
         "n_cod_prod": to_int(p.get("nCodProd")),
         "codigo_local_estoque": to_int(p.get("codigo_local_estoque")) or 0,
         "codigo": p.get("cCodigo") or None,
-        "descricao": p.get("cDescricao") or None,
+        "descricao": _desc(p.get("cDescricao")),
         "saldo": to_float(p.get("nSaldo")),
         "fisico": to_float(p.get("fisico")),
         "reservado": to_float(p.get("reservado")),
@@ -74,7 +82,7 @@ def map_movimento(m: dict, sigla: str):
         "valor": to_float(m.get("valor")),
         "saldo": to_float(m.get("saldo")),
         "cmc": to_float(m.get("cmc")),
-        "descricao": m.get("descricao") or None,
+        "descricao": _desc(m.get("descricao")),
         "codigo_local_estoque": to_int(m.get("codigo_local_estoque")),
         "cancelamento": str(m.get("cancelamento")) if m.get("cancelamento") is not None else None,
         "devolucao": str(m.get("devolucao")) if m.get("devolucao") is not None else None,
