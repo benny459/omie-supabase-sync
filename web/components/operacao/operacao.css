@@ -437,3 +437,9 @@
 .op .srv-l2{color:var(--ww-text-muted);font-size:11.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .op .srv-l2.late{color:var(--ww-crit)}
 .op .srv-l2 .svc-h{color:var(--ww-text-faint)}
+/* Filtros rápidos em grupos: Faturamento · Compras · Serviços */
+.op .qv-g{display:inline-flex;align-items:center;gap:6px;padding:3px 6px 3px 10px;border:1px solid var(--ww-border);border-radius:12px;background:var(--ww-panel-sunken)}
+.op .qv-gl{font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--ww-text-faint);font-weight:700;margin-right:2px}
+.op .qv-g .chip{height:28px}
+/* ícone legível dentro do botão selecionado (fundo claro) */
+.op .chip.on .alm{background:var(--ww-bg);border-color:transparent}

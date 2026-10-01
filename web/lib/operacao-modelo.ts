@@ -310,6 +310,12 @@ export type Servico = {
   historico: { data: string | null; em: string; por: string }[];
 };
 
+/** Serviço atrasado: previsão do app de serviços vencida e OS ainda não
+ *  concluída nem cancelada. */
+export function servicoAtrasado(sv: Servico | null): boolean {
+  return !!sv && sv.prev != null && sv.st !== "Concluída" && sv.st !== "Cancelada" && (diasAte(sv.prev) ?? 0) < 0;
+}
+
 /** Serviço do pedido (PV/OS), a partir do app de serviços — mesmo critério da
  *  coluna "Status OS" da tela antiga. Mercantil sem OS não tem serviço. */
 export function servicoDoPedido(p: Pedido): Servico | null {
@@ -366,7 +372,7 @@ export type Escopo = "aberto" | "faturado" | "todos";
 export type Periodo = "tudo" | "7" | "30" | "vencidos";
 export type Rapida = "todos" | "minha" | "atrasados" | "sem_pc" | "alarme"
   | "serv_exec" | "serv_agend" | "serv_semos" | "pode_fat"
-  | "venda_atraso" | "compra_atraso" | "recusa" | "sem_projeto";
+  | "venda_atraso" | "compra_atraso" | "recusa" | "sem_projeto" | "serv_atraso";
 export type Filtros = {
   tipo?: string; etapaVenda?: string; projeto?: string;
   estado?: Estado; fornecedor?: string; categoria?: string;
@@ -407,6 +413,7 @@ export function passa(p: Pedido, c: Compra | null, q: string, per: Periodo, f: F
   if (rap.startsWith("serv_") || rap === "pode_fat") {
     const sv = servicoDoPedido(p);
     if (rap === "serv_exec" && sv?.st !== "Concluída") return false;
+    if (rap === "serv_atraso" && !servicoAtrasado(sv)) return false;
     if (rap === "serv_agend" && !(sv?.os && sv.st !== "Concluída" && sv.st !== "Cancelada")) return false;
     if (rap === "serv_semos" && !(sv && !sv.os && !sv.st)) return false;
     if (rap === "pode_fat" && !p.flags.some((x) => x.t === "pode faturar")) return false;

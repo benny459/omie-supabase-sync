@@ -28,7 +28,7 @@ import {
   montarPedido, fases, financeiro, passa, noEscopo, dataMs, diasAte, dBR, isoDia, brl, pct,
   ESTADO_LABEL, FILTRO_LABEL,
   type Compra, type Escopo, type Estado, type Filtros, type Pedido, type Periodo, type Rapida,
-  servicoDoPedido, tipoVenda, type Servico,
+  servicoDoPedido, servicoAtrasado, tipoVenda, type Servico,
 } from "@/lib/operacao-modelo";
 import { mudarStatus, mudarStatusEmMassa, salvarCampo, CAMPOS, type Modulo } from "@/lib/approvals-write";
 import { buildBuckets, BucketTotals, projetoDoBucket, LinkAbrirProjeto, type Bucket, type BudgetSummary } from "../BoldAvulsosView";
@@ -269,6 +269,7 @@ export default function TelaOperacao({ modulo, title, rows: rowsIniciais, parcia
       compra_atraso: noScope.filter((p) => p.flags.some((f) => f.t === "compra em atraso")).length,
       recusa: noScope.filter((p) => p.flags.some((f) => f.t === "recusa a resolver")).length,
       serv_exec: svs.filter((x) => x?.st === "Concluída").length,
+      serv_atraso: svs.filter((x) => servicoAtrasado(x)).length,
       serv_agend: svs.filter((x) => x?.os && x.st !== "Concluída" && x.st !== "Cancelada").length,
       serv_semos: svs.filter((x) => x && !x.os && !x.st).length,
     };
@@ -529,27 +530,50 @@ export default function TelaOperacao({ modulo, title, rows: rowsIniciais, parcia
 
       {/* ── visões rápidas + salvas ── */}
       <div className="qv">
-        {([
-          ["todos", "Todos", rapidas.todos, null],
-          ["pode_fat", "Pode faturar", rapidas.pode_fat, ALARME_PODE_FAT],
-          ["venda_atraso", "Venda em atraso", rapidas.venda_atraso, ALARMES["venda em atraso"]],
-          ["compra_atraso", "Compra em atraso", rapidas.compra_atraso, ALARMES["compra em atraso"]],
-          ["minha", "Minha aprovação", rapidas.minha, ALARMES["aprovação pendente"]],
-          ["recusa", "Recusados", rapidas.recusa, ALARMES["recusa a resolver"]],
-          ["sem_pc", "Sem PC", rapidas.sem_pc, ALARMES["sem PC"]],
-          ["serv_exec", "Serviço executado", rapidas.serv_exec, null],
-          ["serv_agend", "Serviço agendado", rapidas.serv_agend, null],
-          ["serv_semos", "Sem OS", rapidas.serv_semos, null],
-        ] as [Rapida, string, number, AlarmeIcone | null][])
-          .filter(([k]) => !(modulo === "pcs" && (k === "sem_pc" || k === "venda_atraso" || k === "pode_fat")))
-          .filter(([k]) => modulo === "avulsos" || !(k === "pode_fat" || k.startsWith("serv_")))
-          .filter(([k, , n]) => k === "todos" || k === rapida || n > 0)
-          .map(([k, l, n, ic]) => (
-            <button key={k} className={`chip ${rapida === k ? "on" : ""}`} onClick={() => setRapida(rapida === k ? "todos" : k)}
-              title={ic ? ic.desc : undefined}>
-              {ic ? <Alm a={ic} chip /> : k.startsWith("serv_") ? <span className="pip" style={{ background: "#fb923c" }} /> : null}{l} <b>{n}</b>
+        {(() => {
+          const G: [string, [Rapida, string, number, AlarmeIcone][]][] = [
+            ["Faturamento", [
+              ["pode_fat", "Pode faturar", rapidas.pode_fat, ALARME_PODE_FAT],
+              ["venda_atraso", "Venda em atraso", rapidas.venda_atraso, ALARMES["venda em atraso"]],
+            ]],
+            ["Compras", [
+              ["compra_atraso", "Compra em atraso", rapidas.compra_atraso, ALARMES["compra em atraso"]],
+              ["minha", "Minha aprovação", rapidas.minha, ALARMES["aprovação pendente"]],
+              ["recusa", "Recusados", rapidas.recusa, ALARMES["recusa a resolver"]],
+              ["sem_pc", "Sem PC", rapidas.sem_pc, ALARMES["sem PC"]],
+            ]],
+            ["Serviços", [
+              ["serv_atraso", "Serviço em atraso", rapidas.serv_atraso, ALARME_SERV.atraso],
+              ["serv_agend", "Agendado", rapidas.serv_agend, ALARME_SERV.agend],
+              ["serv_exec", "Executado", rapidas.serv_exec, ALARME_SERV.exec],
+              ["serv_semos", "Sem OS", rapidas.serv_semos, ALARME_SERV.semos],
+            ]],
+          ];
+          const vale = ([k, , n]: [Rapida, string, number, AlarmeIcone]) =>
+            (k === rapida || n > 0)
+            && !(modulo === "pcs" && (k === "sem_pc" || k === "venda_atraso" || k === "pode_fat"))
+            && (modulo === "avulsos" || !(k === "pode_fat" || k.startsWith("serv_")));
+          const chip = ([k, l, n, ic]: [Rapida, string, number, AlarmeIcone]) => (
+            <button key={k} className={`chip ${rapida === k ? "on" : ""}`} onClick={() => setRapida(rapida === k ? "todos" : k)} title={ic.desc}>
+              <Alm a={ic} chip />{l} <b>{n}</b>
             </button>
-          ))}
+          );
+          return (
+            <>
+              <button className={`chip ${rapida === "todos" ? "on" : ""}`} onClick={() => setRapida("todos")}>Todos <b>{rapidas.todos}</b></button>
+              {G.map(([nome, itens]) => {
+                const vis = itens.filter(vale);
+                if (!vis.length) return null;
+                return (
+                  <span key={nome} className="qv-g">
+                    <span className="qv-gl">{nome}</span>
+                    {vis.map(chip)}
+                  </span>
+                );
+              })}
+            </>
+          );
+        })()}
         <span className="spacer" />
         <span style={{ color: "var(--ww-text-faint)", fontSize: 12, display: "inline-flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
           Visões salvas ·
@@ -801,6 +825,12 @@ const ALARMES: Record<string, AlarmeIcone> = {
   "PV incompleto": { l: "I", s: "!", tom: "violet", desc: "PV/OS incompleto no Omie" },
   "defasado Omie": { l: "O", s: "↻", tom: "violet", desc: "Dados defasados em relação ao Omie — rode o Sync" },
 };
+const ALARME_SERV: Record<"atraso" | "exec" | "agend" | "semos", AlarmeIcone> = {
+  atraso: { l: "S", s: "⚠", tom: "crit", desc: "Serviço em atraso — previsão vencida e OS não concluída", rap: "serv_atraso" },
+  exec: { l: "S", s: "✓", tom: "ok", desc: "Serviço executado — OS concluída", rap: "serv_exec" },
+  agend: { l: "S", s: "◷", tom: "mute", desc: "Serviço agendado — OS vinculada, ainda não concluída", rap: "serv_agend" },
+  semos: { l: "S", s: "∅", tom: "warn", desc: "Venda com serviço, mas sem OS vinculada no app de serviços", rap: "serv_semos" },
+};
 const ALARME_PODE_FAT: AlarmeIcone = { l: "F", s: "$", tom: "okb", desc: "Pode faturar — falta só emitir a NF de saída", rap: "pode_fat" };
 function alarmeFaturamento(p: Pedido): AlarmeIcone {
   if (p.faturado) {
@@ -941,6 +971,12 @@ function CartaoPedido(props: {
             <span className="alms" onClick={(e) => e.stopPropagation()}>
               {modulo !== "pcs" && <Alm a={alarmeFaturamento(p)} onFiltrar={props.filtrarRapida} />}
               {p.flags.filter((f) => f.t !== "pode faturar").map((f) => <Alm key={f.t} a={ALARMES[f.t] ?? { l: "!", s: "", tom: "mute", desc: f.t }} onFiltrar={props.filtrarRapida} />)}
+              {modulo !== "pcs" && (() => {
+                const sv = servicoDoPedido(p);
+                if (!servicoAtrasado(sv)) return null;
+                const d = -(diasAte(sv!.prev) ?? 0);
+                return <Alm a={{ ...ALARME_SERV.atraso, desc: `Serviço em atraso — previsão ${dBR(sv!.prev)} vencida há ${d}d (OS ${sv!.rotulo.toLowerCase()})` }} onFiltrar={props.filtrarRapida} />;
+              })()}
             </span>
             {p.faturado && p.nfSaida && <span className="nf-num">NF {p.nfSaida}</span>}
           </div>
