@@ -60,7 +60,7 @@ export const RECUSAS = new Set(["NAO_APROVADO", "REJEITADO_VALIDADE", "CANCELAR_
 
 type Vista = "lista" | "tabela" | "kanban" | "tempo";
 type Toast = { msg: string; desfazer?: () => void; erro?: boolean } | null;
-type Visao = { nome: string; escopo: Escopo; periodo: Periodo; filtros: Filtros; rapida: Rapida; q: string };
+type Visao = { nome: string; escopo: Escopo; periodo: Periodo; filtros: Filtros; rapida: Rapida | Rapida[]; q: string };
 
 const VIEW_DO_MODULO: Record<Modulo, string> = { avulsos: "v_pc_avulsos", projetos: "v_pc_projetos", pcs: "v_pc_pcs" };
 
@@ -102,7 +102,12 @@ export default function TelaOperacao({ modulo, title, rows: rowsIniciais, parcia
   const [q, setQ] = useState("");
   const [periodo, setPeriodo] = useState<Periodo>("tudo");
   const [filtros, setFiltros] = useState<Filtros>({});
-  const [rapida, setRapida] = useState<Rapida>("todos");
+  /* Filtros rápidos marcados — vários ao mesmo tempo; cada um estreita a
+     lista (E). Vazio = todos. (pedido do Benny, 01/10/2026) */
+  const [marcados, setMarcados] = useState<Rapida[]>([]);
+  const alternar = (k: Rapida) => setMarcados((m) => (m.includes(k) ? m.filter((x) => x !== k) : [...m, k]));
+  const temAlgumFiltro = marcados.length > 0 || !!q.trim() || periodo !== "tudo" || Object.values(filtros).some(Boolean);
+  const limparTudo = () => { setMarcados([]); setQ(""); setPeriodo("tudo"); setFiltros({}); };
   const [vista, setVista] = useState<Vista>("lista");
   const [abertos, setAbertos] = useState<Set<string>>(new Set());
   const [sel, setSel] = useState<Set<string>>(new Set());
@@ -234,57 +239,56 @@ export default function TelaOperacao({ modulo, title, rows: rowsIniciais, parcia
     const ab = pedidos.filter((p) => !p.faturado), fa = pedidos.filter((p) => p.faturado);
     return { aberto: [ab.length, soma(ab)], faturado: [fa.length, soma(fa)], todos: [pedidos.length, soma(pedidos)] } as const;
   }, [pedidos]);
-  const temFiltroCompra = !!(filtros.estado || filtros.fornecedor || filtros.categoria) || rapida === "minha";
-  const visiveis = useMemo(() => {
+  const temFiltroCompra = !!((filtros.estado && filtros.estado !== "sem_pc") || filtros.fornecedor || filtros.categoria) || marcados.includes("minha");
+  /* Uma função só decide quem aparece — a lista E os contadores dos botões
+     usam ela (01/10/2026: contavam por conta própria e divergiam do filtro).
+     O contador de cada botão respeita busca, período e painel de filtros. */
+  const filtrarPor = useCallback((raps: Rapida[]) => {
     const qq = q.trim().toLowerCase();
+    const lista: Rapida[] = raps.length ? raps : ["todos"];
+    const soCompra = !!((filtros.estado && filtros.estado !== "sem_pc") || filtros.fornecedor || filtros.categoria) || lista.includes("minha");
+    const ok = (p: Pedido, c: Compra | null) => lista.every((r) => passa(p, c, qq, periodo, filtros, r));
     const out: { p: Pedido; compras: Compra[] }[] = [];
     for (const p of noScope) {
-      const cs = p.compras.filter((c) => passa(p, c, qq, periodo, filtros, rapida));
+      const cs = p.compras.filter((c) => ok(p, c));
       if (cs.length) out.push({ p, compras: cs });
-      else if (!p.compras.length && !temFiltroCompra && passa(p, null, qq, periodo, filtros, rapida)) out.push({ p, compras: [] });
+      else if (!p.compras.length && !soCompra && ok(p, null)) out.push({ p, compras: [] });
     }
     return out;
-  }, [noScope, q, periodo, filtros, rapida, temFiltroCompra]);
+  }, [noScope, q, periodo, filtros]);
+  const visiveis = useMemo(() => filtrarPor(marcados), [filtrarPor, marcados]);
   const opcoes = useMemo(() => {
     const uniq = (a: string[]) => [...new Set(a.filter(Boolean))].sort((x, y) => x.localeCompare(y, "pt-BR"));
     return {
       tipo: uniq(noScope.map((p) => tipoVenda(p.tipo) || p.tipo)),
       etapaVenda: uniq(noScope.map((p) => p.etapaVenda)),
       projeto: ["Sem projeto", ...uniq(noScope.map((p) => p.projeto))],
-      fornecedor: uniq(noScope.flatMap((p) => p.compras.map((c) => c.fornecedor))),
+      // Uma opção por fornecedor, sem distinguir caixa (o Omie tem INDFILTROS e Indfiltros).
+      fornecedor: [...new Map(noScope.flatMap((p) => p.compras.map((c) => c.fornecedor)).filter(Boolean)
+        .sort((a, b) => (a === a.toUpperCase() ? 1 : 0) - (b === b.toUpperCase() ? 1 : 0)) // maiúsculas por último → ganham no Map
+        .map((x) => [x.toUpperCase(), x] as const)).values()].sort((x, y) => x.localeCompare(y, "pt-BR")),
       categoria: uniq(noScope.flatMap((p) => p.compras.map((c) => c.categoria))),
     };
   }, [noScope]);
+  // Número de cada botão = quantos ficariam ao somar aquele filtro aos já marcados.
   const rapidas = useMemo(() => {
-    const it = noScope.flatMap((p) => p.compras);
-    const svs = noScope.map((p) => servicoDoPedido(p));
-    return {
-      todos: noScope.length,
-      minha: it.filter((c) => c.estado === "pendente").length,
-      atrasados: noScope.filter((p) => p.flags.some((f) => f.tom === "r" && f.t.includes("atraso"))).length,
-      sem_pc: noScope.filter((p) => p.flags.some((f) => f.t === "sem PC")).length,
-      alarme: noScope.filter((p) => p.flags.some((f) => f.t !== "sem PC")).length,
-      pode_fat: noScope.filter((p) => p.flags.some((f) => f.t === "pode faturar")).length,
-      venda_atraso: noScope.filter((p) => p.flags.some((f) => f.t === "venda em atraso")).length,
-      compra_atraso: noScope.filter((p) => p.flags.some((f) => f.t === "compra em atraso")).length,
-      recusa: noScope.filter((p) => p.flags.some((f) => f.t === "recusa a resolver")).length,
-      serv_exec: svs.filter((x) => x?.st === "Concluída").length,
-      serv_atraso: svs.filter((x) => servicoAtrasado(x)).length,
-      serv_agend: svs.filter((x) => x?.os && x.st !== "Concluída" && x.st !== "Cancelada").length,
-      serv_semos: svs.filter((x) => x && !x.os && !x.st).length,
-    };
-  }, [noScope]);
+    const k: Rapida[] = ["minha", "atrasados", "sem_pc", "alarme", "pode_fat", "venda_atraso", "compra_atraso",
+      "recusa", "serv_exec", "serv_atraso", "serv_agend", "serv_semos"];
+    const r = Object.fromEntries(k.map((x) => [x, filtrarPor(marcados.includes(x) ? marcados : [...marcados, x]).length])) as Record<Rapida, number>;
+    r.todos = filtrarPor([]).length;
+    return r;
+  }, [filtrarPor, marcados]);
   const fila = useMemo(() => noScope.flatMap((p) => p.compras.filter((c) => c.estado === "pendente")), [noScope]);
   const nFiltros = Object.values(filtros).filter(Boolean).length;
 
   const salvarVisao = () => {
     const nome = window.prompt("Nome desta visão:");
     if (!nome?.trim()) return;
-    const nv = [...visoes.filter((v) => v.nome !== nome.trim()), { nome: nome.trim(), escopo, periodo, filtros, rapida, q }];
+    const nv = [...visoes.filter((v) => v.nome !== nome.trim()), { nome: nome.trim(), escopo, periodo, filtros, rapida: marcados, q }];
     setVisoes(nv);
     try { localStorage.setItem(`${chaveLS}:visoes`, JSON.stringify(nv)); } catch { /* */ }
   };
-  const aplicarVisao = (v: Visao) => { setEscopo(v.escopo); setPeriodo(v.periodo); setFiltros(v.filtros); setRapida(v.rapida); setQ(v.q); };
+  const aplicarVisao = (v: Visao) => { setEscopo(v.escopo); setPeriodo(v.periodo); setFiltros(v.filtros); setMarcados(Array.isArray(v.rapida) ? v.rapida : v.rapida && v.rapida !== "todos" ? [v.rapida] : []); setQ(v.q); };
   const removerVisao = (nome: string) => {
     const nv = visoes.filter((v) => v.nome !== nome);
     setVisoes(nv);
@@ -550,17 +554,19 @@ export default function TelaOperacao({ modulo, title, rows: rowsIniciais, parcia
             ]],
           ];
           const vale = ([k, , n]: [Rapida, string, number, AlarmeIcone]) =>
-            (k === rapida || n > 0)
+            (marcados.includes(k) || n > 0)
             && !(modulo === "pcs" && (k === "sem_pc" || k === "venda_atraso" || k === "pode_fat"))
-            && (modulo === "avulsos" || !(k === "pode_fat" || k.startsWith("serv_")));
+            && (modulo !== "pcs" || !k.startsWith("serv_"))
+            && (modulo === "avulsos" || k !== "pode_fat");
           const chip = ([k, l, n, ic]: [Rapida, string, number, AlarmeIcone]) => (
-            <button key={k} className={`chip ${rapida === k ? "on" : ""}`} onClick={() => setRapida(rapida === k ? "todos" : k)} title={ic.desc}>
+            <button key={k} className={`chip ${marcados.includes(k) ? "on" : ""}`} onClick={() => alternar(k)}
+              title={`${ic.desc}${marcados.length && !marcados.includes(k) ? " · combina com os filtros marcados" : ""}`}>
               <Alm a={ic} chip />{l} <b>{n}</b>
             </button>
           );
           return (
             <>
-              <button className={`chip ${rapida === "todos" ? "on" : ""}`} onClick={() => setRapida("todos")}>Todos <b>{rapidas.todos}</b></button>
+              <button className={`chip ${marcados.length === 0 ? "on" : ""}`} onClick={() => setMarcados([])}>Todos <b>{rapidas.todos}</b></button>
               {G.map(([nome, itens]) => {
                 const vis = itens.filter(vale);
                 if (!vis.length) return null;
@@ -574,6 +580,9 @@ export default function TelaOperacao({ modulo, title, rows: rowsIniciais, parcia
             </>
           );
         })()}
+        {temAlgumFiltro && (
+          <button className="chip limpar" onClick={limparTudo} title="Limpa filtros rápidos, busca, período e painel de filtros">✕ Limpar filtros</button>
+        )}
         <span className="spacer" />
         <span style={{ color: "var(--ww-text-faint)", fontSize: 12, display: "inline-flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
           Visões salvas ·
@@ -612,7 +621,7 @@ export default function TelaOperacao({ modulo, title, rows: rowsIniciais, parcia
                 return d ? `Mais antiga vence em ${dBR(d)} — aprove direto na lista ou selecione várias.` : "Aprove direto na lista ou selecione várias."; })()}
             </small>
           </p>
-          <button className="btn sm" onClick={() => { setRapida("minha"); trocarVista("lista"); }}>Revisar fila</button>
+          <button className="btn sm" onClick={() => { setMarcados(["minha"]); trocarVista("lista"); }}>Revisar fila</button>
           {fila.length <= 30 && <button className="btn sm ok" onClick={() => {
             if (!window.confirm(`Aprovar as ${fila.length} compras da fila? Cada uma passa pela mesma checagem de alçada e orçamento.`)) return;
             void emMassa("APROVADO", fila);
@@ -657,7 +666,7 @@ export default function TelaOperacao({ modulo, title, rows: rowsIniciais, parcia
               excluirPv={ehAdmin && modulo !== "pcs" ? () => void excluirPv(p) : null}
               statusLote={(lista, st) => { if (lista.length === 1) void setStatus(lista[0], st); else void emMassa(st, lista); }}
               incluirPc={(rc, itens, numero) => incluirPc(p, rc, itens, numero)}
-              filtrarRapida={(r) => { setRapida(r); window.scrollTo({ top: 0, behavior: "smooth" }); }} />
+              filtrarRapida={(r) => { setMarcados((m) => (m.includes(r) ? m : [...m, r])); window.scrollTo({ top: 0, behavior: "smooth" }); }} />
           ))}
           {visiveis.length > limite && (
             <div style={{ textAlign: "center", margin: 14 }}>

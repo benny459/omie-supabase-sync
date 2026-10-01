@@ -454,3 +454,5 @@
 .op .srv-l2{color:var(--ww-text-2,#d6deeb)}
 .op .srv-l1 .svc-os{color:#93c5fd}
 :root[data-theme="light"] .op .srv-l1 .svc-os{color:#1d4ed8}
+/* Botão de limpar todos os filtros */
+.op .chip.limpar{border-color:var(--ww-crit);color:var(--ww-crit-text);background:var(--ww-crit-soft);font-weight:600}

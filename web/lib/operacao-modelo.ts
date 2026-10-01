@@ -152,6 +152,20 @@ export function encerrado(head: AnyRow): boolean {
   return s(head.pv_dt_fat) !== "" || s(head.pv_num_nfe) !== "" || etapa === "Faturado" || etapa === "Cancelado";
 }
 
+/** Faturado ou não. Avulso = um PV. Projeto = vários PVs: só está faturado
+ *  quando TODOS os PVs dele estão encerrados (antes valia o 1º da lista, e um
+ *  projeto com um PV antigo faturado sumia de "Em aberto"). */
+function situacaoFaturamento(rows: AnyRow[], head: AnyRow, modulo: string): { faturado: boolean; nfSaida: string; fatEm: number | null } {
+  if (modulo !== "projetos") return { faturado: encerrado(head), nfSaida: s(head.pv_num_nfe), fatEm: dataMs(head.pv_dt_fat) };
+  const porPv = new Map<string, AnyRow>();
+  for (const r of rows) { const pv = s(r.pv_os_label); if (pv && !porPv.has(pv)) porPv.set(pv, r); }
+  const pvs = [...porPv.values()];
+  if (!pvs.length || !pvs.every(encerrado)) return { faturado: false, nfSaida: "", fatEm: null };
+  const ult = pvs.reduce((a, r) => ((dataMs(r.pv_dt_fat) ?? 0) > (dataMs(a.pv_dt_fat) ?? 0) ? r : a), pvs[0]);
+  const nfs = [...new Set(pvs.map((r) => s(r.pv_num_nfe)).filter(Boolean))];
+  return { faturado: true, nfSaida: nfs.join(", "), fatEm: dataMs(ult.pv_dt_fat) };
+}
+
 export function montarPedido(
   bucket: { pv_os_label: string; rows: AnyRow[] } & AnyRow, modulo: string,
 ): Pedido {
@@ -185,7 +199,7 @@ export function montarPedido(
     tipo: s(head.tipo_omie), etapaVenda: s(head.pv_etapa_texto),
     projeto: s(head.projeto_nome),
     lim: dataMs(head.pv_data_previsao), valorPv,
-    faturado: encerrado(head), nfSaida: s(head.pv_num_nfe), fatEm: dataMs(head.pv_dt_fat),
+    ...situacaoFaturamento(bucket.rows, head, modulo),
     compras, alarmes, flags: [],
   };
   p.flags = sinais(p, modulo);
@@ -320,32 +334,34 @@ export function servicoAtrasado(sv: Servico | null): boolean {
  *  coluna "Status OS" da tela antiga. Mercantil sem OS não tem serviço. */
 export function servicoDoPedido(p: Pedido): Servico | null {
   const tipo = tipoVenda(p.tipo);
+  // Junta o que houver em QUALQUER linha do pedido: o app de serviços às vezes
+  // grava o status numa linha e o nº da OS noutra.
+  let os = "", st = "", prev: number | null = null, conc: number | null = null, podeFat = false, alt = 0;
+  let hist: Servico["historico"] = [];
   for (const r of p.bucket.rows) {
     const cf = (r.custom_fields as Record<string, unknown> | null) ?? {};
-    const os = s(r.servicos_os_numero);
-    const st = s(cf.ww_os_status);
-    const prev = dataMs(r.nova_prev_servicos);
-    if (!os && !st && prev == null) continue;
-    const podeFat = cf.ww_pode_faturar === true;
-    const [rotulo, tom]: [string, Servico["tom"]] =
-      st === "Cancelada" ? ["Cancelada", "mute"]
-      : st === "Concluída" ? (podeFat ? ["Concluída", "ok"] : ["OS pendente", "warn"])
-      : st === "Em Execução" ? ["Em execução", "info"]
-      : st === "Parcial" ? ["Parcial", "info"]
-      : st === "Aberta" ? ["Aberta", "mute"]
-      : os ? ["Aguardando", "mute"] : ["Sem vínculo", "warn"];
-    const hist = Array.isArray(cf.ww_nova_prev_historico) ? cf.ww_nova_prev_historico as Servico["historico"] : [];
-    return {
-      os, st, rotulo, tom, prev,
-      concluidoEm: dataMs(cf.ww_os_concluida_em ?? r.servicos_concluidos_em),
-      alteracoes: Number(cf.ww_nova_prev_alteracoes) || hist.length,
-      historico: hist,
-    };
+    os ||= s(r.servicos_os_numero);
+    st ||= s(cf.ww_os_status);
+    prev ??= dataMs(r.nova_prev_servicos);
+    conc ??= dataMs(cf.ww_os_concluida_em ?? r.servicos_concluidos_em);
+    podeFat ||= cf.ww_pode_faturar === true;
+    alt = Math.max(alt, Number(cf.ww_nova_prev_alteracoes) || 0);
+    if (!hist.length && Array.isArray(cf.ww_nova_prev_historico)) hist = cf.ww_nova_prev_historico as Servico["historico"];
   }
-  if (tipo === "Mix" || tipo === "Serviço") {
-    return { os: "", st: "", rotulo: "Sem vínculo", tom: "warn", prev: null, concluidoEm: null, alteracoes: 0, historico: [] };
+  if (!os && !st && prev == null) {
+    if (tipo === "Mix" || tipo === "Serviço") {
+      return { os: "", st: "", rotulo: "Sem vínculo", tom: "warn", prev: null, concluidoEm: null, alteracoes: 0, historico: [] };
+    }
+    return null;
   }
-  return null;
+  const [rotulo, tom]: [string, Servico["tom"]] =
+    st === "Cancelada" ? ["Cancelada", "mute"]
+    : st === "Concluída" ? (podeFat ? ["Concluída", "ok"] : ["OS pendente", "warn"])
+    : st === "Em Execução" ? ["Em execução", "info"]
+    : st === "Parcial" ? ["Parcial", "info"]
+    : st === "Aberta" ? ["Aberta", "mute"]
+    : os ? ["Aguardando", "mute"] : ["Sem vínculo", "warn"];
+  return { os, st, rotulo, tom, prev, concluidoEm: conc, alteracoes: alt || hist.length, historico: hist };
 }
 
 /** RC · PC · PV · M.B. — custo usa o PC quando existe, senão a RC (estimado *). */
@@ -396,8 +412,12 @@ export function passa(p: Pedido, c: Compra | null, q: string, per: Periodo, f: F
   if (f.tipo && (tipoVenda(p.tipo) || p.tipo) !== f.tipo) return false;
   if (f.etapaVenda && p.etapaVenda !== f.etapaVenda) return false;
   if (f.projeto && (f.projeto === "Sem projeto" ? !!p.projeto : p.projeto !== f.projeto)) return false;
-  if (f.estado && c?.estado !== f.estado) return false;
-  if (f.fornecedor && c?.fornecedor !== f.fornecedor) return false;
+  // "Sem PC" é do pedido (nenhum PC emitido) — um PC pode atender qualquer RC,
+  // então linha sem PC num pedido que já tem PC não é pendência.
+  if (f.estado === "sem_pc") { if (!p.flags.some((x) => x.t === "sem PC")) return false; }
+  else if (f.estado && c?.estado !== f.estado) return false;
+  // O Omie tem o mesmo fornecedor grafado em caixas diferentes (INDFILTROS/Indfiltros).
+  if (f.fornecedor && (c?.fornecedor ?? "").toUpperCase() !== f.fornecedor.toUpperCase()) return false;
   if (f.categoria && c?.categoria !== f.categoria) return false;
   const d = diasAte(p.lim);
   if (per === "7" && (d == null || d < 0 || d > 7)) return false;
@@ -415,8 +435,10 @@ export function passa(p: Pedido, c: Compra | null, q: string, per: Periodo, f: F
     const sv = servicoDoPedido(p);
     if (rap === "serv_exec" && sv?.st !== "Concluída") return false;
     if (rap === "serv_atraso" && !servicoAtrasado(sv)) return false;
-    if (rap === "serv_agend" && !(sv?.os && sv.st !== "Concluída" && sv.st !== "Cancelada")) return false;
-    if (rap === "serv_semos" && !(sv && !sv.os && !sv.st)) return false;
+    // Agendado = serviço existe no app (OS ou status) e não foi concluído nem cancelado.
+    if (rap === "serv_agend" && !(sv && (sv.os || sv.st) && sv.st !== "Concluída" && sv.st !== "Cancelada")) return false;
+    // Sem OS = exatamente o que a tela mostra como "sem OS": falta o nº da OS.
+    if (rap === "serv_semos" && !(sv && !sv.os)) return false;
     if (rap === "pode_fat" && !p.flags.some((x) => x.t === "pode faturar")) return false;
   }
   return true;
