@@ -243,6 +243,7 @@ export default function TelaTitulosNavy({ tipo }: { tipo: Tipo }) {
   const [empresaSel, setEmpresaSel] = useState("");
   const [statusSel, setStatusSel] = useState("");
   const [conferenciaSel, setConferenciaSel] = useState("");
+  const [soNfSemPedido, setSoNfSemPedido] = useState(false);
   const [excluindo, setExcluindo] = useState<string | null>(null);
   const [horizSel, setHorizSel] = useState<Horizonte[]>([]);
   const [ladoAba, setLadoAba] = useState<"categoria" | "contraparte" | "projeto">("categoria");
@@ -320,6 +321,7 @@ export default function TelaTitulosNavy({ tipo }: { tipo: Tipo }) {
     if (empresaSel) rs = rs.filter((r) => r.empresa === empresaSel);
     if (statusSel) rs = rs.filter((r) => (r.status_titulo ?? "") === statusSel);
     if (conferenciaSel) rs = rs.filter((r) => (r.conferencia ?? "") === conferenciaSel);
+    if (soNfSemPedido) rs = rs.filter((r) => r.nf_sem_pedido);
     if (horizSel.length && modo === "aberto")
       rs = rs.filter((r) => horizSel.includes(horizonteDe(r, hoje, amanha, d7, d30)));
     const n = q.trim().toLowerCase();
@@ -327,7 +329,8 @@ export default function TelaTitulosNavy({ tipo }: { tipo: Tipo }) {
       [r.contraparte, r.numero_documento, r.numero_documento_fiscal, r.numero_pedido, r.categoria, r.projeto, r.observacao]
         .some((v) => (v ?? "").toLowerCase().includes(n)));
     return rs;
-  }, [rows, empresaSel, statusSel, conferenciaSel, horizSel, modo, q, hoje, amanha, d7, d30]);
+  }, [rows, empresaSel, statusSel, conferenciaSel, soNfSemPedido, horizSel, modo, q, hoje, amanha, d7, d30]);
+  const nNfSemPedido = useMemo(() => (rows ?? []).filter((r) => r.nf_sem_pedido).length, [rows]);
 
   // ── Resumo (a mesma regra da API, sobre o que está filtrado) ────────────
   const resumo = useMemo(() => {
@@ -459,7 +462,10 @@ export default function TelaTitulosNavy({ tipo }: { tipo: Tipo }) {
   }), [colsAtivas]);
 
   const celsTitulo = useCallback((r: Row) => colsAtivas.map((c) => {
-    if (c.key === "status_titulo") { const s = statusDe(r.status_titulo); return cPill(s.label, s.tom); }
+    if (c.key === "status_titulo") {
+      const s = statusDe(r.status_titulo);
+      return r.nf_sem_pedido ? cPill("⛔ NF sem pedido — não pagar", "crit", s.label) : cPill(s.label, s.tom);
+    }
     if (c.key === "conferencia") { const k = conferenciaDe(r.conferencia); return cPill(k.label, k.tom); }
     if (c.key === "categoria") return cTexto(r.categoria || "—", { sub: r.tem_rateio ? `rateio: ${r.categorias_rateio ?? ""}` : undefined });
     if (c.key === "contraparte") return cTexto(r.contraparte || "—");
@@ -612,6 +618,10 @@ export default function TelaTitulosNavy({ tipo }: { tipo: Tipo }) {
         {statusChips.map((s) => (
           <ChipFiltro key={s} ativo={statusSel === s} onClick={() => setStatusSel(statusSel === s ? "" : s)}>{statusDe(s).label}</ChipFiltro>
         ))}
+        {(nNfSemPedido > 0 || soNfSemPedido) && (
+          <ChipFiltro ativo={soNfSemPedido} title="Títulos cuja NF chegou sem pedido de compra — não pagar até casar em Compras"
+            onClick={() => setSoNfSemPedido((v) => !v)}>⛔ NF sem pedido · {nNfSemPedido}</ChipFiltro>
+        )}
         {conferencias.map(({ k, n }) => (
           <ChipFiltro key={k} ativo={conferenciaSel === k} title={conferenciaDe(k).dica}
             onClick={() => setConferenciaSel(conferenciaSel === k ? "" : k)}>{conferenciaDe(k).label} · {n.toLocaleString("pt-BR")}</ChipFiltro>

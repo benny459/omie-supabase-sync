@@ -19,6 +19,8 @@ const ABERTO_STATUS = ["A VENCER", "VENCE HOJE", "ATRASADO"];
 
 export type TituloRow = {
   empresa: string;
+  /** ⛔ a NF deste título está na caixa "NF sem pedido" de Compras — não pagar. */
+  nf_sem_pedido?: boolean;
   codigo_lancamento_omie: number;
   contraparte: string | null;
   cnpj_cpf: string | null;
@@ -216,6 +218,24 @@ export async function GET(req: Request) {
     if (modo !== "aberto") pq = pq.gte("vencimento", de!).lte("vencimento", ate!);
     const { data: prev, error: pe } = await pq.order("vencimento", { ascending: true });
     if (!pe) rows.push(...((prev ?? []) as unknown as TituloRow[]));
+  }
+
+  /* ⛔ NF sem pedido — não pagar: título a pagar cuja NF (fornecedor + número
+     do documento fiscal, ou a chave) está na caixa "NF sem pedido" de Compras.
+     Some sozinho quando a NF é casada com um pedido ou dispensada. */
+  if (tipo === "pagar") {
+    const { data: sp } = await createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!,
+      { auth: { persistSession: false }, db: { schema: "orders" } }).rpc("compras_nf_sem_pedido_resumo");
+    const nfs = ((sp as { nfs?: { cnpj: string; numero: string; chave: string }[] } | null)?.nfs ?? []);
+    if (nfs.length) {
+      const chaves = new Set(nfs.map((n) => n.chave));
+      const pares = new Set(nfs.map((n) => `${n.cnpj}|${n.numero}`));
+      const dig = (v: unknown) => String(v ?? "").replace(/\D/g, "");
+      for (const r of rows) {
+        const num = dig(r.numero_documento_fiscal).replace(/^0+/, "");
+        if ((r.chave_nfe && chaves.has(r.chave_nfe)) || (num && pares.has(`${dig(r.cnpj_cpf)}|${num}`))) r.nf_sem_pedido = true;
+      }
+    }
   }
 
   // ── Agregados (sempre sobre o conjunto devolvido) ──────────────────────
