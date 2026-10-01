@@ -13,6 +13,8 @@ type Breakdown = { nome: string; total: number; qtd: number };
 type Row = {
   empresa: string;
   codigo_lancamento_omie: number;
+  /** Linha de finance.receber (só receber). */
+  id?: string | null;
   contraparte: string | null;
   cnpj_cpf: string | null;
   vencimento: string | null;
@@ -538,7 +540,7 @@ export default function TitulosView({ tipo }: { tipo: "pagar" | "receber" }) {
               {!loading && pageRows.map((row) => {
                 const meta = STATUS_META[row.status_titulo ?? ""] ?? { label: row.status_titulo ?? "—", cls: "border-ww-border text-ww-textMuted" };
                 return (
-                  <tr key={`${row.empresa}-${row.codigo_lancamento_omie}`}
+                  <tr key={`${row.empresa}-${row.id ?? row.codigo_lancamento_omie}`}
                       className="border-b border-ww-border/60 hover:bg-ww-rowHover/60 transition-colors"
                       title={row.observacao ?? undefined}>
                     {colunasAtivas.map((c) => {

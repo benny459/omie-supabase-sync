@@ -55,6 +55,21 @@ const STATUS: Record<string, { label: string; tom: Tom }> = {
 };
 const statusDe = (s: string | null) => STATUS[s ?? ""] ?? { label: s || "—", tom: "off" as Tom };
 
+/* Conferência do receber com o Omie (finance.receber, desde 01/10/26): as
+   contas nascem no painel e o Omie entra conferido, sem duplicar. */
+const CONFERENCIA: Record<string, { label: string; tom: Tom; dica: string }> = {
+  ok:         { label: "Conferido",  tom: "ok",   dica: "Painel e Omie batem" },
+  divergente: { label: "Divergente", tom: "crit", dica: "Ligado ao Omie, mas valor/vencimento/cliente diferem" },
+  pendente:   { label: "Pendente",   tom: "warn", dica: "Nossa, à espera do título que o Omie cria ao faturar" },
+  so_painel:  { label: "Só painel",  tom: "info", dica: "Conta manual, existe só no painel" },
+  so_omie:    { label: "Só Omie",    tom: "off",  dica: "Criada no Omie, fora do painel" },
+};
+const conferenciaDe = (c: string | null | undefined) => CONFERENCIA[c ?? ""] ?? { label: c || "—", tom: "off" as Tom, dica: "" };
+/** Colunas que só existem no receber. */
+const SO_RECEBER = new Set<string>(["conferencia", "origem_registro"]);
+const fmtDiverg = (r: TituloRow) => Object.entries(r.divergencias ?? {})
+  .map(([k, v]) => `${k}: painel ${String(v.painel)} × Omie ${String(v.omie)}`).join(" · ");
+
 // ── Registo de colunas ─────────────────────────────────────────────────────
 // O mesmo registo da tela antiga (todas as colunas que o Omie traz), agora com
 // o texto de cada campo — é o texto que o filtro do cabeçalho pesquisa.
@@ -140,6 +155,8 @@ const COLS: Col[] = [
 
   /* O resto da view finance.v_titulos_omie — trazido em 30/09/26 para nada do
      Omie ficar de fora. Desligado por padrão; serve para bater com o Omie. */
+  { key: "conferencia", label: "Conferência", grupo: "Origem", texto: (r) => conferenciaDe(r.conferencia).label },
+  { key: "origem_registro", label: "Nasceu em", grupo: "Origem", texto: (r) => (r.origem_registro === "painel" ? "Painel" : r.origem_registro === "omie" ? "Omie" : "") },
   { key: "status", label: "Status Omie", grupo: "Origem", texto: (r) => txt(r.status) },
   { key: "liquidado", label: "Liquidado", grupo: "Origem", texto: (r) => txt(r.liquidado) },
   { key: "status_pago_d", label: "Pago (flag)", grupo: "Origem", texto: (r) => txt(r.status_pago_d) },
@@ -223,6 +240,8 @@ export default function TelaTitulosNavy({ tipo }: { tipo: Tipo }) {
   const [q, setQ] = useState("");
   const [empresaSel, setEmpresaSel] = useState("");
   const [statusSel, setStatusSel] = useState("");
+  const [conferenciaSel, setConferenciaSel] = useState("");
+  const [excluindo, setExcluindo] = useState<string | null>(null);
   const [horizSel, setHorizSel] = useState<Horizonte[]>([]);
   const [ladoAba, setLadoAba] = useState<"categoria" | "contraparte" | "projeto">("categoria");
   const [novoAberto, setNovoAberto] = useState(false);
@@ -252,7 +271,8 @@ export default function TelaTitulosNavy({ tipo }: { tipo: Tipo }) {
     try { window.localStorage.setItem(chavePrefs, JSON.stringify(colsSel)); } catch { /* quota */ }
   }, [colsSel, chavePrefs, prefsOk]);
   // Ordem sempre a do registo — a tabela não dança conforme a ordem do clique.
-  const colsAtivas = useMemo(() => COLS.filter((c) => colsSel.includes(c.key)), [colsSel]);
+  const colsDoTipo = useMemo(() => COLS.filter((c) => tipo === "receber" || !SO_RECEBER.has(c.key)), [tipo]);
+  const colsAtivas = useMemo(() => colsDoTipo.filter((c) => colsSel.includes(c.key)), [colsSel, colsDoTipo]);
 
   // ── Dados ───────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -297,6 +317,7 @@ export default function TelaTitulosNavy({ tipo }: { tipo: Tipo }) {
     let rs = rows ?? [];
     if (empresaSel) rs = rs.filter((r) => r.empresa === empresaSel);
     if (statusSel) rs = rs.filter((r) => (r.status_titulo ?? "") === statusSel);
+    if (conferenciaSel) rs = rs.filter((r) => (r.conferencia ?? "") === conferenciaSel);
     if (horizSel.length && modo === "aberto")
       rs = rs.filter((r) => horizSel.includes(horizonteDe(r, hoje, amanha, d7, d30)));
     const n = q.trim().toLowerCase();
@@ -304,7 +325,7 @@ export default function TelaTitulosNavy({ tipo }: { tipo: Tipo }) {
       [r.contraparte, r.numero_documento, r.numero_documento_fiscal, r.numero_pedido, r.categoria, r.projeto, r.observacao]
         .some((v) => (v ?? "").toLowerCase().includes(n)));
     return rs;
-  }, [rows, empresaSel, statusSel, horizSel, modo, q, hoje, amanha, d7, d30]);
+  }, [rows, empresaSel, statusSel, conferenciaSel, horizSel, modo, q, hoje, amanha, d7, d30]);
 
   // ── Resumo (a mesma regra da API, sobre o que está filtrado) ────────────
   const resumo = useMemo(() => {
@@ -437,6 +458,7 @@ export default function TelaTitulosNavy({ tipo }: { tipo: Tipo }) {
 
   const celsTitulo = useCallback((r: Row) => colsAtivas.map((c) => {
     if (c.key === "status_titulo") { const s = statusDe(r.status_titulo); return cPill(s.label, s.tom); }
+    if (c.key === "conferencia") { const k = conferenciaDe(r.conferencia); return cPill(k.label, k.tom); }
     if (c.key === "categoria") return cTexto(r.categoria || "—", { sub: r.tem_rateio ? `rateio: ${r.categorias_rateio ?? ""}` : undefined });
     if (c.key === "contraparte") return cTexto(r.contraparte || "—");
     const t = c.texto(r);
@@ -491,19 +513,31 @@ export default function TelaTitulosNavy({ tipo }: { tipo: Tipo }) {
             filhos: lr.map((r) => {
               const dias = r.dias_para_vencer;
               const doc = r.numero_documento_fiscal ? `NF ${r.numero_documento_fiscal}` : (r.numero_documento || "Título");
+              // Só a conta nascida no painel e ainda sem título do Omie se apaga daqui.
+              const apagavel = tipo === "receber" && r.origem_registro === "painel" && !r.codigo_lancamento_omie && r.id;
+              const diverg = r.conferencia === "divergente" ? fmtDiverg(r) : "";
               return {
-                id: `t:${r.empresa}:${r.codigo_lancamento_omie}`,
+                id: `t:${r.empresa}:${r.id ?? r.codigo_lancamento_omie}`,
                 nome: `${doc}${r.tipo_documento ? ` · ${r.tipo_documento.toLowerCase()}` : ""}`,
-                sub: `venc. ${ddmm(r.vencimento)}${dias != null && dias !== 0 && r.em_aberto ? ` · ${dias > 0 ? "+" : "−"}${Math.abs(dias)}d` : ""}${r.numero_parcela ? ` · parc. ${r.numero_parcela}` : ""}`,
-                title: r.observacao ?? undefined,
+                sub: `venc. ${ddmm(r.vencimento)}${dias != null && dias !== 0 && r.em_aberto ? ` · ${dias > 0 ? "+" : "−"}${Math.abs(dias)}d` : ""}${r.numero_parcela ? ` · parc. ${r.numero_parcela}` : ""}${diverg ? ` · ${diverg}` : ""}`,
+                title: [r.observacao, diverg].filter(Boolean).join("\n") || undefined,
                 cels: celsTitulo(r),
+                acao: apagavel ? (
+                  <button type="button" disabled={excluindo === r.id} title="Excluir esta conta (só existe no painel)"
+                    onClick={() => excluir(r)}
+                    style={{ fontSize: 11, padding: "2px 8px", borderRadius: 999, cursor: "pointer",
+                             border: "1px solid var(--ww-border-strong)", background: "transparent", color: "var(--ww-crit-text)" }}>
+                    {excluindo === r.id ? "excluindo…" : "excluir"}
+                  </button>
+                ) : undefined,
               };
             }),
           };
         }),
       };
     });
-  }, [modo, hoje, amanha, d7, d30, rotuloContra, celsSoma, celsTitulo]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [modo, hoje, amanha, d7, d30, rotuloContra, celsSoma, celsTitulo, tipo, excluindo]);
 
   /* Hoje abre sempre; vencidos só quando cabe no olho — com centenas de
      fornecedores atrasados, abrir por padrão empurrava o resto da agenda
@@ -511,6 +545,27 @@ export default function TelaTitulosNavy({ tipo }: { tipo: Tipo }) {
   const nVencidos = useMemo(() => new Set(base.filter((r) => horizonteDe(r, hoje, amanha, d7, d30) === "vencidos")
     .map((r) => r.contraparte)).size, [base, hoje, amanha, d7, d30]);
   const abertosIniciais = modo === "aberto" ? ["g:hoje", ...(nVencidos <= 8 ? ["g:vencidos"] : [])] : [];
+
+  async function excluir(r: Row) {
+    if (!r.id || !window.confirm(`Excluir a conta de ${brl(num(r.valor_documento))} de ${r.contraparte ?? "—"} (venc. ${ddmm(r.vencimento)})?`)) return;
+    setExcluindo(r.id);
+    try {
+      const res = await fetch("/api/financeiro/titulos/excluir", { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tipo, id: r.id }) });
+      const j = await res.json();
+      if (!res.ok) throw new Error(j.error ?? `HTTP ${res.status}`);
+      setRefresh((n) => n + 1);
+    } catch (e) { setErro((e as Error).message); }
+    finally { setExcluindo(null); }
+  }
+
+  /* Contagem por estado de conferência — os chips só aparecem com o que existe. */
+  const conferencias = useMemo(() => {
+    if (tipo !== "receber") return [];
+    const m = new Map<string, number>();
+    for (const r of rows ?? []) if (r.conferencia) m.set(r.conferencia, (m.get(r.conferencia) ?? 0) + 1);
+    return ["divergente", "pendente", "so_painel", "so_omie", "ok"].filter((k) => m.has(k)).map((k) => ({ k, n: m.get(k)! }));
+  }, [rows, tipo]);
 
   async function sincronizar() {
     if (!window.confirm("Disparar o sync financeiro do Omie agora (master_finance_diaria)?\n\nLeva alguns minutos; a tela atualiza ao recarregar.")) return;
@@ -531,7 +586,7 @@ export default function TelaTitulosNavy({ tipo }: { tipo: Tipo }) {
       <CabecalhoTela
         area="Financeiro"
         titulo={tipo === "pagar" ? "Títulos a Pagar" : "Títulos a Receber"}
-        sub={<>finance.v_titulos_omie · natureza {tipo === "pagar" ? "P" : "R"} · todas as empresas · agenda por vencimento
+        sub={<>{tipo === "pagar" ? "finance.v_titulos_omie · natureza P" : "finance.v_receber · contas do painel + Omie conferido"} · todas as empresas · agenda por vencimento
           {sync && <span style={{ marginLeft: 8, color: "var(--ww-accent-text)" }}>· {sync}</span>}</>}
         acoes={<>
           <BotaoTela onClick={() => setNovoAberto(true)}>+ Nova conta</BotaoTela>
@@ -554,6 +609,10 @@ export default function TelaTitulosNavy({ tipo }: { tipo: Tipo }) {
         ))}
         {statusChips.map((s) => (
           <ChipFiltro key={s} ativo={statusSel === s} onClick={() => setStatusSel(statusSel === s ? "" : s)}>{statusDe(s).label}</ChipFiltro>
+        ))}
+        {conferencias.map(({ k, n }) => (
+          <ChipFiltro key={k} ativo={conferenciaSel === k} title={conferenciaDe(k).dica}
+            onClick={() => setConferenciaSel(conferenciaSel === k ? "" : k)}>{conferenciaDe(k).label} · {n.toLocaleString("pt-BR")}</ChipFiltro>
         ))}
         {empresas.length > 1 && (<>
           <ChipFiltro ativo={!empresaSel} onClick={() => setEmpresaSel("")}>Todas</ChipFiltro>
@@ -595,7 +654,7 @@ export default function TelaTitulosNavy({ tipo }: { tipo: Tipo }) {
               <button type="button" onClick={() => setColunasAberto((v) => !v)} style={{
                 height: 32, padding: "0 12px", borderRadius: 9, fontSize: 12.5, cursor: "pointer", background: "transparent",
                 border: "1px solid var(--ww-border-strong)", color: "var(--ww-text-2)",
-              }}>Colunas · {colsSel.length}/{COLS.length}</button>
+              }}>Colunas · {colsAtivas.length}/{colsDoTipo.length}</button>
               {colunasAberto && (<>
                 <div style={{ position: "fixed", inset: 0, zIndex: 30 }} onClick={() => setColunasAberto(false)} />
                 <div style={{
@@ -611,7 +670,7 @@ export default function TelaTitulosNavy({ tipo }: { tipo: Tipo }) {
                     <div key={g} style={{ marginBottom: 10 }}>
                       <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: ".06em", color: "var(--ww-text-faint)", marginBottom: 4 }}>{g}</div>
                       <div style={{ display: "grid", gridTemplateColumns: "repeat(3,minmax(0,1fr))", gap: "2px 12px" }}>
-                        {COLS.filter((c) => c.grupo === g).map((c) => (
+                        {colsDoTipo.filter((c) => c.grupo === g).map((c) => (
                           <label key={c.key} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "var(--ww-text-2)", cursor: "pointer" }}>
                             <input type="checkbox" checked={colsSel.includes(c.key)}
                               onChange={() => setColsSel((cur) => (cur.includes(c.key) ? cur.filter((k) => k !== c.key) : [...cur, c.key]))} />

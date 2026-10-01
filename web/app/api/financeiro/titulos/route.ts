@@ -102,6 +102,17 @@ export type TituloRow = {
   ret_csll: string | null;
   ret_inss: string | null;
   ret_iss: string | null;
+
+  // ── Só em receber (finance.v_receber, desde 01/10/26) ───────────────────
+  /** Id da linha em finance.receber — a fonte da verdade do receber. */
+  id?: string | null;
+  /** De onde a linha nasceu: 'painel' (nossa) ou 'omie' (veio do sync). */
+  origem_registro?: "painel" | "omie" | null;
+  /** ok · divergente · pendente · so_painel · so_omie */
+  conferencia?: string | null;
+  divergencias?: Record<string, { painel: unknown; omie: unknown }> | null;
+  /** Ligada a um título do Omie que já não aparece no sync. */
+  omie_ausente?: boolean | null;
 };
 
 /* Todos os campos do titulo. A fonte passou de finance.v_titulos (que le
@@ -126,6 +137,12 @@ const COLS =
   // aparecia na tela antiga mas nunca era pedido, por isso vinha sempre vazio.
   "cod_titulo, cod_int_titulo, num_titulo, cod_contrato, cod_os, status, status_pago_d, " +
   "info_h_inc, info_h_alt, ret_ir, ret_pis, ret_cofins, ret_csll, ret_inss, ret_iss";
+
+/* Receber lê finance.v_receber desde 01/10/26: as contas a receber nascem no
+   painel (finance.receber) e o Omie entra conferido, sem duplicar
+   (finance.conciliar_receber_omie, pg_cron 30 min). Mesmos nomes de coluna da
+   v_titulos_omie, mais a conferência. Pagar continua no Omie. */
+const COLS_RECEBER = COLS + ", id, origem_registro, conferencia, divergencias, omie_ausente";
 
 function num(v: number | string | null): number {
   const n = Number(v ?? 0);
@@ -172,7 +189,9 @@ export async function GET(req: Request) {
   const MAX_ROWS = 30_000;
   const rows: TituloRow[] = [];
   for (let offset = 0; offset < MAX_ROWS; offset += PAGE) {
-    let q = admin.from("v_titulos_omie").select(COLS).eq("tipo", tipo);
+    let q = tipo === "receber"
+      ? admin.from("v_receber").select(COLS_RECEBER)
+      : admin.from("v_titulos_omie").select(COLS).eq("tipo", tipo);
     if (modo === "aberto") {
       q = q.in("status_titulo", ABERTO_STATUS);
     } else {
@@ -181,9 +200,9 @@ export async function GET(req: Request) {
     }
     const { data, error } = await q
       .order("vencimento", { ascending: true, nullsFirst: false })
-      .order("codigo_lancamento_omie", { ascending: true })
+      .order(tipo === "receber" ? "id" : "codigo_lancamento_omie", { ascending: true })
       .range(offset, offset + PAGE - 1);
-    if (error) return NextResponse.json({ error: `v_titulos_omie: ${error.message}` }, { status: 500 });
+    if (error) return NextResponse.json({ error: `${tipo === "receber" ? "v_receber" : "v_titulos_omie"}: ${error.message}` }, { status: 500 });
     const batch = (data ?? []) as unknown as TituloRow[];
     rows.push(...batch);
     if (batch.length < PAGE) break;

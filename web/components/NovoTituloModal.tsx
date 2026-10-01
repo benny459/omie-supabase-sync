@@ -1,8 +1,8 @@
 "use client";
 
-// Modal "Nova conta" (a pagar ou a receber). Grava no OMIE via
-// /api/financeiro/titulos/incluir e o espelho local faz a linha aparecer
-// na lista logo após criar.
+// Modal "Nova conta" (a pagar ou a receber) via /api/financeiro/titulos/incluir.
+// A pagar grava no OMIE (e espelha aqui); a receber grava só no painel
+// (finance.receber, desde 01/10/26) — o Omie não recebe nada.
 
 import { useEffect, useRef, useState } from "react";
 
@@ -235,7 +235,7 @@ export default function NovoTituloModal({
               Nova conta a {tipo === "pagar" ? "pagar" : "receber"}
             </h3>
             <p className="text-[11px] text-ww-textMuted mt-0.5">
-              Grava no Omie e aparece aqui na hora.
+              {tipo === "pagar" ? "Grava no Omie e aparece aqui na hora." : "Grava no painel (não vai ao Omie). Com pedido ou NF, é conferida com o título que o Omie criar ao faturar."}
             </p>
           </div>
           <button onClick={onClose} className="text-ww-textFaint hover:text-ww-text text-xl leading-none">×</button>
@@ -397,7 +397,7 @@ export default function NovoTituloModal({
             ))}
           </div>
           <p className="text-[10px] text-ww-textFaint mt-2">
-            Valor preenchido vai ao Omie já marcado como retido. Em branco não viaja.
+            {tipo === "pagar" ? "Valor preenchido vai ao Omie já marcado como retido. Em branco não viaja." : "Valor preenchido fica guardado na conta como retido."}
           </p>
         </Secao>
 
@@ -407,13 +407,13 @@ export default function NovoTituloModal({
         </div>
 
         {err && <div className="text-[12px] text-rose-600 bg-rose-500/10 border border-rose-500/30 rounded-md px-3 py-2">{err}</div>}
-        {ok && <div className="text-[12px] text-emerald-600 bg-emerald-500/10 border border-emerald-500/30 rounded-md px-3 py-2">✓ Conta criada no Omie e espelhada aqui.</div>}
+        {ok && <div className="text-[12px] text-emerald-600 bg-emerald-500/10 border border-emerald-500/30 rounded-md px-3 py-2">✓ {tipo === "pagar" ? "Conta criada no Omie e espelhada aqui." : "Conta criada no painel."}</div>}
 
         <div className="flex justify-end gap-2 pt-1">
           <button onClick={onClose} className="px-3 py-1.5 text-[12px] font-medium text-ww-textMuted hover:bg-ww-bg rounded-md transition">Cancelar</button>
           <button onClick={salvar} disabled={salvando || ok}
             className="px-4 py-1.5 text-[12px] font-semibold text-white bg-ww-accent hover:opacity-90 rounded-md shadow-sm transition disabled:opacity-40">
-            {salvando ? "Gravando no Omie…" : "Criar conta"}
+            {salvando ? (tipo === "pagar" ? "Gravando no Omie…" : "Gravando…") : "Criar conta"}
           </button>
         </div>
       </div>

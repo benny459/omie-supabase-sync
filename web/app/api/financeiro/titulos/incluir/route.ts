@@ -1,8 +1,8 @@
-// POST /api/financeiro/titulos/incluir — cadastra um título no OMIE (write-back)
-// e espelha imediatamente em finance.contas_pagar/receber pra aparecer na tela
-// sem esperar o próximo ciclo de sync. O Omie continua sendo a fonte da verdade
-// enquanto a migração não termina — por isso o insert local só acontece DEPOIS
-// do Omie confirmar com codigo_lancamento_omie.
+// POST /api/financeiro/titulos/incluir
+//  · pagar   — cadastra no OMIE (write-back) e espelha em finance.contas_pagar
+//              logo depois do Omie confirmar com codigo_lancamento_omie.
+//  · receber — desde 01/10/26 grava SÓ em finance.receber (a nossa fonte da
+//              verdade); o Omie não recebe nada daqui. Ver sql/20.
 //
 // Credenciais por empresa: OMIE_APP_KEY_<SIGLA> / OMIE_APP_SECRET_<SIGLA>.
 // Hoje só SF está na Vercel — outras empresas retornam erro explicando isso.
@@ -80,6 +80,14 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "data_vencimento deve ser YYYY-MM-DD" }, { status: 400 });
   }
 
+  const previsaoISO = body.data_previsao && /^\d{4}-\d{2}-\d{2}$/.test(body.data_previsao)
+    ? body.data_previsao : body.data_vencimento;
+
+  /* Receber nasce no NOSSO sistema desde 01/10/26 (finance.receber) e não vai
+     ao Omie. Com pedido/NF/chave fica 'pendente' até a conciliação achar o
+     título que o Omie criar ao faturar; sem documento é conta só do painel. */
+  if (tipo === "receber") return incluirReceber(body, empresa, previsaoISO, perms.id ?? null);
+
   const appKey = process.env[`OMIE_APP_KEY_${empresa}`];
   const appSecret = process.env[`OMIE_APP_SECRET_${empresa}`];
   if (!appKey || !appSecret) {
@@ -87,9 +95,6 @@ export async function POST(req: Request) {
       error: `Credencial Omie da empresa ${empresa} não configurada na Vercel (OMIE_APP_KEY_${empresa}). Por ora só SF cadastra.`,
     }, { status: 422 });
   }
-
-  const previsaoISO = body.data_previsao && /^\d{4}-\d{2}-\d{2}$/.test(body.data_previsao)
-    ? body.data_previsao : body.data_vencimento;
   const integrId = `painel-${Date.now()}`;
 
   const param: Record<string, unknown> = {
@@ -205,4 +210,50 @@ export async function POST(req: Request) {
     codigo_lancamento_omie: codigoOmie,
     espelho_local: upErr ? `falhou (${upErr.message}) — aparece no próximo sync` : "ok",
   });
+}
+
+const iso = (v: string | null | undefined) => (v && /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : null);
+const vazio = (v: string | null | undefined) => (v ?? "").trim() || null;
+
+async function incluirReceber(body: Body, empresa: string, previsaoISO: string, userId: string | null) {
+  const admin = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    { auth: { persistSession: false }, db: { schema: "finance" } },
+  );
+  const pedido = vazio(body.numero_pedido), nf = vazio(body.numero_documento_fiscal), chave = vazio(body.chave_nfe);
+
+  // O que o formulário manda e não tem coluna própria fica guardado, não se perde.
+  const extras: Record<string, unknown> = {};
+  if (body.codigo_tipo_documento) extras.codigo_tipo_documento = body.codigo_tipo_documento;
+  if (body.id_origem) extras.id_origem = body.id_origem;
+  if (iso(body.data_entrada)) extras.data_entrada = body.data_entrada;
+  for (const k of ["pis", "cofins", "csll", "ir", "iss", "inss"] as const) {
+    const v = Number(body[`valor_${k}`] ?? 0);
+    if (v > 0) extras[`valor_${k}`] = v;
+  }
+
+  const { data, error } = await admin.from("receber").insert({
+    empresa,
+    codigo_cliente_omie: body.codigo_cliente_fornecedor,
+    numero_documento: vazio(body.numero_documento),
+    numero_parcela: vazio(body.numero_parcela),
+    numero_pedido: pedido,
+    numero_documento_fiscal: nf,
+    chave_nfe: chave,
+    emissao: iso(body.data_emissao),
+    vencimento: body.data_vencimento,
+    previsao: previsaoISO,
+    valor: body.valor_documento,
+    codigo_categoria: body.codigo_categoria,
+    codigo_projeto: body.codigo_projeto ? String(body.codigo_projeto) : null,
+    id_conta_corrente: body.id_conta_corrente,
+    observacao: vazio(body.observacao),
+    extras: Object.keys(extras).length ? extras : null,
+    origem: "painel",
+    conferencia: pedido || nf || chave ? "pendente" : "so_painel",
+    created_by: userId,
+  }).select("id, conferencia").single();
+  if (error) return NextResponse.json({ error: `Não gravou: ${error.message}` }, { status: 500 });
+  return NextResponse.json({ ok: true, id: data.id, conferencia: data.conferencia });
 }
