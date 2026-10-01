@@ -52,6 +52,8 @@ const STATUS: Record<string, { label: string; tom: Tom }> = {
   "PAGO":       { label: "Pago",       tom: "ok" },
   "RECEBIDO":   { label: "Recebido",   tom: "ok" },
   "CANCELADO":  { label: "Cancelado",  tom: "off" },
+  // previsão vinda de pedido de compra do painel (finance.v_pagar_previsto)
+  "PREVISTO":   { label: "Previsto (PC)", tom: "violet" },
 };
 const statusDe = (s: string | null) => STATUS[s ?? ""] ?? { label: s || "—", tom: "off" as Tom };
 

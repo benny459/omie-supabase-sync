@@ -208,6 +208,16 @@ export async function GET(req: Request) {
     if (batch.length < PAGE) break;
   }
 
+  /* Pagar: previsões dos pedidos de compra do painel (finance.v_pagar_previsto,
+     sql/29) entram como "Previsto (PC nnnn)" até a conta real chegar do Omie —
+     aí são substituídas (não duplicam). */
+  if (tipo === "pagar" && modo !== "baixado") {
+    let pq = admin.from("v_pagar_previsto").select("*");
+    if (modo !== "aberto") pq = pq.gte("vencimento", de!).lte("vencimento", ate!);
+    const { data: prev, error: pe } = await pq.order("vencimento", { ascending: true });
+    if (!pe) rows.push(...((prev ?? []) as unknown as TituloRow[]));
+  }
+
   // ── Agregados (sempre sobre o conjunto devolvido) ──────────────────────
   const hoje = new Date().toLocaleDateString("sv-SE", { timeZone: "America/Sao_Paulo" }); // YYYY-MM-DD
   const d7 = new Date(Date.now() + 7 * 86_400_000).toLocaleDateString("sv-SE", { timeZone: "America/Sao_Paulo" });
