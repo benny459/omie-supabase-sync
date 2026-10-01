@@ -214,7 +214,7 @@ function AbaRevisao({ d, mudou, avisar }: { d: { familias: Familia[]; revisao_co
         : <button className="btn sm pri" onClick={async () => { try { await postar("/api/estoque/familias", { acao: "concluir_revisao" }); avisar("Revisão concluída", "ok"); mudou(); } catch (e) { avisar((e as Error).message, "crit"); } }}>Concluir revisão de famílias</button>)}
     </div>
     <section className="kpis">
-      <div className="kpi hero" style={{ cursor: "default" }}><div className="r">Itens para revisar</div><div className="v">{q((sug ?? []).filter((s) => s.status === "pendente").length)}</div><div className="s">sem família ou em família que não é material</div></div>
+      <div className="kpi hero" style={{ cursor: "default" }}><div className="r">Itens para revisar</div><div className="v">{q((sug ?? []).filter((s) => s.status === "pendente").length)}</div><div className="s">sem família, em família que não é material, ou fora do lugar</div></div>
       {(["alta", "média", "baixa", "nenhuma"] as const).map((b) => (
         <button key={b} className="kpi" onClick={() => { setFBanda(b); setFStatus("pendente"); }}>
           <div className="r">Confiança {b === "nenhuma" ? "— sem sugestão" : b}</div><div className="v">{q(contaB(b))}</div>
