@@ -740,7 +740,7 @@ export default function FolhaPedido({
                     } catch (e) { toast((e as Error).message, true); }
                   }}>✓ Aprovar pedido</button>
                 )}
-                {D.id && !isRC && ["15", "40"].includes(D.etapa) && <button className="btn" onClick={() => onReceber(D.id!)}>📦 Registrar recebimento</button>}
+                {D.id && !isRC && (["15", "40"].includes(D.etapa) || (D.etapa === "10" && D.origem === "omie")) && <button className="btn" onClick={() => onReceber(D.id!)}>📦 Registrar recebimento</button>}
                 {D.id && <button className="btn ghost" onClick={() => onDuplicar(D.id!)}>⧉ Duplicar</button>}
                 {D.id && !isRC && <button className="btn ghost" onClick={() => onImprimir(D.id!)}>🖨 Imprimir / PDF para fornecedor</button>}
               </div></section>

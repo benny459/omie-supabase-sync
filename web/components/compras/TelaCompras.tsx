@@ -258,7 +258,11 @@ export default function TelaCompras() {
 
   const projetos = useMemo(() => [...new Set(todos.map((p) => p.proj).filter(Boolean) as string[])].sort(), [todos]);
   const compradores = useMemo(() => [...new Set(todos.map((p) => p.comprador).filter(Boolean) as string[])].sort(), [todos]);
-  const candidatosReceb = todos.filter((p) => p.tipo === "PC" && ["15", "40"].includes(p.etapa) && (p.origem === "omie" || p.aprov === "aprovado"));
+  /* Recebe: pedido em Aprovação/Faturado; também em "Pedido de Compra" quando
+     a NF já chegou pela Focus ou ele já está aprovado. Do painel, só aprovado. */
+  const podeReceber = (p: PedidoLista) => p.tipo === "PC" && (["15", "40"].includes(p.etapa) ||
+    (p.etapa === "10" && (!!nfSug[p.id] || p.aprov === "aprovado")));
+  const candidatosReceb = todos.filter((p) => podeReceber(p) && (p.origem === "omie" || p.aprov === "aprovado"));
 
   return (
     <div className="cmp">
@@ -442,7 +446,7 @@ export default function TelaCompras() {
         if (p.etapa === "20") it.push(["gerar", "Gerar Pedido de Compra"]);
         if (p.etapa === "10") it.push(["solic", "Solicitar aprovação"]);
         if (["10", "15"].includes(p.etapa) && p.tipo === "PC" && p.aprov !== "aprovado") it.push(["aprovar", "Aprovar"]);
-        if (["15", "40"].includes(p.etapa) && p.tipo === "PC") it.push(["receb", nfSug[p.id] ? "Registrar recebimento (NF chegou)" : "Registrar recebimento"]);
+        if (podeReceber(p)) it.push(["receb", nfSug[p.id] ? "Registrar recebimento (NF chegou)" : "Registrar recebimento"]);
         if (p.etapa === "60") it.push(["conf", "Marcar como conferido"]);
         if (p.tipo === "PC") it.push(["print", "Imprimir / PDF para fornecedor"]);
         it.push(["cancel", p.tipo === "RC" ? "Cancelar requisição" : "Cancelar pedido", p.origem !== "painel"]);

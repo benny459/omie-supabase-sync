@@ -31,6 +31,8 @@ export default async function ImprimirPedido({ params }: { params: Promise<{ id:
     p.parc ? admin.schema("finance").from("parcelas").select("descricao").eq("codigo", p.parc).maybeSingle() : Promise.resolve({ data: null }),
   ]);
   const e = (emp ?? {}) as Empresa;
+  // O Omie grava a cidade como "BARUERI (SP)" — a UF já vai ao lado.
+  if (e.cidade) e.cidade = e.cidade.replace(/\s*\([A-Z]{2}\)\s*$/, "");
   const f = (forn ?? {}) as Cliente;
   const t = totais({ itens: p.itens ?? [], frete: p.frete ?? {} });
   const fr = p.frete ?? {};
@@ -66,7 +68,7 @@ export default async function ImprimirPedido({ params }: { params: Promise<{ id:
             <div className="rot">Fornecedor</div>
             <div className="forte">{p.forn || "—"}</div>
             <div>CNPJ/CPF {p.cnpj || f.cnpj_cpf || "—"}{f.inscricao_estadual ? ` · IE ${f.inscricao_estadual}` : ""}</div>
-            <div>{linha([f.endereco, f.endereco_numero].filter(Boolean).join(", "), f.complemento, f.bairro, f.cidade, f.cep && `CEP ${f.cep}`)}</div>
+            <div>{linha([f.endereco, f.endereco_numero].filter(Boolean).join(", "), f.complemento, f.bairro, f.cidade?.replace(/\s*\([A-Z]{2}\)\s*$/, "") && `${f.cidade.replace(/\s*\([A-Z]{2}\)\s*$/, "")}/${f.estado ?? ""}`, f.cep && `CEP ${f.cep}`)}</div>
             <div>{linha(f.telefone1_numero && `(${f.telefone1_ddd ?? ""}) ${f.telefone1_numero}`, p.contato && `Contato: ${p.contato}`)}</div>
           </div>
           <div className="bloco">
@@ -149,7 +151,7 @@ const CSS = `
     box-shadow: 0 18px 50px rgba(15,30,70,.18); border-radius: 6px; box-sizing: border-box; font-size: 10.5pt; }
   .topo { display: flex; justify-content: space-between; gap: 16px; padding-bottom: 12px; border-bottom: 3px solid #1B2F7A; }
   .emp { display: flex; gap: 12px; align-items: flex-start; }
-  .logo { width: 44px; height: 44px; }
+  .logo { height: 30px; width: auto; margin-top: 4px; }
   .razao { font-size: 14pt; font-weight: 750; color: #1B2F7A; letter-spacing: -.01em; }
   .sub { font-size: 8.5pt; color: #5D6778; margin-top: 2px; }
   .caixa { min-width: 190px; text-align: right; background: linear-gradient(180deg,#2F6BFF,#1B2F7A); color: #fff; border-radius: 10px; padding: 10px 14px; }
