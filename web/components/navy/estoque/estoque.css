@@ -223,3 +223,20 @@
 .est .inv-barra { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; padding: 10px 14px; border-radius: 12px; font-size: 12.5px; }
 .est .codigo-inp { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: .25em; text-transform: uppercase; width: 150px; }
 .est .ajustado { color: var(--ww-accent-text); font-weight: 600; }
+
+/* ── Cadastros / formulário de item ─────────────────────────────────────────── */
+.est .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.est .form-grid { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 12px; }
+.est .form-grid label.f { display: flex; flex-direction: column; gap: 6px; font-size: 12px; font-weight: 600; color: var(--ww-text-2); min-width: 0; }
+.est .form-grid .inp { width: 100%; height: 36px; }
+.est .form-grid textarea.inp { height: 70px; padding: 10px 12px; resize: vertical; font-family: inherit; }
+.est .s2 { grid-column: span 2; } .est .s3 { grid-column: span 3; } .est .s4 { grid-column: span 4; }
+.est .s6 { grid-column: span 6; } .est .s8 { grid-column: span 8; } .est .s12 { grid-column: span 12; }
+@media (max-width: 900px) { .est .s2, .est .s3 { grid-column: span 6; } .est .s4, .est .s6, .est .s8 { grid-column: span 12; } }
+@media (max-width: 560px) { .est .s2, .est .s3 { grid-column: span 12; } }
+/* rodapé da lista: botões não sobrepõem o link "tela clássica" (fixo no canto) */
+.est .tfoot { flex-wrap: wrap; align-items: center; }
+.est { padding-bottom: 40px; } /* o link "tela clássica" sobe 36px sobre o fim da página: deixa espaço livre para ele */
+.est .busca-ativa { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin: 0 16px 10px; padding: 8px 12px; border-radius: 10px;
+  background: var(--ww-warn-soft); color: var(--ww-warn-text); font-size: 12.5px; font-weight: 600; }
+.est .busca-ativa button { border: 0; background: none; color: inherit; font-weight: 700; text-decoration: underline; }

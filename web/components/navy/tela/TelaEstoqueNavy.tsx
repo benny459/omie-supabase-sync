@@ -17,7 +17,7 @@ import "../estoque/estoque.css";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
-  alarme, alertasLista, baixarCSV, cobertura, consumoDia, dias, hoje, nomeLocal, normMov, parado, situacao, somaDias,
+  alarme, alertasLista, baixarCSV, textoBusca, cobertura, consumoDia, dias, hoje, nomeLocal, normMov, parado, situacao, somaDias,
   temAlarme, valorItem, type ItemEstoque, type MovEstoque, type ParDup,
 } from "@/lib/estoque";
 import {
@@ -107,7 +107,7 @@ export default function TelaEstoqueNavy({ clienteInicial }: { clienteInicial?: s
     const f = (FILTROS.find((x) => x.k === st.filtro) ?? FILTROS[1]).f, t = st.busca.trim().toLowerCase();
     let rs = itens.filter(f);
     if (idsCliente) rs = rs.filter((p) => idsCliente.has(p.n_cod_prod));
-    if (t) rs = rs.filter((p) => `${p.descricao} ${p.codigo}`.toLowerCase().includes(t));
+    if (t) rs = rs.filter((p) => textoBusca(p).toLowerCase().includes(t));
     const col = (COLS.find((c) => c.k === st.ordem[0]) ?? COLS[8]).v, d = st.ordem[1];
     return [...rs].sort((a, b) => { const x = col(a), y = col(b); return (x > y ? 1 : x < y ? -1 : 0) * d; });
   }, [itens, st.filtro, st.busca, st.ordem, idsCliente]);
@@ -132,6 +132,10 @@ export default function TelaEstoqueNavy({ clienteInicial }: { clienteInicial?: s
         </div>
         <div className="goto" onClick={abrirPal} role="button" tabIndex={0} onKeyDown={(e) => e.key === "Enter" && abrirPal()}>
           <Lupa /><span>Ir para item — código, nome, nº do PC, cliente…</span><span className="kbd">⌘K</span>
+        </div>
+        <div className="filtros">
+          <button className="btn sm" onClick={() => router.push("/estoque/cadastros")}>Cadastros</button>
+          <button className="btn sm pri" onClick={() => router.push("/estoque/novo")}>+ Novo item</button>
         </div>
         <div className="seg" role="tablist">
           <button className={st.aba === "itens" ? "on" : ""} onClick={() => muda({ aba: "itens" })}>Itens</button>
@@ -194,8 +198,8 @@ function AbaItens({ itens, lista, st, muda, abrir, cliente, carregandoCliente, l
   const visiveis = lista.slice(0, st.limite);
 
   const csv = () => baixarCSV(`estoque-${hoje()}.csv`, [
-    ["Código", "Descrição", "Família", "Un", "Situação", "Saldo", "Pendente", "Reservado", "Consumo 90 d", "Cobertura (dias)", "Última mov.", "CMC", "Valor", "Locais"],
-    ...lista.map((p) => [p.codigo, p.descricao, p.familia ?? "", p.unidade, situacao(p)[0], p.saldo, p.pendente, p.reservado, p.consumo_90d,
+    ["Código novo", "Código Omie", "Descrição", "Família", "Un", "Situação", "Saldo", "Pendente", "Reservado", "Consumo 90 d", "Cobertura (dias)", "Última mov.", "CMC", "Valor", "Locais"],
+    ...lista.map((p) => [p.codigo_novo ?? "", p.codigo_omie ?? p.codigo, p.descricao, p.familia ?? "", p.unidade, situacao(p)[0], p.saldo, p.pendente, p.reservado, p.consumo_90d,
       cobertura(p) ?? "", p.ult_mov ?? "", p.cmc, Math.round(valorItem(p) * 100) / 100,
       p.locais.map((l) => `${nomeLocal(l.local)} ${l.saldo}`).join(" + ")]),
   ]);
@@ -230,6 +234,12 @@ function AbaItens({ itens, lista, st, muda, abrir, cliente, carregandoCliente, l
         <div style={{ padding: "0 16px 10px" }}>
           <span className="tag-x">Usados por: {cliente}{carregandoCliente ? " (carregando…)" : ""}
             <button onClick={limparCliente} aria-label="Tirar filtro de cliente">×</button></span>
+        </div>
+      )}
+      {st.busca.trim() && (
+        <div className="busca-ativa" role="status">
+          Filtrando por “{st.busca.trim()}” · {q(lista.length)} de {q(itens.length)} itens{org === "familia" ? ` em ${grupos.length} famílias` : ""}
+          <button onClick={() => muda({ busca: "", limite: 100 })}>limpar ✕</button>
         </div>
       )}
       {org === "familia" && semFamilia === itens.length && (
@@ -293,7 +303,7 @@ function LinhaItem({ p, abrir }: { p: ItemEstoque; abrir: (p: ItemEstoque) => vo
         <div className="prod"><Thumb />
           <div>
             <div className="n">{p.descricao}{p.duplicidade && <span className="dup">duplicidade?</span>}</div>
-            <div className="c">{p.codigo} · {p.locais.map((l) => nomeLocal(l.local)).join(" + ")}{p.familia ? ` · ${p.familia}` : ""}
+            <div className="c">{p.codigo_novo ? <><b style={{ color: "var(--ww-text-2)" }}>{p.codigo_novo}</b> · Omie {p.codigo_omie ?? p.codigo}</> : p.codigo} · {p.locais.map((l) => nomeLocal(l.local)).join(" + ")}{p.familia ? ` · ${p.familia}` : ""}
               {p.ajuste !== 0 && <span className="ajustado" title={`Omie ${q(p.saldo_omie)} · ajuste no painel ${p.ajuste > 0 ? "+" : ""}${q(p.ajuste)}`}> · ajustado</span>}</div>
           </div>
         </div>

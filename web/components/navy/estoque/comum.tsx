@@ -3,7 +3,7 @@
 /** Peças partilhadas da lista e da ficha do Estoque: dados em cache, pílula, miniatura e a paleta ⌘K. */
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { normItem, situacao, type ItemEstoque, type JanelaInventario, type ParDup, type Tom } from "@/lib/estoque";
+import { normItem, situacao, textoBusca, type ItemEstoque, type JanelaInventario, type ParDup, type Tom } from "@/lib/estoque";
 
 // ── Dados da lista (cache do módulo: lista ↔ ficha sem recarregar) ───────────
 type Pacote = { itens: ItemEstoque[]; dups: ParDup[]; admin: boolean };
@@ -195,8 +195,8 @@ export function PaletaEstoque({ itens, fechar, onItem, onPc, onCliente }: {
     const toks = sl.split(/\s+/).filter(Boolean);
     let its: ItemEstoque[];
     if (!sl) its = lerRecentes().map((id) => porId.get(id)).filter(Boolean).slice(0, 6) as ItemEstoque[];
-    else its = itens.filter((p) => { const h = `${p.descricao} ${p.codigo}`.toLowerCase(); return toks.every((t) => h.includes(t)); })
-      .sort((a, b) => Number(b.codigo.toLowerCase() === sl) - Number(a.codigo.toLowerCase() === sl)
+    else its = itens.filter((p) => { const h = textoBusca(p).toLowerCase(); return toks.every((t) => h.includes(t)); })
+      .sort((a, b) => Number(b.codigo.toLowerCase() === sl || (b.codigo_novo ?? "").toLowerCase() === sl) - Number(a.codigo.toLowerCase() === sl || (a.codigo_novo ?? "").toLowerCase() === sl)
         || Number(b.codigo.toLowerCase().startsWith(sl)) - Number(a.codigo.toLowerCase().startsWith(sl)) || b.n_mov - a.n_mov)
       .slice(0, 8);
     const ok = remoto.q === sl && sl.length >= 3;
@@ -248,7 +248,7 @@ export function PaletaEstoque({ itens, fechar, onItem, onPc, onCliente }: {
               <Thumb />
               <div className="sp">
                 <div style={{ fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}><Realce t={r.p.descricao} s={tok} /></div>
-                <div className="mini"><Realce t={r.p.codigo} s={s.trim()} /> · saldo {q(r.p.saldo)} {r.p.unidade.toLowerCase()}</div>
+                <div className="mini">{r.p.codigo_novo && <><b><Realce t={r.p.codigo_novo} s={s.trim()} /></b> · Omie </>}<Realce t={r.p.codigo} s={s.trim()} /> · saldo {q(r.p.saldo)} {r.p.unidade.toLowerCase()}</div>
               </div>
               <Pill t={st} tom={tm} />
             </>);

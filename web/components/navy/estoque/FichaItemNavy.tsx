@@ -119,7 +119,7 @@ function Conteudo({ f, aba, setAba, ir, recarregar }: {
 }) {
   const router = useRouter();
   const [sessao, setSessao] = useSessaoInv();
-  const [modal, setModal] = useState<null | "senha" | "ajuste" | { mesclar: ItemEstoque[] }>(null);
+  const [modal, setModal] = useState<null | "senha" | "ajuste" | "recodificar" | { mesclar: ItemEstoque[] }>(null);
   const [toast, avisar] = useToast();
   const [ocupado, setOcupado] = useState(false);
   const mesclado = f.item.mesclado_em != null;
@@ -180,10 +180,18 @@ function Conteudo({ f, aba, setAba, ir, recarregar }: {
             <Pill t={alarme(p)[0]} tom={alarme(p)[1]} />
             {temDup && <Pill t="possível duplicidade" tom="violet" />}
             {p.ajuste !== 0 && <Pill t="saldo ajustado no painel" tom="info" />}
+            {p.omie_status === "ok" && <Pill t="✓ no Omie" tom="ok" />}
+            {p.omie_status === "erro" && <Pill t={`Omie: erro — ${p.omie_erro ?? ""}`} tom="crit" title={p.omie_erro ?? undefined} />}
+            {p.n_cod_prod < 0 && p.omie_status !== "erro" && <Pill t="só no painel (ainda sem id do Omie)" tom="warn" />}
+            {!p.ativo && <Pill t="inativo" tom="off" />}
           </div>
           <div className="titulo-item">{p.descricao}</div>
           <div className="meta">
-            <span>Código {p.codigo}</span><span>{p.unidade}</span>{p.ncm && <span>NCM {p.ncm}</span>}<span>id Omie {p.n_cod_prod}</span>
+            {p.codigo_novo && <span style={{ fontWeight: 700, color: "var(--ww-text)" }}>Código {p.codigo_novo}</span>}
+            <span>Código Omie {p.codigo_omie ?? (p.n_cod_prod < 0 ? "—" : p.codigo)}</span>
+            {p.familia && <span>Família {p.familia}{p.familia_prefixo ? ` (${p.familia_prefixo})` : ""}</span>}
+            {p.codigos_antigos.length > 0 && <span title="Códigos anteriores (apelidos)">antes: {p.codigos_antigos.join(", ")}</span>}
+            <span>{p.unidade}</span>{p.ncm && <span>NCM {p.ncm}</span>}{p.n_cod_prod > 0 && <span>id Omie {p.n_cod_prod}</span>}
             {precos[0] && <span>Fornecedor principal: {precos[0].fornecedor}</span>}
           </div>
           <div className="stats">
@@ -207,7 +215,9 @@ function Conteudo({ f, aba, setAba, ir, recarregar }: {
             <button className="btn pri" onClick={pedirAjuste} disabled={mesclado}
               title={mesclado ? "Código mesclado — ajuste o principal" : sessao ? `Janela “${sessao.janela.nome}” · ${escopoTxt(sessao.janela.escopo, nomeLocal)}` : "Peça a senha de inventário ao Benny"}>
               Ajustar saldo{sessao ? "" : " 🔒"}</button>
-            <button className="btn" disabled title={EM_BREVE}>Definir alarme</button>
+            <button className="btn" onClick={() => router.push(`/estoque/${encodeURIComponent(p.codigo_novo ?? p.codigo)}/editar`)}>Editar cadastro</button>
+            <button className="btn" onClick={() => router.push(`/estoque/${encodeURIComponent(p.codigo_novo ?? p.codigo)}/editar`)}>{p.alarme_minimo != null ? "Editar alarme" : "Definir alarme"}</button>
+            {f.admin && p.codigo_novo && <button className="btn" onClick={() => setModal("recodificar")}>Recodificar…</button>}
             <button className="btn" onClick={() => setAba("auditoria")}>Auditoria{nA ? <> <span className="pill t-warn" style={{ padding: "0 7px" }}>{nA}</span></> : null}</button>
             <button className="btn" disabled title={EM_BREVE}>Pedir compra</button>
           </div>
@@ -234,6 +244,7 @@ function Conteudo({ f, aba, setAba, ir, recarregar }: {
       </div>
     </div>
     {modal === "senha" && <ModalSenha fechar={() => setModal(null)} ok={(s: SessaoInv) => { setSessao(s); setModal("ajuste"); }} />}
+    {modal === "recodificar" && <ModalRecodificar p={p} fechar={() => setModal(null)} ok={(c) => { setModal(null); avisar(`Novo código ${c} — o anterior virou apelido`, "ok"); invalidarItens(); ir(c); }} />}
     {modal === "ajuste" && sessao && <ModalAjuste p={p} sessao={sessao} fechar={() => setModal(null)}
       ok={() => { setModal(null); avisar("Saldo ajustado no painel", "ok"); recarregar(); }} />}
     {modal && typeof modal === "object" && <ModalMesclar itens={modal.mesclar} fechar={() => setModal(null)}
@@ -632,6 +643,38 @@ function SecaoAliases({ st, codigoDe }: { st: EstadoAliases; codigoDe: (id: numb
           </table>
         </div>
       )}
+    </div>
+  );
+}
+
+// ── Recodificar (admin): novo código da família escolhida; o anterior vira apelido ──
+function ModalRecodificar({ p, fechar, ok }: { p: ItemEstoque; fechar: () => void; ok: (codigo: string) => void }) {
+  const [fams, setFams] = useState<{ id: number; nome: string; prefixo: string; proximo: number; ativo: boolean; sistema: boolean }[]>([]);
+  const [fam, setFam] = useState(p.familia_id != null ? String(p.familia_id) : "");
+  const [erro, setErro] = useState<string | null>(null);
+  const [indo, setIndo] = useState(false);
+  useEffect(() => { fetch("/api/estoque/cadastro").then((r) => r.json()).then((j) => setFams((j.familias ?? []).filter((x: { ativo: boolean }) => x.ativo))).catch(() => {}); }, []);
+  const f = fams.find((x) => String(x.id) === fam);
+  return (
+    <div className="est-ov mid" onClick={fechar} role="dialog" aria-modal="true">
+      <div className="modal" onClick={(e) => e.stopPropagation()}>
+        <div className="mh"><div><div style={{ fontSize: 16, fontWeight: 700 }}>Recodificar {p.codigo_novo}</div>
+          <div className="mini" style={{ fontSize: 12, color: "var(--ww-text-muted)" }}>{p.descricao}</div></div><button className="x" onClick={fechar}>×</button></div>
+        <div className="mb">
+          <label className="f">Família do novo código
+            <select className="inp" value={fam} onChange={(e) => setFam(e.target.value)}>
+              <option value="">Escolha…</option>{fams.map((x) => <option key={x.id} value={x.id}>{x.nome} ({x.prefixo})</option>)}
+            </select></label>
+          {f && <div className="prev">Novo código: <b className="mono">{f.prefixo}{String(f.proximo).padStart(4, "0")}</b> · {p.codigo_novo} continua achando o item (apelido). O código do Omie não muda.</div>}
+          {erro && <div className="aviso t-crit">{erro}</div>}
+        </div>
+        <div className="mf"><button className="btn" onClick={fechar}>Cancelar</button>
+          <button className="btn pri" disabled={!fam || indo} onClick={async () => {
+            setIndo(true); setErro(null);
+            try { const r = await postar<{ resultado: { codigo: string } }>("/api/estoque/codigos", { acao: "recodificar", n_cod_prod: p.n_cod_prod, familia_id: Number(fam) }); ok(r.resultado.codigo); }
+            catch (e) { setErro((e as Error).message); } finally { setIndo(false); }
+          }}>Recodificar</button></div>
+      </div>
     </div>
   );
 }

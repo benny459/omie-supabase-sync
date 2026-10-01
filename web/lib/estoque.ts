@@ -23,6 +23,13 @@ export type ItemEstoque = {
   familia: string | null; codigo_familia: number | null;
   /** Se este código foi mesclado em outro (fica fora da lista; a ficha mostra o aviso). */
   mesclado_em: number | null; mesclado_em_codigo: string | null;
+  /** Painel: família com prefixo, código novo (F0001) e o do Omie ao lado; apelidos depois de recodificar. */
+  familia_id: number | null; familia_prefixo: string | null; familia_material: boolean | null;
+  codigo_novo: string | null; codigo_omie: string | null; codigos_antigos: string[];
+  cadastro_id: number | null; ean: string | null; preco_ref: number | null; local_padrao: string | null;
+  alarme_minimo: number | null; alarme_ponto_pedido: number | null; alarme_maximo: number | null;
+  foto_url: string | null; cadastro_obs: string | null; ativo: boolean;
+  omie_status: "nao_enviado" | "ok" | "erro" | "desligado" | null; omie_erro: string | null;
 };
 
 export type AjusteEstoque = {
@@ -79,6 +86,16 @@ export function normItem(r: Record<string, unknown>): ItemEstoque {
     ult_pc: (r.ult_pc as string) || null, duplicidade: !!r.duplicidade,
     familia: (r.familia as string) || null, codigo_familia: r.codigo_familia != null ? n(r.codigo_familia) : null,
     mesclado_em: r.mesclado_em != null ? n(r.mesclado_em) : null, mesclado_em_codigo: (r.mesclado_em_codigo as string) || null,
+    familia_id: r.familia_id != null ? n(r.familia_id) : null, familia_prefixo: (r.familia_prefixo as string) || null,
+    familia_material: r.familia_material == null ? null : !!r.familia_material,
+    codigo_novo: (r.codigo_novo as string) || null, codigo_omie: (r.codigo_omie as string) || null,
+    codigos_antigos: Array.isArray(r.codigos_antigos) ? (r.codigos_antigos as string[]) : [],
+    cadastro_id: r.cadastro_id != null ? n(r.cadastro_id) : null, ean: (r.ean as string) || null,
+    preco_ref: r.preco_ref != null ? n(r.preco_ref) : null, local_padrao: r.local_padrao != null ? String(r.local_padrao) : null,
+    alarme_minimo: r.alarme_minimo != null ? n(r.alarme_minimo) : null, alarme_ponto_pedido: r.alarme_ponto_pedido != null ? n(r.alarme_ponto_pedido) : null,
+    alarme_maximo: r.alarme_maximo != null ? n(r.alarme_maximo) : null, foto_url: (r.foto_url as string) || null,
+    cadastro_obs: (r.cadastro_obs as string) || null, ativo: r.ativo !== false,
+    omie_status: (r.omie_status as ItemEstoque["omie_status"]) ?? null, omie_erro: (r.omie_erro as string) || null,
   };
 }
 
@@ -131,8 +148,21 @@ export function situacao(p: ItemEstoque): [string, Tom] {
 }
 
 /** Alarme por peça chega na fase 2 (platform.estoque_alarme). Até lá: sem alarme. */
-export function alarme(_p: ItemEstoque): [string, Tom] { return ["sem alarme", "off"]; }
-export const temAlarme = (_p: ItemEstoque) => false;
+/** Alarme por peça (mínimo / ponto de pedido / máximo do cadastro do item no painel). */
+export const temAlarme = (p: ItemEstoque) => p.alarme_minimo != null;
+export function alarme(p: ItemEstoque): [string, Tom] {
+  if (!temAlarme(p)) return ["sem alarme", "off"];
+  const mn = p.alarme_minimo ?? 0, pp = p.alarme_ponto_pedido ?? mn, mx = p.alarme_maximo;
+  const NUM = new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 2 });
+  if (p.saldo <= mn) return [`abaixo do mín. ${NUM.format(mn)}`, "crit"];
+  if (p.saldo <= pp) return [`pedir (≤ ${NUM.format(pp)})`, "warn"];
+  if (mx != null && p.saldo > mx) return [`acima do máx. ${NUM.format(mx)}`, "violet"];
+  return ["alarme ok", "ok"];
+}
+/** Código para mostrar: o novo do painel (se já gerado) e o do Omie ao lado. */
+export const codigos = (p: ItemEstoque) => (p.codigo_novo ? `${p.codigo_novo} · Omie ${p.codigo_omie ?? p.codigo}` : p.codigo);
+/** Texto para busca: descrição + todos os códigos (Omie, novo, antigos). */
+export const textoBusca = (p: ItemEstoque) => [p.descricao, p.codigo, p.codigo_novo, p.codigo_omie, ...p.codigos_antigos].filter(Boolean).join(" ");
 
 /**
  * Sinais de auditoria que a LISTA consegue ver só com v_estoque_item (sem Kardex nem preços).

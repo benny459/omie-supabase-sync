@@ -8,7 +8,8 @@
 //   mesclas  — decisões de mesclagem ativas em que o item é principal ou secundário
 //   aliases  — "como os fornecedores chamam este item" (de-para do Compras, orders.compras_aliases)
 //   admin    — se quem vê pode mesclar/desfazer
-// [codigo] aceita o código do produto (deep link /estoque/3026006) ou o id do Omie.
+// [codigo] aceita o código do Omie (/estoque/3026006), o código novo do painel (/estoque/H0012),
+// um código antigo (apelido) ou o id (negativo para item criado no painel ainda sem id do Omie).
 
 import { NextResponse } from "next/server";
 import { orders, platform, quemEstoque, todas } from "@/lib/estoque-server";
@@ -25,7 +26,13 @@ export async function GET(_req: Request, { params }: { params: Promise<{ codigo:
     const db = orders();
     let { data: item, error } = await db.from("v_estoque_item").select("*").eq("codigo", cod).limit(1).maybeSingle();
     if (error) throw new Error(error.message);
-    if (!item && /^\d+$/.test(cod)) {
+    if (!item) {
+      // código novo do painel (F0001) ou um código antigo (apelido depois de recodificar)
+      const c = await platform().from("estoque_item_codigo").select("n_cod_prod").eq("codigo", cod.toUpperCase()).limit(1).maybeSingle();
+      if (c.data) ({ data: item, error } = await db.from("v_estoque_item").select("*").eq("n_cod_prod", c.data.n_cod_prod).limit(1).maybeSingle());
+      if (error) throw new Error(error.message);
+    }
+    if (!item && /^-?\d+$/.test(cod)) {
       ({ data: item, error } = await db.from("v_estoque_item").select("*").eq("n_cod_prod", cod).limit(1).maybeSingle());
       if (error) throw new Error(error.message);
     }
