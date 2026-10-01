@@ -253,9 +253,9 @@ export default function TelaCompras() {
         onDragStart={(e) => { e.dataTransfer.setData("text/plain", String(p.id)); setArrasto(String(p.id)); }}
         onDragEnd={() => setArrasto(null)}>
         <div className="l1">
-          <span className="no">{naColPc && (p.aprov === "aprovado"
-              ? <span className="badge-ap ok">✓ Aprovado</span> : <span className="badge-ap pend">Pendente</span>)}
-            {p.tipo === "RC" ? `Requisição Nº ${p.num}` : `Pedido Nº ${p.num}`}</span>
+          <span className="no"><b className="nro" title={p.tipo === "RC" ? `Requisição Nº ${p.num}` : `Pedido de compra Nº ${p.num}`}>{p.tipo === "RC" ? `RC ${p.num}` : `Nº ${p.num}`}</b>
+            {naColPc && (p.aprov === "aprovado"
+              ? <span className="badge-ap ok">✓ Aprovado</span> : <span className="badge-ap pend">Pendente</span>)}</span>
           <button className="kebab" aria-label="Ações" onClick={(e) => { e.stopPropagation(); const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
             setCtx({ p, x: Math.min(r.left, window.innerWidth - 250), y: Math.min(r.bottom + 4, window.innerHeight - 380) }); }}>⋮</button>
         </div>
@@ -429,7 +429,7 @@ export default function TelaCompras() {
                   <div className="cards">
                     {e.cod === "40" && semPedido.map((n) => (
                       <article key={n.chave} className="card nfsem" aria-label={`NF-e ${n.numero} sem pedido`}>
-                        <div className="l1"><span className="no"><span className="badge-ap crit">⛔ Sem pedido</span>NF-e Nº {n.numero}</span></div>
+                        <div className="l1"><span className="no"><b className="nro" title={`NF-e Nº ${n.numero}`}>NF-e {n.numero}</b><span className="badge-ap crit">⛔ Sem pedido</span></span></div>
                         <div className="forn">{n.emitente ?? "Emitente?"}</div>
                         <div className="ent">Emitida {dBR(String(n.emissao).slice(0, 10), true)} · não pagar até casar</div>
                         <div className="val"><b className="num">{money(Number(n.valor))}</b>
