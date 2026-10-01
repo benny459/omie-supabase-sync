@@ -47,7 +47,11 @@ export async function POST(req: Request) {
         }));
       }
       case "cancelar": return NextResponse.json(await rpc("compras_cancelar", { p_id: Number(b.id), p_por: q.email }));
-      case "excluir": return NextResponse.json(await rpc("compras_excluir", { p_id: Number(b.id) }));
+      case "excluir": {
+        // Exclusão definitiva (some sem rastro) só para admin; o time usa Cancelar.
+        if (!q.perms.is_admin) throw new Error("Só administrador exclui; use Cancelar");
+        return NextResponse.json(await rpc("compras_excluir", { p_id: Number(b.id) }));
+      }
       case "duplicar": return NextResponse.json(await rpc("compras_duplicar", { p_id: Number(b.id), p_por: q.email, p_uid: q.uid }));
       case "nf": return NextResponse.json(await rpc("compras_nf_decidir", {
         p_chave: String(b.chave), p_pedido: Number(b.pedido), p_status: String(b.status), p_por: q.email,
