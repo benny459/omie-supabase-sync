@@ -44,7 +44,9 @@ export default function TelaCompras() {
   const [soAtraso, setSoAtraso] = useState(false);
   const [soNf, setSoNf] = useState(false);
   const [origem, setOrigem] = useState<"" | "painel" | "omie">("");
-  const [filtroAprov, setFiltroAprov] = useState<"" | "pendente" | "aprovado">("");
+  const [filtroAprov, setFiltroAprovS] = useState<"" | "pendente" | "aprovado">("");
+  const setFiltroAprov = (v: "" | "pendente" | "aprovado") => { setFiltroAprovS(v); lsSet("cmp-filtro-aprov", v); };
+  useEffect(() => { const v = lsGet("cmp-filtro-aprov"); if (v === "pendente" || v === "aprovado") setFiltroAprovS(v); }, []);
   const [enviar, setEnviar] = useState<number | null>(null);
   const [sort, setSort] = useState<{ k: string; dir: 1 | -1 }>({ k: "emissao", dir: -1 });
   const [group, setGroup] = useState("");
@@ -231,7 +233,7 @@ export default function TelaCompras() {
     const late = atrasado(p);
     const cond = p.tipo === "RC" ? `com ${p.nItens} ${p.nItens === 1 ? "item" : "itens"}` : (parcDesc(p.parc) || "").toLowerCase();
     return (
-      <article key={p.id} className={`card${late ? " late" : ""}${arrasto === String(p.id) ? " dragging" : ""}`} draggable tabIndex={0}
+      <article key={p.id} className={`card${late ? " late" : ""}${p.tipo === "PC" && (p.etapa === "10" || p.etapa === "15") ? (p.aprov === "aprovado" ? " aprovado" : " pendente") : ""}${arrasto === String(p.id) ? " dragging" : ""}`} draggable tabIndex={0}
         style={{ ["--c" as string]: p.tipo === "PC" && (p.etapa === "10" || p.etapa === "15") ? (p.aprov === "aprovado" ? "#22C55E" : "#8B5CF6") : ETAPA[p.etapa]?.cor }}
         aria-label={`${p.tipo} ${p.num}`}
         onClick={(e) => { if ((e.target as HTMLElement).closest(".kebab")) return; setFolha({ id: p.id }); }}
@@ -239,7 +241,9 @@ export default function TelaCompras() {
         onDragStart={(e) => { e.dataTransfer.setData("text/plain", String(p.id)); setArrasto(String(p.id)); }}
         onDragEnd={() => setArrasto(null)}>
         <div className="l1">
-          <span className="no">{p.tipo === "RC" ? `Requisição Nº ${p.num}` : isNF
+          <span className="no">{p.tipo === "PC" && (p.etapa === "10" || p.etapa === "15") && (p.aprov === "aprovado"
+              ? <span className="pill p-ok" style={{ marginRight: 5 }}>✓ Aprovado</span> : <span className="pill p-vio" style={{ marginRight: 5 }}>Pendente</span>)}
+            {p.tipo === "RC" ? `Requisição Nº ${p.num}` : isNF
             ? <>NF-e Nº {String(p.nf).split(",")[0].padStart(9, "0")} <span className="faint">· Pedido {p.num}</span></> : `Pedido Nº ${p.num}`}</span>
           <button className="kebab" aria-label="Ações" onClick={(e) => { e.stopPropagation(); const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
             setCtx({ p, x: Math.min(r.left, window.innerWidth - 250), y: Math.min(r.bottom + 4, window.innerHeight - 380) }); }}>⋮</button>
@@ -382,13 +386,13 @@ export default function TelaCompras() {
                     <span className="n">{ETAPA_AJUDA[e.cod] ?? (e.cod === "20" ? "saldo a comprar" : e.cod === "10" ? "pendente ou aprovado" : e.plural)}{ocultas ? ` · ${ocultas} atendida(s) ocultas` : ""}</span>
                     {e.cod === "10" && (() => {
                       const base = filtrados.filter((p) => (p.etapa === "10" || p.etapa === "15") && p.tipo === "PC");
-                      const ap = base.filter((p) => p.aprov === "aprovado").length;
+                      const apr = base.filter((p) => p.aprov === "aprovado"), pen = base.filter((p) => p.aprov !== "aprovado");
                       return (
-                        <div style={{ display: "flex", gap: 4, marginTop: 4 }}>
-                          {([["", `Todos ${base.length}`], ["pendente", `Pendentes ${base.length - ap}`], ["aprovado", `Aprovados ${ap}`]] as const).map(([k, l]) => (
-                            <button key={k} className={`pill ${k === "aprovado" ? "p-ok" : k === "pendente" ? "p-vio" : "p-off"}`}
-                              style={{ border: filtroAprov === k ? "1.5px solid currentColor" : "1.5px solid transparent", cursor: "pointer" }}
-                              onClick={() => setFiltroAprov(k)}>{l}</button>
+                        <div className="segap" role="tablist" aria-label="Aprovação">
+                          {([["", "Todos", base], ["pendente", "Pendentes", pen], ["aprovado", "Aprovados", apr]] as const).map(([k, l, arr]) => (
+                            <button key={k} role="tab" aria-selected={filtroAprov === k} className={`${k || "todos"}${filtroAprov === k ? " on" : ""}`}
+                              onClick={() => setFiltroAprov(k)}>
+                              <b>{l} {arr.length}</b><small>{money(soma(arr as PedidoLista[]))}</small></button>
                           ))}
                         </div>
                       );

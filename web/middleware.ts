@@ -4,7 +4,8 @@ import { NextResponse, type NextRequest } from "next/server";
 // "/mockup" é público APENAS em desenvolvimento: é a tela de aprovação de
 // desenho, sem dado real. Em produção ela cai no login como qualquer outra —
 // deixar aberta em prod seria expor layout interno sem motivo.
-const PUBLIC_PATHS = ["/login", "/auth/callback", "/recover", "/reset", "/api/cron",
+// /api/compras/rc: servidor-a-servidor (CRM), protegida por COMPRAS_RC_SECRET na própria rota.
+const PUBLIC_PATHS = ["/login", "/auth/callback", "/recover", "/reset", "/api/cron", "/api/compras/rc",
   ...(process.env.NODE_ENV === "development" ? ["/mockup"] : [])];
 
 export async function middleware(request: NextRequest) {
