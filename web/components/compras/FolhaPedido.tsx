@@ -1,0 +1,870 @@
+"use client";
+
+/**
+ * Folha de Incluir/Alterar requisição ou pedido de compra — porte do mockup
+ * (painel lateral grande, as abas do Omie + o que o Omie não tem: vínculo
+ * requisição ⇄ pedido por item e histórico de preço).
+ *
+ * Pedido importado do Omie é histórico: abre só para leitura (dá para
+ * duplicar, aprovar, receber e imprimir). Pedido do painel grava em compras.*.
+ */
+
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Autocompletar, { type Opcao } from "./Autocompletar";
+import {
+  ETAPAS, ETAPA, APROV_LABEL, TIPOS_FRETE, UFS, TIPOS_DOC, DEPTOS_PADRAO,
+  money, num2, qtd as fq, parseNum, hoje, dBR, totais, totalItem, gerarParcelas, infoPreco, itemVazio, novaChave,
+  type Pedido, type Item, type Refs, type HistPreco, type Etapa, type Parcela,
+} from "@/lib/compras";
+
+type RcAberta = {
+  id: number; num: string; proj?: string; pv?: string; pvCliente?: string; emissao?: string; comprador?: string;
+  itens: { id: number; seq: number; cod?: string; desc: string; un?: string; qtd: number; vu?: number; ncm?: string; cov: number }[];
+};
+type Forn = { cod: number; nome: string; fantasia?: string; cnpj?: string; transp?: boolean; n?: number;
+  ultCatCod?: string; ultCat?: string; ultContato?: string; ultParc?: string };
+type ItemCat = { ncod_prod: number; codigo: string | null; descricao: string; unidade: string | null; ultimo_preco: number | null;
+  fornecedor: string | null; ultima_compra: string | null };
+
+type Tab = "itens" | "deptos" | "frete" | "parcelas" | "info" | "obs";
+
+const json = async <T,>(r: Response): Promise<T> => {
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error((j as { error?: string }).error ?? r.statusText);
+  return j as T;
+};
+
+function vazio(tipo: "RC" | "PC", emp: string): Pedido {
+  return {
+    id: null, tipo, num: "(novo)", etapa: tipo === "RC" ? "20" : "10", emp, forn: "", fornCod: null, cnpj: "",
+    catCod: "", cat: "", comprador: "", compradorCod: null, projCod: null, proj: "", contaCod: null, conta: "",
+    parc: "000", emissao: hoje(), previsao: hoje(), contato: "", numForn: "", contrato: "", obs: "", obsInt: "",
+    pv: "", pvCliente: "", nf: "", chave: "", aprov: tipo === "RC" ? "na" : "nao_solicitada",
+    frete: { tipo: TIPOS_FRETE[5] }, valor: 0, origem: "painel", itens: [], parcelas: [], deptos: [], hist: [],
+  };
+}
+
+function doServidor(p: Pedido): Pedido {
+  return {
+    ...p,
+    forn: p.forn ?? "", cnpj: p.cnpj ?? "", catCod: p.catCod ?? "", cat: p.cat ?? "", comprador: p.comprador ?? "",
+    proj: p.proj ?? "", conta: p.conta ?? "", parc: p.parc ?? "000", previsao: p.previsao ?? "", contato: p.contato ?? "",
+    numForn: p.numForn ?? "", contrato: p.contrato ?? "", obs: p.obs ?? "", obsInt: p.obsInt ?? "", pv: p.pv ?? "",
+    pvCliente: p.pvCliente ?? "", nf: p.nf ?? "", chave: p.chave ?? "", frete: p.frete ?? {},
+    itens: (p.itens ?? []).map((i) => ({ ...i, key: novaChave(), desc: i.desc ?? "", un: i.un ?? "UN",
+      qtd: Number(i.qtd) || 0, vu: Number(i.vu) || 0, desc0: Number(i.desc0) || 0, ipi: Number(i.ipi) || 0, st: Number(i.st) || 0 })),
+    parcelas: (p.parcelas ?? []).map((x) => ({ ...x, valor: Number(x.valor) || 0, venc: x.venc ?? "" })),
+    deptos: (p.deptos ?? []).map((d) => ({ ...d, perc: Number(d.perc) || 0 })),
+  };
+}
+
+export default function FolhaPedido({
+  id, tipoNovo, fromRC, refs, emp, onClose, onSalvo, onReceber, onDuplicar, onImprimir, toast,
+}: {
+  id: number | null; tipoNovo?: "RC" | "PC"; fromRC?: number | null; refs: Refs | null; emp: string;
+  onClose: () => void; onSalvo: (id: number, msg: string, abrirPcDaRc?: number) => void;
+  onReceber: (id: number) => void; onDuplicar: (id: number) => void; onImprimir: (id: number) => void;
+  toast: (m: string, erro?: boolean) => void;
+}) {
+  const [D, setD] = useState<Pedido | null>(null);
+  const [tab, setTab] = useState<Tab>("itens");
+  const [errs, setErrs] = useState<Record<string, string>>({});
+  const [salvando, setSalvando] = useState(false);
+  const [parcEditadas, setParcEditadas] = useState(false);
+  const [hist, setHist] = useState<Record<string, HistPreco[]>>({});
+  const [rcCache, setRcCache] = useState<Record<string, RcAberta>>({});
+  const [rcView, setRcView] = useState<string | null>(null);
+  const [rcLigadas, setRcLigadas] = useState<string[]>([]);
+  const [marcas, setMarcas] = useState<Record<string, { on: boolean; qtd: number }>>({});
+  const [picker, setPicker] = useState(false);
+  const [colar, setColar] = useState<string | null>(null);
+  const salvosRc = useRef<Record<number, number>>({}); // rcItemId → qtd já gravada por ESTE pedido
+
+  const ro = D?.origem === "omie";
+  const isRC = D?.tipo === "RC";
+
+  // ── carregar ──────────────────────────────────────────────────────────────
+  useEffect(() => {
+    let vivo = true;
+    (async () => {
+      try {
+        if (id) {
+          const p = doServidor(await json<Pedido>(await fetch(`/api/compras/pedido?id=${id}`)));
+          if (!vivo) return;
+          const s: Record<number, number> = {};
+          p.itens.forEach((i) => { if (i.rc) s[i.rc.itemId] = (s[i.rc.itemId] ?? 0) + (Number(i.qtd) || 0); });
+          salvosRc.current = s;
+          setRcLigadas([...new Set(p.itens.filter((i) => i.rc).map((i) => i.rc!.num))]);
+          setParcEditadas(p.parcelas.length > 0);
+          setD(p);
+        } else {
+          const base = vazio(tipoNovo ?? "PC", emp);
+          if (fromRC) {
+            const rc = doServidor(await json<Pedido>(await fetch(`/api/compras/pedido?id=${fromRC}`)));
+            const linhas = rc.itens
+              .map((it) => ({ it, rest: Math.max(0, (Number(it.qtd) || 0) - (Number(it.cov) || 0)) }))
+              .filter((x) => x.rest > 0);
+            base.itens = linhas.map(({ it, rest }) => ({
+              ...itemVazio(), cod: it.cod, ncodProd: it.ncodProd, desc: it.desc, un: it.un, qtd: rest, vu: Number(it.vu) || 0,
+              ncm: it.ncm, local: it.local, rc: { itemId: it.id!, num: rc.num, idx: it.seq ?? 0, desc: it.desc, qtd: Number(it.qtd) || 0 },
+            }));
+            base.proj = rc.proj; base.projCod = rc.projCod; base.pv = rc.pv; base.pvCliente = rc.pvCliente;
+            base.comprador = rc.comprador; base.compradorCod = rc.compradorCod; base.cat = rc.cat; base.catCod = rc.catCod;
+            base.contaCod = rc.contaCod; base.conta = rc.conta;
+            if (vivo) setRcLigadas([rc.num]);
+          }
+          if (!vivo) return;
+          setD(base);
+        }
+      } catch (e) { toast((e as Error).message, true); onClose(); }
+    })();
+    return () => { vivo = false; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id, tipoNovo, fromRC]);
+
+  const t = useMemo(() => (D ? totais(D) : { merc: 0, desc: 0, ipi: 0, st: 0, extra: 0, total: 0 }), [D]);
+  const diasDe = useCallback((cod: string) => refs?.parcelas.find((p) => p.cod === cod)?.dias ?? [0], [refs]);
+
+  // Parcelas acompanham total, condição e previsão até alguém mexer nelas à mão.
+  useEffect(() => {
+    if (!D || isRC || ro || parcEditadas) return;
+    const novas = gerarParcelas(t.total, diasDe(D.parc), D.previsao || hoje(), D.parcelas[0]?.doc ?? "Boleto");
+    const igual = novas.length === D.parcelas.length && novas.every((p, i) => p.venc === D.parcelas[i].venc && p.valor === D.parcelas[i].valor);
+    if (!igual) setD((d) => (d ? { ...d, parcelas: novas } : d));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [t.total, D?.parc, D?.previsao, isRC, ro, parcEditadas, refs]);
+
+  // Histórico de preço por código de produto (carrega o que faltar).
+  useEffect(() => {
+    if (!D) return;
+    const falta = [...new Set(D.itens.map((i) => i.cod).filter((c): c is string => !!c && !(c in hist)))];
+    falta.forEach(async (c) => {
+      try {
+        const h = await json<HistPreco[]>(await fetch(`/api/compras/buscar?tipo=preco&q=${encodeURIComponent(c)}`));
+        setHist((x) => ({ ...x, [c]: h.filter((r) => r.id !== D.id) }));
+      } catch { setHist((x) => ({ ...x, [c]: [] })); }
+    });
+  }, [D, hist]);
+
+  useEffect(() => {
+    const esc = (e: KeyboardEvent) => { if (e.key === "Escape" && !picker && !document.querySelector(".cmp .aclist")) onClose(); };
+    document.addEventListener("keydown", esc);
+    return () => document.removeEventListener("keydown", esc);
+  }, [onClose, picker]);
+
+  if (!D) {
+    return (
+      <div className="cmp-scrim"><div className="cmp" style={{ display: "contents" }}>
+        <div className="sheet"><div className="sh-head"><h2>Carregando…</h2><span className="sp" />
+          <button className="btn ghost" onClick={onClose}>Fechar ✕</button></div></div>
+      </div></div>
+    );
+  }
+
+  const set = (patch: Partial<Pedido>) => setD((d) => (d ? { ...d, ...patch } : d));
+  const setItem = (i: number, patch: Partial<Item>) =>
+    setD((d) => (d ? { ...d, itens: d.itens.map((it, k) => (k === i ? { ...it, ...patch } : it)) } : d));
+
+  // ── requisição ⇄ pedido ─────────────────────────────────────────────────────
+  const covEfetiva = (rcItemId: number, covServidor: number) =>
+    Math.max(0, covServidor - (salvosRc.current[rcItemId] ?? 0)) +
+    D.itens.filter((i) => i.rc?.itemId === rcItemId).reduce((a, i) => a + (Number(i.qtd) || 0), 0);
+
+  const levarDaRc = (rc: RcAberta, sel: { itemId: number; qtd: number }[]) => {
+    const novos: Item[] = sel.map(({ itemId, qtd }) => {
+      const it = rc.itens.find((x) => x.id === itemId)!;
+      return { ...itemVazio(), cod: it.cod ?? "", desc: it.desc, un: it.un ?? "UN", qtd, vu: Number(it.vu) || 0, ncm: it.ncm,
+        rc: { itemId: it.id, num: rc.num, idx: it.seq, desc: it.desc, qtd: Number(it.qtd) || 0 } };
+    });
+    setD((d) => d ? {
+      ...d, itens: [...d.itens, ...novos],
+      proj: d.proj || rc.proj || "", pv: d.pv || rc.pv || "", pvCliente: d.pvCliente || rc.pvCliente || "",
+      comprador: d.comprador || rc.comprador || "",
+    } : d);
+    setRcLigadas((l) => [...new Set([...l, rc.num])]);
+    setTab("itens");
+  };
+
+  const buscarRc = async (q: string): Promise<Opcao<RcAberta>[]> => {
+    const lista = await json<RcAberta[]>(await fetch(`/api/compras/buscar?tipo=rc&q=${encodeURIComponent(q)}`));
+    setRcCache((c) => ({ ...c, ...Object.fromEntries(lista.map((r) => [r.num, r])) }));
+    return lista.map((rc) => ({
+      label: `RC ${rc.num} · ${rc.proj || "sem projeto"}${rc.pv ? ` · ${rc.pv}${rc.pvCliente ? " " + rc.pvCliente : ""}` : ""}`,
+      sub: `${dBR(rc.emissao)} · ${rc.itens.length} item(ns): ${rc.itens.map((i) => i.desc).join(", ").slice(0, 90)}`, v: rc,
+    }));
+  };
+
+  // ── validação ─────────────────────────────────────────────────────────────
+  const validar = () => {
+    const e: Record<string, string> = {};
+    if (!isRC && !D.forn) e.forn = 'O "Fornecedor" deve ser preenchido.';
+    if (!isRC && !D.cat) e.cat = 'A "Categoria da Compra" deve ser preenchida.';
+    if (!D.itens.length) e.itens = "Inclua pelo menos 1 item.";
+    else if (D.itens.some((i) => !(Number(i.qtd) > 0))) e.itens = "Há item com quantidade zerada.";
+    else if (D.itens.some((i) => !i.desc.trim())) e.itens = "Há item sem descrição.";
+    const sp = D.deptos.reduce((a, d) => a + (Number(d.perc) || 0), 0);
+    if (D.deptos.length && Math.abs(sp - 100) > 0.01) e.deptos = `Distribuição soma ${num2(sp)}% — precisa fechar 100%.`;
+    const sv = D.parcelas.reduce((a, x) => a + (Number(x.valor) || 0), 0);
+    if (!isRC && D.itens.length && Math.abs(t.total - sv) > 0.05) e.parcelas = `Parcelas somam ${money(sv)}, pedido ${money(t.total)}. Use "Refazer parcelas".`;
+    setErrs(e);
+    if (Object.keys(e).length) {
+      setTab(e.forn || e.cat || e.itens ? "itens" : e.deptos ? "deptos" : "parcelas");
+      toast("Revise os campos destacados para salvar.", true);
+      return false;
+    }
+    return true;
+  };
+
+  const salvar = async (o: { novaEtapa?: Etapa; novaAprov?: "aguardando"; aprovar?: boolean; gerarPc?: boolean; msg?: string } = {}) => {
+    if (ro || salvando || !validar()) return;
+    setSalvando(true);
+    try {
+      const body = {
+        id: D.id, tipo: D.tipo, emp: D.emp, fornCod: D.fornCod, forn: D.forn, cnpj: D.cnpj, catCod: D.catCod, cat: D.cat,
+        comprador: D.comprador, compradorCod: D.compradorCod, projCod: D.projCod, proj: D.proj, contaCod: D.contaCod,
+        conta: D.conta, parc: D.parc, previsao: D.previsao, contato: D.contato, numForn: D.numForn, contrato: D.contrato,
+        obs: D.obs, obsInt: D.obsInt, pv: D.pv, pvCliente: D.pvCliente, frete: D.frete,
+        itens: D.itens.map((i) => ({ id: i.id ?? null, cod: i.cod, ncodProd: i.ncodProd, desc: i.desc, un: i.un, qtd: i.qtd,
+          vu: i.vu, desc0: i.desc0, ipi: i.ipi, st: i.st, ncm: i.ncm, local: i.local, obs: i.obs,
+          rc: i.rc ? { itemId: i.rc.itemId } : null })),
+        parcelas: isRC ? [] : D.parcelas, deptos: isRC ? [] : D.deptos,
+        novaEtapa: o.novaEtapa, novaAprov: o.novaAprov,
+        origemDe: !D.id && rcLigadas.length ? `Gerado a partir da RC ${rcLigadas.join(", ")}` : undefined,
+      };
+      const r = await json<{ id: number; num: string }>(await fetch("/api/compras/pedido", {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+      }));
+      let msg = o.msg ?? `${isRC ? "Requisição" : "Pedido"} ${r.num} salvo${rcLigadas.length && !isRC ? ` · atende ${rcLigadas.map((n) => "RC " + n).join(", ")}` : ""}`;
+      if (o.aprovar) {
+        const a = await json<{ alterados: number; falhas: { erro: string }[] }>(await fetch("/api/compras/acao", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ acao: "aprovar", ids: [r.id], status: "aprovado" }),
+        }));
+        msg = a.falhas.length ? `Pedido ${r.num} salvo, mas não aprovado: ${a.falhas[0].erro}` : `Pedido ${r.num} aprovado`;
+      }
+      onSalvo(r.id, msg, o.gerarPc ? r.id : undefined);
+    } catch (e) { toast((e as Error).message, true); }
+    finally { setSalvando(false); }
+  };
+
+  const idxEtapa = ETAPAS.findIndex((e) => e.cod === D.etapa);
+  const titulo = !D.id ? (isRC ? "Incluir Requisição de Compra" : "Incluir Pedido de Compra")
+    : isRC ? `Requisição Nº ${D.num}` : `Pedido de Compra Nº ${D.num}`;
+  const tabs: [Tab, string, string | number, string?][] = isRC
+    ? [["itens", "Itens da Compra", D.itens.length, errs.itens], ["info", "Informações Adicionais", ""], ["obs", "Observações", D.obs || D.obsInt ? "•" : ""]]
+    : [["itens", "Itens da Compra", D.itens.length, errs.itens], ["deptos", "Departamentos", D.deptos.length || "", errs.deptos],
+       ["frete", "Frete e Outras Despesas", t.extra ? "R$" : ""], ["parcelas", "Parcelas", D.parcelas.length, errs.parcelas],
+       ["info", "Informações Adicionais", ""], ["obs", "Observações", D.obs || D.obsInt ? "•" : ""]];
+  const tabAtual: Tab = isRC && !["itens", "info", "obs"].includes(tab) ? "itens" : tab;
+  const deptosLista = refs?.departamentos.length ? refs.departamentos.map((d) => d.desc) : DEPTOS_PADRAO;
+  const rcAtual = rcView ? rcCache[rcView] : null;
+
+  return (
+    <div className="cmp-scrim" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="cmp" style={{ display: "contents" }}>
+        <div className="sheet" role="dialog" aria-modal="true" aria-label={titulo}>
+          <div className="sh-head">
+            <h2>{titulo}</h2>
+            {D.id && <span className="pill p-acc">{ETAPA[D.etapa]?.nome}</span>}
+            {D.origem === "omie" && <span className="pill p-off" title="Importado do Omie — histórico, só leitura">Omie · histórico</span>}
+            <span className="sp" />
+            <div className="stepper" aria-label="Etapas">
+              {ETAPAS.map((e, i) => (
+                <span key={e.cod} style={{ display: "contents" }}>
+                  <span className={i < idxEtapa ? "done" : i === idxEtapa ? "cur" : ""}>{e.nome}</span>
+                  {i < ETAPAS.length - 1 && <i>›</i>}
+                </span>
+              ))}
+            </div>
+            <button className="btn ghost" onClick={onClose}>Fechar ✕</button>
+          </div>
+
+          <div className="sh-body">
+            <div style={{ minWidth: 0 }}>
+              {ro && (
+                <div className="aviso p-off">
+                  Pedido importado do Omie — é histórico e fica só para leitura. Para comprar de novo, use <b>Duplicar</b>: o pedido novo nasce no painel.
+                </div>
+              )}
+              <section className="card2">
+                <div className="gridf">
+                  <div className="f s6">
+                    <label htmlFor="dForn">Fornecedor {isRC ? <span className="faint">(opcional na requisição)</span> : <span className="req">*</span>}</label>
+                    <Autocompletar<Forn> id="dForn" value={D.forn} disabled={ro} erro={!!errs.forn}
+                      placeholder="Busque por nome, fantasia ou CNPJ"
+                      onChange={(v) => set({ forn: v, fornCod: null, cnpj: "" })}
+                      fonte={async (q) => (await json<Forn[]>(await fetch(`/api/compras/buscar?tipo=fornecedor&emp=${D.emp}&q=${encodeURIComponent(q)}`)))
+                        .map((f) => ({ label: f.nome, sub: `${f.cnpj ?? "sem CNPJ no cadastro"}${f.n ? ` · ${f.n} pedido(s)` : ""}`, v: f }))}
+                      onPick={(o) => {
+                        const f = o.v;
+                        setD((d) => d ? {
+                          ...d, forn: f.nome, fornCod: f.cod, cnpj: f.cnpj ?? "",
+                          cat: d.cat || f.ultCat || "", catCod: d.catCod || f.ultCatCod || "",
+                          contato: d.contato || f.ultContato || "", parc: !d.id && f.ultParc ? f.ultParc : d.parc,
+                        } : d);
+                        setErrs((e) => { const n = { ...e }; delete n.forn; return n; });
+                        toast(f.ultCat ? "Categoria, contato e condição sugeridos pelo último pedido deste fornecedor" : "Fornecedor selecionado");
+                      }} />
+                    {errs.forn ? <span className="errmsg">{errs.forn}</span>
+                      : D.cnpj ? <span className="hint">CNPJ {D.cnpj}</span> : null}
+                  </div>
+                  <div className="f s3"><label htmlFor="dPrev">{isRC ? "Data sugerida" : "Previsão de Entrega"}</label>
+                    <input className="in" type="date" id="dPrev" value={D.previsao || ""} disabled={ro} onChange={(e) => set({ previsao: e.target.value })} /></div>
+                  <div className="f s3"><label htmlFor="dEmis">Inclusão</label>
+                    <input className="in" type="date" id="dEmis" value={D.emissao || ""} disabled /></div>
+                  <div className="f s4"><label htmlFor="dCat">Categoria da Compra {!isRC && <span className="req">*</span>}</label>
+                    <select className={`in${errs.cat ? " err" : ""}`} id="dCat" disabled={ro} value={D.catCod || ""}
+                      onChange={(e) => { const c = refs?.categorias.find((x) => x.cod === e.target.value); set({ catCod: c?.cod ?? "", cat: c?.desc ?? "" }); }}>
+                      <option value="">{D.cat && !refs?.categorias.some((c) => c.cod === D.catCod) ? D.cat : "Selecione…"}</option>
+                      {refs?.categorias.map((c) => <option key={c.cod} value={c.cod}>{c.cod} · {c.desc}</option>)}
+                    </select>
+                    {errs.cat && <span className="errmsg">{errs.cat}</span>}</div>
+                  <div className="f s4"><label htmlFor="dComp">Comprador</label>
+                    <select className="in" id="dComp" disabled={ro} value={D.comprador || ""}
+                      onChange={(e) => { const c = refs?.compradores.find((x) => x.nome === e.target.value); set({ comprador: e.target.value, compradorCod: c?.cod ?? null }); }}>
+                      <option value="">—</option>
+                      {D.comprador && !refs?.compradores.some((c) => c.nome === D.comprador) && <option>{D.comprador}</option>}
+                      {refs?.compradores.map((c) => <option key={c.nome}>{c.nome}</option>)}
+                    </select></div>
+                  {isRC ? (
+                    <div className="f s4"><label htmlFor="dPv">Venda de origem (PV/OS)</label>
+                      <Autocompletar<{ label: string; cliente: string; projeto?: string }> id="dPv" disabled={ro}
+                        value={D.pv ? `${D.pv}${D.pvCliente ? " · " + D.pvCliente : ""}` : ""} placeholder="Busque PV/OS ou cliente"
+                        onChange={(v) => { if (!v) set({ pv: "", pvCliente: "" }); }}
+                        fonte={async (q) => (await json<{ label: string; cliente: string; projeto?: string }[]>(
+                          await fetch(`/api/compras/buscar?tipo=venda&emp=${D.emp}&q=${encodeURIComponent(q)}`)))
+                          .map((v) => ({ label: `${v.label} · ${v.cliente}`, sub: v.projeto || "sem projeto", v }))}
+                        onPick={(o) => set({ pv: o.v.label, pvCliente: o.v.cliente, proj: D.proj || o.v.projeto || "" })} />
+                      <span className="hint">A RC nasce da venda fechada — o pedido herda esse vínculo.</span></div>
+                  ) : (
+                    <div className="f s4"><label htmlFor="dParc">Número de Parcelas</label>
+                      <select className="in" id="dParc" disabled={ro} value={D.parc}
+                        onChange={(e) => { setParcEditadas(false); set({ parc: e.target.value }); }}>
+                        {!refs?.parcelas.some((p) => p.cod === D.parc) && <option value={D.parc}>{D.parc}</option>}
+                        {refs?.parcelas.map((p) => <option key={p.cod} value={p.cod}>{p.desc}</option>)}
+                      </select></div>
+                  )}
+                  {!isRC && !ro && (
+                    <div className="f s12"><label htmlFor="dRc">Requisição de compra (RC) <span className="faint">— vincule uma ou mais; os itens aparecem logo abaixo</span></label>
+                      <Autocompletar<RcAberta> id="dRc" value="" placeholder="Busque a RC por número, projeto, venda (PV/OS), cliente ou produto"
+                        fonte={buscarRc}
+                        onPick={(o) => {
+                          setRcLigadas((l) => [...new Set([...l, o.v.num])]); setRcView(o.v.num);
+                          setD((d) => d ? { ...d, proj: d.proj || o.v.proj || "", pv: d.pv || o.v.pv || "", pvCliente: d.pvCliente || o.v.pvCliente || "" } : d);
+                        }} />
+                      {rcLigadas.length > 0 && (
+                        <div className="chips">
+                          {rcLigadas.map((n) => {
+                            const fixa = D.itens.some((i) => i.rc?.num === n);
+                            const rc = rcCache[n];
+                            const done = rc ? rc.itens.filter((i) => covEfetiva(i.id, i.cov) >= i.qtd).length : null;
+                            return (
+                              <span key={n} className={`chip-x${rcView === n ? " on" : ""}`}
+                                onClick={async () => {
+                                  if (!rcCache[n]) await buscarRc(n);
+                                  setRcView((v) => (v === n ? null : n));
+                                }}>
+                                RC {n}{rc?.pv ? ` · ${rc.pv}` : ""}{done != null ? ` · ${done}/${rc!.itens.length} no pedido` : ""}
+                                {!fixa && <button title="Remover" onClick={(e) => { e.stopPropagation(); setRcLigadas((l) => l.filter((x) => x !== n)); if (rcView === n) setRcView(null); }}>✕</button>}
+                              </span>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {!isRC && rcAtual && (() => {
+                  const linhas = rcAtual.itens.map((it) => {
+                    const cov = covEfetiva(it.id, it.cov);
+                    const rest = Math.max(0, it.qtd - cov);
+                    const k = `${rcAtual.num}|${it.id}`;
+                    const m = marcas[k] ?? { on: rest > 0, qtd: rest };
+                    return { it, cov, rest, k, m };
+                  });
+                  const sel = linhas.filter((l) => l.rest > 0 && l.m.on && l.m.qtd > 0);
+                  return (
+                    <div className="rcbox">
+                      <div className="rch">
+                        <b>Itens da Requisição {rcAtual.num}</b><span className="tag">{rcAtual.proj || "sem projeto"}</span>
+                        {rcAtual.pv && <span className="tag">↔ {rcAtual.pv}{rcAtual.pvCliente ? " · " + rcAtual.pvCliente : ""}</span>}
+                        <span className="faint">{dBR(rcAtual.emissao)} · {rcAtual.comprador || "—"}</span><span style={{ flex: 1 }} />
+                        <button className="btn sm pri" disabled={!sel.length}
+                          onClick={() => { levarDaRc(rcAtual, sel.map((l) => ({ itemId: l.it.id, qtd: l.m.qtd })));
+                            setMarcas((mm) => { const n = { ...mm }; sel.forEach((l) => delete n[l.k]); return n; });
+                            toast(`${sel.length} item(ns) da RC ${rcAtual.num} levados para o pedido`); }}>
+                          ↓ Levar {sel.length || ""} {sel.length === 1 ? "item" : "itens"} para o pedido</button>
+                        <button className="btn sm ghost" onClick={() => setRcView(null)}>Ocultar</button>
+                      </div>
+                      <div style={{ overflowX: "auto" }}>
+                        <table className="items">
+                          <thead><tr><th style={{ width: 34 }} /><th>Item da requisição</th><th className="r">Pedido na RC</th><th className="r">Já em pedido</th><th className="r">A comprar agora</th></tr></thead>
+                          <tbody>{linhas.map(({ it, cov, rest, k, m }) => {
+                            const last = hist[it.cod ?? ""]?.find((x) => x.f);
+                            return (
+                              <tr key={k} className={rest <= 0 ? "done" : ""}>
+                                <td>{rest > 0 ? <input type="checkbox" checked={m.on} aria-label="Selecionar"
+                                  onChange={(e) => setMarcas((mm) => ({ ...mm, [k]: { ...m, on: e.target.checked } }))} /> : "✓"}</td>
+                                <td>{it.desc}<div className="hint mono">{it.cod}{last ? ` · última compra ${money(last.vu)} (${last.f}, ${dBR(last.d)})` : ""}</div></td>
+                                <td className="r num">{fq(it.qtd)} {it.un}</td>
+                                <td className="r num">{cov ? fq(cov) : "—"}</td>
+                                <td style={{ width: 120 }}>{rest > 0
+                                  ? <input className="in r" defaultValue={num2(m.qtd)} onBlur={(e) => { const v = parseNum(e.target.value); setMarcas((mm) => ({ ...mm, [k]: { on: v > 0, qtd: v } })); }} />
+                                  : <span className="pill p-ok">no pedido</span>}</td>
+                              </tr>
+                            );
+                          })}</tbody>
+                        </table>
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                <div className="totals">
+                  <div><div className="k">Total de Mercadorias</div><div className="v num">{money(t.merc)}</div></div>
+                  <div><div className="k">Total do Desconto</div><div className="v num">{money(t.desc)}</div></div>
+                  <div><div className="k">Total de IPI</div><div className="v num">{money(t.ipi)}</div></div>
+                  <div><div className="k">Total de ICMS ST</div><div className="v num">{money(t.st)}</div></div>
+                  {t.extra > 0 && <div><div className="k">Frete e despesas</div><div className="v num">{money(t.extra)}</div></div>}
+                  <div className="grand"><div className="k">Valor Total da Compra</div><div className="v num">{money(t.total)}</div></div>
+                </div>
+
+                <nav className="tabs" role="tablist">
+                  {tabs.map(([k, l, b, e]) => (
+                    <button key={k} role="tab" className={tabAtual === k ? "on" : ""} onClick={() => setTab(k)}>
+                      {l}{b !== "" && b !== 0 ? <span className={`bdg${e ? " e" : ""}`}>{b}</span> : e ? <span className="bdg e">!</span> : null}
+                    </button>
+                  ))}
+                </nav>
+
+                {tabAtual === "itens" && (
+                  <>
+                    {!isRC && (
+                      <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", marginBottom: 10, padding: "9px 10px",
+                        border: "1px solid var(--line)", borderRadius: 10, background: "var(--accent-soft)" }}>
+                        <b style={{ fontSize: 12.5 }}>Requisições atendidas por este pedido</b>
+                        {[...new Set(D.itens.filter((i) => i.rc).map((i) => i.rc!.num))].map((n) => <span key={n} className="pill p-acc">RC {n}</span>)}
+                        {!D.itens.some((i) => i.rc) && <span className="muted">nenhuma ainda</span>}
+                        <span style={{ flex: 1 }} />
+                        {!ro && <button className="btn sm pri" onClick={() => setPicker(true)}>⇠ Vincular requisição</button>}
+                      </div>
+                    )}
+                    {errs.itens && <div className="errmsg" style={{ marginBottom: 8 }}>{errs.itens}</div>}
+                    <div className="items-wrap">
+                      <table className="items fix">
+                        <thead><tr>
+                          <th style={{ width: 34 }}>#</th><th>Produto</th><th style={{ width: 62 }}>Un</th>
+                          <th className="r" style={{ width: 82 }}>Qtde</th><th className="r" style={{ width: 104 }}>Valor unit.</th>
+                          <th className="r" style={{ width: 92 }}>Desconto R$</th><th className="r" style={{ width: 84 }}>IPI R$</th>
+                          <th className="r" style={{ width: 92 }}>ICMS ST R$</th><th className="r" style={{ width: 112 }}>Total</th><th style={{ width: 64 }} />
+                        </tr></thead>
+                        <tbody>
+                          {D.itens.map((it, i) => {
+                            const pi = it.cod ? infoPreco(it, D.forn, hist[it.cod]) : null;
+                            const cls = pi ? (Math.abs(pi.dif) < 1 ? "p-off" : pi.dif > 0 ? (pi.dif > 10 ? "p-crit" : "p-warn") : "p-ok") : "";
+                            return [
+                              <tr key={it.key}>
+                                <td className="faint num" style={{ paddingTop: 11 }}>{i + 1}</td>
+                                <td style={{ position: "relative" }}>
+                                  <Autocompletar<ItemCat> value={it.desc} disabled={ro} minimo={2} placeholder="Busque o produto (código ou descrição)"
+                                    onChange={(v) => setItem(i, { desc: v })}
+                                    fonte={async (q) => (await json<ItemCat[]>(await fetch(`/api/compras/buscar?tipo=produto&q=${encodeURIComponent(q)}`)))
+                                      .map((p) => ({ label: p.descricao, sub: `${p.codigo ?? "—"} · ${p.unidade ?? "UN"}${p.ultimo_preco ? ` · último preço ${money(p.ultimo_preco)}` : ""}${p.fornecedor ? ` · ${p.fornecedor}` : ""}`, v: p }))}
+                                    onPick={(o) => setItem(i, { cod: o.v.codigo ?? "", ncodProd: o.v.ncod_prod, desc: o.v.descricao,
+                                      un: o.v.unidade ?? "UN", vu: Number(o.v.ultimo_preco) || it.vu })} />
+                                  <div className="hint mono">{it.cod || "novo"}{it.ncm ? ` · NCM ${it.ncm}` : ""}</div>
+                                  {it.rc && (
+                                    <div className="hint" style={{ color: "var(--accent-strong)" }}>
+                                      ⇠ RC {it.rc.num} · item {it.rc.idx}{it.desc !== it.rc.desc ? ` · na requisição: “${it.rc.desc}”` : ""}
+                                      {!ro && <button className="linkbtn" onClick={() => setItem(i, { rc: null })} title="Desvincular da requisição">desvincular</button>}
+                                    </div>
+                                  )}
+                                  {it.cod && (pi ? (
+                                    <div className="pricecmp">
+                                      <span className={`pill ${cls}`}>{Math.abs(pi.dif) < 1 ? "= " : pi.dif > 0 ? "▲ " : "▼ "}{num2(Math.abs(pi.dif))}% vs {pi.sameForn ? "último deste fornecedor" : "última compra"}</span>
+                                      <span className="faint">{money(pi.ref.vu)} em {dBR(pi.ref.d)}{pi.ref.f ? " · " + pi.ref.f : ""}</span>
+                                      <button className="linkbtn" onClick={() => setItem(i, { _hist: !it._hist })}>{it._hist ? "fechar histórico" : `histórico (${pi.h.length})`}</button>
+                                    </div>
+                                  ) : hist[it.cod] ? <div className="pricecmp faint">Sem compras anteriores deste item</div> : null)}
+                                </td>
+                                <td><input className="in" value={it.un} disabled={ro} onChange={(e) => setItem(i, { un: e.target.value })} /></td>
+                                {(["qtd", "vu", "desc0", "ipi", "st"] as const).map((k) => (
+                                  <td key={k}><input className="in r" disabled={ro} key={`${it.key}-${k}-${it[k]}`} defaultValue={k === "qtd" ? fq(it[k]) : num2(it[k])}
+                                    onBlur={(e) => { const v = parseNum(e.target.value); if (v !== it[k]) setItem(i, { [k]: v } as Partial<Item>); }} /></td>
+                                ))}
+                                <td className="r num" style={{ paddingTop: 11 }}><b>{money(totalItem(it))}</b>
+                                  {it.rec != null && ["40", "60", "80"].includes(D.etapa) && <div className="hint">recebido {fq(it.rec)}</div>}</td>
+                                <td style={{ whiteSpace: "nowrap" }}>
+                                  <button className="x" title="Mais campos (NCM, local de estoque, obs.)" onClick={() => setItem(i, { _open: !it._open })}>⋯</button>
+                                  {!ro && <button className="x" title="Excluir item" onClick={() => setD((d) => d ? { ...d, itens: d.itens.filter((_, k) => k !== i) } : d)}>✕</button>}
+                                </td>
+                              </tr>,
+                              it._hist && pi ? (
+                                <tr key={it.key + "h"} className="more"><td /><td colSpan={9}>
+                                  <div style={{ display: "flex", gap: 14, flexWrap: "wrap", marginBottom: 6, fontSize: 12 }}>
+                                    <span>Média ({pi.h.length} últimas): <b className="num">{money(pi.avg)}</b></span>
+                                    <span>Menor: <b className="num">{money(pi.min.vu)}</b>{pi.min.f ? ` · ${pi.min.f}` : ""} ({dBR(pi.min.d)})</span>
+                                    <span>Você está pagando: <b className="num">{money(it.vu)}</b></span>
+                                  </div>
+                                  <div style={{ overflowX: "auto" }}>
+                                    <table className="hist-t">
+                                      <thead><tr><th>Data</th><th>PC</th><th>Fornecedor</th><th className="r">Qtde</th><th className="r">Valor unit.</th><th className="r">Atual vs este</th></tr></thead>
+                                      <tbody>{pi.h.map((x, j) => {
+                                        const d = x.vu ? (((Number(it.vu) || 0) - x.vu) / x.vu) * 100 : 0;
+                                        return (
+                                          <tr key={j} className={x.f && x.f === D.forn ? "same" : ""}>
+                                            <td>{dBR(x.d)}</td><td>{x.n}</td><td>{x.f}</td><td className="r num">{fq(x.q)}</td>
+                                            <td className="r num">{money(x.vu)}</td>
+                                            <td className={`r num${d > 1 ? "" : " faint"}`} style={d > 10 ? { color: "var(--ww-crit-text)" } : undefined}>{d > 0 ? "+" : ""}{num2(d)}%</td>
+                                          </tr>
+                                        );
+                                      })}</tbody>
+                                    </table>
+                                  </div>
+                                  {D.forn && <div className="hint" style={{ marginTop: 4 }}>Linhas destacadas = mesmo fornecedor deste pedido.</div>}
+                                </td></tr>
+                              ) : null,
+                              it._open ? (
+                                <tr key={it.key + "m"} className="more"><td /><td colSpan={9}>
+                                  <div className="gridf">
+                                    <div className="f s3"><label>NCM</label><input className="in" disabled={ro} value={it.ncm ?? ""} onChange={(e) => setItem(i, { ncm: e.target.value })} /></div>
+                                    <div className="f s3"><label>Local de estoque</label>
+                                      <select className="in" disabled={ro} value={it.local ?? ""} onChange={(e) => setItem(i, { local: e.target.value || null })}>
+                                        <option value="">Padrão</option>
+                                        {it.local && !refs?.locais.some((l) => l.cod === it.local) && <option value={it.local}>Local {it.local}</option>}
+                                        {refs?.locais.map((l, k) => <option key={l.cod} value={l.cod}>Local {l.cod}{k === 0 ? " (o mais usado)" : ""}</option>)}
+                                      </select></div>
+                                    <div className="f s6"><label>Observação do item</label><input className="in" disabled={ro} value={it.obs ?? ""} onChange={(e) => setItem(i, { obs: e.target.value })} /></div>
+                                  </div>
+                                </td></tr>
+                              ) : null,
+                            ];
+                          })}
+                          {!D.itens.length && <tr><td colSpan={10} className="empty">Nenhum item. Use “Novo Item” ou cole linhas do Excel (código; qtde; valor).</td></tr>}
+                        </tbody>
+                      </table>
+                    </div>
+                    {!ro && (
+                      <>
+                        <div className="addrow">
+                          <button className="btn sm pri" onClick={() => setD((d) => d ? { ...d, itens: [...d.itens, itemVazio()] } : d)}>＋ Novo Item</button>
+                          <button className="btn sm" onClick={() => setColar((c) => (c == null ? "" : null))}>⎘ Colar do Excel</button>
+                          <span className="hint" style={{ alignSelf: "center" }}>O preço sugerido é o do último pedido daquele produto.</span>
+                        </div>
+                        {colar != null && (
+                          <div style={{ marginTop: 8 }}>
+                            <textarea className="in" value={colar} onChange={(e) => setColar(e.target.value)} placeholder={"38050023\t10\t24,20\n3043019\t20\t12,10"} />
+                            <div className="addrow"><button className="btn sm pri" onClick={async () => {
+                              const linhas = colar.split(/\n/).map((l) => l.split(/\t|;/).map((s) => s.trim())).filter((c) => c[0]);
+                              const novos: Item[] = [];
+                              for (const c of linhas) {
+                                let p: ItemCat | undefined;
+                                try {
+                                  const r = await json<ItemCat[]>(await fetch(`/api/compras/buscar?tipo=produto&q=${encodeURIComponent(c[0])}`));
+                                  p = r.find((x) => (x.codigo ?? "").toLowerCase() === c[0].toLowerCase());
+                                } catch { /* fica como digitado */ }
+                                novos.push({ ...itemVazio(), cod: p?.codigo ?? c[0], ncodProd: p?.ncod_prod ?? null, desc: p?.descricao ?? c[0],
+                                  un: p?.unidade ?? "UN", qtd: parseNum(c[1] || 1), vu: c[2] ? parseNum(c[2]) : Number(p?.ultimo_preco) || 0 });
+                              }
+                              setD((d) => d ? { ...d, itens: [...d.itens, ...novos] } : d);
+                              setColar(null); toast(`${novos.length} item(ns) importados`);
+                            }}>Importar linhas</button></div>
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </>
+                )}
+
+                {tabAtual === "deptos" && (() => {
+                  const sp = D.deptos.reduce((a, d) => a + (Number(d.perc) || 0), 0);
+                  const setDep = (i: number, p: Partial<{ nome: string; perc: number }>) =>
+                    set({ deptos: D.deptos.map((d, k) => (k === i ? { ...d, ...p } : d)) });
+                  return D.deptos.length ? (
+                    <>
+                      {errs.deptos && <div className="errmsg" style={{ marginBottom: 8 }}>{errs.deptos}</div>}
+                      <div className="items-wrap">
+                        <table className="items" style={{ minWidth: 520 }}>
+                          <thead><tr><th>Departamento</th><th className="r">%</th><th className="r">Valor</th><th /></tr></thead>
+                          <tbody>{D.deptos.map((d, i) => (
+                            <tr key={i}>
+                              <td><select className="in" disabled={ro} value={d.nome} onChange={(e) => setDep(i, { nome: e.target.value })}>
+                                {!deptosLista.includes(d.nome) && <option>{d.nome}</option>}
+                                {deptosLista.map((x) => <option key={x}>{x}</option>)}</select></td>
+                              <td style={{ width: 110 }}><input className="in r" disabled={ro} key={`${i}-${d.perc}`} defaultValue={num2(d.perc)} onBlur={(e) => setDep(i, { perc: parseNum(e.target.value) })} /></td>
+                              <td className="r num" style={{ width: 140, paddingTop: 11 }}>{money((t.total * (Number(d.perc) || 0)) / 100)}</td>
+                              <td style={{ width: 40 }}>{!ro && <button className="x" onClick={() => set({ deptos: D.deptos.filter((_, k) => k !== i) })}>✕</button>}</td>
+                            </tr>
+                          ))}</tbody>
+                          <tfoot><tr><td>Total distribuído</td><td className={`r num${Math.abs(sp - 100) > 0.01 ? " p-crit" : ""}`}>{num2(sp)}%</td><td className="r num">{money((t.total * sp) / 100)}</td><td /></tr></tfoot>
+                        </table>
+                      </div>
+                      {!ro && <div className="addrow">
+                        <button className="btn sm" onClick={() => set({ deptos: [...D.deptos, { nome: deptosLista.find((x) => !D.deptos.some((d) => d.nome === x)) ?? deptosLista[0], perc: 0 }] })}>＋ Departamento</button>
+                        <button className="btn sm ghost" onClick={() => {
+                          const n = D.deptos.length, parte = Math.floor((100 / n) * 100) / 100;
+                          set({ deptos: D.deptos.map((d, i) => ({ ...d, perc: i === n - 1 ? Math.round((100 - parte * (n - 1)) * 100) / 100 : parte })) });
+                        }}>Dividir igualmente</button>
+                      </div>}
+                    </>
+                  ) : (
+                    <div className="inline-note">Ainda não foi informada nenhuma distribuição por departamentos para esta compra.
+                      {!ro && <button className="btn sm" style={{ marginLeft: 6 }} onClick={() => set({ deptos: [{ nome: deptosLista[0], perc: 100 }] })}>Fazer a distribuição agora</button>}
+                      {!refs?.departamentos.length && <div className="hint" style={{ marginTop: 6 }}>Lista de exemplo — o cadastro de departamentos do Omie entra pelo sync de cadastros de compras.</div>}
+                    </div>
+                  );
+                })()}
+
+                {tabAtual === "frete" && (() => {
+                  const f = D.frete;
+                  const setF = (p: Partial<typeof f>) => set({ frete: { ...f, ...p } });
+                  const num = (k: "qtdVol" | "pl" | "pb" | "valor" | "seguro" | "outras", l: string, cls = "s3") => (
+                    <div className={`f ${cls}`}><label>{l}</label>
+                      <input className="in r" disabled={ro} key={`${k}-${f[k] ?? 0}`} defaultValue={num2(f[k] ?? 0)} onBlur={(e) => setF({ [k]: parseNum(e.target.value) })} /></div>
+                  );
+                  const txt = (k: "placa" | "esp" | "marca" | "numer" | "lacre", l: string, cls = "s3") => (
+                    <div className={`f ${cls}`}><label>{l}</label><input className="in" disabled={ro} value={f[k] ?? ""} onChange={(e) => setF({ [k]: e.target.value })} /></div>
+                  );
+                  return (
+                    <>
+                      <div className="gridf">
+                        <div className="f s6"><label>Transportadora</label>
+                          <Autocompletar<Forn> value={f.transp ?? ""} disabled={ro} placeholder="Busque a transportadora"
+                            onChange={(v) => setF({ transp: v, transpCod: null })}
+                            fonte={async (q) => (await json<Forn[]>(await fetch(`/api/compras/buscar?tipo=fornecedor&emp=${D.emp}&q=${encodeURIComponent(q)}`)))
+                              .sort((a, b) => Number(!!b.transp) - Number(!!a.transp))
+                              .map((x) => ({ label: x.nome, sub: `${x.cnpj ?? ""}${x.transp ? " · transportadora" : ""}`, v: x }))}
+                            onPick={(o) => setF({ transp: o.v.nome, transpCod: o.v.cod })} /></div>
+                        <div className="f s6"><label>Tipo do Frete</label>
+                          <select className="in" disabled={ro} value={f.tipo ?? TIPOS_FRETE[5]} onChange={(e) => setF({ tipo: e.target.value })}>
+                            {TIPOS_FRETE.map((x) => <option key={x}>{x}</option>)}</select></div>
+                        {txt("placa", "Placa do Veículo")}
+                        <div className="f s2"><label>UF</label><select className="in" disabled={ro} value={f.uf ?? ""} onChange={(e) => setF({ uf: e.target.value })}>
+                          <option />{UFS.map((u) => <option key={u}>{u}</option>)}</select></div>
+                        {num("qtdVol", "Quantidade de Volumes", "s2")}{txt("esp", "Espécie dos Volumes", "s5")}
+                        {txt("marca", "Marca dos Volumes")}{txt("numer", "Numeração dos Volumes")}{num("pl", "Peso Líquido (Kg)")}{num("pb", "Peso Bruto (Kg)")}
+                        {num("valor", "Valor do Frete")}{num("seguro", "Valor do Seguro")}{num("outras", "Outras Despesas Acessórias")}{txt("lacre", "Número do Lacre")}
+                      </div>
+                      <div className="hint" style={{ marginTop: 8 }}>Frete, seguro e outras despesas entram no Valor Total da Compra e nas parcelas.</div>
+                    </>
+                  );
+                })()}
+
+                {tabAtual === "parcelas" && (
+                  <>
+                    {errs.parcelas && <div className="errmsg" style={{ marginBottom: 8 }}>{errs.parcelas}</div>}
+                    <div className="muted" style={{ marginBottom: 6 }}>Contas a Pagar — condição <b>{refs?.parcelas.find((p) => p.cod === D.parc)?.desc ?? D.parc}</b> a partir da previsão de entrega
+                      {parcEditadas && !ro && <span className="pill p-warn" style={{ marginLeft: 8 }}>editadas à mão</span>}</div>
+                    <div className="items-wrap">
+                      <table className="items" style={{ minWidth: 620 }}>
+                        <thead><tr><th>Situação</th><th>Parcela</th><th>Vencimento</th><th className="r">Valor</th><th className="r">Percentual</th><th>Tipo de Documento</th></tr></thead>
+                        <tbody>{D.parcelas.map((x, i) => {
+                          const setP = (p: Partial<Parcela>) => { setParcEditadas(true); set({ parcelas: D.parcelas.map((y, k) => (k === i ? { ...y, ...p } : y)) }); };
+                          return (
+                            <tr key={i}>
+                              <td style={{ paddingTop: 11 }}><span className="pill p-off">A pagar</span></td>
+                              <td style={{ paddingTop: 11 }}>{x.n}/{D.parcelas.length}</td>
+                              <td style={{ width: 160 }}><input className="in" type="date" disabled={ro} value={x.venc ?? ""} onChange={(e) => setP({ venc: e.target.value })} /></td>
+                              <td style={{ width: 140 }}><input className="in r" disabled={ro} key={`${i}-${x.valor}`} defaultValue={num2(x.valor)} onBlur={(e) => setP({ valor: parseNum(e.target.value) })} /></td>
+                              <td className="r num" style={{ paddingTop: 11 }}>{t.total ? num2(((Number(x.valor) || 0) / t.total) * 100) : "0,00"}%</td>
+                              <td style={{ width: 170 }}><select className="in" disabled={ro} value={x.doc} onChange={(e) => setP({ doc: e.target.value })}>
+                                {TIPOS_DOC.map((d) => <option key={d}>{d}</option>)}</select></td>
+                            </tr>
+                          );
+                        })}
+                        {!D.parcelas.length && <tr><td colSpan={6} className="empty">Sem parcelas</td></tr>}</tbody>
+                      </table>
+                    </div>
+                    {!ro && <div className="addrow"><button className="btn sm" onClick={() => {
+                      setParcEditadas(false);
+                      set({ parcelas: gerarParcelas(t.total, diasDe(D.parc), D.previsao || hoje(), D.parcelas[0]?.doc ?? "Boleto") });
+                      setErrs((e) => { const n = { ...e }; delete n.parcelas; return n; });
+                    }}>↻ Refazer Parcelas</button></div>}
+                  </>
+                )}
+
+                {tabAtual === "info" && (
+                  <div className="gridf">
+                    <div className="f s4"><label>Contato</label><input className="in" disabled={ro} value={D.contato} onChange={(e) => set({ contato: e.target.value })} /></div>
+                    <div className="f s4"><label>Projeto</label>
+                      <Autocompletar<{ cod: number; nome: string }> value={D.proj} disabled={ro} placeholder="Busque o projeto (PJ…, 41_VP…)"
+                        onChange={(v) => set({ proj: v, projCod: null })}
+                        fonte={(q) => (refs?.projetos ?? []).filter((p) => !q || p.nome.toLowerCase().includes(q)).slice(0, 14).map((p) => ({ label: p.nome, v: p }))}
+                        onPick={(o) => set({ proj: o.v.nome, projCod: o.v.cod })} /></div>
+                    <div className="f s4"><label>Conta Corrente</label>
+                      <select className="in" disabled={ro} value={D.contaCod ?? ""} onChange={(e) => { const c = refs?.contas.find((x) => String(x.cod) === e.target.value); set({ contaCod: c?.cod ?? null, conta: c?.desc ?? "" }); }}>
+                        <option value="">{D.conta && !refs?.contas.some((c) => c.cod === D.contaCod) ? D.conta : "—"}</option>
+                        {refs?.contas.map((c) => <option key={c.cod} value={c.cod}>{c.desc}</option>)}</select></div>
+                    <div className="f s6"><label>Nº do Pedido do Fornecedor</label><input className="in" disabled={ro} value={D.numForn} onChange={(e) => set({ numForn: e.target.value })} /></div>
+                    <div className="f s6"><label>Nº do Contrato</label><input className="in" disabled={ro} value={D.contrato} onChange={(e) => set({ contrato: e.target.value })} /></div>
+                    {!isRC && <div className="f s6"><label>Vínculo PV/OS</label>
+                      <Autocompletar<{ label: string; cliente: string; projeto?: string }> value={D.pv ? `${D.pv}${D.pvCliente ? " · " + D.pvCliente : ""}` : ""} disabled={ro}
+                        placeholder="Ex.: PV 4123 — opcional" onChange={(v) => { if (!v) set({ pv: "", pvCliente: "" }); }}
+                        fonte={async (q) => (await json<{ label: string; cliente: string; projeto?: string }[]>(await fetch(`/api/compras/buscar?tipo=venda&emp=${D.emp}&q=${encodeURIComponent(q)}`)))
+                          .map((v) => ({ label: `${v.label} · ${v.cliente}`, sub: v.projeto || "sem projeto", v }))}
+                        onPick={(o) => set({ pv: o.v.label, pvCliente: o.v.cliente })} />
+                      <span className="hint">Liga a compra à venda (já usado em Operação).</span></div>}
+                  </div>
+                )}
+
+                {tabAtual === "obs" && (
+                  <div className="gridf">
+                    <div className="f s12"><label>Observações deste pedido — impressas no pedido enviado ao fornecedor</label>
+                      <textarea className="in" disabled={ro} value={D.obs} onChange={(e) => set({ obs: e.target.value })} /></div>
+                    <div className="f s12"><label>Observações internas — exibidas apenas aqui</label>
+                      <textarea className="in" disabled={ro} value={D.obsInt} onChange={(e) => set({ obsInt: e.target.value })} /></div>
+                  </div>
+                )}
+              </section>
+            </div>
+
+            <aside className="side">
+              <section className="card2"><h4>Ações</h4><div className="actions">
+                {!ro && <button className="btn pri" disabled={salvando} onClick={() => salvar()}>☁ {salvando ? "Salvando…" : "Salvar"}</button>}
+                {isRC && !ro && <button className="btn" disabled={salvando} onClick={() => salvar({ msg: "Requisição salva", gerarPc: true })}>→ Salvar e gerar Pedido de Compra</button>}
+                {isRC && ro && D.id && <button className="btn" onClick={() => onSalvo(D.id!, "", D.id!)}>→ Gerar Pedido de Compra</button>}
+                {!isRC && !ro && <button className="btn" onClick={() => setPicker(true)}>⇠ Puxar itens de requisição</button>}
+                {!isRC && D.aprov !== "aprovado" && !ro && (
+                  <>
+                    <button className="btn" disabled={salvando} onClick={() => salvar({ novaEtapa: D.etapa === "10" ? "15" : undefined, novaAprov: "aguardando", msg: "Pedido salvo e enviado para aprovação" })}>⏳ Salvar e solicitar aprovação</button>
+                    <button className="btn ok" disabled={salvando} onClick={() => salvar({ aprovar: true })}>✓ Aprovar pedido</button>
+                  </>
+                )}
+                {!isRC && ro && D.aprov !== "aprovado" && D.id && (
+                  <button className="btn ok" onClick={async () => {
+                    try {
+                      const a = await json<{ falhas: { erro: string }[] }>(await fetch("/api/compras/acao", { method: "POST", headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ acao: "aprovar", ids: [D.id], status: "aprovado" }) }));
+                      if (a.falhas.length) toast(a.falhas[0].erro, true); else onSalvo(D.id!, `Pedido ${D.num} aprovado`);
+                    } catch (e) { toast((e as Error).message, true); }
+                  }}>✓ Aprovar pedido</button>
+                )}
+                {D.id && !isRC && ["15", "40"].includes(D.etapa) && <button className="btn" onClick={() => onReceber(D.id!)}>📦 Registrar recebimento</button>}
+                {D.id && <button className="btn ghost" onClick={() => onDuplicar(D.id!)}>⧉ Duplicar</button>}
+                {D.id && !isRC && <button className="btn ghost" onClick={() => onImprimir(D.id!)}>🖨 Imprimir / PDF para fornecedor</button>}
+              </div></section>
+              {!ro && (
+                <section className="card2"><h4>Pronto para salvar?</h4><div className="check">
+                  {([[isRC || !!D.forn, "Fornecedor"], [isRC || !!D.cat, "Categoria da compra"],
+                     [D.itens.length > 0 && D.itens.every((i) => Number(i.qtd) > 0), "Itens com quantidade"],
+                     [!D.deptos.length || Math.abs(D.deptos.reduce((a, d) => a + (Number(d.perc) || 0), 0) - 100) <= 0.01, "Departamentos fecham 100%"],
+                     [isRC || Math.abs(t.total - D.parcelas.reduce((a, x) => a + (Number(x.valor) || 0), 0)) <= 0.05, "Parcelas batem com o total"]] as [boolean, string][])
+                    .map(([ok, l]) => <div key={l}><span className={`dot ${ok ? "ok" : "no"}`} />{l}</div>)}
+                </div></section>
+              )}
+              {!isRC && (
+                <section className="card2"><h4>Aprovação</h4><div className="hist">
+                  {D.aprov === "aprovado"
+                    ? <div><span className="pill p-ok">✓ Aprovado</span><small>{D.aprovEm ? dBR(D.aprovEm.slice(0, 10), true) : ""}{D.aprovPor ? ` por ${D.aprovPor}` : ""}</small></div>
+                    : <div>{APROV_LABEL[D.aprov]}</div>}
+                </div></section>
+              )}
+              {(D.nf || D.dtRec) && (
+                <section className="card2"><h4>Nota fiscal</h4><div className="hist">
+                  <div>NF-e {D.nf || "—"}<small>{D.dtRec ? `recebido em ${dBR(D.dtRec)}` : D.dtFat ? `faturado em ${dBR(D.dtFat)}` : ""}</small></div>
+                  {D.chave && <div className="mono" style={{ fontSize: 11, wordBreak: "break-all" }}>{D.chave}</div>}
+                </div></section>
+              )}
+              {D.hist.length > 0 && (
+                <section className="card2"><h4>Histórico</h4><div className="hist">
+                  {[...D.hist].reverse().map((h, i) => <div key={i}>{h.t}<small>{dBR(h.em?.slice(0, 10), true)}{h.por ? ` · ${h.por}` : ""}</small></div>)}
+                </div></section>
+              )}
+            </aside>
+          </div>
+        </div>
+
+        {picker && (
+          <PickerRc onClose={() => setPicker(false)} covEfetiva={covEfetiva}
+            onAdd={(sel) => {
+              Object.values(sel).forEach(({ rc, itens }) => levarDaRc(rc, itens));
+              setRcCache((c) => ({ ...c, ...Object.fromEntries(Object.values(sel).map(({ rc }) => [rc.num, rc])) }));
+              setPicker(false);
+              toast(`Itens vinculados: ${Object.values(sel).map(({ rc }) => "RC " + rc.num).join(", ")}`);
+            }} />
+        )}
+      </div>
+    </div>
+  );
+}
+
+function PickerRc({ onClose, onAdd, covEfetiva }: {
+  onClose: () => void; covEfetiva: (rcItemId: number, cov: number) => number;
+  onAdd: (sel: Record<string, { rc: RcAberta; itens: { itemId: number; qtd: number }[] }>) => void;
+}) {
+  const [q, setQ] = useState("");
+  const [rcs, setRcs] = useState<RcAberta[] | null>(null);
+  const [marcas, setMarcas] = useState<Record<string, { on: boolean; qtd: number }>>({});
+  useEffect(() => {
+    const t = setTimeout(async () => {
+      try { setRcs(await json<RcAberta[]>(await fetch(`/api/compras/buscar?tipo=rc&q=${encodeURIComponent(q)}`))); }
+      catch { setRcs([]); }
+    }, 200);
+    return () => clearTimeout(t);
+  }, [q]);
+  const n = Object.values(marcas).filter((m) => m.on && m.qtd > 0).length;
+  return (
+    <div className="cmp-scrim" style={{ zIndex: 70, justifyContent: "center", alignItems: "flex-start", padding: "5vh 16px" }}
+      onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="card2" style={{ width: "min(880px,100%)", maxHeight: "88vh", display: "flex", flexDirection: "column", gap: 10, boxShadow: "var(--shadow-float)" }}
+        role="dialog" aria-modal="true" aria-label="Vincular requisição">
+        <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+          <b style={{ fontSize: 16 }}>Puxar itens de requisições</b>
+          <span className="hint">O item no pedido pode ter outro nome/código — a requisição guarda o original.</span>
+          <span style={{ flex: 1 }} /><button className="btn ghost sm" onClick={onClose}>Fechar ✕</button>
+        </div>
+        <input className="in" autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder="Filtrar por nº, projeto, venda (PV/OS), cliente ou produto" />
+        <div style={{ overflow: "auto", display: "grid", gap: 10 }}>
+          {rcs == null && <div className="empty">Carregando…</div>}
+          {rcs?.length === 0 && <div className="empty">Nenhuma requisição em aberto com esse filtro</div>}
+          {rcs?.map((rc) => (
+            <section key={rc.id} style={{ border: "1px solid var(--line)", borderRadius: 10, overflow: "hidden" }}>
+              <div style={{ background: "var(--sunken)", padding: "8px 10px", display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                <b>Requisição {rc.num}</b><span className="tag">{rc.proj || "sem projeto"}</span>
+                {rc.pv ? <span className="tag">↔ {rc.pv}{rc.pvCliente ? " · " + rc.pvCliente : ""}</span> : <span className="faint">sem venda vinculada</span>}
+                <span className="faint">{dBR(rc.emissao)} · {rc.comprador || "—"}</span><span style={{ flex: 1 }} />
+                <button className="btn sm ghost" onClick={() => setMarcas((m) => {
+                  const n2 = { ...m };
+                  rc.itens.forEach((it) => { const rest = it.qtd - covEfetiva(it.id, it.cov); if (rest > 0) n2[`${rc.num}|${it.id}`] = { on: true, qtd: rest }; });
+                  return n2;
+                })}>Marcar todos</button>
+              </div>
+              <table className="items" style={{ minWidth: 0 }}><tbody>
+                {rc.itens.map((it) => {
+                  const cov = covEfetiva(it.id, it.cov), rest = Math.max(0, it.qtd - cov), k = `${rc.num}|${it.id}`;
+                  const m = marcas[k] ?? { on: false, qtd: rest };
+                  return rest <= 0 ? (
+                    <tr key={k} className="done"><td /><td>{it.desc}</td><td className="r faint" colSpan={2}>já pedido</td></tr>
+                  ) : (
+                    <tr key={k}>
+                      <td style={{ width: 34, paddingTop: 9 }}><input type="checkbox" checked={m.on} aria-label="Selecionar item"
+                        onChange={(e) => setMarcas((mm) => ({ ...mm, [k]: { ...m, on: e.target.checked } }))} /></td>
+                      <td style={{ paddingTop: 9 }}>{it.desc}<div className="hint mono">{it.cod} · pedido {fq(it.qtd)} {it.un}{cov ? ` · já em pedido ${fq(cov)}` : ""}</div></td>
+                      <td className="r faint" style={{ paddingTop: 9, width: 90 }}>a comprar</td>
+                      <td style={{ width: 110 }}><input className="in r" defaultValue={num2(m.qtd)}
+                        onBlur={(e) => { const v = parseNum(e.target.value); setMarcas((mm) => ({ ...mm, [k]: { on: v > 0, qtd: v } })); }} /></td>
+                    </tr>
+                  );
+                })}
+              </tbody></table>
+            </section>
+          ))}
+        </div>
+        <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+          <button className="btn" onClick={onClose}>Cancelar</button>
+          <button className="btn pri" disabled={!n} onClick={() => {
+            const sel: Record<string, { rc: RcAberta; itens: { itemId: number; qtd: number }[] }> = {};
+            Object.entries(marcas).filter(([, m]) => m.on && m.qtd > 0).forEach(([k, m]) => {
+              const [num, idS] = k.split("|");
+              const rc = rcs?.find((r) => r.num === num);
+              if (!rc) return;
+              (sel[num] = sel[num] ?? { rc, itens: [] }).itens.push({ itemId: Number(idS), qtd: m.qtd });
+            });
+            onAdd(sel);
+          }}>Adicionar {n || ""} item(ns) ao pedido</button>
+        </div>
+      </div>
+    </div>
+  );
+}
