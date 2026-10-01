@@ -3,10 +3,10 @@
 /** Peças partilhadas da lista e da ficha do Estoque: dados em cache, pílula, miniatura e a paleta ⌘K. */
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { normItem, situacao, type ItemEstoque, type ParDup, type Tom } from "@/lib/estoque";
+import { normItem, situacao, type ItemEstoque, type JanelaInventario, type ParDup, type Tom } from "@/lib/estoque";
 
 // ── Dados da lista (cache do módulo: lista ↔ ficha sem recarregar) ───────────
-type Pacote = { itens: ItemEstoque[]; dups: ParDup[] };
+type Pacote = { itens: ItemEstoque[]; dups: ParDup[]; admin: boolean };
 let cache: Pacote | null = null;
 let emCurso: Promise<Pacote> | null = null;
 
@@ -19,6 +19,7 @@ function carregar(forcar = false): Promise<Pacote> {
     cache = {
       itens: (j.rows as Record<string, unknown>[]).map(normItem),
       dups: (j.dups as ParDup[]).map((d) => ({ ...d, prod_a: Number(d.prod_a), prod_b: Number(d.prod_b), sim: Number(d.sim) })),
+      admin: !!j.admin,
     };
     return cache;
   }).finally(() => { emCurso = null; });
@@ -33,7 +34,59 @@ export function useItensEstoque() {
     carregar().then((d) => vivo && setDados(d)).catch((e) => vivo && setErro((e as Error).message));
     return () => { vivo = false; };
   }, []);
-  return { dados, erro };
+  /** Depois de ajustar/mesclar: busca de novo (saldo e duplicidades mudam). */
+  const recarregar = useCallback(async () => {
+    try { setDados(await carregar(true)); } catch (e) { setErro((e as Error).message); }
+  }, []);
+  return { dados, erro, recarregar };
+}
+/** Invalida o cache da lista (a ficha ajustou algo; a lista recarrega ao voltar). */
+export const invalidarItens = () => { cache = null; };
+
+// ── Sessão de inventário: a senha fica só nesta aba do navegador até a janela vencer ──
+const INV = "est-inv-v1";
+export type SessaoInv = { codigo: string; janela: JanelaInventario };
+export function lerSessaoInv(): SessaoInv | null {
+  try {
+    const s = JSON.parse(sessionStorage.getItem(INV) || "null") as SessaoInv | null;
+    if (!s || new Date(s.janela.valida_ate).getTime() <= Date.now()) { sessionStorage.removeItem(INV); return null; }
+    return s;
+  } catch { return null; }
+}
+export const gravarSessaoInv = (s: SessaoInv | null) => {
+  try { if (s) sessionStorage.setItem(INV, JSON.stringify(s)); else sessionStorage.removeItem(INV); } catch {}
+};
+export async function entrarInventario(codigo: string): Promise<SessaoInv> {
+  const r = await fetch("/api/estoque/janela/validar", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ codigo }) });
+  const j = await r.json();
+  if (!r.ok) throw new Error(j.error ?? r.statusText);
+  const s = { codigo: codigo.toUpperCase().replace(/[^A-Z0-9]/g, ""), janela: j.janela as JanelaInventario };
+  gravarSessaoInv(s);
+  return s;
+}
+export function useSessaoInv() {
+  const [s, setS] = useState<SessaoInv | null>(null);
+  useEffect(() => { setS(lerSessaoInv()); }, []);
+  const set = useCallback((v: SessaoInv | null) => { gravarSessaoInv(v); setS(v); }, []);
+  return [s, set] as const;
+}
+export const escopoTxt = (e: JanelaInventario["escopo"] | undefined, nomeLocal: (l: string) => string) =>
+  e?.familia ? `família ${e.familia}` : e?.local ? nomeLocal(e.local) : "todos os itens";
+
+/** POST JSON com erro legível. */
+export async function postar<T = unknown>(url: string, body: unknown): Promise<T> {
+  const r = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error((j as { error?: string }).error ?? r.statusText);
+  return j as T;
+}
+
+/** Aviso flutuante (substitui alert/confirm). */
+export function useToast() {
+  const [t, setT] = useState<{ msg: string; tom: Tom } | null>(null);
+  useEffect(() => { if (!t) return; const h = setTimeout(() => setT(null), 3500); return () => clearTimeout(h); }, [t]);
+  const el = t ? <div className={`est-toast t-${t.tom}`} role="status">{t.msg}</div> : null;
+  return [el, (msg: string, tom: Tom = "ok") => setT({ msg, tom })] as const;
 }
 
 // ── Navegação lista → ficha (‹ ›) e estado da lista ─────────────────────────
@@ -190,7 +243,7 @@ export function PaletaEstoque({ itens, fechar, onItem, onPc, onCliente }: {
         <div className="res">
           {itensRes.length > 0 && <div className="grp">{sl ? "Itens" : "Abertos recentemente"}</div>}
           {itensRes.map((r) => {
-            const [st, tm] = situacao(r.p);
+            const [st, tm]: [string, Tom] = r.p.mesclado_em_codigo ? [`mesclado em ${r.p.mesclado_em_codigo}`, "off"] : situacao(r.p);
             return linha(r, <>
               <Thumb />
               <div className="sp">

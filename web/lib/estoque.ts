@@ -20,7 +20,35 @@ export type ItemEstoque = {
   estoque_minimo: number; data_posicao: string | null; locais: LocalEstoque[]; n_locais: number; local_negativo: boolean;
   consumo_90d: number; ult_mov: string | null; n_mov: number; pcs_velhos: number; rec_a_mais: number; ult_pc: string | null;
   duplicidade: boolean;
+  familia: string | null; codigo_familia: number | null;
+  /** Se este código foi mesclado em outro (fica fora da lista; a ficha mostra o aviso). */
+  mesclado_em: number | null; mesclado_em_codigo: string | null;
 };
+
+export type AjusteEstoque = {
+  id: number; empresa: string; n_cod_prod: number; codigo_local_estoque: string; tipo: "inventario" | "mesclagem";
+  janela_id: number | null; mescla_id: number | null; saldo_antes: number; contagem: number; diferenca: number;
+  cmc: number; valor: number; motivo: string; obs: string | null; status: "aplicado" | "revertido";
+  revisao: "pendente" | "conferido" | "contestado"; revisado_por_email: string | null; revisado_em: string | null;
+  revertido_por_email: string | null; revertido_em: string | null; created_by_email: string | null; created_at: string;
+};
+
+export type JanelaInventario = {
+  id: number; nome: string; escopo: { familia?: string; local?: string }; valida_ate: string; revogada_em: string | null;
+  revogada_por_email?: string | null; created_by_email?: string | null; created_at?: string;
+};
+
+export function normAjuste(r: Record<string, unknown>): AjusteEstoque {
+  return {
+    id: n(r.id), empresa: String(r.empresa), n_cod_prod: n(r.n_cod_prod), codigo_local_estoque: String(r.codigo_local_estoque),
+    tipo: r.tipo as AjusteEstoque["tipo"], janela_id: r.janela_id != null ? n(r.janela_id) : null, mescla_id: r.mescla_id != null ? n(r.mescla_id) : null,
+    saldo_antes: n(r.saldo_antes), contagem: n(r.contagem), diferenca: n(r.diferenca), cmc: n(r.cmc), valor: n(r.valor),
+    motivo: String(r.motivo ?? ""), obs: (r.obs as string) ?? null, status: r.status as AjusteEstoque["status"],
+    revisao: r.revisao as AjusteEstoque["revisao"], revisado_por_email: (r.revisado_por_email as string) ?? null,
+    revisado_em: (r.revisado_em as string) ?? null, revertido_por_email: (r.revertido_por_email as string) ?? null,
+    revertido_em: (r.revertido_em as string) ?? null, created_by_email: (r.created_by_email as string) ?? null, created_at: String(r.created_at),
+  };
+}
 
 export type MovEstoque = {
   id_mov: number; dt_mov: string; des_origem: string | null; tipo: string | null; qtde: number; valor: number; saldo: number;
@@ -31,6 +59,8 @@ export type MovEstoque = {
 export type PcItem = {
   pedido_id: number; numero: string; emissao: string | null; etapa: string | null; origem: string | null;
   fornecedor: string | null; projeto: string | null; dt_rec: string | null; qtd: number; qtd_recebida: number; valor_unit: number;
+  /** PC de um código mesclado neste (a ficha do principal traz o histórico dos mesclados). */
+  de_codigo?: string | null;
 };
 
 export type ParDup = { empresa: string; prod_a: number; prod_b: number; tipo: "exata" | "similar"; sim: number; chave: string | null };
@@ -47,6 +77,8 @@ export function normItem(r: Record<string, unknown>): ItemEstoque {
     n_locais: n(r.n_locais), local_negativo: !!r.local_negativo, consumo_90d: n(r.consumo_90d),
     ult_mov: (r.ult_mov as string) || null, n_mov: n(r.n_mov), pcs_velhos: n(r.pcs_velhos), rec_a_mais: n(r.rec_a_mais),
     ult_pc: (r.ult_pc as string) || null, duplicidade: !!r.duplicidade,
+    familia: (r.familia as string) || null, codigo_familia: r.codigo_familia != null ? n(r.codigo_familia) : null,
+    mesclado_em: r.mesclado_em != null ? n(r.mesclado_em) : null, mesclado_em_codigo: (r.mesclado_em_codigo as string) || null,
   };
 }
 
@@ -65,6 +97,7 @@ export function normPc(r: Record<string, unknown>): PcItem {
     pedido_id: n(r.pedido_id), numero: String(r.numero ?? ""), emissao: (r.emissao as string) ?? null, etapa: (r.etapa as string) ?? null,
     origem: (r.origem as string) ?? null, fornecedor: (r.fornecedor as string) ?? null, projeto: (r.projeto as string) ?? null,
     dt_rec: (r.dt_rec as string) ?? null, qtd: n(r.qtd), qtd_recebida: n(r.qtd_recebida), valor_unit: n(r.valor_unit),
+    de_codigo: (r.de_codigo as string) ?? null,
   };
 }
 
@@ -117,12 +150,15 @@ export function alertasLista(p: ItemEstoque): number {
   return k;
 }
 
-/** Quebras de sequência no Kardex: saldo anterior (do mesmo local) + qtde ≠ saldo. Índices em movs. */
+/** Chave do saldo corrente no Kardex: produto + local (a ficha de um principal traz o Kardex dos mesclados). */
+export const chaveSaldo = (m: MovEstoque) => `${m.id_prod ?? ""}:${m.codigo_local_estoque}`;
+
+/** Quebras de sequência no Kardex: saldo anterior (do mesmo produto e local) + qtde ≠ saldo. Índices em movs. */
 export function quebras(movs: MovEstoque[]): Set<number> {
   const ult: Record<string, number> = {}, out = new Set<number>();
   movs.forEach((m, i) => {
     if (m.cancelado) return;
-    const l = m.codigo_local_estoque;
+    const l = chaveSaldo(m);
     if (ult[l] != null && Math.abs(ult[l] + m.qtde - m.saldo) > 0.001) out.add(i);
     ult[l] = m.saldo;
   });
@@ -131,7 +167,7 @@ export function quebras(movs: MovEstoque[]): Set<number> {
 
 export type PontoAuditoria = {
   tom: Tom; icone: string; titulo: string; detalhe: string;
-  acao?: { rotulo: string; aba?: AbaFicha; emBreve?: boolean };
+  acao?: { rotulo: string; aba?: AbaFicha; emBreve?: boolean; ajustar?: boolean };
 };
 export type AbaFicha = "uso" | "mov" | "compras" | "forn" | "auditoria";
 
@@ -150,10 +186,10 @@ export function auditoria(p: ItemEstoque, movs: MovEstoque[], pcs: PcItem[], tem
   if (s >= 0 && negLoc.length && p.locais.length > 1)
     pts.push({ tom: "crit", icone: "alerta", titulo: `Saldo negativo no ${nomeLocal(negLoc[0].local)}`,
       detalhe: `${q(negLoc[0].saldo)} ${u} — o total parece certo, mas um local está negativo. Provável transferência entre locais não lançada.`,
-      acao: { rotulo: "Ajustar local", emBreve: true } });
+      acao: { rotulo: "Ajustar local", ajustar: true } });
   if (s < 0)
     pts.push({ tom: "crit", icone: "alerta", titulo: "Saldo negativo",
-      detalhe: `Saldo ${q(s)} ${u} — fisicamente impossível. Faça a contagem e ajuste.`, acao: { rotulo: "Ajustar saldo", emBreve: true } });
+      detalhe: `Saldo ${q(s)} ${u} — fisicamente impossível. Faça a contagem e ajuste.`, acao: { rotulo: "Ajustar saldo", ajustar: true } });
   const qb = quebras(movs);
   if (qb.size) {
     const m = movs[[...qb][0]];
@@ -161,9 +197,10 @@ export function auditoria(p: ItemEstoque, movs: MovEstoque[], pcs: PcItem[], tem
       detalhe: `Primeiro em ${ddmmaa(m.dt_mov)}: ${m.des_origem ?? ""} ${m.doc ?? ""} (${m.qtde > 0 ? "+" : ""}${q(m.qtde)}) registrou saldo ${q(m.saldo)}. Indica lançamento retroativo ou fora de ordem no Omie.`,
       acao: { rotulo: "Ver no Kardex", aba: "mov" } });
   }
-  if (movs.length) {
+  const meus = movs.filter((m) => m.id_prod == null || m.id_prod === p.n_cod_prod);
+  if (meus.length) {
     const ultLoc: Record<string, number> = {};
-    movs.forEach((m) => { if (!m.cancelado) ultLoc[m.codigo_local_estoque] = m.saldo; });
+    meus.forEach((m) => { if (!m.cancelado) ultLoc[m.codigo_local_estoque] = m.saldo; });
     const k = Object.values(ultLoc).reduce((a, b) => a + b, 0);
     if (Math.abs(k - p.saldo_omie) > 0.001 && Object.keys(ultLoc).length === p.locais.length)
       pts.push({ tom: "warn", icone: "soma", titulo: "Posição ≠ último saldo do Kardex",

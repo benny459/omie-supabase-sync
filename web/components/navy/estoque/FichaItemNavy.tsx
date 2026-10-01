@@ -5,23 +5,30 @@
  * Porte da ficha do mockup web/docs/mockups/estoque-ficha-item: foto (placeholder até a fase 2),
  * indicadores, saldo por local, abas Onde foi usado · Movimentação · Pedidos de compra ·
  * Fornecedores e preços · Auditoria, e ‹ › para andar pela lista filtrada.
- * Ajustar saldo / alarme / foto / pedir compra chegam nas fases 2–3 (botões "em breve").
+ * Ajustar saldo: só com a senha de uma janela de inventário (fica SÓ no painel, nunca no Omie).
+ * Mesclagem: aviso "mesclado em X" no secundário; o principal mostra o histórico dos mesclados.
+ * Alarme / foto / pedir compra: fase 2 (botões "em breve").
  */
 
 import "./estoque.css";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
-  alarme, auditoria, baixarCSV, cobertura, consumoDia, dias, hoje, nomeLocal, normItem, normMov, normPc, pcAberto,
+  alarme, auditoria, baixarCSV, chaveSaldo, cobertura, consumoDia, dias, hoje, nomeLocal, normAjuste, normItem, normMov, normPc, pcAberto,
   precosPorFornecedor, quebras, situacao, somaDias, valorItem,
-  type AbaFicha, type ItemEstoque, type MovEstoque, type PcItem, type Tom,
+  type AbaFicha, type AjusteEstoque, type ItemEstoque, type MovEstoque, type PcItem, type Tom,
 } from "@/lib/estoque";
 import {
-  IconeCaixa, Lupa, PaletaEstoque, Pill, Seta, brl, ddmmaa, kbrl, lerNavegacao, marcarRecente, q,
-  useAtalhoPaleta, useItensEstoque,
+  IconeCaixa, Lupa, PaletaEstoque, Pill, Seta, brl, ddmmaa, escopoTxt, invalidarItens, kbrl, lerNavegacao, marcarRecente, postar, q,
+  useAtalhoPaleta, useItensEstoque, useSessaoInv, useToast, type SessaoInv,
 } from "./comum";
+import { ModalAjuste, ModalMesclar, ModalSenha } from "./Acoes";
 
-type Ficha = { item: ItemEstoque; movs: MovEstoque[]; pcs: PcItem[]; dups: { tipo: string; sim: number; item: ItemEstoque | null }[] };
+type Mescla = { id: number; principal: number; secundario: number; secundario_item: { codigo: string; descricao: string } | null };
+type Ficha = {
+  item: ItemEstoque; movs: MovEstoque[]; pcs: PcItem[]; dups: { tipo: string; sim: number; item: ItemEstoque | null }[];
+  ajustes: AjusteEstoque[]; mesclas: Mescla[]; admin: boolean;
+};
 const ABAS: AbaFicha[] = ["uso", "mov", "compras", "forn", "auditoria"];
 const EM_BREVE = "Em breve — próxima fase do Estoque v2";
 
@@ -33,11 +40,13 @@ export default function FichaItemNavy({ codigo, abaInicial }: { codigo: string; 
   const [pal, setPal] = useState(false);
   const [nav, setNav] = useState<string[]>([]);
   const { dados } = useItensEstoque();
+  const [versao, setVersao] = useState(0);
+  const recarregar = useCallback(() => { invalidarItens(); setVersao((v) => v + 1); }, []);
 
   useEffect(() => { setNav(lerNavegacao()); }, []);
   useEffect(() => {
     const ctrl = new AbortController();
-    setF(null); setErro(null);
+    setErro(null);
     fetch(`/api/estoque/item/${encodeURIComponent(codigo)}`, { signal: ctrl.signal, cache: "no-store" })
       .then(async (r) => {
         const j = await r.json();
@@ -48,11 +57,15 @@ export default function FichaItemNavy({ codigo, abaInicial }: { codigo: string; 
           item, movs: (j.movs as Record<string, unknown>[]).map(normMov), pcs: (j.pcs as Record<string, unknown>[]).map(normPc),
           dups: (j.dups as { tipo: string; sim: number; item: Record<string, unknown> | null }[])
             .map((d) => ({ tipo: d.tipo, sim: Number(d.sim), item: d.item ? normItem(d.item) : null })),
+          ajustes: ((j.ajustes ?? []) as Record<string, unknown>[]).map(normAjuste),
+          mesclas: ((j.mesclas ?? []) as Mescla[]).map((m) => ({ ...m, principal: Number(m.principal), secundario: Number(m.secundario) })),
+          admin: !!j.admin,
         });
       })
       .catch((e) => { if ((e as Error).name !== "AbortError") setErro((e as Error).message); });
     return () => ctrl.abort();
-  }, [codigo]);
+  }, [codigo, versao]);
+  useEffect(() => { setF(null); }, [codigo]);
 
   const ir = useCallback((cod: string, a?: string) => router.push(`/estoque/${encodeURIComponent(cod)}${a ? `?aba=${a}` : ""}`), [router]);
   const idx = nav.indexOf(codigo);
@@ -88,7 +101,7 @@ export default function FichaItemNavy({ codigo, abaInicial }: { codigo: string; 
 
       {erro && <div className="aviso t-crit">{erro}</div>}
       {!f && !erro && <div className="cartao vazio">Carregando ficha…</div>}
-      {f && <Conteudo f={f} aba={aba} setAba={setAba} ir={ir} />}
+      {f && <Conteudo f={f} aba={aba} setAba={setAba} ir={ir} recarregar={recarregar} />}
 
       {pal && dados && (
         <PaletaEstoque itens={dados.itens} fechar={() => setPal(false)}
@@ -100,8 +113,28 @@ export default function FichaItemNavy({ codigo, abaInicial }: { codigo: string; 
   );
 }
 
-function Conteudo({ f, aba, setAba, ir }: { f: Ficha; aba: AbaFicha; setAba: (a: AbaFicha) => void; ir: (cod: string, a?: string) => void }) {
+function Conteudo({ f, aba, setAba, ir, recarregar }: {
+  f: Ficha; aba: AbaFicha; setAba: (a: AbaFicha) => void; ir: (cod: string, a?: string) => void; recarregar: () => void;
+}) {
   const router = useRouter();
+  const [sessao, setSessao] = useSessaoInv();
+  const [modal, setModal] = useState<null | "senha" | "ajuste" | { mesclar: ItemEstoque[] }>(null);
+  const [toast, avisar] = useToast();
+  const [ocupado, setOcupado] = useState(false);
+  const mesclado = f.item.mesclado_em != null;
+  const pedirAjuste = () => setModal(sessao ? "ajuste" : "senha");
+  const naoE = async (outro: ItemEstoque) => {
+    setOcupado(true);
+    try { await postar("/api/estoque/duplicidade", { acao: "nao_e", empresa: f.item.empresa, a: f.item.n_cod_prod, b: outro.n_cod_prod }); avisar("Par marcado como não duplicidade", "ok"); recarregar(); }
+    catch (e) { avisar((e as Error).message, "crit"); } finally { setOcupado(false); }
+  };
+  const desfazerMescla = async (m: Mescla) => {
+    setOcupado(true);
+    try { await postar("/api/estoque/duplicidade", { acao: "desfazer", id: m.id }); avisar("Mesclagem desfeita — saldos voltaram", "ok"); recarregar(); }
+    catch (e) { avisar((e as Error).message, "crit"); } finally { setOcupado(false); }
+  };
+  const aliases = useAliases([f.item.n_cod_prod, ...f.mesclas.filter((m) => m.principal === f.item.n_cod_prod).map((m) => m.secundario)]);
+  const nomesSec = new Map(f.mesclas.filter((m) => m.principal === f.item.n_cod_prod).map((m) => [m.secundario, m.secundario_item?.codigo ?? String(m.secundario)]));
   const p = f.item, s = p.saldo, cob = cobertura(p), [st, tom] = situacao(p);
   const ano = somaDias(hoje(), -365), dois = somaDias(hoje(), -730);
   const usos = f.movs.filter((m) => m.qtde < 0 && !m.cancelado && m.dt_mov >= ano);
@@ -113,7 +146,23 @@ function Conteudo({ f, aba, setAba, ir }: { f: Ficha; aba: AbaFicha; setAba: (a:
   const ultPc = f.pcs.filter((x) => x.valor_unit > 0)[0];
   const abertos = pcs24.filter(pcAberto);
 
-  return (
+  return (<>
+    {mesclado && (
+      <div className="aviso t-warn">
+        <span>Este código foi <b>mesclado em {p.mesclado_em_codigo ?? p.mesclado_em}</b> — o saldo dele passou para o principal e ele saiu da lista.</span>
+        <span style={{ flex: 1 }} />
+        {p.mesclado_em_codigo && <button className="btn sm" onClick={() => ir(p.mesclado_em_codigo!)}>Abrir o principal</button>}
+      </div>
+    )}
+    {nomesSec.size > 0 && (
+      <div className="aviso t-info">
+        <span>Este código recebeu a mesclagem de <b>{[...nomesSec.values()].join(", ")}</b>: Kardex, PCs e usos deles aparecem junto aqui.</span>
+        <span style={{ flex: 1 }} />
+        {f.admin && f.mesclas.filter((m) => m.principal === p.n_cod_prod).map((m) => (
+          <button key={m.id} className="btn sm" disabled={ocupado} onClick={() => desfazerMescla(m)}>Desfazer mesclagem de {nomesSec.get(m.secundario)}</button>
+        ))}
+      </div>
+    )}
     <div className="cartao">
       <div className="ficha-top">
         <div className="foto">
@@ -154,11 +203,15 @@ function Conteudo({ f, aba, setAba, ir }: { f: Ficha; aba: AbaFicha; setAba: (a:
             </div>
           )}
           <div className="acoes-item">
-            <button className="btn pri" disabled title={EM_BREVE}>Ajustar saldo</button>
+            <button className="btn pri" onClick={pedirAjuste} disabled={mesclado}
+              title={mesclado ? "Código mesclado — ajuste o principal" : sessao ? `Janela “${sessao.janela.nome}” · ${escopoTxt(sessao.janela.escopo, nomeLocal)}` : "Peça a senha de inventário ao Benny"}>
+              Ajustar saldo{sessao ? "" : " 🔒"}</button>
             <button className="btn" disabled title={EM_BREVE}>Definir alarme</button>
             <button className="btn" onClick={() => setAba("auditoria")}>Auditoria{nA ? <> <span className="pill t-warn" style={{ padding: "0 7px" }}>{nA}</span></> : null}</button>
             <button className="btn" disabled title={EM_BREVE}>Pedir compra</button>
           </div>
+          {!sessao && !mesclado && <div className="mini" style={{ marginTop: 6 }}>Ajustar saldo exige a senha de inventário — peça ao Benny.</div>}
+          {sessao && <div className="mini" style={{ marginTop: 6 }}>Janela de inventário <b>{sessao.janela.nome}</b> aberta nesta aba até {new Date(sessao.janela.valida_ate).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}.</div>}
         </div>
       </div>
 
@@ -172,13 +225,20 @@ function Conteudo({ f, aba, setAba, ir }: { f: Ficha; aba: AbaFicha; setAba: (a:
       </div>
       <div className="painel">
         {aba === "uso" && <AbaUso p={p} usos={usos} filtrarCliente={(c) => router.push(`/estoque?cliente=${encodeURIComponent(c)}`)} />}
-        {aba === "mov" && <AbaMov p={p} movs={f.movs} />}
+        {aba === "mov" && <AbaMov p={p} movs={f.movs} nomesSec={nomesSec} />}
         {aba === "compras" && <AbaCompras p={p} pcs={pcs24} abertos={abertos} />}
-        {aba === "forn" && <AbaForn pcs={f.pcs} precos={precos} />}
-        {aba === "auditoria" && <AbaAuditoria pts={pts} dups={f.dups} setAba={setAba} ir={ir} />}
+        {aba === "forn" && <><SecaoAliases st={aliases} codigoDe={(id) => nomesSec.get(id) ?? ""} /><AbaForn pcs={f.pcs} precos={precos} /></>}
+        {aba === "auditoria" && <AbaAuditoria pts={pts} dups={f.dups} setAba={setAba} ir={ir} ajustes={f.ajustes} aliases={aliases?.lista ?? []} admin={f.admin} ocupado={ocupado}
+          pedirAjuste={pedirAjuste} mesclar={(o) => setModal({ mesclar: [p, o] })} naoE={naoE} codigoDe={(id) => (id === p.n_cod_prod ? p.codigo : nomesSec.get(id) ?? String(id))} />}
       </div>
     </div>
-  );
+    {modal === "senha" && <ModalSenha fechar={() => setModal(null)} ok={(s: SessaoInv) => { setSessao(s); setModal("ajuste"); }} />}
+    {modal === "ajuste" && sessao && <ModalAjuste p={p} sessao={sessao} fechar={() => setModal(null)}
+      ok={() => { setModal(null); avisar("Saldo ajustado no painel", "ok"); recarregar(); }} />}
+    {modal && typeof modal === "object" && <ModalMesclar itens={modal.mesclar} fechar={() => setModal(null)}
+      ok={(pr) => { setModal(null); avisar(`Mesclado em ${pr.codigo}`, "ok"); if (pr.n_cod_prod === p.n_cod_prod) recarregar(); else { invalidarItens(); ir(pr.codigo); } }} />}
+    {toast}
+  </>);
 }
 
 function Stat({ r, v, s, cor }: { r: string; v: string; s: string; cor?: string }) {
@@ -244,7 +304,7 @@ function AbaUso({ p, usos, filtrarCliente }: { p: ItemEstoque; usos: MovEstoque[
 }
 
 // ── Movimentação (Kardex) ────────────────────────────────────────────────────
-function AbaMov({ p, movs }: { p: ItemEstoque; movs: MovEstoque[] }) {
+function AbaMov({ p, movs, nomesSec }: { p: ItemEstoque; movs: MovEstoque[]; nomesSec: Map<number, string> }) {
   if (!movs.length) return <div className="vazio">Sem movimentos sincronizados.</div>;
   const qb = quebras(movs);
   const csv = () => baixarCSV(`kardex-${p.codigo}-${hoje()}.csv`, [
@@ -266,7 +326,7 @@ function AbaMov({ p, movs }: { p: ItemEstoque; movs: MovEstoque[] }) {
           {movs.map((m, i) => [m, i] as const).reverse().map(([m, i]) => (
             <tr key={m.id_mov} style={{ opacity: m.cancelado ? 0.45 : 1, textDecoration: m.cancelado ? "line-through" : undefined }}>
               <td className="num">{ddmmaa(m.dt_mov)}</td>
-              <td>{m.des_origem}{p.locais.length > 1 && <div className="mini">{nomeLocal(m.codigo_local_estoque)}</div>}</td>
+              <td>{m.des_origem}{(p.locais.length > 1 || nomesSec.size > 0) && <div className="mini">{nomeLocal(m.codigo_local_estoque)}{m.id_prod != null && m.id_prod !== p.n_cod_prod ? ` · código ${nomesSec.get(m.id_prod) ?? m.id_prod}` : ""}</div>}</td>
               <td className="mini">{m.doc}{m.pv_numero && <div>PV {m.pv_numero}</div>}</td>
               <td className="opt">{m.cliente ?? ""}</td>
               <td className="r num" style={{ fontWeight: 600, color: `var(--ww-${m.qtde < 0 ? "crit" : "ok"}-text)` }}>{m.qtde > 0 ? "+" : "−"}{q(Math.abs(m.qtde))}</td>
@@ -289,7 +349,7 @@ function GraficoSaldo({ movs, qb }: { movs: MovEstoque[]; qb: Set<number> }) {
   const pts: { t: number; v: number; bad: boolean; m: MovEstoque }[] = [];
   movs.forEach((m, i) => {
     if (m.cancelado) return;
-    porLoc[m.codigo_local_estoque] = m.saldo;
+    porLoc[chaveSaldo(m)] = m.saldo;
     pts.push({ t: new Date(m.dt_mov + "T12:00:00Z").getTime(), v: Object.values(porLoc).reduce((a, b) => a + b, 0), bad: qb.has(i), m });
   });
   if (!pts.length) return null;
@@ -349,7 +409,7 @@ function AbaCompras({ p, pcs, abertos }: { p: ItemEstoque; pcs: PcItem[]; aberto
             const [t, tm] = sit(x);
             return (
               <tr key={`${x.pedido_id}:${x.numero}:${x.qtd}:${x.valor_unit}`}>
-                <td style={{ fontWeight: 600 }}>{x.numero}{x.origem === "painel" && <div className="mini">painel</div>}</td>
+                <td style={{ fontWeight: 600 }}>{x.numero}{x.origem === "painel" && <div className="mini">painel</div>}{x.de_codigo && <div className="mini">código {x.de_codigo}</div>}</td>
                 <td className="num">{ddmmaa(x.emissao)}</td>
                 <td>{x.fornecedor || "— fornecedor não cadastrado"}</td>
                 <td className="opt mini">{x.projeto ?? ""}</td>
@@ -446,8 +506,10 @@ const ICONES: Record<string, string> = {
   zero: "M5 19L19 5M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18z", parado: "M10 9v6M14 9v6M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18z", ok: "M20 6L9 17l-5-5",
 };
 
-function AbaAuditoria({ pts, dups, setAba, ir }: {
+function AbaAuditoria({ pts, dups, setAba, ir, ajustes, aliases, admin, ocupado, pedirAjuste, mesclar, naoE, codigoDe }: {
   pts: ReturnType<typeof auditoria>; dups: Ficha["dups"]; setAba: (a: AbaFicha) => void; ir: (cod: string, a?: string) => void;
+  ajustes: AjusteEstoque[]; aliases: Alias[]; admin: boolean; ocupado: boolean; pedirAjuste: () => void;
+  mesclar: (outro: ItemEstoque) => void; naoE: (outro: ItemEstoque) => void; codigoDe: (id: number) => string;
 }) {
   return (
     <div className="grid2">
@@ -463,9 +525,9 @@ function AbaAuditoria({ pts, dups, setAba, ir }: {
             <div style={{ minWidth: 0 }}><div className="tt">{x.titulo}</div><div className="dd">{x.detalhe}</div></div>
             {x.acao && (
               <div className="ac">
-                {x.acao.emBreve
-                  ? <button className="btn sm" disabled title={EM_BREVE}>{x.acao.rotulo}</button>
-                  : <button className="btn sm" onClick={() => x.acao?.aba && setAba(x.acao.aba)}>{x.acao.rotulo}</button>}
+                {x.acao.emBreve ? <button className="btn sm" disabled title={EM_BREVE}>{x.acao.rotulo}</button>
+                  : x.acao.ajustar ? <button className="btn sm" onClick={pedirAjuste}>{x.acao.rotulo}</button>
+                    : <button className="btn sm" onClick={() => x.acao?.aba && setAba(x.acao.aba)}>{x.acao.rotulo}</button>}
               </div>
             )}
           </div>
@@ -474,18 +536,115 @@ function AbaAuditoria({ pts, dups, setAba, ir }: {
       <div>
         <h3>Possíveis duplicidades</h3>
         {dups.length ? dups.map((d, i) => d.item && (
-          <div key={i} className="aud" style={{ cursor: "pointer" }} onClick={() => d.item && ir(d.item.codigo)}>
+          <div key={i} className="aud">
             <div className="ic t-violet"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden><path d={ICONES.dup} /></svg></div>
-            <div style={{ minWidth: 0 }}>
+            <div style={{ minWidth: 0, cursor: "pointer" }} onClick={() => d.item && ir(d.item.codigo)}>
               <div className="tt">{d.item.codigo} · {d.item.descricao}</div>
               <div className="dd">{d.tipo === "exata" ? "nome igual" : `parecido ${Math.round(d.sim * 100)}%`} · saldo {q(d.item.saldo)} · CMC {brl(d.item.cmc)}</div>
             </div>
+            <div className="ac">
+              <button className="btn sm" disabled={ocupado} onClick={() => d.item && naoE(d.item)}>Não é</button>
+              <button className="btn sm pri" disabled={!admin} title={admin ? undefined : "Só o administrador (Benny) mescla"} onClick={() => d.item && mesclar(d.item)}>Mesclar…</button>
+            </div>
           </div>
-        )) : <div className="nota">Nenhum outro código com descrição igual ou parecida.</div>}
+        )) : <div className="nota">Nenhum outro código com descrição igual ou parecida ainda a decidir.</div>}
+
         <h3 style={{ marginTop: 16 }}>Histórico de alterações no painel</h3>
-        <div className="nota">Ajuste de saldo, alarme, foto e mesclagem passam a ser gravados aqui (quem, quando, antes e depois) quando essas ações chegarem.</div>
+        {ajustes.length ? (
+          <div style={{ maxHeight: 360, overflow: "auto" }}>
+            <table className="tabela">
+              <thead><tr><th>Quando / quem</th><th>O quê</th><th className="r">Dif.</th><th>Revisão</th></tr></thead>
+              <tbody>
+                {ajustes.map((a) => (
+                  <tr key={a.id} style={{ opacity: a.status === "revertido" ? 0.5 : 1, textDecoration: a.status === "revertido" ? "line-through" : undefined }}>
+                    <td className="num">{new Date(a.created_at).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}<div className="mini">{a.created_by_email}</div></td>
+                    <td>{a.tipo === "mesclagem" ? "Mesclagem" : "Inventário"} · {nomeLocal(a.codigo_local_estoque)}{a.n_cod_prod !== undefined && codigoDe(a.n_cod_prod) ? <span className="mini"> · {codigoDe(a.n_cod_prod)}</span> : null}
+                      <div className="mini">{q(a.saldo_antes)} → {q(a.contagem)} · {a.motivo}{a.obs ? ` · ${a.obs}` : ""}</div></td>
+                    <td className="r num" style={{ fontWeight: 600, color: `var(--ww-${a.diferenca < 0 ? "crit" : "ok"}-text)` }}>{a.diferenca > 0 ? "+" : ""}{q(a.diferenca)}<div className="mini">{brl(a.valor)}</div></td>
+                    <td>{a.status === "revertido" ? <Pill t="revertido" tom="off" /> : <Pill t={a.revisao} tom={a.revisao === "conferido" ? "ok" : a.revisao === "contestado" ? "crit" : "warn"} />}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : <div className="nota">Nenhum ajuste ou mesclagem feito pelo painel neste item.</div>}
+        {aliases.length > 0 && (<>
+          <h3 style={{ marginTop: 16 }}>De-para confirmados (Compras)</h3>
+          {aliases.slice().sort((a, b) => String(b.confirmado_em ?? "").localeCompare(String(a.confirmado_em ?? ""))).map((a, i) => (
+            <div key={i} className="aud">
+              <div className="ic t-info"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden><path d="M4 7h11M11 3l4 4-4 4M20 17H9M13 13l-4 4 4 4" /></svg></div>
+              <div style={{ minWidth: 0 }}><div className="tt">{a.fornecedor ?? "Fornecedor"}: {a.codigo ?? "—"} · {a.descricao ?? ""}</div>
+                <div className="dd">{a.confirmado_em ? new Date(a.confirmado_em).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" }) : ""} · {a.confirmado_por ?? "—"}{a.pc ? ` · PC ${a.pc}` : ""}{a.nf ? ` · NF ${a.nf}` : ""}</div></div>
+            </div>
+          ))}
+        </>)}
+        <div className="nota">Ajustes e mesclagens ficam só no painel — o saldo mostrado é o do Omie mais esses ajustes.</div>
         <button className="btn sm" style={{ marginTop: 10 }} onClick={() => window.print()}>Imprimir / PDF da auditoria</button>
       </div>
+    </div>
+  );
+}
+
+// ── Como os fornecedores chamam este item (de-para do Compras) ───────────────
+// Fonte: GET /api/compras/aliases?n_cod_prod= (de-para capturado na conferência do recebimento,
+// feito pelo módulo de Compras). Enquanto a rota não existir, mostra o estado vazio.
+export type Alias = {
+  fornecedor: string | null; codigo: string | null; descricao: string | null; ncm: string | null; unidade: string | null;
+  fator: number | null; confirmado_por: string | null; confirmado_em: string | null; pc: string | null; nf: string | null; n_cod_prod: number;
+};
+const campo = (r: Record<string, unknown>, ...ks: string[]) => { for (const k of ks) if (r[k] != null && r[k] !== "") return r[k]; return null; };
+function normAlias(r: Record<string, unknown>, prod: number): Alias {
+  const s = (v: unknown) => (v == null ? null : String(v));
+  const fator = campo(r, "fator", "fator_conversao");
+  return {
+    fornecedor: s(campo(r, "fornecedor_nome", "fornecedor", "razao_social")), codigo: s(campo(r, "codigo_fornecedor", "cod_fornecedor", "cprod", "codigo")),
+    descricao: s(campo(r, "descricao_fornecedor", "xprod", "descricao")), ncm: s(campo(r, "ncm")), unidade: s(campo(r, "unidade_fornecedor", "unidade", "ucom")),
+    fator: fator == null ? null : Number(fator), confirmado_por: s(campo(r, "confirmado_por_email", "confirmado_por", "created_by_email")),
+    confirmado_em: s(campo(r, "confirmado_em", "created_at")), pc: s(campo(r, "pc_numero", "pc", "numero_pc")), nf: s(campo(r, "nf_numero", "nf", "numero_nf")),
+    n_cod_prod: Number(campo(r, "n_cod_prod", "ncod_prod") ?? prod),
+  };
+}
+export function useAliases(prods: number[]) {
+  const [st, setSt] = useState<{ ok: boolean; lista: Alias[] } | null>(null);
+  const chave = prods.join(",");
+  useEffect(() => {
+    let vivo = true;
+    Promise.all(prods.map(async (id) => {
+      const r = await fetch(`/api/compras/aliases?n_cod_prod=${id}`, { cache: "no-store" });
+      if (!r.ok) throw new Error(String(r.status));
+      const j = await r.json();
+      const rows = (Array.isArray(j) ? j : j.aliases ?? j.rows ?? []) as Record<string, unknown>[];
+      return rows.map((x) => normAlias(x, id));
+    })).then((l) => vivo && setSt({ ok: true, lista: l.flat() })).catch(() => vivo && setSt({ ok: false, lista: [] }));
+    return () => { vivo = false; };
+  }, [chave]); // eslint-disable-line react-hooks/exhaustive-deps
+  return st;
+}
+function SecaoAliases({ st, codigoDe }: { st: ReturnType<typeof useAliases>; codigoDe: (id: number) => string }) {
+  return (
+    <div style={{ marginBottom: 16 }}>
+      <h3>Como os fornecedores chamam este item</h3>
+      {!st ? <div className="nota">Carregando…</div> : !st.lista.length ? (
+        <div className="nota">{st.ok ? "Nenhum de-para registrado ainda." : "Ainda sem de-para: ele é registrado na conferência do recebimento em Compras e passa a aparecer aqui automaticamente."}</div>
+      ) : (
+        <div style={{ overflowX: "auto" }}>
+          <table className="tabela">
+            <thead><tr><th>Fornecedor</th><th>Código / descrição no fornecedor</th><th className="opt">NCM</th><th>Unidade · fator</th><th className="opt">Confirmado</th><th className="opt">Origem</th></tr></thead>
+            <tbody>
+              {st.lista.map((a, i) => (
+                <tr key={i}>
+                  <td style={{ fontWeight: 600 }}>{a.fornecedor ?? "—"}</td>
+                  <td>{a.codigo ?? "—"}<div className="mini">{a.descricao ?? ""}{codigoDe(a.n_cod_prod) ? ` · via código mesclado ${codigoDe(a.n_cod_prod)}` : ""}</div></td>
+                  <td className="opt">{a.ncm ?? "—"}</td>
+                  <td>{a.unidade ?? "—"}{a.fator != null && a.fator !== 1 ? ` · ×${q(a.fator)}` : ""}</td>
+                  <td className="opt">{a.confirmado_por ?? "—"}<div className="mini">{a.confirmado_em ? new Date(a.confirmado_em).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" }) : ""}</div></td>
+                  <td className="opt mini">{[a.pc && `PC ${a.pc}`, a.nf && `NF ${a.nf}`].filter(Boolean).join(" · ") || "—"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }

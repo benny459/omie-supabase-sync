@@ -293,3 +293,7 @@ grant execute on function orders.estoque_ajustar(bigint, text, bigint, bigint, n
   orders.estoque_revisar(bigint, text, uuid, text), orders.estoque_reverter(bigint, uuid, text),
   orders.estoque_mesclar(text, bigint, bigint, uuid, text), orders.estoque_nao_duplicidade(text, bigint, bigint, uuid, text),
   orders.estoque_desfazer_decisao(bigint, uuid, text) to service_role;
+
+-- Inserções feitas pela rota (janela, tentativa) usam as sequências com o service role.
+grant usage, select on sequence platform.estoque_janela_id_seq, platform.estoque_janela_tentativa_id_seq,
+  platform.estoque_ajuste_id_seq, platform.estoque_duplicidade_decisao_id_seq to service_role;
