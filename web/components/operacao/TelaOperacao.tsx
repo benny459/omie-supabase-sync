@@ -28,7 +28,7 @@ import {
   montarPedido, fases, financeiro, passa, noEscopo, dataMs, diasAte, dBR, isoDia, brl, pct,
   ESTADO_LABEL, FILTRO_LABEL,
   type Compra, type Escopo, type Estado, type Filtros, type Pedido, type Periodo, type Rapida,
-  servicoDoPedido,
+  servicoDoPedido, tipoVenda, type Servico,
 } from "@/lib/operacao-modelo";
 import { mudarStatus, mudarStatusEmMassa, salvarCampo, CAMPOS, type Modulo } from "@/lib/approvals-write";
 import { buildBuckets, BucketTotals, projetoDoBucket, LinkAbrirProjeto, type Bucket, type BudgetSummary } from "../BoldAvulsosView";
@@ -234,7 +234,7 @@ export default function TelaOperacao({ modulo, title, rows: rowsIniciais, parcia
     const ab = pedidos.filter((p) => !p.faturado), fa = pedidos.filter((p) => p.faturado);
     return { aberto: [ab.length, soma(ab)], faturado: [fa.length, soma(fa)], todos: [pedidos.length, soma(pedidos)] } as const;
   }, [pedidos]);
-  const temFiltroCompra = !!(filtros.estado || filtros.fornecedor || filtros.categoria) || rapida === "minha" || rapida === "sem_pc";
+  const temFiltroCompra = !!(filtros.estado || filtros.fornecedor || filtros.categoria) || rapida === "minha";
   const visiveis = useMemo(() => {
     const qq = q.trim().toLowerCase();
     const out: { p: Pedido; compras: Compra[] }[] = [];
@@ -257,12 +257,17 @@ export default function TelaOperacao({ modulo, title, rows: rowsIniciais, parcia
   }, [noScope]);
   const rapidas = useMemo(() => {
     const it = noScope.flatMap((p) => p.compras);
+    const svs = noScope.map((p) => servicoDoPedido(p));
     return {
       todos: noScope.length,
       minha: it.filter((c) => c.estado === "pendente").length,
       atrasados: noScope.filter((p) => p.flags.some((f) => f.tom === "r" && f.t.includes("atraso"))).length,
-      sem_pc: it.filter((c) => c.estado === "sem_pc").length,
+      sem_pc: noScope.filter((p) => p.flags.some((f) => f.t === "sem PC")).length,
       alarme: noScope.filter((p) => p.flags.some((f) => f.t !== "sem PC")).length,
+      pode_fat: noScope.filter((p) => p.flags.some((f) => f.t === "pode faturar")).length,
+      serv_exec: svs.filter((x) => x?.st === "Concluída").length,
+      serv_agend: svs.filter((x) => x?.os && x.st !== "Concluída" && x.st !== "Cancelada").length,
+      serv_semos: svs.filter((x) => x && !x.os && !x.st).length,
     };
   }, [noScope]);
   const fila = useMemo(() => noScope.flatMap((p) => p.compras.filter((c) => c.estado === "pendente")), [noScope]);
@@ -523,8 +528,13 @@ export default function TelaOperacao({ modulo, title, rows: rowsIniciais, parcia
       <div className="qv">
         {([["todos", "Todos", rapidas.todos, ""], ["minha", "Minha aprovação", rapidas.minha, "var(--ww-warn)"],
            ["atrasados", "Atrasados", rapidas.atrasados, "var(--ww-crit)"], ["sem_pc", "Sem PC", rapidas.sem_pc, "var(--ww-text-faint)"],
-           ["alarme", "Com alarme", rapidas.alarme, "var(--ww-violet)"]] as const)
+           ["alarme", "Com alarme", rapidas.alarme, "var(--ww-violet)"],
+           ["pode_fat", "Pode faturar", rapidas.pode_fat, "var(--ww-ok)"],
+           ["serv_exec", "Serviço executado", rapidas.serv_exec, "var(--ww-ok)"],
+           ["serv_agend", "Serviço agendado", rapidas.serv_agend, "var(--ww-info)"],
+           ["serv_semos", "Sem OS", rapidas.serv_semos, "var(--ww-warn)"]] as const)
           .filter(([k]) => !(modulo === "pcs" && k === "sem_pc"))
+          .filter(([k]) => modulo === "avulsos" || !(k === "pode_fat" || k.startsWith("serv_")))
           .map(([k, l, n, cor]) => (
             <button key={k} className={`chip ${rapida === k ? "on" : ""}`} onClick={() => setRapida(k)}>
               {cor && <span className="pip" style={{ background: cor }} />}{l} <b>{n}</b>
@@ -755,6 +765,38 @@ export function FasesBar({ p, modulo }: { p: Pedido; modulo: string }) {
   );
 }
 
+function TipoVenda({ t }: { t: string }) {
+  const tv = tipoVenda(t);
+  if (!tv) return t ? <span className="tipo">{t}</span> : null;
+  return <span className={`tipo ${tv === "Mix" ? "mix" : tv === "Serviço" ? "serv" : "merc"}`}>{tv}</span>;
+}
+
+/** Faixa do serviço — uma vez por pedido. Só leitura: quem manda é o app de
+ *  serviços (OS, status, previsão), como na tela antiga. */
+function FaixaServico({ sv }: { sv: Servico }) {
+  const d = sv.prev != null && sv.st !== "Concluída" && sv.st !== "Cancelada" ? diasAte(sv.prev) : null;
+  const hist = sv.historico.length
+    ? sv.historico.map((h) => `${h.data ? dBR(dataMs(h.data)) : "sem data"} · ${dBR(dataMs(h.em))}${h.por ? ` por ${h.por}` : ""}`).join("\n")
+    : "";
+  return (
+    <div className="svc" onClick={(e) => e.stopPropagation()}>
+      <span className="svc-k">Serviço</span>
+      {sv.os
+        ? <a className="mono svc-os" href={`https://app.waterworks.com.br/ordens-de-servico/${encodeURIComponent(sv.os)}`} target="_blank" rel="noopener noreferrer" title="Abrir a OS no app de serviços">{sv.os.replace(/-/g, "")} ↗</a>
+        : <span className="svc-os mute">sem OS vinculada</span>}
+      <span className={`st svc-st ${sv.tom}`}>{sv.rotulo}</span>
+      {sv.st === "Concluída" && sv.concluidoEm && <span className="svc-d">concluída em {dBR(sv.concluidoEm)}</span>}
+      {sv.prev != null && sv.st !== "Concluída" && (
+        <span className={`svc-d ${d != null && d < 0 ? "late" : ""}`}>
+          previsão {dBR(sv.prev)}{d != null && d < 0 ? <b> · ⚠ {-d}d de atraso</b> : null}
+        </span>
+      )}
+      {sv.alteracoes > 0 && <span className="svc-h" title={hist || undefined}>data alterada {sv.alteracoes}×</span>}
+      <span className="svc-f">vem do app de serviços</span>
+    </div>
+  );
+}
+
 /** NF de saída (faturamento ao cliente) — o que mais importa no pedido:
  *  sempre visível no cabeçalho, faturado ou não. */
 function NfSaida({ p }: { p: Pedido }) {
@@ -839,12 +881,20 @@ function CartaoPedido(props: {
     <div className={`pv ${aberto ? "open" : ""} ${p.faturado ? "isfat" : ""}`}>
       <div className="pvh" onClick={props.onToggle}>
         <span className="chev">▸</span>
-        <div className="pvid">{props.nomeId}<small>{p.tipo || (modulo === "pcs" ? "PC avulso" : "—")} · {p.compras.length} compra{p.compras.length === 1 ? "" : "s"}</small>
-          {modulo !== "pcs" && <NfSaida p={p} />}</div>
+        <div className="pvid">{props.nomeId}<small>{p.compras.length} compra{p.compras.length === 1 ? "" : "s"}</small></div>
+        {/* Cliente e, logo ao lado, a situação do pedido (NF de saída + alertas);
+            embaixo, tipo da venda (cor por Mercantil/Serviço/Mix), projeto e etapa. */}
         <div className="cli">
-          {p.cliente || "—"}
-          <small>{[p.projeto, p.etapaVenda].filter(Boolean).join(" · ") || (modulo === "pcs" ? "fornecedor" : "")}</small>
-          {p.flags.length > 0 && <div className="tags">{p.flags.map((f) => <span key={f.t} className={`tag ${f.tom}`}>{f.t}</span>)}</div>}
+          <div className="cli-l1">
+            <span className="cli-nome" title={p.cliente}>{p.cliente || "—"}</span>
+            {modulo !== "pcs" && <NfSaida p={p} />}
+            {p.flags.map((f) => <span key={f.t} className={`tag ${f.tom}`}>{f.t}</span>)}
+          </div>
+          <div className="cli-l2">
+            {modulo === "pcs" ? <span className="tipo">PC avulso</span> : <TipoVenda t={p.tipo} />}
+            {p.projeto && <span className="meta" title="Projeto">{p.projeto}</span>}
+            {p.etapaVenda && <span className="meta" title="Etapa da venda no Omie">Etapa: <b>{p.etapaVenda}</b></span>}
+          </div>
         </div>
         <FasesBar p={p} modulo={modulo} />
         <div className="date">
@@ -865,6 +915,7 @@ function CartaoPedido(props: {
 
       {aberto && (
         <div className="pcs">
+          {modulo !== "pcs" && (() => { const sv = servicoDoPedido(p); return sv ? <FaixaServico sv={sv} /> : null; })()}
           {modulo !== "pcs" ? (
             <GruposRc {...props} />
           ) : (
@@ -986,8 +1037,8 @@ function GruposRc({ compras, p, sel, toggleSel, podeAprovar, podeEditar, ehAdmin
   incluirPc: (rc: string, itens: Compra[], numero: string) => Promise<void>;
   gravar: Gravar; abrirDrawer: (k: string) => void; $: (v: number | null) => string;
 }) {
-  // Serviço: vem do app de serviços por PV/OS (custom_fields.ww_os_status).
-  const servico = servicoDoPedido(p) ?? (p.compras.some((c) => c.servico) ? { st: "Sem OS", prev: null as number | null } : null);
+  // Serviço é do pedido inteiro: aparece uma vez na faixa acima (FaixaServico).
+  const servico = null as null | { st: string; prev: number | null };
 
   const grupos = new Map<string, Compra[]>();
   for (const c of compras) {
@@ -1091,7 +1142,7 @@ function GruposRc({ compras, p, sel, toggleSel, podeAprovar, podeEditar, ehAdmin
                     <InputTexto key={`novo-${pcs.map(([n]) => n).join(",")}`} mono className="in caixa" valor="" placeholder={pcs.length ? "+ PC" : "nº PC"}
                       onSalvar={(v) => { if (v.trim()) void incluirPc(rc, itens, v); }} />
                   </span>
-                  {pcs.length === 0 && <span className="desc" style={{ color: "var(--ww-text-faint)", fontSize: 12 }}>digite o nº do pedido de compra — fornecedor, valor e status vêm do Omie</span>}
+                  {pcs.length === 0 && !p.compras.some((c) => c.pc) && <span className="desc" style={{ color: "var(--ww-text-faint)", fontSize: 12 }}>digite o nº do pedido de compra — fornecedor, valor e status vêm do Omie</span>}
                 </div>
               )}
             </div>

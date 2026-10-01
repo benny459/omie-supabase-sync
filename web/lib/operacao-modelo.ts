@@ -200,7 +200,9 @@ export function sinais(p: Pedido, modulo: string): Pedido["flags"] {
   if (a.has("compra")) f.push({ tom: "r", t: "compra em atraso" });
   if (p.compras.some((c) => c.estado === "pendente")) f.push({ tom: "a", t: "aprovação pendente" });
   if (p.compras.some((c) => c.estado === "recusado")) f.push({ tom: "r", t: "recusa a resolver" });
-  if (modulo !== "pcs" && estrutura(p).rcsSemPc > 0) f.push({ tom: "g", t: "sem PC" });
+  // Um PC pode atender qualquer número de RCs: "sem PC" só quando o pedido
+  // tem compra/RC e nenhum PC ainda (Benny, 01/10/2026).
+  if (modulo !== "pcs" && p.compras.length > 0 && estrutura(p).pcs.length === 0) f.push({ tom: "g", t: "sem PC" });
   if (modulo === "avulsos" && a.has("sem_projeto")) f.push({ tom: "v", t: "sem projeto" });
   if (modulo !== "pcs" && a.has("pvos_incompl")) f.push({ tom: "v", t: "PV incompleto" });
   if (a.has("defas_omie")) f.push({ tom: "v", t: "defasado Omie" });
@@ -240,7 +242,6 @@ export function fases(p: Pedido, modulo: string): { lista: Fase[]; atual: Fase |
   const nRcb = E.pcs.filter((x) => x.estado === "recebido").length;
   const matLate = E.pcs.filter((x) => x.estado !== "recebido" && x.cs.some((c) => c.prev != null && (diasAte(c.prev) ?? 0) < 0)).length;
   const srv = it.filter((c) => c.servico), srvOk = srv.filter((c) => c.estado === "recebido").length;
-  const rcsCom = E.nRcs - E.rcsSemPc;
   const plural = (n: number, a: string, b: string) => `${n} ${n === 1 ? a : b}`;
   const L: Fase[] = [];
   if (modulo !== "pcs") {
@@ -251,19 +252,20 @@ export function fases(p: Pedido, modulo: string): { lista: Fase[]; atual: Fase |
     L.push(nRcNum === 0 && nPcs > 0
       ? { k: "RC", s: "na", t: "sem requisição — compra direto por PC" }
       : { k: "RC", s: nRcNum ? "d" : "o", t: nRcNum ? plural(nRcNum, "requisição", "requisições") : "nenhuma requisição ainda", next: "criar requisição" });
-    L.push({ k: "PC", s: !E.nRcs ? "o" : E.rcsSemPc === 0 ? "d" : rcsCom ? (atrasado ? "l" : "p") : (atrasado ? "l" : "o"),
-      t: E.rcsSemPc === 0 ? `${plural(nPcs, "pedido de compra", "pedidos de compra")} atendendo ${alvoTxt(E.nRcs)}`
-        : `${E.rcsSemPc} de ${alvoTxt(E.nRcs)} sem pedido de compra`,
-      next: `${alvoTxt(E.rcsSemPc)} sem pedido de compra` });
+    // Sem relação fixa RC × PC: basta haver PC para a etapa estar feita.
+    L.push({ k: "PC", s: nPcs ? "d" : atrasado && E.nRcs ? "l" : "o",
+      t: nPcs ? `${plural(nPcs, "pedido de compra", "pedidos de compra")} · ${alvoTxt(E.nRcs)}`
+        : E.nRcs ? "nenhum pedido de compra ainda" : "nada a comprar lançado",
+      next: "emitir pedido de compra" });
   } else {
     L.push({ k: "PC", s: nPcs ? "d" : "o", t: plural(nPcs, "pedido de compra", "pedidos de compra") });
   }
-  L.push({ k: "Aprov", s: nRec ? "l" : nPend ? "p" : nPcs && nAp === nPcs ? (E.rcsSemPc === 0 ? "d" : "p") : "o",
+  L.push({ k: "Aprov", s: nRec ? "l" : nPend ? "p" : nPcs && nAp === nPcs ? "d" : "o",
     t: nRec ? `${plural(nRec, "PC recusado", "PCs recusados")}` : nPend ? `${plural(nPend, "PC aguardando", "PCs aguardando")} aprovação` : nPcs ? `${nAp}/${nPcs} PCs aprovados` : "nenhum PC para aprovar",
     next: nRec ? `resolver ${plural(nRec, "recusa", "recusas")}` : `aprovar ${plural(nPend, "PC", "PCs")}` });
   const soServico = it.length > 0 && it.every((c) => c.servico);
   if (soServico) L.push({ k: "Mat", s: "na", t: "sem material — pedido só de serviço" });
-  else L.push({ k: "Mat", s: nPcs && nRcb === nPcs && E.rcsSemPc === 0 ? "d" : matLate ? "l" : nRcb || nAp ? "p" : "o",
+  else L.push({ k: "Mat", s: nPcs && nRcb === nPcs ? "d" : matLate ? "l" : nRcb || nAp ? "p" : "o",
     t: nPcs ? `${nRcb}/${nPcs} PCs recebidos${matLate ? ` · ${matLate} com previsão vencida` : ""}` : "nada comprado ainda",
     next: nPcs ? `receber ${plural(nPcs - nRcb, "PC", "PCs")}` : "aguardando compra" });
   if (modulo !== "pcs") {
@@ -271,8 +273,10 @@ export function fases(p: Pedido, modulo: string): { lista: Fase[]; atual: Fase |
     // o pedido tem serviço — mesmo que nenhuma compra seja de categoria serviço.
     const os = servicoDoPedido(p);
     L.push(os
-      ? { k: "Serv", s: os.st === "Concluída" ? "d" : os.prev != null && (diasAte(os.prev) ?? 0) < 0 ? "l" : os.st === "Aberta" ? "o" : "p",
-          t: `OS ${os.st}${os.prev ? ` · prev. ${dBR(os.prev)}` : ""}`, next: `serviço ${os.st.toLowerCase()}` }
+      ? (os.st === "Cancelada" ? { k: "Serv", s: "na", t: "OS cancelada" }
+        : { k: "Serv", s: os.st === "Concluída" ? "d" : os.prev != null && (diasAte(os.prev) ?? 0) < 0 ? "l" : (os.st === "Aberta" || !os.st) ? "o" : "p",
+          t: `${os.os ? `OS ${os.os} · ` : ""}${os.rotulo}${os.prev ? ` · prev. ${dBR(os.prev)}` : ""}`,
+          next: os.os ? `serviço ${os.rotulo.toLowerCase()}` : "vincular OS no app de serviços" })
       : srv.length
       ? { k: "Serv", s: srvOk === srv.length ? "d" : srvOk ? "p" : "o", t: `${srvOk}/${srv.length} serviços concluídos`, next: "concluir serviços" }
       : { k: "Serv", s: "na", t: "sem serviço neste pedido" });
@@ -284,13 +288,56 @@ export function fases(p: Pedido, modulo: string): { lista: Fase[]; atual: Fase |
   return { lista: L, atual };
 }
 
-/** Estado do serviço vindo do app de serviços por PV/OS. */
-export function servicoDoPedido(p: Pedido): { st: string; prev: number | null } | null {
+/** Tipo da venda normalizado em 3 baldes — Mix / Serviço / Mercantil — como
+ *  na tela antiga (pedido_venda → Mercantil, ordem_servico → Serviço). */
+export function tipoVenda(t: string): "Mix" | "Serviço" | "Mercantil" | "" {
+  const x = t.trim().toLowerCase();
+  if (!x) return "";
+  if (x === "mix") return "Mix";
+  if (/^(servi[cç]os?|ordem_servico)$/.test(x)) return "Serviço";
+  if (/^(mercantil|pedido_venda)$/.test(x)) return "Mercantil";
+  return "";
+}
+
+export type Servico = {
+  os: string;               // nº da OS no app de serviços ("" se sem vínculo)
+  st: string;               // status cru da OS (Aberta, Parcial, Em Execução, Concluída, Cancelada)
+  rotulo: string;           // como a tela antiga mostrava (Pode faturar, OS pendente, Aguardando, Sem vínculo…)
+  tom: "ok" | "warn" | "crit" | "info" | "mute";
+  prev: number | null;      // previsão do serviço (vem do app de serviços — só leitura)
+  concluidoEm: number | null;
+  alteracoes: number;
+  historico: { data: string | null; em: string; por: string }[];
+};
+
+/** Serviço do pedido (PV/OS), a partir do app de serviços — mesmo critério da
+ *  coluna "Status OS" da tela antiga. Mercantil sem OS não tem serviço. */
+export function servicoDoPedido(p: Pedido): Servico | null {
+  const tipo = tipoVenda(p.tipo);
   for (const r of p.bucket.rows) {
     const cf = (r.custom_fields as Record<string, unknown> | null) ?? {};
+    const os = s(r.servicos_os_numero);
     const st = s(cf.ww_os_status);
     const prev = dataMs(r.nova_prev_servicos);
-    if (st || prev != null) return { st: st || "Agendar", prev };
+    if (!os && !st && prev == null) continue;
+    const podeFat = cf.ww_pode_faturar === true;
+    const [rotulo, tom]: [string, Servico["tom"]] =
+      st === "Cancelada" ? ["Cancelada", "mute"]
+      : st === "Concluída" ? (podeFat ? ["Pode faturar", "ok"] : ["OS pendente", "warn"])
+      : st === "Em Execução" ? ["Em execução", "info"]
+      : st === "Parcial" ? ["Parcial", "info"]
+      : st === "Aberta" ? ["Aberta", "mute"]
+      : os ? ["Aguardando", "mute"] : ["Sem vínculo", "warn"];
+    const hist = Array.isArray(cf.ww_nova_prev_historico) ? cf.ww_nova_prev_historico as Servico["historico"] : [];
+    return {
+      os, st, rotulo, tom, prev,
+      concluidoEm: dataMs(cf.ww_os_concluida_em ?? r.servicos_concluidos_em),
+      alteracoes: Number(cf.ww_nova_prev_alteracoes) || hist.length,
+      historico: hist,
+    };
+  }
+  if (tipo === "Mix" || tipo === "Serviço") {
+    return { os: "", st: "", rotulo: "Sem vínculo", tom: "warn", prev: null, concluidoEm: null, alteracoes: 0, historico: [] };
   }
   return null;
 }
@@ -317,7 +364,8 @@ export function financeiro(p: Pedido) {
 // ── Filtros ────────────────────────────────────────────────────────────────
 export type Escopo = "aberto" | "faturado" | "todos";
 export type Periodo = "tudo" | "7" | "30" | "vencidos";
-export type Rapida = "todos" | "minha" | "atrasados" | "sem_pc" | "alarme";
+export type Rapida = "todos" | "minha" | "atrasados" | "sem_pc" | "alarme"
+  | "serv_exec" | "serv_agend" | "serv_semos" | "pode_fat";
 export type Filtros = {
   tipo?: string; etapaVenda?: string; projeto?: string;
   estado?: Estado; fornecedor?: string; categoria?: string;
@@ -349,8 +397,15 @@ export function passa(p: Pedido, c: Compra | null, q: string, per: Periodo, f: F
   if (per === "vencidos" && (d == null || d >= 0)) return false;
   if (rap === "minha" && c?.estado !== "pendente") return false;
   if (rap === "atrasados" && !p.flags.some((x) => x.t === "venda em atraso" || x.t === "compra em atraso")) return false;
-  if (rap === "sem_pc" && c?.estado !== "sem_pc") return false;
+  if (rap === "sem_pc" && !p.flags.some((x) => x.t === "sem PC")) return false;
   if (rap === "alarme" && !p.flags.some((x) => x.t !== "sem PC")) return false;
+  if (rap.startsWith("serv_") || rap === "pode_fat") {
+    const sv = servicoDoPedido(p);
+    if (rap === "serv_exec" && sv?.st !== "Concluída") return false;
+    if (rap === "serv_agend" && !(sv?.os && sv.st !== "Concluída" && sv.st !== "Cancelada")) return false;
+    if (rap === "serv_semos" && !(sv && !sv.os && !sv.st)) return false;
+    if (rap === "pode_fat" && !p.flags.some((x) => x.t === "pode faturar")) return false;
+  }
   return true;
 }
 

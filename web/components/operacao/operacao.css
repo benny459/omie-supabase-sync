@@ -374,3 +374,32 @@
 .op .rcg .pc.pc-novo{min-height:40px;grid-template-columns:auto 1fr}
 .op .rcg .pc.pc-novo .in.caixa{width:92px;opacity:.75}
 .op .rcg .pc.pc-novo .in.caixa:focus{opacity:1}
+/* Cabeçalho do pedido: cliente + situação na mesma linha; tipo/projeto/etapa embaixo */
+.op .cli{white-space:normal;overflow:visible;min-width:0}
+.op .cli-l1{display:flex;align-items:center;gap:6px;flex-wrap:wrap;min-width:0}
+.op .cli-nome{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;margin-right:4px}
+.op .cli-l1 .nfs{margin-top:0}
+.op .cli-l2{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:5px}
+.op .cli-l2 .meta{font-size:11.5px;color:var(--ww-text-muted);border:1px solid var(--ww-border);border-radius:6px;padding:1px 7px;white-space:nowrap}
+.op .cli-l2 .meta b{color:var(--ww-text);font-weight:600}
+.op .tipo{font-size:11px;font-weight:700;letter-spacing:.02em;border-radius:6px;padding:2px 8px;white-space:nowrap;background:var(--ww-border);color:var(--ww-text-muted)}
+.op .tipo.merc{background:rgba(56,189,248,.14);color:#38bdf8;border:1px solid rgba(56,189,248,.35)}
+.op .tipo.serv{background:rgba(249,115,22,.14);color:#fb923c;border:1px solid rgba(249,115,22,.38)}
+.op .tipo.mix{background:rgba(168,85,247,.15);color:#c084fc;border:1px solid rgba(168,85,247,.38)}
+:root[data-theme="light"] .op .tipo.merc{color:#0369a1}
+:root[data-theme="light"] .op .tipo.serv{color:#c2410c}
+:root[data-theme="light"] .op .tipo.mix{color:#7e22ce}
+/* Faixa do serviço (uma por pedido) */
+.op .svc{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:9px 14px;border-top:1px solid var(--ww-border-strong);background:rgba(249,115,22,.05);font-size:12.5px}
+.op .svc-k{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:#fb923c;font-weight:700}
+.op .svc-os{color:var(--ww-info-text);text-decoration:none;font-weight:600}
+.op .svc-os:hover{text-decoration:underline}
+.op .svc-os.mute{color:var(--ww-text-faint);font-weight:400}
+.op .svc-st.ok{background:var(--ww-ok-soft);color:var(--ww-ok)}
+.op .svc-st.warn{background:rgba(245,166,35,.14);color:var(--ww-warn)}
+.op .svc-st.info{background:var(--ww-info-soft);color:var(--ww-info-text)}
+.op .svc-st.mute{background:var(--ww-border);color:var(--ww-text-muted)}
+.op .svc-d{color:var(--ww-text-muted)}
+.op .svc-d.late{color:var(--ww-crit)}
+.op .svc-h{color:var(--ww-text-faint);border-bottom:1px dotted var(--ww-text-faint);cursor:help}
+.op .svc-f{margin-left:auto;color:var(--ww-text-faint);font-size:11px}
