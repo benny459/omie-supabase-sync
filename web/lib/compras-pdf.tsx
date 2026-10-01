@@ -83,7 +83,7 @@ const s = StyleSheet.create({
   sign: { flex: 1, borderTop: `0.8 solid ${TEXT}`, paddingTop: 6, fontSize: 8.6 },
   foot: { position: "absolute", bottom: 20, left: 44, right: 44, borderTop: `0.6 solid ${LINE}`, paddingTop: 7,
     flexDirection: "row", justifyContent: "space-between", fontSize: 7.4, color: MUTED },
-  marcaD: { position: "absolute", top: 360, left: 0, right: 0, textAlign: "center", fontSize: 38, color: CRIT, opacity: 0.08,
+  marcaD: { position: "absolute", top: 380, left: -40, right: -40, textAlign: "center", fontSize: 30, color: CRIT, opacity: 0.13,
     fontFamily: "Helvetica-Bold", transform: "rotate(-18deg)" },
 });
 
@@ -147,7 +147,7 @@ export function DocumentoPedido({ p, empresa, forn, condicao, variante, usuario,
     <Document title={`Pedido de Compra ${p.num}`} author={empNome}>
       <Page size="A4" style={s.page}>
         <View style={s.faixa} fixed /><View style={s.faixaInk} fixed />
-        {p.aprov !== "aprovado" && p.origem === "painel" && <Text style={s.marcaD} fixed>PEDIDO NÃO APROVADO</Text>}
+        {p.aprov !== "aprovado" && <Text style={s.marcaD} fixed>AGUARDANDO APROVAÇÃO — sem validade</Text>}
         <View style={s.head}>
           <View style={{ maxWidth: 330 }}>
             <Text style={s.marca}>{empNome}</Text>

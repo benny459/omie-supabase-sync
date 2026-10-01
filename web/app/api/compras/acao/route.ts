@@ -80,6 +80,7 @@ async function mover(q: Quem, id: number, etapa: string) {
     throw new Error("Pedido ainda não aprovado — aprove antes de avançar");
   }
   if (etapa === "60" && !p.nf) throw new Error("Registre o recebimento com a NF-e");
+  if (etapa === "35" && p.aprov !== "aprovado") throw new Error("Só pedido aprovado vai para Enviado ao fornecedor");
   if (etapa === "35") return rpc("compras_marcar_enviado", { p_id: id, p_para: "", p_meio: "outro", p_por: q.email });
   if (etapa === "15" && p.origem === "omie" && p.aprov !== "aprovado") {
     // Solicitar aprovação de pedido do Omie = status PENDENTE em approval.approvals.

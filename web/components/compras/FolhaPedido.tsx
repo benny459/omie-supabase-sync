@@ -247,7 +247,8 @@ export default function FolhaPedido({
     finally { setSalvando(false); }
   };
 
-  const idxEtapa = ETAPAS.findIndex((e) => e.cod === D.etapa);
+  // sem coluna de Aprovação: a etapa 15 aparece como "Pedido de Compra"
+  const idxEtapa = ETAPAS.filter((e) => e.cod !== "15").findIndex((e) => e.cod === (D.etapa === "15" ? "10" : D.etapa));
   const titulo = !D.id ? (isRC ? "Incluir Requisição de Compra" : "Incluir Pedido de Compra")
     : isRC ? `Requisição Nº ${D.num}` : `Pedido de Compra Nº ${D.num}`;
   const tabs: [Tab, string, string | number, string?][] = isRC
@@ -270,10 +271,10 @@ export default function FolhaPedido({
               : <span className="tag orig-painel">Emitido pela plataforma</span>}
             <span className="sp" />
             <div className="stepper" aria-label="Etapas">
-              {ETAPAS.map((e, i) => (
+              {ETAPAS.filter((e) => e.cod !== "15").map((e, i, arr) => (
                 <span key={e.cod} style={{ display: "contents" }}>
                   <span className={i < idxEtapa ? "done" : i === idxEtapa ? "cur" : ""} style={{ ["--c" as string]: e.cor }}>{e.nome}</span>
-                  {i < ETAPAS.length - 1 && <i>›</i>}
+                  {i < arr.length - 1 && <i>›</i>}
                 </span>
               ))}
             </div>

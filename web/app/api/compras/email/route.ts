@@ -57,7 +57,9 @@ export async function POST(req: Request) {
 
   // Marcar como enviado sem e-mail (WhatsApp, entregue em mãos…)
   if (b.acao === "marcar") {
-    try { return NextResponse.json(await rpc("compras_marcar_enviado", { p_id: id, p_para: String(b.para ?? ""), p_meio: String(b.meio ?? "outro"), p_por: q.email })); }
+    try {
+      const ped = await rpc<Pedido>("compras_pedido", { p_id: id });
+      if (ped.aprov !== "aprovado") throw new Error("Pedido ainda não aprovado — só pedido aprovado vai ao fornecedor"); return NextResponse.json(await rpc("compras_marcar_enviado", { p_id: id, p_para: String(b.para ?? ""), p_meio: String(b.meio ?? "outro"), p_por: q.email })); }
     catch (e) { return erro(e); }
   }
 
@@ -76,7 +78,7 @@ export async function POST(req: Request) {
   }
   try {
     const { pdf, pedido, empresa } = await gerarPdfPedido(id, variante, q.nome);
-    if (pedido.origem === "painel" && pedido.aprov !== "aprovado") throw new Error("Pedido ainda não aprovado — aprove antes de enviar ao fornecedor");
+    if (pedido.aprov !== "aprovado") throw new Error("Pedido ainda não aprovado — aprove antes de enviar ao fornecedor");
     const nomeEmp = titulo(empresa.razao_social ?? pedido.emp);
     const texto = String(b.texto ?? "").trim();
     const html = `<div style="font-family:-apple-system,Segoe UI,Helvetica,Arial,sans-serif;color:#1A2731;font-size:14px;line-height:1.55;max-width:600px">

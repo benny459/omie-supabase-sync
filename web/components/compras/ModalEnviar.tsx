@@ -96,7 +96,7 @@ export default function ModalEnviar({ id, onClose, onEnviado, toast }: {
     finally { setOcupado(false); }
   };
 
-  const bloqueio = d && d.origem === "painel" && !d.aprovado ? "Pedido ainda não aprovado — aprove antes de enviar ao fornecedor." : null;
+  const bloqueio = d && !d.aprovado ? "Pedido ainda não aprovado: dá para visualizar o rascunho (com a marca “AGUARDANDO APROVAÇÃO”), mas só pedido aprovado vai ao fornecedor." : null;
 
   return (
     <div className="cmp-scrim" style={{ zIndex: 90, justifyContent: "center", alignItems: "center", padding: 16 }}
