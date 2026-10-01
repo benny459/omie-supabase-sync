@@ -27,7 +27,7 @@ import { ModalAjuste, ModalMesclar, ModalSenha } from "./Acoes";
 type Mescla = { id: number; principal: number; secundario: number; secundario_item: { codigo: string; descricao: string } | null };
 type Ficha = {
   item: ItemEstoque; movs: MovEstoque[]; pcs: PcItem[]; dups: { tipo: string; sim: number; item: ItemEstoque | null }[];
-  ajustes: AjusteEstoque[]; mesclas: Mescla[]; admin: boolean;
+  ajustes: AjusteEstoque[]; mesclas: Mescla[]; admin: boolean; aliases: Alias[];
 };
 const ABAS: AbaFicha[] = ["uso", "mov", "compras", "forn", "auditoria"];
 const EM_BREVE = "Em breve — próxima fase do Estoque v2";
@@ -60,6 +60,7 @@ export default function FichaItemNavy({ codigo, abaInicial }: { codigo: string; 
           ajustes: ((j.ajustes ?? []) as Record<string, unknown>[]).map(normAjuste),
           mesclas: ((j.mesclas ?? []) as Mescla[]).map((m) => ({ ...m, principal: Number(m.principal), secundario: Number(m.secundario) })),
           admin: !!j.admin,
+          aliases: ((j.aliases ?? []) as Record<string, unknown>[]).map((x) => normAlias(x, Number(j.item.n_cod_prod))),
         });
       })
       .catch((e) => { if ((e as Error).name !== "AbortError") setErro((e as Error).message); });
@@ -133,7 +134,7 @@ function Conteudo({ f, aba, setAba, ir, recarregar }: {
     try { await postar("/api/estoque/duplicidade", { acao: "desfazer", id: m.id }); avisar("Mesclagem desfeita — saldos voltaram", "ok"); recarregar(); }
     catch (e) { avisar((e as Error).message, "crit"); } finally { setOcupado(false); }
   };
-  const aliases = useAliases([f.item.n_cod_prod, ...f.mesclas.filter((m) => m.principal === f.item.n_cod_prod).map((m) => m.secundario)]);
+  const aliases: EstadoAliases = { ok: true, lista: f.aliases };
   const nomesSec = new Map(f.mesclas.filter((m) => m.principal === f.item.n_cod_prod).map((m) => [m.secundario, m.secundario_item?.codigo ?? String(m.secundario)]));
   const p = f.item, s = p.saldo, cob = cobertura(p), [st, tom] = situacao(p);
   const ano = somaDias(hoje(), -365), dois = somaDias(hoje(), -730);
@@ -586,11 +587,12 @@ function AbaAuditoria({ pts, dups, setAba, ir, ajustes, aliases, admin, ocupado,
 }
 
 // ── Como os fornecedores chamam este item (de-para do Compras) ───────────────
-// Fonte: GET /api/compras/aliases?n_cod_prod= (de-para capturado na conferência do recebimento,
-// feito pelo módulo de Compras). Enquanto a rota não existir, mostra o estado vazio.
+// Fonte: orders.compras_aliases (de-para gravado na conferência do recebimento pelo módulo de
+// Compras — compras.v_item_aliases), lido pela rota da ficha junto com o resto.
 export type Alias = {
   fornecedor: string | null; codigo: string | null; descricao: string | null; ncm: string | null; unidade: string | null;
   fator: number | null; confirmado_por: string | null; confirmado_em: string | null; pc: string | null; nf: string | null; n_cod_prod: number;
+  vezes: number | null;
 };
 const campo = (r: Record<string, unknown>, ...ks: string[]) => { for (const k of ks) if (r[k] != null && r[k] !== "") return r[k]; return null; };
 function normAlias(r: Record<string, unknown>, prod: number): Alias {
@@ -598,34 +600,19 @@ function normAlias(r: Record<string, unknown>, prod: number): Alias {
   const fator = campo(r, "fator", "fator_conversao");
   return {
     fornecedor: s(campo(r, "fornecedor_nome", "fornecedor", "razao_social")), codigo: s(campo(r, "codigo_fornecedor", "cod_fornecedor", "cprod", "codigo")),
-    descricao: s(campo(r, "descricao_fornecedor", "xprod", "descricao")), ncm: s(campo(r, "ncm")), unidade: s(campo(r, "unidade_fornecedor", "unidade", "ucom")),
+    descricao: s(campo(r, "nome_na_nf", "descricao_fornecedor", "xprod", "descricao")), ncm: s(campo(r, "ncm")), unidade: s(campo(r, "unidade_forn", "unidade_fornecedor", "unidade", "ucom")),
     fator: fator == null ? null : Number(fator), confirmado_por: s(campo(r, "confirmado_por_email", "confirmado_por", "created_by_email")),
-    confirmado_em: s(campo(r, "confirmado_em", "created_at")), pc: s(campo(r, "pc_numero", "pc", "numero_pc")), nf: s(campo(r, "nf_numero", "nf", "numero_nf")),
-    n_cod_prod: Number(campo(r, "n_cod_prod", "ncod_prod") ?? prod),
+    confirmado_em: s(campo(r, "confirmado_em", "created_at")), pc: s(campo(r, "pedido_numero", "pc_numero", "pc", "numero_pc")), nf: s(campo(r, "nf_numero", "nf", "numero_nf")),
+    n_cod_prod: Number(campo(r, "ncod_prod", "n_cod_prod") ?? prod), vezes: campo(r, "vezes") == null ? null : Number(campo(r, "vezes")),
   };
 }
-export function useAliases(prods: number[]) {
-  const [st, setSt] = useState<{ ok: boolean; lista: Alias[] } | null>(null);
-  const chave = prods.join(",");
-  useEffect(() => {
-    let vivo = true;
-    Promise.all(prods.map(async (id) => {
-      const r = await fetch(`/api/compras/aliases?n_cod_prod=${id}`, { cache: "no-store" });
-      if (!r.ok) throw new Error(String(r.status));
-      const j = await r.json();
-      const rows = (Array.isArray(j) ? j : j.aliases ?? j.rows ?? []) as Record<string, unknown>[];
-      return rows.map((x) => normAlias(x, id));
-    })).then((l) => vivo && setSt({ ok: true, lista: l.flat() })).catch(() => vivo && setSt({ ok: false, lista: [] }));
-    return () => { vivo = false; };
-  }, [chave]); // eslint-disable-line react-hooks/exhaustive-deps
-  return st;
-}
-function SecaoAliases({ st, codigoDe }: { st: ReturnType<typeof useAliases>; codigoDe: (id: number) => string }) {
+export type EstadoAliases = { ok: boolean; lista: Alias[] } | null;
+function SecaoAliases({ st, codigoDe }: { st: EstadoAliases; codigoDe: (id: number) => string }) {
   return (
     <div style={{ marginBottom: 16 }}>
       <h3>Como os fornecedores chamam este item</h3>
       {!st ? <div className="nota">Carregando…</div> : !st.lista.length ? (
-        <div className="nota">{st.ok ? "Nenhum de-para registrado ainda." : "Ainda sem de-para: ele é registrado na conferência do recebimento em Compras e passa a aparecer aqui automaticamente."}</div>
+        <div className="nota">Nenhum de-para registrado ainda — ele é gravado na conferência do recebimento em Compras (item da NF → nosso item) e aparece aqui automaticamente.</div>
       ) : (
         <div style={{ overflowX: "auto" }}>
           <table className="tabela">
@@ -638,7 +625,7 @@ function SecaoAliases({ st, codigoDe }: { st: ReturnType<typeof useAliases>; cod
                   <td className="opt">{a.ncm ?? "—"}</td>
                   <td>{a.unidade ?? "—"}{a.fator != null && a.fator !== 1 ? ` · ×${q(a.fator)}` : ""}</td>
                   <td className="opt">{a.confirmado_por ?? "—"}<div className="mini">{a.confirmado_em ? new Date(a.confirmado_em).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" }) : ""}</div></td>
-                  <td className="opt mini">{[a.pc && `PC ${a.pc}`, a.nf && `NF ${a.nf}`].filter(Boolean).join(" · ") || "—"}</td>
+                  <td className="opt mini">{[a.pc && `PC ${a.pc}`, a.nf && `NF ${a.nf}`, a.vezes && a.vezes > 1 ? `${a.vezes}×` : null].filter(Boolean).join(" · ") || "—"}</td>
                 </tr>
               ))}
             </tbody>

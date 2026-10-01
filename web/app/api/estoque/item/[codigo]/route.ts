@@ -6,6 +6,7 @@
 //   dups     — pares de possível duplicidade ainda não decididos, com o outro item
 //   ajustes  — ajustes do painel (inventário e mesclagem) deste item e dos mesclados
 //   mesclas  — decisões de mesclagem ativas em que o item é principal ou secundário
+//   aliases  — "como os fornecedores chamam este item" (de-para do Compras, orders.compras_aliases)
 //   admin    — se quem vê pode mesclar/desfazer
 // [codigo] aceita o código do produto (deep link /estoque/3026006) ou o id do Omie.
 
@@ -39,7 +40,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ codigo:
     const secundarios = mesclas.filter((m) => Number(m.principal) === id).map((m) => Number(m.secundario));
     const prods = [id, ...secundarios];
 
-    const [movs, pcsRes, dupsRes, ajRes, secRes] = await Promise.all([
+    const [movs, pcsRes, dupsRes, ajRes, secRes, aliRes] = await Promise.all([
       todas((de, ate) => db.from("v_estoque_mov_cli").select("*").eq("empresa", empresa).in("id_prod", prods)
         .order("dt_mov").order("id_mov").range(de, ate)),
       Promise.all(prods.map((p) => db.rpc("estoque_item_pcs", { p_empresa: empresa, p_prod: p }))),
@@ -47,7 +48,10 @@ export async function GET(_req: Request, { params }: { params: Promise<{ codigo:
       platform().from("estoque_ajuste").select("*").eq("empresa", empresa).in("n_cod_prod", prods).order("created_at", { ascending: false }).limit(300),
       secundarios.length ? db.from("v_estoque_item").select("n_cod_prod, codigo, descricao").eq("empresa", empresa).in("n_cod_prod", secundarios)
         : Promise.resolve({ data: [], error: null }),
+      Promise.all(prods.map((pid) => db.rpc("compras_aliases", { p_ncod_prod: pid, p_cod: null, p_cnpj: null }))),
     ]);
+    // De-para é complemento: se a função do Compras falhar, a ficha abre sem ele.
+    const aliases = aliRes.flatMap((r) => (r.error ? [] : ((r.data ?? []) as Record<string, unknown>[])));
     for (const r of pcsRes) if (r.error) throw new Error(r.error.message);
     if (dupsRes.error) throw new Error(dupsRes.error.message);
     if (ajRes.error) throw new Error(ajRes.error.message);
@@ -71,7 +75,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ codigo:
       .sort((a, b) => String(b.emissao ?? "").localeCompare(String(a.emissao ?? "")));
 
     return NextResponse.json({
-      item, movs, pcs, dups, ajustes: ajRes.data ?? [], admin: q.admin,
+      item, movs, pcs, dups, ajustes: ajRes.data ?? [], admin: q.admin, aliases,
       mesclas: mesclas.map((m) => ({ ...m, secundario_item: nomes.get(Number(m.secundario)) ?? null })),
     });
   } catch (e) {
