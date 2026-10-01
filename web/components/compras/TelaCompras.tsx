@@ -233,7 +233,7 @@ export default function TelaCompras() {
     const late = atrasado(p);
     const cond = p.tipo === "RC" ? `com ${p.nItens} ${p.nItens === 1 ? "item" : "itens"}` : (parcDesc(p.parc) || "").toLowerCase();
     return (
-      <article key={p.id} className={`card${late ? " late" : ""}${p.tipo === "PC" && (p.etapa === "10" || p.etapa === "15") ? (p.aprov === "aprovado" ? " aprovado" : " pendente") : ""}${arrasto === String(p.id) ? " dragging" : ""}`} draggable tabIndex={0}
+      <article key={p.id} className={`card${p.tipo === "PC" && (p.etapa === "10" || p.etapa === "15") ? (p.aprov === "aprovado" ? " aprovado" : " pendente") : late ? " late" : ""}${arrasto === String(p.id) ? " dragging" : ""}`} draggable tabIndex={0}
         style={{ ["--c" as string]: p.tipo === "PC" && (p.etapa === "10" || p.etapa === "15") ? (p.aprov === "aprovado" ? "#22C55E" : "#8B5CF6") : ETAPA[p.etapa]?.cor }}
         aria-label={`${p.tipo} ${p.num}`}
         onClick={(e) => { if ((e.target as HTMLElement).closest(".kebab")) return; setFolha({ id: p.id }); }}
@@ -242,7 +242,8 @@ export default function TelaCompras() {
         onDragEnd={() => setArrasto(null)}>
         <div className="l1">
           <span className="no">{p.tipo === "PC" && (p.etapa === "10" || p.etapa === "15") && (p.aprov === "aprovado"
-              ? <span className="pill p-ok" style={{ marginRight: 5 }}>✓ Aprovado</span> : <span className="pill p-vio" style={{ marginRight: 5 }}>Pendente</span>)}
+              ? <span className="badge-ap ok">✓ Aprovado{p.aprovEm ? ` · ${dBR(p.aprovEm.slice(0, 10))}` : ""}{p.aprovPor ? ` · ${p.aprovPor.split("@")[0]}` : ""}</span>
+              : <span className="badge-ap pend">⏳ Pendente de aprovação</span>)}
             {p.tipo === "RC" ? `Requisição Nº ${p.num}` : isNF
             ? <>NF-e Nº {String(p.nf).split(",")[0].padStart(9, "0")} <span className="faint">· Pedido {p.num}</span></> : `Pedido Nº ${p.num}`}</span>
           <button className="kebab" aria-label="Ações" onClick={(e) => { e.stopPropagation(); const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
@@ -256,12 +257,10 @@ export default function TelaCompras() {
           {p.tipo === "RC" && p.saldo != null && Math.abs((p.saldo ?? 0) - p.valor) > 0.005 && <span className="faint" title="Saldo a comprar / valor original">saldo de {money(p.valor)}</span>}
           <span className="muted">{cond}</span>
           {p.tipo === "PC" && (p.etapa === "80" ? <span className="pill p-conf">Conferido</span> : p.etapa === "60" ? <span className="pill p-rec">Recebido</span>
-            : p.etapa === "40" ? <span className="pill p-fat">Faturado</span> : p.etapa === "35" ? <span className="pill p-env">Enviado</span> : <span className="pill p-off">Pendente</span>)}</div>
-        {p.tipo === "PC" && (p.aprov === "aprovado"
-          ? <div className="ent"><span className="pill p-ok">✓ Aprovado</span> {p.aprovEm ? dBR(p.aprovEm.slice(0, 10), true) : ""}{p.aprovPor ? ` por ${p.aprovPor.split("@")[0]}` : ""}</div>
-          : (p.etapa === "10" || p.etapa === "15") ? <div className="ent"><span className="pill p-vio">⏳ Pendente de aprovação</span>
-              <button className="btn sm ok" style={{ height: 22, padding: "0 8px", fontSize: 11 }} onClick={(ev) => { ev.stopPropagation(); aprovar([p.id]); }}>✓ Aprovar</button></div>
-          : null)}
+            : p.etapa === "40" ? <span className="pill p-fat">Faturado</span> : p.etapa === "35" ? <span className="pill p-env">Enviado</span> : null)}</div>
+        {p.tipo === "PC" && (p.etapa === "10" || p.etapa === "15") && p.aprov !== "aprovado" &&
+          <div className="ent"><button className="btn sm ok" style={{ height: 24, padding: "0 10px", fontSize: 11.5 }}
+            onClick={(ev) => { ev.stopPropagation(); aprovar([p.id]); }}>✓ Aprovar</button></div>}
         {p.enviadoEm && p.tipo === "PC" ? <div className="ent"><span className="pill p-env">✉ Enviado {dBR(p.enviadoEm.slice(0, 10))}</span>
           <span className="faint">{p.enviadoMeio === "whatsapp" ? "WhatsApp" : p.enviadoMeio === "email" ? "e-mail" : ""}</span></div> : null}
         {nfSug[p.id] ? <div className="ent"><span className="pill p-sky">📄 NF chegou pela Focus</span><span className="faint">confira no recebimento</span></div> : null}
@@ -389,9 +388,10 @@ export default function TelaCompras() {
                       const apr = base.filter((p) => p.aprov === "aprovado"), pen = base.filter((p) => p.aprov !== "aprovado");
                       return (
                         <div className="segap" role="tablist" aria-label="Aprovação">
-                          {([["", "Todos", base], ["pendente", "Pendentes", pen], ["aprovado", "Aprovados", apr]] as const).map(([k, l, arr]) => (
-                            <button key={k} role="tab" aria-selected={filtroAprov === k} className={`${k || "todos"}${filtroAprov === k ? " on" : ""}`}
-                              onClick={() => setFiltroAprov(k)}>
+                          {([["pendente", "⏳ Pendentes", pen], ["aprovado", "✓ Aprovados", apr]] as const).map(([k, l, arr]) => (
+                            <button key={k} role="tab" aria-selected={filtroAprov === k} className={`${k}${filtroAprov === k ? " on" : ""}`}
+                              title={filtroAprov === k ? "Clique de novo para ver os dois" : `Ver só os ${l.slice(2).toLowerCase()}`}
+                              onClick={() => setFiltroAprov(filtroAprov === k ? "" : k)}>
                               <b>{l} {arr.length}</b><small>{money(soma(arr as PedidoLista[]))}</small></button>
                           ))}
                         </div>

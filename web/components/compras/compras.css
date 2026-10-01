@@ -284,9 +284,13 @@
 .cmp .seg2 label.on { border-color: var(--ww-brand-3); background: var(--accent-soft); }
 
 /* Pedido de Compra: pendente × aprovado à primeira vista (claro e escuro) */
-.cmp .card.aprovado { border-left-color: #22C55E; background: color-mix(in srgb, #22C55E 8%, var(--panel)); }
-.cmp .card.pendente { border-left-color: #8B5CF6; }
-.cmp .segap { display: grid; grid-template-columns: repeat(3, 1fr); gap: 3px; margin-top: 6px; background: var(--panel);
+.cmp .card.aprovado { border-left: 4px solid #22C55E; background: color-mix(in srgb, #22C55E 16%, var(--panel));
+  border-color: color-mix(in srgb, #22C55E 45%, var(--line)); border-left-color: #22C55E; }
+.cmp .card.pendente { border-left: 4px solid #8B5CF6; background: var(--panel); }
+.cmp .badge-ap { display: inline-flex; font-size: 10.5px; font-weight: 700; padding: 1px 7px; border-radius: 999px; margin-right: 6px; }
+.cmp .badge-ap.ok { background: #16A34A; color: #fff; }
+.cmp .badge-ap.pend { background: color-mix(in srgb, #8B5CF6 22%, transparent); color: color-mix(in srgb, #7C3AED 85%, var(--tx)); }
+.cmp .segap { display: grid; grid-template-columns: repeat(2, 1fr); gap: 3px; margin-top: 6px; background: var(--panel);
   border: 1px solid var(--line); border-radius: 9px; padding: 3px; }
 .cmp .segap button { border: 0; background: transparent; border-radius: 6px; padding: 4px 2px; cursor: pointer; display: flex;
   flex-direction: column; align-items: center; color: var(--tx-3); font-family: inherit; }
