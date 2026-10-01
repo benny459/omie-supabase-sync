@@ -19,8 +19,8 @@ export type NfDoPedido = { n: string; valor: number; em: string; chave: string; 
 
 const so = (s: string | null | undefined) => (s ?? "").replace(/\D/g, "");
 
-export default function CaixaNfSemPedido({ nfs, pedidos, foco, onAcao, onClose }: {
-  nfs: NfSemPedido[]; pedidos: PedidoLista[]; foco?: string | null;
+export default function CaixaNfSemPedido({ nfs, pedidos, foco, onAcao, onClose, onGerarPc }: {
+  nfs: NfSemPedido[]; pedidos: PedidoLista[]; foco?: string | null; onGerarPc: (chave: string) => void;
   onAcao: (body: Record<string, unknown>, msg: string) => Promise<boolean>; onClose: () => void;
 }) {
   const [aberta, setAberta] = useState<string | null>(foco ?? nfs[0]?.chave ?? null);
@@ -97,6 +97,13 @@ export default function CaixaNfSemPedido({ nfs, pedidos, foco, onAcao, onClose }
                   </div>
                 ))}
                 {busca && !achados.length && <div className="faint" style={{ fontSize: 12.5 }}>Nenhum pedido encontrado.</div>}
+
+                <h4>Não tem pedido?</h4>
+                <div className="nfsp-sug">
+                  <div><b>Gerar pedido a partir da NF</b>
+                    <div className="faint" style={{ fontSize: 11.5 }}>Fornecedor, itens e valores da NF; nasce pendente e precisa ser aprovado.</div></div>
+                  <button className="btn sm pri" disabled={ocupado} onClick={() => onGerarPc(nf.chave)}>Gerar pedido…</button>
+                </div>
 
                 <h4>Dispensar</h4>
                 {dispensa?.chave === nf.chave ? (

@@ -16,6 +16,7 @@ import { CabecalhoTela, PaginaNavy, Carregando, Aviso } from "@/components/navy/
 import FolhaPedido from "./FolhaPedido";
 import FolhaRecebimento from "./FolhaRecebimento";
 import ModalEnviar from "./ModalEnviar";
+import ModalPcDaNf from "./ModalPcDaNf";
 import CaixaNfSemPedido, { type NfSemPedido, type NfDoPedido } from "./CaixaNfSemPedido";
 import {
   ETAPAS, ETAPA, ETAPA_AJUDA, APROV_LABEL, money, dBR, rel, hoje, diffDias, situacao, atrasado, rcAtendida,
@@ -38,6 +39,7 @@ export default function TelaCompras() {
   const [semPedido, setSemPedido] = useState<NfSemPedido[]>([]);
   const [soSemPedido, setSoSemPedido] = useState(false);
   const [caixa, setCaixa] = useState<{ foco: string | null } | null>(null);
+  const [pcDaNf, setPcDaNf] = useState<string | null>(null);
   const [erro, setErro] = useState<string | null>(null);
   const [refs, setRefs] = useState<Refs | null>(null);
   const [historico, setHistorico] = useState("365");
@@ -253,7 +255,7 @@ export default function TelaCompras() {
         onDragStart={(e) => { e.dataTransfer.setData("text/plain", String(p.id)); setArrasto(String(p.id)); }}
         onDragEnd={() => setArrasto(null)}>
         <div className="l1">
-          <span className="no"><b className="nro" title={p.tipo === "RC" ? `Requisição Nº ${p.num}` : `Pedido de compra Nº ${p.num}`}>{p.tipo === "RC" ? `RC ${p.num}` : `Nº ${p.num}`}</b>
+          <span className="no"><b className="nro" title={p.tipo === "RC" ? `Requisição Nº ${p.num}` : `Pedido de compra Nº ${p.num}`}>{p.tipo === "RC" ? `RC ${p.num}` : `PC ${p.num}`}</b>
             {naColPc && (p.aprov === "aprovado"
               ? <span className="badge-ap ok">✓ Aprovado</span> : <span className="badge-ap pend">Pendente</span>)}</span>
           <button className="kebab" aria-label="Ações" onClick={(e) => { e.stopPropagation(); const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
@@ -282,6 +284,10 @@ export default function TelaCompras() {
               setConfirma({ texto: `Desfazer o casamento da NF-e ${n.n} com o pedido ${p.num}? A NF volta para "NF sem pedido".`,
                 acao: async () => { await acaoNf({ acao: "nf_descasar", chave: n.chave, pedido: p.id }, `NF-e ${n.n} descasada do pedido ${p.num}`); } }); }}>desfazer</button>
           </div>)) : p.nf ? <div className="nfl">📄 NF-e <span className="num">{String(p.nf).split(",").map((x) => x.trim()).join(", ")}</span></div> : null)}
+        {naColPc && nfsDele.length > 0 && (
+          <div className="ent">{nfsDele.some((n) => n.como === "gerado da NF") && <span className="badge-ap nf">Gerado da NF</span>}
+            <span className="pill p-sky">📄 NF já chegou · NF-e {nfsDele.map((n) => String(n.n).replace(/^0+/, "")).join(", ")}</span>
+            {p.aprov !== "aprovado" && <span className="faint">aprovar para seguir a Faturado</span>}</div>)}
         {nfSug[p.id] ? <div className="ent"><span className="pill p-sky">📄 NF chegou pela Focus</span><span className="faint">confira no recebimento</span></div> : null}
         {p.tipo === "RC"
           ? <div className="ent">{p.cobPcs?.length ? <><span className="pill p-sky">{p.cobDone}/{p.cobTotal} itens atendidos{p.parciais ? ` · ${p.parciais} parcial` : ""}</span> {p.cobPcs.map((n) => "PC " + n).join(", ")}</> : <span className="faint">Nenhum item comprado ainda</span>}</div>
@@ -430,13 +436,14 @@ export default function TelaCompras() {
                   <div className="cards">
                     {e.cod === "40" && semPedido.map((n) => (
                       <article key={n.chave} className="card nfsem" aria-label={`NF-e ${n.numero} sem pedido`}>
-                        <div className="l1"><span className="no"><b className="nro" title={`NF-e Nº ${n.numero}`}>NF-e {n.numero}</b><span className="badge-ap crit">⛔ Sem pedido</span></span></div>
+                        <div className="l1"><span className="no"><b className="nro" title={`NF-e Nº ${n.numero}`}>NF {n.numero}</b><span className="badge-ap crit">⛔ Sem pedido</span></span></div>
                         <div className="forn">{n.emitente ?? "Emitente?"}</div>
                         <div className="ent">Emitida {dBR(String(n.emissao).slice(0, 10), true)} · não pagar até casar</div>
                         <div className="val"><b className="num">{money(Number(n.valor))}</b>
                           {n.sugestoes?.length ? <span className="muted">{n.sugestoes.length} sugestão(ões): {n.sugestoes.slice(0, 2).map((x) => "PC " + x.num).join(", ")}</span> : <span className="muted">sem sugestão</span>}</div>
                         <div className="acts">
                           <button className="btn sm crit" onClick={() => setCaixa({ foco: n.chave })}>Casar</button>
+                          <button className="btn sm" onClick={() => setPcDaNf(n.chave)}>Gerar pedido</button>
                           <button className="btn sm" onClick={() => setCaixa({ foco: n.chave })}>Ver sugestões</button>
                           <button className="btn sm ghost" onClick={() => setCaixa({ foco: n.chave })}>Dispensar</button>
                         </div>
@@ -567,7 +574,10 @@ export default function TelaCompras() {
       {enviar != null && <ModalEnviar id={enviar} toast={toast} onClose={() => setEnviar(null)}
         onEnviado={(m) => { setEnviar(null); toast(m); carregar(); }} />}
       {caixa && <CaixaNfSemPedido nfs={semPedido} pedidos={todos} foco={caixa.foco} onClose={() => setCaixa(null)}
+        onGerarPc={(ch) => setPcDaNf(ch)}
         onAcao={async (b, m) => { const ok = await acaoNf(b, m); if (ok && semPedido.length <= 1) setCaixa(null); return ok; }} />}
+      {pcDaNf && <ModalPcDaNf chave={pcDaNf} refs={refs} toast={toast} onClose={() => setPcDaNf(null)}
+        onGerado={(r) => { setPcDaNf(null); setCaixa(null); toast(`Pedido ${r.num} gerado da NF — aguardando aprovação`); carregar(); }} />}
       {toastMsg && <div className={`cmp-toast${toastMsg.erro ? " erro" : ""}`} role="status">{toastMsg.m}</div>}
     </div>
   );
