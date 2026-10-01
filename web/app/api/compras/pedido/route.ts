@@ -14,7 +14,9 @@ export async function GET(req: Request) {
   try {
     const p = await rpc("compras_pedido", { p_id: id });
     if (!p) return NextResponse.json({ error: "Pedido não encontrado" }, { status: 404 });
-    return NextResponse.json(p);
+    // contas a pagar do pedido no financeiro (fase do ciclo: previsto → … → liberado)
+    const pagar = await rpc("compras_pagar_do_pedido", { p_id: id }).catch(() => []);
+    return NextResponse.json({ ...(p as object), pagar });
   } catch (e) { return erro(e); }
 }
 

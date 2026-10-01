@@ -23,6 +23,13 @@ export type TituloRow = {
   nf_sem_pedido?: boolean;
   /** ⛔ a NF já tem pedido gerado/casado no painel, mas o pedido ainda não foi aprovado — não pagar. */
   nf_aguardando_pedido?: string;
+  /** Ciclo do pagar (Compras, sql/36): previsto → aguardando_recebimento →
+   *  aguardando_conferencia → liberado; bloqueado = NF sem pedido / PC não aprovado.
+   *  Só "liberado" é pagável. Título do Omie sem PC do painel fica sem fase. */
+  fase_pagar?: "previsto" | "aguardando_recebimento" | "aguardando_conferencia" | "liberado" | "bloqueado";
+  fase_pedido?: string;
+  parcial?: boolean;
+  valor_liberado?: number | null;
   codigo_lancamento_omie: number;
   contraparte: string | null;
   cnpj_cpf: string | null;
@@ -216,6 +223,9 @@ export async function GET(req: Request) {
      sql/29) entram como "Previsto (PC nnnn)" até a conta real chegar do Omie —
      aí são substituídas (não duplicam). */
   if (tipo === "pagar" && modo !== "baixado") {
+    // refaz fases/parcelas e substitui pelo título do Omie quando ele chega
+    await createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!,
+      { auth: { persistSession: false }, db: { schema: "orders" } }).rpc("compras_atualizar_pagar");
     let pq = admin.from("v_pagar_previsto").select("*");
     if (modo !== "aberto") pq = pq.gte("vencimento", de!).lte("vencimento", ate!);
     const { data: prev, error: pe } = await pq.order("vencimento", { ascending: true });
@@ -241,6 +251,26 @@ export async function GET(req: Request) {
         if (ped !== undefined) r.nf_aguardando_pedido = ped || "?";
       }
     }
+    // título do Omie de NF que tem PC do painel herda a fase do pedido
+    const { data: fz } = await createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!,
+      { auth: { persistSession: false }, db: { schema: "orders" } }).rpc("compras_fases_pagar");
+    type Fase = { cnpj: string; nf: string; fase: TituloRow["fase_pagar"]; parcial: boolean; prop: number; pedido: string };
+    const fases = new Map(((fz as Fase[] | null) ?? []).map((f) => [`${f.cnpj}|${f.nf}`, f]));
+    {
+      const dig = (v: unknown) => String(v ?? "").replace(/\D/g, "");
+      for (const r of rows as (TituloRow & { fase?: string; pedido_id?: number })[]) {
+        if (r.pedido_id && r.fase) {           // linha do painel (v_pagar_previsto)
+          r.fase_pagar = r.fase as TituloRow["fase_pagar"]; r.fase_pedido = r.numero_pedido ?? undefined;
+          continue;
+        }
+        const nfNum = dig(r.numero_documento_fiscal).replace(/^0+/, "");
+        const f = nfNum ? fases.get(`${dig(r.cnpj_cpf)}|${nfNum}`) : undefined;
+        if (f) {
+          r.fase_pagar = f.fase; r.fase_pedido = f.pedido; r.parcial = f.parcial;
+          if (f.fase === "liberado") r.valor_liberado = Math.round(num(r.valor_documento as number | string | null) * (f.prop ?? 1) * 100) / 100;
+        }
+      }
+    }
     if (nfs.length) {
       const chaves = new Set(nfs.map((n) => n.chave));
       const pares = new Set(nfs.map((n) => `${n.cnpj}|${n.numero}`));
@@ -251,6 +281,8 @@ export async function GET(req: Request) {
       }
     }
   }
+
+  if (tipo === "pagar") for (const r of rows) if (r.nf_sem_pedido || r.nf_aguardando_pedido) r.fase_pagar = "bloqueado";
 
   // ── Agregados (sempre sobre o conjunto devolvido) ──────────────────────
   const hoje = new Date().toLocaleDateString("sv-SE", { timeZone: "America/Sao_Paulo" }); // YYYY-MM-DD
