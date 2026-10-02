@@ -305,7 +305,7 @@ export async function GET(req: Request) {
     const v = num(r.valor_documento);
     const st = r.status_titulo ?? "";
     const venc = r.vencimento ?? "";
-    if (st === "CANCELADO") continue;
+    if (st === "CANCELADO" || st === "EXCLUIDO") continue;
     resumo.total.total += v; resumo.total.qtd += 1;
     if (st === "PAGO" || st === "RECEBIDO") { resumo.baixado.total += v; resumo.baixado.qtd += 1; }
     else {

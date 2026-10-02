@@ -16,7 +16,9 @@ from _common import (
     EMPRESAS_ALVO, EMPRESAS_OMIE, env,
     fetch_and_upsert_streaming, update_sync_state,
     to_int, to_float, trigger_sheets_mirror,
+    supa_select, supa_headers, http_request, SUPABASE_URL,
 )
+import json, urllib.parse
 
 OMIE_URL = "https://app.omie.com.br/api/v1/financas/pesquisartitulos/"
 SCHEMA   = "finance"
@@ -25,6 +27,60 @@ PK       = "empresa,cod_titulo"
 FORCAR_FULL = env("FORCAR_FULL", "false").lower() == "true"
 DIAS_INCREMENTAL = int(env("DIAS_INCREMENTAL", "90"))
 MAX_SECONDS = int(env("MAX_SECONDS_PER_STEP", "7000"))
+
+# Títulos excluídos no Omie somem da API, mas o upsert nunca os apagava: ficavam
+# em aberto no painel pra sempre (diagnóstico de 02/10/26: ~2,3 mil só na SF,
+# quase todos parcelas recorrentes excluídas e relançadas). Depois de um FULL
+# COMPLETO, o que está no painel e não veio do Omie vira status EXCLUIDO — não
+# apaga a linha; se o título reaparecer, o próximo upsert devolve o status real.
+#   MARCAR_EXCLUIDOS=dry   → só relata (padrão)
+#   MARCAR_EXCLUIDOS=true  → relata e marca
+#   MARCAR_EXCLUIDOS=false → nem relata
+MARCAR_EXCLUIDOS = env("MARCAR_EXCLUIDOS", "dry").lower()
+STATUS_EXCLUIDO = "EXCLUIDO"
+# Trava: se sumir mais que isso, a leitura do Omie é suspeita — não marca.
+LIMITE_EXCLUIDOS_PCT = float(env("LIMITE_EXCLUIDOS_PCT", "10"))
+ABERTOS = {"A VENCER", "ATRASADO", "VENCE HOJE"}
+
+
+def _painel_titulos(sigla):
+    rows, off = [], 0
+    while True:
+        chunk = supa_select(SCHEMA, TABELA,
+                            f"select=cod_titulo,status,natureza,valor_titulo,dt_vencimento,cod_cc"
+                            f"&empresa=eq.{sigla}&status=neq.{STATUS_EXCLUIDO}"
+                            f"&order=cod_titulo&limit=1000&offset={off}")
+        rows.extend(chunk)
+        if len(chunk) < 1000:
+            return rows
+        off += 1000
+
+
+def tratar_excluidos(sigla, vistos):
+    painel = _painel_titulos(sigla)
+    sumidos = [r for r in painel if to_int(r["cod_titulo"]) not in vistos]
+    abertos = [r for r in sumidos if (r.get("status") or "") in ABERTOS]
+    soma = round(sum(to_float(r.get("valor_titulo")) or 0 for r in abertos), 2)
+    print(f"\n   🔎 {sigla}: Omie={len(vistos)} | painel={len(painel)} | "
+          f"sumiram do Omie={len(sumidos)} (em aberto: {len(abertos)}, R$ {soma:,.2f})")
+    with open(f"excluidos_{sigla}.json", "w") as f:
+        json.dump(sumidos, f, ensure_ascii=False, indent=1, default=str)
+    if not sumidos or MARCAR_EXCLUIDOS != "true":
+        return
+    pct = 100 * len(sumidos) / max(len(painel), 1)
+    if pct > LIMITE_EXCLUIDOS_PCT:
+        print(f"   ⛔ {pct:.1f}% sumiram (> {LIMITE_EXCLUIDOS_PCT}%) — leitura do Omie suspeita, NÃO marquei")
+        return
+    cods = [to_int(r["cod_titulo"]) for r in sumidos]
+    for i in range(0, len(cods), 200):
+        lote = ",".join(str(c) for c in cods[i:i + 200])
+        url = (f"{SUPABASE_URL}/rest/v1/{TABELA}?empresa=eq.{sigla}"
+               f"&cod_titulo=in.({urllib.parse.quote(lote)})")
+        code, body, _ = http_request(url, "PATCH", supa_headers(SCHEMA, {"Prefer": "return=minimal"}),
+                                     json.dumps({"status": STATUS_EXCLUIDO}).encode())
+        if code >= 300:
+            raise RuntimeError(f"PATCH excluidos HTTP {code}: {body[:200]}")
+    print(f"   ✅ {sigla}: {len(cods)} títulos marcados {STATUS_EXCLUIDO}")
 
 
 def map_row(titulo: dict, sigla: str) -> dict:
@@ -140,12 +196,19 @@ def main():
             # dAlt preenchido (0 com inclusão e sem alteração), ou seja, o
             # filtro por alteração também alcança os recém-criados.
             extra["dDtAltDe"] = data_filtro
+        vistos = set()
+
+        def mapper(titulo, sigla, _vistos=vistos):
+            row = map_row(titulo, sigla)
+            _vistos.add(to_int(row.get("cod_titulo")))
+            return row
+
         try:
             total, completed, pages = fetch_and_upsert_streaming(
                 url=OMIE_URL, call="PesquisarLancamentos", sigla=sigla,
                 list_field="titulosEncontrados",
                 schema=SCHEMA, table=TABELA, pk=PK,
-                mapper_fn=map_row,
+                mapper_fn=mapper,
                 page_size=100,
                 extra_param=extra,
                 page_key="nPagina", size_key="nRegPorPagina",
@@ -156,6 +219,8 @@ def main():
             duracao = int(time.time() - inicio)
             modo = "FULL" if completed else "PARCIAL"
             update_sync_state(f"pesquisa_titulos_{sigla}", sigla, total, modo=modo, duracao_segundos=duracao)
+            if FORCAR_FULL and completed and MARCAR_EXCLUIDOS != "false":
+                tratar_excluidos(sigla, vistos)
         except Exception as e:
             print(f"   ❌ {sigla}: {e}")
             update_sync_state(f"pesquisa_titulos_{sigla}", sigla, 0, status="ERRO", erro=str(e)[:200])

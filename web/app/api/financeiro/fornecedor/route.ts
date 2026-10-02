@@ -108,7 +108,7 @@ export async function GET(req: Request) {
   for (const l of linhas) {
     const doc = num(l.valor_documento);
     const aberto = num(l.val_aberto);
-    if (l.status_titulo === "CANCELADO") continue;
+    if (l.status_titulo === "CANCELADO" || l.status_titulo === "EXCLUIDO") continue;
 
     total += doc;
     if (aberto > 0) {

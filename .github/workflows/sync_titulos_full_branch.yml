@@ -1,0 +1,40 @@
+name: SYNC títulos FULL + relatório de excluídos (branch financeiro)
+
+# Sync completo de finance.pesquisa_titulos (mesmo do domingo) e relatório dos
+# títulos que sumiram do Omie. MARCAR_EXCLUIDOS=dry: só relata, não marca.
+on:
+  workflow_dispatch:
+  push:
+    branches: [financeiro]
+    paths:
+      - .github/workflows/sync_titulos_full_branch.yml
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Pesquisa títulos FULL
+        env:
+          EMPRESAS_ALVO: "SF,CD,WW"
+          FORCAR_FULL: "true"
+          MARCAR_EXCLUIDOS: "dry"
+          PYTHONUNBUFFERED: "1"
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          OMIE_APP_KEY_SF: ${{ secrets.OMIE_APP_KEY_SF }}
+          OMIE_APP_SECRET_SF: ${{ secrets.OMIE_APP_SECRET_SF }}
+          OMIE_APP_KEY_CD: ${{ secrets.OMIE_APP_KEY_CD }}
+          OMIE_APP_SECRET_CD: ${{ secrets.OMIE_APP_SECRET_CD }}
+          OMIE_APP_KEY_WW: ${{ secrets.OMIE_APP_KEY_WW }}
+          OMIE_APP_SECRET_WW: ${{ secrets.OMIE_APP_SECRET_WW }}
+        run: python3 scripts/import_pesquisa_titulos.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: excluidos
+          path: excluidos_*.json
