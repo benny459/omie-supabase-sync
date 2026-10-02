@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<title>Recibo de Prestação de Serviço nº 0000004578</title>
+<!--
+  RECIBO DE PRESTAÇÃO DE SERVIÇO — réplica do modelo do Omie (decisão do Benny,
+  02/10/2026: mesmo nome, mesma numeração sequencial, menor mudança de design
+  possível porque os clientes já conhecem o molde).
+  Medidas tiradas do PDF do Omie (recibo 4578): A4, conteúdo de 10 a 200 mm,
+  Helvetica, faixas #00BFB7 com rótulo branco, cabeçalhos de tabela #E5F8F7.
+  Única correção: o endereço do cliente quebra dentro da coluna (no Omie ele
+  saía cortado na margem direita).
+  Dados de exemplo: recibo 4578 / OS 4805. Branch focus-faturamento.
+-->
+<style>
+  @page { size: A4; margin: 0; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: #fff; }
+  body { font-family: Helvetica, Arial, sans-serif; color: #000; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .folha { width: 210mm; height: 297mm; position: relative; margin: 0 auto; overflow: hidden; }
+
+  /* cabeçalho (posições do original) */
+  .emp-nome { position: absolute; right: 11mm; top: 0.5mm; font-size: 12pt; font-weight: bold; }
+  .logo { position: absolute; left: 10mm; top: 8mm; width: 59.3mm; height: 17mm; }
+  .emp-dados { position: absolute; right: 11mm; top: 9.6mm; text-align: right; font-size: 8pt; line-height: 1; }
+  .emp-dados div { margin-bottom: 3.4mm; }
+  .emp-dados div + div { margin-bottom: 1.2mm; }
+  .titulo { position: absolute; left: 10mm; right: 10mm; top: 31.4mm; text-align: center; font-size: 15pt; font-weight: bold; }
+
+  /* corpo em fluxo, começando onde o original começa */
+  .corpo { position: absolute; left: 10mm; right: 10mm; top: 44mm; }
+  .linha { display: grid; grid-template-columns: 40mm 1fr; column-gap: 1mm; }
+  .rot { background: #00BFB7; color: #fff; font-weight: bold; font-size: 10pt; text-align: right; height: 6mm; line-height: 6mm; padding-right: 1mm; }
+  .val { font-size: 10pt; line-height: 6mm; }
+
+  .cli-nome { font-weight: bold; font-size: 10pt; line-height: 6mm; }
+  .cli-grid { display: grid; grid-template-columns: 54mm 1fr; column-gap: 1mm; margin-top: -0.6mm; }
+  .cli-cnpj { font-size: 8pt; }
+  .cli-emails { margin-top: 4.6mm; font-size: 6pt; font-weight: bold; line-height: 3mm; }
+  .cli-end { font-size: 6.5pt; line-height: 1.25; }      /* quebra dentro da coluna */
+  .cli-cid { font-size: 8pt; margin-top: .6mm; }
+  .cli-tel { font-size: 8pt; font-weight: bold; margin-top: .9mm; }
+
+  .obj-cab { display: grid; grid-template-columns: 1fr 30mm; height: 6mm; font-size: 8pt; font-weight: bold; }
+  .obj-cab span { background: #E5F8F7; line-height: 6mm; padding: 0 1mm; }
+  .obj-cab span + span { text-align: right; }
+  .obj-itens { margin-top: 3.2mm; }
+  .obj-item { display: grid; grid-template-columns: 1fr 30mm; font-size: 8pt; line-height: 4mm; }
+  .obj-item .desc { padding: 0 1mm; max-width: 116mm; }
+  .obj-item .desc p { margin: 0 0 4mm; }
+  .obj-item .desc p:last-child { margin-bottom: 0; }
+  .obj-item .v { text-align: right; padding-right: 1mm; }
+  .totais { display: grid; grid-template-columns: 21mm 20mm 30mm; margin: .6mm 0 0 auto; width: 71mm; font-size: 8pt; }
+  .totais .h { background: #E5F8F7; font-weight: bold; text-align: right; height: 5mm; line-height: 5mm; padding-right: 1mm; }
+  .totais .n { text-align: right; height: 5mm; line-height: 5mm; padding-right: 1mm; }
+
+  .obs { font-size: 7pt; line-height: 3.5mm; padding: 0 1mm; }
+  .rodape { position: absolute; left: 0; right: 0; top: 278.7mm; text-align: center; font-size: 7pt; color: #808080; }
+</style>
+</head>
+<body>
+<div class="folha">
+  <div class="emp-nome">SAFE WATER BRASIL LTDA</div>
+  <img class="logo" src="logo-waterworks-omie.png" alt="WaterWorks">
+  <div class="emp-dados">
+    <div>CNPJ: 15.766.003/0001-08 | Inscrição Estadual: 206878808115 | Inscrição Municipal: 4AY5076</div>
+    <div>Avenida Tucunaré, 550 - GALPÃO AMJ/AMI - Tamboré</div>
+    <div>Barueri - SP - CEP: 06460-020</div>
+    <div>Telefone: (11) 4705-4848</div>
+  </div>
+
+  <div class="titulo">Recibo de Prestação de Serviço nº 0000004578</div>
+
+  <div class="corpo">
+    <div class="linha">
+      <div class="rot">Emissão:</div>
+      <div class="val">Barueri (SP), 16 de Setembro de 2026.</div>
+    </div>
+
+    <div class="linha" style="margin-top:3mm">
+      <div class="rot">Cliente:</div>
+      <div>
+        <div class="cli-nome">NOTRE DAME INTERMEDICA SAUDE S.A.</div>
+        <div class="cli-grid">
+          <div>
+            <div class="cli-cnpj">CNPJ: 44.649.812/0050-16</div>
+            <div class="cli-emails">
+              engeclin.capitalsp@hapvida.com.br<br>
+              t_mayra.couto@hapvida.com.br<br>
+              eloisa.rodrigues@rkpengenharia.com.br<br>
+              milton.jcolontonio@hapvida.com.br<br>
+              contasareceber@waterworks.com.br<br>
+              bpofinanceiro@zacassessoria.com.br<br>
+              fernanda@waterworks.com.br<br>
+              nf.prestadores@hapvida.com.br<br>
+              nf.prestadores_sap@hapvida.com.br
+            </div>
+          </div>
+          <div>
+            <div class="cli-end">AVENIDA LUCAS NOGUEIRA GARCEZ, 400 - ANEXO R MARMARA N161 E 169FUNDOSR BERING</div>
+            <div class="cli-cid">São Bernardo do Campo - SP - CEP: 09750660</div>
+            <div class="cli-tel">Telefone: (11) 3155-2000</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="linha" style="margin-top:12.3mm">
+      <div class="rot">Objeto:</div>
+      <div>
+        <div class="obj-cab"><span>Descrição</span><span>Valor Total</span></div>
+        <div class="obj-itens">
+          <div class="obj-item">
+            <div class="desc">
+              <p>VISITA TÉCNICA PARA DESINFECÇÃO DO SISTEMA DE TRATAMENTO DE ÁGUA POR OSMOSE REVERSA</p>
+              <p>CONFORME OC N 4101507839</p>
+            </div>
+            <div class="v">1.663,00</div>
+          </div>
+        </div>
+        <div class="totais">
+          <div class="h">Total Bruto</div><div class="h">Descontos</div><div class="h">Total Líquido</div>
+          <div class="n">1.663,00</div><div class="n">0,00</div><div class="n">1.663,00</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="linha" style="margin-top:3mm">
+      <div class="rot">Vencimento:</div>
+      <div class="val">dia 02/10/2026 no valor de R$ 1.663,00</div>
+    </div>
+
+    <div class="linha" style="margin-top:4mm">
+      <div class="rot">Observações:</div>
+      <div class="obs">Conforme Lei Complementar 116/2003 de 31/07/03, que trata do VETO ao imposto sobre a prestação de serviço em Saneamento
+        Ambiental, purificação e tratamento de água, esgotamento sanitário e Congêneres.</div>
+    </div>
+  </div>
+
+  <div class="rodape">Página 1 de 1</div>
+</div>
+</body>
+</html>
