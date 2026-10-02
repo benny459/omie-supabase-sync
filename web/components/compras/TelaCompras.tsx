@@ -39,6 +39,8 @@ export default function TelaCompras() {
   const [nfsPed, setNfsPed] = useState<Record<string, NfDoPedido[]>>({});
   const [semPedido, setSemPedido] = useState<NfSemPedido[]>([]);
   const [soSemPedido, setSoSemPedido] = useState(false);
+  /* Busca por código: inclui todos os códigos do mesmo item de hoje (Omie, mesclados, recodificados). */
+  const [equiv, setEquiv] = useState<{ q: string; itens: { codigoAtual: string; descricaoAtual: string; codigos: string[] }[] } | null>(null);
   const [caixa, setCaixa] = useState<{ foco: string | null } | null>(null);
   const [pcDaNf, setPcDaNf] = useState<string | null>(null);
   const [confer, setConfer] = useState<number | null>(null);
@@ -110,6 +112,15 @@ export default function TelaCompras() {
 
   const idsSugeridos = useMemo(() => new Set(semPedido.flatMap((n) => (n.sugestoes ?? []).map((x) => x.pedidoId))), [semPedido]);
   const totSemPedido = semPedido.reduce((a, n) => a + Number(n.valor || 0), 0);
+  useEffect(() => {
+    const t = q.trim();
+    if (t.length < 3 || /\s/.test(t)) { setEquiv(null); return; }
+    const h = setTimeout(() => {
+      fetch(`/api/compras/codigos?q=${encodeURIComponent(t)}`).then((r) => (r.ok ? r.json() : [])).then((j) => setEquiv({ q: t, itens: j ?? [] })).catch(() => null);
+    }, 250);
+    return () => clearTimeout(h);
+  }, [q]);
+  const codigosEq = useMemo(() => (equiv && equiv.q === q.trim() ? equiv.itens.flatMap((i) => i.codigos.map((c) => c.toLowerCase())) : []), [equiv, q]);
   const parcDesc = useCallback((cod?: string) => refs?.parcelas.find((p) => p.cod === cod)?.desc ?? cod ?? "", [refs]);
   const todos = lista ?? [];
   const filtrados = useMemo(() => {
@@ -125,11 +136,11 @@ export default function TelaCompras() {
       if (t) {
         const hay = [p.num, p.forn, p.proj, p.cat, p.comprador, p.contato, p.nf, p.cnpj, p.pv, p.pvCliente, p.busca,
           ...(p.rcs ?? []), ...(p.cobPcs ?? [])].join(" ").toLowerCase();
-        if (!hay.includes(t)) return false;
+        if (!hay.includes(t) && !codigosEq.some((c) => c !== t && hay.includes(c))) return false;
       }
       return true;
     });
-  }, [todos, q, comprador, projeto, periodo, soAtraso, soNf, nfSug, origem, soSemPedido, idsSugeridos]);
+  }, [todos, q, comprador, projeto, periodo, soAtraso, soNf, nfSug, origem, soSemPedido, idsSugeridos, codigosEq]);
 
   // ── ações ────────────────────────────────────────────────────────────────
   const acao = useCallback(async (body: Record<string, unknown>) => {
@@ -398,6 +409,10 @@ export default function TelaCompras() {
         </div>
         <div className="faint" style={{ fontSize: 12, marginTop: -6 }}>
           {lista ? `${filtrados.length} de ${todos.length} registros${historico !== "todos" ? " (histórico do Omie limitado ao filtro acima)" : ""}` : ""}
+          {equiv && equiv.q === q.trim() && equiv.itens.some((i) => i.codigos.length > 1) && equiv.itens.map((i) => (
+            <span key={i.codigoAtual} style={{ marginLeft: 10 }}>· busca inclui os códigos {i.codigos.join(", ")} —
+              <a className="cod-hoje" style={{ marginLeft: 4 }} href={`/estoque/${encodeURIComponent(i.codigoAtual)}`} target="_blank" rel="noopener noreferrer">
+                hoje <b className="mono">{i.codigoAtual}</b> · {i.descricaoAtual}</a></span>))}
         </div>
 
         {!lista && !erro && <Carregando texto="Carregando compras…" />}

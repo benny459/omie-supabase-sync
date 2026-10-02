@@ -165,7 +165,8 @@ export function gerarParcelas(total: number, dias: number[], base: string, doc =
   }));
 }
 
-export type HistPreco = { n: string; d: string; f: string | null; q: number; vu: number; id: number };
+/** Histórico de preço consolidado por item de hoje (sql/38): `cod` é o código usado naquele PC. */
+export type HistPreco = { n: string; d: string; f: string | null; q: number; vu: number; id: number; cod?: string | null };
 export function infoPreco(it: Item, forn: string, hist: HistPreco[] | undefined) {
   const h = (hist ?? []).filter((x) => !(it.rc && x.n === it.rc.num));
   if (!h.length) return null;

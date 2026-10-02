@@ -8,7 +8,8 @@
  * dispensar (motivo obrigatório; mesma permissão de aprovar compra).
  */
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import CodigoHoje from "./CodigoHoje";
 import { money, dBR, type PedidoLista } from "@/lib/compras";
 
 export type NfSugestao = { pedidoId: number; num: string; forn: string | null; valor: number; emissao: string | null;
@@ -29,6 +30,20 @@ export default function CaixaNfSemPedido({ nfs, pedidos, foco, onAcao, onClose, 
   const [ocupado, setOcupado] = useState(false);
   const total = nfs.reduce((a, n) => a + Number(n.valor || 0), 0);
   const nf = nfs.find((n) => n.chave === aberta) ?? null;
+  /* Itens da NF (prévia do "Gerar pedido"): nome/cód. do fornecedor → nosso item
+     (de-para ou catálogo), com o código de hoje quando mudou. */
+  type ItemPrevia = { desc: string; descNf: string; cod: string | null; codForn: string | null; qtd: number; un: string; casado: boolean; deAlias?: boolean };
+  const [itensNf, setItensNf] = useState<{ chave: string; itens: ItemPrevia[] | null; erro?: string } | null>(null);
+  useEffect(() => {
+    if (!aberta) return;
+    let vivo = true;
+    setItensNf({ chave: aberta, itens: null });
+    fetch(`/api/compras/nf-gerar-pc?chave=${aberta}`).then(async (r) => {
+      const j = await r.json();
+      if (vivo) setItensNf(r.ok ? { chave: aberta, itens: j.itens ?? [] } : { chave: aberta, itens: [], erro: j.error });
+    }).catch(() => null);
+    return () => { vivo = false; };
+  }, [aberta]);
 
   const achados = useMemo(() => {
     if (!nf) return [];
@@ -76,6 +91,19 @@ export default function CaixaNfSemPedido({ nfs, pedidos, foco, onAcao, onClose, 
                     {nf.completa === false ? " · só resumo (XML completo ainda não veio)" : ""}</div>
                   <div className="faint mono" style={{ fontSize: 11, wordBreak: "break-all" }}>{nf.chave}</div>
                 </div>
+
+                <h4>Itens da NF</h4>
+                {itensNf?.chave === nf.chave && (itensNf.itens == null ? <div className="faint" style={{ fontSize: 12 }}>Lendo itens…</div>
+                  : itensNf.erro ? <div className="faint" style={{ fontSize: 12 }}>{itensNf.erro}</div>
+                  : itensNf.itens.map((i, k) => (
+                    <div key={k} className="nfsp-item">
+                      <div><span className="faint">na NF:</span> {i.descNf}{i.codForn ? <span className="faint"> (cód. fornecedor {i.codForn})</span> : null}
+                        <span className="faint"> · {i.qtd} {i.un}</span></div>
+                      <div>{i.casado ? <><span className="faint">nosso item:</span> <b>{i.desc}</b> <span className="mono faint">{i.cod}</span>
+                        {i.deAlias ? <span className="pill p-ok" style={{ marginLeft: 6 }}>de-para</span> : null} <CodigoHoje cod={i.cod} desc={false} /></>
+                        : <span className="faint">sem item nosso identificado</span>}</div>
+                    </div>
+                  )))}
 
                 <h4>Sugestões</h4>
                 {nf.sugestoes?.length ? nf.sugestoes.map((s) => (

@@ -50,6 +50,8 @@ export default function ModalEnviar({ id, onClose, onEnviado, toast }: {
   const [assunto, setAssunto] = useState("");
   const [texto, setTexto] = useState("");
   const [variante, setVariante] = useState<"completo" | "sem_valores">("completo");
+  // "código anterior" sob o item (PC já com código novo) — padrão ligado até 31/12/2026
+  const [anterior, setAnterior] = useState(() => new Date().toISOString().slice(0, 10) <= "2026-12-31");
   const [anexo, setAnexo] = useState<{ nome: string; base64: string } | null>(null);
   const [ocupado, setOcupado] = useState(false);
   const [meio, setMeio] = useState<"whatsapp" | "outro">("whatsapp");
@@ -69,15 +71,15 @@ export default function ModalEnviar({ id, onClose, onEnviado, toast }: {
     return () => document.removeEventListener("keydown", esc);
   }, [onClose]);
 
-  const ver = () => window.open(`/api/compras/pdf?id=${id}&variante=${variante}`, "_blank", "noopener");
-  const baixar = () => window.open(`/api/compras/pdf?id=${id}&variante=${variante}&baixar=1`, "_blank", "noopener");
+  const ver = () => window.open(`/api/compras/pdf?id=${id}&variante=${variante}&anterior=${anterior ? 1 : 0}`, "_blank", "noopener");
+  const baixar = () => window.open(`/api/compras/pdf?id=${id}&variante=${variante}&anterior=${anterior ? 1 : 0}&baixar=1`, "_blank", "noopener");
 
   const enviar = async () => {
     if (!para.length) { toast("Informe pelo menos um destinatário em “Para”.", true); return; }
     setOcupado(true);
     try {
       const r = await fetch("/api/compras/email", { method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id, para, cc, cco, copia, assunto, texto, variante, anexo }) });
+        body: JSON.stringify({ id, para, cc, cco, copia, assunto, texto, variante, anexo, anterior }) });
       const j = await r.json().catch(() => ({}));
       if (!r.ok) throw new Error(j.error ?? r.statusText);
       onEnviado(`Pedido ${d?.numero} enviado para ${para.join(", ")}`);
@@ -142,7 +144,10 @@ export default function ModalEnviar({ id, onClose, onEnviado, toast }: {
                         <span><b>Completo</b><br /><span className="muted">com valores, totais e pagamento</span></span></label>
                       <label className={variante === "sem_valores" ? "on" : ""}><input type="radio" checked={variante === "sem_valores"} onChange={() => setVariante("sem_valores")} />
                         <span><b>Sem valores</b><br /><span className="muted">só itens e quantidades</span></span></label>
-                    </div></div>
+                    </div>
+                    <label className="hint" style={{ display: "flex", gap: 6, alignItems: "center", marginTop: 6 }}>
+                      <input type="checkbox" checked={anterior} onChange={(e) => setAnterior(e.target.checked)} />
+                      Mostrar “código anterior” sob o item (itens com código novo)</label></div>
                 </div>
                 <div style={{ display: "grid", gap: 10, alignContent: "start" }}>
                   <div className="secao-t">Prévia do e-mail</div>

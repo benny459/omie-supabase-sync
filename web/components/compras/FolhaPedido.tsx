@@ -10,6 +10,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import CodigoHoje from "./CodigoHoje";
 import Autocompletar, { type Opcao } from "./Autocompletar";
 import {
   ETAPAS, ETAPA, APROV_LABEL, TIPOS_FRETE, UFS, TIPOS_DOC, DEPTOS_PADRAO,
@@ -24,7 +25,7 @@ type RcAberta = {
 type Forn = { cod: number; nome: string; fantasia?: string; cnpj?: string; transp?: boolean; n?: number;
   ultCatCod?: string; ultCat?: string; ultContato?: string; ultParc?: string };
 type ItemCat = { ncod_prod: number; codigo: string | null; descricao: string; unidade: string | null; ultimo_preco: number | null;
-  fornecedor: string | null; ultima_compra: string | null };
+  fornecedor: string | null; ultima_compra: string | null; codigo_omie?: string | null; via?: string };
 
 type Tab = "itens" | "deptos" | "frete" | "parcelas" | "info" | "obs";
 type PagarLinha = { n: number; total: number; venc: string | null; valor: number; fase: string; parcial: boolean;
@@ -493,10 +494,11 @@ export default function FolhaPedido({
                                   <Autocompletar<ItemCat> value={it.desc} disabled={ro} minimo={2} placeholder="Busque o produto (código ou descrição)"
                                     onChange={(v) => setItem(i, { desc: v })}
                                     fonte={async (q) => (await json<ItemCat[]>(await fetch(`/api/compras/buscar?tipo=produto&q=${encodeURIComponent(q)}`)))
-                                      .map((p) => ({ label: p.descricao, sub: `${p.codigo ?? "—"} · ${p.unidade ?? "UN"}${p.ultimo_preco ? ` · último preço ${money(p.ultimo_preco)}` : ""}${p.fornecedor ? ` · ${p.fornecedor}` : ""}`, v: p }))}
+                                      .map((p) => ({ label: p.descricao, sub: `${p.codigo ?? "—"}${p.via ? ` (${p.via})` : p.codigo_omie && p.codigo_omie !== p.codigo ? ` (era ${p.codigo_omie})` : ""} · ${p.unidade ?? "UN"}${p.ultimo_preco ? ` · último preço ${money(p.ultimo_preco)}` : ""}${p.fornecedor ? ` · ${p.fornecedor}` : ""}`, v: p }))}
                                     onPick={(o) => setItem(i, { cod: o.v.codigo ?? "", ncodProd: o.v.ncod_prod, desc: o.v.descricao,
                                       un: o.v.unidade ?? "UN", vu: Number(o.v.ultimo_preco) || it.vu })} />
                                   <div className="hint mono">{it.cod || "novo"}{it.ncm ? ` · NCM ${it.ncm}` : ""}</div>
+                                  {it.cod ? <CodigoHoje cod={it.cod} /> : null}
                                   {it.rc && (
                                     <div className="hint" style={{ color: "var(--accent-strong)" }}>
                                       ⇠ RC {it.rc.num} · item {it.rc.idx}{it.desc !== it.rc.desc ? ` · na requisição: “${it.rc.desc}”` : ""}
@@ -537,7 +539,7 @@ export default function FolhaPedido({
                                         const d = x.vu ? (((Number(it.vu) || 0) - x.vu) / x.vu) * 100 : 0;
                                         return (
                                           <tr key={j} className={x.f && x.f === D.forn ? "same" : ""}>
-                                            <td>{dBR(x.d)}</td><td>{x.n}</td><td>{x.f}</td><td className="r num">{fq(x.q)}</td>
+                                            <td>{dBR(x.d)}</td><td>{x.n}{x.cod && it.cod && x.cod.toUpperCase() !== it.cod.toUpperCase() ? <span className="faint mono" title="Comprado com outro código do mesmo item"> · cód. {x.cod}</span> : null}</td><td>{x.f}</td><td className="r num">{fq(x.q)}</td>
                                             <td className="r num">{money(x.vu)}</td>
                                             <td className={`r num${d > 1 ? "" : " faint"}`} style={d > 10 ? { color: "var(--ww-crit-text)" } : undefined}>{d > 0 ? "+" : ""}{num2(d)}%</td>
                                           </tr>

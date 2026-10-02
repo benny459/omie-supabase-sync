@@ -10,6 +10,7 @@
 
 import { useEffect, useState } from "react";
 import Autocompletar from "./Autocompletar";
+import CodigoHoje from "./CodigoHoje";
 import { money, qtd as fq } from "@/lib/compras";
 
 type Nosso = { ncodProd: number; cod: string | null; desc: string; un?: string | null };
@@ -114,6 +115,7 @@ export default function FolhaConferencia({ id, onClose, onConferido, toast }: {
                         <option value={String(l.nosso.ncodProd)}>{l.nosso.desc}{l.nosso.cod ? ` (${l.nosso.cod})` : ""}</option>}
                       {opcoesPc.map((x) => <option key={x.seq} value={String(x.ncodProd)}>Item {x.seq} do PC · {x.desc}{x.cod ? ` (${x.cod})` : ""}</option>)}
                     </select>
+                    {l?.nosso?.cod ? <CodigoHoje cod={l.nosso.cod} /> : null}
                     <Autocompletar<ItemCat> value={busca[key] ?? ""} minimo={2} placeholder="…ou outro item do catálogo (código ou descrição)" disabled={ocupado}
                       onChange={(v) => setBusca((b) => ({ ...b, [key]: v }))}
                       fonte={async (q) => ((await (await fetch(`/api/compras/buscar?tipo=produto&q=${encodeURIComponent(q)}`)).json()) as ItemCat[])
