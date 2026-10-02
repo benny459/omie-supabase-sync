@@ -40,6 +40,19 @@ def testar(token, cnpj):
             print(f"   corpo: {str(data)[:400]}")
 
 
+def mostrar_municipio(token, codigo):
+    """Como a Focus emite NFS-e no município (provedor, nacional ou não,
+    certificado, homologação). Só leitura."""
+    for path in (f"/v2/municipios/{codigo}", f"/v2/municipios/{codigo}/itens_lista_servico?codigo=07.03"):
+        st, data, _ = focus(token, "GET", path)
+        print(f"GET {path} → HTTP {st}")
+        if isinstance(data, dict):
+            for k in sorted(data):
+                print(f"   {k} = {str(data[k])[:160]}")
+        else:
+            print(f"   corpo: {str(data)[:600]}")
+
+
 master = env("FOCUS_TOKEN_MASTER")
 for sigla, cnpj in EMPRESAS.items():
     print(f"\n===== {sigla} {cnpj}")
@@ -48,6 +61,9 @@ for sigla, cnpj in EMPRESAS.items():
     else:
         print("sem FOCUS_TOKEN_MASTER")
     tok = env(f"FOCUS_TOKEN_{sigla}")
+    if tok and env("FOCUS_SO_MUNICIPIO"):
+        mostrar_municipio(tok, "3505708")  # Barueri
+        continue
     if tok:
         testar(tok, cnpj)
         for chave in (env("FOCUS_CHAVES") or "").split(","):

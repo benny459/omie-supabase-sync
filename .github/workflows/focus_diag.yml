@@ -24,5 +24,6 @@ jobs:
           FOCUS_TOKEN_MASTER: ${{ secrets.FOCUS_TOKEN_MASTER }}
           FOCUS_TOKEN_SF: ${{ secrets.FOCUS_TOKEN_SF }}
           FOCUS_CHAVES: ${{ github.event.inputs.chaves }}
+          FOCUS_SO_MUNICIPIO: "1"
           PYTHONUNBUFFERED: "1"
         run: python3 scripts/diag_focus.py
