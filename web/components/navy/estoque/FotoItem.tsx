@@ -42,6 +42,14 @@ export function FotoItem({ n, avisar }: { n: number; avisar: (t: string, tom?: "
   </>);
 }
 
+/** "Trocar foto" de qualquer item, fora da ficha (página Fotos do Catálogo). */
+export function TrocarFoto({ n, fechar, mudou, avisar }: { n: number; fechar: () => void; mudou: () => void; avisar: (t: string, tom?: "ok" | "crit") => void }) {
+  const [e, setE] = useState<Estado | null>(null);
+  useEffect(() => { fetch(`/api/estoque/foto?n=${n}`, { cache: "no-store" }).then((r) => r.json()).then(setE).catch(() => setE(null)); }, [n]);
+  if (!e) return null;
+  return <ModalFoto n={n} e={e} fechar={fechar} mudou={() => { invalidarItens(); mudou(); }} avisar={avisar} />;
+}
+
 function ModalFoto({ n, e, fechar, mudou, avisar }: {
   n: number; e: Estado; fechar: () => void; mudou: (e: Estado) => void; avisar: (t: string, tom?: "ok" | "crit") => void;
 }) {

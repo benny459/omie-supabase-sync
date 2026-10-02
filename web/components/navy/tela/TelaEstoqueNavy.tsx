@@ -27,11 +27,19 @@ import {
 import { ModalMesclar } from "../estoque/Acoes";
 import { ListaMesclagens, MesclarTodos, type GrupoMescla, type LoteMescla } from "../estoque/MesclarTodos";
 import AbaInventario from "../estoque/Inventario";
+import { AbaMovs } from "../estoque/Movimentacoes";
 
 export type Aba = "itens" | "dups" | "movs" | "inv";
 /** Rota de cada aba — desde 02/10/26 as abas são a 2ª linha do menu (AppSidebar › MODULES). */
 export const ROTA_ABA: Record<Aba, string> = { itens: "/estoque", dups: "/estoque/duplicidades", movs: "/estoque/movimentacao", inv: "/estoque/inventario" };
-const TITULO: Record<Aba, string> = { itens: "Estoque", dups: "Duplicidades", movs: "Movimentação", inv: "Inventário" };
+const TITULO: Record<Aba, string> = { itens: "Itens", dups: "Duplicidades", movs: "Movimentação", inv: "Inventário" };
+/** Para que serve cada aba — uma linha, sem jargão (pedido do Benny, 02/10/26). */
+const PARA_QUE: Record<Aba, string> = {
+  itens: "Tudo o que está em estoque: quanto tem, quanto dura e onde está. Clique num item para abrir a ficha.",
+  movs: "Tudo o que entrou e saiu, dia a dia — as NF do Omie e as movimentações lançadas aqui (obra, transferência, consumo, perda…).",
+  inv: "Contagem física: com a senha da janela de inventário, confira e acerte o saldo (o acerto fica só no painel).",
+  dups: "Itens cadastrados duas vezes. Junte os códigos e tudo (saldo, compras, movimentos) passa a ficar num só.",
+};
 type Filtro = { k: string; rotulo: string; f: (p: ItemEstoque) => boolean; title?: string };
 
 const FILTROS: Filtro[] = [
@@ -42,7 +50,7 @@ const FILTROS: Filtro[] = [
   { k: "cobertura", rotulo: "Cobertura < 30 d", f: (p) => { const c = cobertura(p); return c !== null && c < 30; } },
   { k: "alarme", rotulo: "Alarme disparado", f: (p) => ["crit", "warn"].includes(alarme(p)[1]), title: "Alarmes por peça chegam na fase 2" },
   { k: "semalarme", rotulo: "Consumo sem alarme", f: (p) => consumoDia(p) > 0 && !temAlarme(p) },
-  { k: "dup", rotulo: "Duplicidade", f: (p) => p.duplicidade },
+  { k: "dup", rotulo: "Em duplicidade (itens)", f: (p) => p.duplicidade, title: "Itens que aparecem em algum grupo de duplicidade (a aba Duplicidades conta grupos)" },
   { k: "parado", rotulo: "Parado +180 d", f: parado },
   { k: "audit", rotulo: "Com alerta de auditoria", f: (p) => alertasLista(p) > 0,
     title: "Saldo negativo (total ou por local), PC aberto > 60 dias, recebido a mais, duplicidade, consumo sem alarme ou CMC zerado. A ficha mostra também quebra de Kardex e preço fora da curva." },
@@ -52,7 +60,7 @@ type Col = { k: string; rotulo: string; v: (p: ItemEstoque) => string | number; 
 const COLS: Col[] = [
   { k: "item", rotulo: "Item", v: (p) => p.descricao },
   { k: "sit", rotulo: "Situação", v: (p) => situacao(p)[0] },
-  { k: "saldo", rotulo: "Saldo", v: (p) => p.saldo, cls: "r" },
+  { k: "saldo", rotulo: "Saldo ⓘ", v: (p) => p.saldo, cls: "r" },
   { k: "pend", rotulo: "Pendente", v: (p) => p.pendente, cls: "r opt" },
   { k: "al", rotulo: "Alarme", v: (p) => alarme(p)[0], cls: "opt" },
   { k: "cob", rotulo: "Cobertura", v: (p) => cobertura(p) ?? 1e9 },
@@ -101,11 +109,11 @@ export default function TelaEstoqueNavy({ clienteInicial, aba = "itens" }: { cli
 
   const abrirPal = useCallback(() => setPal(true), []);
   useAtalhoPaleta(abrirPal);
+  useEffect(() => { try { if (new URL(window.location.href).searchParams.get("paleta")) setPal(true); } catch {} }, []);
 
   const todosItens = useMemo(() => dados?.itens ?? [], [dados]);
   /** Códigos mesclados em outro saem da lista (continuam no ⌘K e na ficha, com o aviso). */
   const itens = useMemo(() => todosItens.filter((p) => !p.mesclado_em), [todosItens]);
-  const nMesclados = todosItens.length - itens.length;
   const porId = useMemo(() => new Map(todosItens.map((p) => [p.n_cod_prod, p])), [todosItens]);
 
   const lista = useMemo(() => {
@@ -129,30 +137,21 @@ export default function TelaEstoqueNavy({ clienteInicial, aba = "itens" }: { cli
     <div className="est">
       <header className="cartao head">
         <div style={{ flex: 1, minWidth: 220 }}>
-          <div className="area">Estoque</div>
           <h1>{TITULO[aba]}{aba === "inv" && sessao ? <span className="b" style={{ marginLeft: 10, fontSize: 12, verticalAlign: "middle", padding: "2px 8px", borderRadius: 999, background: "var(--ww-ok-soft)", color: "var(--ww-ok-text)" }}>sessão aberta</span> : null}</h1>
-          <div className="sub">
-            {dados ? `${q(itens.length)} itens · posição do Omie ${ddmmaa(itens[0]?.data_posicao)} · saldo = Omie + ajustes do painel${nMesclados ? ` · ${nMesclados} código(s) mesclado(s) ocultos` : ""}` : "Carregando posição…"}
-          </div>
+          <div className="sub">{PARA_QUE[aba]}</div>
         </div>
-        <div className="goto" onClick={abrirPal} role="button" tabIndex={0} onKeyDown={(e) => e.key === "Enter" && abrirPal()}>
-          <Lupa /><span>Ir para item — código, nome, nº do PC, cliente…</span><span className="kbd">⌘K</span>
-        </div>
-        <div className="filtros">
-          <button className={`btn pri ${aba === "itens" ? "" : "sm"}`} onClick={() => router.push("/estoque/novo")}
-            style={aba === "itens" ? { fontWeight: 700, padding: "0 16px" } : undefined}>+ Novo item</button>
-        </div>
+        {aba === "itens" && <button className="btn pri" onClick={() => router.push("/estoque/novo")} style={{ fontWeight: 700, padding: "0 18px", height: 40 }}>+ Novo item</button>}
       </header>
 
       {erro && <div className="aviso t-crit">{erro}</div>}
-      {!dados && !erro && <div className="cartao vazio">Carregando itens…</div>}
+      {!dados && !erro && aba !== "movs" && <div className="cartao vazio">Carregando itens…</div>}
 
       {dados && aba === "itens" && (
         <AbaItens itens={itens} lista={lista} st={st} muda={muda} abrir={abrir}
           cliente={cliente} carregandoCliente={!!cliente && !idsCliente} limparCliente={() => setCliente(null)} nDups={nDups} irDups={() => irAba("dups")} />
       )}
       {dados && aba === "dups" && <AbaDups dups={dados.dups} porId={porId} abrir={abrir} admin={dados.admin} recarregar={recarregar} />}
-      {dados && aba === "movs" && <AbaMovs porId={porId} abrir={abrir} />}
+      {aba === "movs" && <AbaMovs porId={porId} itens={itens} abrir={abrir} />}
       {dados && aba === "inv" && <AbaInventario admin={dados.admin} itens={itens} aoMudar={recarregar} />}
 
       {pal && dados && (
@@ -175,12 +174,16 @@ function AbaItens({ itens, lista, st, muda, abrir, cliente, carregandoCliente, l
   const parados = itens.filter(parado), vpar = parados.reduce((s, p) => s + valorItem(p), 0);
   const comSaldo = itens.filter((p) => p.saldo > 0).length;
 
-  const kpi = (k: string, rotulo: string, v: string, s: string, tom = "", glow = "", hero = false, onClick?: () => void) => (
-    <button key={k} className={`kpi ${hero ? "hero" : ""}`} style={glow ? ({ "--glow": glow } as React.CSSProperties) : undefined}
-      onClick={onClick ?? (() => muda({ filtro: k, limite: 100 }))}>
+  // Os cartões SÃO os filtros (clique = filtra; de novo = volta para "Com saldo").
+  const kpi = (k: string, rotulo: string, v: string, s: string, tom = "", glow = "", titulo?: string) => (
+    <button key={k} className={`kpi ${st.filtro === k ? "on" : ""}`} style={glow ? ({ "--glow": glow } as React.CSSProperties) : undefined}
+      title={titulo} aria-pressed={st.filtro === k} onClick={() => muda({ filtro: st.filtro === k ? "saldo" : k, limite: 100 })}>
       <div className="r">{rotulo}</div><div className="v">{v}</div><div className={`s ${tom}`}>{s}</div>
     </button>
   );
+  const [maisAberto, setMaisAberto] = useState(false);
+  const MAIS = ["cobertura", "alarme", "semalarme", "dup", "audit"];
+  const filtroMais = MAIS.includes(st.filtro) ? FILTROS.find((f) => f.k === st.filtro) : null;
 
   // Organizar: A–Z (ordem da coluna escolhida) ou por família (grupos que abrem/fecham). Fica no navegador.
   const [org, setOrgSt] = useState<"alfa" | "familia">("alfa");
@@ -204,22 +207,31 @@ function AbaItens({ itens, lista, st, muda, abrir, cliente, carregandoCliente, l
   ]);
 
   return (<>
-    <section className="kpis">
-      {kpi("saldo", "Valor em estoque", kbrl(vt), `${q(comSaldo)} itens com saldo · ao CMC`, "", "", true)}
-      {kpi("ruptura", "Em ruptura", q(conta.ruptura), "têm consumo e saldo ≤ 0", "crit", "rgba(255,107,74,.26)")}
-      {kpi("negativo", "Saldo negativo", q(conta.negativo), "ajustar — saldo impossível", "crit", "rgba(154,130,255,.3)")}
-      {kpi("semalarme", "Consumo sem alarme", q(conta.semalarme), "alarmes por peça: fase 2", "warn", "rgba(245,197,66,.26)")}
-      {kpi("dup", "Possíveis duplicidades", q(nDups), "grupos para revisar", "", "rgba(154,130,255,.3)", false, irDups)}
-      {kpi("parado", "Parado +180 dias", kbrl(vpar), `${q(parados.length)} itens · ${Math.round((vpar / Math.max(vt, 1)) * 100)}% do valor`, "warn", "rgba(59,184,255,.22)")}
+    <section className="kpis k4">
+      {kpi("saldo", "Valor em estoque ⓘ", kbrl(vt), `${q(comSaldo)} itens com saldo · ao CMC`, "", "", "Saldo = posição do Omie + ajustes e movimentações lançados no painel")}
+      {kpi("ruptura", "Em ruptura", q(conta.ruptura), "têm consumo e não têm saldo", "crit", "rgba(255,107,74,.26)")}
+      {kpi("negativo", "Saldo negativo", q(conta.negativo), "saldo impossível — conferir", "crit", "rgba(154,130,255,.3)")}
+      {kpi("parado", "Parado há +180 dias", kbrl(vpar), `${q(parados.length)} itens · ${Math.round((vpar / Math.max(vt, 1)) * 100)}% do valor`, "warn", "rgba(59,184,255,.22)")}
     </section>
+    {nDups > 0 && <div className="aviso t-info"><span>{q(nDups)} grupos de itens cadastrados duas vezes.</span><span style={{ flex: 1 }} /><button className="btn sm" onClick={irDups}>Ver duplicidades</button></div>}
 
     <div className="cartao">
       <div className="head" style={{ padding: "12px 16px", gap: 10 }}>
-        <div className="filtros" style={{ flex: 1 }}>
-          {FILTROS.map((f) => (
+        <div className="filtros" style={{ flex: 1, position: "relative" }}>
+          {FILTROS.filter((f) => f.k === "todos" || f.k === "saldo").map((f) => (
             <button key={f.k} className={`chip ${st.filtro === f.k ? "on" : ""}`} title={f.title}
               onClick={() => muda({ filtro: f.k, limite: 100 })}>{f.rotulo} <b>{q(conta[f.k])}</b></button>
           ))}
+          {filtroMais && <button className="chip on" onClick={() => muda({ filtro: "saldo", limite: 100 })}>{filtroMais.rotulo} <b>{q(conta[filtroMais.k])}</b> ✕</button>}
+          <button className="chip" onClick={() => setMaisAberto((x) => !x)} aria-expanded={maisAberto}>Mais filtros ▾</button>
+          {maisAberto && (
+            <div className="menu-mais" onMouseLeave={() => setMaisAberto(false)}>
+              {FILTROS.filter((f) => MAIS.includes(f.k)).map((f) => (
+                <button key={f.k} className={st.filtro === f.k ? "on" : ""} title={f.title} onClick={() => { muda({ filtro: f.k, limite: 100 }); setMaisAberto(false); }}>
+                  {f.rotulo} <b>{q(conta[f.k])}</b></button>
+              ))}
+            </div>
+          )}
         </div>
         <div className="seg" title="Organizar a lista">
           <button className={org === "alfa" ? "on" : ""} onClick={() => setOrg("alfa")}>A–Z</button>
@@ -249,7 +261,7 @@ function AbaItens({ itens, lista, st, muda, abrir, cliente, carregandoCliente, l
           <thead>
             <tr>
               {COLS.map((c) => (
-                <th key={c.k} className={`th-sort ${c.cls ?? ""} ${st.ordem[0] === c.k ? "on" : ""}`}
+                <th key={c.k} className={`th-sort ${c.cls ?? ""} ${st.ordem[0] === c.k ? "on" : ""}`} title={c.k === "saldo" ? "Saldo = posição do Omie + ajustes e movimentações lançados no painel" : undefined}
                   onClick={() => muda({ ordem: [c.k, st.ordem[0] === c.k ? -st.ordem[1] : c.k === "item" ? 1 : -1] })}>
                   {c.rotulo}{st.ordem[0] === c.k ? (st.ordem[1] > 0 ? " ↑" : " ↓") : ""}
                 </th>
@@ -386,16 +398,17 @@ function AbaDups({ dups, porId, abrir, admin, recarregar }: {
 
   return (<>
     {todosAberto && <MesclarTodos fechar={() => setTodosAberto(false)} feito={aposMudar} avisar={avisar} />}
-    <div className="aviso t-info">
-      <span><b>Como achamos:</b> (1) <b>nome igual</b>: descrição sem acento, espaço e pontuação idêntica em códigos diferentes; (2) <b>parecido</b>: similaridade de trigramas ≥ 85% (pg_trgm), com as mesmas medidas/números e sem trocar códigos curtos (C×LR, AZ×PT). Atualiza a cada 6 horas. <b>Mesclar</b> (só o administrador) escolhe o código que fica, passa o saldo dos outros para ele por ajustes do painel e tira os outros da lista; Kardex, PCs e usos dos mesclados passam a responder no principal e o ⌘K leva o código antigo ao principal. <b>Mesclar todos</b> faz todos os grupos de uma vez (cada um desfaz sozinho). <b>Não é duplicidade</b> fica gravado e o par não volta. Nada vai ao Omie.</span>
+    <div className="aviso t-info" style={{ flexDirection: "column", alignItems: "flex-start", gap: 6 }}>
+      <span>Estes itens parecem estar cadastrados mais de uma vez (nome igual ou muito parecido). Junte os códigos e tudo deles — saldo, compras, movimentos — passa a ficar num código só; dá para desfazer.</span>
+      <details><summary style={{ cursor: "pointer", fontWeight: 600 }}>Como funciona</summary><span><b>Como achamos:</b> (1) <b>nome igual</b>: o mesmo nome em códigos diferentes, ignorando acentos, espaços e pontuação; (2) <b>parecido</b>: nomes quase iguais (85% ou mais), com as mesmas medidas e números. A lista atualiza a cada 6 horas. <b>Mesclar</b> (só o administrador) escolhe o código que fica, passa o saldo dos outros para ele por ajustes do painel e tira os outros da lista; Kardex, PCs e usos dos mesclados passam a responder no principal e o ⌘K leva o código antigo ao principal. <b>Mesclar todos</b> faz todos os grupos de uma vez (cada um desfaz sozinho). <b>Não é duplicidade</b> fica gravado e o par não volta. Nada vai ao Omie.</span></details>
     </div>
     <div className="filtros">
       {([["todos", "Todos", todos.length], ["exata", "Nome igual", todos.filter((g) => g.tipo === "exata").length],
         ["similar", "Parecido", todos.filter((g) => g.tipo === "similar").length], ["saldo", "Com saldo nos dois", todos.filter(ambos).length]] as const)
         .map(([k, l, nn]) => <button key={k} className={`chip ${f === k ? "on" : ""}`} onClick={() => setF(k)}>{l} <b>{nn}</b></button>)}
       <div className="sp" />
-      {!todosAberto && <button className="btn sm pri" disabled={!admin || !todos.length} title={admin ? "Prévia de todos os grupos com o principal sugerido" : "Só o administrador (Benny) mescla"}
-        onClick={() => setTodosAberto(true)}>Mesclar todos…</button>}
+      {!todosAberto && <button className="btn pri" style={{ fontWeight: 700 }} disabled={!admin || !todos.length} title={admin ? "Prévia de todos os grupos com o principal sugerido" : "Só o administrador (Benny) mescla"}
+        onClick={() => setTodosAberto(true)}>Mesclar todos ({q(todos.length)} grupos)…</button>}
     </div>
     <div className="cartao">
       {rs.map((g) => {
@@ -462,99 +475,3 @@ function AbaDups({ dups, porId, abrir, admin, recarregar }: {
 }
 
 type Decisao = { id: number; empresa: string; prod_a: number; prod_b: number; decisao: "nao_e" | "mesclado"; principal: number | null; secundario: number | null; grupo_id: number | null; created_by_email: string | null; created_at: string };
-
-// ── Movimentação ─────────────────────────────────────────────────────────────
-function AbaMovs({ porId, abrir }: { porId: Map<number, ItemEstoque>; abrir: (p: ItemEstoque, aba?: string) => void }) {
-  const h = hoje();
-  const [de, setDe] = useState(somaDias(h, -30));
-  const [ate, setAte] = useState(h);
-  const [tipo, setTipo] = useState<"" | "entrada" | "saida" | "semcli">("");
-  const [busca, setBusca] = useState("");
-  const [movs, setMovs] = useState<MovEstoque[] | null>(null);
-  const [erro, setErro] = useState<string | null>(null);
-  const [abertos, setAbertos] = useState<Set<string>>(new Set());
-
-  useEffect(() => {
-    const ctrl = new AbortController();
-    setMovs(null); setErro(null);
-    fetch(`/api/estoque/movimentos?de=${de}&ate=${ate}`, { signal: ctrl.signal, cache: "no-store" })
-      .then(async (r) => { const j = await r.json(); if (!r.ok) throw new Error(j.error ?? r.statusText); setMovs((j.rows as Record<string, unknown>[]).map(normMov)); })
-      .catch((e) => { if ((e as Error).name !== "AbortError") setErro((e as Error).message); });
-    return () => ctrl.abort();
-  }, [de, ate]);
-
-  const t = busca.trim().toLowerCase();
-  const rs = (movs ?? []).filter((m) =>
-    (!tipo || (tipo === "entrada" ? m.qtde > 0 : m.qtde < 0)) && (tipo !== "semcli" || (!m.cancelado && !m.cliente))
-    && (!t || [porId.get(m.id_prod ?? -1)?.descricao, porId.get(m.id_prod ?? -1)?.codigo, m.doc, m.cliente, m.projeto, m.num_pedido]
-      .some((v) => (v ?? "").toLowerCase().includes(t))));
-  const vivos = rs.filter((m) => !m.cancelado), ent = vivos.filter((m) => m.qtde > 0), sai = vivos.filter((m) => m.qtde < 0);
-  const v = (l: MovEstoque[]) => l.reduce((s, m) => s + Math.abs(m.qtde) * (m.valor || 0), 0);
-  const porDia = new Map<string, MovEstoque[]>();
-  rs.forEach((m) => { (porDia.get(m.dt_mov) ?? porDia.set(m.dt_mov, []).get(m.dt_mov)!).push(m); });
-  const primeiro = rs[0]?.dt_mov;
-  const aberto = (d: string) => abertos.size ? abertos.has(d) : d === primeiro;
-  const alterna = (d: string) => setAbertos((s) => {
-    const n = new Set(s.size ? s : primeiro ? [primeiro] : []);
-    if (n.has(d)) n.delete(d); else n.add(d);
-    return n;
-  });
-
-  return (<>
-    <div className="filtros">
-      <input type="date" className="inp" value={de} onChange={(e) => setDe(e.target.value)} style={{ borderRadius: 999, height: 32 }} aria-label="De" />
-      <span className="mini">→</span>
-      <input type="date" className="inp" value={ate} onChange={(e) => setAte(e.target.value)} style={{ borderRadius: 999, height: 32 }} aria-label="Até" />
-      {([["entrada", "Entradas"], ["saida", "Saídas"], ["semcli", "Saída sem cliente"]] as const).map(([k, l]) => (
-        <button key={k} className={`chip ${tipo === k ? "on" : ""}`} onClick={() => setTipo(tipo === k ? "" : k)}>{l}</button>
-      ))}
-      <div className="sp" />
-      <input className="inp" value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Produto, doc, cliente…" style={{ width: 240 }} aria-label="Buscar movimentos" />
-    </div>
-    {erro && <div className="aviso t-crit">{erro}</div>}
-    {!movs && !erro && <div className="cartao vazio">Carregando movimentos…</div>}
-    {movs && (<>
-      <section className="kpis">
-        <div className="kpi hero" style={{ cursor: "default" }}><div className="r">Movimentos no período</div><div className="v">{q(rs.length)}</div><div className="s">{ddmm(de)} a {ddmm(ate)} · {rs.length - vivos.length} cancelados</div></div>
-        <div className="kpi" style={{ cursor: "default" }}><div className="r">Entradas</div><div className="v">{kbrl(v(ent))}</div><div className="s">{ent.length} movimentos</div></div>
-        <div className="kpi" style={{ cursor: "default", "--glow": "rgba(255,107,74,.26)" } as React.CSSProperties}><div className="r">Saídas</div><div className="v">{kbrl(v(sai))}</div><div className="s">{sai.length} movimentos · {sai.filter((m) => !m.cliente).length} sem cliente</div></div>
-        <div className="kpi" style={{ cursor: "default" }}><div className="r">Itens movimentados</div><div className="v">{q(new Set(vivos.map((m) => m.id_prod)).size)}</div><div className="s">distintos</div></div>
-      </section>
-      <div className="cartao" style={{ overflow: "hidden" }}>
-        {[...porDia.entries()].map(([d, l]) => {
-          const e = l.filter((m) => m.qtde > 0 && !m.cancelado), s = l.filter((m) => m.qtde < 0 && !m.cancelado), ab = aberto(d);
-          return (
-            <div key={d}>
-              <div className="mov-dia" onClick={() => alterna(d)} role="button" tabIndex={0} onKeyDown={(ev) => ev.key === "Enter" && alterna(d)}>
-                <span style={{ display: "inline-flex", transform: `rotate(${ab ? 90 : 0}deg)`, transition: ".15s" }}>›</span>
-                <b>{ddmm(d)} · {dsem(d)}</b>
-                <span className="mini">{l.length} movimentos · {e.length} entradas · {s.length} saídas</span>
-                <span style={{ marginLeft: "auto" }} className="num">
-                  <span style={{ color: "var(--ww-ok-text)" }}>+{kbrl(v(e))}</span> / <span style={{ color: "var(--ww-crit-text)" }}>−{kbrl(v(s))}</span>
-                </span>
-              </div>
-              {ab && (
-                <div className="scroll"><table className="tabela"><tbody>
-                  {l.map((m) => {
-                    const p = porId.get(m.id_prod ?? -1);
-                    return (
-                      <tr key={m.id_mov} className="click" style={{ opacity: m.cancelado ? 0.45 : 1 }} onClick={() => p && abrir(p, "mov")}>
-                        <td><div className="prod"><Thumb /><div><div className="n">{p?.descricao ?? `Produto ${m.id_prod}`}</div><div className="c">{p?.codigo ?? ""} · {nomeLocal(m.codigo_local_estoque)}</div></div></div></td>
-                        <td>{m.des_origem}<div className="mini">{m.doc}</div></td>
-                        <td className="opt">{m.cliente ? <><b>{m.cliente}</b><div className="mini">{m.projeto ?? ""}</div></> : m.qtde < 0 ? <span className="mini" style={{ color: "var(--ww-warn-text)" }}>sem cliente</span> : null}</td>
-                        <td className="r" style={{ fontWeight: 600, color: `var(--ww-${m.cancelado ? "off" : m.qtde < 0 ? "crit" : "ok"}-text)` }}>{m.qtde > 0 ? "+" : "−"}{q(Math.abs(m.qtde))}</td>
-                        <td className="r opt">{brl(m.valor)}</td>
-                        <td className="r">{q(m.saldo)}</td>
-                      </tr>
-                    );
-                  })}
-                </tbody></table></div>
-              )}
-            </div>
-          );
-        })}
-        {!rs.length && <div className="vazio">Nenhum movimento no período.</div>}
-      </div>
-    </>)}
-  </>);
-}

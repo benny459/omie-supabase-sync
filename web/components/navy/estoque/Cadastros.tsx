@@ -1,7 +1,8 @@
 "use client";
 
 /**
- * Estoque › Catálogo (/estoque/catalogo; /estoque/cadastros redireciona) — organização do catálogo, tudo só no painel:
+ * Estoque › Catálogo (/estoque/catalogo; /estoque/cadastros redireciona) — organização do catálogo, tudo só no painel.
+ * Entrada: 3 cartões (Famílias · Códigos novos · Fotos), cada um abre a sua página com "‹ Catálogo".
  *   Famílias            — criar, renomear, prefixo, "é material?", inativar, mesclar (move os itens)
  *   Revisão de famílias — sugestão automática para itens sem família / em família que não é material,
  *                         com confiança e motivo; aceitar/rejeitar em lote, trocar um a um; "Concluir revisão"
@@ -29,8 +30,10 @@ const banda = (c: number): ["alta" | "média" | "baixa" | "nenhuma", "ok" | "inf
 
 export default function CadastrosEstoque({ abaInicial }: { abaInicial?: string }) {
   const router = useRouter();
-  const [aba, setAba] = useState<Aba>((["familias", "revisao", "codigos", "fotos"] as Aba[]).includes(abaInicial as Aba) ? (abaInicial as Aba) : "familias");
+  const valida = (a?: string) => ((["familias", "revisao", "codigos", "fotos"] as Aba[]).includes(a as Aba) ? (a as Aba) : null);
+  const [aba, setAba] = useState<Aba | null>(valida(abaInicial));
   const [d, setD] = useState<{ familias: Familia[]; revisao_concluida: boolean; codigos_gerados: number; passos?: Passos; admin: boolean } | null>(null);
+  const [fotos, setFotos] = useState<{ total: number; ativo: boolean; pronto: boolean } | null>(null);
   const [erro, setErro] = useState<string | null>(null);
   const [toast, avisar] = useToast();
   const carregar = useCallback(async () => {
@@ -39,32 +42,75 @@ export default function CadastrosEstoque({ abaInicial }: { abaInicial?: string }
     if (r.ok) setD(j); else setErro(j.error ?? r.statusText);
   }, []);
   useEffect(() => { carregar(); }, [carregar]);
+  useEffect(() => {
+    if (aba) return;
+    fetch("/api/estoque/fotos?resumo=1", { cache: "no-store" }).then((r) => r.json())
+      .then((j) => setFotos({ total: j.fotos?.total ?? 0, ativo: !!j.job?.ativo, pronto: !!j.provedor?.pronto })).catch(() => null);
+  }, [aba]);
   const mudou = useCallback(() => { invalidarItens(); carregar(); }, [carregar]);
-  const ir = (a: Aba) => { setAba(a); try { window.history.replaceState(null, "", `/estoque/catalogo?aba=${a}`); } catch {} };
+  const ir = (a: Aba | null) => { setAba(a); try { window.history.pushState(null, "", a ? `/estoque/catalogo?aba=${a}` : "/estoque/catalogo"); } catch {} window.scrollTo(0, 0); };
+  useEffect(() => {
+    const h = () => setAba(valida(new URL(window.location.href).searchParams.get("aba") ?? undefined));
+    window.addEventListener("popstate", h);
+    return () => window.removeEventListener("popstate", h);
+  }, []);
+
+  const totalItens = d ? d.familias.reduce((s, f) => s + (f.ativo ? f.itens || 0 : 0), 0) : 0;
+  const semFamilia = d?.familias.find((f) => f.sistema)?.itens ?? 0;
+  const PAGINA: Record<Aba, [string, string]> = {
+    familias: ["Famílias", "Cada item pertence a uma família (Hidráulica, Membranas…). A família dá o prefixo do código novo."],
+    revisao: ["Revisar famílias", "O painel sugere a família dos itens que estão sem família ou numa família genérica. Aceite, troque ou rejeite."],
+    codigos: ["Códigos novos", "Um código curto por item, com o prefixo da família (ex.: H0012). O código do Omie continua ao lado."],
+    fotos: ["Fotos", "Uma foto para cada item — achada na web automaticamente ou enviada por você."],
+  };
 
   return (
     <div className="est">
-      <div className="crumbs"><button className="link" onClick={() => router.push("/estoque")}><Seta dir="esq" />Estoque</button><span>/</span><span>Catálogo</span></div>
-      <header className="cartao head">
-        <div style={{ flex: 1, minWidth: 220 }}>
-          <div className="area">Estoque</div><h1>Catálogo</h1>
-          <div className="sub">Organização do catálogo: famílias, códigos e fotos.</div>
-        </div>
-        <button className="btn sm pri" onClick={() => router.push("/estoque/novo")}>+ Novo item</button>
-        <div className="seg">
-          <button className={aba === "familias" ? "on" : ""} onClick={() => ir("familias")}>Famílias</button>
-          <button className={aba === "revisao" ? "on" : ""} onClick={() => ir("revisao")}>Revisão de famílias{d && !d.revisao_concluida ? <span className="b">aberta</span> : null}</button>
-          <button className={aba === "codigos" ? "on" : ""} onClick={() => ir("codigos")}>Códigos novos</button>
-          <button className={aba === "fotos" ? "on" : ""} onClick={() => ir("fotos")}>Fotos</button>
-        </div>
-      </header>
+      {aba ? (<>
+        <div className="crumbs"><button className="link" onClick={() => ir(aba === "revisao" ? "familias" : null)}><Seta dir="esq" />{aba === "revisao" ? "Famílias" : "Catálogo"}</button></div>
+        <header className="cartao head">
+          <div style={{ flex: 1, minWidth: 220 }}><h1>{PAGINA[aba][0]}</h1><div className="sub">{PAGINA[aba][1]}</div></div>
+        </header>
+      </>) : (
+        <header className="cartao head">
+          <div style={{ flex: 1, minWidth: 220 }}><h1>Catálogo</h1><div className="sub">Organização do catálogo: famílias, códigos e fotos. Para ver o estoque e abrir itens, use a aba Itens.</div></div>
+        </header>
+      )}
       {erro && <div className="aviso t-crit">{erro}</div>}
       {!d && !erro && <div className="cartao vazio">Carregando…</div>}
-      {d && !d.admin && <div className="aviso t-info">Só o administrador (Benny) altera famílias e códigos. Você pode consultar.</div>}
-      {d && aba === "familias" && <AbaFamilias d={d} mudou={mudou} avisar={avisar} />}
+      {d && aba && aba !== "fotos" && !d.admin && <div className="aviso t-info">Só o administrador (Benny) altera famílias e códigos. Você pode consultar.</div>}
+
+      {d && !aba && (
+        <section className="passos3">
+          <div className="passo-card">
+            <div className="n">1</div>
+            <h2>Famílias</h2>
+            <p>Agrupe os itens por tipo de material. Cada família tem um prefixo (H = Hidráulica, MEM = Membranas…).</p>
+            <div className="status">{q(d.familias.filter((f) => f.ativo).length)} famílias · <b>{q(semFamilia)}</b> itens sem família{d.passos?.sugestoes_pendentes ? ` · ${q(d.passos.sugestoes_pendentes)} sugestões para revisar` : ""}</div>
+            <button className="btn pri" onClick={() => ir("familias")}>Organizar famílias</button>
+          </div>
+          <div className="passo-card">
+            <div className="n">2</div>
+            <h2>Códigos novos</h2>
+            <p>Dê a cada item um código curto da família (ex.: H0012). Antes: juntar duplicados e revisar as famílias.</p>
+            <div className="status">{d.codigos_gerados ? `${q(d.codigos_gerados)} itens já codificados` : "Nenhum código gerado ainda"} · duplicidades {d.passos?.dups_pares ? <b>{q(d.passos.dups_pares)} abertas</b> : "resolvidas"} · revisão {d.revisao_concluida ? "concluída" : <b>aberta</b>}</div>
+            <button className="btn pri" onClick={() => ir("codigos")}>Gerar códigos</button>
+          </div>
+          <div className="passo-card">
+            <div className="n">3</div>
+            <h2>Fotos</h2>
+            <p>Uma foto para cada item, achada na web sozinha ou enviada por você.</p>
+            <div className="status">{fotos ? <><b>{q(fotos.total)}</b> de {q(totalItens)} itens com foto · {!fotos.pronto ? "busca automática aguardando chave" : fotos.ativo ? "buscando…" : "pausada"}</> : "…"}</div>
+            <div className="barra" style={{ margin: "2px 0 12px" }}><i style={{ width: `${totalItens && fotos ? Math.min(100, (fotos.total / totalItens) * 100) : 0}%`, background: "var(--ww-ok)" }} /></div>
+            <button className="btn pri" onClick={() => ir("fotos")}>Ver fotos</button>
+          </div>
+        </section>
+      )}
+
+      {d && aba === "familias" && <AbaFamilias d={d} mudou={mudou} avisar={avisar} irRevisao={() => ir("revisao")} />}
       {d && aba === "revisao" && <AbaRevisao d={d} mudou={mudou} avisar={avisar} />}
       {d && aba === "codigos" && <AbaCodigos d={d} mudou={mudou} avisar={avisar} irRevisao={() => ir("revisao")} irDups={() => router.push("/estoque/duplicidades")} />}
-      {d && aba === "fotos" && <AbaFotos totalItens={d.familias.reduce((s, f) => s + (f.itens || 0), 0)} avisar={avisar} />}
+      {d && aba === "fotos" && <AbaFotos totalItens={totalItens} avisar={avisar} />}
       {toast}
     </div>
   );
@@ -72,10 +118,10 @@ export default function CadastrosEstoque({ abaInicial }: { abaInicial?: string }
 
 type Avisar = (m: string, t?: "ok" | "crit" | "warn" | "info") => void;
 
-// ── Famílias ─────────────────────────────────────────────────────────────────
-function AbaFamilias({ d, mudou, avisar }: { d: { familias: Familia[]; admin: boolean; codigos_gerados: number }; mudou: () => void; avisar: Avisar }) {
+// ── Famílias: tabela limpa; clique na linha abre a gaveta com tudo (renomear, prefixo, mesclar, inativar) ──
+function AbaFamilias({ d, mudou, avisar, irRevisao }: { d: { familias: Familia[]; admin: boolean; codigos_gerados: number; passos?: Passos; revisao_concluida: boolean }; mudou: () => void; avisar: Avisar; irRevisao: () => void }) {
   const [edit, setEdit] = useState<Partial<Familia> & { id?: number } | null>(null);
-  const [mesclar, setMesclar] = useState<{ de: Familia; para: string } | null>(null);
+  const [para, setPara] = useState("");
   const [verInativas, setVerInativas] = useState(false);
   const ativas = d.familias.filter((f) => f.ativo), inativas = d.familias.filter((f) => !f.ativo);
   const nomeDe = (id: number | null) => d.familias.find((f) => f.id === id)?.nome ?? "—";
@@ -83,83 +129,78 @@ function AbaFamilias({ d, mudou, avisar }: { d: { familias: Familia[]; admin: bo
     try { await postar("/api/estoque/familias", body); avisar(ok, "ok"); mudou(); return true; } catch (e) { avisar((e as Error).message, "crit"); return false; }
   };
   const linhas = verInativas ? [...ativas, ...inativas] : ativas;
+  const abrir = (f: Partial<Familia>) => { setEdit(f); setPara(""); };
   return (<>
+    {(d.passos?.sugestoes_pendentes ?? 0) > 0 && (
+      <div className="aviso t-info"><span><b>{q(d.passos!.sugestoes_pendentes)} itens</b> estão sem família ou numa família genérica — o painel já sugeriu a família de cada um.</span>
+        <span style={{ flex: 1 }} /><button className="btn sm pri" onClick={irRevisao}>Revisar sugestões</button></div>
+    )}
     <div className="cartao">
       <div className="head" style={{ padding: "12px 16px" }}>
-        <h3 style={{ margin: 0, flex: 1 }}>Famílias <span className="mini">· {ativas.length} ativas{inativas.length ? ` · ${inativas.length} inativas/mescladas` : ""}</span></h3>
-        {inativas.length > 0 && <button className={`chip ${verInativas ? "on" : ""}`} onClick={() => setVerInativas(!verInativas)}>Mostrar inativas</button>}
-        {d.admin && <button className="btn sm" onClick={() => acao({ acao: "importar_omie" }, "Famílias do Omie conferidas")}>Importar famílias novas do Omie</button>}
-        {d.admin && <button className="btn sm pri" onClick={() => setEdit({ nome: "", prefixo: "", material: true })}>+ Nova família</button>}
+        <h3 style={{ margin: 0, flex: 1 }}>{ativas.length} famílias <span className="mini">· clique numa família para editar</span></h3>
+        {inativas.length > 0 && <button className={`chip ${verInativas ? "on" : ""}`} onClick={() => setVerInativas(!verInativas)}>Mostrar inativas ({inativas.length})</button>}
+        {d.admin && <button className="btn sm pri" onClick={() => abrir({ nome: "", prefixo: "", material: true })}>+ Nova família</button>}
       </div>
       <div className="scroll">
         <table className="tabela">
-          <thead><tr><th>Família</th><th>Prefixo</th><th className="r">Itens</th><th className="r opt">Valor</th><th className="opt">Tipo</th><th className="opt">Próximo código</th><th /></tr></thead>
+          <thead><tr><th>Família</th><th>Prefixo</th><th className="r">Itens</th><th className="r opt">Valor</th><th className="opt">Próximo código</th></tr></thead>
           <tbody>
             {linhas.map((f) => (
-              <tr key={f.id} style={{ opacity: f.ativo ? 1 : 0.55 }}>
-                <td><b>{f.nome}</b>{f.descricao && <div className="mini">{f.descricao}</div>}
-                  {f.mesclada_em && <div className="mini">mesclada em {nomeDe(f.mesclada_em)}</div>}
+              <tr key={f.id} className={d.admin ? "click" : ""} style={{ opacity: f.ativo ? 1 : 0.55 }} onClick={() => d.admin && abrir(f)}>
+                <td><b>{f.nome}</b> {!f.sistema && !f.material && <Pill t="genérica" tom="warn" />}{f.sistema && <Pill t="sistema" tom="off" />}
+                  {f.descricao && <div className="mini">{f.descricao}</div>}
+                  {f.mesclada_em && <div className="mini">juntada em {nomeDe(f.mesclada_em)}</div>}
                   {!f.ativo && !f.mesclada_em && <div className="mini">inativa</div>}</td>
                 <td><span className="pill t-info" style={{ fontFamily: "ui-monospace, Menlo, monospace" }}>{f.prefixo}</span></td>
                 <td className="r num">{q(f.itens)}</td>
                 <td className="r num opt">{brl(f.valor)}</td>
-                <td className="opt">{f.sistema ? <Pill t="sistema" tom="off" /> : f.material ? <Pill t="material" tom="ok" /> : <Pill t="não é material" tom="warn" />}</td>
                 <td className="opt mono num">{f.prefixo}{String(f.proximo).padStart(4, "0")}</td>
-                <td style={{ whiteSpace: "nowrap" }}>
-                  {d.admin && f.ativo && <><button className="btn sm" onClick={() => setEdit(f)}>Editar</button>{" "}</>}
-                  {d.admin && f.ativo && !f.sistema && <><button className="btn sm" onClick={() => setMesclar({ de: f, para: "" })}>Mesclar…</button>{" "}</>}
-                  {d.admin && !f.sistema && (f.ativo
-                    ? <button className="btn sm" onClick={() => acao({ acao: "inativar", id: f.id }, `${f.nome} inativada`)}>Inativar</button>
-                    : !f.mesclada_em && <button className="btn sm" onClick={() => acao({ acao: "reativar", id: f.id }, `${f.nome} reativada`)}>Reativar</button>)}
-                </td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
-      <div className="tfoot"><span>“Não é material” = a família não diz o tipo da peça (Ativo, Orçamentos…): os itens dela entram na revisão para ganhar uma família de material.</span></div>
+      <div className="tfoot"><details><summary>Detalhes</summary>
+        <span>“Genérica” = a família não diz o tipo da peça (Ativo, Orçamentos…): os itens dela entram na revisão para ganhar uma família de material.</span>
+        {d.admin && <> <button className="btn sm" style={{ marginTop: 6 }} onClick={() => acao({ acao: "importar_omie" }, "Famílias do Omie conferidas")}>Trazer famílias novas do Omie</button></>}
+      </details></div>
     </div>
 
     {edit && (
-      <div className="est-ov mid" onClick={() => setEdit(null)} role="dialog" aria-modal="true">
-        <div className="modal" onClick={(e) => e.stopPropagation()}>
-          <div className="mh"><div style={{ fontSize: 16, fontWeight: 700 }}>{edit.id ? `Editar ${edit.nome}` : "Nova família"}</div><button className="x" onClick={() => setEdit(null)}>×</button></div>
+      <div className="est-ov gaveta" onClick={() => setEdit(null)} role="dialog" aria-modal="true" aria-label="Editar família">
+        <div className="gaveta-c" onClick={(e) => e.stopPropagation()}>
+          <div className="mh"><div><div style={{ fontSize: 16, fontWeight: 700 }}>{edit.id ? edit.nome : "Nova família"}</div>
+            {edit.id && <div className="mini">{q(edit.itens ?? 0)} itens · {brl(edit.valor ?? 0)}</div>}</div><button className="x" onClick={() => setEdit(null)} aria-label="Fechar">×</button></div>
           <div className="mb">
-            <div className="row2">
-              <label className="f">Nome<input className="inp" value={edit.nome ?? ""} onChange={(e) => setEdit({ ...edit, nome: e.target.value })} /></label>
-              <label className="f">Prefixo (1–3 letras){edit.id ? "" : " — vazio = sugerido"}
-                <input className="inp" value={edit.prefixo ?? ""} maxLength={3} onChange={(e) => setEdit({ ...edit, prefixo: e.target.value.toUpperCase().replace(/[^A-Z]/g, "") })}
-                  style={{ fontFamily: "ui-monospace, Menlo, monospace", letterSpacing: ".15em" }} /></label>
-            </div>
+            <label className="f">Nome<input className="inp" value={edit.nome ?? ""} onChange={(e) => setEdit({ ...edit, nome: e.target.value })} /></label>
+            <label className="f">Prefixo do código (1 a 3 letras){edit.id ? "" : " — vazio = o painel sugere"}
+              <input className="inp" value={edit.prefixo ?? ""} maxLength={3} onChange={(e) => setEdit({ ...edit, prefixo: e.target.value.toUpperCase().replace(/[^A-Z]/g, "") })}
+                style={{ fontFamily: "ui-monospace, Menlo, monospace", letterSpacing: ".15em" }} /></label>
             <label className="f">Descrição (opcional)<input className="inp" value={edit.descricao ?? ""} onChange={(e) => setEdit({ ...edit, descricao: e.target.value })} /></label>
-            {!edit.sistema && <label className="opcao" style={{ alignItems: "center" }}><input type="checkbox" checked={edit.material !== false} onChange={(e) => setEdit({ ...edit, material: e.target.checked })} /> É tipo de material (itens desta família não entram na revisão)</label>}
+            {!edit.sistema && <label className="check"><input type="checkbox" checked={edit.material !== false} onChange={(e) => setEdit({ ...edit, material: e.target.checked })} /> É um tipo de material (desmarque para famílias genéricas como “Ativo”)</label>}
             {edit.id && d.codigos_gerados > 0 && <div className="aviso t-warn">Se já houver códigos gerados com este prefixo, ele não pode mais mudar.</div>}
-          </div>
-          <div className="mf"><button className="btn" onClick={() => setEdit(null)}>Cancelar</button>
-            <button className="btn pri" onClick={async () => {
+            <div><button className="btn pri" onClick={async () => {
               const ok = await acao(edit.id ? { acao: "editar", id: edit.id, nome: edit.nome, prefixo: edit.prefixo, descricao: edit.descricao ?? "", material: edit.material }
                 : { acao: "criar", nome: edit.nome, prefixo: edit.prefixo, descricao: edit.descricao ?? "", material: edit.material !== false }, edit.id ? "Família salva" : "Família criada");
               if (ok) setEdit(null);
-            }}>Salvar</button></div>
-        </div>
-      </div>
-    )}
+            }}>{edit.id ? "Salvar" : "Criar família"}</button></div>
 
-    {mesclar && (
-      <div className="est-ov mid" onClick={() => setMesclar(null)} role="dialog" aria-modal="true">
-        <div className="modal" onClick={(e) => e.stopPropagation()}>
-          <div className="mh"><div style={{ fontSize: 16, fontWeight: 700 }}>Mesclar “{mesclar.de.nome}”</div><button className="x" onClick={() => setMesclar(null)}>×</button></div>
-          <div className="mb">
-            <div className="prev">Os {q(mesclar.de.itens)} itens de <b>{mesclar.de.nome}</b> passam para a família escolhida, e “{mesclar.de.nome}” fica inativa (mesclada). Códigos já gerados não mudam.</div>
-            <label className="f">Mesclar em
-              <select className="inp" value={mesclar.para} onChange={(e) => setMesclar({ ...mesclar, para: e.target.value })}>
-                <option value="">Escolha…</option>
-                {ativas.filter((f) => f.id !== mesclar.de.id).map((f) => <option key={f.id} value={f.id}>{f.nome} ({f.prefixo}) · {f.itens} itens</option>)}
-              </select>
-            </label>
+            {edit.id && edit.ativo && !edit.sistema && (<>
+              <hr style={{ border: 0, borderTop: "1px solid var(--ww-border)", width: "100%" }} />
+              <div style={{ fontWeight: 700 }}>Juntar com outra família</div>
+              <div className="mini">Os {q(edit.itens ?? 0)} itens passam para a família escolhida e “{edit.nome}” fica inativa. Códigos já gerados não mudam.</div>
+              <div style={{ display: "flex", gap: 8 }}>
+                <select className="inp" value={para} onChange={(e) => setPara(e.target.value)} style={{ flex: 1 }}>
+                  <option value="">Escolha a família…</option>
+                  {ativas.filter((f) => f.id !== edit.id).map((f) => <option key={f.id} value={f.id}>{f.nome} ({f.prefixo}) · {f.itens} itens</option>)}
+                </select>
+                <button className="btn" disabled={!para} onClick={async () => { if (await acao({ acao: "mesclar", de: edit.id, para: Number(para) }, "Famílias juntadas")) setEdit(null); }}>Juntar</button>
+              </div>
+              <hr style={{ border: 0, borderTop: "1px solid var(--ww-border)", width: "100%" }} />
+              <div><button className="btn" onClick={async () => { if (await acao({ acao: "inativar", id: edit.id }, `${edit.nome} inativada`)) setEdit(null); }}>Inativar esta família</button></div>
+            </>)}
+            {edit.id && !edit.ativo && !edit.mesclada_em && <div><button className="btn" onClick={async () => { if (await acao({ acao: "reativar", id: edit.id }, `${edit.nome} reativada`)) setEdit(null); }}>Reativar</button></div>}
           </div>
-          <div className="mf"><button className="btn" onClick={() => setMesclar(null)}>Cancelar</button>
-            <button className="btn pri" disabled={!mesclar.para} onClick={async () => { if (await acao({ acao: "mesclar", de: mesclar.de.id, para: Number(mesclar.para) }, "Famílias mescladas")) setMesclar(null); }}>Mesclar</button></div>
         </div>
       </div>
     )}

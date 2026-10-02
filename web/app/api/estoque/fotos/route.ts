@@ -7,8 +7,8 @@
 // Nenhuma chamada paga acontece sem IMAGE_SEARCH_PROVIDER + IMAGE_SEARCH_KEY (+ IMAGE_SEARCH_CX no Google).
 
 import { NextResponse } from "next/server";
-import { exigirAdminEstoque, platform, quemEstoque } from "@/lib/estoque-server";
-import { configProvedor, rodarCiclo } from "@/lib/estoque-fotos";
+import { exigirAdminEstoque, orders, platform, quemEstoque } from "@/lib/estoque-server";
+import { configProvedor, rodarCiclo, urlsAssinadas } from "@/lib/estoque-fotos";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -34,10 +34,37 @@ async function estado() {
   };
 }
 
-export async function GET() {
+/** Página Fotos: últimas fotos achadas (URL assinada), itens sem achado e o ritmo da última meia hora. */
+async function detalhes() {
+  const db = platform();
+  const meia = new Date(Date.now() - 30 * 60_000).toISOString();
+  const [rec, sem, ritmo] = await Promise.all([
+    db.from("estoque_foto").select("n_cod_prod, path, origem, created_at").order("created_at", { ascending: false }).limit(24),
+    db.from("estoque_foto_busca").select("n_cod_prod, termo, status, ultimo_erro, buscado_em").in("status", ["sem_resultado", "erro"]).order("buscado_em", { ascending: false }).limit(200),
+    db.from("estoque_foto_busca").select("n_cod_prod", { count: "exact", head: true }).gte("buscado_em", meia),
+  ]);
+  const erro = rec.error ?? sem.error;
+  if (erro) throw new Error(erro.message);
+  const recs = (rec.data ?? []) as { n_cod_prod: number; path: string; origem: string; created_at: string }[];
+  const sems = (sem.data ?? []) as { n_cod_prod: number; termo: string | null; status: string; ultimo_erro: string | null; buscado_em: string | null }[];
+  const ids = [...new Set([...recs, ...sems].map((x) => Number(x.n_cod_prod)))];
+  const [urls, pos] = await Promise.all([
+    urlsAssinadas(recs.map((r) => r.path)).catch(() => new Map<string, string>()),
+    ids.length ? orders().from("estoque_posicao").select("n_cod_prod, codigo, descricao").in("n_cod_prod", ids) : Promise.resolve({ data: [], error: null }),
+  ]);
+  const nome = new Map(((pos.data ?? []) as { n_cod_prod: number; codigo: string; descricao: string }[]).map((p) => [Number(p.n_cod_prod), p]));
+  return {
+    recentes: recs.map((r) => ({ ...r, url: urls.get(r.path) ?? null, codigo: nome.get(Number(r.n_cod_prod))?.codigo ?? null, descricao: nome.get(Number(r.n_cod_prod))?.descricao ?? null })),
+    sem_achado: sems.map((r) => ({ ...r, codigo: nome.get(Number(r.n_cod_prod))?.codigo ?? null, descricao: nome.get(Number(r.n_cod_prod))?.descricao ?? null })),
+    ritmo_por_min: Math.round(((ritmo.count ?? 0) / 30) * 10) / 10,
+  };
+}
+
+export async function GET(req: Request) {
   const q = await quemEstoque();
   if (q instanceof NextResponse) return q;
-  try { return NextResponse.json({ ...(await estado()), admin: q.admin }); }
+  const resumo = new URL(req.url).searchParams.get("resumo");
+  try { return NextResponse.json({ ...(await estado()), ...(resumo ? {} : await detalhes()), admin: q.admin }); }
   catch (e) { return NextResponse.json({ error: (e as Error).message }, { status: 500 }); }
 }
 

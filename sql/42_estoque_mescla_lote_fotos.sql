@@ -426,3 +426,25 @@ left join cad on cad.empresa = pos.empresa and cad.id_item = pos.n_cod_prod
 left join cod on cod.empresa = pos.empresa and cod.n_cod_prod = pos.n_cod_prod;
 
 revoke all on orders.v_estoque_item, orders.v_estoque_saldo_local from anon, authenticated;
+
+-- ── 4. Prévia do "Mesclar todos": PCs e fornecedores de cada código (antes → depois) ──
+create or replace function orders.estoque_compras_resumo(p_empresa text, p_ids bigint[])
+returns table (id_prod bigint, n_pcs bigint, fornecedores jsonb)
+language sql stable security definer set search_path = compras, public as $$
+  with l as (
+    select i.ncod_prod as id_prod, p.id as pedido_id, coalesce(nullif(p.fornecedor_nome, ''), '(fornecedor não cadastrado)') as fornecedor,
+           i.valor_unit, p.emissao
+    from compras.itens i join compras.pedidos p on p.id = i.pedido_id
+    where p.empresa = p_empresa and i.ncod_prod = any (p_ids) and p.tipo = 'PC' and not coalesce(p.cancelado, false)
+  ), f as (
+    select id_prod, fornecedor, count(*) as n, sum(valor_unit) as soma, min(valor_unit) as minimo, max(valor_unit) as maximo, max(emissao) as ult
+    from l where valor_unit > 0 group by 1, 2
+  )
+  select x.id_prod, count(distinct l.pedido_id),
+         coalesce((select jsonb_agg(jsonb_build_object('fornecedor', f.fornecedor, 'n', f.n, 'soma', f.soma, 'min', f.minimo, 'max', f.maximo, 'ult', f.ult) order by f.n desc)
+                   from f where f.id_prod = x.id_prod), '[]'::jsonb)
+  from unnest(p_ids) x(id_prod) left join l on l.id_prod = x.id_prod
+  group by x.id_prod
+$$;
+revoke all on function orders.estoque_compras_resumo(text, bigint[]) from public, anon, authenticated;
+grant execute on function orders.estoque_compras_resumo(text, bigint[]) to service_role;

@@ -36,7 +36,10 @@ export default function AbaInventario({ admin, itens, aoMudar }: { admin: boolea
   }, [admin]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { carregar(); }, [carregar]);
 
+  const temAtiva = (janelas ?? []).some((j) => estado(j)[0] === "ativa");
   return (<>
+    {admin && janelas && <NovaJanela key={temAtiva ? "rec" : "ab"} recolhida={temAtiva} itens={itens} criada={(r) => { setNova(r); carregar(); }} avisar={avisar} />}
+
     <div className="cartao" style={{ padding: "14px 16px" }}>
       <h3>Sua sessão de inventário</h3>
       {sessao ? (
@@ -53,8 +56,6 @@ export default function AbaInventario({ admin, itens, aoMudar }: { admin: boolea
         </div>
       )}
     </div>
-
-    {admin && <NovaJanela itens={itens} criada={(r) => { setNova(r); carregar(); }} avisar={avisar} />}
 
     {admin && (
       <div className="cartao">
@@ -107,7 +108,8 @@ function Revogar({ id, feito, avisar }: { id: number; feito: () => void; avisar:
   </>);
 }
 
-function NovaJanela({ itens, criada, avisar }: { itens: ItemEstoque[]; criada: (r: { janela: JanelaInventario; codigo: string }) => void; avisar: (m: string, t?: "crit") => void }) {
+function NovaJanela({ itens, criada, avisar, recolhida }: { itens: ItemEstoque[]; criada: (r: { janela: JanelaInventario; codigo: string }) => void; avisar: (m: string, t?: "crit") => void; recolhida?: boolean }) {
+  const [aberta, setAberta] = useState(!recolhida);
   const mes = new Date().toLocaleDateString("pt-BR", { month: "long" });
   const [nome, setNome] = useState(`Inventário ${mes}`);
   const [horas, setHoras] = useState(24);
@@ -130,7 +132,13 @@ function NovaJanela({ itens, criada, avisar }: { itens: ItemEstoque[]; criada: (
   };
   return (
     <div className="cartao" style={{ padding: "14px 16px" }}>
-      <h3>Abrir janela de inventário <span className="mini">— só você (administrador) vê isto</span></h3>
+      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+        <h3 style={{ margin: 0 }}>Abrir janela de inventário <span className="mini">— só o administrador vê isto</span></h3>
+        <span style={{ flex: 1 }} />
+        {!aberta && <span className="mini">já há uma janela aberta</span>}
+        <button className="btn sm" onClick={() => setAberta((x) => !x)}>{aberta ? "Recolher" : "Abrir outra janela"}</button>
+      </div>
+      {aberta && <>
       <div className="filtros" style={{ alignItems: "flex-end" }}>
         <label style={{ display: "grid", gap: 4, fontSize: 12, fontWeight: 600 }}>Nome
           <input className="inp" value={nome} onChange={(e) => setNome(e.target.value)} style={{ width: 220 }} /></label>
@@ -152,7 +160,8 @@ function NovaJanela({ itens, criada, avisar }: { itens: ItemEstoque[]; criada: (
         </div>
         <button className="btn pri" disabled={!valido || indo} onClick={criar}>{indo ? "Criando…" : "Gerar senha"}</button>
       </div>
-      <div className="nota">A senha aparece uma única vez — o painel guarda só um resumo criptográfico dela. Passe ao time por WhatsApp ou pessoalmente. Você pode revogar a qualquer momento.</div>
+      <div className="nota">A senha aparece uma vez só — o painel não guarda a senha, então anote ou mande ao time por WhatsApp ou pessoalmente. Dá para cancelar a janela a qualquer momento.</div>
+      </>}
     </div>
   );
 }

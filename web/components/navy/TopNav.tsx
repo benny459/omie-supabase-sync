@@ -308,6 +308,24 @@ export default function TopNav({ userEmail }: { userEmail?: string | null }) {
             Sem telas nesta área.
           </span>
         )}
+        {/* Estoque: "ir para item" uma vez só, aqui (a tela escuta "estoque:paleta"; sem tela que escute, abre /estoque?paleta=1). */}
+        {areaActiva === "estoque" && (
+          <button type="button" title="Ir para um item pelo código, nome, nº do PC ou cliente (⌘K)"
+            onClick={() => {
+              if ((window as unknown as { __paletaEstoque?: number }).__paletaEstoque) window.dispatchEvent(new Event("estoque:paleta"));
+              else navegar("/estoque?paleta=1");
+            }}
+            style={{
+              marginLeft: "auto", display: "inline-flex", alignItems: "center", gap: 8, whiteSpace: "nowrap",
+              padding: "6px 10px", marginBottom: 4, borderRadius: 10, cursor: "pointer",
+              border: "1px solid var(--ww-border-strong)", background: "var(--ww-panel-sunken, transparent)",
+              color: "var(--ww-text-muted)", fontSize: "var(--text-meta)",
+            }}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} style={{ width: 14, height: 14 }} strokeLinecap="round"><circle cx="11" cy="11" r="7" /><path d="M20 20l-3.5-3.5" /></svg>
+            Ir para item
+            <span style={{ fontSize: 11, padding: "1px 6px", borderRadius: 6, border: "1px solid var(--ww-border)" }}>⌘K</span>
+          </button>
+        )}
       </div>
     </header>
   );

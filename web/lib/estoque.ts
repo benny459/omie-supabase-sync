@@ -32,6 +32,8 @@ export type ItemEstoque = {
   /** Foto guardada no bucket privado "produtos" — URL assinada (1 h), vem de /api/estoque/itens e da ficha. */
   foto: string | null;
   omie_status: "nao_enviado" | "ok" | "erro" | "desligado" | null; omie_erro: string | null;
+  /** Principal de mesclagem: CMC = média ponderada pelo estoque positivo de cada código (cmc_partes); cmc_proprio = o do Omie. */
+  cmc_ponderado: boolean; cmc_proprio: number; cmc_partes: { codigo: string; qtd: number; cmc: number; proprio?: boolean }[] | null;
 };
 
 export type AjusteEstoque = {
@@ -98,6 +100,8 @@ export function normItem(r: Record<string, unknown>): ItemEstoque {
     alarme_maximo: r.alarme_maximo != null ? n(r.alarme_maximo) : null, foto_url: (r.foto_url as string) || null, foto: (r.foto as string) || null,
     cadastro_obs: (r.cadastro_obs as string) || null, ativo: r.ativo !== false,
     omie_status: (r.omie_status as ItemEstoque["omie_status"]) ?? null, omie_erro: (r.omie_erro as string) || null,
+    cmc_ponderado: !!r.cmc_ponderado, cmc_proprio: n(r.cmc_proprio ?? r.cmc),
+    cmc_partes: Array.isArray(r.cmc_partes) ? (r.cmc_partes as Record<string, unknown>[]).map((x) => ({ codigo: String(x.codigo), qtd: n(x.qtd), cmc: n(x.cmc), proprio: !!x.proprio })) : null,
   };
 }
 
@@ -126,7 +130,7 @@ export const somaDias = (iso: string, d: number) => new Date(new Date(iso + "T12
 export const dias = (iso: string | null | undefined) =>
   iso ? Math.round((new Date(hoje() + "T12:00:00Z").getTime() - new Date(iso.slice(0, 10) + "T12:00:00Z").getTime()) / 864e5) : null;
 
-const LOCAIS: Record<string, string> = { "2264756939": "Principal", "12172796544": "Local 2" };
+export const LOCAIS: Record<string, string> = { "2264756939": "Principal", "12172796544": "Local 2" };
 export const nomeLocal = (l: string | number | null | undefined) => (l == null ? "—" : LOCAIS[String(l)] ?? `Local ${l}`);
 
 // ── Regras ───────────────────────────────────────────────────────────────────

@@ -154,6 +154,14 @@ type Res = { k: "item"; p: ItemEstoque } | { k: "pc"; pc: PcBusca } | { k: "cli"
 /** Abre com ⌘K / Ctrl+K em qualquer lugar e com "/" fora de campos de texto. Na tela de Estoque o ⌘K
  *  é desta paleta: o listener em captura para o evento antes da busca global (GlobalSearch). */
 export function useAtalhoPaleta(abrir: () => void) {
+  // botão "Ir para item ⌘K" da 2ª linha do menu (TopNav) dispara "estoque:paleta"
+  useEffect(() => {
+    const w = window as unknown as { __paletaEstoque?: number };
+    w.__paletaEstoque = (w.__paletaEstoque ?? 0) + 1;
+    const h = () => abrir();
+    window.addEventListener("estoque:paleta", h);
+    return () => { window.removeEventListener("estoque:paleta", h); w.__paletaEstoque = (w.__paletaEstoque ?? 1) - 1; };
+  }, [abrir]);
   useEffect(() => {
     const h = (e: KeyboardEvent) => {
       const alvo = e.target as HTMLElement | null;

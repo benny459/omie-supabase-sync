@@ -247,3 +247,52 @@
 .est .cand input[type="radio"] { accent-color: var(--ww-accent); }
 .est .thumb img, .est-ov .thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .est .foto > img { width: 100%; height: 100%; object-fit: contain; background: #fff; display: block; }
+.est .barra-acao { position: fixed; left: 50%; transform: translateX(-50%); bottom: 16px; z-index: 45; width: min(1100px, calc(100% - 32px));
+  display: flex; gap: 12px; align-items: center; flex-wrap: wrap; padding: 12px 16px; border-radius: 14px;
+  background: var(--ww-panel); border: 1px solid var(--ww-accent); box-shadow: 0 18px 50px rgba(0,0,0,.35); color: var(--ww-text); font-size: 13px; }
+.est .est-ov .btn.crit { color: #fff; background: var(--ww-crit); border-color: var(--ww-crit); }
+
+/* Revisão de usabilidade (02/10/26) */
+.est .kpis.k4 { grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); }
+.est .kpi.on { border-color: var(--ww-accent); box-shadow: 0 0 0 2px var(--ww-accent-soft), var(--shadow-card); }
+.est .kpi.on .r::before { content: "● "; color: var(--ww-accent-text); }
+.est .menu-mais { position: absolute; z-index: 30; top: calc(100% + 4px); left: 0; min-width: 240px; display: flex; flex-direction: column; padding: 6px;
+  border-radius: 12px; background: var(--ww-panel); border: 1px solid var(--ww-border-strong); box-shadow: 0 18px 40px rgba(0,0,0,.35); }
+.est .acoes-item .menu-mais { left: auto; right: 0; }
+.est .menu-mais button { text-align: left; padding: 8px 10px; border-radius: 8px; border: 0; background: transparent; color: var(--ww-text); font-size: 13px; cursor: pointer; }
+.est .menu-mais button:hover:not(:disabled), .est .menu-mais button.on { background: var(--ww-row-hover); }
+.est .menu-mais button:disabled { color: var(--ww-text-faint); cursor: default; }
+.est .menu-mais b { float: right; margin-left: 12px; color: var(--ww-text-muted); font-weight: 600; }
+.est .tabela tr.skel td span { display: block; height: 12px; border-radius: 6px; background: linear-gradient(90deg, var(--ww-panel-sunken), var(--ww-border), var(--ww-panel-sunken));
+  background-size: 200% 100%; animation: est-skel 1.2s linear infinite; }
+@keyframes est-skel { from { background-position: 200% 0; } to { background-position: -200% 0; } }
+.est .tab-movs th { position: sticky; top: 0; z-index: 1; background: var(--ww-panel); }
+.est-ov label.check, .est label.check { display: flex; gap: 8px; align-items: center; font-size: 13px; color: var(--ww-text-2); }
+.est-ov .modal .form-grid .s4 { grid-column: span 4; }
+.est-ov .modal .form-grid .s6 { grid-column: span 6; }
+@media (max-width: 640px) { .est-ov .modal .form-grid .s4, .est-ov .modal .form-grid .s6 { grid-column: span 12; } }
+.est details > summary { list-style: none; }
+.est details > summary::-webkit-details-marker { display: none; }
+.est details > summary::before { content: "▸ "; }
+.est details[open] > summary::before { content: "▾ "; }
+
+/* Catálogo: 3 cartões de passo + gaveta lateral (02/10/26) */
+.est .passos3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 14px; }
+.est .passo-card { display: flex; flex-direction: column; gap: 8px; padding: 20px; border-radius: var(--radius-card); background: var(--ww-panel-grad);
+  border: 1px solid var(--ww-border); box-shadow: var(--shadow-card); }
+.est .passo-card .n { width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; font-weight: 800; background: var(--ww-accent-soft); color: var(--ww-accent-text); }
+.est .passo-card h2 { margin: 2px 0 0; font-size: 18px; }
+.est .passo-card p { margin: 0; color: var(--ww-text-2); font-size: 13px; line-height: 1.5; flex: 1; }
+.est .passo-card .status { font-size: 12.5px; color: var(--ww-text-muted); }
+.est .passo-card .btn { align-self: flex-start; }
+.est-ov.gaveta { place-items: stretch end; padding: 0; }
+.est-ov.gaveta .gaveta-c { width: min(440px, 100%); height: 100%; overflow: auto; background: var(--ww-panel); border-left: 1px solid var(--ww-border-strong);
+  box-shadow: -20px 0 60px rgba(0,0,0,.35); color: var(--ww-text); font-size: 13px; }
+.est .tfoot details { width: 100%; }
+
+.est .grade-fotos { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 12px; padding: 0 16px 16px; }
+.est .foto-mini { display: grid; gap: 6px; }
+.est .foto-mini > .link { width: 100%; aspect-ratio: 1; border-radius: 12px; overflow: hidden; background: #fff; border: 1px solid var(--ww-border); display: grid; place-items: center; }
+.est .foto-mini img { width: 100%; height: 100%; object-fit: contain; display: block; }
+.est .foto-mini .nome { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.est .foto-mini .btn { justify-self: start; }

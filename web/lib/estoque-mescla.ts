@@ -9,9 +9,12 @@ import { orders } from "@/lib/estoque-server";
  * (saldo × CMC) → empate: PC mais recente → empate: menor id (o código mais antigo no Omie).
  */
 export type EscopoMescla = "exatas" | "todos";
+/** Fornecedor de um código, em forma somável (n e soma juntam por nome entre os códigos do grupo). */
+export type FornPrevia = { fornecedor: string; n: number; soma: number; min: number; max: number; ult: string | null };
 export type MembroPrevia = {
   n_cod_prod: number; codigo: string; codigo_novo: string | null; descricao: string; unidade: string | null;
   saldo: number; cmc: number; valor: number; mov12: number; ult_pc: string | null;
+  n_pcs: number; fornecedores: FornPrevia[];
 };
 export type GrupoPrevia = {
   chave: string; tipo: "exata" | "parecido"; sim_min: number; membros: MembroPrevia[];
@@ -38,19 +41,26 @@ export async function previaMescla(empresa: string, escopo: EscopoMescla) {
   const ids = [...pai.keys()];
   if (!ids.length) return { grupos: [] as GrupoPrevia[], totais: totais([]) };
 
-  const [it, mv] = await Promise.all([
+  const [it, mv, cp] = await Promise.all([
     db.from("v_estoque_item").select("n_cod_prod, codigo, codigo_novo, descricao, unidade, saldo, cmc, ult_pc, mesclado_em").eq("empresa", empresa).in("n_cod_prod", ids),
     db.rpc("estoque_mov12", { p_empresa: empresa, p_ids: ids }),
+    db.rpc("estoque_compras_resumo", { p_empresa: empresa, p_ids: ids }),
   ]);
   if (it.error) throw new Error(it.error.message);
   if (mv.error) throw new Error(mv.error.message);
+  if (cp.error) throw new Error(cp.error.message);
   const mov = new Map(((mv.data ?? []) as { id_prod: number; n: number }[]).map((r) => [Number(r.id_prod), Number(r.n)]));
+  const compras = new Map(((cp.data ?? []) as { id_prod: number; n_pcs: number; fornecedores: Record<string, unknown>[] }[]).map((r) => [Number(r.id_prod), {
+    n_pcs: Number(r.n_pcs) || 0,
+    fornecedores: (r.fornecedores ?? []).map((f) => ({ fornecedor: String(f.fornecedor), n: Number(f.n), soma: Number(f.soma), min: Number(f.min), max: Number(f.max), ult: (f.ult as string) ?? null })),
+  }]));
   const porId = new Map(((it.data ?? []) as Record<string, unknown>[])
     .filter((r) => r.mesclado_em == null)
     .map((r): [number, MembroPrevia] => {
       const id = Number(r.n_cod_prod), saldo = Number(r.saldo) || 0, cmc = Number(r.cmc) || 0;
       return [id, { n_cod_prod: id, codigo: String(r.codigo), codigo_novo: (r.codigo_novo as string) ?? null, descricao: String(r.descricao ?? ""),
-        unidade: (r.unidade as string) ?? null, saldo, cmc, valor: Math.round(saldo * cmc * 100) / 100, mov12: mov.get(id) ?? 0, ult_pc: (r.ult_pc as string) ?? null }];
+        unidade: (r.unidade as string) ?? null, saldo, cmc, valor: Math.round(saldo * cmc * 100) / 100, mov12: mov.get(id) ?? 0, ult_pc: (r.ult_pc as string) ?? null,
+        n_pcs: compras.get(id)?.n_pcs ?? 0, fornecedores: compras.get(id)?.fornecedores ?? [] }];
     }));
 
   const grupos: GrupoPrevia[] = [];

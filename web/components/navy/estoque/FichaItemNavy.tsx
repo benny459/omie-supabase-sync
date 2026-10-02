@@ -24,6 +24,7 @@ import {
 } from "./comum";
 import { ModalAjuste, ModalMesclar, ModalSenha } from "./Acoes";
 import { FotoItem } from "./FotoItem";
+import { MovsPainelItem } from "./Movimentacoes";
 
 type Mescla = { id: number; principal: number; secundario: number; grupo_id: number | null; secundario_item: { codigo: string; descricao: string } | null };
 type Mesclado = { n_cod_prod: number; codigo: string; descricao: string };
@@ -106,13 +107,13 @@ export default function FichaItemNavy({ codigo, abaInicial }: { codigo: string; 
           {idx >= 0 && nav.length > 1 && <span className="mini">{idx + 1} de {q(nav.length)}</span>}
           <button className="btn sm" onClick={() => andar(-1)} disabled={idx < 0} title="Item anterior da lista (Alt ←)" aria-label="Item anterior"><Seta dir="esq" /></button>
           <button className="btn sm" onClick={() => andar(1)} disabled={idx < 0} title="Próximo item da lista (Alt →)" aria-label="Próximo item"><Seta dir="dir" /></button>
-          <button className="btn sm" onClick={abrirPal}><Lupa />Ir para… <span className="kbd">⌘K</span></button>
+
         </span>
       </div>
 
       {erro && <div className="aviso t-crit">{erro}</div>}
       {!f && !erro && <div className="cartao vazio">Carregando ficha…</div>}
-      {f && <Conteudo f={f} aba={aba} setAba={setAba} ir={ir} recarregar={recarregar} />}
+      {f && <Conteudo f={f} aba={aba} setAba={setAba} ir={ir} recarregar={recarregar} itensTodos={dados?.itens ?? []} />}
 
       {pal && dados && (
         <PaletaEstoque itens={dados.itens} fechar={() => setPal(false)}
@@ -124,14 +125,16 @@ export default function FichaItemNavy({ codigo, abaInicial }: { codigo: string; 
   );
 }
 
-function Conteudo({ f, aba, setAba, ir, recarregar }: {
-  f: Ficha; aba: AbaFicha; setAba: (a: AbaFicha) => void; ir: (cod: string, a?: string) => void; recarregar: () => void;
+function Conteudo({ f, aba, setAba, ir, recarregar, itensTodos }: {
+  f: Ficha; aba: AbaFicha; setAba: (a: AbaFicha) => void; ir: (cod: string, a?: string) => void; recarregar: () => void; itensTodos: ItemEstoque[];
 }) {
   const router = useRouter();
   const [sessao, setSessao] = useSessaoInv();
   const [modal, setModal] = useState<null | "senha" | "ajuste" | "recodificar" | { mesclar: ItemEstoque[] }>(null);
   const [toast, avisar] = useToast();
   const [ocupado, setOcupado] = useState(false);
+  const [mais, setMais] = useState(false);
+  const [novaMov, setNovaMov] = useState(false);
   const mesclado = f.item.mesclado_em != null;
   const pedirAjuste = () => setModal(sessao ? "ajuste" : "senha");
   const naoE = async (outro: ItemEstoque) => {
@@ -234,7 +237,10 @@ function Conteudo({ f, aba, setAba, ir, recarregar }: {
             <Stat r="Consumo / mês" v={consumoDia(p) ? q(Math.round(consumoDia(p) * 30)) : "—"} s="média de 90 dias" />
             <Stat r="Cobertura" v={cob === null ? "—" : `${cob > 999 ? "999+" : q(cob)} d`}
               s={cob === null ? "sem consumo" : cob === 0 ? "em ruptura" : `até ~${ddmmaa(somaDias(hoje(), Math.min(cob, 3650)))}`} />
-            <Stat r="CMC" v={brl(p.cmc)} s={ultPc ? `últ. PC ${brl(ultPc.valor_unit)}` : "custo médio"} />
+            {p.cmc_ponderado
+              ? <Stat r="CMC (ponderado após mesclagem) ⓘ" v={brl(p.cmc)} s={`o do Omie era ${brl(p.cmc_proprio)}`}
+                  titulo={`Média ponderada pelo estoque positivo de cada código:\n${(p.cmc_partes ?? []).map((x) => `${x.codigo}${x.proprio ? " (este, no Omie)" : " (mesclado)"}: ${q(x.qtd)} × ${brl(x.cmc)}`).join("\n")}`} />
+              : <Stat r="CMC" v={brl(p.cmc)} s={ultPc ? `últ. PC ${brl(ultPc.valor_unit)}` : "custo médio"} />}
             <Stat r="Valor" v={kbrl(valorItem(p))} s="saldo × CMC" />
           </div>
           {p.locais.length > 1 && (
@@ -249,11 +255,18 @@ function Conteudo({ f, aba, setAba, ir, recarregar }: {
             <button className="btn pri" onClick={pedirAjuste} disabled={mesclado}
               title={mesclado ? "Código mesclado — ajuste o principal" : sessao ? `Janela “${sessao.janela.nome}” · ${escopoTxt(sessao.janela.escopo, nomeLocal)}` : "Peça a senha de inventário ao Benny"}>
               Ajustar saldo{sessao ? "" : " 🔒"}</button>
-            <button className="btn" onClick={() => router.push(`/estoque/${encodeURIComponent(p.codigo_novo ?? p.codigo)}/editar`)}>Editar cadastro</button>
-            <button className="btn" onClick={() => router.push(`/estoque/${encodeURIComponent(p.codigo_novo ?? p.codigo)}/editar`)}>{p.alarme_minimo != null ? "Editar alarme" : "Definir alarme"}</button>
-            {f.admin && p.codigo_novo && <button className="btn" onClick={() => setModal("recodificar")}>Recodificar…</button>}
-            <button className="btn" onClick={() => setAba("auditoria")}>Auditoria{nA ? <> <span className="pill t-warn" style={{ padding: "0 7px" }}>{nA}</span></> : null}</button>
-            <button className="btn" disabled title={EM_BREVE}>Pedir compra</button>
+            <button className="btn" onClick={() => { setAba("mov"); setNovaMov(true); }} disabled={mesclado}>+ Nova movimentação</button>
+            <span style={{ position: "relative" }}>
+              <button className="btn" onClick={() => setMais((x) => !x)} aria-expanded={mais}>Mais ações ▾</button>
+              {mais && (
+                <div className="menu-mais" onMouseLeave={() => setMais(false)}>
+                  <button onClick={() => router.push(`/estoque/${encodeURIComponent(p.codigo_novo ?? p.codigo)}/editar`)}>Editar cadastro</button>
+                  <button onClick={() => router.push(`/estoque/${encodeURIComponent(p.codigo_novo ?? p.codigo)}/editar`)}>{p.alarme_minimo != null ? "Editar alarme" : "Definir alarme"}</button>
+                  {f.admin && p.codigo_novo && <button onClick={() => { setMais(false); setModal("recodificar"); }}>Recodificar…</button>}
+                  <button disabled title={EM_BREVE}>Pedir compra (em breve)</button>
+                </div>
+              )}
+            </span>
           </div>
           {!sessao && !mesclado && <div className="mini" style={{ marginTop: 6 }}>Ajustar saldo exige a senha de inventário — peça ao Benny.</div>}
           {sessao && <div className="mini" style={{ marginTop: 6 }}>Janela de inventário <b>{sessao.janela.nome}</b> aberta nesta aba até {new Date(sessao.janela.valida_ate).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}.</div>}
@@ -270,7 +283,7 @@ function Conteudo({ f, aba, setAba, ir, recarregar }: {
       </div>
       <div className="painel">
         {aba === "uso" && <AbaUso p={p} usos={usos} filtrarCliente={(c) => router.push(`/estoque?cliente=${encodeURIComponent(c)}`)} />}
-        {aba === "mov" && <AbaMov p={p} movs={f.movs} nomesSec={nomesSec} />}
+        {aba === "mov" && <><MovsPainelItem key={novaMov ? "n" : "v"} item={p} itens={itensTodos} abrirNova={novaMov} aoFechar={() => setNovaMov(false)} /><AbaMov p={p} movs={f.movs} nomesSec={nomesSec} /></>}
         {aba === "compras" && <AbaCompras p={p} pcs={pcs24} abertos={abertos} />}
         {aba === "forn" && <><SecaoAliases st={aliases} codigoDe={(id) => nomesSec.get(id) ?? ""} /><AbaForn pcs={f.pcs} precos={precos} /></>}
         {aba === "auditoria" && <AbaAuditoria pts={pts} dups={f.dups} setAba={setAba} ir={ir} ajustes={f.ajustes} aliases={aliases?.lista ?? []} admin={f.admin} ocupado={ocupado}
@@ -287,9 +300,9 @@ function Conteudo({ f, aba, setAba, ir, recarregar }: {
   </>);
 }
 
-function Stat({ r, v, s, cor }: { r: string; v: string; s: string; cor?: string }) {
+function Stat({ r, v, s, cor, titulo }: { r: string; v: string; s: string; cor?: string; titulo?: string }) {
   return (
-    <div className="stat"><div className="r1">{r}</div><div className="v1" style={{ color: cor }} title={v}>{v}</div><div className="s1">{s}</div></div>
+    <div className="stat" title={titulo}><div className="r1">{r}</div><div className="v1" style={{ color: cor }} title={titulo ?? v}>{v}</div><div className="s1">{s}</div></div>
   );
 }
 

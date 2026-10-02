@@ -137,6 +137,8 @@ export function ModalMesclar({ itens, fechar, ok, tipo = "exata" }: { itens: Ite
   const locais = [...new Set(ord.flatMap((x) => x.locais.map((l) => l.local)))];
   const soma = (l: string) => ord.reduce((a, x) => a + (x.locais.find((y) => y.local === l)?.saldo ?? 0), 0);
   const u = principal.unidade.toLowerCase();
+  const qPos = ord.reduce((a, x) => a + Math.max(x.saldo, 0), 0);
+  const cmcPond = qPos > 0 ? ord.reduce((a, x) => a + Math.max(x.saldo, 0) * x.cmc, 0) / qPos : Math.max(...ord.map((x) => x.cmc));
   const mesclar = async () => {
     setIndo(true); setErro(null);
     try {
@@ -166,8 +168,8 @@ export function ModalMesclar({ itens, fechar, ok, tipo = "exata" }: { itens: Ite
         <div className="prev">
           <b>Depois da mesclagem — {principal.codigo}</b><br />
           {locais.map((l) => <span key={l}>{nomeLocal(l)}: <b>{q(soma(l))}</b> {u}{"  ·  "}</span>)}
-          total <b>{q(ord.reduce((a, x) => a + x.saldo, 0))}</b> {u}<br />
-          A ficha de {principal.codigo} passa a mostrar também o Kardex, os PCs e os usos de {sec.map((s) => s.codigo).join(", ")} ({q(sec.reduce((a, s) => a + s.n_mov, 0))} movimentos).
+          total <b>{q(ord.reduce((a, x) => a + x.saldo, 0))}</b> {u} · CMC ponderado <b title="Média pelo estoque positivo de cada código">{brl(cmcPond)}</b> · valor <b>{brl(Math.max(ord.reduce((a, x) => a + x.saldo, 0), 0) * cmcPond)}</b><br />
+          <b>Nada se perde:</b> a ficha de {principal.codigo} passa a mostrar também o Kardex, os PCs, fornecedores e preços e os usos de {sec.map((s) => s.codigo).join(", ")} ({q(sec.reduce((a, s) => a + s.n_mov, 0))} movimentos); o código antigo continua achável no ⌘K.
           {sec.some((s) => Math.abs(s.cmc - principal.cmc) / Math.max(principal.cmc, 0.01) > 0.5) && <><br /><span style={{ color: "var(--ww-warn-text)" }}>CMC bem diferente entre os códigos — confira se são mesmo o mesmo item.</span></>}
         </div>
         {erro && <div className="aviso t-crit">{erro}</div>}
