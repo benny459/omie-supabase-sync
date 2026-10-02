@@ -32,7 +32,10 @@ ALVO = {
     "proximo_numero_nfse_producao": 1,
     "serie_nfse_homologacao": "2",
     "proximo_numero_nfse_homologacao": 1,
+    "exibe_fatura_danfe": True,           # DANFE igual à do Omie: quadro FATURA / DUPLICATA
 }
+# Logo da DANFE: o mesmo que o Omie usa hoje (extraído do PDF da NF-e 2191).
+LOGO = "docs/modelos/logo-waterworks-omie.png"
 SENSIVEL = ("token", "senha", "certificado_base64", "arquivo_certificado", "csc")
 
 
@@ -51,6 +54,11 @@ def main():
     emp = atual(master)
     print(f"Empresa id={emp.get('id')} {emp.get('nome')} ({emp.get('municipio')}/{emp.get('uf')})")
     mudar = {k: v for k, v in ALVO.items() if str(emp.get(k)) != str(v)}
+    if not emp.get("caminho_logo") or env("FOCUS_LOGO_FORCAR"):
+        import base64
+        with open(LOGO, "rb") as f:
+            mudar["arquivo_logo_base64"] = base64.b64encode(f.read()).decode()
+        print(f"  → MUDA  logo: {emp.get('caminho_logo')!r} → {LOGO}")
     for k, v in ALVO.items():
         marca = "→ MUDA" if k in mudar else "  ok"
         print(f"  {marca}  {k}: {emp.get(k)!r} → {v!r}")
@@ -69,6 +77,7 @@ def main():
     print("Depois:")
     for k in ALVO:
         print(f"   {k} = {depois.get(k)!r}")
+    print(f"   caminho_logo = {'definido' if depois.get('caminho_logo') else None}")
     falhou = [k for k, v in ALVO.items() if str(depois.get(k)) != str(v)]
     if falhou:
         print(f"⚠️ não ficaram como pedido: {falhou}")
