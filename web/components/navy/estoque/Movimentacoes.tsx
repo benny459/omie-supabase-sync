@@ -43,7 +43,15 @@ type Linha = {
   apagado: boolean; status: MovPainel["status"] | null; local: string; mov?: MovPainel; solicitante: string | null; tipoKey: string; lote: number | null;
 };
 
-export function AbaMovs({ porId, itens, abrir }: {
+export function AbaMovs(props: { porId: Map<number, ItemEstoque>; itens: ItemEstoque[]; abrir: (p: ItemEstoque, aba?: string) => void }) {
+  // Só no cliente: com render no servidor a aba não hidratava ao abrir o endereço direto (02/10/26).
+  const [montado, setMontado] = useState(false);
+  useEffect(() => { setMontado(true); }, []);
+  if (!montado) return <div className="cartao vazio">Carregando movimentos…</div>;
+  return <AbaMovsCliente {...props} />;
+}
+
+function AbaMovsCliente({ porId, itens, abrir }: {
   porId: Map<number, ItemEstoque>; itens: ItemEstoque[]; abrir: (p: ItemEstoque, aba?: string) => void;
 }) {
   const h = hoje();
