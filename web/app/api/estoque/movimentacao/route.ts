@@ -3,7 +3,8 @@
 // GET  ?n_cod_prod=…                    → movimentos do painel de um item (ficha) + tipos/justificativas/usuários
 // POST { acao: "registrar", tipo_id, n_cod_prod, quantidade, local_origem, local_destino, solicitante_user, solicitante_nome,
 //        cliente, projeto, pv_os, pc_numero, motivo_id | motivo, obs }  → qualquer usuário do ERP (perda/avaria fica pendente)
-// POST { acao: "aprovar" | "rejeitar" | "cancelar", id, obs }            → administrador
+// POST { acao: "registrar_lote", ...cabeçalho, linhas: [{ n_cod_prod, quantidade, local_origem?, local_destino?, obs? }] } → lote atômico
+// POST { acao: "aprovar" | "rejeitar" | "cancelar", id | lote_id, obs }  → administrador
 // POST { acao: "tipo_salvar", tipo: {...} } / { acao: "motivo_salvar", motivo: {...} } → administrador (Configurar)
 
 import { NextResponse } from "next/server";
@@ -51,7 +52,15 @@ export async function GET(req: Request) {
       const ids = new Set((r as { id: number }[]).map((x) => x.id));
       movs = [...r, ...((pend.data ?? []) as { id: number }[]).filter((x) => !ids.has(x.id))];
     }
-    return NextResponse.json({ movs, ...(await apoio()), admin: q.admin, eu: { id: q.id, email: q.email } });
+    // cabeçalho dos lotes que aparecem (para agrupar na lista)
+    const ids = [...new Set((movs as { lote_id: number | null }[]).map((m) => m.lote_id).filter(Boolean))] as number[];
+    let lotes: unknown[] = [];
+    if (ids.length) {
+      const lr = await platform().from("estoque_mov_lote").select("*").in("id", ids);
+      if (lr.error) throw new Error(lr.error.message);
+      lotes = lr.data ?? [];
+    }
+    return NextResponse.json({ movs, lotes, ...(await apoio()), admin: q.admin, eu: { id: q.id, email: q.email } });
   } catch (e) { return NextResponse.json({ error: (e as Error).message }, { status: 500 }); }
 }
 
@@ -65,6 +74,17 @@ export async function POST(req: Request) {
       const r = await orders().rpc("estoque_movimentar", { p: { ...b, empresa: "SF" }, p_user: q.id || null, p_email: q.email, p_admin: q.admin });
       if (r.error) return NextResponse.json({ error: msgErro(r.error) }, { status: 409 });
       return NextResponse.json({ ok: true, mov: r.data });
+    }
+    if (b.acao === "registrar_lote") {
+      const r = await orders().rpc("estoque_movimentar_lote", { p: { ...b, empresa: "SF" }, p_user: q.id || null, p_email: q.email, p_admin: q.admin });
+      if (r.error) return NextResponse.json({ error: msgErro(r.error) }, { status: 409 });
+      return NextResponse.json({ ok: true, lote: r.data });
+    }
+    if ((b.acao === "aprovar" || b.acao === "rejeitar" || b.acao === "cancelar") && b.lote_id) {
+      if (!q.admin) return soAdmin();
+      const r = await orders().rpc("estoque_mov_decidir_lote", { p_lote: Number(b.lote_id), p_acao: b.acao, p_obs: (b.obs as string) ?? null, p_email: q.email });
+      if (r.error) return NextResponse.json({ error: msgErro(r.error) }, { status: 409 });
+      return NextResponse.json({ ok: true, lote: r.data });
     }
     if (b.acao === "aprovar" || b.acao === "rejeitar" || b.acao === "cancelar") {
       if (!q.admin) return soAdmin();

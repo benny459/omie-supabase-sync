@@ -296,3 +296,31 @@
 .est .foto-mini img { width: 100%; height: 100%; object-fit: contain; display: block; }
 .est .foto-mini .nome { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .est .foto-mini .btn { justify-self: start; }
+
+/* Nova movimentação em lote (02/10/26) */
+.est-ov .modal.nova-mov { width: min(1100px, 100%); }
+.est-ov .modal .f > span { font-size: 12px; font-weight: 600; color: var(--ww-text-2); }
+.est-ov .modal div.f { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.est-ov .auto-lista, .est .auto-lista { position: absolute; z-index: 80; top: calc(100% + 4px); left: 0; right: 0; max-height: 300px; overflow: auto; display: flex; flex-direction: column;
+  padding: 4px; border-radius: 10px; background: var(--ww-panel); border: 1px solid var(--ww-border-strong); box-shadow: 0 18px 40px rgba(0,0,0,.4); }
+.est-ov .auto-lista button { text-align: left; padding: 7px 9px; border-radius: 8px; border: 0; background: transparent; color: var(--ww-text); font-size: 12.5px; cursor: pointer; }
+.est-ov .auto-lista button:hover { background: var(--ww-row-hover); }
+.est-ov .auto-lista button.livre { color: var(--ww-accent-text); border-top: 1px solid var(--ww-border); border-radius: 0 0 8px 8px; }
+.est-ov .grade-linhas { display: grid; gap: 6px; padding: 12px; border-radius: 12px; border: 1px solid var(--ww-border); background: var(--ww-panel-sunken); }
+.est-ov .gl-cab, .est-ov .gl-linha { display: grid; grid-template-columns: minmax(220px, 1fr) 110px 170px minmax(120px, 200px) 28px; gap: 8px; align-items: center; }
+.est-ov .gl-cab { font-size: 11.5px; font-weight: 600; color: var(--ww-text-muted); padding: 0 2px; }
+.est-ov .gl-cab .r, .est-ov .gl-linha .inp.r { text-align: right; }
+.est-ov .gl-linha .inp { height: 34px; width: 100%; }
+.est-ov .gl-linha.aviso-l { box-shadow: inset 3px 0 0 var(--ww-warn); padding-left: 6px; border-radius: 6px; }
+.est-ov .gl-linha .prod { display: flex; gap: 8px; align-items: center; }
+.est-ov .gl-linha .prod .n { font-weight: 600; font-size: 12.5px; }
+.est-ov .gl-linha .prod .c { font-size: 11.5px; color: var(--ww-text-faint); }
+.est-ov .gl-linha .link { background: none; border: 0; color: var(--ww-accent-text); cursor: pointer; font-size: 18px; }
+.est-ov .gl-linha .link.mini { font-size: 11.5px; margin-left: auto; }
+@media (max-width: 760px) {
+  .est-ov .gl-cab { display: none; }
+  .est-ov .gl-linha { grid-template-columns: 1fr 90px 28px; }
+  .est-ov .gl-linha > :nth-child(3), .est-ov .gl-linha > :nth-child(4) { grid-column: span 3; }
+}
+.est .tabela tr.lote-cab td { background: color-mix(in srgb, var(--ww-accent-soft) 40%, transparent); }
+.est .tabela tr.no-lote td:first-child { padding-left: 34px; }

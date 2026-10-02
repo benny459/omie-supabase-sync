@@ -9,9 +9,11 @@
  * "Configurar" (administrador): tipos de movimentação e justificativas de cada tipo.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { LOCAIS, hoje, nomeLocal, normMov, somaDias, textoBusca, type ItemEstoque, type MovEstoque } from "@/lib/estoque";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { hoje, nomeLocal, normMov, somaDias, type ItemEstoque, type MovEstoque } from "@/lib/estoque";
 import { Pill, Thumb, brl, ddmm, dsem, invalidarItens, kbrl, postar, q, useToast } from "./comum";
+import { ModalNovaMov } from "./NovaMovimentacao";
+export { ModalNovaMov };
 
 export type TipoMov = { id: number; codigo: string; nome: string; sentido: "entra" | "sai" | "transfere"; origem: "manual" | "omie" | "inventario";
   exige_aprovacao: boolean; exige_cliente_ou_projeto: boolean; exige_pc: boolean; ativo: boolean; ordem: number; descricao: string | null };
@@ -20,13 +22,15 @@ export type Usuario = { id: string; nome: string; email: string };
 export type MovPainel = { id: number; tipo_id: number; n_cod_prod: number; quantidade: number; local_origem: number | null; local_destino: number | null;
   solicitante_nome: string; cliente: string | null; projeto: string | null; pv_os: string | null; pc_numero: string | null; motivo: string; obs: string | null;
   status: "aplicado" | "pendente" | "rejeitado" | "cancelado"; cmc: number; valor: number; created_by_email: string | null; created_at: string;
-  aprovado_por_email: string | null; decisao_obs: string | null };
+  aprovado_por_email: string | null; decisao_obs: string | null; lote_id: number | null };
+export type LoteMov = { id: number; tipo_id: number; solicitante_nome: string; cliente: string | null; projeto: string | null; pv_os: string | null;
+  motivo: string; obs: string | null; status: MovPainel["status"]; n_linhas: number; quantidade: number; valor: number; created_by_email: string | null; created_at: string };
 export type ApoioMov = { tipos: TipoMov[]; motivos: MotivoMov[]; usuarios: Usuario[]; pendentes: number; admin: boolean; eu: { id: string; email: string } };
 
 const normPainel = (r: Record<string, unknown>): MovPainel => ({
   ...(r as unknown as MovPainel), id: Number(r.id), tipo_id: Number(r.tipo_id), n_cod_prod: Number(r.n_cod_prod), quantidade: Number(r.quantidade),
   local_origem: r.local_origem == null ? null : Number(r.local_origem), local_destino: r.local_destino == null ? null : Number(r.local_destino),
-  cmc: Number(r.cmc) || 0, valor: Number(r.valor) || 0,
+  cmc: Number(r.cmc) || 0, valor: Number(r.valor) || 0, lote_id: r.lote_id == null ? null : Number(r.lote_id),
 });
 const diaSP = (iso: string) => new Date(iso).toLocaleDateString("sv-SE", { timeZone: "America/Sao_Paulo" });
 const horaSP = (iso: string) => new Date(iso).toLocaleTimeString("pt-BR", { timeZone: "America/Sao_Paulo", hour: "2-digit", minute: "2-digit" });
@@ -36,7 +40,7 @@ const SENTIDO: Record<TipoMov["sentido"], string> = { entra: "entra", sai: "sai"
 type Linha = {
   k: string; dia: string; fonte: "omie" | "painel"; id_prod: number | null; tipo: string; doc: string | null; sub: string | null;
   cliente: string | null; projeto: string | null; qtde: number; transfer: string | null; unit: number; saldo: number | null;
-  apagado: boolean; status: MovPainel["status"] | null; local: string; mov?: MovPainel; solicitante: string | null; tipoKey: string;
+  apagado: boolean; status: MovPainel["status"] | null; local: string; mov?: MovPainel; solicitante: string | null; tipoKey: string; lote: number | null;
 };
 
 export function AbaMovs({ porId, itens, abrir }: {
@@ -54,6 +58,8 @@ export function AbaMovs({ porId, itens, abrir }: {
   const [apoio, setApoio] = useState<ApoioMov | null>(null);
   const [erro, setErro] = useState<string | null>(null);
   const [fechados, setFechados] = useState<Set<string>>(new Set());
+  const [lotes, setLotes] = useState<Map<number, LoteMov>>(new Map());
+  const [lotesAbertos, setLotesAbertos] = useState<Set<number>>(new Set());
   const [nova, setNova] = useState(false);
   const [config, setConfig] = useState(false);
   const [toast, avisar] = useToast();
@@ -67,7 +73,9 @@ export function AbaMovs({ porId, itens, abrir }: {
       .catch((e) => { if ((e as Error).name !== "AbortError") setErro((e as Error).message); });
     fetch(`/api/estoque/movimentacao?de=${de}&ate=${ate}`, { signal: ctrl.signal, cache: "no-store" })
       .then(async (r) => { const j = await r.json(); if (!r.ok) throw new Error(j.error ?? r.statusText);
-        setPainel((j.movs as Record<string, unknown>[]).map(normPainel)); setApoio({ tipos: j.tipos, motivos: j.motivos, usuarios: j.usuarios, pendentes: j.pendentes, admin: j.admin, eu: j.eu }); })
+        setPainel((j.movs as Record<string, unknown>[]).map(normPainel));
+        setLotes(new Map(((j.lotes ?? []) as LoteMov[]).map((l) => [Number(l.id), { ...l, id: Number(l.id), tipo_id: Number(l.tipo_id), n_linhas: Number(l.n_linhas), quantidade: Number(l.quantidade), valor: Number(l.valor) }])));
+        setApoio({ tipos: j.tipos, motivos: j.motivos, usuarios: j.usuarios, pendentes: j.pendentes, admin: j.admin, eu: j.eu }); })
       .catch((e) => { if ((e as Error).name !== "AbortError") setErro((e as Error).message); });
     return () => ctrl.abort();
   }, [de, ate, versao]);
@@ -77,7 +85,7 @@ export function AbaMovs({ porId, itens, abrir }: {
     const o: Linha[] = (omie ?? []).map((m) => ({
       k: `o${m.id_mov}`, dia: m.dt_mov, fonte: "omie", id_prod: m.id_prod ?? null, tipo: m.des_origem ?? "Omie", doc: m.doc ?? m.num_pedido, sub: null,
       cliente: m.cliente, projeto: m.projeto, qtde: m.qtde, transfer: null, unit: m.valor || 0, saldo: m.saldo, apagado: m.cancelado, status: null,
-      local: nomeLocal(m.codigo_local_estoque), solicitante: null, tipoKey: `o:${m.des_origem ?? ""}`,
+      local: nomeLocal(m.codigo_local_estoque), solicitante: null, tipoKey: `o:${m.des_origem ?? ""}`, lote: null,
     }));
     const p: Linha[] = (painel ?? []).map((m) => {
       const t = tipoPorId.get(m.tipo_id);
@@ -90,6 +98,7 @@ export function AbaMovs({ porId, itens, abrir }: {
         transfer: s === "transfere" ? `${nomeLocal(m.local_origem)} → ${nomeLocal(m.local_destino)}` : null,
         unit: m.cmc, saldo: null, apagado: m.status === "cancelado" || m.status === "rejeitado", status: m.status,
         local: s === "entra" ? nomeLocal(m.local_destino) : nomeLocal(m.local_origem), mov: m, solicitante: m.solicitante_nome, tipoKey: `p:${m.tipo_id}`,
+        lote: m.lote_id,
       };
     });
     return [...p, ...o];
@@ -113,12 +122,43 @@ export function AbaMovs({ porId, itens, abrir }: {
   const vivos = rs.filter((l) => !l.apagado && l.status !== "pendente");
   const v = (l: Linha[]) => l.reduce((s, x) => s + Math.abs(x.qtde) * (x.unit || 0), 0);
   const ent = vivos.filter((l) => l.qtde > 0 && !l.transfer), sai = vivos.filter((l) => l.qtde < 0);
-  const pend = (painel ?? []).filter((m) => m.status === "pendente");
+  const pendTodas = (painel ?? []).filter((m) => m.status === "pendente");
+  // fila: um lote pendente aparece uma vez (aprova/rejeita inteiro); movimento avulso, sozinho
+  const pend = [...new Map(pendTodas.map((m) => [m.lote_id ? `l${m.lote_id}` : `m${m.id}`, m])).values()];
   const carregando = !omie || !painel;
 
-  const decidir = async (m: MovPainel, acao: "aprovar" | "rejeitar" | "cancelar") => {
-    try { await postar("/api/estoque/movimentacao", { acao, id: m.id }); avisar(acao === "aprovar" ? "Aprovada — saldo baixado" : acao === "rejeitar" ? "Rejeitada" : "Cancelada — saldo voltou", "ok"); invalidarItens(); setVersao((x) => x + 1); }
+  const decidir = async (m: MovPainel | { lote: number }, acao: "aprovar" | "rejeitar" | "cancelar") => {
+    try { await postar("/api/estoque/movimentacao", "lote" in m ? { acao, lote_id: m.lote } : { acao, id: m.id }); avisar(acao === "aprovar" ? "Aprovada — saldo baixado" : acao === "rejeitar" ? "Rejeitada" : "Cancelada — saldo voltou", "ok"); invalidarItens(); setVersao((x) => x + 1); }
     catch (e) { avisar((e as Error).message, "crit"); }
+  };
+
+
+  // uma linha de movimento (dentro de lote: recuada)
+  const linhaMov = (x: Linha, dentro: boolean) => {
+    const p = porId.get(x.id_prod ?? -1);
+    return (
+                    <tr key={x.k} className={`click ${dentro ? "no-lote" : ""}`} style={{ opacity: x.apagado ? 0.45 : 1 }} onClick={() => p && abrir(p, "mov")}>
+                      <td><div className="prod"><Thumb src={p?.foto} /><div><div className="n">{p?.descricao ?? `Produto ${x.id_prod}`}</div><div className="c">{p?.codigo ?? ""} · {x.transfer ?? x.local}</div></div></div></td>
+                      <td>{x.tipo} {x.fonte === "painel" ? <Pill t={x.status === "aplicado" ? "interna" : x.status ?? ""} tom={x.status === "pendente" ? "warn" : x.status === "aplicado" ? "info" : "off"} /> : null}
+                        <div className="mini">{[x.doc, x.sub].filter(Boolean).join(" · ") || "—"}</div>
+                        {x.mov && apoio?.admin && x.status === "aplicado" && <button className="link mini" onClick={(ev) => { ev.stopPropagation(); decidir(x.mov!, "cancelar"); }}>cancelar</button>}</td>
+                      <td className="opt">{x.cliente || x.projeto ? <><b>{x.cliente ?? "—"}</b><div className="mini">{x.projeto ?? ""}</div></> : x.qtde < 0 ? <span className="mini" style={{ color: "var(--ww-warn-text)" }}>sem cliente</span> : <span className="mini">—</span>}</td>
+                      <td className="r" style={{ fontWeight: 600, color: `var(--ww-${x.apagado ? "off" : x.transfer ? "info" : x.qtde < 0 ? "crit" : "ok"}-text)` }}>{x.transfer ? "⇄ " : x.qtde > 0 ? "+" : "−"}{q(Math.abs(x.qtde))}</td>
+                      <td className="r opt">{brl(x.unit)}</td>
+                      <td className="r">{x.saldo == null ? <span className="mini">—</span> : q(x.saldo)}</td>
+                    </tr>
+    );
+  };
+  /** Junta, dentro do dia, as linhas do mesmo lote (lote com 2+ linhas vira uma linha que abre). */
+  const blocosDoDia = (l: Linha[]): { lote: number | null; linhas: Linha[] }[] => {
+    const out: { lote: number | null; linhas: Linha[] }[] = [], idx = new Map<number, number>();
+    for (const x of l) {
+      if (x.lote && l.filter((y) => y.lote === x.lote).length > 1) {
+        const k = idx.get(x.lote);
+        if (k == null) { idx.set(x.lote, out.length); out.push({ lote: x.lote, linhas: [x] }); } else out[k].linhas.push(x);
+      } else out.push({ lote: null, linhas: [x] });
+    }
+    return out;
   };
 
   return (<>
@@ -145,14 +185,18 @@ export function AbaMovs({ porId, itens, abrir }: {
         <div className="head" style={{ padding: "12px 16px" }}><h3 style={{ margin: 0 }}>Aguardando aprovação</h3>
           <span className="mini">{pend.length} movimentação(ões) — perda/avaria só baixa o saldo depois de aprovada{apoio?.admin ? "" : " pelo administrador"}</span></div>
         <div className="scroll"><table className="tabela"><tbody>
-          {pend.map((m) => { const p = porId.get(m.n_cod_prod); const tp = tipoPorId.get(m.tipo_id); return (
-            <tr key={m.id}>
-              <td><b>{p?.descricao ?? m.n_cod_prod}</b><div className="mini">{p?.codigo} · {tp?.nome}</div></td>
-              <td>{q(m.quantidade)} {(p?.unidade ?? "").toLowerCase()} · {brl(m.quantidade * m.cmc)}<div className="mini">{m.motivo}{m.obs ? ` — ${m.obs}` : ""}</div></td>
+          {pend.map((m) => { const p = porId.get(m.n_cod_prod); const tp = tipoPorId.get(m.tipo_id); const lt = m.lote_id ? lotes.get(m.lote_id) : null;
+            const doLote = lt ? pendTodas.filter((x) => x.lote_id === lt.id) : [m];
+            const alvo = lt ? { lote: lt.id } : m;
+            return (
+            <tr key={lt ? `l${lt.id}` : m.id}>
+              <td>{lt && doLote.length > 1 ? <><b>Lote #{lt.id} · {doLote.length} itens</b><div className="mini">{tp?.nome} · {doLote.slice(0, 3).map((x) => porId.get(x.n_cod_prod)?.descricao ?? x.n_cod_prod).join(", ")}{doLote.length > 3 ? "…" : ""}</div></>
+                : <><b>{p?.descricao ?? m.n_cod_prod}</b><div className="mini">{p?.codigo} · {tp?.nome}</div></>}</td>
+              <td>{q(doLote.reduce((s2, x) => s2 + x.quantidade, 0))} un · {brl(doLote.reduce((s2, x) => s2 + x.quantidade * x.cmc, 0))}<div className="mini">{m.motivo}{m.obs ? ` — ${m.obs}` : ""}</div></td>
               <td className="opt">pedido por <b>{m.solicitante_nome}</b><div className="mini">lançado por {m.created_by_email} · {ddmm(diaSP(m.created_at))}</div></td>
               <td style={{ whiteSpace: "nowrap" }}>{apoio?.admin ? <>
-                <button className="btn sm pri" onClick={() => decidir(m, "aprovar")}>Aprovar</button>{" "}
-                <button className="btn sm" onClick={() => decidir(m, "rejeitar")}>Rejeitar</button></> : <Pill t="aguardando" tom="warn" />}</td>
+                <button className="btn sm pri" onClick={() => decidir(alvo, "aprovar")}>{lt && doLote.length > 1 ? "Aprovar o lote" : "Aprovar"}</button>{" "}
+                <button className="btn sm" onClick={() => decidir(alvo, "rejeitar")}>Rejeitar</button></> : <Pill t="aguardando" tom="warn" />}</td>
             </tr>
           ); })}
         </tbody></table></div>
@@ -182,20 +226,25 @@ export function AbaMovs({ porId, itens, abrir }: {
                     <span style={{ float: "right" }} className="num"><span style={{ color: "var(--ww-ok-text)" }}>+{kbrl(v(e))}</span> / <span style={{ color: "var(--ww-crit-text)" }}>−{kbrl(v(s))}</span></span>
                   </td>
                 </tr>,
-                ...(ab ? l.map((x) => {
-                  const p = porId.get(x.id_prod ?? -1);
-                  return (
-                    <tr key={x.k} className="click" style={{ opacity: x.apagado ? 0.45 : 1 }} onClick={() => p && abrir(p, "mov")}>
-                      <td><div className="prod"><Thumb src={p?.foto} /><div><div className="n">{p?.descricao ?? `Produto ${x.id_prod}`}</div><div className="c">{p?.codigo ?? ""} · {x.transfer ?? x.local}</div></div></div></td>
-                      <td>{x.tipo} {x.fonte === "painel" ? <Pill t={x.status === "aplicado" ? "interna" : x.status ?? ""} tom={x.status === "pendente" ? "warn" : x.status === "aplicado" ? "info" : "off"} /> : null}
-                        <div className="mini">{[x.doc, x.sub].filter(Boolean).join(" · ") || "—"}</div>
-                        {x.mov && apoio?.admin && x.status === "aplicado" && <button className="link mini" onClick={(ev) => { ev.stopPropagation(); decidir(x.mov!, "cancelar"); }}>cancelar</button>}</td>
-                      <td className="opt">{x.cliente || x.projeto ? <><b>{x.cliente ?? "—"}</b><div className="mini">{x.projeto ?? ""}</div></> : x.qtde < 0 ? <span className="mini" style={{ color: "var(--ww-warn-text)" }}>sem cliente</span> : <span className="mini">—</span>}</td>
-                      <td className="r" style={{ fontWeight: 600, color: `var(--ww-${x.apagado ? "off" : x.transfer ? "info" : x.qtde < 0 ? "crit" : "ok"}-text)` }}>{x.transfer ? "⇄ " : x.qtde > 0 ? "+" : "−"}{q(Math.abs(x.qtde))}</td>
-                      <td className="r opt">{brl(x.unit)}</td>
-                      <td className="r">{x.saldo == null ? <span className="mini">—</span> : q(x.saldo)}</td>
-                    </tr>
-                  );
+                ...(ab ? blocosDoDia(l).flatMap((bl) => {
+                  if (bl.lote) {
+                    const lt = lotes.get(bl.lote), aberto = lotesAbertos.has(bl.lote), x0 = bl.linhas[0];
+                    const cab = (
+                      <tr key={`lt${bl.lote}`} className="click lote-cab" onClick={() => setLotesAbertos((s0) => { const n = new Set(s0); if (n.has(bl.lote!)) n.delete(bl.lote!); else n.add(bl.lote!); return n; })}>
+                        <td><div className="prod"><Thumb txt="LT" /><div><div className="n">Lote #{bl.lote} · {bl.linhas.length} itens {aberto ? "▾" : "▸"}</div>
+                          <div className="c">{bl.linhas.slice(0, 3).map((x) => porId.get(x.id_prod ?? -1)?.descricao ?? x.id_prod).join(", ")}{bl.linhas.length > 3 ? "…" : ""}</div></div></div></td>
+                        <td>{x0.tipo} <Pill t={x0.status === "aplicado" ? "interna" : x0.status ?? ""} tom={x0.status === "pendente" ? "warn" : x0.status === "aplicado" ? "info" : "off"} />
+                          <div className="mini">{x0.sub}</div>
+                          {apoio?.admin && x0.status === "aplicado" && <button className="link mini" onClick={(ev) => { ev.stopPropagation(); decidir({ lote: bl.lote! }, "cancelar"); }}>cancelar o lote</button>}</td>
+                        <td className="opt">{lt?.cliente || lt?.projeto ? <><b>{lt?.cliente ?? "—"}</b><div className="mini">{lt?.projeto ?? ""}</div></> : <span className="mini">—</span>}</td>
+                        <td className="r" style={{ fontWeight: 600 }}>{x0.transfer ? "⇄ " : x0.qtde > 0 ? "+" : "−"}{q(bl.linhas.reduce((s0, x) => s0 + Math.abs(x.qtde), 0))}</td>
+                        <td className="r opt">{brl(bl.linhas.reduce((s0, x) => s0 + Math.abs(x.qtde) * x.unit, 0))}<div className="mini">total</div></td>
+                        <td className="r"><span className="mini">—</span></td>
+                      </tr>
+                    );
+                    return [cab, ...(aberto ? bl.linhas.map((x) => linhaMov(x, true)) : [])];
+                  }
+                  return [linhaMov(bl.linhas[0], false)];
                 }) : []),
               ];
             })}
@@ -205,134 +254,10 @@ export function AbaMovs({ porId, itens, abrir }: {
       </div>
     </div>
     {nova && apoio && <ModalNovaMov itens={itens} apoio={apoio} fechar={() => setNova(false)}
-      ok={(m) => { setNova(false); avisar(m.status === "pendente" ? "Lançada — aguardando aprovação do administrador" : "Movimentação lançada — saldo atualizado", "ok"); invalidarItens(); setVersao((x) => x + 1); }} />}
+      ok={(lt) => { setNova(false); avisar(lt.status === "pendente" ? `Lote #${lt.id} lançado — aguardando aprovação do administrador` : `Lote #${lt.id} lançado (${lt.n_linhas} linha${lt.n_linhas > 1 ? "s" : ""}) — saldo atualizado`, "ok"); invalidarItens(); setVersao((x) => x + 1); }} />}
     {config && apoio && <ModalConfigMov apoio={apoio} fechar={() => setConfig(false)} mudou={(a) => setApoio((x) => (x ? { ...x, ...a } : x))} />}
     {toast}
   </>);
-}
-
-// ── Nova movimentação ────────────────────────────────────────────────────────
-export function ModalNovaMov({ itens, itemFixo, apoio, fechar, ok }: {
-  itens: ItemEstoque[]; itemFixo?: ItemEstoque; apoio: ApoioMov; fechar: () => void; ok: (m: MovPainel) => void;
-}) {
-  const manuais = apoio.tipos.filter((t) => t.ativo && t.origem === "manual");
-  const [tipoId, setTipoId] = useState<number>(manuais[0]?.id ?? 0);
-  const tipo = manuais.find((t) => t.id === tipoId);
-  const [item, setItem] = useState<ItemEstoque | null>(itemFixo ?? null);
-  const [buscaIt, setBuscaIt] = useState("");
-  const [qtd, setQtd] = useState("");
-  const locais = Object.keys(LOCAIS);
-  const [orig, setOrig] = useState(locais[0]);
-  const [dest, setDest] = useState(locais[1] ?? locais[0]);
-  const eu = apoio.usuarios.find((u) => u.id === apoio.eu.id || u.email === apoio.eu.email);
-  const [solUser, setSolUser] = useState<string>(eu?.id ?? "");
-  const [solNome, setSolNome] = useState("");
-  const [cliente, setCliente] = useState("");
-  const [projeto, setProjeto] = useState("");
-  const [pvos, setPvos] = useState("");
-  const [pc, setPc] = useState("");
-  const [motivoId, setMotivoId] = useState("");
-  const [motivoTxt, setMotivoTxt] = useState("");
-  const [obs, setObs] = useState("");
-  const [erro, setErro] = useState<string | null>(null);
-  const [indo, setIndo] = useState(false);
-  const inp = useRef<HTMLInputElement>(null);
-  useEffect(() => { if (!itemFixo) setTimeout(() => inp.current?.focus(), 30); }, [itemFixo]);
-  useEffect(() => { if (tipo?.sentido === "entra") setDest(locais[0]); else if (tipo?.sentido === "transfere") { setOrig(locais[0]); setDest(locais[1] ?? locais[0]); } setMotivoId(""); }, [tipoId]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  const motivos = apoio.motivos.filter((m) => m.tipo_id === tipoId && m.ativo);
-  const achados = useMemo(() => {
-    const s = buscaIt.trim().toLowerCase();
-    if (s.length < 2) return [];
-    const toks = s.split(/\s+/);
-    return itens.filter((p) => !p.mesclado_em && toks.every((x) => textoBusca(p).toLowerCase().includes(x))).slice(0, 8);
-  }, [buscaIt, itens]);
-  const saldoOrig = item?.locais.find((l) => l.local === orig)?.saldo ?? 0;
-  const n = Number(String(qtd).replace(",", "."));
-  const vaiNegativo = !!item && tipo && tipo.sentido !== "entra" && n > 0 && saldoOrig - n < 0;
-  const solicitante = solUser === "__outro" ? solNome.trim() : apoio.usuarios.find((u) => u.id === solUser)?.nome ?? "";
-
-  const salvar = async () => {
-    setErro(null);
-    if (!tipo) return setErro("Escolha o tipo");
-    if (!item) return setErro("Escolha o item");
-    if (!(n > 0)) return setErro("Informe a quantidade");
-    if (!solicitante) return setErro("Diga quem pediu o material");
-    if (tipo.exige_cliente_ou_projeto && !cliente.trim() && !projeto.trim()) return setErro(`"${tipo.nome}" exige cliente ou projeto`);
-    if (tipo.exige_pc && !pc.trim()) return setErro("Informe o número do PC");
-    if (!motivoId && !motivoTxt.trim()) return setErro("Escolha ou escreva a justificativa");
-    setIndo(true);
-    try {
-      const r = await postar<{ mov: Record<string, unknown> }>("/api/estoque/movimentacao", {
-        acao: "registrar", tipo_id: tipo.id, n_cod_prod: item.n_cod_prod, quantidade: n,
-        local_origem: tipo.sentido !== "entra" ? orig : null, local_destino: tipo.sentido !== "sai" ? dest : null,
-        solicitante_user: solUser && solUser !== "__outro" ? solUser : null, solicitante_nome: solicitante,
-        cliente, projeto, pv_os: pvos, pc_numero: pc, motivo_id: motivoId || null, motivo: motivoTxt, obs,
-      });
-      ok(normPainel(r.mov));
-    } catch (e) { setErro((e as Error).message); } finally { setIndo(false); }
-  };
-
-  return (
-    <div className="est-ov mid" onClick={fechar} role="dialog" aria-modal="true" aria-label="Nova movimentação">
-      <div className="modal lg" onClick={(e) => e.stopPropagation()}>
-        <div className="mh"><div><div style={{ fontSize: 16, fontWeight: 700 }}>Nova movimentação</div>
-          <div className="mini">Fica só no painel — o Omie não é alterado. Entradas e saídas por NF vêm sozinhas do Omie.</div></div>
-          <button className="x" onClick={fechar} aria-label="Fechar">×</button></div>
-        <div className="mb">
-          <label className="f">Tipo
-            <select className="inp" value={tipoId} onChange={(e) => setTipoId(Number(e.target.value))}>
-              {manuais.map((t) => <option key={t.id} value={t.id}>{t.nome}{t.exige_aprovacao ? " (precisa de aprovação)" : ""}</option>)}
-            </select>
-            {tipo?.descricao && <span className="mini">{tipo.descricao}</span>}
-          </label>
-          {itemFixo ? <div className="prev"><b>{itemFixo.descricao}</b> · {itemFixo.codigo_novo ?? itemFixo.codigo} · saldo {q(itemFixo.saldo)} {itemFixo.unidade.toLowerCase()}</div> : (
-            <label className="f">Item
-              {item ? <div style={{ display: "flex", gap: 8, alignItems: "center" }}><div className="prev" style={{ flex: 1 }}><b>{item.descricao}</b> · {item.codigo_novo ?? item.codigo} · saldo {q(item.saldo)} {item.unidade.toLowerCase()}</div>
-                <button className="btn sm" onClick={() => { setItem(null); setBuscaIt(""); }}>Trocar</button></div> : <>
-                <input ref={inp} className="inp" value={buscaIt} onChange={(e) => setBuscaIt(e.target.value)} placeholder="Código ou nome do item" />
-                {achados.length > 0 && <div style={{ display: "grid", gap: 4 }}>{achados.map((p) => (
-                  <button key={p.n_cod_prod} type="button" className="opcao" onClick={() => setItem(p)} style={{ textAlign: "left" }}>
-                    <b>{p.descricao}</b> <span className="mini">· {p.codigo_novo ?? p.codigo} · saldo {q(p.saldo)}</span></button>))}</div>}
-              </>}
-            </label>
-          )}
-          <div className="form-grid">
-            <label className="f s4">Quantidade<input className="inp" inputMode="decimal" value={qtd} onChange={(e) => setQtd(e.target.value)} placeholder="0" /></label>
-            {tipo?.sentido !== "entra" && <label className="f s4">Sai de<select className="inp" value={orig} onChange={(e) => setOrig(e.target.value)}>{locais.map((l) => <option key={l} value={l}>{nomeLocal(l)}</option>)}</select></label>}
-            {tipo?.sentido !== "sai" && <label className="f s4">Entra em<select className="inp" value={dest} onChange={(e) => setDest(e.target.value)}>{locais.map((l) => <option key={l} value={l}>{nomeLocal(l)}</option>)}</select></label>}
-          </div>
-          {vaiNegativo && <div className="aviso t-warn"><span>O saldo de {nomeLocal(orig)} ficaria negativo ({q(saldoOrig)} − {q(n)}). Dá para lançar, mas confira.</span></div>}
-          <div className="form-grid">
-            <label className="f s6">Quem pediu o material (solicitante)
-              <select className="inp" value={solUser} onChange={(e) => setSolUser(e.target.value)}>
-                <option value="">— escolha —</option>
-                {apoio.usuarios.map((u) => <option key={u.id} value={u.id}>{u.nome}</option>)}
-                <option value="__outro">Outra pessoa (digitar o nome)</option>
-              </select>
-              {solUser === "__outro" && <input className="inp" value={solNome} onChange={(e) => setSolNome(e.target.value)} placeholder="Nome de quem pediu" />}
-            </label>
-            <label className="f s6">Cliente{tipo?.exige_cliente_ou_projeto ? " (ou projeto) *" : ""}<input className="inp" value={cliente} onChange={(e) => setCliente(e.target.value)} placeholder="Ex.: HOSPITAL SÃO CAMILO" /></label>
-            <label className="f s4">Projeto<input className="inp" value={projeto} onChange={(e) => setProjeto(e.target.value)} placeholder="Ex.: PJ340" /></label>
-            <label className="f s4">PV / OS<input className="inp" value={pvos} onChange={(e) => setPvos(e.target.value)} placeholder="opcional" /></label>
-            <label className="f s4">PC{tipo?.exige_pc ? " *" : ""}<input className="inp" value={pc} onChange={(e) => setPc(e.target.value)} placeholder={tipo?.exige_pc ? "obrigatório" : "opcional"} /></label>
-          </div>
-          <label className="f">Justificativa *
-            <select className="inp" value={motivoId} onChange={(e) => setMotivoId(e.target.value)}>
-              <option value="">{motivos.length ? "— escolha —" : "— sem lista: escreva abaixo —"}</option>
-              {motivos.map((m) => <option key={m.id} value={m.id}>{m.nome}</option>)}
-            </select>
-            {!motivoId && <input className="inp" value={motivoTxt} onChange={(e) => setMotivoTxt(e.target.value)} placeholder="ou escreva a justificativa" />}
-          </label>
-          <label className="f">Observação<input className="inp" value={obs} onChange={(e) => setObs(e.target.value)} placeholder="opcional" /></label>
-          {erro && <div className="aviso t-crit">{erro}</div>}
-        </div>
-        <div className="mf"><span className="sp">{tipo?.exige_aprovacao ? (apoio.admin ? "Você é administrador: já entra aprovada." : "Fica aguardando a aprovação do administrador.") : "O saldo muda na hora."}</span>
-          <button className="btn" onClick={fechar}>Cancelar</button>
-          <button className="btn pri" onClick={salvar} disabled={indo}>{indo ? "Lançando…" : "Lançar movimentação"}</button></div>
-      </div>
-    </div>
-  );
 }
 
 // ── Configurar tipos e justificativas (administrador) ────────────────────────
@@ -436,7 +361,7 @@ export function MovsPainelItem({ item, itens, abrirNova, aoFechar }: { item: Ite
       {d && !d.movs.length && <div className="vazio">Nenhuma movimentação interna deste item.</div>}
     </div>
     {nova && d && <ModalNovaMov itens={itens} itemFixo={item} apoio={d.apoio} fechar={() => setNova(false)}
-      ok={(m) => { setNova(false); avisar(m.status === "pendente" ? "Lançada — aguardando aprovação" : "Movimentação lançada", "ok"); invalidarItens(); carregar(); }} />}
+      ok={(lt) => { setNova(false); avisar(lt.status === "pendente" ? "Lançada — aguardando aprovação" : "Movimentação lançada", "ok"); invalidarItens(); carregar(); }} />}
     {toast}
   </>);
 }
