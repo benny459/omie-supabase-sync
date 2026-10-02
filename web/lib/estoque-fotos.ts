@@ -208,9 +208,14 @@ export async function guardarFoto(empresa: string, n_cod_prod: number, img: { by
 export async function urlsAssinadas(paths: string[], segundos = 3600): Promise<Map<string, string>> {
   const m = new Map<string, string>();
   if (!paths.length) return m;
-  const r = await supaAdmin().storage.from(BUCKET).createSignedUrls(paths, segundos);
-  if (r.error) throw new Error(r.error.message);
-  for (const x of r.data ?? []) if (x.signedUrl && x.path) m.set(x.path, x.signedUrl);
+  // Em lotes: um pedido só com ~1.500 caminhos passou a falhar (02/10/26) e a lista ficou sem miniaturas.
+  const LOTE = 250, st = supaAdmin().storage.from(BUCKET);
+  const lotes = Array.from({ length: Math.ceil(paths.length / LOTE) }, (_, i) => paths.slice(i * LOTE, (i + 1) * LOTE));
+  const rs = await Promise.all(lotes.map((l) => st.createSignedUrls(l, segundos)));
+  for (const r of rs) {
+    if (r.error) { console.error("[estoque-fotos] createSignedUrls:", r.error.message); continue; }
+    for (const x of r.data ?? []) if (x.signedUrl && x.path) m.set(x.path, x.signedUrl);
+  }
   return m;
 }
 

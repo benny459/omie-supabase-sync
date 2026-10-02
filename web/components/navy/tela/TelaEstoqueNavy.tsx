@@ -372,6 +372,8 @@ function AbaDups({ dups, porId, abrir, admin, recarregar }: {
   }, []);
   const aposMudar = useCallback(async () => { await recarregar(); await carregarDec(); }, [recarregar, carregarDec]);
   useEffect(() => { carregarDec(); }, [carregarDec]);
+  // aquece a prévia do "Mesclar todos" (a 1ª chamada da função é lenta) — resultado descartado
+  useEffect(() => { if (admin) fetch("/api/estoque/duplicidade?previa=exatas", { cache: "no-store" }).catch(() => null); }, [admin]);
 
   const todos = useMemo(() => grupos(dups).filter((g) => g.ids.every((i) => porId.has(i))), [dups, porId]);
   const itensDe = (g: Grupo) => g.ids.map((i) => porId.get(i)!);
@@ -399,7 +401,6 @@ function AbaDups({ dups, porId, abrir, admin, recarregar }: {
   return (<>
     {todosAberto && <MesclarTodos fechar={() => setTodosAberto(false)} feito={aposMudar} avisar={avisar} />}
     <div className="aviso t-info" style={{ flexDirection: "column", alignItems: "flex-start", gap: 6 }}>
-      <span>Estes itens parecem estar cadastrados mais de uma vez (nome igual ou muito parecido). Junte os códigos e tudo deles — saldo, compras, movimentos — passa a ficar num código só; dá para desfazer.</span>
       <details><summary style={{ cursor: "pointer", fontWeight: 600 }}>Como funciona</summary><span><b>Como achamos:</b> (1) <b>nome igual</b>: o mesmo nome em códigos diferentes, ignorando acentos, espaços e pontuação; (2) <b>parecido</b>: nomes quase iguais (85% ou mais), com as mesmas medidas e números. A lista atualiza a cada 6 horas. <b>Mesclar</b> (só o administrador) escolhe o código que fica, passa o saldo dos outros para ele por ajustes do painel e tira os outros da lista; Kardex, PCs e usos dos mesclados passam a responder no principal e o ⌘K leva o código antigo ao principal. <b>Mesclar todos</b> faz todos os grupos de uma vez (cada um desfaz sozinho). <b>Não é duplicidade</b> fica gravado e o par não volta. Nada vai ao Omie.</span></details>
     </div>
     <div className="filtros">

@@ -16,6 +16,10 @@ export const runtime = "nodejs";
 export const maxDuration = 60;
 
 async function item(n: number) {
+  // leve: a posição do Omie basta (a view completa só para item criado no painel, sem posição)
+  const p = await orders().from("estoque_posicao").select("empresa, n_cod_prod, descricao").eq("n_cod_prod", n).limit(1).maybeSingle();
+  if (p.error) throw new Error(p.error.message);
+  if (p.data) return p.data as { empresa: string; n_cod_prod: number; descricao: string };
   const r = await orders().from("v_estoque_item").select("empresa, n_cod_prod, descricao").eq("n_cod_prod", n).limit(1).maybeSingle();
   if (r.error) throw new Error(r.error.message);
   if (!r.data) throw new Error("Item não encontrado");

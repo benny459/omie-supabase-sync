@@ -15,22 +15,26 @@ export const maxDuration = 60;
 
 async function estado() {
   const db = platform();
-  const [job, fotos, busca] = await Promise.all([
+  // contagens exatas (count head): uma lista simples vem limitada a 1.000 linhas
+  const n = (q: PromiseLike<{ count: number | null; error: { message: string } | null }>) => q;
+  const ORIGENS = ["web", "upload", "url"], STATUS = ["ok", "sem_resultado", "erro", "pendente"];
+  const [job, ...cs] = await Promise.all([
     db.from("estoque_foto_job").select("*").eq("id", 1).single(),
-    db.from("estoque_foto").select("origem"),
-    db.from("estoque_foto_busca").select("status"),
+    ...ORIGENS.map((o) => n(db.from("estoque_foto").select("n_cod_prod", { count: "exact", head: true }).eq("origem", o))),
+    ...STATUS.map((st) => n(db.from("estoque_foto_busca").select("n_cod_prod", { count: "exact", head: true }).eq("status", st))),
   ]);
-  const erro = job.error ?? fotos.error ?? busca.error;
-  if (erro) throw new Error(erro.message);
-  const cont = (l: { status?: string; origem?: string }[] | null, k: "status" | "origem") =>
-    (l ?? []).reduce<Record<string, number>>((m, x) => { const v = String(x[k]); m[v] = (m[v] ?? 0) + 1; return m; }, {});
+  if (job.error) throw new Error(job.error.message);
+  for (const c of cs) if (c.error) throw new Error(c.error.message);
+  const por_origem: Record<string, number> = {}, busca: Record<string, number> = {};
+  ORIGENS.forEach((o, i) => { const v = cs[i].count ?? 0; if (v) por_origem[o] = v; });
+  STATUS.forEach((st, i) => { const v = cs[ORIGENS.length + i].count ?? 0; if (v) busca[st] = v; });
   const hoje = new Date().toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" });
   const j = job.data as Record<string, unknown>;
   return {
     provedor: configProvedor(),
     job: { ...j, usados_hoje: j.dia === hoje ? Number(j.usados_dia) : 0, rodando: !!j.rodando_ate && new Date(String(j.rodando_ate)) > new Date() },
-    fotos: { total: (fotos.data ?? []).length, por_origem: cont(fotos.data as { origem: string }[], "origem") },
-    busca: cont(busca.data as { status: string }[], "status"),
+    fotos: { total: Object.values(por_origem).reduce((a, b) => a + b, 0), por_origem },
+    busca,
   };
 }
 

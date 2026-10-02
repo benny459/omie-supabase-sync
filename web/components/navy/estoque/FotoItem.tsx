@@ -33,10 +33,10 @@ export function FotoItem({ n, avisar }: { n: number; avisar: (t: string, tom?: "
   return (<>
     <div className="foto">
       {e?.foto?.url ? <img src={e.foto.url} alt="" /> : <div className="icone"><IconeCaixa /></div>}
-      <span className="src">{e?.foto ? ORIGEM[e.foto.origem] ?? e.foto.origem : e ? "sem foto" : "…"}</span>
-      <div className="acoes">
-        <button className="btn sm" onClick={() => setAberto(true)} disabled={!e}>{e?.foto ? "Trocar foto" : "Pôr foto"}</button>
-      </div>
+      <span className="src">{e?.foto ? ORIGEM[e.foto.origem] ?? e.foto.origem : e ? "sem foto" : "carregando foto…"}</span>
+      {e && <div className="acoes">
+        <button className="btn sm" onClick={() => setAberto(true)}>{e.foto ? "Trocar foto" : "Pôr foto"}</button>
+      </div>}
     </div>
     {aberto && e && <ModalFoto n={n} e={e} fechar={() => setAberto(false)} mudou={(x) => { setE(x); invalidarItens(); }} avisar={avisar} />}
   </>);
