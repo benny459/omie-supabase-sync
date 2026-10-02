@@ -4,7 +4,7 @@ import { orders, platform } from "@/lib/estoque-server";
 
 /**
  * Revisão de famílias — 2ª passada com IA (02/10/26). Mesma chave do Cesar (ANTHROPIC_API_KEY).
- * Para cada item ainda "sem sugestão": manda à IA (lotes de 50, 3 em paralelo) código, descrição, NCM, unidade,
+ * Para cada item ainda "sem sugestão": manda à IA (lotes de 25, 3 em paralelo) código, descrição, NCM, unidade,
  * família atual, 3 vizinhos parecidos com a família deles e a família da maioria do NCM, junto com as famílias de
  * material ativas (com exemplos). A IA devolve {familia, confianca 0–100, motivo, nova?}.
  * Teto: "média" (0,79); só chega a "alta" quando o NCM (≥ 50% dos itens do NCM) ou um vizinho parecido (≥ 0,30) concordam.
@@ -54,13 +54,18 @@ Responda SÓ com JSON, sem texto em volta:
 /** Classifica uma lista de itens (contexto já montado). Devolve por código + tokens usados. */
 async function classificar(cliente: Anthropic, fams: Fam[], itens: Ctx[]) {
   const r = await cliente.messages.create({
-    model: MODELO(), max_tokens: 6000,
+    model: MODELO(), max_tokens: 8000,
     messages: [{ role: "user", content: prompt(fams, itens) }],
   });
   const txt = r.content.map((c) => (c.type === "text" ? c.text : "")).join("");
   const i = txt.indexOf("{"), j = txt.lastIndexOf("}");
-  let out: { codigo: string; familia: string; confianca: number; motivo: string; nova: string | null }[] = [];
-  try { out = JSON.parse(txt.slice(i, j + 1)).itens ?? []; } catch { out = []; }
+  type Saida = { codigo: string; familia: string; confianca: number; motivo: string; nova: string | null };
+  let out: Saida[] = [];
+  try { out = JSON.parse(txt.slice(i, j + 1)).itens ?? []; }
+  catch {
+    // resposta cortada (limite de tokens): aproveita cada objeto completo {"codigo":…}
+    for (const m of txt.matchAll(/\{[^{}]*"codigo"[^{}]*\}/g)) { try { out.push(JSON.parse(m[0])); } catch { /* objeto incompleto */ } }
+  }
   return { out, tin: r.usage?.input_tokens ?? 0, tout: r.usage?.output_tokens ?? 0 };
 }
 
@@ -134,7 +139,7 @@ export async function passadaIA(empresa = "SF") {
 
   const cliente = new Anthropic({ apiKey: chave });
   const lotes: Ctx[][] = [];
-  for (let i = 0; i < faltam.length; i += 50) lotes.push(faltam.slice(i, i + 50));
+  for (let i = 0; i < faltam.length; i += 25) lotes.push(faltam.slice(i, i + 25));
   let idx = 0;
   const trabalhador = async () => {
     while (idx < lotes.length) {
