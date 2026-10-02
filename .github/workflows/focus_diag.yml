@@ -7,6 +7,10 @@ on:
         description: "Chaves de NF-e para consultar na Focus (separadas por vírgula)"
         required: false
         default: ""
+      modo:
+        description: "focus (padrão) ou omie (diagnóstico fiscal do Omie, só leitura)"
+        required: false
+        default: "focus"
       so_municipio:
         description: "Só consultar o município (NFS-e Barueri)? deixe vazio para o diagnóstico completo"
         required: false
@@ -29,5 +33,8 @@ jobs:
           FOCUS_TOKEN_SF: ${{ secrets.FOCUS_TOKEN_SF }}
           FOCUS_CHAVES: ${{ github.event.inputs.chaves }}
           FOCUS_SO_MUNICIPIO: ${{ github.event.inputs.so_municipio }}
+          OMIE_APP_KEY_SF: ${{ secrets.OMIE_APP_KEY_SF }}
+          OMIE_APP_SECRET_SF: ${{ secrets.OMIE_APP_SECRET_SF }}
           PYTHONUNBUFFERED: "1"
-        run: python3 scripts/diag_focus.py
+        run: |
+          if [ "${{ github.event.inputs.modo }}" = "omie" ]; then python3 scripts/diag_omie_fiscal.py; else python3 scripts/diag_focus.py; fi
