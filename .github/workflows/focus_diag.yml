@@ -40,6 +40,7 @@ jobs:
         run: |
           case "${{ github.event.inputs.modo }}" in
             omie) python3 scripts/diag_omie_fiscal.py ;;
+            omie-docs) SO_DOCUMENTOS=1 python3 scripts/diag_omie_fiscal.py ;;
             config|config-aplicar) python3 scripts/config_focus_empresa.py ;;
             *) python3 scripts/diag_focus.py ;;
           esac

@@ -104,7 +104,30 @@ def servicos():
         print(f"   {limpo(s)}")
 
 
+def documentos():
+    """O que o Omie entrega de PDF: DANFE de uma NF-e e o recibo de uma OS."""
+    print("\n===== DOCUMENTOS (PDF)")
+    r = fetch_omie("https://app.omie.com.br/api/v1/produtos/dfedocs/", "ObterNfe", SIGLA, {"nIdNfe": NOTAS["5.102"]})
+    print(f"   ObterNfe chaves: {sorted(r)}")
+    for k, v in r.items():
+        if k != "cXmlNfe":
+            print(f"      {k} = {str(v)[:140]}")
+    # Recibo de OS: tenta os métodos conhecidos da API de OS (só leitura).
+    for call, param in (("ObterRecibo", {"nCodOS": 12586888580}), ("ConsultarOS", {"nCodOS": 12586888580})):
+        try:
+            r = fetch_omie("https://app.omie.com.br/api/v1/servicos/os/", call, SIGLA, param)
+            print(f"   {call} chaves: {sorted(r)[:30]}")
+            for k in ("InformacoesAdicionais", "Cabecalho", "Email", "Recibo", "cUrlRecibo", "cLinkRecibo"):
+                if k in r:
+                    print(f"      {k} = {str(limpo(r[k]))[:400]}")
+        except Exception as e:  # noqa: BLE001
+            print(f"   {call}: {str(e)[:200]}")
+
+
 if __name__ == "__main__":
+    if __import__("os").environ.get("SO_DOCUMENTOS"):
+        documentos()
+        raise SystemExit(0)
     empresa()
     notas()
     servicos()
