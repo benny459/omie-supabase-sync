@@ -1,0 +1,38 @@
+name: DIAG paridade títulos (painel x Omie)
+
+# Somente leitura: compara finance.contas_pagar/contas_receber com o Omie ao vivo.
+on:
+  workflow_dispatch:
+  push:
+    branches: [financeiro]
+    paths:
+      - scripts/diag_paridade_titulos.py
+      - .github/workflows/diag_paridade_titulos.yml
+
+jobs:
+  diag:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Comparar
+        env:
+          EMPRESAS_ALVO: "SF,CD,WW"
+          PAUSA_ENTRE_CHAMADAS: "1"
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          OMIE_APP_KEY_SF: ${{ secrets.OMIE_APP_KEY_SF }}
+          OMIE_APP_SECRET_SF: ${{ secrets.OMIE_APP_SECRET_SF }}
+          OMIE_APP_KEY_CD: ${{ secrets.OMIE_APP_KEY_CD }}
+          OMIE_APP_SECRET_CD: ${{ secrets.OMIE_APP_SECRET_CD }}
+          OMIE_APP_KEY_WW: ${{ secrets.OMIE_APP_KEY_WW }}
+          OMIE_APP_SECRET_WW: ${{ secrets.OMIE_APP_SECRET_WW }}
+        run: python scripts/diag_paridade_titulos.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: diag-paridade
+          path: diag_paridade.json
