@@ -7,6 +7,10 @@ on:
         description: "Chaves de NF-e para consultar na Focus (separadas por vírgula)"
         required: false
         default: ""
+      so_municipio:
+        description: "Só consultar o município (NFS-e Barueri)? deixe vazio para o diagnóstico completo"
+        required: false
+        default: ""
 
 jobs:
   diag:
@@ -24,6 +28,6 @@ jobs:
           FOCUS_TOKEN_MASTER: ${{ secrets.FOCUS_TOKEN_MASTER }}
           FOCUS_TOKEN_SF: ${{ secrets.FOCUS_TOKEN_SF }}
           FOCUS_CHAVES: ${{ github.event.inputs.chaves }}
-          FOCUS_SO_MUNICIPIO: "1"
+          FOCUS_SO_MUNICIPIO: ${{ github.event.inputs.so_municipio }}
           PYTHONUNBUFFERED: "1"
         run: python3 scripts/diag_focus.py
