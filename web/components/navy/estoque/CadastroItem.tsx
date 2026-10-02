@@ -174,7 +174,7 @@ export default function CadastroItem({ codigo }: { codigo?: string }) {
           <label className="f s2">Mínimo<input className="inp" inputMode="decimal" {...campo("minimo")} /></label>
           <label className="f s2">Pedir em<input className="inp" inputMode="decimal" {...campo("ponto_pedido")} /></label>
           <label className="f s2">Máximo<input className="inp" inputMode="decimal" {...campo("maximo")} /></label>
-          <label className="f s6">Foto (URL — envio de arquivo chega na próxima fase)<input className="inp" {...campo("foto_url")} placeholder="https://…" /></label>
+          <div className="f s6"><span>Foto</span><span className="mini" style={{ paddingTop: 8 }}>Na ficha do item: “Pôr foto” (busca na web, link ou arquivo). A foto fica guardada no painel, não como link externo.</span></div>
           <label className="f s12">Observações<textarea className="inp" value={f.obs} onChange={(e) => setF({ ...f, obs: e.target.value })} /></label>
           <label className="f s12" style={{ flexDirection: "row", alignItems: "center", gap: 8 }}><input type="checkbox" checked={f.ativo} onChange={(e) => setF({ ...f, ativo: e.target.checked })} /> Item ativo</label>
         </div>

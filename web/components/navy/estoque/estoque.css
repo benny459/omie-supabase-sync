@@ -240,3 +240,10 @@
 .est .busca-ativa { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin: 0 16px 10px; padding: 8px 12px; border-radius: 10px;
   background: var(--ww-warn-soft); color: var(--ww-warn-text); font-size: 12.5px; font-weight: 600; }
 .est .busca-ativa button { border: 0; background: none; color: inherit; font-weight: 700; text-decoration: underline; }
+
+/* Mesclar todos (02/10/26) */
+.est .btn.crit { color: #fff; background: var(--ww-crit); border-color: var(--ww-crit); }
+.est .link { background: none; border: 0; color: var(--ww-accent-text); padding: 0; cursor: pointer; font: inherit; }
+.est .cand input[type="radio"] { accent-color: var(--ww-accent); }
+.est .thumb img, .est-ov .thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.est .foto > img { width: 100%; height: 100%; object-fit: contain; background: #fff; display: block; }

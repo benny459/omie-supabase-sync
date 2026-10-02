@@ -43,8 +43,12 @@ export async function GET(_req: Request, { params }: { params: Promise<{ codigo:
     const mr = await platform().from("estoque_duplicidade_decisao").select("*").eq("empresa", empresa).eq("ativo", true)
       .eq("decisao", "mesclado").or(`principal.eq.${id},secundario.eq.${id}`);
     if (mr.error) throw new Error(mr.error.message);
-    const mesclas = (mr.data ?? []) as { id: number; principal: number; secundario: number }[];
-    const secundarios = mesclas.filter((m) => Number(m.principal) === id).map((m) => Number(m.secundario));
+    const mesclas = (mr.data ?? []) as { id: number; principal: number; secundario: number; grupo_id: number | null }[];
+    // todos os códigos que respondem neste (inclusive em cadeia: A→B e depois B→este)
+    const dr = await db.from("v_estoque_mescla_dono").select("secundario").eq("empresa", empresa).eq("dono", id);
+    if (dr.error) throw new Error(dr.error.message);
+    const secundarios = [...new Set([...mesclas.filter((m) => Number(m.principal) === id).map((m) => Number(m.secundario)),
+      ...((dr.data ?? []) as { secundario: number }[]).map((r) => Number(r.secundario))])];
     const prods = [id, ...secundarios];
 
     const [movs, pcsRes, dupsRes, ajRes, secRes, aliRes] = await Promise.all([
@@ -82,7 +86,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ codigo:
       .sort((a, b) => String(b.emissao ?? "").localeCompare(String(a.emissao ?? "")));
 
     return NextResponse.json({
-      item, movs, pcs, dups, ajustes: ajRes.data ?? [], admin: q.admin, aliases,
+      item, movs, pcs, dups, ajustes: ajRes.data ?? [], admin: q.admin, aliases, mesclados: secRes.data ?? [],
       mesclas: mesclas.map((m) => ({ ...m, secundario_item: nomes.get(Number(m.secundario)) ?? null })),
     });
   } catch (e) {

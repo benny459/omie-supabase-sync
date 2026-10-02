@@ -7,7 +7,7 @@
  * Fornecedores e preços · Auditoria, e ‹ › para andar pela lista filtrada.
  * Ajustar saldo: só com a senha de uma janela de inventário (fica SÓ no painel, nunca no Omie).
  * Mesclagem: aviso "mesclado em X" no secundário; o principal mostra o histórico dos mesclados.
- * Alarme / foto / pedir compra: fase 2 (botões "em breve").
+ * Foto: bucket privado "produtos" (FotoItem). Pedir compra: fase 2 (botão "em breve").
  */
 
 import "./estoque.css";
@@ -23,11 +23,13 @@ import {
   useAtalhoPaleta, useItensEstoque, useSessaoInv, useToast, type SessaoInv,
 } from "./comum";
 import { ModalAjuste, ModalMesclar, ModalSenha } from "./Acoes";
+import { FotoItem } from "./FotoItem";
 
-type Mescla = { id: number; principal: number; secundario: number; secundario_item: { codigo: string; descricao: string } | null };
+type Mescla = { id: number; principal: number; secundario: number; grupo_id: number | null; secundario_item: { codigo: string; descricao: string } | null };
+type Mesclado = { n_cod_prod: number; codigo: string; descricao: string };
 type Ficha = {
   item: ItemEstoque; movs: MovEstoque[]; pcs: PcItem[]; dups: { tipo: string; sim: number; item: ItemEstoque | null }[];
-  ajustes: AjusteEstoque[]; mesclas: Mescla[]; admin: boolean; aliases: Alias[];
+  ajustes: AjusteEstoque[]; mesclas: Mescla[]; mesclados: Mesclado[]; admin: boolean; aliases: Alias[]; de: string | null;
 };
 const ABAS: AbaFicha[] = ["uso", "mov", "compras", "forn", "auditoria"];
 const EM_BREVE = "Em breve — próxima fase do Estoque v2";
@@ -52,20 +54,28 @@ export default function FichaItemNavy({ codigo, abaInicial }: { codigo: string; 
         const j = await r.json();
         if (!r.ok) throw new Error(j.error ?? r.statusText);
         const item = normItem(j.item);
+        // Código mesclado responde no principal: abre a ficha do principal (?ficar=1 mostra o código antigo).
+        const url = new URL(window.location.href);
+        if (item.mesclado_em_codigo && !url.searchParams.get("ficar")) {
+          router.replace(`/estoque/${encodeURIComponent(item.mesclado_em_codigo)}?de=${encodeURIComponent(codigo)}`);
+          return;
+        }
         marcarRecente(item.n_cod_prod);
         setF({
           item, movs: (j.movs as Record<string, unknown>[]).map(normMov), pcs: (j.pcs as Record<string, unknown>[]).map(normPc),
           dups: (j.dups as { tipo: string; sim: number; item: Record<string, unknown> | null }[])
             .map((d) => ({ tipo: d.tipo, sim: Number(d.sim), item: d.item ? normItem(d.item) : null })),
           ajustes: ((j.ajustes ?? []) as Record<string, unknown>[]).map(normAjuste),
-          mesclas: ((j.mesclas ?? []) as Mescla[]).map((m) => ({ ...m, principal: Number(m.principal), secundario: Number(m.secundario) })),
+          mesclas: ((j.mesclas ?? []) as Mescla[]).map((m) => ({ ...m, principal: Number(m.principal), secundario: Number(m.secundario), grupo_id: m.grupo_id == null ? null : Number(m.grupo_id) })),
+          mesclados: ((j.mesclados ?? []) as Mesclado[]).map((m) => ({ ...m, n_cod_prod: Number(m.n_cod_prod) })),
+          de: url.searchParams.get("de"),
           admin: !!j.admin,
           aliases: ((j.aliases ?? []) as Record<string, unknown>[]).map((x) => normAlias(x, Number(j.item.n_cod_prod))),
         });
       })
       .catch((e) => { if ((e as Error).name !== "AbortError") setErro((e as Error).message); });
     return () => ctrl.abort();
-  }, [codigo, versao]);
+  }, [codigo, versao, router]);
   useEffect(() => { setF(null); }, [codigo]);
 
   const ir = useCallback((cod: string, a?: string) => router.push(`/estoque/${encodeURIComponent(cod)}${a ? `?aba=${a}` : ""}`), [router]);
@@ -131,11 +141,25 @@ function Conteudo({ f, aba, setAba, ir, recarregar }: {
   };
   const desfazerMescla = async (m: Mescla) => {
     setOcupado(true);
-    try { await postar("/api/estoque/duplicidade", { acao: "desfazer", id: m.id }); avisar("Mesclagem desfeita — saldos voltaram", "ok"); recarregar(); }
+    try {
+      await postar("/api/estoque/duplicidade", m.grupo_id != null ? { acao: "desfazer_grupo", id: m.grupo_id } : { acao: "desfazer", id: m.id });
+      avisar("Mesclagem desfeita — saldos voltaram", "ok"); recarregar();
+    }
+    catch (e) { avisar((e as Error).message, "crit"); } finally { setOcupado(false); }
+  };
+  const trocarPrincipal = async (grupo: number, novo: number, cod: string) => {
+    setOcupado(true);
+    try { await postar("/api/estoque/duplicidade", { acao: "trocar_principal", id: grupo, principal: novo }); avisar(`Agora o principal é ${cod}`, "ok"); ir(cod); }
     catch (e) { avisar((e as Error).message, "crit"); } finally { setOcupado(false); }
   };
   const aliases: EstadoAliases = { ok: true, lista: f.aliases };
-  const nomesSec = new Map(f.mesclas.filter((m) => m.principal === f.item.n_cod_prod).map((m) => [m.secundario, m.secundario_item?.codigo ?? String(m.secundario)]));
+  const nomesSec = new Map<number, string>([
+    ...f.mesclas.filter((m) => m.principal === f.item.n_cod_prod).map((m): [number, string] => [m.secundario, m.secundario_item?.codigo ?? String(m.secundario)]),
+    ...f.mesclados.map((m): [number, string] => [m.n_cod_prod, m.codigo]),
+  ]);
+  const diretas = f.mesclas.filter((m) => m.principal === f.item.n_cod_prod);
+  const grupos = [...new Set(diretas.map((m) => m.grupo_id).filter((g): g is number => g != null))];
+  const avulsas = diretas.filter((m) => m.grupo_id == null);
   const p = f.item, s = p.saldo, cob = cobertura(p), [st, tom] = situacao(p);
   const ano = somaDias(hoje(), -365), dois = somaDias(hoje(), -730);
   const usos = f.movs.filter((m) => m.qtde < 0 && !m.cancelado && m.dt_mov >= ano);
@@ -155,25 +179,35 @@ function Conteudo({ f, aba, setAba, ir, recarregar }: {
         {p.mesclado_em_codigo && <button className="btn sm" onClick={() => ir(p.mesclado_em_codigo!)}>Abrir o principal</button>}
       </div>
     )}
+    {f.de && f.de !== p.codigo && (
+      <div className="aviso t-info"><span>Você abriu <b>{f.de}</b>, que foi mesclado neste código — tudo dele responde aqui.</span>
+        <span style={{ flex: 1 }} /><button className="btn sm" onClick={() => router.push(`/estoque/${encodeURIComponent(f.de!)}?ficar=1`)}>Ver o código antigo</button></div>
+    )}
     {nomesSec.size > 0 && (
-      <div className="aviso t-info">
-        <span>Este código recebeu a mesclagem de <b>{[...nomesSec.values()].join(", ")}</b>: Kardex, PCs e usos deles aparecem junto aqui.</span>
+      <div className="aviso t-info" style={{ flexWrap: "wrap" }}>
+        <span>Este código recebeu a mesclagem de <b>{[...nomesSec.values()].join(", ")}</b>: Kardex, PCs, usos e saldo deles respondem aqui.</span>
         <span style={{ flex: 1 }} />
-        {f.admin && f.mesclas.filter((m) => m.principal === p.n_cod_prod).map((m) => (
+        {f.admin && avulsas.map((m) => (
           <button key={m.id} className="btn sm" disabled={ocupado} onClick={() => desfazerMescla(m)}>Desfazer mesclagem de {nomesSec.get(m.secundario)}</button>
         ))}
+        {f.admin && grupos.map((g) => {
+          const doG = diretas.filter((m) => m.grupo_id === g);
+          return (
+            <span key={g} style={{ display: "inline-flex", gap: 6, alignItems: "center" }}>
+              <select className="inp" style={{ height: 30 }} disabled={ocupado} value="" aria-label="Trocar o principal"
+                onChange={(e) => { const id = Number(e.target.value); if (id) trocarPrincipal(g, id, nomesSec.get(id) ?? String(id)); }}>
+                <option value="">Trocar principal…</option>
+                {doG.map((m) => <option key={m.secundario} value={m.secundario}>{nomesSec.get(m.secundario)}</option>)}
+              </select>
+              <button className="btn sm" disabled={ocupado} onClick={() => desfazerMescla(doG[0])}>Desfazer o grupo</button>
+            </span>
+          );
+        })}
       </div>
     )}
     <div className="cartao">
       <div className="ficha-top">
-        <div className="foto">
-          <div className="icone"><IconeCaixa /></div>
-          <span className="src">sem foto</span>
-          <div className="acoes">
-            <button className="btn sm" disabled title={EM_BREVE}>Buscar na web</button>
-            <button className="btn sm" disabled title={EM_BREVE}>Enviar</button>
-          </div>
-        </div>
+        <FotoItem n={p.n_cod_prod} avisar={avisar} />
         <div style={{ minWidth: 0 }}>
           <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
             <Pill t={st} tom={tom} />

@@ -159,11 +159,60 @@ export const MODULES: NavItem[] = [
     href: "/estoque",
     area: "erp",
     grupo: "estoque",
-    label: "Estoque",
+    label: "Itens",
     tone: "text-orange-600",
     icon: (
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className="w-5 h-5" strokeLinecap="round" strokeLinejoin="round">
         <path d="M12 3l9 4.5v9L12 21l-9-4.5v-9L12 3z"/><path d="M3 7.5l9 4.5 9-4.5M12 12v9"/>
+      </svg>
+    ),
+  },
+  /* Estoque v2 (02/10/26): as abas da tela viraram a 2ª linha do menu, como na Operação. */
+  {
+    href: "/estoque/cadastros",
+    area: "erp",
+    grupo: "estoque",
+    label: "Cadastros",
+    tone: "text-orange-600",
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className="w-5 h-5" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M4 6h16M4 12h10M4 18h7"/><circle cx="18" cy="16" r="3"/>
+      </svg>
+    ),
+  },
+  {
+    href: "/estoque/movimentacao",
+    area: "erp",
+    grupo: "estoque",
+    label: "Movimentação",
+    tone: "text-orange-600",
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className="w-5 h-5" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M7 4v16M7 20l-3-3M7 20l3-3M17 20V4M17 4l-3 3M17 4l3 3"/>
+      </svg>
+    ),
+  },
+  {
+    href: "/estoque/inventario",
+    area: "erp",
+    grupo: "estoque",
+    label: "Inventário",
+    tone: "text-orange-600",
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className="w-5 h-5" strokeLinecap="round" strokeLinejoin="round">
+        <rect x="5" y="4" width="14" height="17" rx="2"/><path d="M9 4V3h6v1M9 11l2 2 4-4M9 17h6"/>
+      </svg>
+    ),
+  },
+  {
+    href: "/estoque/duplicidades",
+    area: "erp",
+    grupo: "estoque",
+    label: "Duplicidades",
+    tone: "text-orange-600",
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className="w-5 h-5" strokeLinecap="round" strokeLinejoin="round">
+        <rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/>
       </svg>
     ),
   },

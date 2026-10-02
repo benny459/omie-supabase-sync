@@ -124,7 +124,9 @@ const ICONE = (
   </svg>
 );
 export const IconeCaixa = () => ICONE;
-export const Thumb = ({ txt }: { txt?: string }) => <div className="thumb">{txt ?? ICONE}</div>;
+export const Thumb = ({ txt, src }: { txt?: string; src?: string | null }) => (
+  <div className="thumb">{src ? <img src={src} alt="" loading="lazy" /> : txt ?? ICONE}</div>
+);
 
 export const Seta = ({ dir }: { dir: "esq" | "dir" }) => (
   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
@@ -173,6 +175,8 @@ export function PaletaEstoque({ itens, fechar, onItem, onPc, onCliente }: {
   const [remoto, setRemoto] = useState<{ q: string; pcs: PcBusca[]; clientes: CliBusca[] }>({ q: "", pcs: [], clientes: [] });
   const inp = useRef<HTMLInputElement>(null);
   const porId = useMemo(() => new Map(itens.map((p) => [p.n_cod_prod, p])), [itens]);
+  /** Código mesclado responde no principal: achar o código antigo leva à ficha do principal. */
+  const dono = useCallback((p: ItemEstoque) => (p.mesclado_em != null ? porId.get(p.mesclado_em) ?? p : p), [porId]);
 
   useEffect(() => { setTimeout(() => inp.current?.focus(), 10); }, []);
 
@@ -211,10 +215,13 @@ export function PaletaEstoque({ itens, fechar, onItem, onPc, onCliente }: {
   const escolher = useCallback((r: Res | undefined) => {
     if (!r) return;
     fechar();
-    if (r.k === "item") { marcarRecente(r.p.n_cod_prod); onItem(r.p); }
-    else if (r.k === "pc") { const id = r.pc.itens[0]?.n_cod_prod; if (id != null) onPc(Number(id)); }
+    if (r.k === "item") { const d = dono(r.p); marcarRecente(d.n_cod_prod); onItem(d); }
+    else if (r.k === "pc") {
+      const id = r.pc.itens[0]?.n_cod_prod;
+      if (id != null) { const it = porId.get(Number(id)); onPc(it ? dono(it).n_cod_prod : Number(id)); }
+    }
     else onCliente(r.c.nome);
-  }, [fechar, onItem, onPc, onCliente]);
+  }, [fechar, onItem, onPc, onCliente, dono, porId]);
 
   const tecla = (e: React.KeyboardEvent) => {
     if (e.key === "ArrowDown") { setSel(Math.min(atual + 1, res.length - 1)); e.preventDefault(); }
@@ -243,9 +250,9 @@ export function PaletaEstoque({ itens, fechar, onItem, onPc, onCliente }: {
         <div className="res">
           {itensRes.length > 0 && <div className="grp">{sl ? "Itens" : "Abertos recentemente"}</div>}
           {itensRes.map((r) => {
-            const [st, tm]: [string, Tom] = r.p.mesclado_em_codigo ? [`mesclado em ${r.p.mesclado_em_codigo}`, "off"] : situacao(r.p);
+            const [st, tm]: [string, Tom] = r.p.mesclado_em_codigo ? [`→ ${r.p.mesclado_em_codigo} (mesclado)`, "violet"] : situacao(r.p);
             return linha(r, <>
-              <Thumb />
+              <Thumb src={r.p.foto} />
               <div className="sp">
                 <div style={{ fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}><Realce t={r.p.descricao} s={tok} /></div>
                 <div className="mini">{r.p.codigo_novo && <><b><Realce t={r.p.codigo_novo} s={s.trim()} /></b> · Omie </>}<Realce t={r.p.codigo} s={s.trim()} /> · saldo {q(r.p.saldo)} {r.p.unidade.toLowerCase()}</div>

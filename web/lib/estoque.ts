@@ -29,6 +29,8 @@ export type ItemEstoque = {
   cadastro_id: number | null; ean: string | null; preco_ref: number | null; local_padrao: string | null;
   alarme_minimo: number | null; alarme_ponto_pedido: number | null; alarme_maximo: number | null;
   foto_url: string | null; cadastro_obs: string | null; ativo: boolean;
+  /** Foto guardada no bucket privado "produtos" — URL assinada (1 h), vem de /api/estoque/itens e da ficha. */
+  foto: string | null;
   omie_status: "nao_enviado" | "ok" | "erro" | "desligado" | null; omie_erro: string | null;
 };
 
@@ -93,7 +95,7 @@ export function normItem(r: Record<string, unknown>): ItemEstoque {
     cadastro_id: r.cadastro_id != null ? n(r.cadastro_id) : null, ean: (r.ean as string) || null,
     preco_ref: r.preco_ref != null ? n(r.preco_ref) : null, local_padrao: r.local_padrao != null ? String(r.local_padrao) : null,
     alarme_minimo: r.alarme_minimo != null ? n(r.alarme_minimo) : null, alarme_ponto_pedido: r.alarme_ponto_pedido != null ? n(r.alarme_ponto_pedido) : null,
-    alarme_maximo: r.alarme_maximo != null ? n(r.alarme_maximo) : null, foto_url: (r.foto_url as string) || null,
+    alarme_maximo: r.alarme_maximo != null ? n(r.alarme_maximo) : null, foto_url: (r.foto_url as string) || null, foto: (r.foto as string) || null,
     cadastro_obs: (r.cadastro_obs as string) || null, ativo: r.ativo !== false,
     omie_status: (r.omie_status as ItemEstoque["omie_status"]) ?? null, omie_erro: (r.omie_erro as string) || null,
   };
@@ -163,6 +165,9 @@ export function alarme(p: ItemEstoque): [string, Tom] {
 export const codigos = (p: ItemEstoque) => (p.codigo_novo ? `${p.codigo_novo} · Omie ${p.codigo_omie ?? p.codigo}` : p.codigo);
 /** Texto para busca: descrição + todos os códigos (Omie, novo, antigos). */
 export const textoBusca = (p: ItemEstoque) => [p.descricao, p.codigo, p.codigo_novo, p.codigo_omie, ...p.codigos_antigos].filter(Boolean).join(" ");
+/** Termo para buscar a foto do item na web (igual ao mockup): sem parênteses, sem a sigla do fim, 6 primeiras palavras. */
+export const termoBusca = (p: { descricao: string }) => (p.descricao ?? "")
+  .replace(/\(.*?\)/g, " ").replace(/[-–,.;]+\s*[A-Z]{2,}$/, "").replace(/\s+/g, " ").trim().split(" ").slice(0, 6).join(" ");
 
 /**
  * Sinais de auditoria que a LISTA consegue ver só com v_estoque_item (sem Kardex nem preços).

@@ -10,7 +10,7 @@
  * e /api/estoque/movimentos (orders.v_estoque_mov_cli, com cliente/projeto).
  * Organizar por ordem alfabética ou por família (orders.produto_familia). Aba Inventário: janelas
  * com senha temporária (ajuste SÓ no painel). Duplicidades: mesclar (admin) e "não é duplicidade".
- * Códigos mesclados saem da lista (a ficha deles mostra "mesclado em X"). Alarme e foto: fase 2.
+ * Códigos mesclados saem da lista (a ficha deles leva ao principal). Foto: miniatura do bucket "produtos".
  */
 
 import "../estoque/estoque.css";
@@ -25,9 +25,13 @@ import {
   useSessaoInv, useToast,
 } from "../estoque/comum";
 import { ModalMesclar } from "../estoque/Acoes";
+import { ListaMesclagens, MesclarTodos, type GrupoMescla, type LoteMescla } from "../estoque/MesclarTodos";
 import AbaInventario from "../estoque/Inventario";
 
-type Aba = "itens" | "dups" | "movs" | "inv";
+export type Aba = "itens" | "dups" | "movs" | "inv";
+/** Rota de cada aba — desde 02/10/26 as abas são a 2ª linha do menu (AppSidebar › MODULES). */
+export const ROTA_ABA: Record<Aba, string> = { itens: "/estoque", dups: "/estoque/duplicidades", movs: "/estoque/movimentacao", inv: "/estoque/inventario" };
+const TITULO: Record<Aba, string> = { itens: "Estoque", dups: "Duplicidades", movs: "Movimentação", inv: "Inventário" };
 type Filtro = { k: string; rotulo: string; f: (p: ItemEstoque) => boolean; title?: string };
 
 const FILTROS: Filtro[] = [
@@ -60,17 +64,18 @@ const COLS: Col[] = [
 const ESTADO = "est-lista-v1";
 const ORG = "est-organizar-v1";
 const SEM_FAMILIA = "Sem família";
-type EstadoLista = { aba: Aba; filtro: string; busca: string; ordem: [string, number]; limite: number };
+type EstadoLista = { filtro: string; busca: string; ordem: [string, number]; limite: number };
 const estadoInicial = (): EstadoLista => {
-  const base: EstadoLista = { aba: "itens", filtro: "saldo", busca: "", ordem: ["valor", -1], limite: 100 };
-  try { return { ...base, ...JSON.parse(sessionStorage.getItem(ESTADO) || "{}") }; } catch { return base; }
+  const base: EstadoLista = { filtro: "saldo", busca: "", ordem: ["valor", -1], limite: 100 };
+  try { const { aba: _a, ...salvo } = JSON.parse(sessionStorage.getItem(ESTADO) || "{}"); void _a; return { ...base, ...salvo }; } catch { return base; }
 };
 
-export default function TelaEstoqueNavy({ clienteInicial }: { clienteInicial?: string | null }) {
+export default function TelaEstoqueNavy({ clienteInicial, aba = "itens" }: { clienteInicial?: string | null; aba?: Aba }) {
   const router = useRouter();
   const { dados, erro, recarregar } = useItensEstoque();
   const [sessao] = useSessaoInv();
-  const [st, setSt] = useState<EstadoLista>({ aba: "itens", filtro: "saldo", busca: "", ordem: ["valor", -1], limite: 100 });
+  const irAba = useCallback((a: Aba) => router.push(ROTA_ABA[a]), [router]);
+  const [st, setSt] = useState<EstadoLista>({ filtro: "saldo", busca: "", ordem: ["valor", -1], limite: 100 });
   const [pronto, setPronto] = useState(false);
   const [pal, setPal] = useState(false);
   const [cliente, setCliente] = useState<string | null>(clienteInicial ?? null);
@@ -125,7 +130,7 @@ export default function TelaEstoqueNavy({ clienteInicial }: { clienteInicial?: s
       <header className="cartao head">
         <div style={{ flex: 1, minWidth: 220 }}>
           <div className="area">Estoque</div>
-          <h1>Estoque</h1>
+          <h1>{TITULO[aba]}{aba === "inv" && sessao ? <span className="b" style={{ marginLeft: 10, fontSize: 12, verticalAlign: "middle", padding: "2px 8px", borderRadius: 999, background: "var(--ww-ok-soft)", color: "var(--ww-ok-text)" }}>sessão aberta</span> : null}</h1>
           <div className="sub">
             {dados ? `${q(itens.length)} itens · posição do Omie ${ddmmaa(itens[0]?.data_posicao)} · saldo = Omie + ajustes do painel${nMesclados ? ` · ${nMesclados} código(s) mesclado(s) ocultos` : ""}` : "Carregando posição…"}
           </div>
@@ -134,42 +139,35 @@ export default function TelaEstoqueNavy({ clienteInicial }: { clienteInicial?: s
           <Lupa /><span>Ir para item — código, nome, nº do PC, cliente…</span><span className="kbd">⌘K</span>
         </div>
         <div className="filtros">
-          <button className="btn sm" onClick={() => router.push("/estoque/cadastros")}>Cadastros</button>
           <button className="btn sm pri" onClick={() => router.push("/estoque/novo")}>+ Novo item</button>
-        </div>
-        <div className="seg" role="tablist">
-          <button className={st.aba === "itens" ? "on" : ""} onClick={() => muda({ aba: "itens" })}>Itens</button>
-          <button className={st.aba === "dups" ? "on" : ""} onClick={() => muda({ aba: "dups" })}>Duplicidades{nDups ? <span className="b">{nDups}</span> : null}</button>
-          <button className={st.aba === "movs" ? "on" : ""} onClick={() => muda({ aba: "movs" })}>Movimentação</button>
-          <button className={st.aba === "inv" ? "on" : ""} onClick={() => muda({ aba: "inv" })}>Inventário{sessao ? <span className="b" style={{ background: "var(--ww-ok-soft)", color: "var(--ww-ok-text)" }}>aberto</span> : null}</button>
         </div>
       </header>
 
       {erro && <div className="aviso t-crit">{erro}</div>}
       {!dados && !erro && <div className="cartao vazio">Carregando itens…</div>}
 
-      {dados && st.aba === "itens" && (
+      {dados && aba === "itens" && (
         <AbaItens itens={itens} lista={lista} st={st} muda={muda} abrir={abrir}
-          cliente={cliente} carregandoCliente={!!cliente && !idsCliente} limparCliente={() => setCliente(null)} nDups={nDups} />
+          cliente={cliente} carregandoCliente={!!cliente && !idsCliente} limparCliente={() => setCliente(null)} nDups={nDups} irDups={() => irAba("dups")} />
       )}
-      {dados && st.aba === "dups" && <AbaDups dups={dados.dups} porId={porId} abrir={abrir} admin={dados.admin} recarregar={recarregar} />}
-      {dados && st.aba === "movs" && <AbaMovs porId={porId} abrir={abrir} />}
-      {dados && st.aba === "inv" && <AbaInventario admin={dados.admin} itens={itens} aoMudar={recarregar} />}
+      {dados && aba === "dups" && <AbaDups dups={dados.dups} porId={porId} abrir={abrir} admin={dados.admin} recarregar={recarregar} />}
+      {dados && aba === "movs" && <AbaMovs porId={porId} abrir={abrir} />}
+      {dados && aba === "inv" && <AbaInventario admin={dados.admin} itens={itens} aoMudar={recarregar} />}
 
       {pal && dados && (
         <PaletaEstoque itens={todosItens} fechar={() => setPal(false)}
           onItem={(p) => abrir(p)}
           onPc={(id) => { const p = porId.get(id); if (p) abrir(p, "compras"); }}
-          onCliente={(nome) => { setCliente(nome); muda({ aba: "itens", filtro: "todos" }); }} />
+          onCliente={(nome) => { setCliente(nome); muda({ filtro: "todos" }); if (aba !== "itens") router.push(`/estoque?cliente=${encodeURIComponent(nome)}`); }} />
       )}
     </div>
   );
 }
 
 // ── Itens ────────────────────────────────────────────────────────────────────
-function AbaItens({ itens, lista, st, muda, abrir, cliente, carregandoCliente, limparCliente, nDups }: {
+function AbaItens({ itens, lista, st, muda, abrir, cliente, carregandoCliente, limparCliente, nDups, irDups }: {
   itens: ItemEstoque[]; lista: ItemEstoque[]; st: EstadoLista; muda: (p: Partial<EstadoLista>) => void;
-  abrir: (p: ItemEstoque) => void; cliente: string | null; carregandoCliente: boolean; limparCliente: () => void; nDups: number;
+  abrir: (p: ItemEstoque) => void; cliente: string | null; carregandoCliente: boolean; limparCliente: () => void; nDups: number; irDups: () => void;
 }) {
   const conta = useMemo(() => Object.fromEntries(FILTROS.map((f) => [f.k, itens.filter(f.f).length])), [itens]);
   const vt = itens.reduce((s, p) => s + valorItem(p), 0);
@@ -210,7 +208,7 @@ function AbaItens({ itens, lista, st, muda, abrir, cliente, carregandoCliente, l
       {kpi("ruptura", "Em ruptura", q(conta.ruptura), "têm consumo e saldo ≤ 0", "crit", "rgba(255,107,74,.26)")}
       {kpi("negativo", "Saldo negativo", q(conta.negativo), "ajustar — saldo impossível", "crit", "rgba(154,130,255,.3)")}
       {kpi("semalarme", "Consumo sem alarme", q(conta.semalarme), "alarmes por peça: fase 2", "warn", "rgba(245,197,66,.26)")}
-      {kpi("dup", "Possíveis duplicidades", q(nDups), "grupos para revisar", "", "rgba(154,130,255,.3)", false, () => muda({ aba: "dups" }))}
+      {kpi("dup", "Possíveis duplicidades", q(nDups), "grupos para revisar", "", "rgba(154,130,255,.3)", false, irDups)}
       {kpi("parado", "Parado +180 dias", kbrl(vpar), `${q(parados.length)} itens · ${Math.round((vpar / Math.max(vt, 1)) * 100)}% do valor`, "warn", "rgba(59,184,255,.22)")}
     </section>
 
@@ -300,7 +298,7 @@ function LinhaItem({ p, abrir }: { p: ItemEstoque; abrir: (p: ItemEstoque) => vo
   return (
     <tr className="click" onClick={() => abrir(p)}>
       <td>
-        <div className="prod"><Thumb />
+        <div className="prod"><Thumb src={p.foto} />
           <div>
             <div className="n">{p.descricao}{p.duplicidade && <span className="dup">duplicidade?</span>}</div>
             <div className="c">{p.codigo_novo ? <><b style={{ color: "var(--ww-text-2)" }}>{p.codigo_novo}</b> · Omie {p.codigo_omie ?? p.codigo}</> : p.codigo} · {p.locais.map((l) => nomeLocal(l.local)).join(" + ")}{p.familia ? ` · ${p.familia}` : ""}
@@ -347,15 +345,19 @@ function AbaDups({ dups, porId, abrir, admin, recarregar }: {
   dups: ParDup[]; porId: Map<number, ItemEstoque>; abrir: (p: ItemEstoque) => void; admin: boolean; recarregar: () => Promise<void>;
 }) {
   const [f, setF] = useState<"todos" | "exata" | "similar" | "saldo">("todos");
-  const [mesclar, setMesclar] = useState<ItemEstoque[] | null>(null);
+  const [mesclar, setMesclar] = useState<{ its: ItemEstoque[]; tipo: "exata" | "parecido" } | null>(null);
+  const [todosAberto, setTodosAberto] = useState(false);
   const [toast, avisar] = useToast();
   const [decisoes, setDecisoes] = useState<Decisao[] | null>(null);
+  const [gruposM, setGruposM] = useState<GrupoMescla[]>([]);
+  const [lotes, setLotes] = useState<LoteMescla[]>([]);
   const [ocupado, setOcupado] = useState<string | null>(null);
   const carregarDec = useCallback(async () => {
     const r = await fetch("/api/estoque/duplicidade", { cache: "no-store" });
     const j = await r.json();
-    if (r.ok) setDecisoes(j.decisoes);
+    if (r.ok) { setDecisoes(j.decisoes); setGruposM(j.grupos ?? []); setLotes(j.lotes ?? []); }
   }, []);
+  const aposMudar = useCallback(async () => { await recarregar(); await carregarDec(); }, [recarregar, carregarDec]);
   useEffect(() => { carregarDec(); }, [carregarDec]);
 
   const todos = useMemo(() => grupos(dups).filter((g) => g.ids.every((i) => porId.has(i))), [dups, porId]);
@@ -382,13 +384,17 @@ function AbaDups({ dups, porId, abrir, admin, recarregar }: {
   const cod = (id: number | null) => (id != null ? porId.get(Number(id))?.codigo ?? String(id) : "—");
 
   return (<>
+    {todosAberto && <MesclarTodos fechar={() => setTodosAberto(false)} feito={aposMudar} avisar={avisar} />}
     <div className="aviso t-info">
-      <span><b>Como achamos:</b> (1) <b>nome igual</b>: descrição sem acento, espaço e pontuação idêntica em códigos diferentes; (2) <b>parecido</b>: similaridade de trigramas ≥ 85% (pg_trgm), com as mesmas medidas/números e sem trocar códigos curtos (C×LR, AZ×PT). Atualiza a cada 6 horas. <b>Mesclar</b> (só o administrador) escolhe o código que fica, passa o saldo dos outros para ele por ajustes do painel e tira os outros da lista. <b>Não é duplicidade</b> fica gravado e o par não volta. Nada vai ao Omie.</span>
+      <span><b>Como achamos:</b> (1) <b>nome igual</b>: descrição sem acento, espaço e pontuação idêntica em códigos diferentes; (2) <b>parecido</b>: similaridade de trigramas ≥ 85% (pg_trgm), com as mesmas medidas/números e sem trocar códigos curtos (C×LR, AZ×PT). Atualiza a cada 6 horas. <b>Mesclar</b> (só o administrador) escolhe o código que fica, passa o saldo dos outros para ele por ajustes do painel e tira os outros da lista; Kardex, PCs e usos dos mesclados passam a responder no principal e o ⌘K leva o código antigo ao principal. <b>Mesclar todos</b> faz todos os grupos de uma vez (cada um desfaz sozinho). <b>Não é duplicidade</b> fica gravado e o par não volta. Nada vai ao Omie.</span>
     </div>
     <div className="filtros">
       {([["todos", "Todos", todos.length], ["exata", "Nome igual", todos.filter((g) => g.tipo === "exata").length],
         ["similar", "Parecido", todos.filter((g) => g.tipo === "similar").length], ["saldo", "Com saldo nos dois", todos.filter(ambos).length]] as const)
         .map(([k, l, nn]) => <button key={k} className={`chip ${f === k ? "on" : ""}`} onClick={() => setF(k)}>{l} <b>{nn}</b></button>)}
+      <div className="sp" />
+      {!todosAberto && <button className="btn sm pri" disabled={!admin || !todos.length} title={admin ? "Prévia de todos os grupos com o principal sugerido" : "Só o administrador (Benny) mescla"}
+        onClick={() => setTodosAberto(true)}>Mesclar todos…</button>}
     </div>
     <div className="cartao">
       {rs.map((g) => {
@@ -402,7 +408,7 @@ function AbaDups({ dups, porId, abrir, admin, recarregar }: {
               {dif && <Pill t="CMC diferente" tom="warn" />}
               <div className="sp" />
               <button className="btn sm" disabled={ocupado === g.k} onClick={() => naoE(g)}>{ocupado === g.k ? "Gravando…" : "Não é duplicidade"}</button>
-              <button className="btn sm pri" disabled={!admin} title={admin ? undefined : "Só o administrador (Benny) mescla"} onClick={() => setMesclar(its)}>Mesclar…</button>
+              <button className="btn sm pri" disabled={!admin} title={admin ? undefined : "Só o administrador (Benny) mescla"} onClick={() => setMesclar({ its, tipo: g.tipo === "exata" ? "exata" : "parecido" })}>Mesclar…</button>
             </div>
             <div className="cands">
               {its.map((p, i) => (
@@ -428,13 +434,15 @@ function AbaDups({ dups, porId, abrir, admin, recarregar }: {
       {!rs.length && <div className="vazio">Nada para revisar.</div>}
     </div>
 
-    {decisoes && decisoes.length > 0 && (
+    <ListaMesclagens grupos={gruposM} lotes={lotes} porId={porId} admin={admin} abrir={abrir} aoMudar={aposMudar} avisar={avisar} />
+
+    {decisoes && decisoes.filter((d) => d.grupo_id == null).length > 0 && (
       <div className="cartao">
         <div className="head" style={{ padding: "12px 16px" }}><h3 style={{ margin: 0 }}>Decisões tomadas</h3></div>
         <div className="scroll"><table className="tabela">
           <thead><tr><th>Decisão</th><th>Códigos</th><th className="opt">Quem / quando</th><th /></tr></thead>
           <tbody>
-            {decisoes.map((d) => (
+            {decisoes.filter((d) => d.grupo_id == null).map((d) => (
               <tr key={d.id}>
                 <td>{d.decisao === "mesclado" ? <Pill t="mesclado" tom="violet" /> : <Pill t="não é duplicidade" tom="off" />}</td>
                 <td>{d.decisao === "mesclado" ? <><b>{cod(d.secundario)}</b> → <b>{cod(d.principal)}</b></> : <>{cod(d.prod_a)} × {cod(d.prod_b)}</>}</td>
@@ -446,13 +454,13 @@ function AbaDups({ dups, porId, abrir, admin, recarregar }: {
         </table></div>
       </div>
     )}
-    {mesclar && <ModalMesclar itens={mesclar} fechar={() => setMesclar(null)}
+    {mesclar && <ModalMesclar itens={mesclar.its} tipo={mesclar.tipo} fechar={() => setMesclar(null)}
       ok={async (pr) => { setMesclar(null); await recarregar(); await carregarDec(); avisar(`Mesclado em ${pr.codigo}`, "ok"); }} />}
     {toast}
   </>);
 }
 
-type Decisao = { id: number; empresa: string; prod_a: number; prod_b: number; decisao: "nao_e" | "mesclado"; principal: number | null; secundario: number | null; created_by_email: string | null; created_at: string };
+type Decisao = { id: number; empresa: string; prod_a: number; prod_b: number; decisao: "nao_e" | "mesclado"; principal: number | null; secundario: number | null; grupo_id: number | null; created_by_email: string | null; created_at: string };
 
 // ── Movimentação ─────────────────────────────────────────────────────────────
 function AbaMovs({ porId, abrir }: { porId: Map<number, ItemEstoque>; abrir: (p: ItemEstoque, aba?: string) => void }) {

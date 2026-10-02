@@ -128,7 +128,7 @@ export function ModalAjuste({ p, sessao, fechar, ok }: { p: ItemEstoque; sessao:
 }
 
 // ── Mesclar duplicidade ──────────────────────────────────────────────────────
-export function ModalMesclar({ itens, fechar, ok }: { itens: ItemEstoque[]; fechar: () => void; ok: (principal: ItemEstoque) => void }) {
+export function ModalMesclar({ itens, fechar, ok, tipo = "exata" }: { itens: ItemEstoque[]; fechar: () => void; ok: (principal: ItemEstoque) => void; tipo?: "exata" | "parecido" }) {
   const ord = useMemo(() => [...itens].sort((a, b) => b.n_mov - a.n_mov), [itens]);
   const [pid, setPid] = useState(ord[0].n_cod_prod);
   const [erro, setErro] = useState<string | null>(null);
@@ -140,7 +140,8 @@ export function ModalMesclar({ itens, fechar, ok }: { itens: ItemEstoque[]; fech
   const mesclar = async () => {
     setIndo(true); setErro(null);
     try {
-      for (const s of sec) await postar("/api/estoque/duplicidade", { acao: "mesclar", empresa: principal.empresa, principal: principal.n_cod_prod, secundario: s.n_cod_prod });
+      // um grupo = uma mesclagem (desfaz inteira ou troca o principal depois)
+      await postar("/api/estoque/duplicidade", { acao: "mesclar_grupo", principal: principal.n_cod_prod, membros: ord.map((x) => x.n_cod_prod), tipo });
       ok(principal);
     } catch (e) { setErro((e as Error).message); } finally { setIndo(false); }
   };

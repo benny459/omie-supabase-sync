@@ -11,6 +11,9 @@
     },
     "app/api/cron/planos-crm/route.ts": {
       "maxDuration": 120
+    },
+    "app/api/cron/estoque-fotos/route.ts": {
+      "maxDuration": 60
     }
   },
   "crons": [
@@ -29,6 +32,10 @@
     {
       "path": "/api/cron/planos-crm",
       "schedule": "*/15 * * * *"
+    },
+    {
+      "path": "/api/cron/estoque-fotos",
+      "schedule": "*/10 * * * *"
     }
   ]
 }

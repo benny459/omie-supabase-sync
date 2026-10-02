@@ -6,6 +6,7 @@
  *   Revisão de famílias — sugestão automática para itens sem família / em família que não é material,
  *                         com confiança e motivo; aceitar/rejeitar em lote, trocar um a um; "Concluir revisão"
  *   Códigos novos       — prévia prefixo + sequência (código Omie → código novo); aplicar só depois da revisão
+ *   Fotos               — busca automática de fotos (provedor por env, cota por dia, pausar/retomar)
  */
 
 import "./estoque.css";
@@ -13,6 +14,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { baixarCSV } from "@/lib/estoque";
 import { Pill, Seta, brl, invalidarItens, postar, q, useToast } from "./comum";
+import { AbaFotos } from "./FotosAdmin";
 
 type Familia = { id: number; nome: string; prefixo: string; descricao: string | null; ativo: boolean; sistema: boolean; material: boolean;
   mesclada_em: number | null; omie_codigo_familia: number | null; proximo: number; itens: number; valor: number };
@@ -20,14 +22,14 @@ type Sug = { n_cod_prod: number; familia_atual_id: number | null; familia_sugeri
   status: "pendente" | "aceita" | "rejeitada" | "alterada"; familia_escolhida_id: number | null; decidido_por_email: string | null;
   item: { codigo: string; codigo_novo: string | null; descricao: string; ncm: string | null; saldo: number; cmc: number; familia: string | null } };
 type Previa = { n_cod_prod: number; codigo_omie: string; descricao: string; familia_id: number; familia: string; codigo_novo: string };
-type Aba = "familias" | "revisao" | "codigos";
+type Aba = "familias" | "revisao" | "codigos" | "fotos";
 
 const banda = (c: number): ["alta" | "média" | "baixa" | "nenhuma", "ok" | "info" | "warn" | "off"] =>
   c >= 0.8 ? ["alta", "ok"] : c >= 0.6 ? ["média", "info"] : c > 0 ? ["baixa", "warn"] : ["nenhuma", "off"];
 
 export default function CadastrosEstoque({ abaInicial }: { abaInicial?: string }) {
   const router = useRouter();
-  const [aba, setAba] = useState<Aba>((["familias", "revisao", "codigos"] as Aba[]).includes(abaInicial as Aba) ? (abaInicial as Aba) : "familias");
+  const [aba, setAba] = useState<Aba>((["familias", "revisao", "codigos", "fotos"] as Aba[]).includes(abaInicial as Aba) ? (abaInicial as Aba) : "familias");
   const [d, setD] = useState<{ familias: Familia[]; revisao_concluida: boolean; codigos_gerados: number; admin: boolean } | null>(null);
   const [erro, setErro] = useState<string | null>(null);
   const [toast, avisar] = useToast();
@@ -46,12 +48,13 @@ export default function CadastrosEstoque({ abaInicial }: { abaInicial?: string }
       <header className="cartao head">
         <div style={{ flex: 1, minWidth: 220 }}>
           <div className="area">Estoque</div><h1>Cadastros</h1>
-          <div className="sub">Famílias com prefixo, revisão das famílias e código novo por família. Tudo fica no painel — o código do Omie continua ao lado.</div>
+          <div className="sub">Famílias com prefixo, revisão das famílias, código novo por família e fotos. Tudo fica no painel — o código do Omie continua ao lado.</div>
         </div>
         <div className="seg">
           <button className={aba === "familias" ? "on" : ""} onClick={() => ir("familias")}>Famílias</button>
           <button className={aba === "revisao" ? "on" : ""} onClick={() => ir("revisao")}>Revisão de famílias{d && !d.revisao_concluida ? <span className="b">aberta</span> : null}</button>
           <button className={aba === "codigos" ? "on" : ""} onClick={() => ir("codigos")}>Códigos novos</button>
+          <button className={aba === "fotos" ? "on" : ""} onClick={() => ir("fotos")}>Fotos</button>
         </div>
       </header>
       {erro && <div className="aviso t-crit">{erro}</div>}
@@ -60,6 +63,7 @@ export default function CadastrosEstoque({ abaInicial }: { abaInicial?: string }
       {d && aba === "familias" && <AbaFamilias d={d} mudou={mudou} avisar={avisar} />}
       {d && aba === "revisao" && <AbaRevisao d={d} mudou={mudou} avisar={avisar} />}
       {d && aba === "codigos" && <AbaCodigos d={d} mudou={mudou} avisar={avisar} irRevisao={() => ir("revisao")} />}
+      {d && aba === "fotos" && <AbaFotos totalItens={d.familias.reduce((s, f) => s + (f.itens || 0), 0)} avisar={avisar} />}
       {toast}
     </div>
   );
