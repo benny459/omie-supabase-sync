@@ -41,6 +41,15 @@ jobs:
           case "${{ github.event.inputs.modo }}" in
             omie) python3 scripts/diag_omie_fiscal.py ;;
             omie-docs) SO_DOCUMENTOS=1 python3 scripts/diag_omie_fiscal.py ;;
+            danfe-teste) python3 scripts/teste_danfe_focus.py ;;
             config|config-aplicar) python3 scripts/config_focus_empresa.py ;;
             *) python3 scripts/diag_focus.py ;;
           esac
+      - name: Guardar PDFs do teste de DANFE
+        if: ${{ always() && github.event.inputs.modo == 'danfe-teste' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: danfe-teste
+          path: out/
+          if-no-files-found: ignore
+          retention-days: 7
