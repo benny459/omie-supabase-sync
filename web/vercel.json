@@ -13,7 +13,7 @@
       "maxDuration": 120
     },
     "app/api/cron/estoque-fotos/route.ts": {
-      "maxDuration": 60
+      "maxDuration": 300
     }
   },
   "crons": [
@@ -35,7 +35,7 @@
     },
     {
       "path": "/api/cron/estoque-fotos",
-      "schedule": "*/10 * * * *"
+      "schedule": "*/5 * * * *"
     }
   ]
 }

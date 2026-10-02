@@ -1,8 +1,8 @@
 "use client";
 
 /**
- * Estoque › Cadastros › Fotos (02/10/26): a busca automática de fotos.
- * "Iniciar busca de fotos" liga o job (o cron roda a cada 10 min; com esta tela aberta, roda também daqui).
+ * Estoque › Catálogo › Fotos (02/10/26): a busca automática de fotos.
+ * "Iniciar busca de fotos" liga o job (o cron roda a cada 5 min, ~4 min por ciclo, 4 em paralelo; com esta tela aberta, roda também daqui).
  * Ordem: itens de maior valor em estoque e mais usados primeiro. Cota por dia (padrão 100 = faixa grátis
  * do Google). Pausar/retomar a qualquer momento — o job retoma de onde parou (estado por item).
  * Sem IMAGE_SEARCH_PROVIDER + IMAGE_SEARCH_KEY (+ IMAGE_SEARCH_CX no Google) mostra "aguardando chave".
@@ -35,7 +35,7 @@ export function AbaFotos({ totalItens, avisar }: { totalItens: number; avisar: A
   }, []);
   useEffect(() => { carregar(); }, [carregar]);
 
-  // Com a tela aberta e o job ligado, roda um ciclo por minuto daqui (além do cron de 10 em 10 min).
+  // Com a tela aberta e o job ligado, roda um ciclo por minuto daqui (além do cron de 5 em 5 min; se o cron estiver rodando, este sai na hora).
   useEffect(() => {
     if (!e?.admin || !e.job.ativo || !e.provedor.pronto) return;
     const t = setInterval(async () => {
@@ -88,12 +88,12 @@ export function AbaFotos({ totalItens, avisar }: { totalItens: number; avisar: A
       <div className="head" style={{ padding: "14px 16px", gap: 10, flexWrap: "wrap" }}>
         <div style={{ flex: 1, minWidth: 220 }}>
           <h3 style={{ margin: 0 }}>Busca automática de fotos</h3>
-          <div className="mini">Para cada item sem foto: busca pelo nome (como na ficha), baixa a melhor imagem e guarda. Itens de maior valor em estoque e mais usados primeiro. Roda a cada 10 minutos até bater a cota do dia; pausar e retomar continua de onde parou.</div>
+          <div className="mini">Para cada item sem foto: busca pelo nome (como na ficha), baixa a melhor imagem e guarda. Itens de maior valor em estoque e mais usados primeiro. Roda a cada 5 minutos, com 4 buscas em paralelo, até bater a cota do dia — mesmo com a tela fechada; pausar e retomar continua de onde parou.</div>
         </div>
         {e.admin && (j.ativo
           ? <button className="btn" disabled={ocupado} onClick={() => acao({ acao: "pausar" }, "Busca pausada")}>Pausar</button>
           : <button className="btn pri" disabled={ocupado || !e.provedor.pronto} title={e.provedor.pronto ? undefined : "Aguardando a chave do provedor"}
-              onClick={() => acao({ acao: "iniciar" }, "Busca de fotos ligada — roda a cada 10 min")}>{feitos ? "Retomar busca de fotos" : "Iniciar busca de fotos"}</button>)}
+              onClick={() => acao({ acao: "iniciar" }, "Busca de fotos ligada — roda a cada 5 min")}>{feitos ? "Retomar busca de fotos" : "Iniciar busca de fotos"}</button>)}
       </div>
       {e.admin && (
         <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", padding: "0 16px 14px" }}>

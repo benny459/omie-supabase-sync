@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * Estoque › Cadastros (/estoque/cadastros) — tudo só no painel:
+ * Estoque › Catálogo (/estoque/catalogo; /estoque/cadastros redireciona) — organização do catálogo, tudo só no painel:
  *   Famílias            — criar, renomear, prefixo, "é material?", inativar, mesclar (move os itens)
  *   Revisão de famílias — sugestão automática para itens sem família / em família que não é material,
  *                         com confiança e motivo; aceitar/rejeitar em lote, trocar um a um; "Concluir revisão"
@@ -30,7 +30,7 @@ const banda = (c: number): ["alta" | "média" | "baixa" | "nenhuma", "ok" | "inf
 export default function CadastrosEstoque({ abaInicial }: { abaInicial?: string }) {
   const router = useRouter();
   const [aba, setAba] = useState<Aba>((["familias", "revisao", "codigos", "fotos"] as Aba[]).includes(abaInicial as Aba) ? (abaInicial as Aba) : "familias");
-  const [d, setD] = useState<{ familias: Familia[]; revisao_concluida: boolean; codigos_gerados: number; admin: boolean } | null>(null);
+  const [d, setD] = useState<{ familias: Familia[]; revisao_concluida: boolean; codigos_gerados: number; passos?: Passos; admin: boolean } | null>(null);
   const [erro, setErro] = useState<string | null>(null);
   const [toast, avisar] = useToast();
   const carregar = useCallback(async () => {
@@ -40,16 +40,17 @@ export default function CadastrosEstoque({ abaInicial }: { abaInicial?: string }
   }, []);
   useEffect(() => { carregar(); }, [carregar]);
   const mudou = useCallback(() => { invalidarItens(); carregar(); }, [carregar]);
-  const ir = (a: Aba) => { setAba(a); try { window.history.replaceState(null, "", `/estoque/cadastros?aba=${a}`); } catch {} };
+  const ir = (a: Aba) => { setAba(a); try { window.history.replaceState(null, "", `/estoque/catalogo?aba=${a}`); } catch {} };
 
   return (
     <div className="est">
-      <div className="crumbs"><button className="link" onClick={() => router.push("/estoque")}><Seta dir="esq" />Estoque</button><span>/</span><span>Cadastros</span></div>
+      <div className="crumbs"><button className="link" onClick={() => router.push("/estoque")}><Seta dir="esq" />Estoque</button><span>/</span><span>Catálogo</span></div>
       <header className="cartao head">
         <div style={{ flex: 1, minWidth: 220 }}>
-          <div className="area">Estoque</div><h1>Cadastros</h1>
-          <div className="sub">Famílias com prefixo, revisão das famílias, código novo por família e fotos. Tudo fica no painel — o código do Omie continua ao lado.</div>
+          <div className="area">Estoque</div><h1>Catálogo</h1>
+          <div className="sub">Organização do catálogo: famílias, códigos e fotos.</div>
         </div>
+        <button className="btn sm pri" onClick={() => router.push("/estoque/novo")}>+ Novo item</button>
         <div className="seg">
           <button className={aba === "familias" ? "on" : ""} onClick={() => ir("familias")}>Famílias</button>
           <button className={aba === "revisao" ? "on" : ""} onClick={() => ir("revisao")}>Revisão de famílias{d && !d.revisao_concluida ? <span className="b">aberta</span> : null}</button>
@@ -62,7 +63,7 @@ export default function CadastrosEstoque({ abaInicial }: { abaInicial?: string }
       {d && !d.admin && <div className="aviso t-info">Só o administrador (Benny) altera famílias e códigos. Você pode consultar.</div>}
       {d && aba === "familias" && <AbaFamilias d={d} mudou={mudou} avisar={avisar} />}
       {d && aba === "revisao" && <AbaRevisao d={d} mudou={mudou} avisar={avisar} />}
-      {d && aba === "codigos" && <AbaCodigos d={d} mudou={mudou} avisar={avisar} irRevisao={() => ir("revisao")} />}
+      {d && aba === "codigos" && <AbaCodigos d={d} mudou={mudou} avisar={avisar} irRevisao={() => ir("revisao")} irDups={() => router.push("/estoque/duplicidades")} />}
       {d && aba === "fotos" && <AbaFotos totalItens={d.familias.reduce((s, f) => s + (f.itens || 0), 0)} avisar={avisar} />}
       {toast}
     </div>
@@ -297,7 +298,37 @@ function AbaRevisao({ d, mudou, avisar }: { d: { familias: Familia[]; revisao_co
 }
 
 // ── Códigos novos ────────────────────────────────────────────────────────────
-function AbaCodigos({ d, mudou, avisar, irRevisao }: { d: { revisao_concluida: boolean; admin: boolean; codigos_gerados: number }; mudou: () => void; avisar: Avisar; irRevisao: () => void }) {
+type Passos = { dups_pares: number; dups_itens: number; mesclados: number; sugestoes_pendentes: number };
+
+/** Os 3 passos antes dos códigos novos, com a situação de cada um. */
+function TresPassos({ d, total, irRevisao, irDups }: {
+  d: { revisao_concluida: boolean; codigos_gerados: number; passos?: Passos }; total: number | null; irRevisao: () => void; irDups: () => void;
+}) {
+  const ps = d.passos;
+  const p1ok = !!ps && ps.dups_pares === 0, p2ok = d.revisao_concluida;
+  const passo = (n: string, titulo: string, ok: boolean, atual: boolean, txt: string, botao?: [string, () => void]) => (
+    <div className="kpi" style={{ cursor: "default", borderColor: atual ? "var(--ww-accent)" : undefined }}>
+      <div className="r">{n} {titulo}</div>
+      <div className="v" style={{ fontSize: 17 }}><Pill t={ok ? "feito" : atual ? "agora" : "a seguir"} tom={ok ? "ok" : atual ? "info" : "off"} /></div>
+      <div className="s">{txt}</div>
+      {botao && <button className="btn sm" style={{ marginTop: 8 }} onClick={botao[1]}>{botao[0]}</button>}
+    </div>
+  );
+  return (
+    <section className="kpis">
+      {passo("①", "Mesclar duplicidades", p1ok, !p1ok,
+        ps ? (ps.dups_pares ? `${q(ps.dups_pares)} pares abertos (${q(ps.dups_itens)} códigos) · ${q(ps.mesclados)} já mesclados — mesclados não ganham código novo` : `nenhuma duplicidade aberta · ${q(ps.mesclados)} códigos mesclados ficam de fora`) : "…",
+        ps?.dups_pares ? ["Ir para Duplicidades", irDups] : undefined)}
+      {passo("②", "Revisar famílias e Concluir", p2ok, p1ok && !p2ok,
+        p2ok ? "revisão concluída — a família revisada define o prefixo" : `${q(ps?.sugestoes_pendentes ?? 0)} sugestões pendentes · depois clique em “Concluir revisão de famílias”`,
+        p2ok ? undefined : ["Ir para a revisão", irRevisao])}
+      {passo("③", "Aplicar códigos", total === 0 && d.codigos_gerados > 0, p2ok,
+        `${total == null ? "…" : q(total)} itens a codificar · ${q(d.codigos_gerados)} já codificados${p2ok ? "" : " · liberado depois do passo ②"}`)}
+    </section>
+  );
+}
+
+function AbaCodigos({ d, mudou, avisar, irRevisao, irDups }: { d: { revisao_concluida: boolean; admin: boolean; codigos_gerados: number; passos?: Passos }; mudou: () => void; avisar: Avisar; irRevisao: () => void; irDups: () => void }) {
   const [p, setP] = useState<Previa[] | null>(null);
   const [busca, setBusca] = useState("");
   const [lim, setLim] = useState(200);
@@ -312,14 +343,14 @@ function AbaCodigos({ d, mudou, avisar, irRevisao }: { d: { revisao_concluida: b
   const lista = (p ?? []).filter((x) => !busca.trim() || `${x.descricao} ${x.codigo_omie} ${x.codigo_novo} ${x.familia}`.toLowerCase().includes(busca.trim().toLowerCase()));
   const porFam = useMemo(() => { const m = new Map<string, number>(); (p ?? []).forEach((x) => m.set(x.familia, (m.get(x.familia) ?? 0) + 1)); return [...m.entries()].sort((a, b) => b[1] - a[1]); }, [p]);
   return (<>
+    <TresPassos d={d} total={p ? p.length : null} irRevisao={irRevisao} irDups={irDups} />
     {!d.revisao_concluida && (
-      <div className="aviso t-warn"><span>Prévia provisória: os códigos só podem ser gerados depois que a <b>revisão de famílias</b> for concluída — a família de cada item define o prefixo.</span>
-        <span style={{ flex: 1 }} /><button className="btn sm" onClick={irRevisao}>Ir para a revisão</button></div>
+      <div className="aviso t-warn"><span>Prévia provisória: os códigos só podem ser gerados depois que a <b>revisão de famílias</b> for concluída — a família de cada item define o prefixo. Códigos mesclados em outro não entram.</span></div>
     )}
     <div className="cartao">
       <div className="head" style={{ padding: "12px 16px", gap: 10 }}>
         <div style={{ flex: 1, minWidth: 200 }}><h3 style={{ margin: 0 }}>Prévia da codificação</h3>
-          <div className="mini">{p ? `${q(p.length)} itens sem código novo · ${q(d.codigos_gerados)} já codificados · ordem: família, depois descrição` : "Carregando…"}</div></div>
+          <div className="mini">{p ? `${q(p.length)} itens sem código novo (sem os mesclados) · ${q(d.codigos_gerados)} já codificados · família revisada · ordem: família, depois descrição` : "Carregando…"}</div></div>
         <input className="inp" value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Filtrar…" style={{ width: 180 }} />
         <button className="btn sm" disabled={!p} onClick={() => p && baixarCSV("previa-codigos-estoque.csv", [["Família", "Código Omie", "Código novo", "Descrição"], ...p.map((x) => [x.familia, x.codigo_omie, x.codigo_novo, x.descricao])])}>CSV</button>
         {d.admin && <button className="btn sm pri" disabled={!d.revisao_concluida || !p?.length} title={d.revisao_concluida ? undefined : "Conclua a revisão de famílias primeiro"} onClick={() => setConf(true)}>Aplicar códigos…</button>}

@@ -1,5 +1,5 @@
 // Famílias do Estoque (só no painel — não cria famílias no Omie).
-// GET  → famílias com nº de itens e valor, situação da revisão
+// GET  → famílias com nº de itens e valor, situação da revisão e dos 3 passos dos códigos novos
 // POST (admin) { acao: "criar" | "editar" | "inativar" | "reativar" | "mesclar" | "importar_omie" | "concluir_revisao" | "reabrir_revisao", ... }
 
 import { NextResponse } from "next/server";
@@ -15,12 +15,14 @@ export async function GET() {
   const q = await quemEstoque();
   if (q instanceof NextResponse) return q;
   try {
-    const [fr, itens, cfg, codigos] = await Promise.all([
+    const [fr, itens, cfg, codigos, dups, sug] = await Promise.all([
       platform().from("estoque_familia").select("*").order("nome"),
       todasParalelo<{ familia_id: number | null; saldo: number; cmc: number; mesclado_em: number | null }>((de, ate) =>
         orders().from("v_estoque_item").select("familia_id, saldo, cmc, mesclado_em").range(de, ate)),
       orders().rpc("estoque_revisao_familias_concluida", { p_empresa: "SF" }),
       platform().from("estoque_item_codigo").select("familia_id", { count: "exact", head: true }),
+      orders().from("v_estoque_duplicidade").select("prod_a, prod_b, tipo").eq("empresa", "SF"),
+      platform().from("estoque_familia_sugestao").select("n_cod_prod", { count: "exact", head: true }).eq("empresa", "SF").eq("status", "pendente"),
     ]);
     if (fr.error) throw new Error(fr.error.message);
     const cont = new Map<number | null, { n: number; valor: number }>();
@@ -34,7 +36,15 @@ export async function GET() {
       const ts = f.sistema ? cont.get(f.id) : undefined;
       return { ...f, itens: t.n + (ts?.n ?? 0), valor: t.valor + (ts?.valor ?? 0) };
     });
-    return NextResponse.json({ familias: fams, revisao_concluida: !!cfg.data, codigos_gerados: codigos.count ?? 0, admin: q.admin });
+    // passos do "Códigos novos": ① duplicidades ainda abertas · ② revisão de famílias · ③ aplicar
+    const pares = (dups.data ?? []) as { prod_a: number; prod_b: number; tipo: string }[];
+    const passos = {
+      dups_pares: pares.length,
+      dups_itens: new Set(pares.flatMap((p) => [Number(p.prod_a), Number(p.prod_b)])).size,
+      mesclados: itens.filter((i) => i.mesclado_em).length,
+      sugestoes_pendentes: sug.count ?? 0,
+    };
+    return NextResponse.json({ familias: fams, revisao_concluida: !!cfg.data, codigos_gerados: codigos.count ?? 0, passos, admin: q.admin });
   } catch (e) {
     return NextResponse.json({ error: (e as Error).message }, { status: 500 });
   }

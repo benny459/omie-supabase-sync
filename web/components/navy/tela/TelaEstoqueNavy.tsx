@@ -139,7 +139,8 @@ export default function TelaEstoqueNavy({ clienteInicial, aba = "itens" }: { cli
           <Lupa /><span>Ir para item — código, nome, nº do PC, cliente…</span><span className="kbd">⌘K</span>
         </div>
         <div className="filtros">
-          <button className="btn sm pri" onClick={() => router.push("/estoque/novo")}>+ Novo item</button>
+          <button className={`btn pri ${aba === "itens" ? "" : "sm"}`} onClick={() => router.push("/estoque/novo")}
+            style={aba === "itens" ? { fontWeight: 700, padding: "0 16px" } : undefined}>+ Novo item</button>
         </div>
       </header>
 

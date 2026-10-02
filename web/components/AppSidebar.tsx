@@ -169,10 +169,10 @@ export const MODULES: NavItem[] = [
   },
   /* Estoque v2 (02/10/26): as abas da tela viraram a 2ª linha do menu, como na Operação. */
   {
-    href: "/estoque/cadastros",
+    href: "/estoque/catalogo",
     area: "erp",
     grupo: "estoque",
-    label: "Cadastros",
+    label: "Catálogo",
     tone: "text-orange-600",
     icon: (
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className="w-5 h-5" strokeLinecap="round" strokeLinejoin="round">

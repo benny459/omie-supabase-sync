@@ -1,6 +1,6 @@
 // Busca automática de fotos do Estoque — estado e controles (admin).
 // GET  → provedor (pronto? o que falta), job (ligado, cota do dia, usados hoje, motivo de pausa), progresso.
-// POST { acao: "iniciar" | "pausar" }        (admin) → liga/desliga o job (o cron roda a cada 10 min)
+// POST { acao: "iniciar" | "pausar" }        (admin) → liga/desliga o job (o cron roda a cada 5 min)
 // POST { acao: "cota", cota }                 (admin) → buscas por dia (padrão 100 = faixa grátis do Google)
 // POST { acao: "rodar" }                      (admin) → roda um ciclo agora (a tela chama enquanto está aberta)
 // POST { acao: "refazer_sem_resultado" }      (admin) → devolve à fila os itens que não acharam foto
@@ -62,7 +62,7 @@ export async function POST(req: Request) {
       const r = await db.from("estoque_foto_job").update({ cota_dia: c, updated_by_email: q.email, updated_at: agora }).eq("id", 1);
       if (r.error) throw new Error(r.error.message);
     } else if (b.acao === "rodar") {
-      const r = await rodarCiclo({ max: 8, prazoMs: 40_000, email: "busca automática" });
+      const r = await rodarCiclo({ max: 120, prazoMs: 40_000, email: "busca automática" });
       return NextResponse.json({ ciclo: r, ...(await estado()) });
     } else if (b.acao === "refazer_sem_resultado") {
       const r = await db.from("estoque_foto_busca").update({ status: "pendente", tentativas: 0 }).eq("status", "sem_resultado");

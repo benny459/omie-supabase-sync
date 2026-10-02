@@ -11,7 +11,7 @@ const ABAS: Record<string, string> = {
   dups: "/estoque/duplicidades", duplicidades: "/estoque/duplicidades",
   movs: "/estoque/movimentacao", movimentacao: "/estoque/movimentacao",
   inv: "/estoque/inventario", inventario: "/estoque/inventario",
-  cadastros: "/estoque/cadastros",
+  cadastros: "/estoque/catalogo", catalogo: "/estoque/catalogo",
 };
 
 /* 30/09/26: tela Navy; a antiga em ?classica=1 para comparar.

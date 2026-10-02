@@ -218,38 +218,40 @@ export async function urlsAssinadas(paths: string[], segundos = 3600): Promise<M
 export type EstadoJob = { ativo: boolean; cota_dia: number; dia: string | null; usados_dia: number; ultimo_lote_em: string | null; ultimo_erro: string | null; pausa_motivo: string | null };
 
 const espera = (ms: number) => new Promise((r) => setTimeout(r, ms));
+/** Buscas em paralelo por ciclo (IMAGE_SEARCH_CONCURRENCY, 1–8; padrão 4). Cada "trabalhador" espera 300 ms entre buscas. */
+const concorrencia = () => Math.min(8, Math.max(1, Number(process.env.IMAGE_SEARCH_CONCURRENCY) || 4));
 
 /**
- * Um ciclo do job: pega a vez (lease), busca os próximos itens da fila (maior valor/mais usados primeiro),
- * grava os 5 melhores candidatos e baixa o primeiro que vier. Para na cota do dia, no limite do provedor
- * ou no tempo. Pode ser chamado pelo cron e pela tela ao mesmo tempo: só um roda (lease de 100 s).
+ * Um ciclo do job: pega a vez (lease), pega a fila (maior valor/mais usados primeiro) e processa com
+ * alguns trabalhadores em paralelo — cada item: reserva 1 da cota do dia, busca, grava os 5 melhores
+ * candidatos e baixa o primeiro que vier. Para na cota do dia, na cota/chave do provedor ou no prazo.
+ * Limite por minuto (429): espera e segue; 3 seguidos encerram o ciclo (o próximo retoma).
+ * Cron e tela podem chamar juntos: só um ciclo roda por vez.
  */
 export async function rodarCiclo(opts: { max?: number; prazoMs?: number; email?: string | null } = {}) {
   const cfg = configProvedor();
-  const out = { rodou: false, motivo: "" as string, processados: 0, com_foto: 0, sem_resultado: 0, erros: 0 };
+  const out = { rodou: false, motivo: "" as string, processados: 0, com_foto: 0, sem_resultado: 0, erros: 0, segundos: 0 };
   if (!cfg.pronto) { out.motivo = `aguardando chave (${cfg.faltando.join(", ")})`; return out; }
   const job = await platform().from("estoque_foto_job").select("*").eq("id", 1).single();
   if (job.error) throw new Error(job.error.message);
   if (!job.data.ativo) { out.motivo = "pausado"; return out; }
-  const lease = await orders().rpc("estoque_foto_lease", { p_segundos: 100 });
+  const inicio = Date.now(), prazo = opts.prazoMs ?? 45_000, max = opts.max ?? 40;
+  const lease = await orders().rpc("estoque_foto_lease", { p_segundos: Math.ceil(prazo / 1000) + 60 });
   if (lease.error) throw new Error(lease.error.message);
   if (!lease.data) { out.motivo = "outro ciclo em andamento"; return out; }
   out.rodou = true;
-  const inicio = Date.now(), prazo = opts.prazoMs ?? 45_000, max = opts.max ?? 10;
   try {
     const fila = await orders().rpc("estoque_foto_fila", { p_empresa: "SF", p_limite: max });
     if (fila.error) throw new Error(fila.error.message);
-    const itens = (fila.data ?? []) as { n_cod_prod: number; descricao: string }[];
+    const itens = [...((fila.data ?? []) as { n_cod_prod: number; descricao: string }[])];
     if (!itens.length) { out.motivo = "fila vazia — todos os itens já têm foto ou foram buscados"; await pausar(null, "concluído"); return out; }
-    for (const it of itens) {
-      if (Date.now() - inicio > prazo) { out.motivo = "tempo do ciclo"; break; }
-      const res = await orders().rpc("estoque_foto_reservar", { p_qtd: 1, p_manual: false });
-      if (res.error) throw new Error(res.error.message);
-      if (!res.data) { out.motivo = "cota do dia atingida"; await anotar({ pausa_motivo: "cota do dia atingida — retoma amanhã" }); break; }
+    let parar = "", limites = 0;
+
+    const processar = async (it: { n_cod_prod: number; descricao: string }) => {
       const id = Number(it.n_cod_prod), termo = termoBusca({ descricao: it.descricao });
       try {
-        const cands = melhores(await buscarImagens(termo));
-        const top = cands.slice(0, 5);
+        const top = melhores(await buscarImagens(termo)).slice(0, 5);
+        limites = 0;
         let guardou = false, ultimoErro: string | null = null;
         for (const c of top) {
           try { await guardarFoto("SF", id, await baixarImagem(c.url), { origem: "web", source_url: c.url, provider: cfg.provedor, termo, email: opts.email ?? "busca automática" }); guardou = true; break; }
@@ -263,20 +265,39 @@ export async function rodarCiclo(opts: { max?: number; prazoMs?: number; email?:
         out.processados++; if (guardou) out.com_foto++; else out.sem_resultado++;
       } catch (e) {
         const er = e as ErroProvedor;
+        if (er instanceof ErroProvedor && er.tipo === "limite") {
+          // não conta como erro do item: volta para a fila do próximo ciclo
+          limites++; await anotar({ ultimo_erro: er.message });
+          if (limites >= 3) parar = "limite por minuto do provedor — retoma no próximo ciclo"; else await espera(5000);
+          return;
+        }
         const ant = await platform().from("estoque_foto_busca").select("tentativas").eq("empresa", "SF").eq("n_cod_prod", id).maybeSingle();
         await platform().from("estoque_foto_busca").upsert({ empresa: "SF", n_cod_prod: id, termo, provider: cfg.provedor, status: "erro",
           ultimo_erro: er.message, buscado_em: new Date().toISOString(), tentativas: (ant.data?.tentativas ?? 0) + 1 });
         out.erros++;
-        if (er instanceof ErroProvedor && er.tipo === "chave") { await pausar(er.message, "chave recusada — confira IMAGE_SEARCH_KEY"); out.motivo = er.message; break; }
-        if (er instanceof ErroProvedor && er.tipo === "cota") { await anotar({ ultimo_erro: er.message, pausa_motivo: "cota do provedor esgotada — retoma no próximo ciclo" }); out.motivo = er.message; break; }
-        if (er instanceof ErroProvedor && er.tipo === "limite") { await anotar({ ultimo_erro: er.message }); out.motivo = "limite por minuto do provedor"; break; }
-        await anotar({ ultimo_erro: er.message });
+        if (er instanceof ErroProvedor && er.tipo === "chave") { await pausar(er.message, "chave recusada — confira IMAGE_SEARCH_KEY"); parar = er.message; }
+        else if (er instanceof ErroProvedor && er.tipo === "cota") { await anotar({ ultimo_erro: er.message, pausa_motivo: "cota do provedor esgotada — retoma no próximo ciclo" }); parar = er.message; }
+        else await anotar({ ultimo_erro: er.message });
       }
-      await espera(1200); // ≤ 1 busca/s: folga para os limites por minuto dos provedores
-    }
-    if (out.processados && !out.motivo) await anotar({ pausa_motivo: null });
+    };
+
+    const trabalhador = async () => {
+      while (!parar && itens.length && Date.now() - inicio < prazo) {
+        const res = await orders().rpc("estoque_foto_reservar", { p_qtd: 1, p_manual: false });
+        if (res.error) { parar = res.error.message; break; }
+        if (!res.data) { parar = "cota do dia atingida"; await anotar({ pausa_motivo: "cota do dia atingida — retoma amanhã" }); break; }
+        const it = itens.shift();
+        if (!it) break;
+        await processar(it);
+        await espera(300);
+      }
+    };
+    await Promise.all(Array.from({ length: concorrencia() }, trabalhador));
+    out.motivo = parar || (itens.length ? "prazo do ciclo" : "lote concluído");
+    if (out.processados && !parar) await anotar({ pausa_motivo: null });
     return out;
   } finally {
+    out.segundos = Math.round((Date.now() - inicio) / 1000);
     await orders().rpc("estoque_foto_lease", { p_segundos: 0 });
   }
 }
