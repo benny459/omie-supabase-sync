@@ -95,7 +95,7 @@ function ModalFoto({ n, e, fechar, mudou, avisar }: {
             <div className="aviso t-info"><span><b>Busca automática aguardando chave.</b> Enquanto isso: cole o link de uma imagem ou envie um arquivo.</span></div>
           )}
           {cands.length > 0 && (<>
-            <div className="mini">{e.busca?.buscado_em && cands === e.busca.candidatos ? "Achados pela busca automática" : "Resultados"} — clique para escolher</div>
+            <div className="mini">{e.busca?.buscado_em && cands === e.busca.candidatos ? `Achados guardados da última busca (${new Date(e.busca.buscado_em).toLocaleDateString("pt-BR")})` : "Resultados"} — clique para escolher</div>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(130px, 1fr))", gap: 10 }}>
               {cands.map((c, i) => (
                 <button key={i} type="button" onClick={() => setSel(c)} title={c.titulo ?? c.url}
