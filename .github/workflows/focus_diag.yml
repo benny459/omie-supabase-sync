@@ -8,7 +8,7 @@ on:
         required: false
         default: ""
       modo:
-        description: "focus (padrão) ou omie (diagnóstico fiscal do Omie, só leitura)"
+        description: "focus (padrão) | omie (diagnóstico fiscal, só leitura) | config (simula a configuração de emissão) | config-aplicar (grava na Focus)"
         required: false
         default: "focus"
       so_municipio:
@@ -33,8 +33,13 @@ jobs:
           FOCUS_TOKEN_SF: ${{ secrets.FOCUS_TOKEN_SF }}
           FOCUS_CHAVES: ${{ github.event.inputs.chaves }}
           FOCUS_SO_MUNICIPIO: ${{ github.event.inputs.so_municipio }}
+          FOCUS_CONFIRMA: ${{ github.event.inputs.modo == 'config-aplicar' && 'SIM' || '' }}
           OMIE_APP_KEY_SF: ${{ secrets.OMIE_APP_KEY_SF }}
           OMIE_APP_SECRET_SF: ${{ secrets.OMIE_APP_SECRET_SF }}
           PYTHONUNBUFFERED: "1"
         run: |
-          if [ "${{ github.event.inputs.modo }}" = "omie" ]; then python3 scripts/diag_omie_fiscal.py; else python3 scripts/diag_focus.py; fi
+          case "${{ github.event.inputs.modo }}" in
+            omie) python3 scripts/diag_omie_fiscal.py ;;
+            config|config-aplicar) python3 scripts/config_focus_empresa.py ;;
+            *) python3 scripts/diag_focus.py ;;
+          esac
