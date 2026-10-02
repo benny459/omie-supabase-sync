@@ -53,6 +53,8 @@ def xml_omie():
 
 def main():
     xml, pdf_omie = xml_omie()
+    with open(f"{OUT}/nfe_omie.xml", "w") as f:
+        f.write(xml)
     nfe = converter(xml)
     with open(f"{OUT}/nfe_focus.json", "w") as f:
         json.dump(nfe, f, ensure_ascii=False, indent=2)
