@@ -5,7 +5,10 @@ Focus igual ao Omie: cadastro da empresa (regime), o XML de uma NF-e por CFOP
 (LC116, código municipal, ISS). Nunca imprime chaves, senhas ou certificado.
 
 Branch focus-faturamento (02/10/2026)."""
+import base64
+import html
 import sys
+import urllib.request
 import xml.etree.ElementTree as ET
 sys.path.insert(0, "scripts")
 from _common import fetch_omie
@@ -60,11 +63,22 @@ def notas():
         except Exception as e:  # noqa: BLE001
             print(f"   erro: {e}")
             continue
-        xml = r.get("cXmlNfe") or ""
+        xml = (r.get("cXmlNfe") or "").strip()
         if not xml:
             print(f"   sem XML; chaves da resposta: {list(r)[:20]}")
             continue
-        root = ET.fromstring(xml.encode("utf-8"))
+        try:
+            if xml.startswith("http"):
+                xml = urllib.request.urlopen(xml, timeout=30).read().decode("utf-8", "replace")
+            elif xml.startswith("&lt;"):
+                xml = html.unescape(xml)
+            elif not xml.lstrip("\ufeff").startswith("<"):
+                xml = base64.b64decode(xml).decode("utf-8", "replace")
+            xml = xml.lstrip("\ufeff")
+            root = ET.fromstring(xml.encode("utf-8"))
+        except Exception as e:  # noqa: BLE001
+            print(f"   não consegui ler o XML ({e}); início: {xml[:160]!r}")
+            continue
         inf = root.find(".//n:infNFe", NS)
         print(f"   natOp={texto(inf, 'n:ide/n:natOp')} serie={texto(inf, 'n:ide/n:serie')} nNF={texto(inf, 'n:ide/n:nNF')}"
               f" idDest={texto(inf, 'n:ide/n:idDest')} indFinal={texto(inf, 'n:ide/n:indFinal')} indPres={texto(inf, 'n:ide/n:indPres')}")
