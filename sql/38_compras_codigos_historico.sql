@@ -71,3 +71,30 @@ begin
     execute format('grant execute on function %s to service_role', f);
   end loop;
 end $$;
+
+-- 38b — a busca não depende do texto `busca` da lista (cortado em 300 caracteres): devolve também os
+-- pedidos que têm o item por qualquer código equivalente.
+create or replace function orders.compras_codigos_equivalentes(p_q text, p_empresa text default 'SF')
+returns jsonb language sql stable security definer set search_path = compras, platform, orders, public as $$
+  with alvo as (
+    select distinct r.n_cod_prod_atual from orders.item_codigo_resolver(p_empresa, array[trim(p_q)]) r
+     where coalesce(trim(p_q), '') <> ''
+  ), eq as (
+    select a.n_cod_prod_atual, v.codigo_usado, v.n_cod_prod_usado, v.origem, v.codigo_atual, v.descricao_atual
+      from alvo a join platform.v_item_codigo_resolvido v on v.empresa = p_empresa and v.n_cod_prod_atual = a.n_cod_prod_atual
+  )
+  select coalesce(jsonb_agg(jsonb_build_object(
+           'nCodProdAtual', a.n_cod_prod_atual,
+           'codigoAtual', (select max(e.codigo_atual) from eq e where e.n_cod_prod_atual = a.n_cod_prod_atual),
+           'descricaoAtual', (select max(e.descricao_atual) from eq e where e.n_cod_prod_atual = a.n_cod_prod_atual),
+           'codigos', (select coalesce(jsonb_agg(distinct e.codigo_usado), '[]'::jsonb) from eq e
+                        where e.n_cod_prod_atual = a.n_cod_prod_atual and e.origem <> 'fornecedor'),
+           'ids', (select coalesce(jsonb_agg(distinct e.n_cod_prod_usado), '[]'::jsonb) from eq e where e.n_cod_prod_atual = a.n_cod_prod_atual),
+           'pedidos', (select coalesce(jsonb_agg(distinct i.pedido_id), '[]'::jsonb) from compras.itens i
+                        where upper(i.produto_cod) in (select upper(e.codigo_usado) from eq e where e.n_cod_prod_atual = a.n_cod_prod_atual and e.origem <> 'fornecedor')
+                           or i.ncod_prod in (select e.n_cod_prod_usado from eq e where e.n_cod_prod_atual = a.n_cod_prod_atual))
+         )), '[]'::jsonb)
+    from alvo a
+$$;
+revoke all on function orders.compras_codigos_equivalentes(text, text) from public, anon, authenticated;
+grant execute on function orders.compras_codigos_equivalentes(text, text) to service_role;

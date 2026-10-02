@@ -40,7 +40,7 @@ export default function TelaCompras() {
   const [semPedido, setSemPedido] = useState<NfSemPedido[]>([]);
   const [soSemPedido, setSoSemPedido] = useState(false);
   /* Busca por código: inclui todos os códigos do mesmo item de hoje (Omie, mesclados, recodificados). */
-  const [equiv, setEquiv] = useState<{ q: string; itens: { codigoAtual: string; descricaoAtual: string; codigos: string[] }[] } | null>(null);
+  const [equiv, setEquiv] = useState<{ q: string; itens: { codigoAtual: string; descricaoAtual: string; codigos: string[]; pedidos: number[] }[] } | null>(null);
   const [caixa, setCaixa] = useState<{ foco: string | null } | null>(null);
   const [pcDaNf, setPcDaNf] = useState<string | null>(null);
   const [confer, setConfer] = useState<number | null>(null);
@@ -120,7 +120,7 @@ export default function TelaCompras() {
     }, 250);
     return () => clearTimeout(h);
   }, [q]);
-  const codigosEq = useMemo(() => (equiv && equiv.q === q.trim() ? equiv.itens.flatMap((i) => i.codigos.map((c) => c.toLowerCase())) : []), [equiv, q]);
+  const pedidosEq = useMemo(() => new Set(equiv && equiv.q === q.trim() ? equiv.itens.flatMap((i) => i.pedidos ?? []) : []), [equiv, q]);
   const parcDesc = useCallback((cod?: string) => refs?.parcelas.find((p) => p.cod === cod)?.desc ?? cod ?? "", [refs]);
   const todos = lista ?? [];
   const filtrados = useMemo(() => {
@@ -136,11 +136,11 @@ export default function TelaCompras() {
       if (t) {
         const hay = [p.num, p.forn, p.proj, p.cat, p.comprador, p.contato, p.nf, p.cnpj, p.pv, p.pvCliente, p.busca,
           ...(p.rcs ?? []), ...(p.cobPcs ?? [])].join(" ").toLowerCase();
-        if (!hay.includes(t) && !codigosEq.some((c) => c !== t && hay.includes(c))) return false;
+        if (!hay.includes(t) && !pedidosEq.has(p.id)) return false;
       }
       return true;
     });
-  }, [todos, q, comprador, projeto, periodo, soAtraso, soNf, nfSug, origem, soSemPedido, idsSugeridos, codigosEq]);
+  }, [todos, q, comprador, projeto, periodo, soAtraso, soNf, nfSug, origem, soSemPedido, idsSugeridos, pedidosEq]);
 
   // ── ações ────────────────────────────────────────────────────────────────
   const acao = useCallback(async (body: Record<string, unknown>) => {
