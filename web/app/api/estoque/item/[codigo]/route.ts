@@ -51,7 +51,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ codigo:
       ...((dr.data ?? []) as { secundario: number }[]).map((r) => Number(r.secundario))])];
     const prods = [id, ...secundarios];
 
-    const [movs, pcsRes, dupsRes, ajRes, secRes, aliRes] = await Promise.all([
+    const [movs, pcsRes, dupsRes, ajRes, secRes, aliRes, codRes] = await Promise.all([
       todas((de, ate) => db.from("v_estoque_mov_cli").select("*").eq("empresa", empresa).in("id_prod", prods)
         .order("dt_mov").order("id_mov").range(de, ate)),
       Promise.all(prods.map((p) => db.rpc("estoque_item_pcs", { p_empresa: empresa, p_prod: p }))),
@@ -60,6 +60,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ codigo:
       secundarios.length ? db.from("v_estoque_item").select("n_cod_prod, codigo, descricao").eq("empresa", empresa).in("n_cod_prod", secundarios)
         : Promise.resolve({ data: [], error: null }),
       Promise.all(prods.map((pid) => db.rpc("compras_aliases", { p_ncod_prod: pid, p_cod: null, p_cnpj: null }))),
+      db.rpc("item_codigos_do_item", { p_empresa: empresa, p_prod: id }),
     ]);
     // De-para é complemento: se a função do Compras falhar, a ficha abre sem ele.
     const aliases = aliRes.flatMap((r) => (r.error ? [] : ((r.data ?? []) as Record<string, unknown>[])));
@@ -87,6 +88,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ codigo:
 
     return NextResponse.json({
       item, movs, pcs, dups, ajustes: ajRes.data ?? [], admin: q.admin, aliases, mesclados: secRes.data ?? [],
+      codigos: codRes.error ? [] : codRes.data ?? [],
       mesclas: mesclas.map((m) => ({ ...m, secundario_item: nomes.get(Number(m.secundario)) ?? null })),
     });
   } catch (e) {

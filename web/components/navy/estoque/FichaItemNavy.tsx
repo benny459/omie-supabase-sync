@@ -28,9 +28,12 @@ import { MovsPainelItem } from "./Movimentacoes";
 
 type Mescla = { id: number; principal: number; secundario: number; grupo_id: number | null; secundario_item: { codigo: string; descricao: string } | null };
 type Mesclado = { n_cod_prod: number; codigo: string; descricao: string };
+/** Linha do resolvedor de códigos (platform.v_item_codigo_resolvido). */
+type CodigoHist = { codigo_usado: string; n_cod_prod_usado: number; origem: "omie" | "mesclado" | "recodificado" | "fornecedor"; codigo_atual: string;
+  codigo_novo_atual: string | null; desde: string | null; por: string | null; fornecedor: string | null };
 type Ficha = {
   item: ItemEstoque; movs: MovEstoque[]; pcs: PcItem[]; dups: { tipo: string; sim: number; item: ItemEstoque | null }[];
-  ajustes: AjusteEstoque[]; mesclas: Mescla[]; mesclados: Mesclado[]; admin: boolean; aliases: Alias[]; de: string | null;
+  ajustes: AjusteEstoque[]; mesclas: Mescla[]; mesclados: Mesclado[]; admin: boolean; aliases: Alias[]; de: string | null; codigos: CodigoHist[];
 };
 const ABAS: AbaFicha[] = ["uso", "mov", "compras", "forn", "auditoria"];
 const EM_BREVE = "Em breve — próxima fase do Estoque v2";
@@ -69,6 +72,7 @@ export default function FichaItemNavy({ codigo, abaInicial }: { codigo: string; 
           ajustes: ((j.ajustes ?? []) as Record<string, unknown>[]).map(normAjuste),
           mesclas: ((j.mesclas ?? []) as Mescla[]).map((m) => ({ ...m, principal: Number(m.principal), secundario: Number(m.secundario), grupo_id: m.grupo_id == null ? null : Number(m.grupo_id) })),
           mesclados: ((j.mesclados ?? []) as Mesclado[]).map((m) => ({ ...m, n_cod_prod: Number(m.n_cod_prod) })),
+          codigos: ((j.codigos ?? []) as CodigoHist[]).map((c) => ({ ...c, n_cod_prod_usado: Number(c.n_cod_prod_usado) })),
           de: url.searchParams.get("de"),
           admin: !!j.admin,
           aliases: ((j.aliases ?? []) as Record<string, unknown>[]).map((x) => normAlias(x, Number(j.item.n_cod_prod))),
@@ -164,6 +168,9 @@ function Conteudo({ f, aba, setAba, ir, recarregar, itensTodos }: {
   const grupos = [...new Set(diretas.map((m) => m.grupo_id).filter((g): g is number => g != null))];
   const avulsas = diretas.filter((m) => m.grupo_id == null);
   const p = f.item, s = p.saldo, cob = cobertura(p), [st, tom] = situacao(p);
+  /** Código que aparece no documento (Omie do item, ou do código mesclado) — o de hoje é p.codigo_novo ?? p.codigo. */
+  const codDoc = (idProd: number | null | undefined): { doc: string; mesclado: boolean } =>
+    idProd != null && idProd !== p.n_cod_prod ? { doc: nomesSec.get(idProd) ?? String(idProd), mesclado: true } : { doc: p.codigo_omie ?? p.codigo, mesclado: false };
   const ano = somaDias(hoje(), -365), dois = somaDias(hoje(), -730);
   const usos = f.movs.filter((m) => m.qtde < 0 && !m.cancelado && m.dt_mov >= ano);
   const pcs24 = f.pcs.filter((x) => (x.emissao ?? "") >= dois);
@@ -273,6 +280,7 @@ function Conteudo({ f, aba, setAba, ir, recarregar, itensTodos }: {
         </div>
       </div>
 
+      <CodigosDoItem codigos={f.codigos} />
       <div className="subtabs" role="tablist">
         {([["uso", "Onde foi usado", usos.length], ["mov", "Movimentação", f.movs.length], ["compras", "Pedidos de compra", pcs24.length],
           ["forn", "Fornecedores e preços", precos.length], ["auditoria", "Auditoria", nA]] as [AbaFicha, string, number][]).map(([k, l, nn]) => (
@@ -283,7 +291,7 @@ function Conteudo({ f, aba, setAba, ir, recarregar, itensTodos }: {
       </div>
       <div className="painel">
         {aba === "uso" && <AbaUso p={p} usos={usos} filtrarCliente={(c) => router.push(`/estoque?cliente=${encodeURIComponent(c)}`)} />}
-        {aba === "mov" && <><MovsPainelItem key={novaMov ? "n" : "v"} item={p} itens={itensTodos} abrirNova={novaMov} aoFechar={() => setNovaMov(false)} /><AbaMov p={p} movs={f.movs} nomesSec={nomesSec} /></>}
+        {aba === "mov" && <><MovsPainelItem key={novaMov ? "n" : "v"} item={p} itens={itensTodos} abrirNova={novaMov} aoFechar={() => setNovaMov(false)} /><AbaMov p={p} movs={f.movs} nomesSec={nomesSec} codDoc={codDoc} /></>}
         {aba === "compras" && <AbaCompras p={p} pcs={pcs24} abertos={abertos} />}
         {aba === "forn" && <><SecaoAliases st={aliases} codigoDe={(id) => nomesSec.get(id) ?? ""} /><AbaForn pcs={f.pcs} precos={precos} /></>}
         {aba === "auditoria" && <AbaAuditoria pts={pts} dups={f.dups} setAba={setAba} ir={ir} ajustes={f.ajustes} aliases={aliases?.lista ?? []} admin={f.admin} ocupado={ocupado}
@@ -298,6 +306,41 @@ function Conteudo({ f, aba, setAba, ir, recarregar, itensTodos }: {
       ok={(pr) => { setModal(null); avisar(`Mesclado em ${pr.codigo}`, "ok"); if (pr.n_cod_prod === p.n_cod_prod) recarregar(); else { invalidarItens(); ir(pr.codigo); } }} />}
     {toast}
   </>);
+}
+
+/** "código no documento → item hoje": mostra os dois; selo quando o documento é de outro código (mesclado). */
+function CodDocHoje({ doc, hoje, mesclado }: { doc: string; hoje: string; mesclado: boolean }) {
+  if (doc === hoje) return <span className="mini mono">{doc}</span>;
+  return (
+    <span className="mini mono" title={mesclado ? `Documento lançado no código ${doc}, mesclado neste item (${hoje})` : `Documento com o código ${doc}; o item hoje é ${hoje}`}>
+      {doc} → <b>{hoje}</b>{mesclado && <> <Pill t="mesclado" tom="violet" /></>}
+    </span>
+  );
+}
+
+const ORIGEM_COD: Record<CodigoHist["origem"], [string, Tom]> = {
+  omie: ["código do Omie", "info"], mesclado: ["código mesclado", "violet"], recodificado: ["código do painel", "ok"], fornecedor: ["código do fornecedor", "off"],
+};
+/** Códigos deste item: todos os que já foram usados e respondem nele hoje (resolvedor de códigos). */
+function CodigosDoItem({ codigos }: { codigos: CodigoHist[] }) {
+  if (codigos.length <= 1) return null;
+  const quando = (s: string | null) => (s ? new Date(s).toLocaleDateString("pt-BR") : null);
+  return (
+    <div className="cod-hist">
+      <span className="mini" style={{ fontWeight: 600 }}>Códigos deste item:</span>
+      {codigos.map((c, i) => {
+        const [t, tom] = ORIGEM_COD[c.origem];
+        const atual = c.codigo_usado === c.codigo_atual;
+        return (
+          <span key={i} className={`cod-chip ${atual ? "atual" : ""}`} title={[t, c.fornecedor, quando(c.desde) && `desde ${quando(c.desde)}`, c.por && `por ${c.por}`].filter(Boolean).join(" · ")}>
+            <b className="mono">{c.codigo_usado}</b> <Pill t={atual ? "atual" : t} tom={atual ? "ok" : tom} />
+            {c.fornecedor && <span className="mini"> {c.fornecedor.slice(0, 24)}</span>}
+            {c.desde && <span className="mini"> · {quando(c.desde)}</span>}
+          </span>
+        );
+      })}
+    </div>
+  );
 }
 
 function Stat({ r, v, s, cor, titulo }: { r: string; v: string; s: string; cor?: string; titulo?: string }) {
@@ -363,12 +406,13 @@ function AbaUso({ p, usos, filtrarCliente }: { p: ItemEstoque; usos: MovEstoque[
 }
 
 // ── Movimentação (Kardex) ────────────────────────────────────────────────────
-function AbaMov({ p, movs, nomesSec }: { p: ItemEstoque; movs: MovEstoque[]; nomesSec: Map<number, string> }) {
+function AbaMov({ p, movs, nomesSec, codDoc }: { p: ItemEstoque; movs: MovEstoque[]; nomesSec: Map<number, string>; codDoc: (id: number | null | undefined) => { doc: string; mesclado: boolean } }) {
+  const hojeCod = p.codigo_novo ?? p.codigo;
   if (!movs.length) return <div className="vazio">Sem movimentos sincronizados.</div>;
   const qb = quebras(movs);
   const csv = () => baixarCSV(`kardex-${p.codigo}-${hoje()}.csv`, [
-    ["Data", "Origem", "Local", "Doc / pedido", "Cliente", "Projeto", "Qtde", "Valor unit.", "Saldo", "Cancelado", "Saldo não fecha"],
-    ...movs.map((m, i) => [m.dt_mov, m.des_origem, nomeLocal(m.codigo_local_estoque), m.doc ?? m.num_pedido, m.cliente, m.projeto,
+    ["Data", "Origem", "Local", "Doc / pedido", "Código no documento", "Código atual", "Cliente", "Projeto", "Qtde", "Valor unit.", "Saldo", "Cancelado", "Saldo não fecha"],
+    ...movs.map((m, i) => [m.dt_mov, m.des_origem, nomeLocal(m.codigo_local_estoque), m.doc ?? m.num_pedido, codDoc(m.id_prod).doc, hojeCod, m.cliente, m.projeto,
       m.qtde, m.valor, m.saldo, m.cancelado ? "sim" : "", qb.has(i) ? "sim" : ""]),
   ]);
   return (<>
@@ -380,13 +424,14 @@ function AbaMov({ p, movs, nomesSec }: { p: ItemEstoque; movs: MovEstoque[]; nom
     <GraficoSaldo movs={movs} qb={qb} />
     <div style={{ maxHeight: 460, overflow: "auto", marginTop: 12 }}>
       <table className="tabela">
-        <thead><tr><th>Data</th><th>Origem</th><th>Doc / pedido</th><th className="opt">Cliente</th><th className="r">Qtde</th><th className="r opt">Valor unit.</th><th className="r">Saldo</th><th /></tr></thead>
+        <thead><tr><th>Data</th><th>Origem</th><th>Doc / pedido</th><th title="Código usado no documento → código do item hoje">Código no doc.</th><th className="opt">Cliente</th><th className="r">Qtde</th><th className="r opt">Valor unit.</th><th className="r">Saldo</th><th /></tr></thead>
         <tbody>
           {movs.map((m, i) => [m, i] as const).reverse().map(([m, i]) => (
             <tr key={m.id_mov} style={{ opacity: m.cancelado ? 0.45 : 1, textDecoration: m.cancelado ? "line-through" : undefined }}>
               <td className="num">{ddmmaa(m.dt_mov)}</td>
-              <td>{m.des_origem}{(p.locais.length > 1 || nomesSec.size > 0) && <div className="mini">{nomeLocal(m.codigo_local_estoque)}{m.id_prod != null && m.id_prod !== p.n_cod_prod ? ` · código ${nomesSec.get(m.id_prod) ?? m.id_prod}` : ""}</div>}</td>
+              <td>{m.des_origem}{(p.locais.length > 1 || nomesSec.size > 0) && <div className="mini">{nomeLocal(m.codigo_local_estoque)}</div>}</td>
               <td className="mini">{m.doc}{m.pv_numero && <div>PV {m.pv_numero}</div>}</td>
+              <td><CodDocHoje {...codDoc(m.id_prod)} hoje={hojeCod} /></td>
               <td className="opt">{m.cliente ?? ""}</td>
               <td className="r num" style={{ fontWeight: 600, color: `var(--ww-${m.qtde < 0 ? "crit" : "ok"}-text)` }}>{m.qtde > 0 ? "+" : "−"}{q(Math.abs(m.qtde))}</td>
               <td className="r num opt">{brl(m.valor)}</td>
@@ -468,7 +513,8 @@ function AbaCompras({ p, pcs, abertos }: { p: ItemEstoque; pcs: PcItem[]; aberto
             const [t, tm] = sit(x);
             return (
               <tr key={`${x.pedido_id}:${x.numero}:${x.qtd}:${x.valor_unit}`}>
-                <td style={{ fontWeight: 600 }}>{x.numero}{x.origem === "painel" && <div className="mini">painel</div>}{x.de_codigo && <div className="mini">código {x.de_codigo}</div>}</td>
+                <td style={{ fontWeight: 600 }}>{x.numero}{x.origem === "painel" && <div className="mini">painel</div>}
+                  <div><CodDocHoje doc={x.de_codigo ?? p.codigo_omie ?? p.codigo} mesclado={!!x.de_codigo} hoje={p.codigo_novo ?? p.codigo} /></div></td>
                 <td className="num">{ddmmaa(x.emissao)}</td>
                 <td>{x.fornecedor || "— fornecedor não cadastrado"}</td>
                 <td className="opt mini">{x.projeto ?? ""}</td>

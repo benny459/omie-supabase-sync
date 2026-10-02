@@ -180,7 +180,7 @@ export function PaletaEstoque({ itens, fechar, onItem, onPc, onCliente }: {
 }) {
   const [s, setS] = useState("");
   const [sel, setSel] = useState(0);
-  const [remoto, setRemoto] = useState<{ q: string; pcs: PcBusca[]; clientes: CliBusca[] }>({ q: "", pcs: [], clientes: [] });
+  const [remoto, setRemoto] = useState<{ q: string; pcs: PcBusca[]; clientes: CliBusca[]; codigos: { codigo_usado: string; fornecedor: string | null; n_cod_prod_atual: number }[] }>({ q: "", pcs: [], clientes: [], codigos: [] });
   const inp = useRef<HTMLInputElement>(null);
   const porId = useMemo(() => new Map(itens.map((p) => [p.n_cod_prod, p])), [itens]);
   /** Código mesclado responde no principal: achar o código antigo leva à ficha do principal. */
@@ -197,7 +197,7 @@ export function PaletaEstoque({ itens, fechar, onItem, onPc, onCliente }: {
       try {
         const r = await fetch(`/api/estoque/busca?q=${encodeURIComponent(sl)}`, { signal: ctrl.signal });
         const j = await r.json();
-        if (r.ok) setRemoto({ q: sl, pcs: j.pcs ?? [], clientes: j.clientes ?? [] });
+        if (r.ok) setRemoto({ q: sl, pcs: j.pcs ?? [], clientes: j.clientes ?? [], codigos: j.codigos ?? [] });
       } catch {}
     }, 180);
     return () => { clearTimeout(t); ctrl.abort(); };
@@ -212,6 +212,9 @@ export function PaletaEstoque({ itens, fechar, onItem, onPc, onCliente }: {
         || Number(b.codigo.toLowerCase().startsWith(sl)) - Number(a.codigo.toLowerCase().startsWith(sl)) || b.n_mov - a.n_mov)
       .slice(0, 8);
     const ok = remoto.q === sl && sl.length >= 3;
+    // código de fornecedor → item de hoje (entra na lista de itens, no topo)
+    const porFornecedor = ok ? remoto.codigos.map((c) => porId.get(Number(c.n_cod_prod_atual))).filter((p): p is ItemEstoque => !!p && !its.includes(p)) : [];
+    its = [...porFornecedor, ...its].slice(0, 8);
     return [
       ...its.map((p) => ({ k: "item" as const, p })),
       ...(ok ? remoto.pcs.map((pc) => ({ k: "pc" as const, pc })) : []),

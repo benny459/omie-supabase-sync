@@ -324,3 +324,8 @@
 }
 .est .tabela tr.lote-cab td { background: color-mix(in srgb, var(--ww-accent-soft) 40%, transparent); }
 .est .tabela tr.no-lote td:first-child { padding-left: 34px; }
+
+/* Histórico de códigos (02/10/26) */
+.est .cod-hist { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 10px 16px; border-bottom: 1px solid var(--ww-border); }
+.est .cod-chip { display: inline-flex; gap: 4px; align-items: center; padding: 3px 8px; border-radius: 10px; border: 1px solid var(--ww-border); background: var(--ww-panel-sunken); font-size: 12px; }
+.est .cod-chip.atual { border-color: var(--ww-ok); }

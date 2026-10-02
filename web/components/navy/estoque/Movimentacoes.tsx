@@ -10,7 +10,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { hoje, nomeLocal, normMov, somaDias, type ItemEstoque, type MovEstoque } from "@/lib/estoque";
+import { baixarCSV, hoje, nomeLocal, normMov, somaDias, type ItemEstoque, type MovEstoque } from "@/lib/estoque";
 import { Pill, Thumb, brl, ddmm, dsem, invalidarItens, kbrl, postar, q, useToast } from "./comum";
 import { ModalNovaMov } from "./NovaMovimentacao";
 export { ModalNovaMov };
@@ -114,7 +114,7 @@ function AbaMovsCliente({ porId, itens, abrir }: {
 
   const t = busca.trim().toLowerCase();
   const rs = linhas.filter((l) => (fonte === "todas" || l.fonte === fonte) && (!tipoF || l.tipoKey === tipoF) && (!solF || l.solicitante === solF)
-    && (!t || [porId.get(l.id_prod ?? -1)?.descricao, porId.get(l.id_prod ?? -1)?.codigo, l.doc, l.cliente, l.projeto, l.solicitante, l.tipo]
+    && (!t || [porId.get(l.id_prod ?? -1)?.descricao, porId.get(l.id_prod ?? -1)?.codigo, porId.get(l.id_prod ?? -1)?.codigo_novo, l.doc, l.cliente, l.projeto, l.solicitante, l.tipo]
       .some((v) => (v ?? "").toLowerCase().includes(t))));
   const opcoesTipo = useMemo(() => {
     const m = new Map<string, string>();
@@ -144,9 +144,10 @@ function AbaMovsCliente({ porId, itens, abrir }: {
   // uma linha de movimento (dentro de lote: recuada)
   const linhaMov = (x: Linha, dentro: boolean) => {
     const p = porId.get(x.id_prod ?? -1);
+    const cd = codigos(x);
     return (
                     <tr key={x.k} className={`click ${dentro ? "no-lote" : ""}`} style={{ opacity: x.apagado ? 0.45 : 1 }} onClick={() => p && abrir(p, "mov")}>
-                      <td><div className="prod"><Thumb src={p?.foto} /><div><div className="n">{p?.descricao ?? `Produto ${x.id_prod}`}</div><div className="c">{p?.codigo ?? ""} · {x.transfer ?? x.local}</div></div></div></td>
+                      <td><div className="prod"><Thumb src={p?.foto} /><div><div className="n">{p?.descricao ?? `Produto ${x.id_prod}`}</div><div className="c"><span className="mono" title="Código no documento → código do item hoje">{cd.doc}{cd.hoje !== cd.doc ? <> → <b>{cd.hoje}</b></> : null}</span>{cd.mesclado && <> <Pill t="mesclado" tom="violet" /></>} · {x.transfer ?? x.local}</div></div></div></td>
                       <td>{x.tipo} {x.fonte === "painel" ? <Pill t={x.status === "aplicado" ? "interna" : x.status ?? ""} tom={x.status === "pendente" ? "warn" : x.status === "aplicado" ? "info" : "off"} /> : null}
                         <div className="mini">{[x.doc, x.sub].filter(Boolean).join(" · ") || "—"}</div>
                         {x.mov && apoio?.admin && x.status === "aplicado" && <button className="link mini" onClick={(ev) => { ev.stopPropagation(); decidir(x.mov!, "cancelar"); }}>cancelar</button>}</td>
@@ -157,6 +158,18 @@ function AbaMovsCliente({ porId, itens, abrir }: {
                     </tr>
     );
   };
+  /** Código usado no documento e o código do item hoje (o mesclado responde no principal). */
+  const codigos = (x: Linha) => {
+    const p = porId.get(x.id_prod ?? -1);
+    const hojeIt = p?.mesclado_em != null ? porId.get(p.mesclado_em) ?? p : p;
+    return { doc: p ? p.codigo_omie ?? p.codigo : String(x.id_prod ?? ""), hoje: hojeIt ? hojeIt.codigo_novo ?? hojeIt.codigo : "", mesclado: !!p && p.mesclado_em != null,
+      descricaoHoje: hojeIt?.descricao ?? "" };
+  };
+  const csv = () => baixarCSV(`movimentacao-${de}-a-${ate}.csv`, [
+    ["Data", "Origem", "Tipo", "Documento", "Código no documento", "Código atual", "Item (hoje)", "Mesclado", "Local", "Cliente", "Projeto", "Solicitante", "Qtde", "Valor unit.", "Saldo após", "Situação"],
+    ...rs.map((x) => { const c = codigos(x); return [x.dia, x.fonte === "omie" ? "Omie" : "Painel", x.tipo, x.doc ?? "", c.doc, c.hoje, c.descricaoHoje, c.mesclado ? "sim" : "",
+      x.transfer ?? x.local, x.cliente ?? "", x.projeto ?? "", x.solicitante ?? "", x.qtde, x.unit, x.saldo ?? "", x.status ?? (x.apagado ? "cancelado" : "")]; }),
+  ]);
   /** Junta, dentro do dia, as linhas do mesmo lote (lote com 2+ linhas vira uma linha que abre). */
   const blocosDoDia = (l: Linha[]): { lote: number | null; linhas: Linha[] }[] => {
     const out: { lote: number | null; linhas: Linha[] }[] = [], idx = new Map<number, number>();
@@ -183,6 +196,7 @@ function AbaMovsCliente({ porId, itens, abrir }: {
       </select>}
       <input className="inp" value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Produto, cliente, projeto, doc…" style={{ width: 220 }} aria-label="Buscar movimentos" />
       <div className="sp" />
+      <button className="btn sm" onClick={csv} disabled={carregando}>CSV</button>
       {apoio?.admin && <button className="btn sm" onClick={() => setConfig(true)}>Configurar tipos</button>}
       <button className="btn sm pri" onClick={() => setNova(true)} disabled={!apoio}>+ Nova movimentação</button>
     </div>
