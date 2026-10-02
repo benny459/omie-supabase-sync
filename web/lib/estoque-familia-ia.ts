@@ -85,7 +85,7 @@ function mapear(fams: Fam[], nome: string): Fam | undefined {
 }
 
 const motivoTexto = (r: Pick<ResultadoIA, "motivo" | "concorda" | "nova">) =>
-  `IA: ${r.motivo}${r.concorda ? ` · confirmado pelo ${r.concorda === "ncm" ? "NCM" : r.concorda === "vizinhos" ? "itens parecidos" : "NCM e itens parecidos"}` : ""}${r.nova ? ` · sugere criar a família “${r.nova}”` : ""}`;
+  `IA: ${r.motivo}${r.concorda ? ` · confirmado ${r.concorda === "ncm" ? "pelo NCM" : r.concorda === "vizinhos" ? "por itens parecidos" : "pelo NCM e por itens parecidos"}` : ""}${r.nova ? ` · sugere criar a família “${r.nova}”` : ""}`;
 
 /**
  * Passada de IA sobre as sugestões pendentes SEM família sugerida. Aplica o cache primeiro; só o resto vai à IA.
