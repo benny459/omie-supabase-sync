@@ -16,7 +16,8 @@ export async function GET(req: Request) {
   const variante: VariantePdf = sp.get("variante") === "sem_valores" ? "sem_valores" : "completo";
   if (!id) return NextResponse.json({ error: "id obrigatório" }, { status: 400 });
   try {
-    const { pdf, pedido } = await gerarPdfPedido(id, variante, q.nome);
+    const ant = sp.get("anterior");
+    const { pdf, pedido } = await gerarPdfPedido(id, variante, q.nome, ant == null ? undefined : ant === "1");
     const nome = `pedido_de_compra_${pedido.num}${variante === "sem_valores" ? "_sem_valores" : ""}.pdf`;
     return new NextResponse(pdf, { headers: {
       "Content-Type": "application/pdf", "Cache-Control": "no-store",

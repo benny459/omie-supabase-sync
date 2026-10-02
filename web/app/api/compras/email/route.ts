@@ -77,7 +77,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: `Modo teste: só envia para ${so.join(", ")}.` }, { status: 400 });
   }
   try {
-    const { pdf, pedido, empresa } = await gerarPdfPedido(id, variante, q.nome);
+    const { pdf, pedido, empresa } = await gerarPdfPedido(id, variante, q.nome, b.anterior == null ? undefined : !!b.anterior);
     if (pedido.aprov !== "aprovado") throw new Error("Pedido ainda não aprovado — aprove antes de enviar ao fornecedor");
     const nomeEmp = titulo(empresa.razao_social ?? pedido.emp);
     const texto = String(b.texto ?? "").trim();

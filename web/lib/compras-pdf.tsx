@@ -14,6 +14,13 @@ import { totais, totalItem, type Pedido } from "@/lib/compras";
 
 export type VariantePdf = "completo" | "sem_valores";
 
+/* Histórico de códigos (02/10/26): PC NOVO (já com o código de hoje) pode imprimir
+   uma linha pequena "código anterior" sob o item nos primeiros meses — ligado por
+   padrão até 31/12/2026. PC ANTIGO imprime o código que foi usado (é cópia do
+   documento) e nunca ganha essa linha. */
+export const CODIGO_ANTERIOR_PADRAO_ATE = "2026-12-31";
+export const codigoAnteriorPadrao = (hoje = new Date().toISOString().slice(0, 10)) => hoje <= CODIGO_ANTERIOR_PADRAO_ATE;
+
 type Empresa = { razao_social?: string; cnpj?: string; ie?: string; im?: string; endereco?: string; numero?: string; complemento?: string;
   bairro?: string; cidade?: string; uf?: string; cep?: string; telefone?: string; email?: string };
 export type Fornecedor = { razao_social?: string; nome_fantasia?: string; cnpj_cpf?: string; inscricao_estadual?: string;
@@ -87,7 +94,7 @@ const s = StyleSheet.create({
     fontFamily: "Helvetica-Bold", transform: "rotate(-18deg)" },
 });
 
-function Itens({ p, variante }: { p: Pedido; variante: VariantePdf }) {
+function Itens({ p, variante, anteriores }: { p: Pedido; variante: VariantePdf; anteriores: Record<string, string> }) {
   const v = variante === "completo";
   const W = v ? { n: 18, prod: 186, ncm: 44, q: 40, vu: 58, d: 34, ipi: 30, st: 40, tot: 57 }
               : { n: 22, prod: 330, ncm: 70, q: 85, vu: 0, d: 0, ipi: 0, st: 0, tot: 0 };
@@ -114,6 +121,7 @@ function Itens({ p, variante }: { p: Pedido; variante: VariantePdf }) {
           <View style={[s.td, { width: W.prod }]}>
             <Text style={s.descB}>{it.desc}</Text>
             <Text style={s.descS}>{it.cod ? `Cód. ${it.cod}` : ""}{it.obs ? `${it.cod ? " · " : ""}${it.obs}` : ""}</Text>
+            {it.cod && anteriores[it.cod.toUpperCase()] ? <Text style={s.descS}>código anterior: {anteriores[it.cod.toUpperCase()]}</Text> : null}
           </View>
           <Text style={[s.td, { width: W.ncm }]}>{it.ncm || <Text style={s.dash}>—</Text>}</Text>
           <Text style={[s.td, s.r, { width: W.q }]}>{QTD.format(Number(it.qtd) || 0)} {(it.un ?? "UN").toUpperCase()}</Text>
@@ -128,8 +136,9 @@ function Itens({ p, variante }: { p: Pedido; variante: VariantePdf }) {
   );
 }
 
-export function DocumentoPedido({ p, empresa, forn, condicao, variante, usuario, agora }: {
+export function DocumentoPedido({ p, empresa, forn, condicao, variante, usuario, agora, anteriores = {} }: {
   p: Pedido; empresa: Empresa; forn: Fornecedor; condicao: string; variante: VariantePdf; usuario: string; agora: Date;
+  anteriores?: Record<string, string>;
 }): ReactElement<DocumentProps> {
   const t = totais({ itens: p.itens ?? [], frete: p.frete ?? {} });
   const fr = p.frete ?? {};
@@ -188,7 +197,7 @@ export function DocumentoPedido({ p, empresa, forn, condicao, variante, usuario,
           </View>
         </View>
 
-        <Itens p={p} variante={variante} />
+        <Itens p={p} variante={variante} anteriores={anteriores} />
 
         {v && (
           <View style={s.bottom} wrap={false}>
@@ -241,7 +250,7 @@ export function DocumentoPedido({ p, empresa, forn, condicao, variante, usuario,
 }
 
 /** Junta pedido + empresa + fornecedor + condição e devolve o PDF. */
-export async function gerarPdfPedido(id: number, variante: VariantePdf, usuario: string) {
+export async function gerarPdfPedido(id: number, variante: VariantePdf, usuario: string, codigoAnterior = codigoAnteriorPadrao()) {
   const admin = supaAdmin();
   const { data: ped, error } = await admin.schema("orders").rpc("compras_pedido", { p_id: id });
   if (error) throw new Error(error.message);
@@ -254,8 +263,19 @@ export async function gerarPdfPedido(id: number, variante: VariantePdf, usuario:
       .eq("empresa", p.emp).eq("codigo_cliente_omie", p.fornCod).maybeSingle() : Promise.resolve({ data: null }),
     p.parc ? admin.schema("finance").from("parcelas").select("descricao").eq("codigo", p.parc).maybeSingle() : Promise.resolve({ data: null }),
   ]);
+  // código anterior só para item cujo código no PC já é o código NOVO (recodificado) e o do Omie era outro
+  const anteriores: Record<string, string> = {};
+  const cods = [...new Set((p.itens ?? []).map((i) => i.cod).filter(Boolean) as string[])];
+  if (codigoAnterior && cods.length) {
+    const { data: rs } = await admin.schema("orders").rpc("item_codigo_resolver", { p_empresa: p.emp, p_codigos: cods });
+    for (const r of (rs ?? []) as { codigo_usado: string; origem: string; codigo_omie_atual: string | null; codigo_novo_atual: string | null }[]) {
+      if (r.origem === "recodificado" && r.codigo_novo_atual && r.codigo_usado.toUpperCase() === r.codigo_novo_atual.toUpperCase()
+          && r.codigo_omie_atual && r.codigo_omie_atual.toUpperCase() !== r.codigo_usado.toUpperCase())
+        anteriores[r.codigo_usado.toUpperCase()] = r.codigo_omie_atual;
+    }
+  }
   const doc = (
-    <DocumentoPedido p={p} empresa={(emp ?? {}) as Empresa} forn={(forn ?? {}) as Fornecedor}
+    <DocumentoPedido anteriores={anteriores} p={p} empresa={(emp ?? {}) as Empresa} forn={(forn ?? {}) as Fornecedor}
       condicao={(parc as { descricao?: string } | null)?.descricao ?? p.parc ?? ""} variante={variante}
       usuario={usuario} agora={new Date()} />
   );
