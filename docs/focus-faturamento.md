@@ -12,13 +12,14 @@ espelho das notas emitidas pelo Omie (`sales.nfe_saida`, `sales.nfse_saida`,
 | Empresa SAFE WATER (15.766.003/0001-08) na Focus | cadastrada, Barueri/SP, IE 206878808115, IM 4AY5076 |
 | Certificado A1 na Focus | carregado — **vence 23/10/2026** |
 | Regime tributário | **Simples Nacional** (Omie: `optante_simples_nacional = S`; Focus: regime 1) — correto |
-| Emissão de NF-e na Focus | **ligada em 02/10/2026** — série **2**, próximo nº 1 (produção e homologação) |
+| Emissão de NF-e na Focus | **ligada em 02/10/2026** — produção na **série 1, continuando o Omie** (próx. 2193); homologação série 2 |
 | Emissão de NFS-e na Focus | **ligada em 02/10/2026** — RPS série **"2"**, próximo nº 1 (produção e homologação) |
 | NFS-e em Barueri pela Focus | suportado: provedor **BarueriWs**, ativo, com homologação e cancelamento; exige certificado, endereço, CPF/CNPJ do tomador e item da lista de serviço |
 | Recebimento de notas (NF-e, CT-e, NFS-e) | já funciona (importer agendado) |
 
-Volume dos últimos 12 meses: **851 OS faturadas (NFS-e)** e **388 NF-e**.
-Serviço pesa mais que produto: sem NFS-e não dá para largar o Omie.
+Volume dos últimos 12 meses: **388 NF-e** e **40 NFS-e** da SF (+12 da WW).
+As ~850 OS faturadas no ano são, na maioria, **recibos** (nº de recibo 4589… em
+01/10/2026), não nota fiscal — confirmado pelo Benny em 02/10: ficam fora da Focus.
 
 Como o Omie emite hoje:
 - NF-e: modelo 55, **série 1**, última nº **2192** (01/10/2026), CRT 1. Regras
@@ -46,10 +47,22 @@ Como o Omie emite hoje:
 
 ### 1. Configuração da empresa na Focus — FEITO em 02/10/2026
 `scripts/config_focus_empresa.py` (workflow `focus_diag`, modo `config` simula,
-`config-aplicar` grava): regime 1, NF-e e NFS-e ligadas, NF-e série 2 e RPS série
-"2" começando em 1 — o Omie continua emitindo nas séries dele (NF-e 1; RPS
-"NFSE"/"900") sem colisão. Pendente: **renovar o certificado A1 antes de 23/10**
-(Focus e Omie dependem dele).
+`config-aplicar` grava): regime 1, NF-e e NFS-e ligadas.
+
+**Numeração (decisão do Benny, 02/10):** a nota emitida pela Focus segue a
+sequência do Omie.
+- **NF-e**: produção na **série 1**. Na hora de emitir, o painel consulta no
+  Omie (API, ao vivo) o último número da série 1 e manda `numero` = último + 1
+  explícito no JSON da Focus. Se depois alguém emitir no Omie e coincidir, o
+  Omie recusa por duplicidade e o número precisa ser ajustado lá (NF-e são
+  ~1–2/dia, raro). `proximo_numero_nfe_producao` = 2193 é só o ponto de partida.
+- **NFS-e**: o número da nota é dado pela **prefeitura de Barueri** — segue a
+  mesma sequência sozinho (últimas: 107, 108, 109). O RPS da Focus usa série
+  "2" só para não repetir RPS do Omie ("NFSE"/"900"); não aparece como número
+  da nota.
+- Homologação: NF-e série 2, RPS série "2" (ambiente separado).
+
+Pendente: **renovar o certificado A1 antes de 23/10** (Focus e Omie dependem dele).
 
 ### 2. Regras fiscais (o que o Omie calcula hoje e nós teremos que mandar pronto)
 A Focus não calcula imposto: cada item vai com CFOP, CST de ICMS/PIS/COFINS
@@ -88,11 +101,10 @@ A Focus não calcula imposto: cada item vai com CFOP, CST de ICMS/PIS/COFINS
   painel passa a ser a fonte.
 
 ## Ordem sugerida
-1. **NFS-e primeiro**: mais volume (851/ano), regra fiscal já conhecida pelo
-   espelho, sem estoque envolvido. Homologação em Barueri → produção com série
-   de RPS própria.
-2. **NF-e depois**: depende do XML/regras com o contador e do estoque. Série 2
-   em paralelo ao Omie até a virada.
+1. **Teste em homologação** de uma NFS-e e uma NF-e a partir de um PV/OS real.
+2. **NF-e** (388/ano, maior volume fiscal): regras já mapeadas por CFOP; número
+   consultado no Omie na hora.
+3. **NFS-e** (~40/ano): regra conhecida pelo espelho; número da prefeitura.
 3. **Virada**: quando a nota pela Focus estiver estável, o Omie para de emitir.
 
 ## Decisões
