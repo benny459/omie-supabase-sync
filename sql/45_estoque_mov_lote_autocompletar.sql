@@ -83,6 +83,12 @@ create or replace function orders.fn_sem_acento(t text) returns text language sq
   select lower(translate(coalesce(t, ''), 'ÁÀÂÃÄÉÈÊËÍÌÎÏÓÒÔÕÖÚÙÛÜÇáàâãäéèêëíìîïóòôõöúùûüç', 'AAAAAEEEEIIIIOOOOOUUUUCaaaaaeeeeiiiiooooouuuuc'))
 $$;
 
+-- Casa palavra por palavra (sem acento): "hosp sao cam" acha "HOSPITAL SÃO CAMILO".
+create or replace function orders.fn_casa(p_texto text, p_q text) returns boolean language sql immutable as $$
+  select coalesce(bool_and(orders.fn_sem_acento(p_texto) like '%' || t || '%'), true)
+  from unnest(regexp_split_to_array(orders.fn_sem_acento(trim(coalesce(p_q, ''))), '\s+')) t where t <> ''
+$$;
+
 create or replace function orders.estoque_autocompletar(p_tipo text, p_q text, p_empresa text default 'SF') returns jsonb
 language plpgsql stable security definer set search_path = orders, public as $fn$
 declare q text := '%' || orders.fn_sem_acento(trim(coalesce(p_q, ''))) || '%'; r jsonb;
@@ -92,8 +98,8 @@ begin
       select c.codigo_cliente_omie as id, c.razao_social, c.nome_fantasia, c.cnpj_cpf, c.cidade, c.estado
       from finance.clientes c
       where c.empresa = p_empresa and coalesce(c.inativo, 'N') <> 'S'
-        and orders.fn_sem_acento(concat_ws(' ', c.razao_social, c.nome_fantasia, c.cnpj_cpf, regexp_replace(coalesce(c.cnpj_cpf, ''), '\D', '', 'g'))) like q
-      order by (orders.fn_sem_acento(c.nome_fantasia) like q) desc, c.nome_fantasia nulls last, c.razao_social limit 15) x;
+        and orders.fn_casa(concat_ws(' ', c.razao_social, c.nome_fantasia, c.cnpj_cpf, regexp_replace(coalesce(c.cnpj_cpf, ''), '\D', '', 'g')), p_q)
+      order by (orders.fn_casa(c.nome_fantasia, p_q)) desc, c.nome_fantasia nulls last, c.razao_social limit 15) x;
   elsif p_tipo = 'projeto' then
     select coalesce(jsonb_agg(x), '[]') into r from (
       select pj.codigo as id, pj.nome,
@@ -104,7 +110,7 @@ begin
               ) u join finance.clientes c on c.empresa = p_empresa and c.codigo_cliente_omie::text = u.cli
               group by 1 order by count(*) desc limit 1) as cliente
       from finance.projetos pj
-      where pj.empresa = p_empresa and coalesce(pj.inativo, 'N') <> 'S' and orders.fn_sem_acento(pj.nome) like q
+      where pj.empresa = p_empresa and coalesce(pj.inativo, 'N') <> 'S' and orders.fn_casa(pj.nome, p_q)
       order by pj.nome limit 15) x;
   elsif p_tipo = 'pvos' then
     select coalesce(jsonb_agg(x), '[]') into r from (
@@ -115,7 +121,7 @@ begin
         left join finance.clientes c on c.empresa = pv.empresa and c.codigo_cliente_omie = pv.codigo_cliente
         left join finance.projetos pj on pj.empresa = pv.empresa and pj.codigo::text = pv.codigo_projeto
         where pv.empresa = p_empresa and pv.etapa in ('10', '20', '50')
-          and orders.fn_sem_acento(concat_ws(' ', 'pv', pv.numero_pedido, c.razao_social, c.nome_fantasia, pj.nome)) like q
+          and orders.fn_casa(concat_ws(' ', 'pv', pv.numero_pedido, c.razao_social, c.nome_fantasia, pj.nome), p_q)
         union all
         select distinct on (os.numero_os) 'OS ' || os.numero_os, 'OS', os.numero_os, os.etapa,
                coalesce(c.nome_fantasia, c.razao_social), pj.nome, os.valor_total
@@ -123,14 +129,14 @@ begin
         left join finance.clientes c on c.empresa = os.empresa and c.codigo_cliente_omie::text = os.codigo_cliente
         left join finance.projetos pj on pj.empresa = os.empresa and pj.codigo::text = os.codigo_projeto
         where os.empresa = p_empresa and coalesce(os.faturada, 'N') <> 'S' and coalesce(os.cancelada, 'N') <> 'S'
-          and orders.fn_sem_acento(concat_ws(' ', 'os', os.numero_os, c.razao_social, c.nome_fantasia, pj.nome)) like q
+          and orders.fn_casa(concat_ws(' ', 'os', os.numero_os, c.razao_social, c.nome_fantasia, pj.nome), p_q)
       ) y order by numero desc limit 15) x;
   elsif p_tipo = 'pc' then
     select coalesce(jsonb_agg(x), '[]') into r from (
       select p.numero, p.fornecedor_nome as fornecedor, p.emissao, p.projeto_nome as projeto
       from compras.pedidos p
       where p.empresa = p_empresa and p.tipo = 'PC' and not coalesce(p.cancelado, false)
-        and orders.fn_sem_acento(concat_ws(' ', p.numero, p.fornecedor_nome)) like q
+        and orders.fn_casa(concat_ws(' ', p.numero, p.fornecedor_nome), p_q)
       order by p.emissao desc nulls last limit 15) x;
   else
     raise exception 'tipo inválido';

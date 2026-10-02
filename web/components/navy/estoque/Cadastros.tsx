@@ -20,7 +20,7 @@ import { AbaFotos } from "./FotosAdmin";
 type Familia = { id: number; nome: string; prefixo: string; descricao: string | null; ativo: boolean; sistema: boolean; material: boolean;
   mesclada_em: number | null; omie_codigo_familia: number | null; proximo: number; itens: number; valor: number };
 type Sug = { n_cod_prod: number; familia_atual_id: number | null; familia_sugerida_id: number | null; confianca: number; motivo: string | null;
-  status: "pendente" | "aceita" | "rejeitada" | "alterada"; familia_escolhida_id: number | null; decidido_por_email: string | null;
+  status: "pendente" | "aceita" | "rejeitada" | "alterada"; familia_escolhida_id: number | null; decidido_por_email: string | null; fonte?: string;
   item: { codigo: string; codigo_novo: string | null; descricao: string; ncm: string | null; saldo: number; cmc: number; familia: string | null } };
 type Previa = { n_cod_prod: number; codigo_omie: string; descricao: string; familia_id: number; familia: string; codigo_novo: string };
 type Aba = "familias" | "revisao" | "codigos" | "fotos";
@@ -277,7 +277,7 @@ function AbaRevisao({ d, mudou, avisar }: { d: { familias: Familia[]; revisao_co
           {(["pendente", "decididas", "todas"] as const).map((s) => <button key={s} className={`chip ${fStatus === s ? "on" : ""}`} onClick={() => setFStatus(s)}>{s === "pendente" ? "A decidir" : s === "decididas" ? "Decididas" : "Todas"}</button>)}
         </div>
         <input className="inp" value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Filtrar item…" style={{ width: 180 }} />
-        {d.admin && <button className="btn sm" disabled={indo} onClick={async () => { setIndo(true); try { const r = await postar<{ resultado: Record<string, number> }>("/api/estoque/familias/sugestoes", { acao: "gerar" }); avisar(`Sugestões recalculadas: ${r.resultado.alta} alta · ${r.resultado.media} média · ${r.resultado.baixa} baixa`, "ok"); await carregar(); } catch (e) { avisar((e as Error).message, "crit"); } finally { setIndo(false); } }}>Recalcular sugestões</button>}
+        {d.admin && <button className="btn sm" disabled={indo} onClick={async () => { setIndo(true); try { const r = await postar<{ resultado: Record<string, number>; ia?: { classificados: number; do_cache: number } }>("/api/estoque/familias/sugestoes", { acao: "gerar" }); avisar(`Sugestões recalculadas: ${r.resultado.alta} alta · ${r.resultado.media} média · ${r.resultado.baixa} baixa${r.ia ? ` · IA: ${r.ia.classificados} novos + ${r.ia.do_cache} do cache` : ""}`, "ok"); await carregar(); } catch (e) { avisar((e as Error).message, "crit"); } finally { setIndo(false); } }}>Recalcular sugestões</button>}
       </div>
       {d.admin && sel.size > 0 && (
         <div className="inv-barra t-info" style={{ margin: "0 16px 10px" }}>
@@ -316,7 +316,7 @@ function AbaRevisao({ d, mudou, avisar }: { d: { familias: Familia[]; revisao_co
                     <tr key={s.n_cod_prod}>
                       {d.admin && <td style={{ width: 30 }}><input type="checkbox" checked={sel.has(s.n_cod_prod)} onChange={() => alterna(s.n_cod_prod)} aria-label="Selecionar" /></td>}
                       <td><b>{s.item.descricao}</b><div className="mini">{s.item.codigo_novo ? `${s.item.codigo_novo} · ` : ""}{s.item.codigo}{s.item.ncm ? ` · NCM ${s.item.ncm}` : ""} · hoje: {nome(s.familia_atual_id)}</div></td>
-                      <td style={{ maxWidth: 360, minWidth: 160 }}><span className="mini">{s.motivo ?? "sem sinal suficiente"}</span></td>
+                      <td style={{ maxWidth: 360, minWidth: 160 }}>{s.fonte === "ia" && <Pill t="IA" tom="violet" />} <span className="mini">{s.motivo ?? "sem sinal suficiente"}</span></td>
                       <td>{s.familia_sugerida_id ? <Pill t={`${bd} ${Math.round(s.confianca * 100)}%`} tom={tm} /> : <Pill t="sem sugestão" tom="off" />}
                         {s.status !== "pendente" && <div className="mini">{s.status} · {s.decidido_por_email}</div>}</td>
                       <td style={{ whiteSpace: "nowrap" }}>
@@ -361,8 +361,9 @@ function TresPassos({ d, total, irRevisao, irDups }: {
         ps ? (ps.dups_pares ? `${q(ps.dups_pares)} pares abertos (${q(ps.dups_itens)} códigos) · ${q(ps.mesclados)} já mesclados — mesclados não ganham código novo` : `nenhuma duplicidade aberta · ${q(ps.mesclados)} códigos mesclados ficam de fora`) : "…",
         ps?.dups_pares ? ["Ir para Duplicidades", irDups] : undefined)}
       {passo("②", "Revisar famílias e Concluir", p2ok, p1ok && !p2ok,
-        p2ok ? "revisão concluída — a família revisada define o prefixo" : `${q(ps?.sugestoes_pendentes ?? 0)} sugestões pendentes · depois clique em “Concluir revisão de famílias”`,
-        p2ok ? undefined : ["Ir para a revisão", irRevisao])}
+        p2ok ? ((ps?.sugestoes_pendentes ?? 0) > 0 ? `concluída, mas ${q(ps!.sugestoes_pendentes)} itens ainda sem decisão — recomendo reabrir` : "revisão concluída — a família revisada define o prefixo")
+          : `${q(ps?.sugestoes_pendentes ?? 0)} sugestões pendentes · depois clique em “Concluir revisão de famílias”`,
+        p2ok && !(ps?.sugestoes_pendentes ?? 0) ? undefined : ["Ir para a revisão", irRevisao])}
       {passo("③", "Aplicar códigos", total === 0 && d.codigos_gerados > 0, p2ok,
         `${total == null ? "…" : q(total)} itens a codificar · ${q(d.codigos_gerados)} já codificados${p2ok ? "" : " · liberado depois do passo ②"}`)}
     </section>
@@ -374,7 +375,10 @@ function AbaCodigos({ d, mudou, avisar, irRevisao, irDups }: { d: { revisao_conc
   const [busca, setBusca] = useState("");
   const [lim, setLim] = useState(200);
   const [conf, setConf] = useState(false);
+  const [ciente, setCiente] = useState(false);
   const [indo, setIndo] = useState(false);
+  // revisão concluída mas com itens ainda sem decisão: eles ficam com o prefixo da família atual (muitos "Sem família", X)
+  const semDecisao = d.revisao_concluida ? d.passos?.sugestoes_pendentes ?? 0 : 0;
   const carregar = useCallback(async () => {
     const r = await fetch("/api/estoque/codigos", { cache: "no-store" });
     const j = await r.json();
@@ -385,6 +389,10 @@ function AbaCodigos({ d, mudou, avisar, irRevisao, irDups }: { d: { revisao_conc
   const porFam = useMemo(() => { const m = new Map<string, number>(); (p ?? []).forEach((x) => m.set(x.familia, (m.get(x.familia) ?? 0) + 1)); return [...m.entries()].sort((a, b) => b[1] - a[1]); }, [p]);
   return (<>
     <TresPassos d={d} total={p ? p.length : null} irRevisao={irRevisao} irDups={irDups} />
+    {semDecisao > 0 && (
+      <div className="aviso t-crit"><span><b>{q(semDecisao)} itens ainda sem família decidida</b> vão receber o código da família em que estão hoje — muitos como “Sem família” (prefixo X). Recomendo reabrir a revisão e decidir esses itens antes de gerar os códigos.</span>
+        <span style={{ flex: 1 }} /><button className="btn sm" onClick={irRevisao}>Ir para a revisão</button></div>
+    )}
     {!d.revisao_concluida && (
       <div className="aviso t-warn"><span>Prévia provisória: os códigos só podem ser gerados depois que a <b>revisão de famílias</b> for concluída — a família de cada item define o prefixo. Códigos mesclados em outro não entram.</span></div>
     )}
@@ -414,9 +422,14 @@ function AbaCodigos({ d, mudou, avisar, irRevisao, irDups }: { d: { revisao_conc
       <div className="est-ov mid" onClick={() => setConf(false)} role="dialog" aria-modal="true">
         <div className="modal" onClick={(e) => e.stopPropagation()}>
           <div className="mh"><div style={{ fontSize: 16, fontWeight: 700 }}>Gerar {q(p?.length ?? 0)} códigos novos?</div><button className="x" onClick={() => setConf(false)}>×</button></div>
-          <div className="mb"><div className="prev">Cada item recebe o código da prévia (prefixo da família + 4 dígitos). O código do Omie continua ao lado e as buscas acham os dois. Nada muda no Omie. Depois, mudar a família de um item não troca o código — para isso use “Recodificar” na ficha (o código anterior vira apelido).</div></div>
+          <div className="mb">
+            {semDecisao > 0 && (<>
+              <div className="aviso t-crit"><span><b>{q(semDecisao)} itens ainda sem família decidida</b> vão receber o código da família atual (muitos “Sem família”, prefixo X). O recomendado é reabrir a revisão primeiro.</span></div>
+              <label className="check"><input type="checkbox" checked={ciente} onChange={(e) => setCiente(e.target.checked)} /> Entendo e quero gerar mesmo assim</label>
+            </>)}
+            <div className="prev">Cada item recebe o código da prévia (prefixo da família + 4 dígitos). O código do Omie continua ao lado e as buscas acham os dois. Nada muda no Omie. Depois, mudar a família de um item não troca o código — para isso use “Recodificar” na ficha (o código anterior vira apelido).</div></div>
           <div className="mf"><button className="btn" onClick={() => setConf(false)}>Cancelar</button>
-            <button className="btn pri" disabled={indo} onClick={async () => {
+            <button className="btn pri" disabled={indo || (semDecisao > 0 && !ciente)} onClick={async () => {
               setIndo(true);
               try { const r = await postar<{ resultado: { codificados: number } }>("/api/estoque/codigos", { acao: "aplicar" }); avisar(`${q(r.resultado.codificados)} itens codificados`, "ok"); setConf(false); mudou(); await carregar(); }
               catch (e) { avisar((e as Error).message, "crit"); } finally { setIndo(false); }

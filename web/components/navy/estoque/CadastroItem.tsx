@@ -77,6 +77,13 @@ export default function CadastroItem({ codigo }: { codigo?: string }) {
   }, [f.descricao, base]);
 
   const fams = useMemo(() => (base?.familias ?? []).filter((x) => x.ativo), [base]);
+  // sugestão de família pela descrição (IA); só sugere — a pessoa escolhe
+  const [sugFam, setSugFam] = useState<{ familia_id: number; familia: string; confianca: number; motivo: string; nova: string | null } | null | "buscando">(null);
+  const sugerirFamilia = async () => {
+    setSugFam("buscando");
+    try { const r = await postar<{ sugestao: { familia_id: number; familia: string; confianca: number; motivo: string; nova: string | null } | null }>("/api/estoque/familias/sugerir-item", { descricao: f.descricao, ncm: f.ncm }); setSugFam(r.sugestao); }
+    catch { setSugFam(null); }
+  };
   const fam = fams.find((x) => String(x.id) === f.familia_id) ?? fams.find((x) => x.sistema);
   const temCodigo = editando && !!base?.item?.codigo_novo;
   const sugerido = fam ? `${fam.prefixo}${String(fam.proximo).padStart(4, "0")}` : "";
@@ -160,6 +167,12 @@ export default function CadastroItem({ codigo }: { codigo?: string }) {
               <option value="">Sem família</option>
               {fams.filter((x) => !x.sistema).map((x) => <option key={x.id} value={x.id}>{x.nome} ({x.prefixo})</option>)}
             </select>
+            {!f.familia_id && f.descricao.trim().length >= 3 && sugFam === null && <button type="button" className="link mini" style={{ textAlign: "left" }} onClick={sugerirFamilia}>Sugerir a família pela descrição</button>}
+            {sugFam === "buscando" && <span className="mini">Pensando…</span>}
+            {sugFam && sugFam !== "buscando" && String(sugFam.familia_id) !== f.familia_id && (
+              <span className="mini" style={{ fontWeight: 400 }}>Sugestão: <b>{sugFam.familia}</b> ({Math.round(sugFam.confianca * 100)}%) — {sugFam.motivo}{sugFam.nova ? ` · falta a família “${sugFam.nova}”?` : ""}{" "}
+                <button type="button" className="link mini" onClick={() => setF({ ...f, familia_id: String(sugFam.familia_id) })}>usar</button></span>
+            )}
           </label>
           <label className="f s4">Código {temCodigo ? "(gerado)" : base.admin ? "(admin pode trocar)" : "(sugerido)"}
             <input className="inp mono" value={temCodigo ? String(base.item?.codigo_novo) : f.codigo || sugerido} disabled={temCodigo || !base.admin || editando}
