@@ -184,6 +184,14 @@ export default function TopNav({ userEmail }: { userEmail?: string | null }) {
             }}>
             CRM
           </a>
+          <a href="https://app.waterworks.com.br" title="Plataforma de serviços (login próprio)"
+            style={{
+              padding: "6px 13px", borderRadius: "var(--radius-pill)", textDecoration: "none",
+              fontSize: "var(--text-body-sm)", fontWeight: 500,
+              border: "1px solid var(--ww-border-strong)", color: "var(--ww-text-2)", background: "transparent",
+            }}>
+            Serviços
+          </a>
           {areasVisiveis.map((a) => {
             const activa = a === areaActiva;
             return (
