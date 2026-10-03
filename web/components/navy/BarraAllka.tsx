@@ -178,10 +178,17 @@ function Modulo({ m, activo, ir, aquecer, pendente }: {
 }) {
   const [aberto, setAberto] = useState(false);
   const fecho = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const ancora = useRef<HTMLDivElement>(null);
+  /* A lista sai em position: fixed, ancorada ao botão. A fila dos módulos tem
+     overflow-x (para rolar em ecrã estreito), e um overflow corta também na
+     vertical — em absolute a lista ficava escondida dentro da barra. */
+  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
   const temLista = (m.itens?.length ?? 0) > 0;
 
   const abrir = () => {
     if (fecho.current) clearTimeout(fecho.current);
+    const r = ancora.current?.getBoundingClientRect();
+    if (r) setPos({ top: r.bottom + 6, left: Math.min(r.left, window.innerWidth - 230) });
     if (temLista) setAberto(true);
     if (!m.externo && aquecer) { aquecer(m.href); m.itens?.forEach((i) => i.href && aquecer(i.href)); }
   };
@@ -192,7 +199,7 @@ function Modulo({ m, activo, ir, aquecer, pendente }: {
   useEffect(() => () => { if (fecho.current) clearTimeout(fecho.current); }, []);
 
   return (
-    <div className="ab-mod" onMouseEnter={abrir} onMouseLeave={fechar}>
+    <div className="ab-mod" ref={ancora} onMouseEnter={abrir} onMouseLeave={fechar}>
       <a className="ab-mod-link" href={m.href} title={m.titulo}
         data-activo={activo ? "1" : undefined} data-aberto={aberto ? "1" : undefined}
         data-pendente={pendente && pendente === m.href ? "1" : undefined}
@@ -204,7 +211,8 @@ function Modulo({ m, activo, ir, aquecer, pendente }: {
       </a>
       {activo && <span className="ab-sublinhado" />}
       {aberto && temLista && (
-        <div className="ab-lista" onMouseEnter={abrir} onMouseLeave={fechar}>
+        <div className="ab-lista" onMouseEnter={abrir} onMouseLeave={fechar}
+          style={pos ? { position: "fixed", top: pos.top, left: pos.left, marginTop: 0 } : undefined}>
           <div className="ab-titulo">{m.nome}</div>
           {m.itens!.map((s, i) => (
             <div key={`${s.label}-${i}`}>
