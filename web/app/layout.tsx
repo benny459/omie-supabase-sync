@@ -1,11 +1,17 @@
 import type { Metadata } from "next";
-import { JetBrains_Mono } from "next/font/google";
+import { JetBrains_Mono, Plus_Jakarta_Sans } from "next/font/google";
 import "./globals.css";
 import UpdateBanner from "@/components/UpdateBanner";
 import CesarProvider from "@/components/cesar/CesarProvider";
 
-// Fonte UI: San Francisco (sistema, no macOS) via stack — sem fonte web
-// pra preservar o feel "nativo" Apple. JetBrains Mono pra códigos/valores.
+// Fonte UI: Plus Jakarta Sans — a mesma do portal ALLKA (03/10/26), para a
+// navegação portal ↔ painel parecer um sistema só. JetBrains Mono pra códigos/valores.
+const jakarta = Plus_Jakarta_Sans({
+  subsets: ["latin"],
+  display: "swap",
+  weight: ["300", "400", "500", "600", "700", "800"],
+  variable: "--font-jakarta",
+});
 const jetbrains = JetBrains_Mono({
   subsets: ["latin"],
   display: "swap",
@@ -20,7 +26,7 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   const version = process.env.NEXT_PUBLIC_APP_VERSION;
   return (
-    <html lang="pt-BR" className={jetbrains.variable}>
+    <html lang="pt-BR" className={`${jetbrains.variable} ${jakarta.variable}`}>
       <head>
         {version && <meta name="app-version" content={version} />}
         {/* Aplica .dark ANTES da hidratação se o user preferiu — evita FOUC */}

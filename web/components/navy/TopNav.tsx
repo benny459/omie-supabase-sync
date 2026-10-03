@@ -156,18 +156,18 @@ export default function TopNav({ userEmail }: { userEmail?: string | null }) {
   const labelGrupo = (g: Grupo) => GRUPOS.find((x) => x.id === g)!;
 
   return (
-    <header style={{ position: "sticky", top: 0, zIndex: 30, padding: "14px 28px 0", background: "var(--ww-bg)" }}>
+    // Desenho ALLKA (03/10/26): barra lisa de ponta a ponta com borda inferior,
+    // como a TopBar do portal — mesmos itens, ordem e links de antes.
+    <header style={{ position: "sticky", top: 0, zIndex: 30, padding: "0 0 0", background: "var(--ww-panel)", borderBottom: "1px solid var(--ww-border)" }}>
       <div style={{
         display: "flex", alignItems: "center", gap: 18, flexWrap: "wrap",
-        padding: "10px 16px", borderRadius: "var(--radius-panel)",
-        background: "var(--ww-panel-grad)", border: "1px solid var(--ww-border)",
-        boxShadow: "var(--shadow-card)",
+        padding: "10px 28px",
       }}>
         {/* Menu único (03/10/26): o logotipo leva ao portal ALLKA, onde está o CRM. */}
         <a href="/api/sso/portal?next=/w/waterworks" title="Portal ALLKA · WaterWorks"
           style={{ display: "flex", alignItems: "center", gap: 10, textDecoration: "none" }}>
           <span style={{
-            width: 30, height: 30, borderRadius: 9, background: "var(--ww-brand-grad)",
+            width: 30, height: 30, borderRadius: 8, background: "var(--ww-brand-grad)",
             display: "grid", placeItems: "center", fontWeight: 700, color: "#fff",
           }}>W</span>
           <span style={{ fontWeight: 700, fontSize: 15, color: "var(--ww-text)" }}>WaterWorks</span>
@@ -177,17 +177,17 @@ export default function TopNav({ userEmail }: { userEmail?: string | null }) {
         <nav style={{ display: "flex", gap: 6, flexWrap: "wrap", flex: 1, minWidth: 0 }}>
           <a href="/api/sso/portal?next=/w/waterworks/crm" title="CRM no portal ALLKA"
             style={{
-              padding: "6px 13px", borderRadius: "var(--radius-pill)", textDecoration: "none",
+              padding: "6px 12px", borderRadius: 8, textDecoration: "none",
               fontSize: "var(--text-body-sm)", fontWeight: 500,
-              border: "1px solid var(--ww-border-strong)", color: "var(--ww-text-2)", background: "transparent",
+              border: "1px solid transparent", color: "var(--ww-text-2)", background: "transparent",
             }}>
             CRM
           </a>
           <a href="https://app.waterworks.com.br" title="Plataforma de serviços (login próprio)"
             style={{
-              padding: "6px 13px", borderRadius: "var(--radius-pill)", textDecoration: "none",
+              padding: "6px 12px", borderRadius: 8, textDecoration: "none",
               fontSize: "var(--text-body-sm)", fontWeight: 500,
-              border: "1px solid var(--ww-border-strong)", color: "var(--ww-text-2)", background: "transparent",
+              border: "1px solid transparent", color: "var(--ww-text-2)", background: "transparent",
             }}>
             Serviços
           </a>
@@ -199,9 +199,9 @@ export default function TopNav({ userEmail }: { userEmail?: string | null }) {
                 onMouseEnter={() => itensDaArea(a).forEach((m) => aquecer(m.href))}
                 title={labelGrupo(a).desc}
                 style={{
-                  padding: "6px 13px", borderRadius: "var(--radius-pill)",
+                  padding: "6px 12px", borderRadius: 8,
                   fontSize: "var(--text-body-sm)", fontWeight: activa ? 600 : 500, cursor: "pointer",
-                  border: "1px solid " + (activa ? "var(--ww-accent)" : "var(--ww-border-strong)"),
+                  border: "1px solid transparent",
                   color: activa ? "var(--ww-accent-text)" : "var(--ww-text-2)",
                   background: activa ? "var(--ww-accent-soft)" : "transparent",
                   boxShadow: activa ? "var(--ww-glow-chip)" : "none",
@@ -214,10 +214,10 @@ export default function TopNav({ userEmail }: { userEmail?: string | null }) {
             <button type="button" onClick={() => abrirArea("sistema")}
               onMouseEnter={() => itensDaArea("sistema").forEach((m) => aquecer(m.href))}
               style={{
-                padding: "6px 13px", borderRadius: "var(--radius-pill)",
+                padding: "6px 12px", borderRadius: 8,
                 fontSize: "var(--text-body-sm)", fontWeight: areaActiva === "sistema" ? 600 : 500,
                 cursor: "pointer",
-                border: "1px solid " + (areaActiva === "sistema" ? "var(--ww-accent)" : "var(--ww-border-strong)"),
+                border: "1px solid transparent",
                 color: areaActiva === "sistema" ? "var(--ww-accent-text)" : "var(--ww-text-2)",
                 background: areaActiva === "sistema" ? "var(--ww-accent-soft)" : "transparent",
               }}>
@@ -268,7 +268,7 @@ export default function TopNav({ userEmail }: { userEmail?: string | null }) {
       </div>
 
       {secoes.length > 0 && (
-        <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "10px 8px 0" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "2px 36px 4px" }}>
           <span style={{ fontSize: "var(--text-micro)", color: "var(--ww-text-faint)", textTransform: "uppercase", letterSpacing: "var(--tracking-label)", marginRight: 4 }}>
             Relatórios
           </span>
@@ -281,9 +281,9 @@ export default function TopNav({ userEmail }: { userEmail?: string | null }) {
                   if (primeiro && itemDaRota?.href !== primeiro.href) navegar(primeiro.href);
                 }}
                 style={{
-                  padding: "4px 11px", borderRadius: "var(--radius-pill)", cursor: "pointer",
+                  padding: "4px 11px", borderRadius: 8, cursor: "pointer",
                   fontSize: "var(--text-meta)", fontWeight: activa ? 600 : 500,
-                  border: "1px solid " + (activa ? "var(--ww-accent)" : "var(--ww-border)"),
+                  border: "1px solid transparent",
                   color: activa ? "var(--ww-accent-text)" : "var(--ww-text-muted)",
                   background: activa ? "var(--ww-accent-soft)" : "transparent",
                 }}>
@@ -296,8 +296,8 @@ export default function TopNav({ userEmail }: { userEmail?: string | null }) {
 
       {/* Abas dos módulos da área activa */}
       <div style={{
-        display: "flex", alignItems: "center", gap: 4, padding: "8px 8px 0",
-        borderBottom: "1px solid var(--ww-border-subtle)", overflowX: "auto",
+        display: "flex", alignItems: "center", gap: 4, padding: "0 28px",
+        borderTop: "1px solid var(--ww-border-subtle)", overflowX: "auto",
       }}>
         {abas.map((m) => {
           const activo = itemDaRota?.href === m.href;
@@ -336,7 +336,7 @@ export default function TopNav({ userEmail }: { userEmail?: string | null }) {
             }}
             style={{
               marginLeft: "auto", display: "inline-flex", alignItems: "center", gap: 8, whiteSpace: "nowrap",
-              padding: "6px 10px", marginBottom: 4, borderRadius: 10, cursor: "pointer",
+              padding: "6px 10px", margin: "4px 0", borderRadius: 8, cursor: "pointer",
               border: "1px solid var(--ww-border-strong)", background: "var(--ww-panel-sunken, transparent)",
               color: "var(--ww-text-muted)", fontSize: "var(--text-meta)",
             }}>
