@@ -48,7 +48,7 @@ const grupoNaBarra = (m: NavItem): Grupo | undefined => {
   return g === "vendas" ? "operacao" : g;
 };
 
-export default function TopNav({ userEmail, isPlatformAdmin }: { userEmail?: string | null; isPlatformAdmin?: boolean }) {
+export default function TopNav({ userEmail, isPlatformAdmin, telasRh = [] }: { userEmail?: string | null; isPlatformAdmin?: boolean; telasRh?: { label: string; next: string }[] }) {
   const pathname = usePathname();
   const router = useRouter();
   const perms = useUserPerms();
@@ -149,6 +149,16 @@ export default function TopNav({ userEmail, isPlatformAdmin }: { userEmail?: str
     });
   }
   modulos.push({ id: "servicos", nome: "Serviços", href: "https://app.waterworks.com.br", externo: true, titulo: "Plataforma de serviços (login próprio)" });
+  // RH (03/10/26): módulo próprio, logo a seguir a Serviços, igual ao portal.
+  // Mora na app de Serviços; entra pelo login único do portal, que leva ao
+  // destino pedido. Só aparece para quem já abre o RH (lib/rh-menu.ts).
+  if (telasRh.length > 0) {
+    const rhSso = (next: string) => `https://allka.ai/api/sso/servicos?next=${encodeURIComponent(next)}`;
+    modulos.push({
+      id: "rh", nome: "RH", href: rhSso(telasRh[0].next), externo: true, titulo: "Recursos humanos (na app de Serviços)",
+      itens: telasRh.map((t) => ({ label: t.label, href: rhSso(t.next) })),
+    });
+  }
 
   return (
     <BarraAllka
