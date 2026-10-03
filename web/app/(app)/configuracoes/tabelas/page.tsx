@@ -78,7 +78,7 @@ export default async function TabelasPage({
   return (
     <div className="space-y-4 max-w-[1400px]">
       <div>
-        <h1 className="text-2xl md:text-3xl font-semibold text-ww-text tracking-tight">
+        <h1 className="text-[26px] font-semibold text-ww-text tracking-[-0.022em]">
           Tabelas do banco
         </h1>
         <p className="text-ww-textMuted text-sm mt-1">

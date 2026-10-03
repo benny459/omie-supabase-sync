@@ -16,7 +16,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ c
     <div className="space-y-4">
       <LinkClassica href="/bi/financeiro" novo />
       <div>
-        <h1 className="text-[18px] font-bold text-ww-text tracking-[-0.3px]">Financeiro</h1>
+        <h1 className="text-[26px] font-semibold text-ww-text tracking-[-0.022em]">Financeiro</h1>
         <p className="text-[12px] text-ww-textMuted mt-0.5 max-w-[860px]">
           Fluxo, análise e recebíveis numa tela só. A natureza do título é filtro, não tela — por
           isso um aging em vez de dois. A aba Fluxo mantém a mesa de reagendamento inteira:

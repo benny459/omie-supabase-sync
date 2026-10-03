@@ -10,6 +10,7 @@ import BotaoCesar from "@/components/cesar/BotaoCesar";
 import ReportsSalvos from "@/components/cesar/ReportsSalvos";
 import SupportWidget from "@/components/SupportWidget";
 import { supaServer } from "@/lib/supabase-server";
+import { supaAdmin } from "@/lib/supabase-admin";
 import type { AreaAccess, ModuleRole, PermsOverride, Role, UserPerms } from "@/lib/permissions";
 
 /* Botão "Suporte" do canto inferior direito.
@@ -29,6 +30,15 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const { data: { user } } = await supa.auth.getUser();
 
   let perms: UserPerms | null = null;
+  // Administrador da plataforma ALLKA (Benny, David): vê o "CRM ALLKA" na barra,
+  // como no portal. Mesma origem que o portal usa (profiles.is_platform_admin).
+  let isPlatformAdmin = false;
+  if (user && NAV_HORIZONTAL) {
+    try {
+      const { data: p } = await supaAdmin().from("profiles").select("is_platform_admin").eq("user_id", user.id).maybeSingle();
+      isPlatformAdmin = !!(p as { is_platform_admin?: boolean } | null)?.is_platform_admin;
+    } catch { /* sem o botão extra, nada mais muda */ }
+  }
   if (user) {
     const [{ data: profile }, { data: rolesRaw }, { data: areasRaw }] = await Promise.all([
       supa.schema("platform" as never).from("user_profiles")
@@ -64,18 +74,23 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   return (
     <UserPermsProvider user={perms}>
-      {NAV_HORIZONTAL ? <TopNav userEmail={user?.email} /> : <AppSidebar userEmail={user?.email} />}
+      {NAV_HORIZONTAL ? <TopNav userEmail={user?.email} isPlatformAdmin={isPlatformAdmin} /> : <AppSidebar userEmail={user?.email} />}
       {/* A margem de 54px existe para o trilho da sidebar; sem sidebar nao ha
           trilho, e mante-la deixava uma faixa morta a esquerda. */}
       <main className={`${NAV_HORIZONTAL ? "" : "ml-[54px]"} min-h-screen bg-ww-bg text-ww-text overflow-x-hidden`}>
-        {/* Barra superior: versão sempre visível + último sync + paleta + theme */}
-        <div className="border-b border-ww-border bg-ww-panel/70 backdrop-blur px-4 md:px-6 py-1.5 flex items-center justify-end gap-3">
-          <VersionWatcher />
-          <SyncStatusBar />
-          <BotaoCesar />
-          <SeletorPaleta />
-          <ThemeToggle />
-        </div>
+        {/* Linha de utilidades (versão, sync, Cesar, paleta, tema). Com a barra
+            ALLKA (03/10/26) estes controlos moraram para a própria barra —
+            botão de opções e "Pergunte ao Cesar". Só a sidebar antiga ainda
+            precisa desta linha. */}
+        {!NAV_HORIZONTAL && (
+          <div className="border-b border-ww-border bg-ww-panel/70 backdrop-blur px-4 md:px-6 py-1.5 flex items-center justify-end gap-3">
+            <VersionWatcher />
+            <SyncStatusBar />
+            <BotaoCesar />
+            <SeletorPaleta />
+            <ThemeToggle />
+          </div>
+        )}
         <div className="p-4 md:p-6 min-w-0">
           {/* Menu "Reports do Cesar" no TOPO das telas de BI suportadas (v3).
               Montagem única aqui: o componente lê a pathname e só renderiza

@@ -195,7 +195,7 @@ export default function TelaAvulsosNavy() {
             textTransform: "uppercase", color: "var(--ww-accent-text)",
           }}>Operação</div>
           <h1 style={{
-            margin: "2px 0 0", fontSize: "var(--text-h1)", fontWeight: 700,
+            margin: "2px 0 0", fontSize: "var(--text-h1)", fontWeight: 600,
             letterSpacing: "var(--tracking-tight)", color: "var(--ww-text)",
           }}>Vendas avulsas</h1>
           <div style={{ fontSize: "var(--text-meta)", color: "var(--ww-text-muted)", marginTop: 2 }}>

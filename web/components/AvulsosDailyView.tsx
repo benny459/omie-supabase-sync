@@ -303,7 +303,7 @@ export default function AvulsosDailyView() {
     <div className="max-w-5xl mx-auto p-6 space-y-4 avulsos-daily-root">
       <div className="flex items-center justify-between avulsos-daily-noprint">
         <div>
-          <h1 className="text-[20px] font-bold text-ww-text tracking-[-0.4px]">Daily Avulsos · Preview Webex</h1>
+          <h1 className="text-[26px] font-semibold text-ww-text tracking-[-0.022em]">Daily Avulsos · Preview Webex</h1>
           <p className="text-[12px] text-ww-textMuted mt-0.5">
             Contadores atuais + delta vs último snapshot. Links abrem painel filtrado.
           </p>

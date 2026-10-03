@@ -1969,7 +1969,7 @@ export default function BoldAvulsosView({
     <div className="space-y-3">
       {/* Top bar */}
       <div className="flex items-baseline gap-3 flex-wrap">
-        <h1 className="text-[20px] font-bold tracking-tight text-ww-text">{title}</h1>
+        <h1 className="text-[26px] font-semibold tracking-[-0.022em] text-ww-text">{title}</h1>
         <span className="text-[12px] text-ww-textMuted font-mono font-medium">
           {filtered.length.toLocaleString("pt-BR")} itens · {buckets.length} {modulo === "projetos" ? "projeto(s)" : modulo === "pcs" ? "PC(s)" : "PV/OS"}
           {loadingMore && <span className="ml-2 text-amber-700 animate-pulse">· carregando mais…</span>}

@@ -48,7 +48,7 @@ export default async function ConfiguracoesPage() {
     <div className="space-y-6 max-w-[1200px]">
       <div className="flex items-end justify-between gap-4 flex-wrap">
         <div>
-          <h1 className="text-2xl md:text-3xl font-semibold text-ww-text tracking-tight">Configurações</h1>
+          <h1 className="text-[26px] font-semibold text-ww-text tracking-[-0.022em]">Configurações</h1>
           <p className="text-ww-textMuted text-sm mt-1">Administração de usuários, permissões e sincronização.</p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">

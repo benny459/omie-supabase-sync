@@ -17,7 +17,7 @@ export default async function MargemProjetoPage({ searchParams }: { searchParams
     <div className="space-y-4">
       <LinkClassica href="/bi/margem-projeto" novo />
       <div>
-        <h1 className="text-[18px] font-bold text-ww-text tracking-[-0.3px]">Margem por projeto</h1>
+        <h1 className="text-[26px] font-semibold text-ww-text tracking-[-0.022em]">Margem por projeto</h1>
         <p className="text-[12px] text-ww-textMuted mt-0.5">
           Receita (itens vendidos + OS faturadas) menos títulos a pagar, por projeto.
           Porte nativo do dashboard equivalente no Metabase.

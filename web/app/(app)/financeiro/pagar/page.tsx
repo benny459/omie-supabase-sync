@@ -17,7 +17,7 @@ export default async function ContasPagarPage({ searchParams }: { searchParams: 
       <div className="space-y-4">
         <div className="flex items-start justify-between gap-3">
           <div>
-            <h1 className="text-[18px] font-bold text-ww-text tracking-[-0.3px]">Contas a Pagar</h1>
+            <h1 className="text-[26px] font-semibold text-ww-text tracking-[-0.022em]">Contas a Pagar</h1>
             <p className="text-[12px] text-ww-textMuted mt-0.5">
               Títulos do Omie espelhados aqui. Todas as empresas; status calculado pelo Omie.
             </p>

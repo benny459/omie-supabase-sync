@@ -15,7 +15,7 @@ export default async function ContasPagarPage({ searchParams }: { searchParams: 
     <div className="space-y-4">
       <LinkClassica href="/bi/contas-pagar" novo />
       <div>
-        <h1 className="text-[18px] font-bold text-ww-text tracking-[-0.3px]">Contas a Pagar</h1>
+        <h1 className="text-[26px] font-semibold text-ww-text tracking-[-0.022em]">Contas a Pagar</h1>
         <p className="text-[12px] text-ww-textMuted mt-0.5">
           Saldo quebrado por horizonte — vencido, a vencer e parcelas futuras contratadas.
           O card equivalente no Metabase somava tudo num número só.

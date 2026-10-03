@@ -18,7 +18,7 @@ export default async function ErpComprasPage({ searchParams }: { searchParams: P
       <div className="space-y-4">
         <div className="flex items-start justify-between gap-3">
           <div>
-            <h1 className="text-[18px] font-bold text-ww-text tracking-[-0.3px]">Compras — PC / RC</h1>
+            <h1 className="text-[26px] font-semibold text-ww-text tracking-[-0.022em]">Compras — PC / RC</h1>
             <p className="text-[12px] text-ww-textMuted mt-0.5">
               Pedidos e requisições de compra espelhados do Omie, com etapa, recebimento e vínculo
               PV/OS (⚙ = vínculo por triangulação automática). Clique pra ver os itens.

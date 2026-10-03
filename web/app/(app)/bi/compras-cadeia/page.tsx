@@ -15,7 +15,7 @@ export default async function ComprasCadeiaPage({ searchParams }: { searchParams
     <div className="space-y-4">
       <LinkClassica href="/bi/compras-cadeia" novo />
       <div>
-        <h1 className="text-[18px] font-bold text-ww-text tracking-[-0.3px]">Cadeia de Compras</h1>
+        <h1 className="text-[26px] font-semibold text-ww-text tracking-[-0.022em]">Cadeia de Compras</h1>
         <p className="text-[12px] text-ww-textMuted mt-0.5">
           O caminho do dinheiro de compra: título a pagar → pedido de compra → aprovação → PV/OS →
           nota pro cliente → recebimento. Mostra onde a cadeia trava — compra paga que nunca virou

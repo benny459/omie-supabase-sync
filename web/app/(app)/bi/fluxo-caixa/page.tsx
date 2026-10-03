@@ -15,7 +15,7 @@ export default async function FluxoCaixaPage({ searchParams }: { searchParams: P
     <div className="space-y-4">
       <LinkClassica href="/bi/fluxo-caixa" novo />
       <div>
-        <h1 className="text-[18px] font-bold text-ww-text tracking-[-0.3px]">Fluxo de Caixa Projetado</h1>
+        <h1 className="text-[26px] font-semibold text-ww-text tracking-[-0.022em]">Fluxo de Caixa Projetado</h1>
         <p className="text-[12px] text-ww-textMuted mt-0.5">
           Saldo de hoje mais o que entra e sai a cada dia, pela data de previsão. Mostra onde a curva
           aperta antes de ela apertar.

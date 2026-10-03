@@ -37,7 +37,7 @@ export default async function ProjetoFechamentoPage({ params }: { params: Promis
     <div className="max-w-6xl mx-auto p-6 space-y-4">
       <div className="flex items-baseline justify-between gap-4 flex-wrap">
         <div>
-          <h1 className="text-[18px] font-bold">Fechamento do CRM</h1>
+          <h1 className="text-[26px] font-semibold tracking-[-0.022em]">Fechamento do CRM</h1>
           <p className="text-[12px] text-ww-muted">
             O que foi confirmado ao ganhar a proposta linkada a este projeto — e o CP/MC Excel para o planejamento.
           </p>

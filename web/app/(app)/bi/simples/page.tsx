@@ -14,7 +14,7 @@ export default async function SimplesPage({ searchParams }: { searchParams: Prom
     <div className="space-y-4">
       <LinkClassica href="/bi/simples" novo />
       <div>
-        <h1 className="text-[18px] font-bold text-ww-text tracking-[-0.3px]">Simples Nacional</h1>
+        <h1 className="text-[26px] font-semibold text-ww-text tracking-[-0.022em]">Simples Nacional</h1>
         <p className="text-[12px] text-ww-textMuted mt-0.5">
           Projeção do DAS do mês em andamento — a alíquota já está travada no dia 1º,
           só a base se move.

@@ -27,7 +27,7 @@ export default async function EstoquePage({ searchParams }: { searchParams: Prom
     <div className="space-y-4">
       <LinkClassica href="/estoque" novo />
       <div>
-        <h1 className="text-[18px] font-bold text-ww-text tracking-[-0.3px]">Estoque</h1>
+        <h1 className="text-[26px] font-semibold text-ww-text tracking-[-0.022em]">Estoque</h1>
         <p className="text-[12px] text-ww-textMuted mt-0.5">
           Posição e movimentação espelhadas do Omie. Clique num produto pra ver o Kardex.
         </p>

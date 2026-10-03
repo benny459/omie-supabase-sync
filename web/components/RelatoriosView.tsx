@@ -110,7 +110,7 @@ export default function RelatoriosView() {
       {/* Header */}
       <div className="flex items-end justify-between gap-4 flex-wrap">
         <div>
-          <h1 className="text-[24px] font-bold tracking-tight text-ww-text">Relatório de aprovações</h1>
+          <h1 className="text-[26px] font-semibold tracking-[-0.022em] text-ww-text">Relatório de aprovações</h1>
           <p className="text-sm text-ww-textMuted mt-1">Resumo das compras aprovadas no período. Filtra por data de aprovação.</p>
         </div>
         {report && (

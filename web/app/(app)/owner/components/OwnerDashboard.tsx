@@ -66,7 +66,7 @@ export default function OwnerDashboard() {
       {/* Header */}
       <div className="flex items-end justify-between gap-4 flex-wrap">
         <div>
-          <h1 className="text-2xl md:text-3xl font-semibold text-ww-text tracking-tight">Owner Dashboard</h1>
+          <h1 className="text-[26px] font-semibold text-ww-text tracking-[-0.022em]">Owner Dashboard</h1>
           <p className="text-ww-textMuted text-sm mt-1">Visão consolidada — Painel WW + CRM + App WW</p>
         </div>
         <div className="flex items-center gap-1">

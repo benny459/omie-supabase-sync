@@ -72,7 +72,7 @@ export default async function ProjetoMateriaisPage({
             <span>·</span>
             <span className="font-mono text-[11px]">PJ{codigoProjeto}</span>
           </div>
-          <h1 className="text-[22px] font-bold text-ww-text tracking-[-0.4px] mt-1 truncate">
+          <h1 className="text-[26px] font-semibold text-ww-text tracking-[-0.022em] mt-1 truncate">
             Projeto
             {projetoNome && <span className="ml-2 text-ww-textMuted font-normal">— {projetoNome}</span>}
           </h1>

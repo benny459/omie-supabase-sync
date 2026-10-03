@@ -49,7 +49,7 @@ export const cartao: CSSProperties = {
 };
 
 const botaoBase: CSSProperties = {
-  height: 34, padding: "0 14px", borderRadius: 10, fontSize: 13, fontWeight: 600,
+  height: 34, padding: "0 14px", borderRadius: 10, fontSize: 14, fontWeight: 600,
   cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 7, whiteSpace: "nowrap",
 };
 
@@ -86,7 +86,7 @@ export function CabecalhoTela({ area, titulo, sub, acoes }: {
       <div style={{ flex: 1, minWidth: 260 }}>
         <div style={{ fontSize: 12, color: "var(--ww-text-faint)", fontWeight: 600 }}>{area}</div>
         <h1 style={{
-          margin: "2px 0 0", fontSize: 22, fontWeight: 700, letterSpacing: "-.02em",
+          margin: "2px 0 0", fontSize: 26, fontWeight: 600, letterSpacing: "-.022em", lineHeight: 1.5,
           color: "var(--ww-text)", fontFamily: "var(--font-display)",
         }}>{titulo}</h1>
         {sub != null && <div style={{ fontSize: 12.5, color: "var(--ww-text-muted)", marginTop: 3 }}>{sub}</div>}
@@ -203,7 +203,7 @@ export function GradeKpis({ kpis, min = 190 }: { kpis: Kpi[]; min?: number }) {
               {k.dot && <span style={{ width: 9, height: 9, borderRadius: 3, background: k.dot, boxShadow: "0 0 0 1.5px rgba(255,255,255,.7)" }} />}
               {k.rotulo}
             </div>
-            <div style={{ position: "relative", fontSize: 24, fontWeight: 800, letterSpacing: "-.03em", lineHeight: 1.1,
+            <div style={{ position: "relative", fontSize: 24, fontWeight: 700, letterSpacing: "-.03em", lineHeight: 1.1,
                           whiteSpace: "nowrap", fontFamily: "var(--font-display)", overflow: "hidden", textOverflow: "ellipsis",
                           fontVariantNumeric: "tabular-nums" }}>
               {k.valor}
@@ -259,7 +259,7 @@ function TabelaDoGrafico({ cab, linhas }: { cab: string[]; linhas: (string | num
   return (
     <div style={{ overflow: "auto", maxHeight: 260, border: "1px solid var(--ww-border-subtle)", borderRadius: 10 }}>
       <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12, fontVariantNumeric: "tabular-nums" }}>
-        <thead><tr>{cab.map((c, i) => <th key={i} style={{ padding: "6px 10px", textAlign: i ? "right" : "left", color: "var(--ww-text-faint)", fontWeight: 600, background: "var(--ww-panel-sunken)", position: "sticky", top: 0 }}>{c}</th>)}</tr></thead>
+        <thead><tr>{cab.map((c, i) => <th key={i} style={{ padding: "6px 10px", textAlign: i ? "right" : "left", color: "var(--ww-text)", fontWeight: 600, fontSize: 13, background: "var(--ww-panel-sunken)", position: "sticky", top: 0 }}>{c}</th>)}</tr></thead>
         <tbody>{linhas.map((l, i) => <tr key={i}>{l.map((v, j) => <td key={j} style={{ padding: "5px 10px", textAlign: j ? "right" : "left", borderTop: "1px dashed var(--ww-border-subtle)" }}>
           {typeof v === "number" ? brl0(v) : v}</td>)}</tr>)}</tbody>
       </table>
@@ -270,7 +270,7 @@ function TabelaDoGrafico({ cab, linhas }: { cab: string[]; linhas: (string | num
 function CabecalhoGrafico({ titulo, legenda, extra, botoes }: { titulo: ReactNode; legenda?: Legenda[]; extra?: ReactNode; botoes?: ReactNode }) {
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap", marginBottom: 14 }}>
-      <div style={{ fontSize: 14, fontWeight: 700, flex: "1 1 100%", minWidth: 220, display: "flex", gap: 8, alignItems: "center" }}>
+      <div style={{ fontSize: 15, fontWeight: 600, letterSpacing: "-.014em", flex: "1 1 100%", minWidth: 220, display: "flex", gap: 8, alignItems: "center" }}>
         <span style={{ flex: 1 }}>{titulo}</span>{extra}{botoes}
       </div>
       {(legenda ?? []).map((l) => (
@@ -451,7 +451,7 @@ export function PainelLateral({ titulo, blocos, extra, children }: {
   return (
     <div style={{ ...cartao, padding: "18px 20px", display: "flex", flexDirection: "column", gap: 12 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-        <div style={{ fontSize: 14, fontWeight: 700, flex: 1 }}>{titulo}</div>{extra}
+        <div style={{ fontSize: 15, fontWeight: 600, letterSpacing: "-.014em", flex: 1 }}>{titulo}</div>{extra}
         <BotoesGrafico titulo={textoDe(titulo) || "Painel"} contexto={[`Painel: ${textoDe(titulo)}`,
           ...(blocos ?? []).map((b) => (b.k === "m" ? `${b.rotulo} | ${textoDe(b.valor)}${b.title ? ` | ${b.title}` : ""}` : b.k === "i" ? `${textoDe(b.t)} | ${textoDe(b.s)}` : textoDe(b.t)))].join("\n")} />
       </div>
@@ -675,7 +675,7 @@ export function ArvoreNavy<R>({
         borderBottom: "1px solid color-mix(in srgb,var(--ww-brand-2) 10%,transparent)",
       }}>
         <div style={{ flex: 1, minWidth: 220 }}>
-          <div style={{ fontSize: 15, fontWeight: 700 }}>{titulo}</div>
+          <div style={{ fontSize: 15, fontWeight: 600, letterSpacing: "-.014em" }}>{titulo}</div>
           {dica != null && <div style={{ fontSize: 12, color: "var(--ww-text-muted)", marginTop: 2 }}>{dica}</div>}
         </div>
         {ativos.length > 0 && (
@@ -765,7 +765,7 @@ export function ArvoreNavy<R>({
         <div style={{ minWidth }}>
           <div style={{
             display: "grid", gridTemplateColumns: grid, background: "var(--ww-panel-sunken)",
-            borderBottom: "1px solid color-mix(in srgb,var(--ww-brand-2) 12%,transparent)", fontSize: 11.5,
+            borderBottom: "1px solid color-mix(in srgb,var(--ww-brand-2) 12%,transparent)", fontSize: 13,
           }}>
             {colunas.map((c, i) => {
               const f = filtros[i], on = painel === i, so = ordem?.col === i, act = ativo(f);
@@ -778,7 +778,7 @@ export function ArvoreNavy<R>({
                     display: "flex", alignItems: "center", gap: 6,
                     justifyContent: c.align === "right" ? "flex-end" : "flex-start",
                     cursor: podeFiltrar ? "pointer" : "default", userSelect: "none", fontWeight: 600,
-                    color: act || on || so ? "var(--ww-accent-text)" : "var(--ww-text-faint)",
+                    color: act || on || so ? "var(--ww-accent-text)" : "var(--ww-text)",
                     background: on ? "color-mix(in srgb,var(--ww-brand-3) 10%,transparent)" : "transparent",
                   }}>
                   <span style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{c.label}</span>

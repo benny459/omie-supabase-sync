@@ -7,7 +7,7 @@ export default function Page() {
     <div className="min-h-screen bg-ww-bg p-6">
       <div className="max-w-[1500px] mx-auto space-y-4">
         <div>
-          <h1 className="text-[18px] font-bold text-ww-text tracking-[-0.3px]">
+          <h1 className="text-[26px] font-semibold text-ww-text tracking-[-0.022em]">
             Projeto — materiais, orçamento e fluxo{" "}
             <span className="text-ww-textFaint">(mockup)</span>
           </h1>

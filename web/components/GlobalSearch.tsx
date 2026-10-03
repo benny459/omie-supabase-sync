@@ -1,5 +1,7 @@
 "use client";
 
+import { CampoPesquisa } from "./navy/BarraAllka";
+
 import { useEffect, useRef, useState } from "react";
 
 type Hit = {
@@ -34,7 +36,9 @@ const MOD_COLOR: Record<string, string> = {
   standby:  "bg-ww-bg text-ww-textMuted border-ww-border",
 };
 
-export default function GlobalSearch() {
+/* `gatilho`: o que abre a busca. "botao" é o botão azul de sempre; "campo" é o
+   campo "Pesquisar… ⌘K" da barra ALLKA (03/10/26) — mesma busca, outro desenho. */
+export default function GlobalSearch({ gatilho = "botao" }: { gatilho?: "botao" | "campo" } = {}) {
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
   const [hits, setHits] = useState<Hit[]>([]);
@@ -97,6 +101,9 @@ export default function GlobalSearch() {
 
   return (
     <>
+      {gatilho === "campo" ? (
+        <CampoPesquisa onAbrir={() => setOpen(true)} texto="Pesquisar PC, PV, OS, fornecedor…" />
+      ) : (
       <button
         onClick={() => setOpen(true)}
         title="Busca global (⌘K) — encontra PV, OS, PC, fornecedor ou cliente em qualquer página"
@@ -109,6 +116,7 @@ export default function GlobalSearch() {
         </svg>
         Buscar
       </button>
+      )}
 
       {open && (
         <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm flex items-start justify-center pt-[10vh] p-4" onClick={() => setOpen(false)}>

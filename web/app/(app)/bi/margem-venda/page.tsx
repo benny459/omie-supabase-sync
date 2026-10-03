@@ -15,7 +15,7 @@ export default async function MargemVendaPage({ searchParams }: { searchParams: 
     <div className="space-y-4">
       <LinkClassica href="/bi/margem-venda" novo />
       <div>
-        <h1 className="text-[18px] font-bold text-ww-text tracking-[-0.3px]">Margem por Venda</h1>
+        <h1 className="text-[26px] font-semibold text-ww-text tracking-[-0.022em]">Margem por Venda</h1>
         <p className="text-[12px] text-ww-textMuted mt-0.5">
           Cada venda avulsa confrontada com o custo de compra do seu PV/OS, e alarme quando alguma
           sai abaixo do custo. Cobre tudo que passa pelo fluxo de avulsos — inclusive Revenda e

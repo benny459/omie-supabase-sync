@@ -107,7 +107,7 @@ export default function UsuariosAcessos({ meuId }: { meuId: string }) {
       <div className="flex items-end justify-between gap-4 flex-wrap">
         <div>
           <a href="/configuracoes" className="text-xs text-ww-textMuted hover:underline">← Configurações</a>
-          <h1 className="text-2xl font-semibold text-ww-text tracking-tight">Usuários e acessos</h1>
+          <h1 className="text-[26px] font-semibold text-ww-text tracking-[-0.022em]">Usuários e acessos</h1>
           <p className="text-sm text-ww-textMuted mt-1">Quem entra em cada módulo e o que vê dentro dele. Toda mudança fica registrada no histórico.</p>
         </div>
         <div className="flex gap-2 items-center">

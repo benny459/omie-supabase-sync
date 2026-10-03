@@ -536,3 +536,17 @@ code, kbd, samp, pre, .font-mono {
 .viz-panel > .viz-head { border-radius: 12px 12px 0 0; }
 .dark .viz-panel > .viz-head { background: rgb(var(--color-ww-drawerHead)); }
 html, body { background-attachment: scroll; }
+
+/* ── Escala de texto do CRM novo ALLKA (03/10/26) ─────────────────────────
+   Pedido do Benny: mesma fonte E mesmo tamanho em portal, painel e serviços.
+   Valores medidos no CRM novo (allka.ai/w/waterworks/crm/novo), tema escuro:
+   título da tela 26/600 (-0.022em) · título de secção 15/600 (-0.014em) ·
+   número do indicador 24/700 (-0.03em) · rótulo 13/500 · tabela: cabeçalho
+   13/600, célula 12–13 · chips e abas 12.5/500 · legenda 12 · selo 10.5/700. */
+:root {
+  --text-kpi-hero: 24px; --text-kpi: 24px;
+  --text-h1: 26px; --text-h2: 15px; --text-h3: 14px;
+  --text-body: 13px; --text-body-sm: 12.5px; --text-meta: 12px; --text-chip: 12.5px; --text-micro: 10.5px;
+  --tracking-tight: -0.022em;
+}
+
