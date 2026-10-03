@@ -133,7 +133,7 @@
 .op .cb{width:16px;height:16px;accent-color:var(--ww-info)}
 .op .pvfoot{display:flex;gap:8px;padding:10px 14px;justify-content:space-between;align-items:center;color:var(--ww-text-faint);font-size:12px}
 .op .tbl{width:100%;border-collapse:separate;border-spacing:0;background:var(--ww-panel);border:1px solid var(--ww-border);border-radius:12px;overflow:hidden}
-.op .tbl th{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--ww-text-faint);text-align:left;font-weight:500;padding:10px 12px;border-bottom:1px solid var(--ww-border);background:var(--ww-panel-sunken);position:sticky;top:0}
+.op .tbl th{font-size:13px;color:var(--ww-text);text-align:left;font-weight:600;padding:10px 12px;border-bottom:1px solid var(--ww-border);background:var(--ww-panel-sunken);position:sticky;top:0}
 .op .tbl td{padding:6px 12px;border-bottom:1px solid var(--ww-border);vertical-align:middle}
 .op .tbl tr:hover td{background:var(--ww-row-hover)}
 .op .tbl .grp td{background:var(--ww-panel-sunken);color:var(--ww-text-muted);font-size:12px;padding:8px 12px}
