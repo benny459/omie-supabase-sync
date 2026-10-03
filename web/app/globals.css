@@ -550,3 +550,131 @@ html, body { background-attachment: scroll; }
   --tracking-tight: -0.022em;
 }
 
+
+/* ── Midnight — a paleta que o CRM novo mostra de facto (03/10/26) ─────────
+   A sessão do CRM confirmou: o CRM ALLKA novo cai no tema "Midnight" do App.jsx
+   (temaAllka() só lê rgb() e os tokens do portal são oklch). É isto que o
+   Benny vê no CRM, por isso é isto que o painel usa. Valores verbatim de
+   THEMES.midnight / THEMES.midnightLight (apps/portal/src/modules/crm/app/
+   App.jsx): bg/s1/bdr/tx/txM/txD/pri/priL/gold/ok/err/pur. Os intermédios
+   (sunken, hover, borda forte) são misturas desses — o CRM não os define. */
+:root {
+  --color-ww-bg:           240 244 248;
+  --color-ww-panel:        255 255 255;
+  --color-ww-panelSunken:  245 248 251;
+  --color-ww-sidebar:      255 255 255;
+  --color-ww-border:       216 224 234;
+  --color-ww-borderStrong: 195 207 221;
+  --color-ww-borderSubtle: 228 234 241;
+  --color-ww-track:        228 234 241;
+  --color-ww-text:         15 26 46;
+  --color-ww-text2:        45 55 72;
+  --color-ww-textMuted:    74 85 104;
+  --color-ww-textFaint:    160 174 192;
+  --color-ww-accent:       59 130 246;
+  --color-ww-accentStrong: 37 99 235;
+  --color-ww-accentSky:    96 165 250;
+  --color-ww-accentText:   37 99 235;
+  --color-ww-accentSoft:   234 242 254;
+  --color-ww-rowL0:        245 248 251;
+  --color-ww-rowL1:        255 255 255;
+  --color-ww-rowL2:        248 250 252;
+  --color-ww-rowHover:     241 245 249;
+  --color-ww-ok:           22 163 74;
+  --color-ww-okText:       21 128 61;
+  --color-ww-okSoft:       220 252 231;
+  --color-ww-crit:         220 38 38;
+  --color-ww-warn:         232 160 32;
+  --color-ww-warnText:     154 103 0;
+  --color-ww-info:         59 130 246;
+  --color-ww-infoText:     37 99 235;
+  --color-ww-infoSoft:     234 242 254;
+  --color-ww-violet:       124 58 237;
+  --color-ww-off:          228 234 241;
+  --color-ww-offText:      160 174 192;
+  --color-ww-offSoft:      245 248 251;
+  --color-ww-barMuted:     195 207 221;
+  --color-ww-brand1:       37 99 235;
+  --color-ww-brand2:       59 130 246;
+  --color-ww-brand3:       96 165 250;
+  --color-ww-brandDash:    195 207 221;
+  --color-ww-drawer:       255 255 255;
+  --color-ww-drawerHead:   245 248 251;
+
+  --ww-bg: #f0f4f8; --ww-bg-grad: #f0f4f8;
+  --ww-panel: #ffffff; --ww-panel-grad: #ffffff; --ww-panel-sunken: #f5f8fb;
+  --ww-row-l0: #f5f8fb; --ww-row-l1: #ffffff; --ww-row-l2: #f8fafc; --ww-row-hover: rgba(15,26,46,.04);
+  --ww-sidebar: #ffffff;
+  --ww-border: #d8e0ea; --ww-border-subtle: rgba(15,26,46,.10); --ww-border-strong: #c3cfdd; --ww-track: rgba(15,26,46,.08);
+  --ww-text: #0f1a2e; --ww-text-2: #2d3748; --ww-text-muted: #4a5568; --ww-text-faint: #a0aec0;
+  --ww-accent: #3b82f6; --ww-accent-strong: #2563eb; --ww-accent-sky: #60a5fa; --ww-accent-text: #2563eb; --ww-accent-soft: #eaf2fe;
+  --ww-ok: #16a34a; --ww-ok-text: #15803d; --ww-ok-soft: rgba(22,163,74,.12);
+  --ww-crit: #dc2626; --ww-warn: #e8a020; --ww-warn-text: #9a6700;
+  --ww-info: #3b82f6; --ww-info-text: #2563eb; --ww-info-soft: rgba(59,130,246,.12);
+  --ww-violet: #7c3aed;
+  --ww-off: #e4eaf1; --ww-off-text: #a0aec0; --ww-off-soft: rgba(15,26,46,.04);
+  --ww-bar-muted: #c3cfdd;
+  --ww-brand-1: #2563eb; --ww-brand-2: #3b82f6; --ww-brand-3: #60a5fa; --ww-brand-dash: #c3cfdd;
+  --ww-active-nav: #eaf2fe;
+  --ww-active-ring: inset 0 0 0 1px rgba(59,130,246,.30);
+}
+.dark {
+  --color-ww-bg:           10 22 40;
+  --color-ww-panel:        17 29 50;
+  --color-ww-panelSunken:  14 26 46;
+  --color-ww-sidebar:      17 29 50;
+  --color-ww-border:       30 48 80;
+  --color-ww-borderStrong: 42 64 104;
+  --color-ww-borderSubtle: 23 38 64;
+  --color-ww-track:        23 38 64;
+  --color-ww-text:         232 236 241;
+  --color-ww-text2:        196 208 222;
+  --color-ww-textMuted:    160 184 208;
+  --color-ww-textFaint:    90 122 152;
+  --color-ww-accent:       59 130 246;
+  --color-ww-accentStrong: 37 99 235;
+  --color-ww-accentSky:    96 165 250;
+  --color-ww-accentText:   96 165 250;
+  --color-ww-accentSoft:   19 40 74;
+  --color-ww-onAccent:     255 255 255;
+  --color-ww-rowL0:        21 35 60;
+  --color-ww-rowL1:        17 29 50;
+  --color-ww-rowL2:        14 26 46;
+  --color-ww-rowHover:     24 42 70;
+  --color-ww-ok:           34 192 122;
+  --color-ww-okText:       74 214 152;
+  --color-ww-okSoft:       15 44 40;
+  --color-ww-crit:         232 80 80;
+  --color-ww-warn:         232 160 32;
+  --color-ww-info:         59 130 246;
+  --color-ww-infoText:     96 165 250;
+  --color-ww-infoSoft:     19 40 74;
+  --color-ww-violet:       139 92 246;
+  --color-ww-off:          42 64 104;
+  --color-ww-offText:      90 122 152;
+  --color-ww-offSoft:      23 38 64;
+  --color-ww-barMuted:     42 64 104;
+  --color-ww-brand1:       37 99 235;
+  --color-ww-brand2:       59 130 246;
+  --color-ww-brand3:       96 165 250;
+  --color-ww-brandDash:    42 64 104;
+  --color-ww-drawer:       17 29 50;
+  --color-ww-drawerHead:   14 26 46;
+
+  --ww-bg: #0a1628; --ww-bg-grad: #0a1628;
+  --ww-panel: #111d32; --ww-panel-grad: #111d32; --ww-panel-sunken: #0e1a2e;
+  --ww-row-l0: #15233c; --ww-row-l1: #111d32; --ww-row-l2: #0e1a2e; --ww-row-hover: rgba(255,255,255,.04);
+  --ww-sidebar: #111d32;
+  --ww-border: #1e3050; --ww-border-subtle: rgba(255,255,255,.10); --ww-border-strong: #2a4068; --ww-track: rgba(255,255,255,.08);
+  --ww-text: #e8ecf1; --ww-text-2: #c4d0de; --ww-text-muted: #a0b8d0; --ww-text-faint: #5a7a98;
+  --ww-accent: #3b82f6; --ww-accent-strong: #2563eb; --ww-accent-sky: #60a5fa; --ww-accent-text: #60a5fa; --ww-accent-soft: #13284a;
+  --ww-ok: #22c07a; --ww-ok-text: #4ad698; --ww-ok-soft: rgba(34,192,122,.14);
+  --ww-crit: #e85050; --ww-warn: #e8a020;
+  --ww-info: #3b82f6; --ww-info-text: #60a5fa; --ww-info-soft: rgba(59,130,246,.14);
+  --ww-violet: #8b5cf6;
+  --ww-off: #2a4068; --ww-off-text: #5a7a98; --ww-off-soft: rgba(255,255,255,.05);
+  --ww-bar-muted: #2a4068;
+  --ww-brand-1: #2563eb; --ww-brand-2: #3b82f6; --ww-brand-3: #60a5fa; --ww-brand-dash: #2a4068;
+  --ww-active-nav: #13284a;
+  --ww-active-ring: inset 0 0 0 1px rgba(59,130,246,.35);
+}
