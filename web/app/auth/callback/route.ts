@@ -24,8 +24,23 @@ export async function GET(request: NextRequest) {
         },
       },
     );
-    const { error } = await supabase.auth.exchangeCodeForSession(code);
-    if (!error) return NextResponse.redirect(`${origin}${next}`);
+    const { data, error } = await supabase.auth.exchangeCodeForSession(code);
+    if (!error) {
+      // Login com Google (03/10/26): só entra quem já é da equipe no painel
+      // (perfil ativo). Uma conta Google qualquer cria usuário no Supabase,
+      // mas aqui é barrada e a sessão é encerrada.
+      if (searchParams.get("via") === "google") {
+        const { supaAdmin } = await import("@/lib/supabase-admin");
+        const { data: perfil } = await supaAdmin()
+          .schema("platform").from("user_profiles")
+          .select("ativo").eq("id", data.user?.id ?? "").maybeSingle();
+        if (!perfil || perfil.ativo === false) {
+          await supabase.auth.signOut();
+          return NextResponse.redirect(`${origin}/login?error=sem_acesso`);
+        }
+      }
+      return NextResponse.redirect(`${origin}${next}`);
+    }
   }
 
   return NextResponse.redirect(`${origin}/login?error=auth`);
