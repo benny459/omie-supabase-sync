@@ -40,9 +40,11 @@
   --ab-popover: oklch(0.205 0 0);
   --ab-primary: #4D8FE0;
 }
-.ab *, .ab *::before, .ab *::after { box-sizing: border-box; font-family: inherit; }
-.ab a { color: inherit; text-decoration: none; }
-.ab button { font: inherit; color: inherit; background: none; border: 0; margin: 0; padding: 0; cursor: pointer; }
+/* Reset com especificidade zero (:where) — senão ganhava das classes da barra
+   e o botão do assistente, por exemplo, perdia o fundo. */
+:where(.ab) *, :where(.ab) *::before, :where(.ab) *::after { box-sizing: border-box; font-family: inherit; }
+:where(.ab) a { color: inherit; text-decoration: none; }
+:where(.ab) button { font: inherit; color: inherit; background: none; border: 0; margin: 0; padding: 0; cursor: pointer; }
 
 /* ── esquerda: marca + tenant ── */
 .ab-esq { display: flex; align-items: center; gap: 10px; min-width: 0; }
@@ -55,7 +57,7 @@
 .ab-tenant-chip { width: 20px; height: 20px; border-radius: 4px; background: #1565C0; color: #fff; display: grid; place-items: center; font-size: 10px; font-weight: 700; line-height: 1; }
 
 /* ── centro: módulos ── */
-.ab-nav { display: flex; align-items: stretch; justify-content: center; gap: 4px; flex: 1; min-width: 0; overflow-x: auto; scrollbar-width: none; }
+.ab-nav { display: flex; align-items: stretch; justify-content: safe center; gap: 4px; flex: 1; min-width: 0; overflow-x: auto; scrollbar-width: none; }
 .ab-nav::-webkit-scrollbar { display: none; }
 .ab-mod { position: relative; display: flex; align-items: center; }
 .ab-mod-link {

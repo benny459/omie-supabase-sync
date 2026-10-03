@@ -102,7 +102,7 @@ export default function GlobalSearch({ gatilho = "botao" }: { gatilho?: "botao" 
   return (
     <>
       {gatilho === "campo" ? (
-        <CampoPesquisa onAbrir={() => setOpen(true)} texto="Pesquisar PC, PV, OS, fornecedor…" />
+        <CampoPesquisa onAbrir={() => setOpen(true)} texto="Pesquisar…" />
       ) : (
       <button
         onClick={() => setOpen(true)}
