@@ -22,7 +22,6 @@ import { canViewArea } from "@/lib/permissions";
 import { useUserPerms } from "../UserPermsProvider";
 import { ADMIN, BI, FINANCEIRO, GRUPOS, MODULES, SECOES_BI, type Grupo, type NavItem } from "../AppSidebar";
 
-const PORTAL_WW = "https://allka.ai/w/waterworks";
 import GlobalSearch from "../GlobalSearch";
 import { supaBrowser } from "@/lib/supabase";
 
@@ -165,7 +164,7 @@ export default function TopNav({ userEmail }: { userEmail?: string | null }) {
         boxShadow: "var(--shadow-card)",
       }}>
         {/* Menu único (03/10/26): o logotipo leva ao portal ALLKA, onde está o CRM. */}
-        <a href={PORTAL_WW} title="Portal ALLKA · WaterWorks"
+        <a href="/api/sso/portal?next=/w/waterworks" title="Portal ALLKA · WaterWorks"
           style={{ display: "flex", alignItems: "center", gap: 10, textDecoration: "none" }}>
           <span style={{
             width: 30, height: 30, borderRadius: 9, background: "var(--ww-brand-grad)",
@@ -176,7 +175,7 @@ export default function TopNav({ userEmail }: { userEmail?: string | null }) {
 
         {/* Áreas */}
         <nav style={{ display: "flex", gap: 6, flexWrap: "wrap", flex: 1, minWidth: 0 }}>
-          <a href={`${PORTAL_WW}/crm`} title="CRM no portal ALLKA"
+          <a href="/api/sso/portal?next=/w/waterworks/crm" title="CRM no portal ALLKA"
             style={{
               padding: "6px 13px", borderRadius: "var(--radius-pill)", textDecoration: "none",
               fontSize: "var(--text-body-sm)", fontWeight: 500,
