@@ -117,7 +117,10 @@
 .ab-assistente:hover { opacity: .9; }
 .ab-assistente-orb { width: 20px; height: 20px; border-radius: 999px; display: grid; place-items: center; color: #fff; background: conic-gradient(from 200deg, var(--ab-primary), #20b8d8, #8b5cf6, var(--ab-primary)); }
 .ab-assistente-nome { display: none; }
-@media (min-width: 1024px) { .ab-assistente { padding-right: 14px; } .ab-assistente-nome { display: inline; } }
+/* Portal: nome a partir de 1024px. Aqui a barra leva mais módulos que a do
+   portal no hub, e o nome só cabe sem empurrar "Serviços" para fora a partir
+   de 1500px; abaixo fica só o ✦, com o nome no tooltip (como no portal). */
+@media (min-width: 1500px) { .ab-assistente { padding-right: 14px; } .ab-assistente-nome { display: inline; } }
 
 .ab-avatar-btn { width: 32px; height: 32px; border-radius: 999px; display: inline-grid; place-items: center; }
 .ab-avatar { width: 28px; height: 28px; border-radius: 999px; display: grid; place-items: center; background: #EFF6FF; color: #1565C0; font-size: 10px; line-height: 1; font-weight: 600; }

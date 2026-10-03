@@ -9,7 +9,7 @@
 .op .num{font-variant-numeric:tabular-nums}
 .op .top{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;flex-wrap:wrap}
 .op .crumb{color:var(--ww-text-faint);font-size:12px;margin-bottom:4px}
-.op h1{font-size:26px;letter-spacing:-.02em;margin:0;font-weight:650}
+.op h1{font-size:26px;letter-spacing:-.022em;margin:0;font-weight:600}
 .op .sub{color:var(--ww-text-muted);font-size:12.5px;margin-top:6px;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
 .op .dot{width:6px;height:6px;border-radius:50%;background:var(--ww-ok);display:inline-block;box-shadow:0 0 0 3px var(--ww-ok-soft)}
 .op .linkbtn{background:none;border:0;color:var(--ww-text-muted);padding:2px 4px;border-radius:6px}
@@ -70,7 +70,7 @@
 .op .kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-top:18px}
 .op .kpi{background:var(--ww-panel);border:1px solid var(--ww-border);border-radius:12px;padding:14px 16px}
 .op .kpi .l{font-size:12px;color:var(--ww-text-muted)}
-.op .kpi .v{font-size:22px;font-weight:650;margin-top:4px;letter-spacing:-.01em}
+.op .kpi .v{font-size:24px;font-weight:700;margin-top:4px;letter-spacing:-.03em}
 .op .kpi .s{font-size:12px;color:var(--ww-text-faint);margin-top:2px}
 .op .bar{height:6px;border-radius:4px;background:var(--ww-border);overflow:hidden;display:flex;margin-top:10px}
 .op .bar i{display:block;height:100%}

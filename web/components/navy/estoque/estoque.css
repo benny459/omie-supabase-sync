@@ -13,7 +13,7 @@
 .est .cartao { border-radius: var(--radius-panel); background: var(--ww-panel-grad); border: 1px solid var(--ww-border); box-shadow: var(--shadow-card); min-width: 0; }
 .est .head { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; padding: 16px 20px; }
 .est .head .area { font-size: 12px; color: var(--ww-text-faint); font-weight: 600; }
-.est h1 { margin: 2px 0 0; font-size: 22px; font-weight: 700; letter-spacing: -.02em; font-family: var(--font-display); }
+.est h1 { margin: 2px 0 0; font-size: 26px; font-weight: 600; letter-spacing: -.022em; font-family: var(--font-display); }
 .est .sub { font-size: 12.5px; color: var(--ww-text-muted); margin-top: 3px; }
 .est .seg { display: inline-flex; padding: 3px; border-radius: 12px; background: var(--ww-panel-sunken); border: 1px solid var(--ww-border-strong); gap: 2px; max-width: 100%; overflow-x: auto; }
 .est .seg button { border: 0; background: none; height: 30px; padding: 0 13px; border-radius: 9px; color: var(--ww-text-2); font-size: 12.5px; font-weight: 500; white-space: nowrap; }
@@ -46,7 +46,7 @@
 .est .kpi { position: relative; overflow: hidden; padding: 14px 16px; border-radius: var(--radius-card); background: var(--ww-panel-grad); border: 1px solid var(--ww-border); box-shadow: var(--shadow-card); cursor: pointer; text-align: left; min-width: 0; }
 .est .kpi:after { content: ""; position: absolute; right: -30px; top: -30px; width: 110px; height: 110px; border-radius: 50%; background: var(--glow, rgba(59,184,255,.22)); filter: blur(28px); pointer-events: none; }
 .est .kpi .r { font-size: 12px; font-weight: 600; color: var(--ww-text-2); text-align: left; }
-.est .kpi .v { font-size: 22px; font-weight: 700; margin-top: 6px; letter-spacing: -.02em; font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.est .kpi .v { font-size: 24px; font-weight: 700; margin-top: 6px; letter-spacing: -.03em; font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .est .kpi .s { font-size: 11.5px; color: var(--ww-text-muted); margin-top: 4px; }
 .est .kpi.hero { background: var(--ww-hero-grad); border-color: transparent; }
 .est .kpi.hero .r, .est .kpi.hero .s { color: var(--ww-hero-text-2); }
