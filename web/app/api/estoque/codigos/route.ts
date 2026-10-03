@@ -17,11 +17,11 @@ export async function GET() {
     orders().rpc("estoque_revisao_familias_concluida", { p_empresa: "SF" }),
   ]);
   if (p.error) return NextResponse.json({ error: p.error.message }, { status: 500 });
-  return NextResponse.json({ previa: p.data ?? [], revisao_concluida: !!c.data, admin: q.admin });
+  return NextResponse.json({ previa: p.data ?? [], revisao_concluida: !!c.data, admin: q.pode["estoque.codigos"] });
 }
 
 export async function POST(req: Request) {
-  const q = await exigirAdminEstoque();
+  const q = await exigirAdminEstoque("estoque.codigos");
   if (q instanceof NextResponse) return q;
   const b = (await req.json().catch(() => ({}))) as { acao?: string; n_cod_prod?: number; familia_id?: number };
   const r = b.acao === "aplicar"

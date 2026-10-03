@@ -11,6 +11,7 @@ export const runtime = "nodejs";
 export async function POST(req: Request) {
   const q = await quemEstoque();
   if (q instanceof NextResponse) return q;
+  if (!q.pode["estoque.ajustar"]) return NextResponse.json({ error: "Sem permissão para ajustar saldo" }, { status: 403 });
   const b = (await req.json().catch(() => ({}))) as {
     codigo?: string; empresa?: string; n_cod_prod?: number; local?: string | number; contagem?: number; motivo?: string; obs?: string;
   };

@@ -44,7 +44,7 @@ export async function GET() {
       mesclados: itens.filter((i) => i.mesclado_em).length,
       sugestoes_pendentes: sug.count ?? 0,
     };
-    return NextResponse.json({ familias: fams, revisao_concluida: !!cfg.data, codigos_gerados: codigos.count ?? 0, passos, admin: q.admin });
+    return NextResponse.json({ familias: fams, revisao_concluida: !!cfg.data, codigos_gerados: codigos.count ?? 0, passos, admin: q.pode["estoque.codigos"] });
   } catch (e) {
     return NextResponse.json({ error: (e as Error).message }, { status: 500 });
   }
@@ -53,7 +53,7 @@ export async function GET() {
 const PREFIXO = /^[A-Z]{1,3}$/;
 
 export async function POST(req: Request) {
-  const q = await exigirAdminEstoque();
+  const q = await exigirAdminEstoque("estoque.codigos");
   if (q instanceof NextResponse) return q;
   const b = (await req.json().catch(() => ({}))) as Record<string, unknown>;
   const acao = String(b.acao ?? "");

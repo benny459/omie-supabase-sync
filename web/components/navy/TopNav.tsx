@@ -18,7 +18,7 @@
 
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { canViewArea } from "@/lib/permissions";
+import { podeAbrirRota, canViewArea } from "@/lib/permissions";
 import { useUserPerms } from "../UserPermsProvider";
 import { ADMIN, BI, FINANCEIRO, GRUPOS, MODULES, SECOES_BI, type Grupo, type NavItem } from "../AppSidebar";
 
@@ -76,10 +76,10 @@ export default function TopNav({ userEmail }: { userEmail?: string | null }) {
   /* Grupos visíveis: um item aparece se a pessoa pode abrir a área dele
      (permissão) — o grupo só decide em que botão ele fica. Grupo sem item
      visível não aparece. */
-  const visivel = (m: NavItem) => !m.area || canViewArea(perms, m.area);
+  const visivel = (m: NavItem) => (!m.area || canViewArea(perms, m.area)) && podeAbrirRota(perms, m.href);
   const areasVisiveis = useMemo(
     () => GRUPOS.map((g) => g.id)
-      .filter((g) => todos.some((m) => (m.grupo ?? m.area) === g && (!m.area || canViewArea(perms, m.area)))),
+      .filter((g) => todos.some((m) => (m.grupo ?? m.area) === g && ((!m.area || canViewArea(perms, m.area)) && podeAbrirRota(perms, m.href)))),
     [perms, todos],
   );
 

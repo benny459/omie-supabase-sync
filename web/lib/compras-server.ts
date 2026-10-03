@@ -4,22 +4,26 @@ import { supaServer } from "@/lib/supabase-server";
 import { supaAdmin } from "@/lib/supabase-admin";
 import { loadPerms } from "@/lib/require-area";
 import { canViewArea, type UserPerms } from "@/lib/permissions";
+import { permissoesDe, semValores } from "@/lib/acessos";
+import type { Chave } from "@/lib/acessos-catalogo";
 
 // O schema compras não é exposto no PostgREST: tudo passa por funções
 // orders.compras_* (security definer, só service_role). Estas rotas validam
 // a sessão e a área ERP antes de chamar.
 
-export type Quem = { perms: UserPerms; email: string; uid: string | null; nome: string };
+export type Quem = { perms: UserPerms; email: string; uid: string | null; nome: string; pode: Record<Chave, boolean> };
 
 export async function exigirCompras(): Promise<Quem | NextResponse> {
   const perms = await loadPerms();
   if (!perms) return NextResponse.json({ error: "Sessão expirada — entre de novo" }, { status: 401 });
   if (!canViewArea(perms, "erp")) return NextResponse.json({ error: "Sem acesso à área ERP" }, { status: 403 });
+  const pode = await permissoesDe(perms);
+  if (!pode["compras.acesso"]) return NextResponse.json({ error: "Sem acesso a Compras" }, { status: 403 });
   const supa = await supaServer("platform");
   const { data: { user } } = await supa.auth.getUser();
   const { data: prof } = await supaAdmin().schema("platform").from("user_profiles").select("nome").eq("id", perms.id ?? "").maybeSingle();
   const email = user?.email ?? "painel";
-  return { perms, email, uid: perms.id ?? null, nome: (prof as { nome?: string } | null)?.nome || email };
+  return { perms, email, uid: perms.id ?? null, nome: (prof as { nome?: string } | null)?.nome || email, pode };
 }
 
 export async function rpc<T = unknown>(fn: string, args: Record<string, unknown> = {}): Promise<T> {
@@ -39,11 +43,11 @@ export function erro(e: unknown) {
  *  de aprovação do Omie (set-status), que já o calcula. */
 export async function podeAprovar(q: Quem, valor: number): Promise<string | null> {
   if (q.perms.is_admin) return null;
+  if (!q.pode["compras.aprovar"]) return "Sem permissão para aprovar compras";
   const { data } = await supaAdmin().schema("platform").from("user_module_roles")
-    .select("can_approve, approval_ceiling_brl").eq("user_id", q.uid ?? "").eq("modulo", "pcs").maybeSingle();
-  const r = data as { can_approve?: boolean; approval_ceiling_brl?: number | null } | null;
-  if (!r?.can_approve) return "Sem permissão para aprovar compras";
-  if (r.approval_ceiling_brl != null && valor > Number(r.approval_ceiling_brl)) {
+    .select("approval_ceiling_brl").eq("user_id", q.uid ?? "").eq("modulo", "pcs").maybeSingle();
+  const r = data as { approval_ceiling_brl?: number | null } | null;
+  if (r?.approval_ceiling_brl != null && valor > Number(r.approval_ceiling_brl)) {
     return `Acima da sua alçada (R$ ${Number(r.approval_ceiling_brl).toLocaleString("pt-BR", { minimumFractionDigits: 2 })})`;
   }
   return null;
@@ -56,4 +60,15 @@ export async function posGravar(id: number, tipo?: string) {
     tipo !== "RC" ? rpc("compras_gerar_previsoes", { p_id: id }).catch(() => null) : null,
     tipo !== "PC" ? rpc("compras_publicar_rcs").catch(() => null) : null,
   ]);
+}
+
+/** Resposta 403 se a pessoa não tem a permissão fina; null se tem. */
+export function semPermissao(q: Quem, chave: Chave, msg: string): NextResponse | null {
+  return q.pode[chave] ? null : NextResponse.json({ error: msg }, { status: 403 });
+}
+
+/** Campos de valor (R$) dos pedidos — zerados para quem não pode ver valores. */
+const CAMPOS_VALOR = /^(valor|vu|vlrUnit|nval|preco|total|merc|desc0|desconto|ipi|st|frete|seguro|outras|liberado|valorAberto|valor_.*|ultimo_preco|min|max|media|avg)$/i;
+export function valoresSePuder<T>(q: Quem, dado: T): T {
+  return q.pode["compras.ver_valores"] ? dado : semValores(dado, CAMPOS_VALOR);
 }

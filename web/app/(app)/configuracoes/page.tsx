@@ -55,6 +55,12 @@ export default async function ConfiguracoesPage() {
           <QuickRunButtons />
           <FetchOmieButton />
           <a
+            href="/configuracoes/acessos"
+            className="inline-flex items-center gap-2 px-4 py-2 text-xs font-medium rounded-lg border border-blue-600 bg-blue-600 text-white shadow-sm transition"
+          >
+            Usuários e acessos →
+          </a>
+          <a
             href="/configuracoes/tabelas"
             className="inline-flex items-center gap-2 px-4 py-2 text-xs font-medium rounded-lg border border-ww-border bg-ww-panel hover:bg-ww-rowHover text-ww-textMuted shadow-sm transition"
           >

@@ -8,7 +8,7 @@
 // COMPRAS_EMAIL_SO_PARA (lista separada por vírgula), se definida, limita os
 // destinatários — usada para testar só com endereços internos.
 import { NextResponse } from "next/server";
-import { exigirCompras, rpc, erro } from "@/lib/compras-server";
+import { exigirCompras, rpc, erro, semPermissao } from "@/lib/compras-server";
 import { gerarPdfPedido, type VariantePdf } from "@/lib/compras-pdf";
 import { supaAdmin } from "@/lib/supabase-admin";
 import type { Pedido } from "@/lib/compras";
@@ -50,10 +50,12 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
   const q = await exigirCompras();
   if (q instanceof NextResponse) return q;
+  const negado = semPermissao(q, "compras.enviar_fornecedor", "Sem permissão para enviar pedidos ao fornecedor");
+  if (negado) return negado;
   let b: Record<string, unknown>;
   try { b = await req.json(); } catch { return NextResponse.json({ error: "JSON inválido" }, { status: 400 }); }
   const id = Number(b.id);
-  const variante: VariantePdf = b.variante === "sem_valores" ? "sem_valores" : "completo";
+  const variante: VariantePdf = b.variante === "sem_valores" || !q.pode["compras.ver_valores"] ? "sem_valores" : "completo";
 
   // Marcar como enviado sem e-mail (WhatsApp, entregue em mãos…)
   if (b.acao === "marcar") {

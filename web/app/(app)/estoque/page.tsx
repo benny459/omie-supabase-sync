@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { requireArea } from "@/lib/require-area";
+import { requirePermissao } from "@/lib/require-area";
 import EstoqueView from "@/components/EstoqueView";
 import TelaEstoqueNavy from "@/components/navy/tela/TelaEstoqueNavy";
 import LinkClassica from "@/components/navy/tela/LinkClassica";
@@ -18,7 +18,7 @@ const ABAS: Record<string, string> = {
    01/10/26: Estoque v2 — lista + ⌘K + ficha do item (/estoque/[codigo]); ?cliente= filtra pelos itens que o cliente usou.
    02/10/26: Itens · Cadastros · Movimentação · Inventário · Duplicidades na 2ª linha do menu. */
 export default async function EstoquePage({ searchParams }: { searchParams: Promise<{ classica?: string; cliente?: string; aba?: string }> }) {
-  await requireArea("erp");
+  await requirePermissao("estoque.acesso");
   const { classica, cliente, aba } = await searchParams;
   if (aba && ABAS[aba]) redirect(ABAS[aba]);
   if (!classica) return (<><TelaEstoqueNavy clienteInicial={cliente ?? null} /><LinkClassica href="/estoque?classica=1" /></>);

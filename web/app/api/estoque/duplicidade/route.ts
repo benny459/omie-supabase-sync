@@ -23,7 +23,7 @@ export async function GET(req: Request) {
   const previa = new URL(req.url).searchParams.get("previa");
   if (previa) {
     try {
-      return NextResponse.json({ ...(await previaMescla("SF", previa === "todos" ? "todos" : "exatas")), admin: q.admin });
+      return NextResponse.json({ ...(await previaMescla("SF", previa === "todos" ? "todos" : "exatas")), admin: q.pode["estoque.mesclar"] });
     } catch (e) { return NextResponse.json({ error: (e as Error).message }, { status: 500 }); }
   }
   const [d, g, l] = await Promise.all([
@@ -33,7 +33,7 @@ export async function GET(req: Request) {
   ]);
   const erro = d.error ?? g.error ?? l.error;
   if (erro) return NextResponse.json({ error: erro.message }, { status: 500 });
-  return NextResponse.json({ decisoes: d.data ?? [], grupos: g.data ?? [], lotes: l.data ?? [], admin: q.admin });
+  return NextResponse.json({ decisoes: d.data ?? [], grupos: g.data ?? [], lotes: l.data ?? [], admin: q.pode["estoque.mesclar"] });
 }
 
 type Corpo = {
@@ -51,31 +51,31 @@ export async function POST(req: Request) {
   const tipo = (t?: string) => (t === "parecido" ? "parecido" : "exata");
   let res;
   if (b.acao === "mesclar") {
-    if (!q.admin) return soAdmin();
+    if (!q.pode["estoque.mesclar"]) return soAdmin();
     res = await db.rpc("estoque_mesclar", { p_empresa: b.empresa, p_principal: Number(b.principal), p_secundario: Number(b.secundario), ...quem });
   } else if (b.acao === "mesclar_grupo") {
-    if (!q.admin) return soAdmin();
+    if (!q.pode["estoque.mesclar"]) return soAdmin();
     res = await db.rpc("estoque_mesclar_grupo", { p_empresa: "SF", p_principal: Number(b.principal), p_membros: (b.membros ?? []).map(Number),
       p_tipo: tipo(b.tipo), p_lote: null, ...quem });
   } else if (b.acao === "mesclar_lote") {
-    if (!q.admin) return soAdmin();
+    if (!q.pode["estoque.mesclar"]) return soAdmin();
     const grupos = (b.grupos ?? []).filter((g) => g && Number(g.principal) && (g.membros ?? []).length >= 2)
       .map((g) => ({ principal: Number(g.principal), membros: g.membros.map(Number), tipo: tipo(g.tipo) }));
     if (!grupos.length) return NextResponse.json({ error: "Nenhum grupo selecionado" }, { status: 400 });
     res = await db.rpc("estoque_mesclar_lote", { p_empresa: "SF", p_escopo: b.escopo === "todos" ? "todos" : "exatas", p_grupos: grupos, ...quem });
   } else if (b.acao === "trocar_principal") {
-    if (!q.admin) return soAdmin();
+    if (!q.pode["estoque.mesclar"]) return soAdmin();
     res = await db.rpc("estoque_trocar_principal", { p_grupo: Number(b.id), p_principal: Number(b.principal), ...quem });
   } else if (b.acao === "desfazer_grupo") {
-    if (!q.admin) return soAdmin();
+    if (!q.pode["estoque.mesclar"]) return soAdmin();
     res = await db.rpc("estoque_desfazer_grupo", { p_grupo: Number(b.id), ...quem });
   } else if (b.acao === "desfazer_lote") {
-    if (!q.admin) return soAdmin();
+    if (!q.pode["estoque.mesclar"]) return soAdmin();
     res = await db.rpc("estoque_desfazer_lote", { p_lote: Number(b.id), ...quem });
   } else if (b.acao === "nao_e") {
     res = await db.rpc("estoque_nao_duplicidade", { p_empresa: b.empresa, p_a: Number(b.a), p_b: Number(b.b), ...quem });
   } else if (b.acao === "desfazer") {
-    if (!q.admin) return soAdmin();
+    if (!q.pode["estoque.mesclar"]) return soAdmin();
     res = await db.rpc("estoque_desfazer_decisao", { p_id: Number(b.id), ...quem });
   } else return NextResponse.json({ error: "Ação inválida" }, { status: 400 });
   if (res.error) return NextResponse.json({ error: msgErro(res.error) }, { status: 409 });

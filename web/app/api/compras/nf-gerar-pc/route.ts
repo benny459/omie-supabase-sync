@@ -5,7 +5,7 @@
 //                 com a NF. Aprovado → Faturado; cancelado/não aprovado → a NF
 //                 volta para "NF sem pedido" (trigger compras.tg_pc_da_nf).
 import { NextResponse } from "next/server";
-import { exigirCompras, rpc, erro, posGravar } from "@/lib/compras-server";
+import { exigirCompras, rpc, erro, posGravar, semPermissao } from "@/lib/compras-server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -22,6 +22,8 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
   const q = await exigirCompras();
   if (q instanceof NextResponse) return q;
+  const negado = semPermissao(q, "compras.gerar_pc_nf", "Sem permissão para gerar pedido a partir da NF");
+  if (negado) return negado;
   const b = await req.json().catch(() => ({})) as { chave?: string; catCod?: string; cat?: string; projCod?: string | number | null; proj?: string | null };
   if (!/^\d{44}$/.test(String(b.chave ?? ""))) return NextResponse.json({ error: "chave inválida" }, { status: 400 });
   if (!b.catCod) return NextResponse.json({ error: "Escolha a categoria do pedido" }, { status: 400 });

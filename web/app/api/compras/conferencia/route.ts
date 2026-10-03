@@ -5,7 +5,7 @@
 //              grava o de-para de cada linha confirmada (compras.item_fornecedor_alias).
 //              Mover para Conferido continua sendo a ação "mover" (etapa 80).
 import { NextResponse } from "next/server";
-import { exigirCompras, rpc, erro } from "@/lib/compras-server";
+import { exigirCompras, rpc, erro, semPermissao } from "@/lib/compras-server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -25,6 +25,8 @@ type Map_ = { chave?: string; nf?: string; cprod?: string; xprod?: string; ncm?:
 export async function POST(req: Request) {
   const q = await exigirCompras();
   if (q instanceof NextResponse) return q;
+  const negado = semPermissao(q, "compras.conferir", "Sem permissão para conferir e liberar pagamento");
+  if (negado) return negado;
   const b = await req.json().catch(() => ({})) as { id?: number; mapeamentos?: Map_[] };
   const id = Number(b.id);
   if (!id) return NextResponse.json({ error: "id obrigatório" }, { status: 400 });

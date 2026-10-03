@@ -1,4 +1,4 @@
-import { requireArea } from "@/lib/require-area";
+import { requirePermissao } from "@/lib/require-area";
 import FichaItemNavy from "@/components/navy/estoque/FichaItemNavy";
 
 export const dynamic = "force-dynamic";
@@ -7,7 +7,7 @@ export const dynamic = "force-dynamic";
 export default async function FichaItemPage({ params, searchParams }: {
   params: Promise<{ codigo: string }>; searchParams: Promise<{ aba?: string }>;
 }) {
-  await requireArea("erp");
+  await requirePermissao("estoque.acesso");
   const [{ codigo }, { aba }] = await Promise.all([params, searchParams]);
   return <FichaItemNavy codigo={decodeURIComponent(codigo)} abaInicial={aba} />;
 }

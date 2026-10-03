@@ -60,7 +60,7 @@ export async function GET(req: Request) {
       if (lr.error) throw new Error(lr.error.message);
       lotes = lr.data ?? [];
     }
-    return NextResponse.json({ movs, lotes, ...(await apoio()), admin: q.admin, eu: { id: q.id, email: q.email } });
+    return NextResponse.json({ movs, lotes, ...(await apoio()), admin: q.pode["estoque.config_mov"] || q.pode["estoque.aprovar_perdas"], pode: q.pode, eu: { id: q.id, email: q.email } });
   } catch (e) { return NextResponse.json({ error: (e as Error).message }, { status: 500 }); }
 }
 
@@ -68,32 +68,32 @@ export async function POST(req: Request) {
   const q = await quemEstoque();
   if (q instanceof NextResponse) return q;
   const b = (await req.json().catch(() => ({}))) as Record<string, unknown>;
-  const soAdmin = () => NextResponse.json({ error: "Só o administrador (Benny) pode fazer isso" }, { status: 403 });
+  const soAdmin = () => NextResponse.json({ error: "Sem permissão para isso — peça ao administrador em Usuários e acessos" }, { status: 403 });
   try {
     if (b.acao === "registrar") {
-      const r = await orders().rpc("estoque_movimentar", { p: { ...b, empresa: "SF" }, p_user: q.id || null, p_email: q.email, p_admin: q.admin });
+      const r = await orders().rpc("estoque_movimentar", { p: { ...b, empresa: "SF" }, p_user: q.id || null, p_email: q.email, p_admin: q.pode["estoque.aprovar_perdas"] });
       if (r.error) return NextResponse.json({ error: msgErro(r.error) }, { status: 409 });
       return NextResponse.json({ ok: true, mov: r.data });
     }
     if (b.acao === "registrar_lote") {
-      const r = await orders().rpc("estoque_movimentar_lote", { p: { ...b, empresa: "SF" }, p_user: q.id || null, p_email: q.email, p_admin: q.admin });
+      const r = await orders().rpc("estoque_movimentar_lote", { p: { ...b, empresa: "SF" }, p_user: q.id || null, p_email: q.email, p_admin: q.pode["estoque.aprovar_perdas"] });
       if (r.error) return NextResponse.json({ error: msgErro(r.error) }, { status: 409 });
       return NextResponse.json({ ok: true, lote: r.data });
     }
     if ((b.acao === "aprovar" || b.acao === "rejeitar" || b.acao === "cancelar") && b.lote_id) {
-      if (!q.admin) return soAdmin();
+      if (!q.pode["estoque.aprovar_perdas"]) return soAdmin();
       const r = await orders().rpc("estoque_mov_decidir_lote", { p_lote: Number(b.lote_id), p_acao: b.acao, p_obs: (b.obs as string) ?? null, p_email: q.email });
       if (r.error) return NextResponse.json({ error: msgErro(r.error) }, { status: 409 });
       return NextResponse.json({ ok: true, lote: r.data });
     }
     if (b.acao === "aprovar" || b.acao === "rejeitar" || b.acao === "cancelar") {
-      if (!q.admin) return soAdmin();
+      if (!q.pode["estoque.aprovar_perdas"]) return soAdmin();
       const r = await orders().rpc("estoque_mov_decidir", { p_id: Number(b.id), p_acao: b.acao, p_obs: (b.obs as string) ?? null, p_email: q.email });
       if (r.error) return NextResponse.json({ error: msgErro(r.error) }, { status: 409 });
       return NextResponse.json({ ok: true, mov: r.data });
     }
     if (b.acao === "tipo_salvar") {
-      if (!q.admin) return soAdmin();
+      if (!q.pode["estoque.config_mov"]) return soAdmin();
       const t = (b.tipo ?? {}) as Record<string, unknown>;
       const nome = String(t.nome ?? "").trim();
       if (!nome) return NextResponse.json({ error: "Dê um nome ao tipo" }, { status: 400 });
@@ -116,7 +116,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ ok: true, ...(await apoio()) });
     }
     if (b.acao === "motivo_salvar") {
-      if (!q.admin) return soAdmin();
+      if (!q.pode["estoque.config_mov"]) return soAdmin();
       const m = (b.motivo ?? {}) as Record<string, unknown>;
       const nome = String(m.nome ?? "").trim();
       if (!nome) return NextResponse.json({ error: "Escreva a justificativa" }, { status: 400 });

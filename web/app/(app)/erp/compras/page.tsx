@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { requireArea } from "@/lib/require-area";
+import { requirePermissao } from "@/lib/require-area";
 import ErpListaView from "@/components/ErpListaView";
 import TelaCompras from "@/components/compras/TelaCompras";
 
@@ -10,7 +10,7 @@ export const dynamic = "force-dynamic";
    painel (schema compras). A lista antiga — espelho do Omie — continua em
    ?classica=1 para comparar. */
 export default async function ErpComprasPage({ searchParams }: { searchParams: Promise<{ classica?: string }> }) {
-  await requireArea("erp");
+  await requirePermissao("compras.acesso");
   const { classica } = await searchParams;
 
   if (classica) {

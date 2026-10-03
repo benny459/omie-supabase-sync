@@ -1,7 +1,7 @@
 // GET  /api/compras/pedido?id=  — pedido completo (folha)
 // POST /api/compras/pedido      — incluir/alterar (só o que nasceu no painel)
 import { NextResponse } from "next/server";
-import { exigirCompras, rpc, erro, posGravar } from "@/lib/compras-server";
+import { exigirCompras, rpc, erro, posGravar, valoresSePuder } from "@/lib/compras-server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -16,7 +16,7 @@ export async function GET(req: Request) {
     if (!p) return NextResponse.json({ error: "Pedido não encontrado" }, { status: 404 });
     // contas a pagar do pedido no financeiro (fase do ciclo: previsto → … → liberado)
     const pagar = await rpc("compras_pagar_do_pedido", { p_id: id }).catch(() => []);
-    return NextResponse.json({ ...(p as object), pagar });
+    return NextResponse.json({ ...valoresSePuder(q, { ...(p as object), pagar }), pode: q.pode });
   } catch (e) { return erro(e); }
 }
 

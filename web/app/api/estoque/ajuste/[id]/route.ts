@@ -7,7 +7,7 @@ import { exigirAdminEstoque, msgErro, orders } from "@/lib/estoque-server";
 export const runtime = "nodejs";
 
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const q = await exigirAdminEstoque();
+  const q = await exigirAdminEstoque("estoque.senha_inventario");
   if (q instanceof NextResponse) return q;
   const id = Number((await params).id);
   const { acao } = (await req.json().catch(() => ({}))) as { acao?: string };

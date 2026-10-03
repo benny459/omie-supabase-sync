@@ -68,12 +68,12 @@ export async function GET(req: Request) {
   const q = await quemEstoque();
   if (q instanceof NextResponse) return q;
   const resumo = new URL(req.url).searchParams.get("resumo");
-  try { return NextResponse.json({ ...(await estado()), ...(resumo ? {} : await detalhes()), admin: q.admin }); }
+  try { return NextResponse.json({ ...(await estado()), ...(resumo ? {} : await detalhes()), admin: q.pode["estoque.codigos"] }); }
   catch (e) { return NextResponse.json({ error: (e as Error).message }, { status: 500 }); }
 }
 
 export async function POST(req: Request) {
-  const q = await exigirAdminEstoque();
+  const q = await exigirAdminEstoque("estoque.codigos");
   if (q instanceof NextResponse) return q;
   const b = (await req.json().catch(() => ({}))) as { acao?: string; cota?: number };
   const db = platform();

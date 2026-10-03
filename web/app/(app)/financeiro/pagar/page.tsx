@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { requireArea } from "@/lib/require-area";
+import { requirePermissao } from "@/lib/require-area";
 import TitulosView from "@/components/TitulosView";
 import TelaTitulosNavy from "@/components/navy/tela/TelaTitulosNavy";
 
@@ -9,7 +9,7 @@ export const dynamic = "force-dynamic";
    A antiga continua em ?classica=1 para comparar lado a lado — a Navy traz
    todos os campos dela, e é aí que se confere. */
 export default async function ContasPagarPage({ searchParams }: { searchParams: Promise<{ classica?: string }> }) {
-  await requireArea("erp");
+  await requirePermissao("financeiro.ver_pagar");
   const { classica } = await searchParams;
 
   if (classica) {

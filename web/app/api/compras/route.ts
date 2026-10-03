@@ -2,7 +2,7 @@
 // Antes de listar, casa as NF-e que chegaram pela Focus com os pedidos
 // (compras.casar_nfs_focus — idempotente) para o selo "NF chegou" aparecer.
 import { NextResponse } from "next/server";
-import { exigirCompras, rpc, erro } from "@/lib/compras-server";
+import { exigirCompras, rpc, erro, valoresSePuder } from "@/lib/compras-server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -32,6 +32,6 @@ export async function GET(req: Request) {
       rpc("compras_nfs_por_pedido"),
       rpc("compras_nfs_sem_pedido", { p_empresa: "SF" }),
     ]);
-    return NextResponse.json({ pedidos, nfSug, nfsPorPedido, semPedido, desde });
+    return NextResponse.json({ ...valoresSePuder(q, { pedidos, nfSug, nfsPorPedido, semPedido }), desde, pode: q.pode });
   } catch (e) { return erro(e); }
 }

@@ -11,7 +11,7 @@ export const runtime = "nodejs";
 const MAX_HORAS = 30 * 24;
 
 export async function GET() {
-  const q = await exigirAdminEstoque();
+  const q = await exigirAdminEstoque("estoque.senha_inventario");
   if (q instanceof NextResponse) return q;
   const db = platform();
   const [jr, ar] = await Promise.all([
@@ -35,7 +35,7 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
-  const q = await exigirAdminEstoque();
+  const q = await exigirAdminEstoque("estoque.senha_inventario");
   if (q instanceof NextResponse) return q;
   const b = (await req.json().catch(() => ({}))) as { nome?: string; horas?: number; escopo?: { familia?: string; local?: string } };
   const nome = String(b.nome ?? "").trim();

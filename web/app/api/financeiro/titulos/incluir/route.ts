@@ -11,6 +11,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { loadPerms } from "@/lib/require-area";
 import { canViewArea } from "@/lib/permissions";
+import { permissoesDe } from "@/lib/acessos";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -65,6 +66,9 @@ export async function POST(req: Request) {
   if (!perms) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if (!canViewArea(perms, "erp")) {
     return NextResponse.json({ error: "Sem acesso à área ERP" }, { status: 403 });
+  }
+  if (!(await permissoesDe(perms))["financeiro.editar_titulo"]) {
+    return NextResponse.json({ error: "Sem permissão para incluir títulos" }, { status: 403 });
   }
 
   let body: Body;

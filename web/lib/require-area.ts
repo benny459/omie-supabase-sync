@@ -23,11 +23,12 @@ export async function loadPerms(): Promise<UserPerms | null> {
 
   const [{ data: profile }, { data: areasRaw }] = await Promise.all([
     supa.schema("platform" as never).from("user_profiles")
-      .select("role, is_admin").eq("id", user.id).maybeSingle(),
+      .select("role, is_admin, ativo").eq("id", user.id).maybeSingle(),
     supa.schema("platform" as never).from("user_area_access")
       .select("area, can_view").eq("user_id", user.id),
   ]);
-  const row = profile as { role?: Role; is_admin?: boolean } | null;
+  const row = profile as { role?: Role; is_admin?: boolean; ativo?: boolean } | null;
+  if (row?.ativo === false) return null; // desativado em Usuários e acessos
   return {
     id: user.id,
     role: row?.role ?? (row?.is_admin ? "admin" : "viewer"),
@@ -43,5 +44,14 @@ export async function requireArea(area: Area): Promise<UserPerms> {
   const perms = await loadPerms();
   if (!perms) redirect("/login");
   if (!canViewArea(perms, area)) redirect("/");
+  return perms;
+}
+
+// Permissão fina de "Usuários e acessos" (03/10/26): área ERP + a chave.
+// Mesmo comportamento do requireArea: sem permissão volta para a home.
+export async function requirePermissao(chave: import("@/lib/acessos-catalogo").Chave): Promise<UserPerms> {
+  const perms = await requireArea("erp");
+  const { permissoesDe } = await import("@/lib/acessos");
+  if (!(await permissoesDe(perms))[chave]) redirect("/");
   return perms;
 }

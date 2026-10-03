@@ -71,8 +71,7 @@ async function executar(q: Quem, req: Request, b: Record<string, unknown>): Prom
       case "nf_casar": return rpc("compras_nf_casar", { p_chave: String(b.chave), p_pedido: Number(b.pedido), p_por: q.email });
       case "nf_descasar": return rpc("compras_nf_descasar", { p_chave: String(b.chave), p_pedido: Number(b.pedido), p_por: q.email });
       case "nf_dispensar": {
-        const nao = await podeAprovar(q, 0); // mesma permissão de aprovar compra
-        if (nao) throw new Error("Só quem aprova compras pode dispensar NF de pedido");
+        if (!q.pode["compras.dispensar_nf"]) throw new Error("Sem permissão para dispensar NF sem pedido");
         return rpc("compras_nf_dispensar", { p_chave: String(b.chave), p_motivo: String(b.motivo ?? ""), p_por: q.email });
       }
       default: throw new Error("ação inválida");
@@ -83,6 +82,7 @@ async function executar(q: Quem, req: Request, b: Record<string, unknown>): Prom
 async function mover(q: Quem, id: number, etapa: string) {
   const p = await pedido(id);
   if (ordemEtapa(etapa) < 0) throw new Error("Etapa inválida");
+  if (etapa === "80" && !q.pode["compras.conferir"]) throw new Error("Sem permissão para conferir e liberar pagamento");
   if (p.etapa === "20" && etapa !== "20") throw new Error("Requisição vira pedido pela folha (Gerar Pedido de Compra)");
   if (["40", "60", "80"].includes(etapa) && p.origem === "painel" && p.aprov !== "aprovado") {
     throw new Error("Pedido ainda não aprovado — aprove antes de avançar");

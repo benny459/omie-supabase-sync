@@ -99,7 +99,20 @@ export type UserPerms = {
   module_roles?: ModuleRole[];
   // 0+ rows da platform.user_area_access. Ausência cai no AREA_DEFAULT.
   area_access?: AreaAccess[];
+  // Permissões finas efetivas (Usuários e acessos) — preenchidas no layout.
+  pode?: Record<string, boolean>;
 };
+
+/** Item de menu do ERP que depende de permissão fina (Usuários e acessos). */
+export function podeAbrirRota(user: UserPerms | null | undefined, href: string): boolean {
+  const p = user?.pode;
+  if (!p) return true;
+  if (href.startsWith("/erp/compras")) return p["compras.acesso"] !== false;
+  if (href.startsWith("/estoque")) return p["estoque.acesso"] !== false;
+  if (href.startsWith("/financeiro/pagar")) return p["financeiro.ver_pagar"] !== false;
+  if (href.startsWith("/financeiro/receber")) return p["financeiro.ver_receber"] !== false;
+  return true;
+}
 
 // Default capability matrix por role
 // edit = pode editar campos do bloco

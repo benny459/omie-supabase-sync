@@ -436,6 +436,16 @@ export const FINANCEIRO: NavItem[] = [
 
 export const ADMIN: NavItem[] = [
   {
+    href: "/configuracoes/acessos",
+    label: "Usuários e acessos",
+    tone: "text-ww-textMuted",
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className="w-5 h-5" strokeLinecap="round" strokeLinejoin="round">
+        <circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><path d="M17 11l2 2 3.5-3.5"/>
+      </svg>
+    ),
+  },
+  {
     href: "/configuracoes",
     label: "Configurações",
     tone: "text-ww-textMuted",

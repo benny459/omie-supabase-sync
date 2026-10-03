@@ -77,7 +77,7 @@ export async function POST(req: Request) {
 
   // Família / código digitado: só admin muda o código; família qualquer usuário do ERP escolhe.
   const antes = b.n_cod_prod ? await orders().from("v_estoque_item").select("descricao, unidade, ncm, ean, n_cod_prod, codigo_omie").eq("n_cod_prod", Number(b.n_cod_prod)).maybeSingle() : null;
-  const r = await orders().rpc("estoque_cadastrar", { p: b, p_admin: q.admin, p_email: q.email });
+  const r = await orders().rpc("estoque_cadastrar", { p: b, p_admin: q.pode["estoque.codigos"], p_email: q.email });
   if (r.error) return NextResponse.json({ error: msgErro(r.error) }, { status: 409 });
   const res = r.data as { cadastro: Cad; n_cod_prod: number; codigo: string };
   const novo = !b.n_cod_prod && !b.cadastro_id;

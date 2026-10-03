@@ -12,7 +12,7 @@
 // um código antigo (apelido) ou o id (negativo para item criado no painel ainda sem id do Omie).
 
 import { NextResponse } from "next/server";
-import { orders, platform, quemEstoque, todas } from "@/lib/estoque-server";
+import { custosSePuder, orders, platform, quemEstoque, todas } from "@/lib/estoque-server";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -87,7 +87,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ codigo:
       .sort((a, b) => String(b.emissao ?? "").localeCompare(String(a.emissao ?? "")));
 
     return NextResponse.json({
-      item, movs, pcs, dups, ajustes: ajRes.data ?? [], admin: q.admin, aliases, mesclados: secRes.data ?? [],
+      ...custosSePuder(q, { item, movs, pcs, ajustes: ajRes.data ?? [] }), dups, admin: q.admin, pode: q.pode, aliases, mesclados: secRes.data ?? [],
       codigos: codRes.error ? [] : codRes.data ?? [],
       mesclas: mesclas.map((m) => ({ ...m, secundario_item: nomes.get(Number(m.secundario)) ?? null })),
     });

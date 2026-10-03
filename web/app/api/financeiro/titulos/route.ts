@@ -11,6 +11,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { loadPerms } from "@/lib/require-area";
 import { canViewArea } from "@/lib/permissions";
+import { permissoesDe } from "@/lib/acessos";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -178,6 +179,11 @@ export async function GET(req: Request) {
   if (!perms) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if (!canViewArea(perms, "erp")) {
     return NextResponse.json({ error: "Sem acesso à área ERP" }, { status: 403 });
+  }
+  {
+    const pode = await permissoesDe(perms);
+    const tipoPedido = new URL(req.url).searchParams.get("tipo") === "receber" ? "financeiro.ver_receber" : "financeiro.ver_pagar";
+    if (!pode[tipoPedido]) return NextResponse.json({ error: "Sem acesso a estes títulos" }, { status: 403 });
   }
 
   const url = new URL(req.url);

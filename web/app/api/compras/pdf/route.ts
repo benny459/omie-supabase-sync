@@ -13,7 +13,7 @@ export async function GET(req: Request) {
   if (q instanceof NextResponse) return q;
   const sp = new URL(req.url).searchParams;
   const id = Number(sp.get("id"));
-  const variante: VariantePdf = sp.get("variante") === "sem_valores" ? "sem_valores" : "completo";
+  const variante: VariantePdf = sp.get("variante") === "sem_valores" || !q.pode["compras.ver_valores"] ? "sem_valores" : "completo";
   if (!id) return NextResponse.json({ error: "id obrigatório" }, { status: 400 });
   try {
     const ant = sp.get("anterior");

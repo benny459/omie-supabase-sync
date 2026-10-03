@@ -1,5 +1,6 @@
 import AppSidebar from "@/components/AppSidebar";
 import TopNav from "@/components/navy/TopNav";
+import { permissoesDe } from "@/lib/acessos";
 import SyncStatusBar from "@/components/SyncStatusBar";
 import ThemeToggle from "@/components/ThemeToggle";
 import SeletorPaleta from "@/components/viz/SeletorPaleta";
@@ -31,14 +32,25 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   if (user) {
     const [{ data: profile }, { data: rolesRaw }, { data: areasRaw }] = await Promise.all([
       supa.schema("platform" as never).from("user_profiles")
-        .select("role, is_admin, permissions").eq("id", user.id).maybeSingle(),
+        .select("role, is_admin, permissions, ativo").eq("id", user.id).maybeSingle(),
       supa.schema("platform" as never).from("user_module_roles")
         .select("modulo, can_edit_pv, can_edit_rc, can_edit_pc, can_approve, can_edit_log, can_release_pv, approval_ceiling_brl, weekly_budget_brl")
         .eq("user_id", user.id),
       supa.schema("platform" as never).from("user_area_access")
         .select("area, can_view").eq("user_id", user.id),
     ]);
-    const row = profile as { role?: Role; is_admin?: boolean; permissions?: PermsOverride | null } | null;
+    const row = profile as { role?: Role; is_admin?: boolean; permissions?: PermsOverride | null; ativo?: boolean } | null;
+    // Desativado em Usuários e acessos: não entra em tela nenhuma.
+    if (row?.ativo === false) {
+      return (
+        <main className="min-h-screen bg-ww-bg text-ww-text flex items-center justify-center p-6">
+          <div className="max-w-md text-center bg-ww-panel border border-ww-border rounded-xl p-8">
+            <h1 className="text-lg font-semibold mb-1">Acesso desativado</h1>
+            <p className="text-sm text-ww-textMuted">O seu acesso ao painel foi desativado. Fale com o administrador.</p>
+          </div>
+        </main>
+      );
+    }
     perms = {
       id: user.id,
       role: row?.role ?? (row?.is_admin ? "admin" : "viewer"),
@@ -47,6 +59,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       module_roles: (rolesRaw ?? []) as ModuleRole[],
       area_access: (areasRaw ?? []) as AreaAccess[],
     };
+    try { perms.pode = await permissoesDe(perms); } catch { /* menu cai no comportamento por área */ }
   }
 
   return (

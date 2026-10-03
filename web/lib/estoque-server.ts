@@ -5,8 +5,10 @@ import { loadPerms } from "@/lib/require-area";
 import { canViewArea } from "@/lib/permissions";
 import { supaAdmin } from "@/lib/supabase-admin";
 import { supaServer } from "@/lib/supabase-server";
+import { permissoesDe, semValores } from "@/lib/acessos";
+import type { Chave } from "@/lib/acessos-catalogo";
 
-export type QuemEstoque = { id: string; email: string; admin: boolean };
+export type QuemEstoque = { id: string; email: string; admin: boolean; pode: Record<Chave, boolean> };
 
 /** Estoque vive na área ERP (mesma guarda de /api/estoque). Devolve a resposta de erro ou null. */
 export async function exigirEstoque(): Promise<NextResponse | null> {
@@ -19,15 +21,24 @@ export async function quemEstoque(): Promise<QuemEstoque | NextResponse> {
   const perms = await loadPerms();
   if (!perms) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if (!canViewArea(perms, "erp")) return NextResponse.json({ error: "Sem acesso à área ERP" }, { status: 403 });
+  const pode = await permissoesDe(perms);
+  if (!pode["estoque.acesso"]) return NextResponse.json({ error: "Sem acesso ao Estoque" }, { status: 403 });
   const { data: { user } } = await (await supaServer()).auth.getUser();
-  return { id: perms.id ?? user?.id ?? "", email: user?.email ?? "", admin: !!perms.is_admin };
+  return { id: perms.id ?? user?.id ?? "", email: user?.email ?? "", admin: !!perms.is_admin, pode };
 }
 
-export async function exigirAdminEstoque(): Promise<QuemEstoque | NextResponse> {
+/** Exige uma permissão fina do Estoque (Usuários e acessos). Sem chave = só administrador. */
+export async function exigirAdminEstoque(chave?: Chave): Promise<QuemEstoque | NextResponse> {
   const q = await quemEstoque();
   if (q instanceof NextResponse) return q;
-  if (!q.admin) return NextResponse.json({ error: "Só o administrador (Benny) pode fazer isso" }, { status: 403 });
+  if (chave ? !q.pode[chave] : !q.admin) return NextResponse.json({ error: "Sem permissão para isso — peça ao administrador em Usuários e acessos" }, { status: 403 });
   return q;
+}
+
+/** Custos (CMC, valor em estoque, preços) zerados para quem não pode ver custos. */
+const CAMPOS_CUSTO = /^(cmc|cmc_.*|valor|valor_.*|valor_estoque|custo|custo_.*|preco|preco_.*|ultimo_preco|ult_preco|vu|nval_unit|min|max|media|avg|valor_unit|vlr.*)$/i;
+export function custosSePuder<T>(q: QuemEstoque, dado: T): T {
+  return q.pode["estoque.ver_custos"] ? dado : semValores(dado, CAMPOS_CUSTO);
 }
 
 /** Service role no schema orders — views orders.v_estoque_* e RPCs orders.estoque_*. */

@@ -4,7 +4,7 @@
 // mais os pares de possível duplicidade ainda não decididos (orders.v_estoque_duplicidade).
 
 import { NextResponse } from "next/server";
-import { orders, platform, quemEstoque, todas, todasParalelo } from "@/lib/estoque-server";
+import { custosSePuder, orders, platform, quemEstoque, todas, todasParalelo } from "@/lib/estoque-server";
 import { urlsAssinadas } from "@/lib/estoque-fotos";
 
 export const runtime = "nodejs";
@@ -24,7 +24,7 @@ export async function GET() {
     const urls = await urlsAssinadas(fs.map((f) => f.path)).catch(() => new Map<string, string>());
     const porItem = new Map(fs.map((f) => [`${f.empresa}:${f.n_cod_prod}`, urls.get(f.path) ?? null]));
     for (const r of rows as Record<string, unknown>[]) r.foto = porItem.get(`${r.empresa}:${r.n_cod_prod}`) ?? null;
-    return NextResponse.json({ rows, dups, count: rows.length, admin: q.admin });
+    return NextResponse.json({ rows: custosSePuder(q, rows), dups, count: rows.length, admin: q.admin, pode: q.pode });
   } catch (e) {
     return NextResponse.json({ error: (e as Error).message }, { status: 500 });
   }

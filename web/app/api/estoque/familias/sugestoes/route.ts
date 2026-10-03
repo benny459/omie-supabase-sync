@@ -22,14 +22,14 @@ export async function GET() {
     ]);
     const porId = new Map(itens.map((i) => [Number(i.n_cod_prod), i]));
     const linhas = (sug as Record<string, unknown>[]).map((s) => ({ ...s, item: porId.get(Number(s.n_cod_prod)) ?? null })).filter((s) => s.item);
-    return NextResponse.json({ sugestoes: linhas, admin: q.admin });
+    return NextResponse.json({ sugestoes: linhas, admin: q.pode["estoque.codigos"] });
   } catch (e) {
     return NextResponse.json({ error: (e as Error).message }, { status: 500 });
   }
 }
 
 export async function POST(req: Request) {
-  const q = await exigirAdminEstoque();
+  const q = await exigirAdminEstoque("estoque.codigos");
   if (q instanceof NextResponse) return q;
   const b = (await req.json().catch(() => ({}))) as { acao?: string; itens?: number[]; familia_id?: number };
   const db = orders();
