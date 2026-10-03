@@ -179,46 +179,40 @@ export type Kpi = {
   onClick?: () => void;
 };
 
-const BRILHOS = [
-  "color-mix(in srgb,var(--ww-brand-2) 38%,transparent)",
-  "color-mix(in srgb,var(--ww-brand-3) 32%,transparent)",
-  "rgba(154,130,255,.32)", "rgba(25,198,166,.28)", "rgba(245,197,66,.26)", "rgba(255,107,74,.26)",
-];
-const FIOS = [
-  "linear-gradient(90deg,var(--ww-brand-1),var(--ww-brand-2))",
-  "linear-gradient(90deg,var(--ww-brand-2),var(--ww-brand-3))",
-  "linear-gradient(90deg,#9A82FF,#bfaeff)", "linear-gradient(90deg,#19C6A6,var(--ww-brand-3))",
-  "linear-gradient(90deg,#F5C542,#FF8F73)", "linear-gradient(90deg,#FF6B4A,#FF8F73)",
-];
+/* Os indicadores são os cartões do CRM novo ALLKA (kanban/CartaoIndicador):
+   degradê da marca, número grande a branco, rótulo e linha de contexto. O
+   cartão-herói fica no marinho; os outros seguem azul → cinza → azul-claro →
+   céu. Só cor e tipografia — a estrutura do cartão é a mesma. */
+const DEGRADES = ["var(--ww-kpi-2)", "var(--ww-kpi-3)", "var(--ww-kpi-4)", "var(--ww-kpi-5)", "var(--ww-kpi-1)"];
 
 export function GradeKpis({ kpis, min = 190 }: { kpis: Kpi[]; min?: number }) {
+  let n = 0;
   return (
     <section style={{ display: "grid", gridTemplateColumns: `repeat(auto-fit,minmax(${min}px,1fr))`, gap: 14 }}>
       {kpis.map((k, i) => {
-        const brilho = k.dot ? `color-mix(in srgb,${k.dot} 35%,transparent)` : BRILHOS[i % 6];
+        const fundo = k.hero ? "var(--ww-kpi-1)" : DEGRADES[n++ % DEGRADES.length];
         return (
           <div key={i} title={k.title} onClick={k.onClick} style={{
-            position: "relative", overflow: "hidden", borderRadius: 16, padding: "16px 18px",
-            background: k.hero ? "var(--ww-hero-grad)" : "var(--ww-panel-grad)",
-            border: "1px solid var(--ww-border)", boxShadow: "var(--shadow-card)",
+            position: "relative", overflow: "hidden", borderRadius: 14, padding: "16px 18px",
+            background: fundo, border: "none", boxShadow: "none",
             display: "flex", flexDirection: "column", gap: 6, minWidth: 0,
-            color: k.hero ? "var(--ww-hero-text)" : "var(--ww-text)",
+            color: "#fff",
             cursor: k.onClick ? "pointer" : "default",
           }}>
-            <span style={{ position: "absolute", right: -50, top: -60, width: 170, height: 170, borderRadius: "50%",
-                           background: `radial-gradient(circle,${brilho},transparent 68%)`, pointerEvents: "none" }} />
-            <span style={{ position: "absolute", left: 0, right: 0, top: 0, height: 2, background: FIOS[i % 6] }} />
-            <div style={{ position: "relative", display: "flex", alignItems: "center", gap: 7, fontSize: 12.5, fontWeight: 700 }}>
-              {k.dot && <span style={{ width: 9, height: 9, borderRadius: 3, background: k.dot }} />}
+            <div style={{ position: "relative", display: "flex", alignItems: "center", gap: 7, fontSize: 13, fontWeight: 500, opacity: 0.95 }}>
+              {k.dot && <span style={{ width: 9, height: 9, borderRadius: 3, background: k.dot, boxShadow: "0 0 0 1.5px rgba(255,255,255,.7)" }} />}
               {k.rotulo}
             </div>
-            <div style={{ position: "relative", fontSize: 24, fontWeight: 700, letterSpacing: "-.02em",
-                          whiteSpace: "nowrap", fontFamily: "var(--font-display)", overflow: "hidden", textOverflow: "ellipsis" }}>
+            <div style={{ position: "relative", fontSize: 24, fontWeight: 800, letterSpacing: "-.03em", lineHeight: 1.1,
+                          whiteSpace: "nowrap", fontFamily: "var(--font-display)", overflow: "hidden", textOverflow: "ellipsis",
+                          fontVariantNumeric: "tabular-nums" }}>
               {k.valor}
             </div>
             {k.sub != null && (
-              <div style={{ position: "relative", fontSize: 12,
-                            color: k.subTom ? tom(k.subTom).fg : k.hero ? "var(--ww-hero-text-2)" : "var(--ww-text-muted)" }}>
+              <div style={{ position: "relative", fontSize: 11, opacity: 0.85, display: "flex", alignItems: "center", gap: 5 }}>
+                {k.subTom && k.subTom !== "off" && (
+                  <span style={{ width: 7, height: 7, borderRadius: "50%", background: tom(k.subTom).fg, boxShadow: "0 0 0 2px rgba(255,255,255,.55)", flexShrink: 0 }} />
+                )}
                 {k.sub}
               </div>
             )}

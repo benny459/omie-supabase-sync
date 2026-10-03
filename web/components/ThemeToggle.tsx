@@ -11,10 +11,11 @@ type Theme = "light" | "dark" | "system";
  * aplicou a classe correta antes da hidratação.
  */
 export default function ThemeToggle() {
-  const [theme, setTheme] = useState<Theme>("system");
+  const [theme, setTheme] = useState<Theme>("dark");
 
   useEffect(() => {
-    const saved = (localStorage.getItem("ww-theme") as Theme) || "system";
+    // Sem escolha gravada, o painel abre escuro, como o CRM novo ALLKA.
+    const saved = (localStorage.getItem("ww-theme") as Theme) || "dark";
     setTheme(saved);
   }, []);
 

@@ -179,25 +179,24 @@ export const STATUS = {
 // Cromo do gráfico. Texto usa token de TEXTO, nunca a cor da série — o mark
 // colorido ao lado é que carrega a identidade.
 export const CHROME = {
-  // Claro "tech": mesma família do escuro, espelhada. Tinta e grade ganham um
-  // leve viés azul pra o par claro/escuro parecer o MESMO produto em dois
-  // modos, e não dois temas diferentes colados.
+  // Cromo do CRM novo ALLKA (03/10/26): superfície, grade e tinta saem das
+  // mesmas cores dos cartões do CRM (modules/crm/tema-allka.ts), para gráfico e
+  // cartão serem o mesmo produto. As rampas de série não mudaram; a escura foi
+  // revalidada contra #161C27 (CVD 11.6 / normal 18.7, passa).
   light: {
     surface:  "#ffffff",
-    gridline: "#dfe7f2",
-    axis:     "#c2cfe3",
-    ink:      "#0f1e3a",
-    inkMuted: "#51637f",
-    inkFaint: "#8496b0",
+    gridline: "#E4E7EC",
+    axis:     "#D7DADE",
+    ink:      "#101828",
+    inkMuted: "#5D636E",
+    inkFaint: "#8F949D",
   },
-  // Tema escuro "tech" azul-marinho. Números da validação estão no comentário
-  // da rampa, que é onde eles mudam.
   dark: {
-    surface:  "#152744",
-    gridline: "#24365c",
-    axis:     "#33497a",
-    ink:      "#eaf0fb",
-    inkMuted: "#9db2d4",
-    inkFaint: "#6b82a8",
+    surface:  "#161C27",
+    gridline: "#242C38",
+    axis:     "#2A3341",
+    ink:      "#EAEEF6",
+    inkMuted: "#9AA4B7",
+    inkFaint: "#6F7B90",
   },
 } as const;
