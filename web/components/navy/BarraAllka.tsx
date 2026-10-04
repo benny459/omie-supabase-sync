@@ -8,7 +8,7 @@
  * portal); as abas agrupam-se Comercial · Operação · Gestão; o módulo aberto
  * acende na sua cor (fundo, contorno, sublinhado luminoso e a faixa sob a
  * barra). Sistema sai das abas e vira a engrenagem à direita. O símbolo de
- * menu (nove pontos) à esquerda leva ao Início do portal, com todos os módulos.
+ * logo Allka, à esquerda, leva ao Início do portal, com todos os módulos.
  *
  * Só a forma: o que cada botão faz continua a ser do app onde a barra está,
  * que o passa por props.
@@ -169,10 +169,7 @@ export default function BarraAllka({ modulos, activo, hubHref, navegar, aquecer,
     <header className="ab" style={{ "--c": cor } as CSSProperties}>
       <div className="ab-esq">
         {antesDaMarca}
-        <a className="ab-icone ab-lanc" href={hubHref} aria-label="Menu — todos os módulos" title="Menu · todos os módulos">
-          <IconeLancador />
-        </a>
-        <a className="ab-marca" href={hubHref} aria-label="Voltar ao Início" title="Allka · WaterWorks">
+        <a className="ab-marca" href={hubHref} aria-label="Início — todos os módulos" title="Início · todos os módulos">
           <MarcaAllka size={28} />
           <span className="ab-marca-nome">Allka</span>
         </a>
