@@ -1,7 +1,8 @@
 "use client";
 
 /**
- * Barra do topo do painel — a mesma do portal ALLKA (03/10/26).
+ * Barra do topo do painel — a mesma do portal ALLKA (03/10/26; desenho do
+ * conceito "menu superior por módulo" desde 04/10/26, ver BarraAllka).
  *
  * Pedido do Benny: portal ↔ painel ↔ serviços têm de parecer um sistema só.
  * A forma vem de BarraAllka (cópia da TopBar do portal); aqui fica o que é do
@@ -34,7 +35,7 @@ import SeletorPaleta from "../viz/SeletorPaleta";
 import { useCesar } from "../cesar/CesarProvider";
 import { supaBrowser } from "@/lib/supabase";
 import BarraAllka, {
-  Avatar, BotaoAssistente, IconeOpcoes, Lancador, useFechaFora,
+  Avatar, BotaoAssistente, IconeOpcoes, useFechaFora,
   type ItemModulo, type ModuloBarra,
 } from "./BarraAllka";
 
@@ -106,7 +107,8 @@ export default function TopNav({ userEmail, isPlatformAdmin, telasRh = [] }: { u
     label: m.label, href: m.href, activo: itemDaRota?.href === m.href || (pathname === m.href),
   }));
 
-  /* Módulos na ordem do portal. Área sem item visível não aparece. */
+  /* Os mesmos módulos do portal; a barra agrupa-os (Comercial · Operação ·
+     Gestão) e põe o Sistema na engrenagem. Área sem item visível não aparece. */
   const modulos: ModuloBarra[] = [];
   modulos.push({ id: "crm", nome: "CRM", href: `${PORTAL_SSO}/w/waterworks/crm`, externo: true, titulo: "CRM no portal ALLKA" });
   if (isPlatformAdmin) {
@@ -168,28 +170,29 @@ export default function TopNav({ userEmail, isPlatformAdmin, telasRh = [] }: { u
       navegar={navegar}
       aquecer={aquecer}
       pendente={pendingHref}
-      direita={<Direita userEmail={userEmail} />}
+      direita={<Direita />}
+      avatar={<MenuUtilizador email={userEmail} iniciais={iniciaisDe(userEmail)} />}
     />
   );
 }
 
-function Direita({ userEmail }: { userEmail?: string | null }) {
-  const { abrir, aberto } = useCesar();
-  const local = (userEmail ?? "").split("@")[0];
-  // Mesmas iniciais do portal (nome de exibição = parte local do e-mail).
-  const iniciais = local.split(" ").map((p) => p[0]).filter(Boolean).slice(0, 2).join("").toUpperCase() || "?";
+// Mesmas iniciais do portal (nome de exibição = parte local do e-mail).
+function iniciaisDe(email?: string | null) {
+  const local = (email ?? "").split("@")[0];
+  return local.split(" ").map((p) => p[0]).filter(Boolean).slice(0, 2).join("").toUpperCase() || "?";
+}
 
+/* Direita da barra (conceito 04/10/26): pesquisa, Cesar e opções; a
+   engrenagem do Sistema e o avatar vêm a seguir, desenhados pela barra. O
+   lançador de apps saiu — o símbolo do menu, à esquerda, leva ao Início do
+   portal com todos os módulos. */
+function Direita() {
+  const { abrir, aberto } = useCesar();
   return (
     <>
       <GlobalSearch gatilho="campo" />
       <BotaoAssistente nome="Pergunte ao Cesar" onClick={() => abrir()} activo={aberto} />
       <Opcoes />
-      <Lancador itens={[
-        { label: "Portal ALLKA", href: `${PORTAL_SSO}/w/waterworks`, nota: "CRM e início" },
-        { label: "Painel", href: "/avulsos", nota: "Operação, compras, estoque, financeiro, BI" },
-        { label: "Serviços", href: "https://app.waterworks.com.br", nota: "OS, técnicos, agenda" },
-      ]} />
-      <MenuUtilizador email={userEmail} iniciais={iniciais} />
     </>
   );
 }

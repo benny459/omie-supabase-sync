@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { JetBrains_Mono, Plus_Jakarta_Sans } from "next/font/google";
+import { Instrument_Sans, JetBrains_Mono, Outfit, Plus_Jakarta_Sans } from "next/font/google";
 import "./globals.css";
 import UpdateBanner from "@/components/UpdateBanner";
 import CesarProvider from "@/components/cesar/CesarProvider";
@@ -18,6 +18,11 @@ const jetbrains = JetBrains_Mono({
   variable: "--font-mono",
 });
 
+// Barra do topo (conceito do Benny, 04/10/26): Instrument Sans na interface e
+// Outfit na marca — as mesmas do portal. O corpo das telas segue em Jakarta.
+const instrument = Instrument_Sans({ subsets: ["latin"], display: "swap", weight: ["400", "500", "600"], variable: "--font-ak-ui" });
+const outfit = Outfit({ subsets: ["latin"], display: "swap", weight: ["400", "500", "600"], variable: "--font-ak-brand" });
+
 export const metadata: Metadata = {
   title: "Waterworks · Aprovações PC",
   description: "Painel de aprovações de Pedidos de Compra (migração SmartSuite → Supabase)",
@@ -26,7 +31,7 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   const version = process.env.NEXT_PUBLIC_APP_VERSION;
   return (
-    <html lang="pt-BR" className={`${jetbrains.variable} ${jakarta.variable}`}>
+    <html lang="pt-BR" className={`${jetbrains.variable} ${jakarta.variable} ${instrument.variable} ${outfit.variable}`}>
       <head>
         {version && <meta name="app-version" content={version} />}
         {/* Aplica .dark ANTES da hidratação se o user preferiu — evita FOUC */}

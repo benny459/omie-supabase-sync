@@ -1,21 +1,25 @@
 "use client";
 
 /**
- * A barra do topo do portal ALLKA, desenhada aqui (03/10/26).
+ * A barra do topo ALLKA — conceito "menu superior por módulo" do Benny
+ * (allka-portal-menu.html, 04/10/26).
  *
- * Pedido do Benny: navegar portal ↔ painel ↔ serviços tem de parecer um
- * sistema só. Esta é a TopBar do portal (allka-platform/apps/portal/src/
- * components/TopBar.tsx) medida a medida — altura, marca, chip do tenant,
- * módulos ao centro com a lista ao passar o rato, sublinhado no activo,
- * pesquisa, assistente, opções, lançador e avatar. Só a forma: o que cada
- * botão faz continua a ser do app onde a barra está, que o passa por props.
+ * Cada módulo tem a sua cor e o seu ícone (os mesmos do cartão no Início do
+ * portal); as abas agrupam-se Comercial · Operação · Gestão; o módulo aberto
+ * acende na sua cor (fundo, contorno, sublinhado luminoso e a faixa sob a
+ * barra). Sistema sai das abas e vira a engrenagem à direita. O símbolo de
+ * menu (nove pontos) à esquerda leva ao Início do portal, com todos os módulos.
+ *
+ * Só a forma: o que cada botão faz continua a ser do app onde a barra está,
+ * que o passa por props.
  *
  * ESTE FICHEIRO EXISTE IGUAL no painel (omie-supabase-sync/web) e no app de
- * serviços (waterworks-app), com o barra-allka.css ao lado. Mudou num, muda
- * no outro — e no portal, que é a referência.
+ * serviços (waterworks-app), com o barra-allka.css ao lado. A referência é a
+ * TopBar do portal (allka-platform/apps/portal/src/components/TopBar.tsx) e
+ * lib/modulos-identidade.ts de lá — mudou lá, muda aqui nos dois.
  */
 
-import { useEffect, useRef, useState, type MouseEvent as RMouseEvent, type ReactNode } from "react";
+import { Fragment, useEffect, useRef, useState, type CSSProperties, type MouseEvent as RMouseEvent, type ReactNode } from "react";
 import "./barra-allka.css";
 
 export interface ItemModulo {
@@ -29,6 +33,7 @@ export interface ItemModulo {
 }
 
 export interface ModuloBarra {
+  /** crm · crm-allka · operacao · servicos · compras · estoque · financeiro · bi · rh · sistema */
   id: string;
   nome: string;
   href: string;
@@ -36,7 +41,7 @@ export interface ModuloBarra {
   externo?: boolean;
   /** Selo de texto ao lado do nome, como o "novo" do portal. */
   selo?: string;
-  /** Contador vermelho (ex.: NF-e sem pedido em Compras). */
+  /** Pendências (ex.: NF-e sem pedido em Compras), na cor do módulo. */
   contador?: { n: number; titulo?: string };
   titulo?: string;
   itens?: ItemModulo[];
@@ -45,38 +50,82 @@ export interface ModuloBarra {
 export interface BarraAllkaProps {
   modulos: ModuloBarra[];
   activo?: string | null;
-  /** Para onde vai a marca ALLKA (o hub do tenant no portal). */
+  /** O Início do portal (marca e símbolo do menu levam para lá). */
   hubHref: string;
   /** Navegação interna do app (router.push). Sem ela, links normais. */
   navegar?: (href: string) => void;
   aquecer?: (href: string) => void;
   pendente?: string | null;
-  /** Antes da marca (o app de serviços põe aqui o botão do seu menu lateral). */
+  /** Antes do símbolo do menu (o app de serviços põe aqui o botão do seu menu lateral). */
   antesDaMarca?: ReactNode;
-  /** Tudo à direita (pesquisa, assistente, opções, lançador, avatar). */
+  /** À direita: pesquisa, assistente, opções. */
   direita: ReactNode;
+  /** Por último, depois da engrenagem do Sistema. */
+  avatar?: ReactNode;
+}
+
+/* ── Identidade de cada módulo — cópia de lib/modulos-identidade.ts do portal ── */
+type Icone = "crm" | "estrela" | "operacao" | "servicos" | "compras" | "estoque" | "financeiro" | "bi" | "rh" | "sistema" | "modulo";
+type Grupo = "comercial" | "operacao" | "gestao" | "outros";
+const IDENT: Record<string, { cor: string; icone: Icone; grupo: Grupo | "sistema"; ordem: number }> = {
+  crm: { cor: "#9A82FF", icone: "crm", grupo: "comercial", ordem: 1 },
+  "crm-allka": { cor: "#C084FC", icone: "estrela", grupo: "comercial", ordem: 2 },
+  operacao: { cor: "#3BB8FF", icone: "operacao", grupo: "operacao", ordem: 10 },
+  servicos: { cor: "#19C6A6", icone: "servicos", grupo: "operacao", ordem: 11 },
+  compras: { cor: "#FF8F73", icone: "compras", grupo: "operacao", ordem: 12 },
+  estoque: { cor: "#F5C542", icone: "estoque", grupo: "operacao", ordem: 13 },
+  financeiro: { cor: "#5C8BFF", icone: "financeiro", grupo: "gestao", ordem: 20 },
+  bi: { cor: "#FF6FB5", icone: "bi", grupo: "gestao", ordem: 21 },
+  rh: { cor: "#7DD3A8", icone: "rh", grupo: "gestao", ordem: 22 },
+  sistema: { cor: "#8A93A3", icone: "sistema", grupo: "sistema", ordem: 99 },
+};
+const identidade = (id: string) => IDENT[id] ?? { cor: "#8A93A3", icone: "modulo" as Icone, grupo: "outros" as Grupo, ordem: 50 };
+const GRUPOS: Grupo[] = ["comercial", "operacao", "gestao", "outros"];
+
+const TRACOS: Record<Icone, ReactNode> = {
+  crm: (<><circle cx="9" cy="8" r="3.2" /><path d="M3 19c.6-3.3 3-5.2 6-5.2s5.4 1.9 6 5.2" /><path d="M16 4.5a3 3 0 0 1 0 6M18 14c1.7.6 2.8 2.2 3 5" /></>),
+  estrela: <path d="M12 3l2.2 5.3L20 9l-4.4 3.8L17 18.5 12 15.6 7 18.5l1.4-5.7L4 9l5.8-.7z" />,
+  operacao: (<><path d="M4 7h16M4 12h10M4 17h7" /><circle cx="18" cy="15.5" r="3" /><path d="M18 14v1.6l1 1" /></>),
+  servicos: <path d="M14.5 6.5a4 4 0 0 0-5.3 5.3L4 17l3 3 5.2-5.2a4 4 0 0 0 5.3-5.3l-2.4 2.4-2.6-.6-.6-2.6z" />,
+  compras: (<><path d="M3 4h2l2.2 10.2a1.5 1.5 0 0 0 1.5 1.2h8.6a1.5 1.5 0 0 0 1.4-1.1L21 8H6.2" /><circle cx="9.5" cy="19.5" r="1.3" /><circle cx="17" cy="19.5" r="1.3" /></>),
+  estoque: (<><path d="M12 3l8 4.5v9L12 21l-8-4.5v-9z" /><path d="M4 7.5l8 4.5 8-4.5M12 12v9" /></>),
+  financeiro: <path d="M4 18V9M10 18V5M16 18v-7M22 18H2" />,
+  bi: (<><path d="M4 20V4M4 20h16" /><path d="M7 15l4-4 3 3 5-6" /></>),
+  rh: (<><rect x="3.5" y="5" width="17" height="14" rx="2.5" /><circle cx="9" cy="11" r="2.2" /><path d="M5.8 16.2c.5-1.7 1.7-2.6 3.2-2.6s2.7.9 3.2 2.6M14.5 10h3.5M14.5 13.5h2.5" /></>),
+  sistema: (<><circle cx="12" cy="12" r="3" /><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1 7 17M17 7l2.1-2.1" /></>),
+  modulo: (<><rect x="4" y="4" width="7" height="7" rx="2" /><rect x="13" y="4" width="7" height="7" rx="2" /><rect x="4" y="13" width="7" height="7" rx="2" /><rect x="13" y="13" width="7" height="7" rx="2" /></>),
+};
+function IconeModulo({ nome, className }: { nome: Icone; className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      {TRACOS[nome]}
+    </svg>
+  );
 }
 
 const Chevron = () => (
   <svg className="ab-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-    <path d="m6 9 6 6 6-6" />
+    <path d="M6 9l6 6 6-6" />
   </svg>
 );
 
-/** O símbolo da ALLKA — o mesmo SVG do portal (components/design/marca-allka.tsx). */
-export function MarcaAllka({ size = 30 }: { size?: number }) {
+/** O anel "All" do conceito (o mesmo do portal). */
+export function MarcaAllka({ size = 28 }: { size?: number }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 100 100" role="img" aria-label="ALLKA" style={{ flexShrink: 0 }}>
-      <path d="M58.32 10.87 A40 40 0 0 1 85.32 31.22" stroke="#243381" strokeWidth="7" strokeLinecap="round" fill="none" />
-      <path d="M88.81 40.32 A40 40 0 0 1 71.79 83.55" stroke="#3F6CF1" strokeWidth="7" strokeLinecap="round" fill="none" />
-      <path d="M64.33 87.34 A40 40 0 0 1 10.02 48.60" stroke="#63B3F2" strokeWidth="7" strokeLinecap="round" fill="none" />
-      <rect x="-3.2" y="-3.2" width="6.4" height="6.4" rx="0.8" fill="#C5C9D1" transform="translate(10.30 45.13) rotate(277)" />
-      <rect x="-3.2" y="-3.2" width="6.4" height="6.4" rx="0.8" fill="#C5C9D1" transform="translate(13.18 34.37) rotate(293)" />
-      <rect x="-3.2" y="-3.2" width="6.4" height="6.4" rx="0.8" fill="#C5C9D1" transform="translate(18.91 24.83) rotate(309)" />
-      <rect x="-3.2" y="-3.2" width="6.4" height="6.4" rx="0.8" fill="#C5C9D1" transform="translate(27.06 17.23) rotate(325)" />
-      <rect x="-3.2" y="-3.2" width="6.4" height="6.4" rx="0.8" fill="#C5C9D1" transform="translate(36.98 12.18) rotate(341)" />
-      <circle cx="48.60" cy="10.02" r="3.3" fill="none" stroke="#63B3F2" strokeWidth="2.4" />
-      <text x="50" y="62" textAnchor="middle" fontFamily="inherit" fontSize="34" fontWeight="600" fill="currentColor" letterSpacing="-1">All</text>
+    <svg width={size} height={size} viewBox="0 0 40 40" role="img" aria-label="Allka" style={{ flexShrink: 0 }}>
+      <circle cx="20" cy="20" r="16" fill="none" stroke="currentColor" strokeOpacity=".18" strokeWidth="3" />
+      <path d="M20 4 A16 16 0 1 1 6 28" fill="none" stroke="#6CCBFF" strokeWidth="3" strokeLinecap="round" />
+      <circle cx="20" cy="4" r="2.4" fill="currentColor" />
+      <text x="20" y="24.5" textAnchor="middle" fontFamily="var(--font-ak-brand), Outfit, sans-serif" fontSize="11" fontWeight="500" fill="currentColor">All</text>
+    </svg>
+  );
+}
+
+/** Símbolo do menu: nove pontos — leva ao Início com todos os módulos. */
+export function IconeLancador() {
+  return (
+    <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+      {[5, 12, 19].flatMap((y) => [5, 12, 19].map((x) => <circle key={`${x}-${y}`} cx={x} cy={y} r="1.9" />))}
     </svg>
   );
 }
@@ -95,7 +144,7 @@ export function useFechaFora(aberto: boolean, fechar: () => void) {
   return caixa;
 }
 
-export default function BarraAllka({ modulos, activo, hubHref, navegar, aquecer, pendente, antesDaMarca, direita }: BarraAllkaProps) {
+export default function BarraAllka({ modulos, activo, hubHref, navegar, aquecer, pendente, antesDaMarca, direita, avatar }: BarraAllkaProps) {
   const [tenantAberto, setTenantAberto] = useState(false);
   const [movelAberto, setMovelAberto] = useState(false);
   const caixaTenant = useFechaFora(tenantAberto, () => setTenantAberto(false));
@@ -108,31 +157,37 @@ export default function BarraAllka({ modulos, activo, hubHref, navegar, aquecer,
     navegar(href);
   };
 
+  const sistema = modulos.find((m) => m.id === "sistema");
+  const abas = modulos.filter((m) => m.id !== "sistema");
+  const grupos = GRUPOS
+    .map((g) => abas.filter((m) => identidade(m.id).grupo === g).sort((a, b) => identidade(a.id).ordem - identidade(b.id).ordem))
+    .filter((g) => g.length > 0);
   const modActivo = modulos.find((m) => m.id === activo);
+  const cor = modActivo ? identidade(modActivo.id).cor : "#6CCBFF";
 
   return (
-    <header className="ab">
+    <header className="ab" style={{ "--c": cor } as CSSProperties}>
       <div className="ab-esq">
         {antesDaMarca}
-        <a className="ab-marca" href={hubHref} aria-label="Voltar ao hub" title="Portal ALLKA · WaterWorks">
-          <MarcaAllka size={30} />
-          <span className="ab-marca-nome">ALLKA</span>
+        <a className="ab-icone ab-lanc" href={hubHref} aria-label="Menu — todos os módulos" title="Menu · todos os módulos">
+          <IconeLancador />
+        </a>
+        <a className="ab-marca" href={hubHref} aria-label="Voltar ao Início" title="Allka · WaterWorks">
+          <MarcaAllka size={28} />
+          <span className="ab-marca-nome">Allka</span>
         </a>
         <span className="ab-barra">/</span>
         <div ref={caixaTenant} style={{ position: "relative" }}>
           <button type="button" className="ab-tenant" data-aberto={tenantAberto ? "1" : undefined}
             onClick={() => setTenantAberto((v) => !v)} aria-label="Tenant WaterWorks">
             <span className="ab-tenant-chip">WW</span>
-            <Chevron />
           </button>
           {tenantAberto && (
             <div className="ab-lista" style={{ width: 240 }}>
               <div className="ab-titulo">Seus tenants</div>
-              <a className="ab-item" href={hubHref} style={{ paddingTop: 8, paddingBottom: 8 }}>
-                <span className="ab-tenant-chip" style={{ width: 24, height: 24 }}>WW</span>
-                <span style={{ flex: 1, minWidth: 0 }}>
-                  <span style={{ display: "block", fontSize: 14, fontWeight: 500 }}>WaterWorks</span>
-                </span>
+              <a className="ab-item" href={hubHref}>
+                <span className="ab-tenant-chip">WW</span>
+                <b style={{ flex: 1, minWidth: 0 }}>WaterWorks</b>
                 <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d="M20 6 9 17l-5-5" /></svg>
               </a>
             </div>
@@ -141,8 +196,13 @@ export default function BarraAllka({ modulos, activo, hubHref, navegar, aquecer,
       </div>
 
       <nav className="ab-nav" aria-label="Módulos">
-        {modulos.map((m) => (
-          <Modulo key={m.id} m={m} activo={m.id === activo} ir={ir} aquecer={aquecer} pendente={pendente} />
+        {grupos.map((g, i) => (
+          <Fragment key={i}>
+            {i > 0 && <span className="ab-gsep" />}
+            {g.map((m) => (
+              <Modulo key={m.id} m={m} activo={m.id === activo} ir={ir} aquecer={aquecer} pendente={pendente} />
+            ))}
+          </Fragment>
         ))}
       </nav>
 
@@ -153,42 +213,47 @@ export default function BarraAllka({ modulos, activo, hubHref, navegar, aquecer,
         {movelAberto && (
           <div className="ab-lista" style={{ left: "50%", transform: "translateX(-50%)", width: 240 }}>
             {modulos.map((m) => (
-              <div key={m.id}>
-                <a className="ab-item" href={m.href} data-activo={m.id === activo ? "1" : undefined}
-                  onClick={(e) => { setMovelAberto(false); ir(m.href, m.externo)(e); }}>
-                  <span style={{ fontWeight: 500 }}>{m.nome}</span>
-                  {m.selo && <span className="ab-selo">{m.selo}</span>}
-                  {m.contador && m.contador.n > 0 && <span className="ab-contador">{m.contador.n}</span>}
-                </a>
-              </div>
+              <a key={m.id} className="ab-item" href={m.href} data-activo={m.id === activo ? "1" : undefined}
+                style={{ "--c": identidade(m.id).cor } as CSSProperties}
+                onClick={(e) => { setMovelAberto(false); ir(m.href, m.externo)(e); }}>
+                <span className="ab-ponto" />
+                <b>{m.nome}</b>
+                {m.selo && <em className="ab-selo">{m.selo}</em>}
+                {m.contador && m.contador.n > 0 && <em className="ab-contador">{m.contador.n}</em>}
+              </a>
             ))}
           </div>
         )}
       </div>
 
-      <div className="ab-dir">{direita}</div>
+      <div className="ab-dir">
+        {direita}
+        {sistema && <Modulo m={sistema} activo={sistema.id === activo} ir={ir} aquecer={aquecer} pendente={pendente} soIcone />}
+        {avatar}
+      </div>
+      <span className="ab-faixa" />
     </header>
   );
 }
 
-function Modulo({ m, activo, ir, aquecer, pendente }: {
+function Modulo({ m, activo, ir, aquecer, pendente, soIcone }: {
   m: ModuloBarra; activo: boolean;
   ir: (href: string, externo?: boolean) => (e: RMouseEvent) => void;
-  aquecer?: (href: string) => void; pendente?: string | null;
+  aquecer?: (href: string) => void; pendente?: string | null; soIcone?: boolean;
 }) {
   const [aberto, setAberto] = useState(false);
   const fecho = useRef<ReturnType<typeof setTimeout> | null>(null);
   const ancora = useRef<HTMLDivElement>(null);
-  /* A lista sai em position: fixed, ancorada ao botão. A fila dos módulos tem
-     overflow-x (para rolar em ecrã estreito), e um overflow corta também na
-     vertical — em absolute a lista ficava escondida dentro da barra. */
+  /* A lista sai em position: fixed, ancorada ao botão — a fila dos módulos
+     pode ter overflow, e um overflow corta também na vertical. */
   const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
   const temLista = (m.itens?.length ?? 0) > 0;
+  const id = identidade(m.id);
 
   const abrir = () => {
     if (fecho.current) clearTimeout(fecho.current);
     const r = ancora.current?.getBoundingClientRect();
-    if (r) setPos({ top: r.bottom + 6, left: Math.min(r.left, window.innerWidth - 230) });
+    if (r) setPos({ top: r.bottom + 10, left: Math.max(8, Math.min(soIcone ? r.right - 300 : r.left - 6, window.innerWidth - 310)) });
     if (temLista) setAberto(true);
     if (!m.externo && aquecer) { aquecer(m.href); m.itens?.forEach((i) => i.href && aquecer(i.href)); }
   };
@@ -199,32 +264,40 @@ function Modulo({ m, activo, ir, aquecer, pendente }: {
   useEffect(() => () => { if (fecho.current) clearTimeout(fecho.current); }, []);
 
   return (
-    <div className="ab-mod" ref={ancora} onMouseEnter={abrir} onMouseLeave={fechar}>
-      <a className="ab-mod-link" href={m.href} title={m.titulo}
-        data-activo={activo ? "1" : undefined} data-aberto={aberto ? "1" : undefined}
-        data-pendente={pendente && pendente === m.href ? "1" : undefined}
-        onClick={(e) => { setAberto(false); ir(m.href, m.externo)(e); }}>
-        <span>{m.nome}</span>
-        {m.selo && <span className="ab-selo">{m.selo}</span>}
-        {m.contador && m.contador.n > 0 && <span className="ab-contador" title={m.contador.titulo}>{m.contador.n}</span>}
-        {temLista && <Chevron />}
-      </a>
-      {activo && <span className="ab-sublinhado" />}
+    <div className="ab-mod" ref={ancora} onMouseEnter={abrir} onMouseLeave={fechar} style={{ "--c": id.cor } as CSSProperties}>
+      {soIcone ? (
+        <a className="ab-icone" href={m.href} title={m.titulo ?? m.nome} aria-label={m.nome}
+          data-aberto={aberto || activo ? "1" : undefined}
+          onClick={(e) => { setAberto(false); ir(m.href, m.externo)(e); }}>
+          <IconeModulo nome={id.icone} />
+        </a>
+      ) : (
+        <a className="ab-mod-link" href={m.href} title={m.titulo ?? m.nome}
+          data-activo={activo ? "1" : undefined} data-aberto={aberto ? "1" : undefined}
+          data-pendente={pendente && pendente === m.href ? "1" : undefined}
+          onClick={(e) => { setAberto(false); ir(m.href, m.externo)(e); }}>
+          <IconeModulo nome={id.icone} className="ab-i" />
+          <span className="ab-nome">{m.nome}</span>
+          {m.selo && <em className="ab-selo">{m.selo}</em>}
+          {m.contador && m.contador.n > 0 && <em className="ab-contador" title={m.contador.titulo}>{m.contador.n}</em>}
+          {temLista && <Chevron />}
+        </a>
+      )}
       {aberto && temLista && (
-        <div className="ab-lista" onMouseEnter={abrir} onMouseLeave={fechar}
+        <div className="ab-lista ab-dd" onMouseEnter={abrir} onMouseLeave={fechar}
           style={pos ? { position: "fixed", top: pos.top, left: pos.left, marginTop: 0 } : undefined}>
-          <div className="ab-titulo">{m.nome}</div>
+          <div className="ab-dd-h"><IconeModulo nome={id.icone} /><span>{m.nome}</span></div>
           {m.itens!.map((s, i) => (
             <div key={`${s.label}-${i}`}>
               {s.secao && (<>{i > 0 && <div className="ab-sep" />}<div className="ab-titulo">{s.secao}</div></>)}
               {s.href ? (
                 <a className="ab-item" href={s.href} data-activo={s.activo ? "1" : undefined}
                   onClick={(e) => { setAberto(false); if (s.onClick) { e.preventDefault(); s.onClick(); } else ir(s.href!, m.externo)(e); }}>
-                  <span className="ab-ponto" />{s.label}
+                  <span className="ab-ponto" /><b>{s.label}</b>
                 </a>
               ) : (
                 <button type="button" className="ab-item" onClick={() => { setAberto(false); s.onClick?.(); }}>
-                  <span className="ab-ponto" />{s.label}
+                  <span className="ab-ponto" /><b>{s.label}</b>
                 </button>
               )}
             </div>
@@ -241,49 +314,45 @@ export function CampoPesquisa({ onAbrir, texto = "Pesquisar…" }: { onAbrir: ()
   return (
     <>
       <button type="button" className="ab-pesquisa" onClick={onAbrir} title="Pesquisar (⌘K)">
-        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" aria-hidden><circle cx="11" cy="11" r="8" /><path d="m21 21-4.3-4.3" /></svg>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" aria-hidden><circle cx="11" cy="11" r="6.5" /><path d="M20 20l-4.2-4.2" /></svg>
         <span>{texto}</span>
         <kbd className="ab-kbd">⌘K</kbd>
       </button>
       <button type="button" className="ab-icone ab-pesquisa-icone" onClick={onAbrir} title="Pesquisar (⌘K)" aria-label="Pesquisar">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" aria-hidden><circle cx="11" cy="11" r="8" /><path d="m21 21-4.3-4.3" /></svg>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" aria-hidden><circle cx="11" cy="11" r="6.5" /><path d="M20 20l-4.2-4.2" /></svg>
       </button>
     </>
   );
 }
 
-/** O botão do assistente, no desenho do "Pergunte à Aria" do portal. */
+/** O botão do assistente, no desenho "Pergunte ao…" do conceito. */
 export function BotaoAssistente({ nome, onClick, activo }: { nome: string; onClick: () => void; activo?: boolean }) {
+  const inicial = nome.replace(/^Pergunte (à|ao|a|o)\s+/i, "").trim()[0] ?? "✦";
   return (
     <button type="button" className="ab-assistente" onClick={onClick} title={nome} aria-label={nome} aria-pressed={activo}>
-      <span className="ab-assistente-orb">
-        <svg width="11" height="11" viewBox="0 0 11 11" fill="currentColor" aria-hidden><path d="M5.5 0 6.8 4.2 11 5.5 6.8 6.8 5.5 11 4.2 6.8 0 5.5 4.2 4.2z" /></svg>
-      </span>
+      <i className="ab-assistente-orb">{inicial}</i>
       <span className="ab-assistente-nome">{nome}</span>
     </button>
   );
 }
 
 export const IconeOpcoes = () => (
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
     <path d="M21 4h-7M10 4H3M21 12h-9M8 12H3M21 20h-5M12 20H3M14 2v4M8 10v4M16 18v4" />
   </svg>
 );
 
-export const IconeGrelha = () => (
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-    <rect width="18" height="18" x="3" y="3" rx="2" /><path d="M3 9h18M3 15h18M9 3v18M15 3v18" />
-  </svg>
-);
+export const IconeGrelha = IconeLancador;
 
-/** Lançador (a grelha do portal): os três apps da WaterWorks. */
+/** Lançador antigo (lista de apps). Mantido para quem ainda o usa; a barra
+ *  nova leva ao Início pelo símbolo do menu, à esquerda. */
 export function Lancador({ itens }: { itens: { label: string; href: string; nota?: string }[] }) {
   const [aberto, setAberto] = useState(false);
   const caixa = useFechaFora(aberto, () => setAberto(false));
   return (
     <div ref={caixa} style={{ position: "relative" }}>
-      <button type="button" className="ab-icone" aria-label="Launcher" title="Apps" data-aberto={aberto ? "1" : undefined} onClick={() => setAberto((v) => !v)}>
-        <IconeGrelha />
+      <button type="button" className="ab-icone" aria-label="Apps" title="Apps" data-aberto={aberto ? "1" : undefined} onClick={() => setAberto((v) => !v)}>
+        <IconeLancador />
       </button>
       {aberto && (
         <div className="ab-lista ab-lista-dir" style={{ width: 240 }}>
@@ -292,7 +361,7 @@ export function Lancador({ itens }: { itens: { label: string; href: string; nota
             <a key={i.label} className="ab-item" href={i.href}>
               <span className="ab-ponto" />
               <span style={{ flex: 1, minWidth: 0 }}>
-                <span style={{ display: "block" }}>{i.label}</span>
+                <b style={{ display: "block" }}>{i.label}</b>
                 {i.nota && <span style={{ display: "block", fontSize: 11.5, color: "var(--ab-muted)" }}>{i.nota}</span>}
               </span>
             </a>
