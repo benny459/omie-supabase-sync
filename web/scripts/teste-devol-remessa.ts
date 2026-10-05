@@ -21,7 +21,9 @@ const DEVOL: DocFat = {
   condicao: { parcelas: [] },
   operacao: {
     tipo: "devolucao", motivo: "TESTE E2E - Mercadoria em desacordo com o pedido",
-    nf_ref: { chave: "35260857158057000130550020007577931991371462", numero: "757793", serie: "2", emitente_doc: "57158057000130", emissao: "2026-08-20" },
+    // Homologação só aceita a própria SF como destinatário, e a SEFAZ exige que o
+    // destinatário seja o emitente da NF referenciada → referencia uma NF da SF (2183).
+    nf_ref: { chave: "35261015766003000108550010000021831267617241", numero: "2183", serie: "1", emitente_doc: "15766003000108", emissao: "2026-10-01" },
   },
   observacoes: "TESTE E2E 05/10 — homologação, sem valor fiscal",
 };
