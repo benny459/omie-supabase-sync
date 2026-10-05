@@ -125,6 +125,14 @@ export type TituloRow = {
   divergencias?: Record<string, { painel: unknown; omie: unknown }> | null;
   /** Ligada a um título do Omie que já não aparece no sync. */
   omie_ausente?: boolean | null;
+
+  // ── Baixa nativa (sql/52, 05/10/26) ──────────────────────────────────────
+  /** Pagar: id da previsão do PC em finance.pagar_previsto (baixável no painel). */
+  pagar_id?: number | null;
+  /** Pagar: previsão já paga por inteiro no painel. */
+  quitado?: boolean | null;
+  /** Receber: quanto já se recebeu no painel (baixas nativas). */
+  valor_pago_painel?: number | string | null;
 };
 
 /* Todos os campos do titulo. A fonte passou de finance.v_titulos (que le
@@ -154,7 +162,7 @@ const COLS =
    painel (finance.receber) e o Omie entra conferido, sem duplicar
    (finance.conciliar_receber_omie, pg_cron 30 min). Mesmos nomes de coluna da
    v_titulos_omie, mais a conferência. Pagar continua no Omie. */
-const COLS_RECEBER = COLS + ", id, origem_registro, conferencia, divergencias, omie_ausente";
+const COLS_RECEBER = COLS + ", id, origem_registro, conferencia, divergencias, omie_ausente, valor_pago_painel";
 
 function num(v: number | string | null): number {
   const n = Number(v ?? 0);
@@ -228,12 +236,16 @@ export async function GET(req: Request) {
   /* Pagar: previsões dos pedidos de compra do painel (finance.v_pagar_previsto,
      sql/29) entram como "Previsto (PC nnnn)" até a conta real chegar do Omie —
      aí são substituídas (não duplicam). */
-  if (tipo === "pagar" && modo !== "baixado") {
+  /* Desde 05/10/26 (sql/52) a previsão pode ser paga aqui (baixa nativa):
+     quitada sai do "em aberto" e aparece em "pagos" como PAGO. */
+  if (tipo === "pagar") {
     // refaz fases/parcelas e substitui pelo título do Omie quando ele chega
-    await createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    if (modo !== "baixado") await createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!,
       { auth: { persistSession: false }, db: { schema: "orders" } }).rpc("compras_atualizar_pagar");
     let pq = admin.from("v_pagar_previsto").select("*");
-    if (modo !== "aberto") pq = pq.gte("vencimento", de!).lte("vencimento", ate!);
+    if (modo === "aberto") pq = pq.eq("quitado", false);
+    else pq = pq.gte("vencimento", de!).lte("vencimento", ate!);
+    if (modo === "baixado") pq = pq.eq("quitado", true);
     const { data: prev, error: pe } = await pq.order("vencimento", { ascending: true });
     if (!pe) rows.push(...((prev ?? []) as unknown as TituloRow[]));
   }

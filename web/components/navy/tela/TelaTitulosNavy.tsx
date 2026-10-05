@@ -31,6 +31,7 @@ import type { TituloRow } from "@/app/api/financeiro/titulos/route";
 import { useUserPerms } from "../../UserPermsProvider";
 import NovoTituloModal from "../../NovoTituloModal";
 import FornecedorDrawer from "../../FornecedorDrawer";
+import BaixaModal from "./BaixaModal";
 import { SegmentedControl, type Tom } from "../primitivos";
 import {
   ArvoreNavy, Aviso, BotaoTela, CabecalhoTela, CampoData, Carregando, ChipFiltro, FaixaFiltros,
@@ -274,6 +275,9 @@ export default function TelaTitulosNavy({ tipo }: { tipo: Tipo }) {
   const [ladoAba, setLadoAba] = useState<"categoria" | "contraparte" | "projeto">("categoria");
   const [novoAberto, setNovoAberto] = useState(false);
   const [retrato, setRetrato] = useState<{ cod: number; empresa: string } | null>(null);
+  // baixa nativa (sql/52): previsão de PC (pagar) ou conta do painel (receber)
+  const [baixa, setBaixa] = useState<{ natureza: "P" | "R"; titulo: string } | null>(null);
+  const podeBaixar = !!(perms?.is_admin || perms?.pode?.["financeiro.baixar"]);
   const [sync, setSync] = useState<string | null>(null);
 
   const rotuloContra = tipo === "pagar" ? "Fornecedor" : "Cliente";
@@ -569,19 +573,34 @@ export default function TelaTitulosNavy({ tipo }: { tipo: Tipo }) {
               // Só a conta nascida no painel e ainda sem título do Omie se apaga daqui.
               const apagavel = tipo === "receber" && r.origem_registro === "painel" && !r.codigo_lancamento_omie && r.id;
               const diverg = r.conferencia === "divergente" ? fmtDiverg(r) : "";
+              // baixa no painel: previsão de PC (pagar) ou conta nascida no painel (receber)
+              const jaPago = tipo === "pagar" ? num(r.valor_pago) > 0 : num(r.valor_pago_painel) > 0;
+              const baixavel = (tipo === "pagar" ? !!r.pagar_id : (r.origem_registro === "painel" && !!r.id)) && (podeBaixar || jaPago);
               return {
                 id: `t:${r.empresa}:${r.id ?? r.codigo_lancamento_omie}`,
                 nome: `${doc}${r.tipo_documento ? ` · ${r.tipo_documento.toLowerCase()}` : ""}`,
                 sub: `venc. ${ddmm(r.vencimento)}${dias != null && dias !== 0 && r.em_aberto ? ` · ${dias > 0 ? "+" : "−"}${Math.abs(dias)}d` : ""}${r.numero_parcela ? ` · parc. ${r.numero_parcela}` : ""}${diverg ? ` · ${diverg}` : ""}`,
                 title: [r.observacao, diverg].filter(Boolean).join("\n") || undefined,
                 cels: celsTitulo(r),
-                acao: apagavel ? (
-                  <button type="button" disabled={excluindo === r.id} title="Excluir esta conta (só existe no painel)"
-                    onClick={() => excluir(r)}
-                    style={{ fontSize: 11, padding: "2px 8px", borderRadius: 999, cursor: "pointer",
-                             border: "1px solid var(--ww-border-strong)", background: "transparent", color: "var(--ww-crit-text)" }}>
-                    {excluindo === r.id ? "excluindo…" : "excluir"}
-                  </button>
+                acao: (apagavel || baixavel) ? (
+                  <span style={{ display: "inline-flex", gap: 6 }}>
+                    {baixavel && (
+                      <button type="button" title={jaPago ? "Ver / estornar baixas deste título" : `Registar ${tipo === "pagar" ? "pagamento" : "recebimento"} (baixa no painel)`}
+                        onClick={() => setBaixa({ natureza: tipo === "pagar" ? "P" : "R", titulo: tipo === "pagar" ? String(r.pagar_id) : String(r.id) })}
+                        style={{ fontSize: 11, padding: "2px 8px", borderRadius: 999, cursor: "pointer",
+                                 border: "1px solid var(--ww-border-strong)", background: "transparent", color: "var(--ww-ok-text)" }}>
+                        {jaPago ? "baixas" : "baixar"}
+                      </button>
+                    )}
+                    {apagavel && !jaPago && (
+                      <button type="button" disabled={excluindo === r.id} title="Excluir esta conta (só existe no painel)"
+                        onClick={() => excluir(r)}
+                        style={{ fontSize: 11, padding: "2px 8px", borderRadius: 999, cursor: "pointer",
+                                 border: "1px solid var(--ww-border-strong)", background: "transparent", color: "var(--ww-crit-text)" }}>
+                        {excluindo === r.id ? "excluindo…" : "excluir"}
+                      </button>
+                    )}
+                  </span>
                 ) : undefined,
               };
             }),
@@ -590,7 +609,7 @@ export default function TelaTitulosNavy({ tipo }: { tipo: Tipo }) {
       };
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [modo, hoje, amanha, d7, d30, rotuloContra, celsSoma, celsTitulo, tipo, excluindo]);
+  }, [modo, hoje, amanha, d7, d30, rotuloContra, celsSoma, celsTitulo, tipo, excluindo, podeBaixar]);
 
   /* Hoje abre sempre; vencidos só quando cabe no olho — com centenas de
      fornecedores atrasados, abrir por padrão empurrava o resto da agenda
@@ -757,6 +776,9 @@ export default function TelaTitulosNavy({ tipo }: { tipo: Tipo }) {
 
       {retrato && (
         <FornecedorDrawer cod={retrato.cod} empresa={retrato.empresa} tipo={tipo} rotulo={rotuloContra} onClose={() => setRetrato(null)} />
+      )}
+      {baixa && (
+        <BaixaModal natureza={baixa.natureza} titulo={baixa.titulo} onClose={() => setBaixa(null)} onFeito={() => setRefresh((n) => n + 1)} />
       )}
       {novoAberto && (
         <NovoTituloModal tipo={tipo} onClose={() => setNovoAberto(false)} onCreated={() => setRefresh((n) => n + 1)} />

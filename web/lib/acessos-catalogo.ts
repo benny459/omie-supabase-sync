@@ -10,7 +10,8 @@ export type Chave =
   | "compras.dispensar_nf" | "compras.conferir" | "compras.enviar_fornecedor"
   | "estoque.acesso" | "estoque.ver_custos" | "estoque.ajustar" | "estoque.mesclar"
   | "estoque.senha_inventario" | "estoque.codigos" | "estoque.config_mov" | "estoque.aprovar_perdas"
-  | "financeiro.ver_pagar" | "financeiro.ver_receber" | "financeiro.editar_titulo";
+  | "financeiro.ver_pagar" | "financeiro.ver_receber" | "financeiro.editar_titulo"
+  | "financeiro.baixar" | "financeiro.conciliar";
 
 /** Como o padrão (sem escolha explícita) é calculado — reproduz o que cada um podia fazer até hoje. */
 export type Padrao = "erp" | "aprovador" | "admin";
@@ -36,6 +37,8 @@ export const CATALOGO: ItemCatalogo[] = [
   { chave: "financeiro.ver_pagar",      modulo: "financeiro", rotulo: "Ver contas a pagar",         descricao: "Títulos a Pagar",                                  padrao: "erp" },
   { chave: "financeiro.ver_receber",    modulo: "financeiro", rotulo: "Ver contas a receber",       descricao: "Títulos a Receber",                                padrao: "erp" },
   { chave: "financeiro.editar_titulo",  modulo: "financeiro", rotulo: "Incluir / excluir título",   descricao: "Criar ou excluir títulos",                         padrao: "erp" },
+  { chave: "financeiro.baixar",         modulo: "financeiro", rotulo: "Baixar / estornar título",   descricao: "Registar pagamento ou recebimento de título do painel", padrao: "admin" },
+  { chave: "financeiro.conciliar",      modulo: "financeiro", rotulo: "Conciliação bancária",       descricao: "Importar extrato OFX e casar com títulos",          padrao: "admin" },
 ];
 
 export const MODULO_LABEL: Record<ModuloPerm, string> = { compras: "Compras", estoque: "Estoque", financeiro: "Financeiro" };
@@ -44,7 +47,7 @@ export const MODULO_LABEL: Record<ModuloPerm, string> = { compras: "Compras", es
 export const PERFIS: Record<string, { rotulo: string; chaves: Chave[] }> = {
   comprador:  { rotulo: "Comprador", chaves: ["compras.acesso", "compras.ver_valores", "compras.gerar_pc_nf", "compras.conferir", "compras.enviar_fornecedor", "estoque.acesso", "estoque.ver_custos"] },
   almoxarife: { rotulo: "Almoxarife", chaves: ["compras.acesso", "compras.conferir", "estoque.acesso", "estoque.ajustar"] },
-  financeiro: { rotulo: "Financeiro", chaves: ["compras.acesso", "compras.ver_valores", "compras.conferir", "financeiro.ver_pagar", "financeiro.ver_receber", "financeiro.editar_titulo", "estoque.acesso", "estoque.ver_custos"] },
+  financeiro: { rotulo: "Financeiro", chaves: ["compras.acesso", "compras.ver_valores", "compras.conferir", "financeiro.ver_pagar", "financeiro.ver_receber", "financeiro.editar_titulo", "financeiro.baixar", "financeiro.conciliar", "estoque.acesso", "estoque.ver_custos"] },
   gestor:     { rotulo: "Gestor", chaves: ["compras.acesso", "compras.ver_valores", "compras.aprovar", "compras.gerar_pc_nf", "compras.dispensar_nf", "compras.conferir", "compras.enviar_fornecedor", "estoque.acesso", "estoque.ver_custos", "estoque.ajustar", "estoque.aprovar_perdas", "financeiro.ver_pagar", "financeiro.ver_receber"] },
   administrador: { rotulo: "Administrador", chaves: CATALOGO.map((c) => c.chave) },
 };

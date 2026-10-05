@@ -112,6 +112,7 @@ export function podeAbrirRota(user: UserPerms | null | undefined, href: string):
   if (href.startsWith("/financeiro/pagar")) return p["financeiro.ver_pagar"] !== false;
   if (href.startsWith("/financeiro/receber")) return p["financeiro.ver_receber"] !== false;
   if (href.startsWith("/faturamento")) return p["financeiro.editar_titulo"] !== false;
+  if (href.startsWith("/financeiro/conciliacao")) return p["financeiro.conciliar"] === true;
   return true;
 }
 

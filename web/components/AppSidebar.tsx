@@ -367,6 +367,19 @@ export const FINANCEIRO: NavItem[] = [
     ),
   },
   {
+    // Extrato OFX × títulos do painel (05/10/26): casar movimento ↔ título = baixa.
+    href: "/financeiro/conciliacao",
+    area: "erp",
+    grupo: "financeiro",
+    label: "Conciliação bancária",
+    tone: "text-sky-600",
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className="w-5 h-5" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M3 10h18M5 10V20M19 10V20M9 10v10M15 10v10M3 20h18M12 3l9 5H3z"/>
+      </svg>
+    ),
+  },
+  {
     href: "/bi/simples",
     area: "bi",
     grupo: "bi",
