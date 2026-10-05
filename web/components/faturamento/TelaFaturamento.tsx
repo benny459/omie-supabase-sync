@@ -39,7 +39,7 @@ const rotulo: CSSProperties = { fontSize: 11.5, color: "var(--ww-text-faint)", f
 const VAZIO: ClienteFat = { nome: "", cnpj: "", ie: "", email: "", logradouro: "", numero: "", bairro: "", municipio: "", uf: "SP", cep: "" };
 
 /** Dados fictícios para validar o fluxo em homologação (nada vai a cliente real). */
-/* Destinatário de teste: a própria WaterWorks (CNPJ do grupo, existe na Receita — a SEFAZ de homologação valida). */
+/* Destinatário de teste: a própria SF (a SEFAZ de homologação só aceita CNPJ do seu cadastro; CNPJs de terceiros vêm "não cadastrado"). */
 const TESTE: { cliente: ClienteFat; itens: ItemFat[]; parcelas: string } = {
   cliente: {
     nome: "TESTE E2E CLIENTE LTDA", cnpj: "07578898000129", ie: "", email: "",
