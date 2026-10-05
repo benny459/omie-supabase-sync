@@ -7,6 +7,7 @@ import NovaEmissao, { type ConfigFat, type Inicial } from "@/components/faturame
 import Rascunhos from "@/components/faturamento/Rascunhos";
 import RegistrarNfse from "@/components/faturamento/RegistrarNfse";
 import ContratosRecorrentes from "@/components/faturamento/ContratosRecorrentes";
+import LoteRecibos from "@/components/faturamento/LoteRecibos";
 import "./faturamento.css";
 
 /* Faturamento PV & OS (05/10/2026) — conceito do mockup do Benny
@@ -111,6 +112,12 @@ function desdePeriodo(p: string): string {
     : p === "ano" ? new Date(y, 0, 1) : p === "tri" ? new Date(y, Math.floor(m / 3) * 3, 1) : new Date(y, m, 1);
   return d.toLocaleDateString("sv-SE");
 }
+/** Busca por vários números (05/10/26): "4729, 4735; OS4738" → tokens; null se for texto comum. */
+function numerosBusca(q: string): { pre: string; num: string }[] | null {
+  const t = q.split(/[,;\s]+/).map((x) => x.trim()).filter(Boolean);
+  if (t.length < 2 || !t.every((x) => /^(PV|OS)?\d+$/i.test(x))) return null;
+  return t.map((x) => ({ pre: (x.match(/^(PV|OS)/i)?.[1] ?? "").toUpperCase(), num: x.replace(/^(PV|OS)/i, "").replace(/^0+/, "") }));
+}
 const MESES = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
 const EMPRESAS: Record<string, string> = { SF: "SafeWater", WW: "WaterWorks", CD: "CD" };
 
@@ -152,6 +159,7 @@ export default function TelaFaturamento() {
   useEffect(() => { carregarRasc(); }, [carregarRasc]);
   const [ocupado, setOcupado] = useState<string | null>(null);
   const [verPront, setVerPront] = useState(false);
+  const [lote, setLote] = useState<Doc[] | null>(null);
   const [secao, setSecao] = useState<"carteira" | "contratos">("carteira");
 
   // Contas a receber de cada documento (sql/72) — carregadas depois da lista, em lotes.
@@ -209,6 +217,7 @@ export default function TelaFaturamento() {
   const empresas = config.filter((c) => c.ativo).map((c) => c.empresa);
 
   // ── recortes ──
+  const nums = useMemo(() => numerosBusca(q), [q]);
   const base = useMemo(() => (docs ?? []).filter((d) => tipo === "all" || d.tipo === tipo), [docs, tipo]);
   const filtrados = useMemo(() => base.filter((d) => {
     const st = status(d);
@@ -226,13 +235,16 @@ export default function TelaFaturamento() {
     if (chips.has("saldo") && st === "fat") return false;
     if (chips.has("semnfse") && !semNfse(d)) return false;
     if (chips.has("prevatras") && !((prevDias(d) ?? 1) < 0)) return false;
-    if (q) {
+    if (nums) {
+      const rn = d.rotulo.replace(/^\D+/, "").replace(/^0+/, "");
+      if (!nums.some((t) => (rn === t.num && (!t.pre || d.rotulo.toUpperCase().startsWith(t.pre))) || d.nfs.some((n) => String(n.num).replace(/^0+/, "") === t.num))) return false;
+    } else if (q) {
       const h = `${d.rotulo} ${d.cliente ?? ""} ${d.fantasia ?? ""} ${d.razao ?? ""} ${d.oc ?? ""} ${d.descricao ?? ""} ${d.proposta ?? ""} ${d.nfs.map((n) => n.num).join(" ")}`.toLowerCase();
       // Todas as palavras precisam aparecer (ex.: "diaverum sorocaba" acha "DIAVERUM - SOROCABA").
       if (!q.toLowerCase().split(/\s+/).filter(Boolean).every((w) => h.includes(w))) return false;
     }
     return true;
-  }), [base, orig, fst, kpi, chips, q]);
+  }), [base, orig, fst, kpi, chips, q, nums]);
 
   const ordenados = useMemo(() => {
     const k = sort.k, dir = sort.d;
@@ -305,7 +317,7 @@ export default function TelaFaturamento() {
   const rotPeriodo: Record<string, string> = { mes: `${MESES[h.getMonth()]}/${String(h.getFullYear()).slice(2)}`, tri: "Trimestre", ano: String(h.getFullYear()), "12m": "12 meses", tudo: "Tudo" };
   const ativos: { k: string; l: string; limpar: () => void }[] = [
     ...(qServ ? [] : [{ k: "per", l: `Período: ${rotPeriodo[periodo]}`, limpar: () => setPeriodo("mes") }]),
-    ...(q ? [{ k: "q", l: `Busca: “${q}”${qServ ? " (todos os períodos)" : ""}`, limpar: () => setQ("") }] : []),
+    ...(q ? [{ k: "q", l: `Busca: “${q}”${nums ? ` · ${nums.length} números` : ""}${qServ ? " (todos os períodos)" : ""}`, limpar: () => setQ("") }] : []),
     ...(tipo !== "all" ? [{ k: "tipo", l: `Tipo: ${tipo}`, limpar: () => setTipo("all") }] : []),
     ...(orig ? [{ k: "orig", l: `Origem: ${orig}`, limpar: () => setOrig("") }] : []),
     ...(fst ? [{ k: "st", l: `Status: ${ST[fst].l}`, limpar: () => setFst("") }] : []),
@@ -337,6 +349,9 @@ export default function TelaFaturamento() {
 
         {erro && <div className="alert bad" onClick={() => setErro(null)}>{erro}</div>}
         <Prontidao p={pront} empresa={empresa} aberto={verPront} onMudou={carregar} />
+        {lote && <LoteRecibos empresa={empresa} docs={lote} prod={prod} admin={!!pront?.pode_mudar} fechar={() => setLote(null)}
+          abrirFolha={(chave) => { const d = (docs ?? []).find((x) => x.chave === chave); setLote(null); if (d) abrirFolhaDe(d); }}
+          onEmitido={() => { carregar(); setSel(new Set()); }} />}
         <NovaEmissao config={config} aberto={nova} inicial={inicialNova} admin={!!pront?.pode_mudar} rascunhoId={rascNova}
           fechar={() => { setNova(false); setInicialNova(null); setRascNova(null); window.setTimeout(carregarRasc, 1500); }} avisar={avisar}
           onEmitido={() => { carregar(); carregarRasc(); }} />
@@ -398,7 +413,7 @@ export default function TelaFaturamento() {
           </label>
           <div className="search">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></svg>
-            <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar PV, OS, cliente (nome fantasia), OC, NF… — procura em todos os períodos" />
+            <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar PV, OS, cliente, OC, NF… — vários números: 4729, 4735, 4738" />
           </div>
           {view !== "emissoes" && view !== "nfse" && view !== "rascunhos" && <>
             <select className="sel" value={orig} onChange={(e) => setOrig(e.target.value)}>
@@ -429,6 +444,11 @@ export default function TelaFaturamento() {
             <span style={{ marginLeft: "auto" }} />
             <button className="btn sm" onClick={() => setSel(new Set())}>Limpar</button>
             <button className="btn sm w" disabled={!!ocupado} onClick={validarLote}>{ocupado ? "Validando…" : "Validar lote"}</button>
+            {(() => {
+              const os = (docs ?? []).filter((d) => sel.has(d.chave) && d.tipo === "OS" && status(d) !== "fat");
+              return os.length > 0
+                ? <button className="btn sm pri" onClick={() => setLote(ordenados.filter((d) => sel.has(d.chave)))}>Emitir {os.length} recibo{os.length === 1 ? "" : "s"}</button> : null;
+            })()}
             {(() => {
               const oss = (docs ?? []).filter((d) => sel.has(d.chave) && semNfse(d));
               return oss.length > 0 && oss.length === sel.size

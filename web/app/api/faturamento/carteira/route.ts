@@ -1,7 +1,8 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { supaAdmin } from "@/lib/supabase-admin";
 import { exigirFaturamento, falha } from "@/lib/faturamento/auth";
-import { bloqueioOsOmie, documentoOsOmie, documentoPvOmie, emitir, emitirOsOmie, emitirPvOmie, prevoo, prevooRecibo, urlArquivo } from "@/lib/faturamento/server";
+import { bloqueioOsOmie, configDe, documentoOsOmie, documentoPvOmie, emitir, emitirOsOmie, emitirPvOmie, prevoo, prevooRecibo, urlArquivo } from "@/lib/faturamento/server";
+import { completarRecebimento } from "@/lib/faturamento/lote";
 import { totalDoc } from "@/lib/faturamento/montar";
 import { docFat, documento } from "@/lib/vendas-server";
 import type { DocFat } from "@/lib/faturamento/montar";
@@ -16,7 +17,10 @@ export const maxDuration = 60;
      doc     → itens e cliente montados (só banco, nada sai);
      prevoo  → checagens completas sem enviar;
      ensaio  → mesma nota na HOMOLOGAÇÃO (só PV do Omie);
-     emitir  → emissão no ambiente da empresa (produção só com a chave do Benny).
+     emitir  → emissão no ambiente da empresa (produção só com a chave do Benny);
+     lote    → (OS) documento do recibo completo como a folha o preencheria
+               (forma/conta/instrução) + pré-voo, sem enviar — para "Emitir N recibos".
+   GET com busca "4729, 4735; OS4738" procura cada número (todos os períodos).
    OS do Omie ("os_omie:<codigo_os>", 05/10/26): emitem RECIBO pelo painel
    (numeração recibo_proximo); NFS-e da prefeitura só se registra. */
 
@@ -26,9 +30,21 @@ export async function GET(req: NextRequest) {
   const empresa = req.nextUrl.searchParams.get("empresa") || "SF";
   const desde = req.nextUrl.searchParams.get("desde");
   // Com texto de busca, a carteira procura em todos os períodos (sql/72).
-  const busca = (req.nextUrl.searchParams.get("busca") ?? "").trim().slice(0, 80) || null;
-  const { data, error } = await supaAdmin().schema("orders")
-    .rpc("fat_carteira", { p_empresa: empresa, p_desde: desde && /^\d{4}-\d{2}-\d{2}$/.test(desde) ? desde : null, p_busca: busca });
+  const buscaTxt = (req.nextUrl.searchParams.get("busca") ?? "").trim().slice(0, 400);
+  const pDesde = desde && /^\d{4}-\d{2}-\d{2}$/.test(desde) ? desde : null;
+  const carteira = (b: string | null) => supaAdmin().schema("orders").rpc("fat_carteira", { p_empresa: empresa, p_desde: pDesde, p_busca: b });
+  // Vários números (vírgula, ponto e vírgula ou espaço): uma busca por número, unidas.
+  const nums = buscaTxt.split(/[,;\s]+/).map((t) => t.trim()).filter(Boolean);
+  if (nums.length > 1 && nums.every((t) => /^(PV|OS)?\d+$/i.test(t))) {
+    const rs = await Promise.all([...new Set(nums.map((t) => t.replace(/^(PV|OS)/i, "")))].slice(0, 40).map((t) => carteira(t)));
+    const erro = rs.find((r) => r.error)?.error;
+    if (erro) return falha(erro.message, 500);
+    const base = (rs[0].data ?? {}) as Record<string, unknown>;
+    const docs = new Map<string, unknown>();
+    for (const r of rs) for (const d of ((r.data as { docs?: { chave: string }[] } | null)?.docs ?? [])) docs.set(d.chave, d);
+    return NextResponse.json({ ...base, docs: [...docs.values()] });
+  }
+  const { data, error } = await carteira(buscaTxt.slice(0, 80) || null);
   if (error) return falha(error.message, 500);
   return NextResponse.json(data);
 }
@@ -44,6 +60,7 @@ export async function POST(req: NextRequest) {
   if (!Number.isFinite(id) || id <= 0) return falha("chave inválida");
   try {
     if (tipo === "pv_omie") {
+      if (b.acao === "lote") return NextResponse.json({ bloqueio: "PV fatura por NF-e — use a folha" });
       if (b.acao === "doc") {
         const { bruto, doc } = await documentoPvOmie(empresa, id);
         return NextResponse.json({ documento: doc, condicao: bruto.condicao, parcelas_dias: bruto.parcelas_dias });
@@ -62,6 +79,15 @@ export async function POST(req: NextRequest) {
       const d = await documento(id);
       const doc = docFat(d);
       if (b.acao === "doc") return NextResponse.json({ documento: doc });
+      if (b.acao === "lote") {
+        if (d.tipo !== "OS") return NextResponse.json({ bloqueio: "PV fatura por NF-e — use a folha" });
+        const cfg = await configDe(empresa);
+        if (cfg.tipo_os !== "recibo") return NextResponse.json({ bloqueio: "OS desta empresa fatura por NFS-e, não por recibo" });
+        const comp = await completarRecebimento(doc);
+        const bloqueio = d.status !== "aberto" ? `${d.label} não está em aberto (${d.status})` : null;
+        const pre = await prevooRecibo(comp, { bloqueio, total_os: Number(d.valor_total) });
+        return NextResponse.json({ documento: comp, bloqueio, ...pre });
+      }
       if (b.acao === "prevoo") {
         const pre = await prevoo(doc, { total_pv: Number(d.valor_total) });
         return NextResponse.json({ documento: doc, ...pre });
@@ -80,6 +106,12 @@ export async function POST(req: NextRequest) {
     if (tipo === "os_omie") {
       const { bruto, doc } = await documentoOsOmie(empresa, id);
       if (b.acao === "doc") return NextResponse.json({ documento: doc, condicao: bruto.condicao, parcelas_dias: bruto.parcelas_dias, bloqueio: bloqueioOsOmie(bruto) });
+      if (b.acao === "lote") {
+        const comp = await completarRecebimento(doc);
+        const bloqueio = bloqueioOsOmie(bruto);
+        const pre = await prevooRecibo(comp, { bloqueio, total_os: totalDoc(doc.itens) });
+        return NextResponse.json({ documento: comp, bloqueio, ...pre });
+      }
       if (b.acao === "prevoo") {
         const pre = await prevooRecibo(b.documento ? { ...b.documento, empresa, rotulo: doc.rotulo } : doc, { bloqueio: bloqueioOsOmie(bruto), total_os: totalDoc(doc.itens) });
         return NextResponse.json({ documento: doc, ...pre });

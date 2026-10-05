@@ -63,6 +63,18 @@ A maioria das OS fatura por **recibo**, emitido **pelo painel** — também as O
 
 > **Teste sem gastar número:** administradores podem marcar **Teste (forçar homologação)** na folha — sai um recibo de teste, sem usar a numeração real.
 
+## Como faço para emitir vários recibos de uma vez (em lote)
+
+1. Na busca da carteira, digite **os números separados por vírgula** (ou espaço / ponto e vírgula), ex.: **4729, 4735, 4738** ou **OS4729, OS4735**. A lista mostra só esses documentos, de todos os períodos.
+2. Marque a caixa do cabeçalho para **selecionar todos** os que aparecem (ou marque um a um).
+3. Na barra de seleção, clique em **Emitir N recibos**.
+4. Abre a lista de conferência: para cada OS, o valor a receber, o vencimento, a **forma e a conta** (as mesmas que a folha "Revisar e emitir recibo" usaria — a conta dos dados bancários da OS ou a do último faturamento do cliente), o **projeto** e a **categoria**.
+   - OS que **não podem** sair (já têm recibo ou NFS-e, falta projeto/categoria, PV que fatura por NF-e) ficam em vermelho, com o motivo, e **não entram no lote**. Use **abrir na folha** para corrigir uma a uma.
+5. Clique em **Emitir N recibos** e confirme. Os recibos saem **um de cada vez, na ordem da lista**, com a numeração sequencial do painel, as contas a receber e o bloco Pagamento — exatamente como na emissão avulsa.
+6. No fim, cada linha mostra o **nº do recibo** e o link **abrir recibo**; **Abrir todos / imprimir** junta todos numa página só (um por folha) para salvar em PDF ou imprimir de uma vez.
+
+> Para mudar forma, conta, vencimento ou observação de uma OS antes de emitir, use **abrir na folha** — o lote usa os dados como estão.
+
 ## Como faço para mudar forma de pagamento, conta ou outro dado da nota
 
 1. Clique no PV/OS na carteira. A gaveta mostra **"O que vai sair na nota"**.
