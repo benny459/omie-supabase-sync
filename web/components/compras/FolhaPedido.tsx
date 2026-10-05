@@ -14,7 +14,7 @@ import CodigoHoje from "./CodigoHoje";
 import Autocompletar, { type Opcao } from "./Autocompletar";
 import {
   ETAPAS, ETAPA, APROV_LABEL, TIPOS_FRETE, UFS, TIPOS_DOC, DEPTOS_PADRAO,
-  money, num2, qtd as fq, parseNum, hoje, dBR, totais, totalItem, gerarParcelas, infoPreco, itemVazio, novaChave,
+  money, num2, qtd as fq, parseNum, hoje, dBR, totais, totalItem, gerarParcelas, infoPreco, itemVazio, novaChave, erroVinculo,
   type Pedido, type Item, type Refs, type HistPreco, type Etapa, type Parcela,
 } from "@/lib/compras";
 
@@ -218,9 +218,11 @@ export default function FolhaPedido({
     if (D.deptos.length && Math.abs(sp - 100) > 0.01) e.deptos = `Distribuição soma ${num2(sp)}% — precisa fechar 100%.`;
     const sv = D.parcelas.reduce((a, x) => a + (Number(x.valor) || 0), 0);
     if (!isRC && D.itens.length && Math.abs(t.total - sv) > 0.05) e.parcelas = `Parcelas somam ${money(sv)}, pedido ${money(t.total)}. Use "Refazer parcelas".`;
+    const ev = !e.itens ? erroVinculo(D) : null;
+    if (ev) e.vinculo = ev;
     setErrs(e);
     if (Object.keys(e).length) {
-      setTab(e.forn || e.cat || e.itens ? "itens" : e.deptos ? "deptos" : "parcelas");
+      setTab(e.forn || e.cat || e.itens || e.vinculo ? "itens" : e.deptos ? "deptos" : "parcelas");
       toast("Revise os campos destacados para salvar.", true);
       return false;
     }
@@ -236,6 +238,8 @@ export default function FolhaPedido({
         comprador: D.comprador, compradorCod: D.compradorCod, projCod: D.projCod, proj: D.proj, contaCod: D.contaCod,
         conta: D.conta, parc: D.parc, previsao: D.previsao, contato: D.contato, numForn: D.numForn, contrato: D.contrato,
         obs: D.obs, obsInt: D.obsInt, pv: D.pv, pvCliente: D.pvCliente, frete: D.frete,
+        ...(isRC ? {} : { semRc: !!D.semRc, semRcMotivo: D.semRc ? D.semRcMotivo ?? "" : null,
+                          avulsa: !!D.avulsa, avulsaMotivo: D.avulsa ? D.avulsaMotivo ?? "" : null }),
         itens: D.itens.map((i) => ({ id: i.id ?? null, cod: i.cod, ncodProd: i.ncodProd, desc: i.desc, un: i.un, qtd: i.qtd,
           vu: i.vu, desc0: i.desc0, ipi: i.ipi, st: i.st, ncm: i.ncm, local: i.local, obs: i.obs,
           rc: i.rc ? { itemId: i.rc.itemId } : null })),
@@ -266,7 +270,7 @@ export default function FolhaPedido({
     : isRC ? `Requisição Nº ${D.num}` : `Pedido de Compra Nº ${D.num}`;
   const tabs: [Tab, string, string | number, string?][] = isRC
     ? [["itens", "Itens da Compra", D.itens.length, errs.itens], ["info", "Informações Adicionais", ""], ["obs", "Observações", D.obs || D.obsInt ? "•" : ""]]
-    : [["itens", "Itens da Compra", D.itens.length, errs.itens], ["deptos", "Departamentos", D.deptos.length || "", errs.deptos],
+    : [["itens", "Itens da Compra", D.itens.length, errs.itens || errs.vinculo], ["deptos", "Departamentos", D.deptos.length || "", errs.deptos],
        ["frete", "Frete e Outras Despesas", t.extra ? "R$" : ""], ["parcelas", "Parcelas", D.parcelas.length, errs.parcelas],
        ["info", "Informações Adicionais", ""], ["obs", "Observações", D.obs || D.obsInt ? "•" : ""]];
   const tabAtual: Tab = isRC && !["itens", "info", "obs"].includes(tab) ? "itens" : tab;
@@ -473,6 +477,40 @@ export default function FolhaPedido({
                         {!D.itens.some((i) => i.rc) && <span className="muted">nenhuma ainda</span>}
                         <span style={{ flex: 1 }} />
                         {!ro && <button className="btn sm pri" onClick={() => setPicker(true)}>⇠ Vincular requisição</button>}
+                      </div>
+                    )}
+                    {!isRC && D.origem === "painel" && (
+                      <div className="cp-vinculo" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 10, padding: "9px 10px",
+                        border: `1px solid ${errs.vinculo ? "var(--danger, #EF4444)" : "var(--line)"}`, borderRadius: 10 }}>
+                        <div>
+                          <label style={{ display: "flex", gap: 6, alignItems: "center", fontSize: 12.5, fontWeight: 600 }}>
+                            <input type="checkbox" disabled={ro} checked={!!D.semRc}
+                              onChange={(e) => set({ semRc: e.target.checked })} />
+                            Pedido sem RC <span className="faint" style={{ fontWeight: 400 }}>— vai a aprovação</span>
+                          </label>
+                          {D.semRc && <input className="in" disabled={ro} style={{ marginTop: 6 }} value={D.semRcMotivo ?? ""}
+                            placeholder="Motivo (obrigatório): ex. reposição urgente de estoque"
+                            onChange={(e) => set({ semRcMotivo: e.target.value })} />}
+                          {!D.semRc && <span className="hint">Cada item precisa vir de uma requisição (⇠ Vincular requisição).</span>}
+                        </div>
+                        <div>
+                          <div style={{ fontSize: 12.5, fontWeight: 600, marginBottom: 4 }}>Venda (PV/OS)</div>
+                          {!D.avulsa && (
+                            <Autocompletar<{ label: string; cliente: string; projeto?: string }> value={D.pv ? `${D.pv}${D.pvCliente ? " · " + D.pvCliente : ""}` : ""} disabled={ro}
+                              placeholder="Busque o PV/OS da venda" onChange={(v) => { if (!v) set({ pv: "", pvCliente: "" }); }}
+                              fonte={async (q) => (await json<{ label: string; cliente: string; projeto?: string }[]>(await fetch(`/api/compras/buscar?tipo=venda&emp=${D.emp}&q=${encodeURIComponent(q)}`)))
+                                .map((v) => ({ label: `${v.label} · ${v.cliente}`, sub: v.projeto || "sem projeto", v }))}
+                              onPick={(o) => set({ pv: o.v.label, pvCliente: o.v.cliente })} />
+                          )}
+                          <label style={{ display: "flex", gap: 6, alignItems: "center", fontSize: 12.5, marginTop: 6 }}>
+                            <input type="checkbox" disabled={ro} checked={!!D.avulsa}
+                              onChange={(e) => set({ avulsa: e.target.checked, ...(e.target.checked ? { pv: "", pvCliente: "" } : {}) })} />
+                            Compra avulsa (estoque / uso interno), sem venda
+                          </label>
+                          {D.avulsa && <input className="in" disabled={ro} style={{ marginTop: 6 }} value={D.avulsaMotivo ?? ""}
+                            placeholder="Motivo (obrigatório)" onChange={(e) => set({ avulsaMotivo: e.target.value })} />}
+                        </div>
+                        {errs.vinculo && <div className="errmsg" style={{ gridColumn: "1 / -1" }}>{errs.vinculo}</div>}
                       </div>
                     )}
                     {errs.itens && <div className="errmsg" style={{ marginBottom: 8 }}>{errs.itens}</div>}
@@ -765,11 +803,11 @@ export default function FolhaPedido({
                     <div className="f s6"><label>Nº do Contrato</label><input className="in" disabled={ro} value={D.contrato} onChange={(e) => set({ contrato: e.target.value })} /></div>
                     {!isRC && <div className="f s6"><label>Vínculo PV/OS</label>
                       <Autocompletar<{ label: string; cliente: string; projeto?: string }> value={D.pv ? `${D.pv}${D.pvCliente ? " · " + D.pvCliente : ""}` : ""} disabled={ro}
-                        placeholder="Ex.: PV 4123 — opcional" onChange={(v) => { if (!v) set({ pv: "", pvCliente: "" }); }}
+                        placeholder="Ex.: PV 4123" onChange={(v) => { if (!v) set({ pv: "", pvCliente: "" }); }}
                         fonte={async (q) => (await json<{ label: string; cliente: string; projeto?: string }[]>(await fetch(`/api/compras/buscar?tipo=venda&emp=${D.emp}&q=${encodeURIComponent(q)}`)))
                           .map((v) => ({ label: `${v.label} · ${v.cliente}`, sub: v.projeto || "sem projeto", v }))}
                         onPick={(o) => set({ pv: o.v.label, pvCliente: o.v.cliente })} />
-                      <span className="hint">Liga a compra à venda (já usado em Operação).</span></div>}
+                      <span className="hint">Obrigatório, salvo compra avulsa (marque em Itens da Compra).</span></div>}
                   </div>
                 )}
 
@@ -840,6 +878,21 @@ export default function FolhaPedido({
                 <section className="card2"><h4>Nota fiscal</h4><div className="hist">
                   <div>NF-e {D.nf || "—"}<small>{D.dtRec ? `recebido em ${dBR(D.dtRec)}` : D.dtFat ? `faturado em ${dBR(D.dtFat)}` : ""}</small></div>
                   {D.chave && <div className="mono" style={{ fontSize: 11, wordBreak: "break-all" }}>{D.chave}</div>}
+                </div></section>
+              )}
+              {!isRC && (D.semRc || D.avulsa) && (
+                <section className="card2"><h4>Vínculo</h4><div className="hist">
+                  {D.semRc && <div>Pedido sem RC<small>{D.semRcMotivo || "sem motivo"}</small></div>}
+                  {D.avulsa && <div>Compra avulsa (sem venda)<small>{D.avulsaMotivo || "sem motivo"}</small></div>}
+                </div></section>
+              )}
+              {(D.estoque ?? []).length > 0 && (
+                <section className="card2"><h4>Entrada no estoque</h4><div className="hist">
+                  {(D.estoque ?? []).map((e) => {
+                    const it = D.itens.find((i) => i.id === e.itemId);
+                    return <div key={e.itemId}>{fq(e.qtd)} × {it?.desc ?? `item ${e.nCodProd}`}
+                      <small>{money(e.vu)} · CMC {money(e.cmcAntes)} → {money(e.cmcDepois)}{e.status === "sombra" ? " · modo sombra (saldo ainda vem do Omie)" : ""}</small></div>;
+                  })}
                 </div></section>
               )}
               {D.hist.length > 0 && (

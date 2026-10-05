@@ -90,6 +90,10 @@ async function mover(q: Quem, id: number, etapa: string) {
   if (etapa === "60" && !p.nf) throw new Error("Registre o recebimento com a NF-e");
   if (etapa === "35") throw new Error("Não há mais etapa Enviado: aprovado = enviado ao fornecedor");
   if (["40", "60", "80"].includes(etapa) && p.aprov !== "aprovado") throw new Error("Só pedido aprovado avança para Faturado");
+  if (etapa === "15" && p.origem === "painel" && p.tipo === "PC") {
+    const v = await rpc<{ vinculoErro?: string | null; regraVinculo?: boolean } | null>("compras_vinculo", { p_id: id });
+    if (v?.regraVinculo && v.vinculoErro) throw new Error(v.vinculoErro);
+  }
   if (etapa === "15" && p.origem === "omie" && p.aprov !== "aprovado") {
     // Solicitar aprovação de pedido do Omie = status PENDENTE em approval.approvals.
     await gravarAprovacaoOmie(q, null, [p], "aguardando");
@@ -112,9 +116,15 @@ async function aprovar(q: Quem, req: Request, ids: number[], status: string) {
     }
     okPainel.push(p.id!);
   }
-  if (okPainel.length) await rpc("compras_aprovar", { p_ids: okPainel, p_status: status, p_por: q.email });
+  let bloqueados = 0;
+  if (okPainel.length) {
+    // PC sem vínculo (RC por item, PV/OS ou as marcações com motivo) não vai a aprovação — sql/51
+    const r = await rpc<{ bloqueados?: { num: string; erro: string }[] }>("compras_aprovar", { p_ids: okPainel, p_status: status, p_por: q.email });
+    for (const b of r?.bloqueados ?? []) falhas.push({ num: b.num, erro: b.erro });
+    bloqueados = (r?.bloqueados ?? []).length;
+  }
   const okOmie = await gravarAprovacaoOmie(q, req, doOmie, status, falhas);
-  return { alterados: okPainel.length + okOmie, falhas };
+  return { alterados: okPainel.length - bloqueados + okOmie, falhas };
 }
 
 /** Pedido do Omie: aprovação pelo caminho de sempre (set-status valida

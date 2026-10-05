@@ -53,6 +53,7 @@ export type PedidoLista = {
   valor: number; nItens: number; busca?: string; aprov: Aprov; aprovPor?: string; aprovEm?: string;
   origem: "painel" | "omie"; sync?: string; rcs?: string[]; cobDone?: number; cobTotal?: number; cobPcs?: string[];
   saldo?: number; parciais?: number; enviadoEm?: string; enviadoPara?: string; enviadoMeio?: string;
+  semRc?: boolean; avulsa?: boolean; criadoEm?: string;
 };
 
 // ── Pedido completo (folha) ─────────────────────────────────────────────────
@@ -80,7 +81,25 @@ export type Pedido = {
   criadoEm?: string | null; enviadoEm?: string | null; enviadoPor?: string | null; enviadoPara?: string | null;
   enviadoMeio?: string | null; pcsDaRc?: string[];
   hist: { t: string; em: string; por?: string }[];
+  /** Vínculo obrigatório (sql/51): sem RC e compra avulsa, com motivo. */
+  semRc?: boolean; semRcMotivo?: string | null; avulsa?: boolean; avulsaMotivo?: string | null;
+  vinculoErro?: string | null; regraVinculo?: boolean;
+  /** Entradas de estoque geradas ao conferir (sql/51). */
+  estoque?: { itemId: number; nCodProd: number; qtd: number; vu: number; cmcAntes: number | null; cmcDepois: number | null; status: "ativa" | "sombra" }[];
 };
+
+/** Mesma regra de compras.vinculo_erro (sql/51), para avisar antes de gravar. */
+export function erroVinculo(p: Pick<Pedido, "tipo" | "origem" | "itens" | "pv" | "semRc" | "semRcMotivo" | "avulsa" | "avulsaMotivo">): string | null {
+  if (p.tipo !== "PC" || p.origem !== "painel") return null;
+  const soltos = p.itens.map((i, n) => ({ i, n: n + 1 })).filter((x) => !x.i.rc);
+  if (!p.semRc && soltos.length) {
+    return `Item sem requisição (RC): ${soltos.map((x) => `#${x.n} ${x.i.desc.slice(0, 40)}`).join(", ")}. Ligue cada item a uma RC ou marque "Pedido sem RC" e informe o motivo.`;
+  }
+  if (p.semRc && !(p.semRcMotivo ?? "").trim()) return "Informe o motivo do pedido sem RC.";
+  if (!p.avulsa && !(p.pv ?? "").trim()) return 'Ligue o pedido a um PV/OS ou marque "Compra avulsa (estoque / uso interno)" e informe o motivo.';
+  if (p.avulsa && !(p.avulsaMotivo ?? "").trim()) return "Informe o motivo da compra avulsa.";
+  return null;
+}
 
 export type Refs = {
   categorias: { cod: string; desc: string }[];

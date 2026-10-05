@@ -7,6 +7,7 @@
 import { NextResponse } from "next/server";
 import { timingSafeEqual } from "node:crypto";
 import { rpc, posGravar } from "@/lib/compras-server";
+import { avisarCompras } from "@/lib/compras-avisos";
 import { supaAdmin } from "@/lib/supabase-admin";
 import type { Pedido } from "@/lib/compras";
 
@@ -56,6 +57,7 @@ export async function POST(req: Request) {
       p_por: b.por ? `CRM · ${b.por}` : "CRM", p_uid: null,
     });
     await posGravar(r.id, "RC");
+    await avisarCompras().catch(() => null); // avisa o time de compras da RC nova (uma vez)
     return NextResponse.json({ ok: true, id: r.id, numero_rc: r.num, label });
   } catch (e) { return NextResponse.json({ error: (e as Error).message }, { status: 400 }); }
 }

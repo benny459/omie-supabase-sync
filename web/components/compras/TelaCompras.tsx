@@ -39,6 +39,10 @@ export default function TelaCompras() {
   const [nfsPed, setNfsPed] = useState<Record<string, NfDoPedido[]>>({});
   const [semPedido, setSemPedido] = useState<NfSemPedido[]>([]);
   const [soSemPedido, setSoSemPedido] = useState(false);
+  /* Avisos (sql/51): RCs novas desde a última visita e PCs criados no Omie após 01/10. */
+  const [avisos, setAvisos] = useState<{ novas: Set<number>; pcsOmie: { id: number; num: string; forn?: string; valor: number; emissao: string }[] }>({ novas: new Set(), pcsOmie: [] });
+  const [verPcsOmie, setVerPcsOmie] = useState(false);
+  const marcouVistas = useRef(false);
   /* Busca por código: inclui todos os códigos do mesmo item de hoje (Omie, mesclados, recodificados). */
   const [equiv, setEquiv] = useState<{ q: string; itens: { codigoAtual: string; descricaoAtual: string; codigos: string[]; pedidos: number[] }[] } | null>(null);
   const [caixa, setCaixa] = useState<{ foco: string | null } | null>(null);
@@ -96,6 +100,17 @@ export default function TelaCompras() {
     } catch (e) { setErro((e as Error).message); }
   }, [historico]);
   useEffect(() => { carregar(); }, [carregar]);
+  useEffect(() => {
+    fetch("/api/compras/avisos").then((r) => (r.ok ? r.json() : null)).then((j) => {
+      if (!j) return;
+      // destaque fica nesta visita; a próxima conta a partir de agora
+      setAvisos({ novas: new Set<number>(j.rcNovasIds ?? []), pcsOmie: j.pcsOmie ?? [] });
+      if (!marcouVistas.current) {
+        marcouVistas.current = true;
+        fetch("/api/compras/avisos", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ acao: "rc_vistas" }) }).catch(() => null);
+      }
+    }).catch(() => null);
+  }, []);
   useEffect(() => {
     fetch(`/api/compras/refs?emp=${emp}`).then((r) => r.json()).then((j) => { if (!j.error) setRefs(j); }).catch(() => null);
   }, []);
@@ -262,7 +277,7 @@ export default function TelaCompras() {
     const late = atrasado(p);
     const cond = p.tipo === "RC" ? `com ${p.nItens} ${p.nItens === 1 ? "item" : "itens"}` : (parcDesc(p.parc) || "").toLowerCase();
     return (
-      <article key={p.id} className={`card${naColPc ? (p.aprov === "aprovado" ? " aprovado" : " pendente") : late ? " late" : ""}${arrasto === String(p.id) ? " dragging" : ""}`} draggable tabIndex={0}
+      <article key={p.id} className={`card${avisos.novas.has(p.id) ? " nova" : ""}${naColPc ? (p.aprov === "aprovado" ? " aprovado" : " pendente") : late ? " late" : ""}${arrasto === String(p.id) ? " dragging" : ""}`} draggable tabIndex={0}
         style={{ ["--c" as string]: naColPc ? (p.aprov === "aprovado" ? "#22C55E" : "#8B5CF6") : ETAPA[p.etapa]?.cor }}
         aria-label={`${p.tipo} ${p.num}`}
         onClick={(e) => { if ((e.target as HTMLElement).closest(".kebab")) return; setFolha({ id: p.id }); }}
@@ -271,6 +286,7 @@ export default function TelaCompras() {
         onDragEnd={() => setArrasto(null)}>
         <div className="l1">
           <span className="no"><b className="nro" title={p.tipo === "RC" ? `Requisição Nº ${p.num}` : `Pedido de compra Nº ${p.num}`}>{p.tipo === "RC" ? `RC ${p.num}` : `PC ${p.num}`}</b>
+            {avisos.novas.has(p.id) && <span className="badge-nova" title="Requisição nova desde a sua última visita">nova</span>}
             {naColPc && (p.aprov === "aprovado"
               ? <span className="badge-ap ok">✓ Aprovado</span> : <span className="badge-ap pend">Pendente</span>)}</span>
           <button className="kebab" aria-label="Ações" onClick={(e) => { e.stopPropagation(); const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
@@ -356,6 +372,18 @@ export default function TelaCompras() {
           </button>
         )}
 
+        {avisos.pcsOmie.length > 0 && (
+          <div className="alarme-omie">
+            <button className="linkbtn" onClick={() => setVerPcsOmie((v) => !v)}>
+              ⚠️ {avisos.pcsOmie.length} pedido(s) de compra criado(s) no Omie depois de 01/10 — o pedido de compra nasce aqui no painel
+              <small>{verPcsOmie ? "esconder" : "ver quais"} ›</small>
+            </button>
+            {verPcsOmie && <div className="lst">{avisos.pcsOmie.map((c) => (
+              <button key={c.id} className="chipf" onClick={() => setFolha({ id: c.id })}>PC {c.num} · {c.forn ?? "—"} · {money(c.valor)} · {dBR(c.emissao)}</button>
+            ))}</div>}
+          </div>
+        )}
+
         <div className="filtros">
           <select className="sel" value={comprador} onChange={(e) => setComprador(e.target.value)} aria-label="Comprador">
             <option value="">Todos os compradores</option>{compradores.map((c) => <option key={c}>{c}</option>)}</select>
@@ -435,7 +463,10 @@ export default function TelaCompras() {
                   onDrop={(ev) => { ev.preventDefault(); ev.currentTarget.classList.remove("drop");
                     const p = todos.find((x) => String(x.id) === ev.dataTransfer.getData("text/plain")); if (p) mover(p, e.cod); }}>
                   <div className="colh">
-                    <div className="t"><b><span className="badge-n">{itens.length}</span>{e.nome}</b><span className="tot num">{money(soma(itens))}</span></div>
+                    <div className="t"><b><span className="badge-n">{itens.length}</span>{e.nome}
+                      {e.cod === "20" && itens.some((p) => avisos.novas.has(p.id)) &&
+                        <span className="badge-nova" title="Requisições novas desde a sua última visita">{itens.filter((p) => avisos.novas.has(p.id)).length} nova(s)</span>}</b>
+                      <span className="tot num">{money(soma(itens))}</span></div>
                     <span className="n">{ETAPA_AJUDA[e.cod] ?? (e.cod === "20" ? "saldo a comprar" : e.cod === "10" ? "pendente ou aprovado" : e.plural)}{ocultas ? ` · ${ocultas} atendida(s) ocultas` : ""}</span>
                     {e.cod === "10" && (() => {
                       const base = filtrados.filter((p) => ["10", "15", "35"].includes(p.etapa) && p.tipo === "PC");

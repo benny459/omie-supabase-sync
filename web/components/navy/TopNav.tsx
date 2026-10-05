@@ -59,12 +59,12 @@ export default function TopNav({ userEmail, isPlatformAdmin, telasRh = [] }: { u
   useEffect(() => { setPendingHref(null); }, [pathname]);
 
   /* Selo vermelho em Compras: NF-e que chegaram sem pedido (não pagar até casar). */
-  const [nfSemPedido, setNfSemPedido] = useState<{ n: number; valor: number }>({ n: 0, valor: 0 });
+  const [nfSemPedido, setNfSemPedido] = useState<{ n: number; valor: number; rcNovas: number }>({ n: 0, valor: 0, rcNovas: 0 });
   useEffect(() => {
     if (!canViewArea(perms, "erp")) return;
     let vivo = true;
     fetch("/api/compras/alerta").then((r) => (r.ok ? r.json() : null))
-      .then((j) => { if (vivo && j && typeof j.n === "number") setNfSemPedido({ n: j.n, valor: Number(j.valor) || 0 }); }).catch(() => null);
+      .then((j) => { if (vivo && j && typeof j.n === "number") setNfSemPedido({ n: j.n, valor: Number(j.valor) || 0, rcNovas: Number(j.rcNovas) || 0 }); }).catch(() => null);
     return () => { vivo = false; };
   }, [pathname, perms]);
 
@@ -144,9 +144,13 @@ export default function TopNav({ userEmail, isPlatformAdmin, telasRh = [] }: { u
     modulos.push({
       id: g, nome: def.label, href: itens[0].href, titulo: def.desc,
       itens: semLista ? undefined : lista,
-      contador: g === "compras" && nfSemPedido.n > 0 ? {
-        n: nfSemPedido.n,
-        titulo: `${nfSemPedido.n} NF-e sem pedido · ${nfSemPedido.valor.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })} — não pagar até casar`,
+      // + RCs novas desde a última visita a Compras (sql/51)
+      contador: g === "compras" && nfSemPedido.n + nfSemPedido.rcNovas > 0 ? {
+        n: nfSemPedido.n + nfSemPedido.rcNovas,
+        titulo: [
+          nfSemPedido.n ? `${nfSemPedido.n} NF-e sem pedido · ${nfSemPedido.valor.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })} — não pagar até casar` : "",
+          nfSemPedido.rcNovas ? `${nfSemPedido.rcNovas} requisição(ões) nova(s) para atender` : "",
+        ].filter(Boolean).join(" · "),
       } : undefined,
     });
   }

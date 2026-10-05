@@ -3,9 +3,11 @@
 //      Actions, header Authorization: Bearer CRON_SECRET): roda o casamento e
 //      avisa por Webex (mensagem direta) as NF-e que continuaram sem pedido e
 //      ainda não foram avisadas. Destinatários: COMPRAS_ALERTA_EMAILS (CSV),
-//      padrão benny@waterworks.com.br.
+//      padrão benny@waterworks.com.br. Também avisa RCs novas e PCs criados
+//      no Omie depois de 01/10 (lib/compras-avisos.ts, sql/51).
 import { NextResponse } from "next/server";
 import { exigirCompras, rpc } from "@/lib/compras-server";
+import { avisarCompras } from "@/lib/compras-avisos";
 import { supaAdmin } from "@/lib/supabase-admin";
 
 export const runtime = "nodejs";
@@ -17,7 +19,14 @@ type Resumo = { n: number; valor: number };
 export async function GET() {
   const q = await exigirCompras();
   if (q instanceof NextResponse) return NextResponse.json({ n: 0, valor: 0 });
-  try { return NextResponse.json(await rpc<Resumo>("compras_nf_sem_pedido_resumo").then((r) => ({ n: r.n, valor: r.valor }))); }
+  try {
+    const [r, av] = await Promise.all([
+      rpc<Resumo>("compras_nf_sem_pedido_resumo"),
+      // RCs novas desde a última visita e PCs criados no Omie após 01/10 (sql/51)
+      rpc<{ rcNovas: number; pcsOmie: unknown[] }>("compras_avisos", { p_email: q.email }).catch(() => null),
+    ]);
+    return NextResponse.json({ n: r.n, valor: r.valor, rcNovas: av?.rcNovas ?? 0, pcsOmie: av?.pcsOmie?.length ?? 0 });
+  }
   catch { return NextResponse.json({ n: 0, valor: 0 }); }
 }
 
@@ -45,5 +54,6 @@ export async function POST(req: Request) {
     }
     if (enviado) await supaAdmin().schema("orders").rpc("compras_nf_marcar_avisadas", { p_chaves: novas.map((n) => n.chave) });
   }
-  return NextResponse.json({ casou, sem_pedido: nfs.length, novas: novas.length, avisos: enviado, erros });
+  const compras = await avisarCompras().catch((e) => ({ erro: String(e) }));
+  return NextResponse.json({ casou, sem_pedido: nfs.length, novas: novas.length, avisos: enviado, erros, compras });
 }
