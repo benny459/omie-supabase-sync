@@ -7,6 +7,7 @@
  */
 
 import { useEffect, useState } from "react";
+import DadosPagamento from "./DadosPagamento";
 import { useRouter, useSearchParams } from "next/navigation";
 import { EMPRESAS, ErroPedido, ListaCandidatos, docValido, mascaraDoc, pedir, type Candidato, type Contato, type Papel, type Pessoa } from "./comum";
 
@@ -229,6 +230,7 @@ export default function FormPessoa({ id }: { id?: number }) {
           </div>
           <label className="f s12">Observações<textarea className="inp" {...campo("obs")} /></label>
         </div>
+        {editando && id ? <DadosPagamento pessoaId={id} /> : null}
 
         {bloqueio && bloqueio.length > 0 ? (
           <ListaCandidatos itens={bloqueio} titulo="Já existe — use o cadastro existente em vez de criar outro" onAbrir={(c) => router.push(`/cadastros/${c.id}`)} />

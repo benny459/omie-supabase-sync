@@ -44,6 +44,8 @@ type Body = {
   valor_ir?: number | null;     retem_ir?: boolean;
   valor_iss?: number | null;    retem_iss?: boolean;
   valor_inss?: number | null;   retem_inss?: boolean;
+  // Recorrência (sql/73): gera uma série a partir do 1º vencimento.
+  recorrencia?: { freq: string; n?: number | null; ate?: string | null; sem_fim?: boolean; dia_fixo?: number | null; valor_modo?: "por_ocorrencia" | "dividir" } | null;
 };
 
 export async function POST(req: Request) {
@@ -75,6 +77,7 @@ export async function POST(req: Request) {
   /* Receber nasce no NOSSO sistema desde 01/10/26 (finance.receber) e não vai
      ao Omie. Com pedido/NF/chave fica 'pendente' até a conciliação achar o
      título que o Omie criar ao faturar; sem documento é conta só do painel. */
+  if (body.recorrencia?.freq) return incluirSerie(body, tipo, empresa, perms.id ?? null);
   if (tipo === "receber") return incluirReceber(body, empresa, previsaoISO, perms.id ?? null);
 
   return incluirPagarNativo(body, empresa, previsaoISO);
@@ -160,4 +163,45 @@ async function incluirReceber(body: Body, empresa: string, previsaoISO: string, 
   }).select("id, conferencia").single();
   if (error) return NextResponse.json({ error: `Não gravou: ${error.message}` }, { status: 500 });
   return NextResponse.json({ ok: true, id: data.id, conferencia: data.conferencia });
+}
+
+/** Série recorrente: cada ocorrência nasce como a conta avulsa nasceria
+ *  (finance.pagar_manual_incluir / finance.receber_manual_incluir), ligada pela série. */
+async function incluirSerie(body: Body, tipo: "pagar" | "receber", empresa: string, userId: string | null) {
+  const { data: { user } } = await (await supaServer()).auth.getUser();
+  const rc = body.recorrencia!;
+  const extras: Record<string, unknown> = {};
+  if (body.codigo_tipo_documento) extras.codigo_tipo_documento = body.codigo_tipo_documento;
+  if (body.id_origem) extras.id_origem = body.id_origem;
+  for (const k of ["pis", "cofins", "csll", "ir", "iss", "inss"] as const) {
+    const v = Number(body[`valor_${k}`] ?? 0);
+    if (v > 0) { extras[`valor_${k}`] = v; extras[`retem_${k}`] = !!body[`retem_${k}`]; }
+  }
+  const modelo = tipo === "pagar" ? {
+    empresa, fornecedor_cod: body.codigo_cliente_fornecedor, categoria_cod: body.codigo_categoria, conta_cod: body.id_conta_corrente,
+    projeto_cod: body.codigo_projeto ?? null, documento: body.numero_documento ?? null, obs: body.observacao ?? null,
+    emissao: iso(body.data_emissao), nf_numero: body.numero_documento_fiscal ?? null, chave_nfe: body.chave_nfe ?? null,
+    tipo_doc: body.codigo_tipo_documento ?? null, extras: Object.keys(extras).length ? extras : null,
+  } : {
+    empresa, codigo_cliente_fornecedor: body.codigo_cliente_fornecedor, codigo_categoria: body.codigo_categoria,
+    id_conta_corrente: body.id_conta_corrente, codigo_projeto: body.codigo_projeto ? String(body.codigo_projeto) : null,
+    numero_documento: vazio(body.numero_documento), numero_pedido: vazio(body.numero_pedido),
+    numero_documento_fiscal: vazio(body.numero_documento_fiscal), chave_nfe: vazio(body.chave_nfe),
+    data_emissao: iso(body.data_emissao), observacao: vazio(body.observacao),
+    extras: Object.keys(extras).length ? extras : null, created_by: userId,
+  };
+  const dividir = rc.valor_modo === "dividir" && !rc.sem_fim;
+  const { data, error } = await supaAdmin().schema("finance").rpc("serie_criar", {
+    p: {
+      natureza: tipo === "pagar" ? "P" : "R", empresa, modelo,
+      regra: {
+        freq: rc.freq, inicio: body.data_vencimento, n: rc.n ?? null, ate: rc.ate ?? null, sem_fim: !!rc.sem_fim,
+        dia_fixo: rc.dia_fixo ?? null, valor_modo: dividir ? "dividir" : "por_ocorrencia",
+        valor: dividir ? null : body.valor_documento, valor_total: dividir ? body.valor_documento : null,
+      },
+    },
+    p_usuario: user?.email ?? "?",
+  });
+  if (error) return NextResponse.json({ error: (error.message ?? "Erro").replace(/^.*?ERROR:\s*/, "") }, { status: 422 });
+  return NextResponse.json({ ok: true, serie: data });
 }

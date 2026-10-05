@@ -11,6 +11,10 @@ type Opts = {
   admin: boolean;
   onNovaConta: () => void;
   onFornecedor: (cod: number, emp: string) => void;
+  /** Remessa ao banco (C6) dos títulos escolhidos — abre a tela "Gerar arquivo C6". */
+  onRemessa: (refs: string[]) => void;
+  /** Série de recorrência (editar esta / próximas / todas, encerrar, excluir). */
+  onSerie: (serieId: string, ref: string) => void;
 };
 
 const EMPS = ["CD", "SF", "WW"];
@@ -35,6 +39,10 @@ export function montarPagarV3(o: Opts) {
   let TODAY = new Date(new Date().toLocaleDateString("sv-SE", { timeZone: "America/Sao_Paulo" }) + "T00:00:00");
   let rows = [], BANKS = [], AGG = {}, PODE = { baixar: false, conciliar: false, incluir: false };
   let MOV = [], MOVLOAD = false, BAIXAS = [], vivo = true, carregando = true, erro = "";
+  let FERIADOS = new Set();
+  // Previsão (sql/73): o vencimento é do documento; a previsão é nossa e manda na agenda,
+  // nos KPIs e no fluxo de caixa. r.vd = vencimento · r.d / r.dias = previsão.
+  const naoUtil = (iso_) => { const d = new Date(iso_ + "T00:00:00"); return d.getDay() === 0 || d.getDay() === 6 || FERIADOS.has(iso_); };
 
   const S = { emp: "ALL", q: "", agMode: "dia", agHide: {}, vcEmp: "SF", vcRange: 60, vcCut: null, agSel: 0, cf: {}, cfv: {}, rkDim: "cat", rkOpen: null,
     tab: "tit", per: "hoje", st: "all", filter: null, kpi: null, sel: new Set(), sort: { k: "pst", dir: 1 }, ofxBank: null };
@@ -78,14 +86,18 @@ export function montarPagarV3(o: Opts) {
       BANKS = (j.banks ?? []).map((b) => ({ emp: b[0], cod: Number(b[1]), desc: b[2], tipo: b[3], saldo: Number(b[4]) || 0, dt: b[5], ofx: b[6], pend: Number(b[7]) || 0 }));
       AGG = j.agg ?? {};
       const prog = j.prog ?? {};
+      const PREV = j.prev ?? {}, ENV = j.env ?? {}, SERIE = j.serie ?? {};
+      FERIADOS = new Set(j.feriados ?? []);
       const sel = new Set([...S.sel].map((i) => rows[i]?.ref).filter(Boolean));
       rows = (j.rows ?? []).map((x, i) => {
-        const d = new Date(x[2] + "T00:00:00");
+        const vd = new Date(x[2] + "T00:00:00");
+        const pv = PREV[x[0]]; const d = pv && pv[0] ? new Date(pv[0] + "T00:00:00") : vd;
         const cod_cc = x[10] != null ? Number(x[10]) : null;
         const def = cod_cc && BANKS.some((b) => b.emp === x[1] && b.cod === cod_cc && b.tipo !== "CX" && b.tipo !== "AD") ? cod_cc : null;
         return { id: i, ref: x[0], emp: x[1], venc: x[2], d, dias: Math.round((d - TODAY) / DAY), v: Number(x[3]), forn: x[4], cat: x[5] ?? "", proj: x[6] ?? "",
           doc: x[7] ?? "", parc: x[8] ?? "", conta: x[9] ?? "", cod_cc, cod: x[11], apr: x[12], pc: x[13], etapa: x[14], nf: x[15], aprov: x[16], tipo: x[17],
           div: !!x[18], st: x[19], cnpj: x[20], orig: x[21], vdoc: Number(x[22]) || 0, cod_forn: x[23], fase: x[25], paid: null,
+          vd, repr: !!(pv && pv[1]), env: ENV[x[0]] ?? null, serie: SERIE[x[0]] ?? null,
           bank: prog[x[0]] != null ? Number(prog[x[0]]) : def };
       });
       S.sel = new Set(rows.filter((r) => sel.has(r.ref)).map((r) => r.id));
@@ -264,9 +276,11 @@ export function montarPagarV3(o: Opts) {
     const cards = Object.entries(g).sort((a, b) => (a[0] === "none" ? -1 : b[0] === "none" ? 1 : sum(b[1]) - sum(a[1]))).map(([key, rs]) => {
       if (key === "none") return `<div class="bcard none" data-b="(sem banco)"><div class="t">⚠ Sem banco definido</div><div class="v num">${brl(sum(rs))}</div><div class="s">${rs.length} títulos — escolha o banco</div></div>`;
       const [e, cod] = key.split("|"); const bk = bankOf(+cod); const saldo = bk ? bk.saldo : 0; const lib = sum(rs.filter((r) => ["ok", "dir"].includes(r.st))); const over = lib > saldo; const nm = bk?.desc ?? cod;
-      return `<div class="bcard ${over ? "over" : ""} ${cur && cur.size === 1 && cur.has(nm) ? "on" : ""}" data-b="${esc(nm)}"><div class="t"><span class="emp ${e}">${e}</span>${esc(nm)}</div><div class="v num">${brl(sum(rs))}</div><div class="s">${rs.length} títulos · saldo ${kk(saldo)}${over ? " · falta " + kk(lib - saldo) : " ✓"}</div></div>`;
+      const c6 = /\bc6\b/i.test(nm) ? `<button class="btn sm" data-c6="${key}" style="margin-top:6px" title="Gerar o arquivo de pagamentos do C6 com estes títulos">Arquivo C6 ↓</button>` : "";
+      return `<div class="bcard ${over ? "over" : ""} ${cur && cur.size === 1 && cur.has(nm) ? "on" : ""}" data-b="${esc(nm)}"><div class="t"><span class="emp ${e}">${e}</span>${esc(nm)}</div><div class="v num">${brl(sum(rs))}</div><div class="s">${rs.length} títulos · saldo ${kk(saldo)}${over ? " · falta " + kk(lib - saldo) : " ✓"}</div>${c6}</div>`;
     }).join("");
     const el = q("bstrip"); el.innerHTML = cards ? `<span class="sub2" style="align-self:center;margin-right:2px">Programação<br>por banco</span>` + cards : "";
+    el.querySelectorAll("[data-c6]").forEach((b) => (b.onclick = (ev) => { ev.stopPropagation(); const lst = g[b.dataset.c6] || []; if (lst.length) o.onRemessa(lst.map((r) => r.ref)); }));
     el.querySelectorAll(".bcard").forEach((c) => (c.onclick = () => { const b = c.dataset.b; if (S.cf.bank && S.cf.bank.size === 1 && S.cf.bank.has(b)) delete S.cf.bank; else S.cf.bank = new Set([b]); renderTable(); }));
   }
 
@@ -348,7 +362,7 @@ export function montarPagarV3(o: Opts) {
   function tblBase() { const a = base(); return S.filter ? a.filter(S.filter.f) : a.filter(PER[S.per]); }
   const nfLbl = (r) => (r.etapa ? (["60", "80"].includes(r.etapa) ? "Recebida" : r.etapa === "40" ? "Emitida" : "Sem NF") : r.tipo === "NFE" ? "NF-e (sem PC)" : "—");
   const COLV = { dias: (r) => r.d.toLocaleDateString("pt-BR"), emp: (r) => r.emp, forn: (r) => r.forn, cat: (r) => r.cat || "Sem categoria", pc: (r) => (r.pc ? "PC " + r.pc : "(sem PC)"), etapa: nfLbl, pst: (r) => PST[r.st].l, conta: (r) => r.conta, bank: (r) => (r.bank ? bankDesc(r.bank) : "(sem banco)") };
-  const COLN = { dias: "Vencimento", emp: "Empresa", forn: "Fornecedor", cat: "Categoria", pc: "Compra", etapa: "NF", pst: "Pagamento", conta: "Conta prevista", bank: "Banco p/ pagar", v: "Valor" };
+  const COLN = { dias: "Previsão", emp: "Empresa", forn: "Fornecedor", cat: "Categoria", pc: "Compra", etapa: "NF", pst: "Pagamento", conta: "Conta prevista", bank: "Banco p/ pagar", v: "Valor" };
   function cfOk(r, ex) { for (const kk2 in S.cf) { if (kk2 === ex) continue; if (!S.cf[kk2].has(COLV[kk2](r))) return false; } if (ex !== "v") { const { min, max } = S.cfv; if (min != null && r.v < min) return false; if (max != null && r.v > max) return false; } return true; }
   const nActive = () => Object.keys(S.cf).length + (S.cfv.min != null || S.cfv.max != null ? 1 : 0);
   function tblRows() { return tblBase().filter((r) => cfOk(r)); }
@@ -368,14 +382,14 @@ export function montarPagarV3(o: Opts) {
     const ca = q("clrAll"); if (ca) ca.onclick = () => { S.cf = {}; S.cfv = {}; S.filter = null; S.kpi = null; S.st = "all"; render(); };
     const c = q("clr"); if (c) c.onclick = () => { S.filter = null; S.kpi = null; render(); };
     const show = a.slice(0, 400); const allSel = show.length && show.every((r) => S.sel.has(r.id));
-    const H = [["", "", 0], ["dias", "Venc.", 0], ["emp", "Emp.", 0], ["forn", "Fornecedor", 0], ["cat", "Categoria", 0], ["pc", "Compra", 0], ["etapa", "NF", 0], ["pst", "Pagamento", 0], ["bank", "Banco p/ pagar", 0], ["v", "Valor", 1], ["", "", 0]];
+    const H = [["", "", 0], ["dias", "Previsão", 0], ["emp", "Emp.", 0], ["forn", "Fornecedor", 0], ["cat", "Categoria", 0], ["pc", "Compra", 0], ["etapa", "NF", 0], ["pst", "Pagamento", 0], ["bank", "Banco p/ pagar", 0], ["v", "Valor", 1], ["", "", 0]];
     q("tbl").innerHTML = `<thead><tr>${H.map(([key, l, r], i) => (i === 0 ? `<th style="width:30px;cursor:default">${PODE.baixar ? `<input type="checkbox" class="ck" id="ckAll" ${allSel ? "checked" : ""}>` : ""}</th>` : `<th class="${r ? "r" : ""}" ${key ? `data-k="${key}"` : ""}>${l}${sk === key && key ? (dir > 0 ? " ↑" : " ↓") : ""}${key ? `<button class="fbtn ${(key === "v" ? S.cfv.min != null || S.cfv.max != null : !!S.cf[key]) ? "on" : ""}" data-f="${key}" title="Filtrar">▾</button>` : ""}</th>`)).join("")}</tr></thead><tbody>${show.map((r) => {
       const compra = r.pc ? `<span class="mono">PC ${esc(r.pc)}</span><div class="sub2">${r.fase ? esc(FASE[r.fase] ?? r.fase) : r.apr === "PENDENTE" || !r.apr ? '<span style="color:#f87171">aprovação pendente</span>' : r.apr === "APROVADO_FAT_DIRETO" ? "aprovado · fat. direto" : "aprovado" + (r.aprov ? " · " + esc(String(r.aprov).split("@")[0]) : "")}</div>` : '<span class="sub2">—</span>';
       const nf = r.etapa ? `<span style="color:${["60", "80"].includes(r.etapa) ? "#22c55e" : "#f59e0b"}">${["60", "80"].includes(r.etapa) ? "Recebida" : r.etapa === "40" ? "Emitida" : "Sem NF"}</span>${r.nf ? `<div class="sub2 mono">${esc(String(r.nf).split(",")[0])}${String(r.nf).includes(",") ? " +" + (String(r.nf).split(",").length - 1) : ""}</div>` : ""}` : r.tipo === "NFE" ? '<span class="sub2">NF-e (sem PC)</span>' : '<span class="sub2">—</span>';
       return `<tr data-id="${r.id}" class="${S.sel.has(r.id) ? "sel" : ""}"><td>${PODE.baixar ? `<input type="checkbox" class="ck" data-id="${r.id}" ${S.sel.has(r.id) ? "checked" : ""}>` : ""}</td>
-      <td class="${r.dias < 0 ? "od" : r.dias === 0 ? "td" : ""}">${dm(r.d)} <span class="sub2">${r.dias < 0 ? r.dias + "d" : r.dias === 0 ? "hoje" : "+" + r.dias + "d"}</span></td>
+      <td class="${r.dias < 0 ? "od" : r.dias === 0 ? "td" : ""}">${dm(r.d)} <span class="sub2">${r.dias < 0 ? r.dias + "d" : r.dias === 0 ? "hoje" : "+" + r.dias + "d"}</span>${+r.d !== +r.vd || r.repr ? `<div class="sub2" title="Vencimento do documento${r.repr ? " · previsão reprogramada" : ""}">venc ${dm(r.vd)}${r.repr ? ' · <span style="color:#a78bfa">reprog.</span>' : ""}</div>` : ""}</td>
       <td><span class="emp ${r.emp}">${r.emp}</span></td><td title="${esc(r.forn)}" style="font-weight:500">${esc(r.forn)}</td><td class="${r.cat ? "" : "nocat"}" style="color:var(--tx2)">${esc(r.cat || "Sem categoria")}</td>
-      <td>${compra}</td><td>${nf}</td><td>${badge(r.st)}</td><td><select class="bsel ${r.bank ? (r.bank !== r.cod_cc ? "chg" : "") : "need"}" data-bk="${r.id}" title="Conta prevista no Omie: ${esc(r.conta)}" ${PODE.baixar ? "" : "disabled"}><option value="">Escolher banco…</option>${payBanks(r.emp).map((b) => `<option value="${b.cod}" ${b.cod === r.bank ? "selected" : ""}>${esc(b.desc)}</option>`).join("")}</select></td><td class="r" style="font-weight:650">${brl(r.v)}</td>
+      <td>${compra}</td><td>${nf}</td><td>${badge(r.st)}</td><td><select class="bsel ${r.bank ? (r.bank !== r.cod_cc ? "chg" : "") : "need"}" data-bk="${r.id}" title="Conta prevista no Omie: ${esc(r.conta)}" ${PODE.baixar ? "" : "disabled"}><option value="">Escolher banco…</option>${payBanks(r.emp).map((b) => `<option value="${b.cod}" ${b.cod === r.bank ? "selected" : ""}>${esc(b.desc)}</option>`).join("")}</select>${r.env ? `<div class="sub2" style="color:#38bdf8" title="Arquivo de remessa #${r.env.id} gerado em ${new Date(r.env.em).toLocaleString("pt-BR")}">↗ enviado ${esc(r.env.banco)} · pagto ${dm(new Date(r.env.data + "T00:00:00"))}</div>` : ""}</td><td class="r" style="font-weight:650">${brl(r.v)}</td>
       <td class="r">${PODE.baixar ? `<button class="btn sm" data-bx="${r.id}">Baixar</button>` : ""}</td></tr>`;
     }).join("")}</tbody>`;
     qa("#tbl tbody tr").forEach((tr) => (tr.onclick = (e) => { if (e.target.classList.contains("ck") || e.target.tagName === "SELECT" || e.target.tagName === "OPTION") return; openDrawer(+tr.dataset.id); }));
@@ -436,12 +450,16 @@ export function montarPagarV3(o: Opts) {
       <div class="verdict ${r.st}"><b>${r.st === "ok" || r.st === "dir" ? "Pode pagar" : "Não pagar ainda"}</b><span>${PST[r.st].d}${r.div ? ' <br><span style="color:#f59e0b">⚠ Este PC tem registros de aprovação divergentes na base — conferir.</span>' : ""}</span></div>
       ${flowHtml(r)}
       <div class="dgrid">
-        <div><span>Vencimento</span>${r.d.toLocaleDateString("pt-BR")}</div><div><span>Valor em aberto</span><b class="num" style="font-size:16px">${brl(r.v)}</b>${r.vdoc && Math.abs(r.vdoc - r.v) > 0.01 ? `<div class="sub2">documento ${brl(r.vdoc)}</div>` : ""}</div>
+        <div><span>Vencimento (documento)</span>${r.vd.toLocaleDateString("pt-BR")}</div>
+        <div class="full" style="grid-column:1/-1"><span>Previsão de pagamento</span>
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:4px"><input type="date" id="pvData" value="${iso(r.d)}" style="max-width:170px"><button class="btn sm" id="pvOk">Reprogramar</button>${r.repr ? '<button class="link" id="pvReg">voltar à regra do dia útil</button>' : ""}<span id="pvAv" class="sub2" style="color:#f59e0b"></span></div>
+          <div class="sub2" id="pvHist" style="margin-top:4px">${r.repr ? "reprogramada · carregando histórico…" : +r.d !== +r.vd ? "dia útil seguinte ao vencimento (regra)" : ""}</div></div><div><span>Valor em aberto</span><b class="num" style="font-size:16px">${brl(r.v)}</b>${r.vdoc && Math.abs(r.vdoc - r.v) > 0.01 ? `<div class="sub2">documento ${brl(r.vdoc)}</div>` : ""}</div>
         <div><span>Categoria</span><span class="${r.cat ? "" : "nocat"}">${esc(r.cat || "Sem categoria")}</span></div><div><span>Projeto</span>${esc(r.proj || "—")}</div>
         <div><span>Documento / Parcela</span>${esc(r.doc || "—")} · ${esc(r.parc || "—")}</div><div><span>Tipo doc.</span>${esc(r.tipo === "99999" ? "Outros" : r.tipo || "—")}</div>
         <div><span>Conta prevista</span>${esc(r.conta || "—")}</div><div><span>${r.orig === "o" ? "Cód. título Omie" : "Previsão do PC"}</span><span class="mono">${r.orig === "o" ? r.cod : esc(r.ref)}</span></div>
       </div>
       ${r.cod_forn ? `<div style="margin:-6px 0 14px"><button class="link" id="dForn">Ver fornecedor (histórico) →</button></div>` : ""}
+      ${r.serie ? `<div class="box" style="margin-bottom:12px"><h4>Conta recorrente</h4><div class="sub2">Ocorrência ${r.serie.seq}${r.serie.n ? " de " + r.serie.n : ""} da série</div><div style="margin-top:8px"><button class="btn sm" id="dSerie">Editar / encerrar série…</button></div></div>` : ""}
       ${PODE.baixar ? `<div class="box"><h4>Baixar título</h4>
         <div class="frm">
           <label>Data do pagamento<input type="date" id="bData" value="${iso(TODAY)}"></label>
@@ -462,6 +480,18 @@ export function montarPagarV3(o: Opts) {
     ov.classList.add("on"); dr.classList.add("on");
     q("dX").onclick = closeAll;
     if (q("dForn")) q("dForn").onclick = () => o.onFornecedor(Number(r.cod_forn), r.emp);
+    if (q("dSerie")) q("dSerie").onclick = () => { closeAll(); o.onSerie(r.serie.id, r.ref); };
+    const pvAviso = () => { const v = q("pvData").value; q("pvAv").textContent = v && naoUtil(v) ? "⚠ dia não útil — o banco só processa no próximo dia útil" : ""; };
+    q("pvData").oninput = pvAviso; pvAviso();
+    q("pvOk").onclick = async () => { const v = q("pvData").value; if (!v) return; q("pvOk").disabled = true;
+      try { await api({ acao: "reprogramar", refs: [r.ref], data: v, obs: null }); toast(`Previsão reprogramada para ${new Date(v + "T00:00:00").toLocaleDateString("pt-BR")}`); closeAll(); await recarregarTudo(); }
+      catch (e) { toast(e.message, true); q("pvOk").disabled = false; } };
+    if (q("pvReg")) q("pvReg").onclick = async () => { try { await api({ acao: "reprogramar", refs: [r.ref], data: null }); toast("Previsão voltou à regra do dia útil"); closeAll(); await recarregarTudo(); } catch (e) { toast(e.message, true); } };
+    if (r.repr) fetch(`/api/financeiro/pagar?hist=${encodeURIComponent(r.ref)}`, { cache: "no-store" }).then((x) => x.json()).then((j) => {
+      const h = (j.historico ?? [])[0]; const el = q("pvHist"); if (!el) return;
+      const f = (x) => (x ? new Date(x + "T00:00:00").toLocaleDateString("pt-BR") : "—");
+      el.textContent = h ? `reprogramada de ${f(h.de)} → ${f(h.para)} por ${String(h.por).split("@")[0]} em ${new Date(h.em).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}${h.obs ? " · " + h.obs : ""}` : "reprogramada";
+    }).catch(() => {});
     if (!PODE.baixar) return;
     const calc = () => {
       const v = num(q("bVal").value), t = v - num(q("bDesc").value) + num(q("bJur").value) + num(q("bMul").value); q("bTot").textContent = brl(t);
@@ -482,6 +512,26 @@ export function montarPagarV3(o: Opts) {
     };
   }
   q("abarClr").onclick = () => { S.sel.clear(); renderTable(); };
+  q("abarC6").onclick = () => { const sel = rows.filter((r) => S.sel.has(r.id) && !r.paid); if (sel.length) o.onRemessa(sel.map((r) => r.ref)); };
+  q("abarRep").onclick = () => openReprog();
+  function openReprog() {
+    const sel = rows.filter((r) => S.sel.has(r.id) && !r.paid); if (!sel.length) return;
+    md.innerHTML = `<div class="dh"><div><h3 style="margin:0">Reprogramar previsão</h3><div class="sub2" style="margin-top:3px">${sel.length} títulos · ${brl(sum(sel))} — o vencimento do documento não muda</div></div><button class="btn" id="mX" style="height:34px">✕</button></div>
+    <div class="dbody"><div class="frm" style="margin-bottom:10px"><label>Nova previsão<input type="date" id="rpData" value="${iso(TODAY)}"></label><label>Motivo (opcional)<input id="rpObs" placeholder="Ex.: caixa apertado, negociar com fornecedor"></label></div>
+    <div id="rpAv" class="sub2" style="color:#f59e0b;min-height:16px"></div>
+    <div class="gl" style="max-height:260px;overflow:auto">${sel.map((r) => `<div><span class="num">${dm(r.d)}</span><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(r.forn)} <span class="sub2">· venc ${dm(r.vd)}</span></span><span class="num" style="text-align:right">${brl(r.v)}</span></div>`).join("")}</div>
+    <div style="margin-top:10px"><button class="link" id="rpReg">Voltar todos à regra do dia útil</button></div></div>
+    <div class="df"><button class="btn" id="mC">Cancelar</button><button class="btn ok" id="mOk">Reprogramar ${sel.length}</button></div>`;
+    ov.classList.add("on"); md.classList.add("on");
+    const av = () => { const v = q("rpData").value; q("rpAv").textContent = v && naoUtil(v) ? "⚠ dia não útil — o banco só processa no próximo dia útil (pode gravar mesmo assim)" : ""; };
+    q("rpData").oninput = av; av();
+    q("mX").onclick = q("mC").onclick = closeAll;
+    const enviar = async (data) => { q("mOk").disabled = true;
+      try { await api({ acao: "reprogramar", refs: sel.map((r) => r.ref), data, obs: q("rpObs").value || null }); closeAll(); S.sel.clear(); toast(data ? `${sel.length} títulos reprogramados para ${new Date(data + "T00:00:00").toLocaleDateString("pt-BR")}` : `${sel.length} títulos de volta à regra`); await recarregarTudo(); }
+      catch (e) { toast(e.message, true); q("mOk").disabled = false; } };
+    q("mOk").onclick = () => q("rpData").value && enviar(q("rpData").value);
+    q("rpReg").onclick = () => enviar(null);
+  }
   q("abarGo").onclick = () => openBatch();
   function openBatch() {
     const all = rows.filter((r) => S.sel.has(r.id) && !r.paid); const sel = all.filter((r) => ["ok", "dir"].includes(r.st)); const out = all.filter((r) => !["ok", "dir"].includes(r.st));

@@ -117,6 +117,13 @@ export default function NovoTituloModal({
   const [projeto, setProjeto] = useState("");
   const [numeroDoc, setNumeroDoc] = useState("");
   const [obs, setObs] = useState("");
+  // Recorrência (sql/73): gera uma série de contas a partir do 1º vencimento.
+  const [recFreq, setRecFreq] = useState("");
+  const [recModo, setRecModo] = useState<"n" | "ate" | "sem_fim">("n");
+  const [recN, setRecN] = useState("12");
+  const [recAte, setRecAte] = useState("");
+  const [recDia, setRecDia] = useState("");
+  const [recValor, setRecValor] = useState<"por_ocorrencia" | "dividir">("por_ocorrencia");
 
   // Campos do Omie que o formulário não pedia.
   const [tipoDoc, setTipoDoc] = useState("");
@@ -191,6 +198,10 @@ export default function NovoTituloModal({
           valor_documento: v,
           data_vencimento: vencimento,
           data_previsao: previsao || undefined,
+          recorrencia: recFreq ? {
+            freq: recFreq, n: recModo === "n" ? Number(recN) || null : null, ate: recModo === "ate" ? recAte || null : null,
+            sem_fim: recModo === "sem_fim", dia_fixo: recDia ? Number(recDia) : null, valor_modo: recValor,
+          } : undefined,
           codigo_categoria: categoria,
           id_conta_corrente: Number(conta),
           codigo_projeto: projeto ? Number(projeto) : undefined,
@@ -288,13 +299,61 @@ export default function NovoTituloModal({
 
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className={labelCls}>Vencimento *</label>
+            <label className={labelCls}>{recFreq ? "1º vencimento *" : "Vencimento *"}</label>
             <input type="date" value={vencimento} onChange={(e) => setVencimento(e.target.value)} className={inputCls} />
           </div>
           <div>
             <label className={labelCls}>Previsão de {tipo === "pagar" ? "pagamento" : "recebimento"}</label>
-            <input type="date" value={previsao} onChange={(e) => setPrevisao(e.target.value)} className={inputCls} placeholder="= vencimento" />
+            <input type="date" value={previsao} onChange={(e) => setPrevisao(e.target.value)} className={inputCls} placeholder="= vencimento" disabled={!!recFreq} />
+            <p className="text-[10.5px] text-ww-textFaint mt-1">
+              {recFreq ? "Na recorrência a previsão de cada conta é o vencimento (ou o próximo dia útil)." :
+                previsao && [0, 6].includes(new Date(previsao + "T00:00:00").getDay()) ? "⚠ fim de semana — o banco só processa no próximo dia útil" :
+                "Vazia = vencimento; se cair em fim de semana ou feriado, vai para o próximo dia útil."}</p>
           </div>
+        </div>
+
+        <div className="border border-ww-border rounded-lg p-3 space-y-2">
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className={labelCls}>Recorrência</label>
+              <select value={recFreq} onChange={(e) => setRecFreq(e.target.value)} className={inputCls}>
+                <option value="">Não repete</option>
+                <option value="semanal">Semanal</option><option value="mensal">Mensal</option><option value="bimestral">Bimestral</option>
+                <option value="trimestral">Trimestral</option><option value="semestral">Semestral</option><option value="anual">Anual</option>
+              </select>
+            </div>
+            {recFreq && (
+              <div>
+                <label className={labelCls}>Até</label>
+                <select value={recModo} onChange={(e) => setRecModo(e.target.value as typeof recModo)} className={inputCls}>
+                  <option value="n">Nº de ocorrências</option><option value="ate">Uma data final</option><option value="sem_fim">Sem fim (gera 12 e vai renovando)</option>
+                </select>
+              </div>
+            )}
+          </div>
+          {recFreq && (
+            <div className="grid grid-cols-3 gap-3">
+              {recModo === "n" && <div><label className={labelCls}>Ocorrências</label><input value={recN} onChange={(e) => setRecN(e.target.value.replace(/\D/g, ""))} className={inputCls} /></div>}
+              {recModo === "ate" && <div><label className={labelCls}>Data final</label><input type="date" value={recAte} onChange={(e) => setRecAte(e.target.value)} className={inputCls} /></div>}
+              {recModo === "sem_fim" && <div />}
+              {recFreq !== "semanal" ? (
+                <div><label className={labelCls}>Dia fixo do mês</label><input value={recDia} onChange={(e) => setRecDia(e.target.value.replace(/\D/g, "").slice(0, 2))} placeholder="= dia do 1º venc." className={inputCls} /></div>
+              ) : <div />}
+              <div><label className={labelCls}>Valor informado é</label>
+                <select value={recValor} onChange={(e) => setRecValor(e.target.value as typeof recValor)} className={inputCls} disabled={recModo === "sem_fim"}>
+                  <option value="por_ocorrencia">por ocorrência</option><option value="dividir">o total (dividir)</option>
+                </select></div>
+              <p className="col-span-3 text-[11px] text-ww-textMuted">
+                {(() => {
+                  const v = Number(valor.replace(/\./g, "").replace(",", ".")) || 0;
+                  const n = recModo === "n" ? Number(recN) || 0 : null;
+                  if (recModo === "sem_fim") return `Gera as próximas 12 contas de ${moedaBR(v)} e mantém sempre 12 à frente. Dá para editar ou encerrar a série depois.`;
+                  if (n) return `${n} contas de ${moedaBR(recValor === "dividir" ? v / n : v)} (total ${moedaBR(recValor === "dividir" ? v : v * n)}). Edite depois: só esta, esta e as próximas, ou todas.`;
+                  return "As contas vão até a data final.";
+                })()}
+              </p>
+            </div>
+          )}
         </div>
 
         <div className="grid grid-cols-2 gap-3">

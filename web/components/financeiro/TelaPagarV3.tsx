@@ -12,6 +12,8 @@ import Link from "next/link";
 import { useUserPerms } from "../UserPermsProvider";
 import NovoTituloModal from "../NovoTituloModal";
 import FornecedorDrawer from "../FornecedorDrawer";
+import RemessaC6 from "./RemessaC6";
+import SerieDialog from "./SerieDialog";
 import { montarPagarV3 } from "./pagar-v3-motor";
 import "./pagar-v3.css";
 
@@ -21,6 +23,8 @@ export default function TelaPagarV3() {
   const motor = useRef<{ recarregar: () => Promise<void>; destruir: () => void } | null>(null);
   const [nova, setNova] = useState(false);
   const [forn, setForn] = useState<{ cod: number; emp: string } | null>(null);
+  const [remessa, setRemessa] = useState<string[] | null>(null);
+  const [serie, setSerie] = useState<{ id: string; ref: string } | null>(null);
   const admin = !!perms?.is_admin;
 
   useEffect(() => {
@@ -30,6 +34,8 @@ export default function TelaPagarV3() {
       admin,
       onNovaConta: () => setNova(true),
       onFornecedor: (cod, emp) => setForn({ cod, emp }),
+      onRemessa: (refs) => setRemessa(refs),
+      onSerie: (id, ref) => setSerie({ id, ref }),
     });
     return () => motor.current?.destruir();
   }, [admin]);
@@ -135,7 +141,7 @@ export default function TelaPagarV3() {
                 </div>
                 <div className="bstrip" id="bstrip" />
                 <div className="tbl"><table className="num" id="tbl" /></div>
-                <div className="abar" id="abar"><b id="abarN" /><span id="abarV" className="num" /><span id="abarE" style={{ fontSize: 12 }} /><span className="w" id="abarW" /><span style={{ marginLeft: "auto" }} /><select id="abarBank" /><button className="btn sm" id="abarClr">Limpar</button><button className="btn ok sm" id="abarGo">Baixar em lote</button></div>
+                <div className="abar" id="abar"><b id="abarN" /><span id="abarV" className="num" /><span id="abarE" style={{ fontSize: 12 }} /><span className="w" id="abarW" /><span style={{ marginLeft: "auto" }} /><select id="abarBank" /><button className="btn sm" id="abarRep" title="Mudar a previsão de pagamento (o vencimento do documento não muda)">Reprogramar previsão</button><button className="btn sm" id="abarC6" title="Gerar o arquivo de pagamentos em lote do C6 Bank">Arquivo C6</button><button className="btn sm" id="abarClr">Limpar</button><button className="btn ok sm" id="abarGo">Baixar em lote</button></div>
                 <div className="foot"><span id="tblFoot" /><span>Status de pagamento = aprovação do pedido de compra + NF recebida · clique numa linha para abrir</span></div>
               </div>
               <div id="pConc" style={{ display: "none" }} />
@@ -153,6 +159,8 @@ export default function TelaPagarV3() {
 
       {nova && <NovoTituloModal tipo="pagar" onClose={() => setNova(false)} onCreated={() => motor.current?.recarregar()} />}
       {forn && <FornecedorDrawer cod={forn.cod} empresa={forn.emp} tipo="pagar" rotulo="Fornecedor" onClose={() => setForn(null)} />}
+      {remessa && <RemessaC6 refs={remessa} onClose={() => setRemessa(null)} onDone={() => motor.current?.recarregar()} />}
+      {serie && <SerieDialog serieId={serie.id} refAtual={serie.ref} onClose={() => setSerie(null)} onDone={() => motor.current?.recarregar()} />}
     </>
   );
 }

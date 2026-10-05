@@ -515,6 +515,20 @@ export const FINANCEIRO: NavItem[] = [
     ),
   },
   {
+    // Feriados (sql/73): fim de semana ou feriado ativo → previsão no próximo dia útil.
+    href: "/cadastros/feriados",
+    area: "erp",
+    grupo: "cadastros",
+    secao: "Geral",
+    label: "Feriados (dias úteis)",
+    tone: "text-slate-700",
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className="w-5 h-5" strokeLinecap="round" strokeLinejoin="round">
+        <rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4M9 15l2 2 4-4"/>
+      </svg>
+    ),
+  },
+  {
     // Duplicados que já existem: mesclar / agrupar / "não é duplicado" (sql/57).
     href: "/cadastros/duplicidades",
     area: "erp",

@@ -14,6 +14,10 @@
 //  POST { acao: "conciliar", movimento_id, itens: [{ref, valor}] }
 //  POST { acao: "ignorar", movimento_id, ignorar, motivo }
 //  POST { acao: "desfazer", movimento_id, motivo? }
+//  POST { acao: "reprogramar", refs, data: "YYYY-MM-DD" | null, obs? }   (sql/73 — previsão; null = voltar à regra)
+//  GET  ?hist=<ref>          → histórico de reprogramação da previsão
+//  GET também devolve prev (ref → [previsão efetiva, reprogramada?]), env (ref → remessa ao banco),
+//  serie (ref → {id, seq}) e feriados (datas, p/ avisar previsão em dia não útil).
 //
 // Título do Omie baixado aqui fica PAGO no painel e com omie_status 'nao_enviado' —
 // nada é escrito no Omie (a lista sai em ?baixas=omie para baixar lá à mão).
@@ -66,6 +70,28 @@ async function carregar() {
   return dados;
 }
 
+/** Previsão efetiva (reprogramada ou regra do dia útil), remessas ao banco,
+ *  séries de recorrência e feriados (sql/73). */
+async function extras() {
+  const hoje = new Date().toLocaleDateString("sv-SE", { timeZone: "America/Sao_Paulo" });
+  const [pv, env, se, fe] = await Promise.all([
+    fin().rpc("pagar_v3_previsoes", {}),
+    fin().rpc("remessa_enviados", {}),
+    fin().from("pagar_previsto").select("id, serie_id, serie_seq, parcelas_total").not("serie_id", "is", null).neq("status", "cancelado"),
+    supaAdmin().schema("cadastros").from("feriados").select("data").eq("ativo", true).gte("data", hoje.slice(0, 4) + "-01-01"),
+  ]);
+  const serie: Record<string, { id: string; seq: number; n: number | null }> = {};
+  for (const x of (se.data ?? []) as { id: number; serie_id: string; serie_seq: number; parcelas_total: number | null }[]) {
+    serie["p:" + x.id] = { id: x.serie_id, seq: x.serie_seq, n: x.parcelas_total };
+  }
+  return {
+    prev: (pv.data ?? {}) as Record<string, [string, boolean]>,
+    env: (env.data ?? {}) as Record<string, unknown>,
+    serie,
+    feriados: ((fe.data ?? []) as { data: string }[]).map((f) => f.data),
+  };
+}
+
 export async function GET(req: Request) {
   const a = await exigir("financeiro.ver_pagar");
   if (a instanceof NextResponse) return a;
@@ -79,6 +105,13 @@ export async function GET(req: Request) {
     return NextResponse.json({ baixas: data });
   }
 
+  const hist = u.searchParams.get("hist");
+  if (hist) {
+    const { data, error } = await fin().rpc("previsao_historico", { p_ref: hist });
+    if (error) return erroDb(error);
+    return NextResponse.json({ historico: data });
+  }
+
   const mov = Number(u.searchParams.get("mov") ?? 0);
   if (mov) {
     if (!a.pode["financeiro.conciliar"]) return NextResponse.json({ error: "Sem permissão (financeiro.conciliar)" }, { status: 403 });
@@ -89,9 +122,10 @@ export async function GET(req: Request) {
   }
 
   try {
-    const dados = await carregar();
+    const [dados, extra] = await Promise.all([carregar(), extras()]);
     return NextResponse.json({
       ...dados,
+      ...extra,
       pode: { baixar: !!a.pode["financeiro.baixar"], conciliar: !!a.pode["financeiro.conciliar"], incluir: !!a.pode["financeiro.editar_titulo"] },
     }, { headers: { "Cache-Control": "no-store" } });
   } catch (e) {
@@ -102,11 +136,24 @@ export async function GET(req: Request) {
 type Item = { ref?: string; valor?: number; cod_cc?: number | null; desconto?: number; juros?: number; multa?: number; forcar?: boolean; obs?: string };
 
 export async function POST(req: Request) {
-  let b: { acao?: string; itens?: Item[]; data?: string; obs?: string; lote?: boolean; baixa_id?: number; motivo?: string;
+  let b: { acao?: string; itens?: Item[]; data?: string | null; obs?: string; lote?: boolean; baixa_id?: number; motivo?: string;
            refs?: string[]; empresa?: string; cod_cc?: number | null; movimento_id?: number; ignorar?: boolean };
   try { b = await req.json(); } catch { return NextResponse.json({ error: "JSON inválido" }, { status: 400 }); }
 
   const conc = b.acao === "conciliar" || b.acao === "ignorar" || b.acao === "desfazer";
+  // Reprogramar a previsão: quem lança/edita títulos ou quem paga.
+  if (b.acao === "reprogramar") {
+    const r = await exigir("financeiro.ver_pagar");
+    if (r instanceof NextResponse) return r;
+    if (!r.pode["financeiro.editar_titulo"] && !r.pode["financeiro.baixar"]) {
+      return NextResponse.json({ error: "Sem permissão para reprogramar (financeiro.editar_titulo ou financeiro.baixar)" }, { status: 403 });
+    }
+    const refs = (b.refs ?? []).filter((x) => /^[op]:\d+$/.test(x));
+    if (!refs.length) return NextResponse.json({ error: "Nenhum título" }, { status: 400 });
+    if (b.data != null && !ISO.test(b.data)) return NextResponse.json({ error: "data (YYYY-MM-DD) ou null" }, { status: 400 });
+    const { data, error } = await fin().rpc("pagar_reprogramar", { p_refs: refs, p_data: b.data ?? null, p_obs: b.obs ?? null, p_usuario: r.email });
+    return error ? erroDb(error) : NextResponse.json(data);
+  }
   const a = await exigir(conc ? "financeiro.conciliar" : "financeiro.baixar");
   if (a instanceof NextResponse) return a;
 
