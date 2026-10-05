@@ -304,3 +304,15 @@
 .fpv .rec-b.info { color: var(--f-tx); background: color-mix(in srgb, var(--f-tx) 8%, transparent); }
 .fpv .rec-b.mut { color: var(--f-tx3); border-color: var(--f-line); }
 .fpv .rec-d { font-size: 12.5px; font-variant-numeric: tabular-nums; color: var(--f-tx2, var(--f-tx)); }
+
+/* Resumo da nota na gaveta (05/10/26) */
+.fpv-drawer .rs { margin-bottom: 6px; }
+.fpv-drawer .rs-grid { display: grid; grid-template-columns: 1fr; gap: 8px; }
+.fpv-drawer .rs-box { border: 1px solid var(--f-line); border-radius: 10px; padding: 8px 10px; background: var(--f-card2, transparent); }
+.fpv-drawer .rs-t { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--f-tx3); margin-bottom: 4px; display: flex; justify-content: space-between; }
+.fpv-drawer .rs-t a { color: var(--f-blue); text-transform: none; letter-spacing: 0; font-weight: 500; }
+.fpv-drawer .rs-l { display: grid; grid-template-columns: 130px 1fr; gap: 8px; font-size: 12.5px; padding: 2px 0; }
+.fpv-drawer .rs-l span { color: var(--f-tx3); }
+.fpv-drawer .rs-l b { font-weight: 500; overflow-wrap: anywhere; }
+.fpv-drawer .rs-inf { font-size: 12px; white-space: pre-wrap; border: 1px dashed var(--f-line); border-radius: 8px; padding: 8px; color: var(--f-tx2, var(--f-tx)); }
+.fpv-drawer .rs-pend .alert { margin-bottom: 4px; }

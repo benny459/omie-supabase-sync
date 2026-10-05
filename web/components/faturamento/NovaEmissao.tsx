@@ -887,6 +887,8 @@ export default function NovaEmissao({ config, aberto, fechar, avisar, onEmitido,
           <span style={{ flex: 1 }} />
           <button className="ne-btn" onClick={sair}>Cancelar</button>
           <button className="ne-btn" disabled={validando} onClick={validar}>{validando ? "Validando…" : "Validar"}</button>
+          {tipo !== "nfse" && <button className="ne-btn" disabled={!cli.nome || !itens.some((i) => i.descricao)} onClick={() => previaDocumento(montarDocumento(), tipo === "recibo" ? "recibo" : "nfe", avisar)}
+            title="Ver como o documento vai sair — sem enviar nada à SEFAZ e sem gastar numeração">{tipo === "recibo" ? "Pré-visualizar recibo" : "Pré-visualizar DANFE"}</button>}
           <button className={`ne-btn ${prod ? "perigo" : "pri"}`} disabled={!cli.nome || !itens.some((i) => i.descricao) || !parcOk} onClick={emitirAgora}>
             {`Emitir ${TIPO[tipo]}${prod ? " (PRODUÇÃO)" : " (homologação)"}`}
           </button>
@@ -894,4 +896,15 @@ export default function NovaEmissao({ config, aberto, fechar, avisar, onEmitido,
       </div>
     </div>
   );
+}
+
+/** Prévia (05/10/26): abre o DANFE/recibo do documento como está na folha,
+ *  numa aba nova, sem enviar nada à SEFAZ e sem reservar número. */
+export async function previaDocumento(documento: unknown, tipo: "nfe" | "recibo", avisar?: (m: string) => void) {
+  const w = window.open("", "_blank");
+  if (w) w.document.write("<p style='font:14px Arial;padding:24px'>Gerando prévia…</p>");
+  const r = await fetch("/api/faturamento/previa", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ acao: "html", documento, tipo }) }).catch(() => null);
+  const html = r ? await r.text() : "<p>Falha ao gerar a prévia</p>";
+  if (!r || !r.ok) avisar?.("Não foi possível gerar a prévia");
+  if (w) { w.document.open(); w.document.write(html); w.document.close(); }
 }

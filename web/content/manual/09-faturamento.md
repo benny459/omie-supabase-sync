@@ -20,7 +20,16 @@ atualizado: 2026-10-05
   - **Previsão fat.**: quando deve ser faturado — **clique para mudar**. Alerta **atrasado N dias** ou **vence em N dias**.
   - **Recebimento**: **recebido**, **a receber**, **vencido** ou **parcial**, com a data.
 - Visões: **Lista, Kanban, Emissões, NFS-e registradas**. Filtro rápido **Previsão atrasada** e **OS sem NFS-e**.
-- Clique num documento para abrir a gaveta: itens, notas (DANFE, XML, recibo — inclusive os antigos do Omie), recebimento e histórico.
+- Clique num documento para abrir a gaveta. Ela mostra **o que vai sair na nota**: destinatário completo (CNPJ, IE, endereço, município/IBGE, e-mail, com **editar cadastro**), recebimento (condição, forma de pagamento, conta, parcelas com datas e valores, instrução de Pix/banco), operação (natureza, CFOP, frete/transportadora, OC, projeto, vendedor), itens com NCM e CFOP e as **informações complementares exatamente como saem**. Pendências (falta IE, CEP, IBGE, e-mail, NCM, forma de pagamento) aparecem no topo.
+- A gaveta também traz as notas (DANFE, XML, recibo — inclusive os antigos do Omie), recebimento e histórico.
+
+> **Importante:** não existe mais "Emitir" direto na lista ou na gaveta. O botão é **Revisar e emitir**: abre a folha completa já preenchida, onde você confere e edita tudo antes de emitir.
+
+## Como ver a nota antes de emitir (prévia do DANFE)
+
+- Na gaveta, clique em **Pré-visualizar DANFE** (PV) ou **Pré-visualizar recibo** (OS).
+- Na folha de emissão, o mesmo botão mostra o documento **com o que você editou**.
+- A prévia abre numa aba nova, no leiaute oficial do DANFE, com a marca **PRÉVIA — SEM VALOR FISCAL** e o número previsto (ex.: nº 2193). **Nada é enviado à SEFAZ e nenhum número é gasto.** Use **Imprimir / salvar PDF** se quiser guardar.
 
 ## Como faço para emitir uma nota nova
 
@@ -34,7 +43,7 @@ atualizado: 2026-10-05
 5. Busque a **Proposta do CRM** (puxa cliente, itens e condição) e/ou o **cliente** pelo nome, fantasia ou CNPJ.
 6. Ao escolher o cliente, aparecem os **últimos faturamentos**. **Usar como modelo →** copia itens, prazos e forma de recebimento, recalculando as datas a partir de hoje.
 7. Em **Recebimento**, escolha condição, forma (boleto, Pix, transferência…), conta, categoria e projeto. Ajuste as **parcelas** (precisam somar o total). Com **Pix** ou transferência, os dados da conta saem no documento.
-8. Confira a **Prévia das contas a receber** e clique em **Validar**, depois **Emitir**.
+8. Confira a **Prévia das contas a receber**, clique em **Pré-visualizar DANFE** (ou recibo) para ver o documento, depois **Validar** e, por fim, **Emitir**.
 
 ## Depois de emitir
 

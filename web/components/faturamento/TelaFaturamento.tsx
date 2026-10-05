@@ -251,6 +251,16 @@ export default function TelaFaturamento() {
     return r;
   }
 
+  /** Revisar e emitir (05/10/26): toda emissão passa pela folha completa,
+   *  pré-preenchida e editável — nunca direto da lista ou da gaveta. */
+  async function abrirFolhaDe(d: Doc) {
+    const r = await agir(d, "doc");
+    if (!r?.documento) return;
+    setInicialNova({ chave: d.chave, documento: r.documento as Inicial["documento"], tipo: d.tipo === "PV" ? "nfe" : undefined,
+      origem_tipo: d.tipo === "PV" ? "pv" : "os", rotulo: d.rotulo });
+    setAberto(null); setNova(true);
+  }
+
   async function validarLote() {
     const lista = ordenados.filter((d) => sel.has(d.chave) && d.emite);
     let ok = 0, ruim = 0;
@@ -408,7 +418,7 @@ export default function TelaFaturamento() {
           </div>
         )}
 
-        {view === "list" && (docs ? <Lista rows={ordenados} sel={sel} setSel={setSel} sort={sort} setSort={setSort} abrir={setAberto} ocupado={ocupado} agir={agir} prod={prod} registrar={(d) => setRegNfse([d.chave])} salvarPrevisao={salvarPrevisao} rec={rec} /> : null)}
+        {view === "list" && (docs ? <Lista rows={ordenados} sel={sel} setSel={setSel} sort={sort} setSort={setSort} abrir={setAberto} ocupado={ocupado} agir={agir} prod={prod} registrar={(d) => setRegNfse([d.chave])} salvarPrevisao={salvarPrevisao} rec={rec} revisar={abrirFolhaDe} /> : null)}
         {view === "kanban" && (docs ? <Kanban rows={filtrados} abrir={setAberto} /> : null)}
         {view === "emissoes" && <Emissoes lista={emissoes} q={q} onMudou={carregar} avisar={avisar} />}
         {view === "nfse" && <NfseRegistradas empresa={empresa} q={q} onMudou={carregar} avisar={avisar} />}
@@ -420,13 +430,7 @@ export default function TelaFaturamento() {
         </>}
 
         {docAberto && <Gaveta d={docAberto} r={rec[docAberto.rotulo.toUpperCase()]} empresa={empresa} prod={prod} ocupado={ocupado} agir={agir} fechar={() => setAberto(null)} avisar={avisar} onMudou={carregar}
-          abrirFolha={async () => {
-            const r = await agir(docAberto, "doc");
-            if (!r?.documento) return;
-            setInicialNova({ chave: docAberto.chave, documento: r.documento as Inicial["documento"], tipo: docAberto.tipo === "PV" ? "nfe" : undefined,
-              origem_tipo: docAberto.tipo === "PV" ? "pv" : "os", rotulo: docAberto.rotulo });
-            setAberto(null); setNova(true);
-          }}
+          abrirFolha={() => abrirFolhaDe(docAberto)}
           registrar={() => { setRegNfse([docAberto.chave]); setAberto(null); }} />}
         {regNfse && <RegistrarNfse empresa={empresa} chaves={regNfse} avisar={avisar} fechar={() => setRegNfse(null)}
           feito={() => { setRegNfse(null); setSel(new Set()); carregar(); }} />}
@@ -625,9 +629,8 @@ function Previsao({ d, salvar }: { d: Doc; salvar: (d: Doc, data: string | null)
   );
 }
 
-function Acoes({ d, ocupado, agir, abrir, prod, registrar }: { d: Doc; ocupado: string | null; agir: (d: Doc, a: "prevoo" | "ensaio" | "emitir") => unknown; abrir: (k: string) => void; prod: boolean; registrar: (d: Doc) => void }) {
+function Acoes({ d, ocupado, abrir, prod, registrar, revisar }: { d: Doc; ocupado: string | null; agir?: unknown; abrir: (k: string) => void; prod: boolean; registrar: (d: Doc) => void; revisar?: (d: Doc) => void }) {
   const st = status(d);
-  const ocup = (a: string) => ocupado === `${a}:${d.chave}`;
   const pare = (f: () => void) => (e: MouseEvent) => { e.stopPropagation(); f(); };
   if (st === "fat") return <button className="btn ghost sm" onClick={pare(() => abrir(d.chave))}>Notas</button>;
   const btnNfse = semNfse(d) ? <button className="btn sm" style={{ borderColor: "var(--f-os)", color: "var(--f-os)" }} disabled={!!ocupado} onClick={pare(() => registrar(d))}>Registrar NFS-e</button> : null;
@@ -638,16 +641,17 @@ function Acoes({ d, ocupado, agir, abrir, prod, registrar }: { d: Doc; ocupado: 
   return <>
     {d.tipo === "OS" && btnNfse}
     <button className="btn ghost sm" disabled={!!ocupado} onClick={pare(() => abrir(d.chave))}>Validar</button>
-    <button className="btn sm pri" disabled={!!ocupado} onClick={pare(() => { agir(d, "emitir"); })}>
-      {ocup("emitir") ? "Emitindo…" : `${st === "parc" ? "Emitir saldo" : `Emitir ${d.tipo === "PV" ? "NF-e" : "NFS-e"}`}${prod ? "" : " (homolog.)"}`}
+    <button className="btn sm pri" disabled={!!ocupado} title="Abre a folha completa: cliente, itens, recebimento, prévia do DANFE — a emissão só acontece lá"
+      onClick={pare(() => revisar?.(d))}>
+      {`Revisar e emitir${st === "parc" ? " saldo" : ""}${prod ? "" : " (homolog.)"}`}
     </button>
   </>;
 }
 
-function Lista({ rows, sel, setSel, sort, setSort, abrir, ocupado, agir, prod, registrar, salvarPrevisao, rec }: {
+function Lista({ rows, sel, setSel, sort, setSort, abrir, ocupado, agir, prod, registrar, salvarPrevisao, rec, revisar }: {
   rows: Doc[]; sel: Set<string>; setSel: (s: Set<string>) => void; sort: { k: string; d: 1 | -1 }; setSort: (s: { k: string; d: 1 | -1 }) => void;
   abrir: (k: string) => void; ocupado: string | null; agir: (d: Doc, a: "prevoo" | "ensaio" | "emitir") => unknown; prod: boolean; registrar: (d: Doc) => void;
-  salvarPrevisao: (d: Doc, data: string | null) => void; rec: Record<string, RecRes>;
+  salvarPrevisao: (d: Doc, data: string | null) => void; rec: Record<string, RecRes>; revisar: (d: Doc) => void;
 }) {
   const [limite, setLimite] = useState(200);
   if (!rows.length) return <div className="tablebox"><div className="empty">Nenhum documento com esses filtros.</div></div>;
@@ -704,7 +708,7 @@ function Lista({ rows, sel, setSel, sort, setSort, abrir, ocupado, agir, prod, r
                   ? <span className="pill s-nfse"><i />Aguardando NFS-e (prefeitura)</span>
                   : <span className={`pill ${ST[st].c}`}><i />{ST[st].l}</span>}
                   {d.nfse_registrada && <div className="orig" style={{ color: "var(--f-os)" }}>NFS-e registrada</div>}</td>
-                <td><div className="rowact"><Acoes d={d} ocupado={ocupado} agir={agir} abrir={abrir} prod={prod} registrar={registrar} /></div></td>
+                <td><div className="rowact"><Acoes d={d} ocupado={ocupado} agir={agir} abrir={abrir} prod={prod} registrar={registrar} revisar={revisar} /></div></td>
               </tr>
             );
           })}
@@ -778,11 +782,15 @@ function Gaveta({ d, r, empresa, prod, ocupado, agir, fechar, avisar, onMudou, r
   const [pre, setPre] = useState<(Prevoo & { error?: string }) | null>(null);
   const [verJson, setVerJson] = useState(false);
   const [links, setLinks] = useState<Record<number, { xml?: string | null; pdf?: string | null }>>({});
+  const [res, setRes] = useState<Resumo | null>(null);
 
   useEffect(() => {
     setItens(null); setPre(null);
     if (!d.emite) return;
     agir(d, "doc").then((r) => { if (r && r.documento) setItens(((r.documento as { itens: ItemDoc[] }).itens) ?? []); });
+    setRes(null);
+    if (status(d) !== "fat") fetch("/api/faturamento/previa", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ acao: "resumo", chave: d.chave, empresa }) })
+      .then((x) => x.json()).then((j) => setRes(j)).catch((e) => setRes({ error: String(e) } as Resumo));
     const esc = (e: KeyboardEvent) => { if (e.key === "Escape") fechar(); };
     document.addEventListener("keydown", esc);
     return () => document.removeEventListener("keydown", esc);
@@ -860,6 +868,8 @@ function Gaveta({ d, r, empresa, prod, ocupado, agir, fechar, avisar, onMudou, r
               )}
             </>
           )}
+
+          {d.emite && st !== "fat" && <ResumoNota res={res} tipo={d.tipo} />}
 
           <h4>Itens</h4>
           {d.emite ? (itens === null ? <div className="orig">Carregando itens…</div> : (
@@ -945,12 +955,13 @@ function Gaveta({ d, r, empresa, prod, ocupado, agir, fechar, avisar, onMudou, r
             <>
               <div className="sum">Emitir agora<b className="mono">{fmt(sd)}</b></div>
               {semNfse(d) && <button className="btn" onClick={registrar}>Registrar NFS-e</button>}
-              <button className="btn" disabled={!!ocupado} onClick={abrirFolha} title="Revisar recebimento, parcelas, forma, conta e emitir na folha dedicada">Revisar e emitir…</button>
               <button className="btn" disabled={!!ocupado} onClick={validar}>{ocupado === `prevoo:${d.chave}` ? "Validando…" : "Validar"}</button>
               {d.origem === "Omie" && d.tipo === "PV" && <button className="btn" disabled={!!ocupado} onClick={() => agir(d, "ensaio")}>{ocupado === `ensaio:${d.chave}` ? "Enviando…" : "Ensaio"}</button>}
-              <button className="btn pri" disabled={!!ocupado || st === "pend" || st === "emis" || (pre != null && !pre.error && !pre.pode_emitir)}
-                onClick={async () => { const r = await agir(d, "emitir"); if (r) fechar(); }}>
-                {ocupado === `emitir:${d.chave}` ? "Emitindo…" : `Emitir ${nf}${Number(d.faturado) > 0 ? " do saldo" : ""}${prod ? "" : " (homolog.)"}`}
+              {!semNfse(d) && <button className="btn" title="Ver como vai sair — nada é enviado à SEFAZ"
+                onClick={() => window.open(`/api/faturamento/previa?empresa=${empresa}&chave=${encodeURIComponent(d.chave)}`, "_blank")}>{d.tipo === "PV" ? "Pré-visualizar DANFE" : "Pré-visualizar recibo"}</button>}
+              <button className="btn pri" disabled={!!ocupado || st === "pend" || st === "emis"} onClick={abrirFolha}
+                title="Abre a folha completa (cliente, itens, recebimento, prévia) — a emissão acontece lá, depois de revisar">
+                {`Revisar e emitir ${nf}${Number(d.faturado) > 0 ? " do saldo" : ""}${prod ? "" : " (homolog.)"}`}
               </button>
             </>
           ) : sd > 0.01 ? (
@@ -1156,6 +1167,77 @@ function NfseRegistradas({ empresa, q, onMudou, avisar }: { empresa: string; q: 
           </tbody>
         </table>
       )}
+    </div>
+  );
+}
+
+// ── Resumo da nota na gaveta (05/10/26): o que vai sair, antes de abrir a folha ──
+type Resumo = {
+  error?: string; tipo?: string;
+  destinatario?: { nome: string; cnpj?: string | null; cpf?: string | null; ie?: string | null; email?: string | null; logradouro?: string; numero?: string; complemento?: string | null; bairro?: string; municipio?: string; codigo_municipio?: string | null; uf?: string; cep?: string; telefone?: string | null };
+  condicao?: { descricao?: string; forma_pagamento?: string; forma_recebimento?: string | null; conta_nome?: string | null; instrucao_pagamento?: string | null; projeto?: string | null; vendedor?: string | null } | null;
+  transporte?: { modalidade: number; nome?: string | null; cnpj?: string | null } | null;
+  itens?: { codigo: string; descricao: string; ncm: string; cfop: string; un: string; qtd: number; unit: number; total: number }[];
+  natureza?: string; informacoes_complementares?: string; pedido_cliente?: string | null;
+  parcelas?: { numero?: string; vencimento: string; valor: number; forma?: string | null }[];
+  total?: number; liquido?: number; retencoes?: number;
+  proximo?: { nfe: number | null; serie: string; recibo: number | null };
+  checagens?: { item: string; ok: boolean; nivel: "erro" | "aviso"; detalhe: string }[];
+};
+const FRETE: Record<number, string> = { 0: "por conta do emitente (CIF)", 1: "por conta do destinatário (FOB)", 2: "terceiros", 3: "próprio (remetente)", 4: "próprio (destinatário)", 9: "sem frete" };
+const TPAG: Record<string, string> = { "01": "dinheiro", "02": "cheque", "03": "cartão de crédito", "04": "cartão de débito", "15": "boleto", "17": "PIX", "18": "transferência", "90": "sem pagamento", "99": "outros" };
+const docFmt = (c?: string | null) => { const x = (c ?? "").replace(/\D/g, ""); return x.length === 14 ? x.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, "$1.$2.$3/$4-$5") : x.length === 11 ? x.replace(/^(\d{3})(\d{3})(\d{3})(\d{2})$/, "$1.$2.$3-$4") : (c ?? ""); };
+
+function ResumoNota({ res, tipo }: { res: Resumo | null; tipo: string }) {
+  if (!res) return <><h4>O que vai sair na nota</h4><div className="orig">Montando o resumo…</div></>;
+  if (res.error) return <><h4>O que vai sair na nota</h4><div className="alert bad">{res.error}</div></>;
+  const c = res.destinatario; const cond = res.condicao; const t = res.transporte;
+  const pend = (res.checagens ?? []).filter((x) => !x.ok);
+  const doc = c?.cnpj || c?.cpf;
+  const linha = (rot: string, v: React.ReactNode) => <div className="rs-l"><span>{rot}</span><b>{v || "—"}</b></div>;
+  return (
+    <div className="rs">
+      <h4>O que vai sair na nota {res.proximo && tipo === "PV" && <small style={{ fontWeight: 400, color: "var(--f-tx3)" }}>· NF-e nº {res.proximo.nfe ?? "—"} série {res.proximo.serie} (previsto)</small>}</h4>
+      {pend.length > 0 && <div className="rs-pend">{pend.map((p, i) => <div key={i} className={`alert ${p.nivel === "erro" ? "bad" : ""}`}>{p.nivel === "erro" ? "✕" : "⚠"} {p.item}: {p.detalhe}</div>)}</div>}
+      <div className="rs-grid">
+        <div className="rs-box">
+          <div className="rs-t">Destinatário {c && <a href={`/cadastros/clientes?busca=${encodeURIComponent(doc || c.nome)}`} target="_blank" rel="noreferrer">editar cadastro ↗</a>}</div>
+          {c ? <>
+            {linha("Razão social", c.nome)}
+            {linha(c.cnpj ? "CNPJ" : "CPF", docFmt(doc))}
+            {linha("Inscrição estadual", c.ie || "não contribuinte")}
+            {linha("Endereço", [c.logradouro, c.numero, c.complemento].filter(Boolean).join(", ") + (c.bairro ? ` — ${c.bairro}` : ""))}
+            {linha("Município / UF / CEP", `${c.municipio ?? ""} / ${c.uf ?? ""} / ${c.cep ?? ""}${c.codigo_municipio ? ` · IBGE ${c.codigo_municipio}` : ""}`)}
+            {linha("E-mail", c.email)}
+          </> : <div className="orig">—</div>}
+        </div>
+        <div className="rs-box">
+          <div className="rs-t">Recebimento</div>
+          {linha("Condição", cond?.descricao)}
+          {linha("Forma de pagamento", cond?.forma_pagamento ? `${TPAG[cond.forma_pagamento] ?? cond.forma_pagamento}` : cond?.forma_recebimento)}
+          {linha("Conta", cond?.conta_nome)}
+          {cond?.instrucao_pagamento && linha("Instrução", cond.instrucao_pagamento)}
+          <table className="it" style={{ marginTop: 6 }}><thead><tr><th>Parcela</th><th>Vencimento</th><th className="r">Valor</th></tr></thead>
+            <tbody>{(res.parcelas ?? []).map((p, i) => <tr key={i}><td>{p.numero ?? String(i + 1).padStart(3, "0")}</td><td className="mono">{dataBR(p.vencimento)}</td><td className="r mono">{fmt(p.valor)}</td></tr>)}</tbody></table>
+          {!!res.retencoes && linha("Líquido (−retenções)", fmt(res.liquido ?? 0))}
+        </div>
+        <div className="rs-box">
+          <div className="rs-t">Operação e transporte</div>
+          {linha("Natureza", res.natureza)}
+          {linha("CFOP", [...new Set((res.itens ?? []).map((i) => i.cfop))].join(", "))}
+          {linha("Frete", t ? `${FRETE[t.modalidade] ?? t.modalidade}${t.nome ? ` · ${t.nome}` : ""}` : "sem frete")}
+          {linha("Pedido do cliente (OC)", res.pedido_cliente)}
+          {linha("Projeto", cond?.projeto)}
+          {linha("Vendedor", cond?.vendedor)}
+          {linha("Total da nota", fmt(res.total ?? 0))}
+        </div>
+      </div>
+      {!!res.itens?.length && <table className="it" style={{ marginTop: 8 }}>
+        <thead><tr><th>Código</th><th>Descrição</th><th>NCM</th><th>CFOP</th><th className="r">Qtd</th><th className="r">Unit.</th><th className="r">Total</th></tr></thead>
+        <tbody>{res.itens.map((i, k) => <tr key={k}><td className="mono">{i.codigo}</td><td>{i.descricao}</td><td className="mono" style={{ color: i.ncm === "00000000" ? "var(--f-bad)" : undefined }}>{i.ncm}</td><td className="mono">{i.cfop}</td><td className="r mono">{i.qtd} {i.un}</td><td className="r mono">{fmt(i.unit)}</td><td className="r mono">{fmt(i.total)}</td></tr>)}</tbody>
+      </table>}
+      <div className="rs-t" style={{ marginTop: 8 }}>Informações complementares (como saem na nota)</div>
+      <div className="rs-inf">{res.informacoes_complementares || "—"}</div>
     </div>
   );
 }
