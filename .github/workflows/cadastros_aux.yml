@@ -1,0 +1,41 @@
+name: Cadastros auxiliares do Omie (vendedores, serviços, unidades) — só leitura
+
+# Espelha os cadastros que ainda não tinham espelho e leva tudo para o cadastro
+# nativo do painel (orders.cad_aux_sync_omie). Poucas chamadas; nada é escrito no Omie.
+on:
+  workflow_dispatch:
+    inputs:
+      empresas:
+        description: "Empresas (CSV)"
+        required: false
+        default: "SF,CD,WW"
+  schedule:
+    - cron: "41 9 * * 1-5"
+
+concurrency:
+  group: cadastros-aux
+  cancel-in-progress: false
+
+jobs:
+  import:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Run
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          OMIE_APP_KEY_SF: ${{ secrets.OMIE_APP_KEY_SF }}
+          OMIE_APP_SECRET_SF: ${{ secrets.OMIE_APP_SECRET_SF }}
+          OMIE_APP_KEY_CD: ${{ secrets.OMIE_APP_KEY_CD }}
+          OMIE_APP_SECRET_CD: ${{ secrets.OMIE_APP_SECRET_CD }}
+          OMIE_APP_KEY_WW: ${{ secrets.OMIE_APP_KEY_WW }}
+          OMIE_APP_SECRET_WW: ${{ secrets.OMIE_APP_SECRET_WW }}
+          EMPRESAS_ALVO: ${{ github.event.inputs.empresas || 'SF,CD,WW' }}
+          PAUSA_ENTRE_CHAMADAS: "3"
+          PYTHONUNBUFFERED: "1"
+        run: python3 scripts/import_cadastros_aux.py

@@ -36,6 +36,8 @@ export const GRUPOS: { id: Grupo; label: string; desc: string }[] = [
   { id: "bi",         label: "BI",         desc: "Relatórios e dashboards — Geral, Compras, Vendas, Financeiro" },
 ];
 export const SECOES_BI = ["Geral", "Compras", "Vendas", "Financeiro"];
+/** Secções do menu Cadastros (05/10/26, sql/63): todos os cadastros que vinham do Omie. */
+export const SECOES_CADASTROS = ["Pessoas", "Itens", "Projetos e vendas", "Financeiro", "Geral"];
 
 export const MODULES: NavItem[] = [
   {
@@ -333,6 +335,7 @@ export const FINANCEIRO: NavItem[] = [
     href: "/cadastros/clientes",
     area: "erp",
     grupo: "cadastros",
+    secao: "Pessoas",
     label: "Clientes",
     tone: "text-sky-600",
     icon: (
@@ -345,6 +348,7 @@ export const FINANCEIRO: NavItem[] = [
     href: "/cadastros/fornecedores",
     area: "erp",
     grupo: "cadastros",
+    secao: "Pessoas",
     label: "Fornecedores",
     tone: "text-violet-600",
     icon: (
@@ -357,6 +361,7 @@ export const FINANCEIRO: NavItem[] = [
     href: "/cadastros/itens",
     area: "erp",
     grupo: "cadastros",
+    secao: "Itens",
     label: "Itens (catálogo)",
     tone: "text-amber-600",
     icon: (
@@ -365,11 +370,156 @@ export const FINANCEIRO: NavItem[] = [
       </svg>
     ),
   },
+  // Todos os cadastros que vinham do Omie (05/10/26, sql/63) — criados e editados no painel.
+  {
+    href: "/cadastros/transportadoras",
+    area: "erp",
+    grupo: "cadastros",
+    secao: "Pessoas",
+    label: "Transportadoras",
+    tone: "text-amber-600",
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className="w-5 h-5" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M3 7h11v9H3zM14 10h4l3 3v3h-7z"/><circle cx="7" cy="18" r="1.6"/><circle cx="17" cy="18" r="1.6"/>
+      </svg>
+    ),
+  },
+  {
+    href: "/cadastros/vendedores",
+    area: "erp",
+    grupo: "cadastros",
+    secao: "Pessoas",
+    label: "Vendedores",
+    tone: "text-sky-600",
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className="w-5 h-5" strokeLinecap="round" strokeLinejoin="round">
+        <circle cx="12" cy="8" r="3.5"/><path d="M5 20a7 7 0 0 1 14 0"/>
+      </svg>
+    ),
+  },
+  {
+    href: "/cadastros/unidades",
+    area: "erp",
+    grupo: "cadastros",
+    secao: "Itens",
+    label: "Unidades de medida",
+    tone: "text-amber-600",
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className="w-5 h-5" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M3 17h18M6 17v-3M10 17v-5M14 17v-3M18 17v-5"/>
+      </svg>
+    ),
+  },
+  {
+    href: "/cadastros/servicos",
+    area: "erp",
+    grupo: "cadastros",
+    secao: "Itens",
+    label: "Serviços (LC 116)",
+    tone: "text-teal-600",
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className="w-5 h-5" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 0 0 5.4-5.4l-2.5 2.5-2.5-.5-.5-2.5z"/>
+      </svg>
+    ),
+  },
+  {
+    href: "/cadastros/projetos",
+    area: "erp",
+    grupo: "cadastros",
+    secao: "Projetos e vendas",
+    label: "Projetos",
+    tone: "text-emerald-600",
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className="w-5 h-5" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M3 7h6l2 2h10v10H3z"/>
+      </svg>
+    ),
+  },
+  {
+    href: "/cadastros/condicoes",
+    area: "erp",
+    grupo: "cadastros",
+    secao: "Projetos e vendas",
+    label: "Condições de pagamento",
+    tone: "text-indigo-600",
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className="w-5 h-5" strokeLinecap="round" strokeLinejoin="round">
+        <rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 10h18M7 15h4"/>
+      </svg>
+    ),
+  },
+  {
+    href: "/cadastros/contas",
+    area: "erp",
+    grupo: "cadastros",
+    secao: "Financeiro",
+    label: "Bancos e contas",
+    tone: "text-sky-700",
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className="w-5 h-5" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M3 10l9-6 9 6M5 10v8M9 10v8M15 10v8M19 10v8M3 20h18"/>
+      </svg>
+    ),
+  },
+  {
+    href: "/cadastros/categorias",
+    area: "erp",
+    grupo: "cadastros",
+    secao: "Financeiro",
+    label: "Categorias",
+    tone: "text-violet-600",
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className="w-5 h-5" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M4 6h16M4 12h10M4 18h6"/>
+      </svg>
+    ),
+  },
+  {
+    href: "/cadastros/centros-custo",
+    area: "erp",
+    grupo: "cadastros",
+    secao: "Financeiro",
+    label: "Centros de custo",
+    tone: "text-rose-600",
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className="w-5 h-5" strokeLinecap="round" strokeLinejoin="round">
+        <circle cx="12" cy="12" r="8"/><path d="M12 4v8l6 4"/>
+      </svg>
+    ),
+  },
+  {
+    href: "/cadastros/tipos-documento",
+    area: "erp",
+    grupo: "cadastros",
+    secao: "Financeiro",
+    label: "Tipos de documento",
+    tone: "text-slate-600",
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className="w-5 h-5" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M6 2h9l5 5v15H6z"/><path d="M14 2v6h6"/>
+      </svg>
+    ),
+  },
+  {
+    href: "/cadastros/empresas",
+    area: "erp",
+    grupo: "cadastros",
+    secao: "Geral",
+    label: "Empresas do grupo",
+    tone: "text-slate-700",
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className="w-5 h-5" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M4 21V5l8-3 8 3v16"/><path d="M9 21v-5h6v5M8 9h2M14 9h2M8 13h2M14 13h2"/>
+      </svg>
+    ),
+  },
   {
     // Duplicados que já existem: mesclar / agrupar / "não é duplicado" (sql/57).
     href: "/cadastros/duplicidades",
     area: "erp",
     grupo: "cadastros",
+    secao: "Pessoas",
     label: "Duplicidades",
     tone: "text-rose-600",
     icon: (

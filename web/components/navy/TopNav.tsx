@@ -27,7 +27,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from
 import { usePathname, useRouter } from "next/navigation";
 import { podeAbrirRota, canViewArea } from "@/lib/permissions";
 import { useUserPerms } from "../UserPermsProvider";
-import { ADMIN, BI, FINANCEIRO, GRUPOS, MODULES, SECOES_BI, type Grupo, type NavItem } from "../AppSidebar";
+import { ADMIN, BI, FINANCEIRO, GRUPOS, MODULES, SECOES_BI, SECOES_CADASTROS, type Grupo, type NavItem } from "../AppSidebar";
 import GlobalSearch from "../GlobalSearch";
 import SyncStatusBar from "../SyncStatusBar";
 import VersionWatcher from "../VersionWatcher";
@@ -154,6 +154,13 @@ export default function TopNav({ userEmail, isPlatformAdmin }: { userEmail?: str
     if (g === "bi") {
       // BI: os relatórios agrupados nas secções de sempre (Geral, Compras, Vendas, Financeiro).
       lista = SECOES_BI.flatMap((sc) => {
+        const daSecao = itens.filter((m) => (m.secao ?? "Geral") === sc);
+        return paraItens(daSecao).map((it, i) => (i === 0 ? { ...it, secao: sc } : it));
+      });
+    }
+    if (g === "cadastros") {
+      // Cadastros (05/10/26): todos os que vinham do Omie, agrupados (Pessoas, Itens, Projetos e vendas, Financeiro, Geral).
+      lista = SECOES_CADASTROS.flatMap((sc) => {
         const daSecao = itens.filter((m) => (m.secao ?? "Geral") === sc);
         return paraItens(daSecao).map((it, i) => (i === 0 ? { ...it, secao: sc } : it));
       });

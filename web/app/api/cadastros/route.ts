@@ -10,7 +10,7 @@ export async function GET(req: Request) {
   const q = await exigirCadastros();
   if (q instanceof NextResponse) return q;
   const sp = new URL(req.url).searchParams;
-  const papel = sp.get("papel") === "fornecedor" ? "fornecedor" : sp.get("papel") === "cliente" ? "cliente" : "todos";
+  const pp = sp.get("papel"); const papel = pp === "fornecedor" || pp === "cliente" || pp === "transportadora" ? pp : "todos";
   try {
     const r = await rpcCad("cadastros_listar", {
       p_papel: papel, p_empresa: (sp.get("emp") ?? "SF").toUpperCase(), p_q: (sp.get("q") ?? "").trim() || null,

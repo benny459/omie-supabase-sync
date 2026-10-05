@@ -21,12 +21,15 @@ export async function GET(req: Request) {
       return NextResponse.json({ clientes: r.linhas ?? [] });
     }
     const a = supaAdmin();
-    const [cond, proj, cat] = await Promise.all([
+    const [cond, proj, cat, vend] = await Promise.all([
       a.schema("sales").from("formas_pagamento").select("codigo, descricao").eq("empresa", emp).order("codigo"),
       a.schema("finance").from("projetos").select("codigo, nome").eq("empresa", emp).neq("inativo", "S").order("nome"),
       a.schema("finance").from("categorias").select("codigo, descricao").eq("empresa", emp).like("codigo", "1.%")
         .neq("conta_inativa", "S").neq("totalizadora", "S").not("descricao", "ilike", "%dispon%").order("codigo"),
+      // Vendedores: cadastro próprio do painel (sql/63) — os do Omie entram pelo sync.
+      rpc<{ codigo: string; nome: string }[]>("cad_aux_opcoes", { p_registro: "vendedores", p_empresa: emp }).catch(() => []),
     ]);
-    return NextResponse.json({ condicoes: cond.data ?? [], projetos: proj.data ?? [], categorias: cat.data ?? [] });
+    return NextResponse.json({ condicoes: cond.data ?? [], projetos: proj.data ?? [], categorias: cat.data ?? [],
+      vendedores: (vend ?? []).map((v) => ({ codigo: v.codigo, nome: v.nome })) });
   } catch (e) { return erro(e); }
 }

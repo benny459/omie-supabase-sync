@@ -12,7 +12,7 @@ import { EMPRESAS, Origem, Papeis, Pill, pedir, ddmmaa, type Linha, type Papel }
 
 type Resp = { total: number; nativos: number; linhas: Linha[]; podeEditar: boolean };
 
-export default function TelaCadastros({ papel }: { papel: Papel }) {
+export default function TelaCadastros({ papel }: { papel: Papel | "transportadora" }) {
   const router = useRouter();
   const [emp, setEmp] = useState("SF");
   const [busca, setBusca] = useState("");
@@ -21,7 +21,7 @@ export default function TelaCadastros({ papel }: { papel: Papel }) {
   const [mais, setMais] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const seq = useRef(0);
-  const nome = papel === "cliente" ? "Clientes" : "Fornecedores";
+  const nome = papel === "cliente" ? "Clientes" : papel === "transportadora" ? "Transportadoras" : "Fornecedores";
 
   useEffect(() => {
     try { const e = localStorage.getItem("cad-emp"); if (e && (EMPRESAS as readonly string[]).includes(e)) setEmp(e); } catch {}
@@ -62,7 +62,7 @@ export default function TelaCadastros({ papel }: { papel: Papel }) {
         </div>
         {dados?.podeEditar && (
           <button className="btn pri" onClick={() => router.push(`/cadastros/novo?papel=${papel}&emp=${emp}`)}>
-            + Novo {papel === "cliente" ? "cliente" : "fornecedor"}
+            + {papel === "cliente" ? "Novo cliente" : papel === "transportadora" ? "Nova transportadora" : "Novo fornecedor"}
           </button>
         )}
       </header>

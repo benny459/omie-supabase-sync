@@ -33,7 +33,7 @@ export default function FormPessoa({ id }: { id?: number }) {
   const [f, setF] = useState<Form | null>(editando ? null : {
     ...VAZIO,
     empresa: (sp.get("emp") ?? "SF").toUpperCase(),
-    cliente: sp.get("papel") === "cliente", fornecedor: sp.get("papel") === "fornecedor",
+    cliente: sp.get("papel") === "cliente", fornecedor: sp.get("papel") === "fornecedor", transportadora: sp.get("papel") === "transportadora",
     doc: sp.get("doc") ? mascaraDoc(sp.get("doc")!) : "", razao: sp.get("razao") ?? "",
   });
   const [orig, setOrig] = useState<Pessoa | null>(null);

@@ -17,6 +17,7 @@ type Opcoes = {
   condicoes: { codigo: string; descricao: string }[];
   projetos: { codigo: number; nome: string }[];
   categorias: { codigo: string; descricao: string }[];
+  vendedores?: { codigo: string; nome: string }[];
 };
 
 const input: CSSProperties = {
@@ -253,6 +254,12 @@ export default function TelaVendaDoc({ id }: { id: number | null }) {
           <select style={input} disabled={!editavel} value={form.categoria_codigo ?? ""} onChange={(e) => setF("categoria_codigo", e.target.value || null)}>
             <option value="">—</option>
             {op.categorias.map((c) => <option key={c.codigo} value={c.codigo}>{c.codigo} · {c.descricao}</option>)}
+          </select>
+        </Campo>
+        <Campo rot="Vendedor" largura={2}>
+          <select style={input} disabled={!editavel} value={form.vendedor_codigo != null ? String(form.vendedor_codigo) : ""} onChange={(e) => setF("vendedor_codigo", e.target.value || null)}>
+            <option value="">—</option>
+            {(op.vendedores ?? []).map((v) => <option key={v.codigo} value={v.codigo}>{v.nome}</option>)}
           </select>
         </Campo>
         <Campo rot="Pedido / OC do cliente"><input style={input} disabled={!editavel} value={form.num_pedido_cliente ?? ""} onChange={(e) => setF("num_pedido_cliente", e.target.value)} /></Campo>
