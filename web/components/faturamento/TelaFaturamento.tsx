@@ -1,333 +1,877 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState, type CSSProperties } from "react";
-import {
-  Aviso, BotaoTela, CabecalhoTela, Carregando, ChipFiltro, FaixaFiltros, GradeKpis, PaginaNavy, brl, cartao,
-} from "@/components/navy/tela/KitTela";
-import type { ClienteFat, DocFat, ItemFat } from "@/lib/faturamento/montar";
-import FilaVendasNativas from "@/components/vendas/FilaVendasNativas";
-import NfeProducaoSf from "@/components/faturamento/NfeProducaoSf";
+import { useCallback, useEffect, useMemo, useState, type MouseEvent, type ReactNode } from "react";
+import { PaginaNavy } from "@/components/navy/tela/KitTela";
+import { limpo } from "@/lib/faturamento/montar";
+import NovaEmissao, { type ConfigFat } from "@/components/faturamento/NovaEmissao";
+import "./faturamento.css";
 
-/* Faturamento — emissão de NF-e / NFS-e / recibo pela Focus (P5, 05/10/26).
-   Lista as emissões, consulta o status na Focus, abre XML/PDF e, em
-   homologação, cancela. O formulário serve para emitir a partir de um PV/OS
-   (origem) ou para teste; o PV/OS nativo chama o mesmo endpoint. */
+/* Faturamento PV & OS (05/10/2026) — conceito do mockup do Benny
+   (faturamento-pv-os-mockup.html): controle do que já foi faturado e do que
+   falta faturar. PV → NF-e mercantil (Focus), OS → NFS-e/recibo.
+   Dados reais de orders.fat_carteira (Omie + nativos do painel); ações reais
+   pelo /api/faturamento/carteira (Validar = pré-voo sem enviar, Ensaio =
+   homologação, Emitir = ambiente da empresa — produção só com a chave do
+   Benny). O Kanban mostra as etapas derivadas dos dados (não se arrasta). */
 
+// ── tipos ────────────────────────────────────────────────────────────────────
+type Nf = {
+  id?: number; num: string; valor: number; status: string; data: string | null; ambiente: string;
+  msg?: string | null; xml?: boolean; pdf?: boolean; fonte: "omie" | "painel";
+};
+type Doc = {
+  chave: string; codigo: number | string; tipo: "PV" | "OS"; rotulo: string; origem: string; etapa: string | null;
+  cliente: string | null; oc: string | null; valor: number; emissao: string | null; faturado: number;
+  nfs: Nf[]; pend: string[]; emite: boolean; emite_motivo?: string; descricao?: string | null;
+  itens?: { desc: string | null; qtd: number | null; vt: number | null }[];
+};
+type St = "pend" | "pronto" | "emis" | "rej" | "parc" | "fat";
+type Checagem = { item: string; ok: boolean; nivel: "erro" | "aviso"; detalhe: string };
+type Prevoo = { checagens: Checagem[]; payload: unknown; total: number; pode_emitir: boolean; ambiente: string; parcelas: { vencimento: string; valor: number }[] };
+type ItemDoc = { codigo?: string; descricao: string; quantidade: number; valor_unitario: number; valor_frete?: number | null; valor_desconto?: number | null; ncm?: string | null; unidade?: string };
+type Pront = {
+  config: { ambiente: string; producao_liberada: boolean; natureza_operacao: string; nfe_serie_producao: string; nfe_proximo_producao: number | null; omie_nfe_desligado_em: string | null };
+  focus: { habilita_nfe?: boolean; certificado_valido_ate?: string } | null;
+  focus_erro: string | null; token_producao_env: boolean;
+  ultima_nfe_omie: { numero: string; serie: string; emissao: string } | null;
+  conflito_numeracao: string | null; pode_mudar: boolean;
+};
 type Emissao = {
-  id: number; empresa: string; ambiente: "homologacao" | "producao"; tipo: "nfe" | "nfse" | "recibo";
-  origem_tipo: string; origem_id: string | null; origem_rotulo?: string | null; cliente: ClienteFat; status: string; focus_status: string | null;
-  mensagem: string | null; numero: string | null; serie: string | null; chave: string | null; valor_total: number;
-  xml_path: string | null; pdf_path: string | null; receber_ids: string[] | null; autorizada_em: string | null;
-  criado_por: string | null; created_at: string;
-};
-type Config = { empresa: string; ativo: boolean; ambiente: string; producao_liberada: boolean; tipo_os: string };
-
-const TIPO: Record<string, string> = { nfe: "NF-e", nfse: "NFS-e", recibo: "Recibo" };
-const STATUS: Record<string, { rot: string; cor: string }> = {
-  rascunho: { rot: "Rascunho", cor: "var(--ww-text-faint)" },
-  processando: { rot: "Processando", cor: "#E0A93B" },
-  autorizada: { rot: "Autorizada", cor: "#3FB68B" },
-  rejeitada: { rot: "Rejeitada", cor: "#E5484D" },
-  cancelada: { rot: "Cancelada", cor: "var(--ww-text-faint)" },
-  erro: { rot: "Erro", cor: "#E5484D" },
+  id: number; empresa: string; ambiente: string; tipo: string; origem_tipo: string; origem_id: string | null; origem_rotulo?: string | null;
+  cliente: { nome?: string } | null; status: string; mensagem: string | null; numero: string | null; serie: string | null;
+  valor_total: number; xml_path: string | null; pdf_path: string | null; receber_ids: string[] | null; created_at: string; ensaio?: boolean;
 };
 
-const input: CSSProperties = {
-  height: 32, padding: "0 10px", borderRadius: 8, fontSize: 12.5, fontFamily: "inherit", minWidth: 0,
-  border: "1px solid var(--ww-border-strong)", background: "var(--ww-panel-sunken)", color: "var(--ww-text)",
+// ── formatação ───────────────────────────────────────────────────────────────
+const BRL = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
+const fmt = (v: number) => BRL.format(v || 0);
+const fmtK = (v: number) => {
+  const a = Math.abs(v || 0);
+  if (a >= 1e6) return `R$ ${(v / 1e6).toLocaleString("pt-BR", { maximumFractionDigits: 2 })} mi`;
+  if (a >= 1e3) return `R$ ${(v / 1e3).toLocaleString("pt-BR", { maximumFractionDigits: 1 })} mil`;
+  return fmt(v);
 };
-const rotulo: CSSProperties = { fontSize: 11.5, color: "var(--ww-text-faint)", fontWeight: 600, display: "flex", flexDirection: "column", gap: 4 };
+const hoje = () => new Date(new Date().toLocaleDateString("sv-SE", { timeZone: "America/Sao_Paulo" }) + "T12:00:00");
+const dias = (iso: string | null) => (iso ? Math.round((hoje().getTime() - new Date(iso + "T12:00:00").getTime()) / 864e5) : 0);
+const dataBR = (iso: string | null | undefined) => (iso ? new Date(iso.slice(0, 10) + "T12:00:00").toLocaleDateString("pt-BR") : "—");
+const curto = (s: string | null) => limpo(s ?? "").replace(/ S\.?\/?A\.?$| LTDA\.?$/i, "").replace("SOC BEN ISRAELITA BRAS HOSP", "HOSP.").replace("SOC .BENEF .DE SRAS.", "");
+const saldo = (d: Doc) => Math.max(0, Number(d.valor) - Number(d.faturado));
+const nfsAut = (d: Doc) => d.nfs.filter((n) => n.status === "autorizada" && n.ambiente === "producao");
 
-const VAZIO: ClienteFat = { nome: "", cnpj: "", ie: "", email: "", logradouro: "", numero: "", bairro: "", municipio: "", uf: "SP", cep: "" };
-
-/** Dados fictícios para validar o fluxo em homologação (nada vai a cliente real). */
-/* Destinatário de teste: a própria SF (a SEFAZ de homologação só aceita CNPJ do seu cadastro; CNPJs de terceiros vêm "não cadastrado"). */
-const TESTE: { cliente: ClienteFat; itens: ItemFat[]; parcelas: string } = {
-  cliente: {
-    nome: "TESTE E2E CLIENTE LTDA", cnpj: "15766003000108", ie: "206878808115", email: "contasareceber@waterworks.com.br",
-    logradouro: "Avenida Tucunare", numero: "550", bairro: "Tambore", municipio: "Barueri", codigo_municipio: "3505708", uf: "SP", cep: "06460020",
-  },
-  itens: [{ codigo: "TESTE-E2E-01", descricao: "TESTE E2E - ELEMENTO FILTRANTE", quantidade: 2, valor_unitario: 150, unidade: "UN", ncm: "84212100" }],
-  parcelas: "30/60",
-};
-
-function parcelasDe(txt: string) {
-  const dias = txt.split(/[\/,;\s]+/).map((d) => Number(d)).filter((d) => Number.isFinite(d) && d >= 0);
-  return dias.length ? { parcelas: dias.map((d) => ({ dias: d })) } : null;
+function status(d: Doc): St {
+  if (Number(d.faturado) >= Number(d.valor) - 0.01 && Number(d.valor) > 0) return "fat";
+  const painel = d.nfs.filter((n) => n.fonte === "painel");
+  const ult = painel[painel.length - 1];
+  if (ult && ult.status === "processando") return "emis";
+  if (ult && (ult.status === "rejeitada" || ult.status === "erro")) return "rej";
+  if (Number(d.faturado) > 0) return "parc";
+  if (d.pend.length) return "pend";
+  return "pronto";
 }
+const ST: Record<St, { l: string; c: string; col: string }> = {
+  pend: { l: "Com pendência", c: "s-pend", col: "var(--f-mute)" },
+  pronto: { l: "Pronto p/ faturar", c: "s-pronto", col: "var(--f-blue)" },
+  emis: { l: "Em emissão", c: "s-emis", col: "var(--f-warn)" },
+  rej: { l: "Rejeitada", c: "s-rej", col: "var(--f-bad)" },
+  parc: { l: "Parcial", c: "s-parc", col: "var(--f-warn)" },
+  fat: { l: "Faturado", c: "s-fat", col: "var(--f-ok)" },
+};
+const COLS: { k: St; t: string; hint: string; incl?: St[] }[] = [
+  { k: "pend", t: "Com pendência", hint: "Cadastro ou valor — não emite" },
+  { k: "pronto", t: "Pronto p/ faturar", hint: "Aguardando emissão" },
+  { k: "emis", t: "Em emissão", hint: "Na Focus/SEFAZ ou rejeitado", incl: ["emis", "rej"] },
+  { k: "parc", t: "Faturado parcial", hint: "Tem NF autorizada e saldo" },
+  { k: "fat", t: "Faturado", hint: "100% coberto por NF autorizada" },
+];
+const ETAPA_PV: Record<string, string> = { "10": "Pedido", "20": "Separar", "50": "Faturar", "60": "Faturado", "70": "Entregue" };
+const ETAPA_OS: Record<string, string> = { "10": "Em aberto", "20": "Execução", "30": "Executada", "50": "Faturar", "60": "Faturada" };
+const etapaRot = (d: Doc) => (d.origem === "Omie" ? (d.tipo === "PV" ? ETAPA_PV : ETAPA_OS)[d.etapa ?? ""] ?? d.etapa : d.etapa) ?? "";
+
+// ── períodos ─────────────────────────────────────────────────────────────────
+function desdePeriodo(p: string): string {
+  const h = hoje();
+  const y = h.getFullYear(), m = h.getMonth();
+  const d = p === "ano" ? new Date(y, 0, 1) : p === "tri" ? new Date(y, Math.floor(m / 3) * 3, 1) : new Date(y, m, 1);
+  return d.toLocaleDateString("sv-SE");
+}
+const MESES = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
+const EMPRESAS: Record<string, string> = { SF: "SafeWater", WW: "WaterWorks", CD: "CD" };
 
 export default function TelaFaturamento() {
-  const [lista, setLista] = useState<Emissao[] | null>(null);
-  const [config, setConfig] = useState<Config[]>([]);
+  const [docs, setDocs] = useState<Doc[] | null>(null);
+  const [config, setConfig] = useState<ConfigFat[]>([]);
+  const [pront, setPront] = useState<Pront | null>(null);
+  const [emissoes, setEmissoes] = useState<Emissao[] | null>(null);
   const [erro, setErro] = useState<string | null>(null);
-  const [filtro, setFiltro] = useState<string>("todos");
-  const [busca, setBusca] = useState("");
-  const [aberto, setAberto] = useState(false);
-  const [ocupado, setOcupado] = useState<number | "nova" | null>(null);
-  const [links, setLinks] = useState<Record<number, { xml?: string | null; pdf?: string | null }>>({});
+  const [toast, setToast] = useState<string | null>(null);
+  const [empresa, setEmpresa] = useState("SF");
+  const [periodo, setPeriodo] = useState("mes");
+  const [tipo, setTipo] = useState<"all" | "PV" | "OS">("all");
+  const [view, setView] = useState<"list" | "kanban" | "emissoes">("list");
+  const [q, setQ] = useState("");
+  const [orig, setOrig] = useState("");
+  const [fst, setFst] = useState<"" | St>("");
+  const [chips, setChips] = useState<Set<string>>(new Set());
+  const [kpi, setKpi] = useState<string | null>(null);
+  const [sel, setSel] = useState<Set<string>>(new Set());
+  const [sort, setSort] = useState<{ k: string; d: 1 | -1 }>({ k: "emissao", d: -1 });
+  const [aberto, setAberto] = useState<string | null>(null);
+  const [nova, setNova] = useState(false);
+  const [ocupado, setOcupado] = useState<string | null>(null);
+  const [verPront, setVerPront] = useState(false);
+
+  const avisar = useCallback((m: string) => { setToast(m); window.setTimeout(() => setToast((t) => (t === m ? null : t)), 4200); }, []);
 
   const carregar = useCallback(async () => {
     try {
-      const [a, b] = await Promise.all([
-        fetch("/api/faturamento/emissoes", { cache: "no-store" }).then((r) => r.json()),
+      const [a, b, c, d] = await Promise.all([
+        fetch(`/api/faturamento/carteira?empresa=${empresa}&desde=${desdePeriodo(periodo)}`, { cache: "no-store" }).then((r) => r.json()),
         fetch("/api/faturamento/config", { cache: "no-store" }).then((r) => r.json()),
+        fetch(`/api/faturamento/prontidao?empresa=${empresa}`, { cache: "no-store" }).then((r) => r.json()).catch(() => null),
+        fetch("/api/faturamento/emissoes", { cache: "no-store" }).then((r) => r.json()).catch(() => ({})),
       ]);
       if (a.error) throw new Error(a.error);
-      setLista(a.emissoes);
+      setDocs(a.docs ?? []);
       setConfig(b.config ?? []);
+      if (c && !c.error) setPront(c);
+      setEmissoes((d.emissoes ?? []).filter((e: Emissao) => e.empresa === empresa));
     } catch (e) {
       setErro(e instanceof Error ? e.message : String(e));
     }
-  }, []);
+  }, [empresa, periodo]);
   useEffect(() => { carregar(); }, [carregar]);
 
-  async function atualizar(id: number) {
-    setOcupado(id);
-    try {
-      const r = await fetch(`/api/faturamento/emissoes/${id}`, { cache: "no-store" }).then((x) => x.json());
-      if (r.error) throw new Error(r.error);
-      setLinks((l) => ({ ...l, [id]: { xml: r.xml_url, pdf: r.pdf_url } }));
-      setLista((ls) => ls?.map((e) => (e.id === id ? { ...e, ...r.emissao } : e)) ?? null);
-      return r as { xml_url: string | null; pdf_url: string | null };
-    } catch (e) {
-      setErro(e instanceof Error ? e.message : String(e));
-      return null;
-    } finally {
-      setOcupado(null);
+  const cfg = config.find((c) => c.empresa === empresa);
+  const prod = cfg?.ambiente === "producao" && !!cfg?.producao_liberada;
+  const empresas = config.filter((c) => c.ativo).map((c) => c.empresa);
+
+  // ── recortes ──
+  const base = useMemo(() => (docs ?? []).filter((d) => tipo === "all" || d.tipo === tipo), [docs, tipo]);
+  const filtrados = useMemo(() => base.filter((d) => {
+    const st = status(d);
+    if (orig && d.origem !== orig) return false;
+    if (fst && st !== fst) return false;
+    if (kpi) {
+      if (kpi === "saldo" && st === "fat") return false;
+      if (kpi === "fat" && Number(d.faturado) === 0) return false;
+      if (kpi === "parc" && st !== "parc") return false;
+      if (kpi === "pend" && !["pend", "rej"].includes(st)) return false;
+      if (kpi === "old" && (st === "fat" || dias(d.emissao) <= 30)) return false;
     }
-  }
+    if (chips.has("semoc") && d.oc) return false;
+    if (chips.has("old") && dias(d.emissao) <= 30) return false;
+    if (chips.has("saldo") && st === "fat") return false;
+    if (q) {
+      const h = `${d.rotulo} ${d.cliente ?? ""} ${d.oc ?? ""} ${d.descricao ?? ""} ${d.nfs.map((n) => n.num).join(" ")}`.toLowerCase();
+      if (!h.includes(q.toLowerCase())) return false;
+    }
+    return true;
+  }), [base, orig, fst, kpi, chips, q]);
 
-  async function abrir(id: number, qual: "xml" | "pdf") {
-    const r = links[id]?.[qual] ? { [`${qual}_url`]: links[id][qual] } as Record<string, string> : await atualizar(id);
-    const url = r?.[`${qual}_url` as "xml_url"];
-    if (url) window.open(url, "_blank", "noopener");
-    else setErro("Arquivo ainda não disponível");
-  }
+  const ordenados = useMemo(() => {
+    const k = sort.k, dir = sort.d;
+    const val = (d: Doc): number | string => k === "saldo" ? saldo(d) : k === "pct" ? Number(d.faturado) / (Number(d.valor) || 1)
+      : k === "valor" || k === "faturado" ? Number(d[k]) : k === "emissao" ? d.emissao ?? "" : k === "doc" ? d.rotulo : (d.cliente ?? "");
+    return [...filtrados].sort((a, b) => { const x = val(a), y = val(b); return (x > y ? 1 : x < y ? -1 : 0) * dir; });
+  }, [filtrados, sort]);
 
-  async function cancelar(e: Emissao) {
-    const just = window.prompt("Justificativa do cancelamento (mín. 15 caracteres):", "Teste de homologação cancelado pelo painel");
-    if (!just) return;
-    setOcupado(e.id);
-    const r = await fetch(`/api/faturamento/emissoes/${e.id}`, {
-      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ acao: "cancelar", justificativa: just }),
-    }).then((x) => x.json());
+  // ── ações ──
+  async function agir(d: Doc, acao: "prevoo" | "ensaio" | "emitir" | "doc") {
+    if (acao === "emitir") {
+      const msg = prod
+        ? `EMITIR ${d.tipo === "PV" ? "NF-e" : "nota"} DE PRODUÇÃO (documento fiscal real) do ${d.rotulo} — ${limpo(d.cliente ?? "")} — ${fmt(saldo(d))}?`
+        : `Emitir o ${d.rotulo} em HOMOLOGAÇÃO (sem valor fiscal)?`;
+      if (!window.confirm(msg)) return null;
+    }
+    setOcupado(`${acao}:${d.chave}`);
+    const r = await fetch("/api/faturamento/carteira", {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ empresa, chave: d.chave, acao }),
+    }).then((x) => x.json()).catch((e) => ({ error: String(e) }));
     setOcupado(null);
-    if (r.error) setErro(r.error); else carregar();
+    if (r.error && acao !== "prevoo") { avisar(`${d.rotulo}: ${r.error}`); return null; }
+    if (acao === "ensaio" || acao === "emitir") {
+      const e = r.emissao;
+      avisar(`${acao === "ensaio" ? "Ensaio (homologação)" : "Emissão"} #${e.id} · ${d.rotulo}: ${e.status}${e.numero ? ` nº ${e.numero}` : ""}${e.mensagem ? ` — ${e.mensagem}` : ""}`);
+      carregar();
+    }
+    return r;
   }
 
-  const filtradas = useMemo(() => (lista ?? []).filter((e) => {
-    if (filtro !== "todos" && e.status !== filtro) return false;
-    if (!busca) return true;
-    const b = busca.toLowerCase();
-    return [e.cliente?.nome, e.numero, e.origem_id, e.origem_rotulo, String(e.id)].some((v) => (v ?? "").toLowerCase().includes(b));
-  }), [lista, filtro, busca]);
+  async function validarLote() {
+    const lista = ordenados.filter((d) => sel.has(d.chave) && d.emite);
+    let ok = 0, ruim = 0;
+    for (const d of lista) {
+      const r = await agir(d, "prevoo");
+      if (r && r.pode_emitir) ok++; else ruim++;
+    }
+    avisar(`Validação em lote: ${ok} pronto(s) para emitir · ${ruim} com pendência${lista.length < sel.size ? ` · ${sel.size - lista.length} OS do Omie fora do lote` : ""}`);
+  }
 
-  const kpis = useMemo(() => {
-    const l = lista ?? [];
-    const aut = l.filter((e) => e.status === "autorizada");
-    return [
-      { rotulo: "Autorizadas", valor: String(aut.length), sub: brl(aut.reduce((s, e) => s + Number(e.valor_total), 0)), hero: true },
-      { rotulo: "Processando", valor: String(l.filter((e) => e.status === "processando").length), sub: "na Focus / SEFAZ" },
-      { rotulo: "Rejeitadas / erro", valor: String(l.filter((e) => ["rejeitada", "erro"].includes(e.status)).length), sub: "ver mensagem" },
-      { rotulo: "Canceladas", valor: String(l.filter((e) => e.status === "cancelada").length), sub: "só homologação" },
-    ];
-  }, [lista]);
+  function exportar() {
+    const linhas = [["Tipo", "Documento", "Origem", "Cliente", "OC", "Emissão", "Valor", "Faturado", "Falta faturar", "Status", "Notas"]]
+      .concat(ordenados.map((d) => [d.tipo, d.rotulo, d.origem, limpo(d.cliente ?? ""), d.oc ?? "", dataBR(d.emissao),
+        String(d.valor).replace(".", ","), String(d.faturado).replace(".", ","), String(saldo(d).toFixed(2)).replace(".", ","),
+        ST[status(d)].l, d.nfs.map((n) => n.num).join(" / ")]));
+    const csv = linhas.map((l) => l.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(";")).join("\n");
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8" }));
+    a.download = `faturamento-${empresa}-${desdePeriodo(periodo)}.csv`;
+    a.click();
+  }
 
-  const homolog = config.filter((c) => c.ativo && c.ambiente !== "producao").map((c) => c.empresa);
+  const docAberto = aberto ? (docs ?? []).find((d) => d.chave === aberto) ?? null : null;
+  const h = hoje();
+  const rotPeriodo: Record<string, string> = { mes: `${MESES[h.getMonth()]}/${String(h.getFullYear()).slice(2)}`, tri: "Trimestre", ano: String(h.getFullYear()) };
 
   return (
     <PaginaNavy>
-      <CabecalhoTela
-        area="Financeiro"
-        titulo="Faturamento"
-        sub={<>Emissão de NF-e, NFS-e e recibo pela Focus, sem Omie.
-          {homolog.length > 0 && <b style={{ color: "#E0A93B" }}> {homolog.join(", ")} em HOMOLOGAÇÃO — sem valor fiscal.</b>}</>}
-        acoes={<>
-          <BotaoTela onClick={carregar}>Recarregar</BotaoTela>
-          <BotaoTela primario onClick={() => setAberto((v) => !v)}>{aberto ? "Fechar" : "Nova emissão"}</BotaoTela>
-        </>}
-      />
-      {erro && <div onClick={() => setErro(null)}><Aviso>{erro}</Aviso></div>}
-      {aberto && <NovaEmissao config={config} ocupado={ocupado === "nova"} onEmitir={async (body) => {
-        setOcupado("nova");
-        const r = await fetch("/api/faturamento/emitir", {
-          method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
-        }).then((x) => x.json()).catch((e) => ({ error: String(e) }));
-        setOcupado(null);
-        if (r.error) { setErro(r.error); return; }
-        setLinks((l) => ({ ...l, [r.emissao.id]: { xml: r.xml_url, pdf: r.pdf_url } }));
-        if (r.emissao.status !== "autorizada") setErro(`Emissão #${r.emissao.id}: ${STATUS[r.emissao.status]?.rot ?? r.emissao.status} — ${r.emissao.mensagem ?? ""}`);
-        setAberto(false);
-        carregar();
-      }} />}
-      <NfeProducaoSf empresa="SF" onEmitido={carregar} />
-      <FilaVendasNativas soAbertos titulo="PV / OS do painel a faturar" />
-      <GradeKpis kpis={kpis} />
-      <FaixaFiltros busca={busca} onBusca={setBusca} placeholder="Cliente, nº, PV/OS…">
-        {["todos", "autorizada", "processando", "rejeitada", "erro", "cancelada"].map((s) => (
-          <ChipFiltro key={s} ativo={filtro === s} onClick={() => setFiltro(s)}>{s === "todos" ? "Todos" : STATUS[s].rot}</ChipFiltro>
-        ))}
-      </FaixaFiltros>
-      {!lista ? <Carregando /> : (
-        <div style={{ ...cartao, overflowX: "auto" }}>
-          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
-            <thead>
-              <tr style={{ textAlign: "left", color: "var(--ww-text-faint)" }}>
-                {["#", "Data", "Documento", "Origem", "Cliente", "Valor", "Status", "Arquivos", ""].map((h) => (
-                  <th key={h} style={{ padding: "14px 12px", fontSize: 13, fontWeight: 600, borderBottom: "1px solid var(--ww-border)" }}>{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {filtradas.length === 0 && (
-                <tr><td colSpan={9} style={{ padding: 28, textAlign: "center", color: "var(--ww-text-muted)" }}>Nenhuma emissão.</td></tr>
-              )}
-              {filtradas.map((e) => {
-                const st = STATUS[e.status] ?? { rot: e.status, cor: "var(--ww-text)" };
-                return (
-                  <tr key={e.id} style={{ borderBottom: "1px solid var(--ww-border)" }}>
-                    <td style={td}>{e.id}</td>
-                    <td style={td}>{new Date(e.created_at).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}</td>
-                    <td style={td}>
-                      <b>{TIPO[e.tipo]}</b> {e.numero ? `nº ${e.numero}` : ""}{e.serie && e.tipo !== "recibo" ? ` · série ${e.serie}` : ""}
-                      <div style={{ fontSize: 11, color: e.ambiente === "producao" ? "#3FB68B" : "#E0A93B", fontWeight: 600 }}>
-                        {e.empresa} · {e.ambiente === "producao" ? "PRODUÇÃO" : "HOMOLOGAÇÃO"}
-                      </div>
-                    </td>
-                    <td style={td}>{(e as Emissao & { ensaio?: boolean }).ensaio ? "ENSAIO · " : ""}{e.origem_rotulo ?? (e.origem_id ? `${e.origem_tipo.toUpperCase()} ${e.origem_id}` : e.origem_tipo)}</td>
-                    <td style={{ ...td, maxWidth: 240 }}>{e.cliente?.nome}</td>
-                    <td style={{ ...td, textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{brl(Number(e.valor_total))}</td>
-                    <td style={{ ...td, maxWidth: 280 }}>
-                      <span style={{ color: st.cor, fontWeight: 600 }}>● {st.rot}</span>
-                      {e.receber_ids?.length ? <span style={{ fontSize: 11, color: "var(--ww-text-faint)" }}> · {e.receber_ids.length} parcela(s) a receber</span> : null}
-                      {e.mensagem && <div style={{ fontSize: 11, color: "var(--ww-text-muted)" }}>{e.mensagem}</div>}
-                    </td>
-                    <td style={td}>
-                      {e.xml_path && <button style={lk} onClick={() => abrir(e.id, "xml")}>XML</button>}
-                      {e.pdf_path && <button style={lk} onClick={() => abrir(e.id, "pdf")}>{e.tipo === "recibo" ? "Recibo" : "PDF"}</button>}
-                    </td>
-                    <td style={{ ...td, whiteSpace: "nowrap" }}>
-                      {["processando", "autorizada"].includes(e.status) && e.tipo !== "recibo" && (
-                        <button style={lk} disabled={ocupado === e.id} onClick={() => atualizar(e.id)}>{ocupado === e.id ? "…" : "Atualizar"}</button>
-                      )}
-                      {e.status === "autorizada" && e.ambiente === "homologacao" && (
-                        <button style={{ ...lk, color: "#E5484D" }} disabled={ocupado === e.id} onClick={() => cancelar(e)}>Cancelar</button>
-                      )}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+      <div className="fpv">
+        <div className="head">
+          <div>
+            <div className="crumb">Financeiro › Faturamento</div>
+            <h1>Pedidos &amp; Ordens de Serviço</h1>
+            <div className="sub">
+              Controle do que já foi faturado e do que falta faturar · PV → NF-e mercantil · OS → NFS-e ·{" "}
+              {prod ? <b className="prod">{empresa} em PRODUÇÃO</b> : <b>{empresa} em homologação</b>}
+            </div>
+          </div>
+          <div className="actions">
+            <button className="btn" onClick={exportar}>Exportar</button>
+            <button className="btn" onClick={() => { setDocs(null); carregar(); }}>Recarregar</button>
+            <button className="btn" onClick={() => setVerPront((v) => !v)}>Prontidão</button>
+            <button className="btn pri" onClick={() => setNova((v) => !v)}>{nova ? "Fechar" : "+ Nova emissão"}</button>
+          </div>
         </div>
-      )}
-      <Aviso tone="info">
-        Enviar ao cliente por e-mail fica disponível quando o Resend estiver configurado (RESEND_API_KEY). Até lá, abra o PDF/XML e envie o link.
-      </Aviso>
+
+        {erro && <div className="alert bad" onClick={() => setErro(null)}>{erro}</div>}
+        <Prontidao p={pront} empresa={empresa} aberto={verPront} onMudou={carregar} />
+        {nova && (
+          <div style={{ marginBottom: 16 }}>
+            <NovaEmissao config={config} ocupado={ocupado === "nova"} onEmitir={async (body) => {
+              setOcupado("nova");
+              const r = await fetch("/api/faturamento/emitir", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })
+                .then((x) => x.json()).catch((e) => ({ error: String(e) }));
+              setOcupado(null);
+              if (r.error) { avisar(r.error); return; }
+              avisar(`Emissão #${r.emissao.id}: ${r.emissao.status}${r.emissao.mensagem ? ` — ${r.emissao.mensagem}` : ""}`);
+              setNova(false); carregar();
+            }} />
+          </div>
+        )}
+
+        <div className="toolbar">
+          <div className="seg">
+            {(["all", "PV", "OS"] as const).map((t) => (
+              <button key={t} className={tipo === t ? "on" : ""} onClick={() => setTipo(t)}>
+                {t !== "all" && <span className="dot" style={{ background: t === "PV" ? "var(--f-pv)" : "var(--f-os)" }} />}
+                {t === "all" ? "Todos" : t === "PV" ? "PV · Produto" : "OS · Serviço"}
+                <span className="ct">{(docs ?? []).filter((d) => t === "all" || d.tipo === t).length}</span>
+              </button>
+            ))}
+          </div>
+          <div className="seg">
+            {(["mes", "tri", "ano"] as const).map((p) => (
+              <button key={p} className={periodo === p ? "on" : ""} onClick={() => setPeriodo(p)} title="Período do faturado (a carteira em aberto aparece sempre)">{rotPeriodo[p]}</button>
+            ))}
+          </div>
+          {empresas.length > 1 && (
+            <div className="seg">
+              {empresas.map((e) => <button key={e} className={empresa === e ? "on" : ""} onClick={() => setEmpresa(e)}>{EMPRESAS[e] ?? e}</button>)}
+            </div>
+          )}
+        </div>
+
+        {!docs ? <div className="empty">Carregando a carteira…</div> : (
+          <>
+            <Kpis base={base} todos={docs} kpi={kpi} setKpi={setKpi} />
+            <Mix docs={docs} base={base} />
+          </>
+        )}
+
+        <div className="filters">
+          <div className="seg">
+            <button className={view === "list" ? "on" : ""} onClick={() => setView("list")}>☰ Lista</button>
+            <button className={view === "kanban" ? "on" : ""} onClick={() => setView("kanban")}>▦ Kanban</button>
+            <button className={view === "emissoes" ? "on" : ""} onClick={() => setView("emissoes")}>⎙ Emissões</button>
+          </div>
+          <div className="search">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></svg>
+            <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar PV, OS, cliente, OC, NF…" />
+          </div>
+          {view !== "emissoes" && <>
+            <select className="sel" value={orig} onChange={(e) => setOrig(e.target.value)}>
+              <option value="">Origem: todas</option><option>Omie</option><option>Painel</option><option>CRM</option>
+            </select>
+            <select className="sel" value={fst} onChange={(e) => setFst(e.target.value as St | "")}>
+              <option value="">Status: todos</option>
+              {(Object.keys(ST) as St[]).map((k) => <option key={k} value={k}>{ST[k].l}</option>)}
+            </select>
+            {([["semoc", "Sem OC"], ["old", "> 30 dias"], ["saldo", "Só com saldo"]] as const).map(([k, l]) => (
+              <button key={k} className={`chipf ${chips.has(k) ? "on" : ""}`} onClick={() => setChips((s) => { const n = new Set(s); if (n.has(k)) n.delete(k); else n.add(k); return n; })}>{l}</button>
+            ))}
+          </>}
+        </div>
+        {view === "list" && sel.size > 0 && (
+          <div className="bulk">
+            <span><b>{sel.size}</b> selecionados · saldo <b>{fmt((docs ?? []).filter((d) => sel.has(d.chave)).reduce((a, d) => a + saldo(d), 0))}</b></span>
+            <span style={{ marginLeft: "auto" }} />
+            <button className="btn sm" onClick={() => setSel(new Set())}>Limpar</button>
+            <button className="btn sm w" disabled={!!ocupado} onClick={validarLote}>{ocupado ? "Validando…" : "Validar lote"}</button>
+          </div>
+        )}
+
+        {view === "list" && (docs ? <Lista rows={ordenados} sel={sel} setSel={setSel} sort={sort} setSort={setSort} abrir={setAberto} ocupado={ocupado} agir={agir} prod={prod} /> : null)}
+        {view === "kanban" && (docs ? <Kanban rows={filtrados} abrir={setAberto} /> : null)}
+        {view === "emissoes" && <Emissoes lista={emissoes} q={q} onMudou={carregar} avisar={avisar} />}
+
+        <p style={{ color: "var(--f-tx3)", fontSize: 12, marginTop: 12 }}>
+          Carteira: PV/OS em aberto (todas as datas) + faturados no período. PV do Omie fatura pelo painel (NF-e, Focus); OS do Omie continua no Omie até a NFS-e do painel ficar pronta.
+          Envio ao cliente por e-mail depende do Resend (RESEND_API_KEY) — até lá, abra o PDF/XML e envie o link.
+        </p>
+
+        {docAberto && <Gaveta d={docAberto} empresa={empresa} prod={prod} ocupado={ocupado} agir={agir} fechar={() => setAberto(null)} avisar={avisar} onMudou={carregar} />}
+        {toast && <div className="fpv-toast" onClick={() => setToast(null)}>{toast}</div>}
+      </div>
     </PaginaNavy>
   );
 }
 
-const td: CSSProperties = { padding: "10px 12px", verticalAlign: "top", color: "var(--ww-text)" };
-const lk: CSSProperties = { background: "none", border: 0, color: "var(--ww-accent-text)", cursor: "pointer", fontSize: 12.5, fontWeight: 600, padding: "0 6px 0 0" };
-
-function NovaEmissao({ config, ocupado, onEmitir }: {
-  config: Config[]; ocupado: boolean; onEmitir: (body: unknown) => void;
-}) {
-  const ativas = config.filter((c) => c.ativo);
-  const [empresa, setEmpresa] = useState(ativas[0]?.empresa ?? "SF");
-  const [tipo, setTipo] = useState<"nfe" | "nfse" | "recibo">("nfe");
-  const [origemTipo, setOrigemTipo] = useState("manual");
-  const [origemId, setOrigemId] = useState("");
-  const [cli, setCli] = useState<ClienteFat>(VAZIO);
-  const [itens, setItens] = useState<ItemFat[]>([{ codigo: "", descricao: "", quantidade: 1, valor_unitario: 0, unidade: "UN", ncm: "" }]);
-  const [parc, setParc] = useState("0");
-  const [obs, setObs] = useState("");
-  const [pedidoCli, setPedidoCli] = useState("");
-  const [gerarRec, setGerarRec] = useState(false);
-  const cfg = config.find((c) => c.empresa === empresa);
-  const homolog = cfg?.ambiente !== "producao";
-
-  const campo = (k: keyof ClienteFat, rot: string, w = 160) => (
-    <label style={{ ...rotulo, width: w }}>{rot}
-      <input style={input} value={(cli[k] as string) ?? ""} onChange={(e) => setCli({ ...cli, [k]: e.target.value })} />
-    </label>
-  );
-
-  function enviar() {
-    const documento: DocFat = {
-      empresa, cliente: cli, itens: itens.filter((i) => i.descricao),
-      condicao: parcelasDe(parc), observacoes: obs || null, pedido_cliente: pedidoCli || null,
-    };
-    onEmitir({ documento, tipo, origem_tipo: origemTipo, origem_id: origemId || null, gerar_receber_homologacao: gerarRec });
-  }
-
+// ── KPIs ─────────────────────────────────────────────────────────────────────
+function Anel({ p, cor }: { p: number; cor: string }) {
+  const r = 17, c = 2 * Math.PI * r;
   return (
-    <section style={{ ...cartao, padding: 18, display: "flex", flexDirection: "column", gap: 14 }}>
-      <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "flex-end" }}>
-        <label style={rotulo}>Empresa
-          <select style={input} value={empresa} onChange={(e) => setEmpresa(e.target.value)}>
-            {ativas.map((c) => <option key={c.empresa} value={c.empresa}>{c.empresa}</option>)}
-          </select>
-        </label>
-        <label style={rotulo}>Documento
-          <select style={input} value={tipo} onChange={(e) => setTipo(e.target.value as typeof tipo)}>
-            <option value="nfe">NF-e (produtos / PV)</option>
-            <option value="recibo">Recibo de prestação (OS)</option>
-            <option value="nfse">NFS-e (OS)</option>
-          </select>
-        </label>
-        <label style={rotulo}>Origem
-          <select style={input} value={origemTipo} onChange={(e) => setOrigemTipo(e.target.value)}>
-            <option value="manual">Manual</option><option value="pv">PV</option><option value="os">OS</option><option value="teste">Teste</option>
-          </select>
-        </label>
-        <label style={{ ...rotulo, width: 120 }}>Nº PV/OS<input style={input} value={origemId} onChange={(e) => setOrigemId(e.target.value)} /></label>
-        <span style={{ flex: 1 }} />
-        <BotaoTela onClick={() => { setCli(TESTE.cliente); setItens(TESTE.itens); setParc(TESTE.parcelas); setOrigemTipo("teste"); setObs("TESTE E2E — homologação"); }}>
-          Preencher teste
-        </BotaoTela>
-      </div>
-      <div style={{ fontSize: 12.5, fontWeight: 600, color: "var(--ww-text-2)" }}>Cliente</div>
-      <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-        {campo("nome", "Razão social", 280)}{campo("cnpj", "CNPJ", 150)}{campo("cpf", "CPF", 130)}{campo("ie", "Inscrição estadual", 140)}{campo("email", "E-mail", 220)}
-        {campo("logradouro", "Logradouro", 240)}{campo("numero", "Nº", 70)}{campo("complemento", "Compl.", 110)}{campo("bairro", "Bairro", 150)}
-        {campo("municipio", "Município", 160)}{campo("codigo_municipio", "Cód. IBGE", 100)}{campo("uf", "UF", 50)}{campo("cep", "CEP", 100)}
-      </div>
-      <div style={{ fontSize: 12.5, fontWeight: 600, color: "var(--ww-text-2)" }}>Itens</div>
-      {itens.map((it, n) => (
-        <div key={n} style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "flex-end" }}>
-          {([["codigo", "Código", 120], ["descricao", "Descrição", 300], ["ncm", "NCM", 100], ["unidade", "Un", 60]] as const).map(([k, r, w]) => (
-            <label key={k} style={{ ...rotulo, width: w }}>{r}
-              <input style={input} value={(it[k] as string) ?? ""} onChange={(e) => setItens(itens.map((x, i) => (i === n ? { ...x, [k]: e.target.value } : x)))} />
-            </label>
-          ))}
-          {([["quantidade", "Qtd"], ["valor_unitario", "Valor unit."]] as const).map(([k, r]) => (
-            <label key={k} style={{ ...rotulo, width: 110 }}>{r}
-              <input style={input} type="number" step="0.01" value={it[k]} onChange={(e) => setItens(itens.map((x, i) => (i === n ? { ...x, [k]: Number(e.target.value) } : x)))} />
-            </label>
-          ))}
-          <button style={lk} onClick={() => setItens(itens.filter((_, i) => i !== n))}>remover</button>
-        </div>
+    <svg className="ring" width="44" height="44" viewBox="0 0 44 44">
+      <circle cx="22" cy="22" r={r} fill="none" stroke="var(--f-line)" strokeWidth="5" />
+      <circle cx="22" cy="22" r={r} fill="none" stroke={cor} strokeWidth="5" strokeLinecap="round" strokeDasharray={`${c * Math.min(1, p)} ${c}`} transform="rotate(-90 22 22)" />
+    </svg>
+  );
+}
+
+function Kpis({ base, kpi, setKpi }: { base: Doc[]; todos: Doc[]; kpi: string | null; setKpi: (k: string | null) => void }) {
+  const tot = base.reduce((a, d) => a + Number(d.valor), 0);
+  const fat = base.reduce((a, d) => a + Number(d.faturado), 0);
+  const comSaldo = base.filter((d) => status(d) !== "fat");
+  const sal = comSaldo.reduce((a, d) => a + saldo(d), 0);
+  const parc = base.filter((d) => status(d) === "parc");
+  const pend = base.filter((d) => ["pend", "rej"].includes(status(d)));
+  const old = base.filter((d) => status(d) !== "fat" && dias(d.emissao) > 30);
+  const nAut = base.reduce((a, d) => a + nfsAut(d).length, 0);
+  const sl = (t: string) => base.filter((d) => d.tipo === t).reduce((a, d) => a + saldo(d), 0);
+  const K: { k: string | null; lb: string; v: string; m: ReactNode; acc?: string; extra?: ReactNode; anel?: ReactNode }[] = [
+    {
+      k: "saldo", lb: "Falta faturar", v: fmtK(sal), m: <><b>{comSaldo.length}</b> documentos com saldo</>, acc: "var(--f-blue)",
+      extra: <>
+        <div className="split"><span style={{ flex: sl("PV") || 0.01, background: "var(--f-pv)" }} /><span style={{ flex: sl("OS") || 0.01, background: "var(--f-os)" }} /></div>
+        <div className="m" style={{ marginTop: 6 }}><span style={{ color: "var(--f-pv)" }}>PV {fmtK(sl("PV"))}</span> · <span style={{ color: "var(--f-os)" }}>OS {fmtK(sl("OS"))}</span></div>
+      </>,
+    },
+    { k: "fat", lb: "Já faturado (período)", v: fmtK(fat), m: <><b>{nAut}</b> notas autorizadas</>, acc: "var(--f-ok)" },
+    { k: null, lb: "% da carteira faturada", v: `${tot ? Math.round((fat / tot) * 100) : 0}%`, m: <>de {fmtK(tot)} em carteira</>, anel: <Anel p={tot ? fat / tot : 0} cor="var(--f-ok)" /> },
+    { k: "parc", lb: "Saldo de parciais", v: fmtK(parc.reduce((a, d) => a + saldo(d), 0)), m: <><b>{parc.length}</b> docs parcialmente faturados</>, acc: "var(--f-warn)" },
+    { k: "pend", lb: "Travado (pendência/rejeição)", v: fmtK(pend.reduce((a, d) => a + saldo(d), 0)), m: <><b>{pend.length}</b> docs precisam de ação</>, acc: "var(--f-bad)" },
+    { k: "old", lb: "Saldo > 30 dias", v: fmtK(old.reduce((a, d) => a + saldo(d), 0)), m: <><b>{old.length}</b> docs envelhecendo</>, acc: "var(--f-warn)" },
+  ];
+  return (
+    <section className="kpis">
+      {K.map((x) => (
+        <button key={x.lb} type="button" className={`kpi ${x.k ? "click" : ""} ${kpi && kpi === x.k ? "active" : ""}`}
+          onClick={() => x.k && setKpi(kpi === x.k ? null : x.k)}>
+          {x.acc && <span className="accent" style={{ background: x.acc }} />}
+          {x.anel}
+          <div className="lb">{x.lb}</div>
+          <div className="v mono">{x.v}</div>
+          <div className="m">{x.m}</div>
+          {x.extra}
+        </button>
       ))}
-      <div><button style={lk} onClick={() => setItens([...itens, { codigo: "", descricao: "", quantidade: 1, valor_unitario: 0, unidade: "UN" }])}>+ item</button></div>
-      <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "flex-end" }}>
-        <label style={{ ...rotulo, width: 160 }}>Parcelas (dias)<input style={input} value={parc} onChange={(e) => setParc(e.target.value)} placeholder="ex.: 30/60/90" /></label>
-        <label style={{ ...rotulo, width: 160 }}>Pedido do cliente (OC)<input style={input} value={pedidoCli} onChange={(e) => setPedidoCli(e.target.value)} /></label>
-        <label style={{ ...rotulo, flex: 1, minWidth: 260 }}>Observações<input style={input} value={obs} onChange={(e) => setObs(e.target.value)} /></label>
+    </section>
+  );
+}
+
+// ── PV × OS + aging ──────────────────────────────────────────────────────────
+function Mix({ docs, base }: { docs: Doc[]; base: Doc[] }) {
+  const linha = (t: "PV" | "OS", lbl: string, sub: string) => {
+    const arr = docs.filter((d) => d.tipo === t);
+    const T = arr.reduce((a, d) => a + Number(d.valor), 0) || 1;
+    const F = arr.reduce((a, d) => a + Number(d.faturado), 0);
+    const P = arr.filter((d) => status(d) === "parc").reduce((a, d) => a + saldo(d), 0);
+    const R = arr.filter((d) => ["pronto", "emis"].includes(status(d))).reduce((a, d) => a + saldo(d), 0);
+    const X = arr.filter((d) => ["pend", "rej"].includes(status(d))).reduce((a, d) => a + saldo(d), 0);
+    const seg = (v: number, c: string) => <div style={{ width: `${(v / T) * 100}%`, background: c }} title={fmt(v)}>{v / T > 0.12 ? `${Math.round((v / T) * 100)}%` : ""}</div>;
+    return (
+      <div className="typerow" key={t}>
+        <div className="nm"><b><span className={`tag ${t.toLowerCase()}`}>{t}</span> {lbl}</b><span>{sub}</span></div>
+        <div className="stack">{seg(F, "var(--f-ok)")}{seg(P, "var(--f-warn)")}{seg(R, "var(--f-blue)")}{seg(X, "var(--f-mute)")}</div>
+        <div className="tot mono">{fmtK(T - F)}<span>falta de {fmtK(T)}</span></div>
       </div>
-      {homolog && (
-        <label style={{ fontSize: 12.5, color: "var(--ww-text-2)", display: "flex", gap: 8, alignItems: "center" }}>
-          <input type="checkbox" checked={gerarRec} onChange={(e) => setGerarRec(e.target.checked)} />
-          Gerar contas a receber mesmo em homologação (só para teste — o cancelamento apaga)
-        </label>
-      )}
-      <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-        <BotaoTela primario disabled={ocupado} onClick={enviar}>{ocupado ? "Emitindo…" : `Emitir ${TIPO[tipo]}${homolog ? " (homologação)" : ""}`}</BotaoTela>
-        <span style={{ fontSize: 12, color: homolog ? "#E0A93B" : "#E5484D", fontWeight: 600 }}>
-          {homolog ? "Ambiente de HOMOLOGAÇÃO — sem valor fiscal" : "PRODUÇÃO — documento fiscal real"}
-        </span>
+    );
+  };
+  const abertos = base.filter((d) => status(d) !== "fat");
+  const tS = abertos.reduce((a, d) => a + saldo(d), 0) || 1;
+  const faixas: [string, number, number, string][] = [["0–15 dias", 0, 15, "var(--f-ok)"], ["16–30 dias", 16, 30, "var(--f-blue)"], ["31–60 dias", 31, 60, "var(--f-warn)"], ["> 60 dias", 61, 1e9, "var(--f-bad)"]];
+  const porCli: Record<string, number> = {};
+  abertos.forEach((d) => { const k = curto(d.cliente) || "—"; porCli[k] = (porCli[k] || 0) + saldo(d); });
+  const top = Object.entries(porCli).sort((a, b) => b[1] - a[1]).slice(0, 4);
+  const mx = top[0]?.[1] || 1;
+  return (
+    <section className="mix">
+      <div className="panel">
+        <h3>Faturado × a faturar por tipo <small>carteira em aberto + faturado no período</small></h3>
+        {linha("PV", "Produto", "NF-e mercantil · Focus")}
+        {linha("OS", "Serviço", "NFS-e / recibo")}
+        <div className="legend">
+          <span><i style={{ background: "var(--f-ok)" }} />Faturado</span>
+          <span><i style={{ background: "var(--f-warn)" }} />Saldo de parcial</span>
+          <span><i style={{ background: "var(--f-blue)" }} />Pronto p/ faturar</span>
+          <span><i style={{ background: "var(--f-mute)" }} />Com pendência</span>
+        </div>
+      </div>
+      <div className="panel">
+        <h3>Aging do saldo a faturar <small>dias desde a emissão do PV / abertura da OS</small></h3>
+        <div className="aging">
+          {faixas.map(([l, a, z, c]) => {
+            const xs = abertos.filter((d) => { const x = dias(d.emissao); return x >= a && x <= z; });
+            const v = xs.reduce((s, d) => s + saldo(d), 0);
+            return (
+              <div className="ag" key={l}>
+                <div className="t">{l}</div><div className="n mono">{fmtK(v)}</div><div className="t">{xs.length} docs</div>
+                <div className="bar"><i style={{ width: `${(v / tS) * 100}%`, background: c }} /></div>
+              </div>
+            );
+          })}
+        </div>
+        <div style={{ marginTop: 14 }}>
+          <div style={{ fontSize: 12, color: "var(--f-tx3)", marginBottom: 8 }}>Maiores saldos por cliente</div>
+          {top.map(([k, v]) => (
+            <div className="topcli" key={k}><span className="nm" title={k}>{k}</span><span className="tr"><i style={{ width: `${(v / mx) * 100}%` }} /></span><b className="mono" style={{ width: 92, textAlign: "right" }}>{fmtK(v)}</b></div>
+          ))}
+        </div>
       </div>
     </section>
+  );
+}
+
+// ── Lista ────────────────────────────────────────────────────────────────────
+function Prog({ d, largura = 130 }: { d: Doc; largura?: number | string }) {
+  const p = Number(d.valor) ? Number(d.faturado) / Number(d.valor) : 0;
+  const c = status(d) === "fat" ? "var(--f-ok)" : "var(--f-warn)";
+  return (
+    <div className="prog" style={{ width: largura }}>
+      <div className="b"><i style={{ width: `${Math.min(1, p) * 100}%`, background: c }} /></div>
+      <div className="l"><span>{Math.round(p * 100)}%</span><span>{nfsAut(d).length} NF</span></div>
+    </div>
+  );
+}
+
+function Idade({ d }: { d: Doc }) {
+  const x = dias(d.emissao);
+  if (status(d) === "fat") return <span className="age" style={{ color: "var(--f-tx3)" }}>{dataBR(d.emissao)}</span>;
+  return <><span className={`age ${x > 60 ? "hot" : x > 30 ? "warm" : ""}`}>{x} dias</span><small style={{ display: "block", color: "var(--f-tx3)", fontSize: 11 }}>{dataBR(d.emissao)}</small></>;
+}
+
+function Acoes({ d, ocupado, agir, abrir, prod }: { d: Doc; ocupado: string | null; agir: (d: Doc, a: "prevoo" | "ensaio" | "emitir") => unknown; abrir: (k: string) => void; prod: boolean }) {
+  const st = status(d);
+  const ocup = (a: string) => ocupado === `${a}:${d.chave}`;
+  const pare = (f: () => void) => (e: MouseEvent) => { e.stopPropagation(); f(); };
+  if (st === "fat") return <button className="btn ghost sm" onClick={pare(() => abrir(d.chave))}>Notas</button>;
+  if (!d.emite) return <span className="orig" title={d.emite_motivo}>fatura no Omie</span>;
+  if (st === "pend") return <button className="btn ghost sm" onClick={pare(() => abrir(d.chave))}>Resolver</button>;
+  if (st === "rej") return <button className="btn ghost sm" style={{ color: "var(--f-bad)" }} onClick={pare(() => abrir(d.chave))}>Ver rejeição</button>;
+  if (st === "emis") return <button className="btn ghost sm" onClick={pare(() => abrir(d.chave))}>Atualizar</button>;
+  return <>
+    <button className="btn ghost sm" disabled={!!ocupado} onClick={pare(() => abrir(d.chave))}>Validar</button>
+    <button className="btn sm pri" disabled={!!ocupado} onClick={pare(() => { agir(d, "emitir"); })}>
+      {ocup("emitir") ? "Emitindo…" : `${st === "parc" ? "Emitir saldo" : `Emitir ${d.tipo === "PV" ? "NF-e" : "NFS-e"}`}${prod ? "" : " (homolog.)"}`}
+    </button>
+  </>;
+}
+
+function Lista({ rows, sel, setSel, sort, setSort, abrir, ocupado, agir, prod }: {
+  rows: Doc[]; sel: Set<string>; setSel: (s: Set<string>) => void; sort: { k: string; d: 1 | -1 }; setSort: (s: { k: string; d: 1 | -1 }) => void;
+  abrir: (k: string) => void; ocupado: string | null; agir: (d: Doc, a: "prevoo" | "ensaio" | "emitir") => unknown; prod: boolean;
+}) {
+  const [limite, setLimite] = useState(200);
+  if (!rows.length) return <div className="tablebox"><div className="empty">Nenhum documento com esses filtros.</div></div>;
+  const th = (k: string, l: string, cls = "") => (
+    <th className={cls} onClick={() => setSort({ k, d: sort.k === k ? (sort.d === 1 ? -1 : 1) : -1 })}>{l}{sort.k === k ? (sort.d > 0 ? " ↑" : " ↓") : ""}</th>
+  );
+  const tot = rows.reduce((a, d) => a + Number(d.valor), 0), fat = rows.reduce((a, d) => a + Number(d.faturado), 0);
+  const selecionaveis = rows.filter((d) => status(d) !== "fat");
+  const todos = selecionaveis.length > 0 && selecionaveis.every((d) => sel.has(d.chave));
+  return (
+    <div className="tablebox">
+      <table className="fl">
+        <thead><tr>
+          <th style={{ width: 34 }} onClick={(e) => e.stopPropagation()}>
+            <input type="checkbox" className="cb" checked={todos} onChange={() => {
+              const n = new Set(sel); selecionaveis.forEach((d) => (todos ? n.delete(d.chave) : n.add(d.chave))); setSel(n);
+            }} />
+          </th>
+          {th("doc", "Documento")}{th("cliente", "Cliente / OC")}{th("emissao", "Idade")}{th("valor", "Valor total", "r")}
+          {th("faturado", "Faturado", "r")}{th("saldo", "Falta faturar", "r")}{th("pct", "Cobertura")}<th>Status</th><th className="r">Ações</th>
+        </tr></thead>
+        <tbody>
+          {rows.slice(0, limite).map((d) => {
+            const st = status(d); const sd = saldo(d);
+            const rej = d.nfs.filter((n) => n.fonte === "painel" && (n.status === "rejeitada" || n.status === "erro")).slice(-1)[0];
+            return (
+              <tr key={d.chave} className={`row ${sel.has(d.chave) ? "sel" : ""}`} onClick={() => abrir(d.chave)}>
+                <td onClick={(e) => e.stopPropagation()}>
+                  <input type="checkbox" className="cb" checked={sel.has(d.chave)} disabled={st === "fat"}
+                    onChange={() => { const n = new Set(sel); if (n.has(d.chave)) n.delete(d.chave); else n.add(d.chave); setSel(n); }} />
+                </td>
+                <td>
+                  <div className="doc"><span className={`tag ${d.tipo.toLowerCase()}`}>{d.tipo}</span><b>{d.rotulo}</b></div>
+                  <div className="orig">{d.origem} · {etapaRot(d)}</div>
+                </td>
+                <td>
+                  <div className="cli" title={limpo(d.cliente ?? "")}>{limpo(d.cliente ?? "—")}
+                    <small>{d.oc ? `OC ${d.oc}` : <span style={{ color: "var(--f-warn)" }}>sem OC</span>}{d.descricao ? ` · ${d.descricao}` : ""}</small>
+                  </div>
+                  {st !== "fat" && d.pend.map((p) => <div className="flag" key={p}>⚠ {p}</div>)}
+                  {st === "rej" && rej && <div className="flag bad">✕ {rej.msg ?? "rejeitada"}</div>}
+                </td>
+                <td><Idade d={d} /></td>
+                <td className="r mono">{fmt(Number(d.valor))}</td>
+                <td className="r mono" style={{ color: Number(d.faturado) ? "var(--f-ok)" : "var(--f-tx3)" }}>{Number(d.faturado) ? fmt(Number(d.faturado)) : "—"}</td>
+                <td className="r mono" style={{ fontWeight: 650, color: sd > 0.01 ? "var(--f-tx)" : "var(--f-tx3)" }}>{sd > 0.01 ? fmt(sd) : "—"}</td>
+                <td><Prog d={d} /></td>
+                <td><span className={`pill ${ST[st].c}`}><i />{ST[st].l}</span></td>
+                <td><div className="rowact"><Acoes d={d} ocupado={ocupado} agir={agir} abrir={abrir} prod={prod} /></div></td>
+              </tr>
+            );
+          })}
+        </tbody>
+        <tfoot><tr>
+          <td /><td colSpan={3}>{rows.length} documentos{rows.length > limite && <button className="btn ghost sm" onClick={() => setLimite((l) => l + 300)}>ver mais</button>}</td>
+          <td className="r mono">{fmt(tot)}</td><td className="r mono" style={{ color: "var(--f-ok)" }}>{fmt(fat)}</td><td className="r mono">{fmt(tot - fat)}</td>
+          <td colSpan={3}><div className="prog" style={{ width: 200 }}><div className="b"><i style={{ width: `${tot ? (fat / tot) * 100 : 0}%`, background: "var(--f-ok)" }} /></div><div className="l"><span>{tot ? Math.round((fat / tot) * 100) : 0}% faturado</span></div></div></td>
+        </tr></tfoot>
+      </table>
+    </div>
+  );
+}
+
+// ── Kanban (etapas derivadas dos dados — não se arrasta) ─────────────────────
+function Kanban({ rows, abrir }: { rows: Doc[]; abrir: (k: string) => void }) {
+  return (
+    <div className="kanban">
+      {COLS.map((c) => {
+        const inc = c.incl ?? [c.k];
+        const xs = rows.filter((d) => inc.includes(status(d)));
+        const v = (d: Doc) => (c.k === "fat" ? Number(d.valor) : saldo(d));
+        const sal = xs.reduce((a, d) => a + v(d), 0);
+        const pvS = xs.filter((d) => d.tipo === "PV").reduce((a, d) => a + v(d), 0);
+        return (
+          <div className="col" key={c.k}>
+            <div className="colh">
+              <div className="t"><span className="dot" style={{ background: ST[c.k].col }} />{c.t}<span className="n">{xs.length}</span></div>
+              <div className="val mono">{fmtK(sal)}</div>
+              <div className="mini"><i style={{ width: `${sal ? (pvS / sal) * 100 : 0}%`, background: "var(--f-pv)" }} /><i style={{ width: `${sal ? ((sal - pvS) / sal) * 100 : 0}%`, background: "var(--f-os)" }} /></div>
+              <div className="hint">{c.k === "fat" ? "valor faturado" : c.k === "parc" ? "saldo restante" : "a faturar"} · {c.hint}</div>
+            </div>
+            <div className="cards">
+              {xs.slice(0, 120).map((d) => {
+                const st = status(d); const x = dias(d.emissao);
+                const rej = d.nfs.filter((n) => n.fonte === "painel").slice(-1)[0];
+                return (
+                  <button type="button" className="kcard" key={d.chave} onClick={() => abrir(d.chave)}>
+                    <span className="stripe" style={{ background: d.tipo === "PV" ? "var(--f-pv)" : "var(--f-os)" }} />
+                    <div className="top"><span className={`tag ${d.tipo.toLowerCase()}`}>{d.tipo}</span><b>{d.rotulo}</b><span className="val mono">{fmt(st === "fat" ? Number(d.valor) : saldo(d))}</span></div>
+                    <div className="cl" title={limpo(d.cliente ?? "")}>{curto(d.cliente)}</div>
+                    {(st === "parc" || st === "fat") && <Prog d={d} largura="100%" />}
+                    {st !== "fat" && d.pend.map((p) => <div className="flag" key={p}>⚠ {p}</div>)}
+                    {st === "rej" && <div className="flag bad">✕ {rej?.msg ?? "rejeitada"}</div>}
+                    {st === "emis" && <div className="flag">⟳ Aguardando SEFAZ</div>}
+                    <div className="meta"><span>{d.oc ? `OC ${d.oc}` : "sem OC"}</span><span>{d.origem}</span>
+                      <span className={`r ${st !== "fat" && x > 60 ? "age hot" : st !== "fat" && x > 30 ? "age warm" : ""}`}>{st === "fat" ? `✓ ${nfsAut(d).length} NF` : `${x}d`}</span></div>
+                  </button>
+                );
+              })}
+              {xs.length === 0 && <div className="empty" style={{ padding: 20, fontSize: 12 }}>—</div>}
+              {xs.length > 120 && <div className="orig" style={{ textAlign: "center" }}>+{xs.length - 120} na lista</div>}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ── Gaveta do documento ──────────────────────────────────────────────────────
+function Gaveta({ d, empresa, prod, ocupado, agir, fechar, avisar, onMudou }: {
+  d: Doc; empresa: string; prod: boolean; ocupado: string | null;
+  agir: (d: Doc, a: "prevoo" | "ensaio" | "emitir" | "doc") => Promise<Record<string, unknown> | null>;
+  fechar: () => void; avisar: (m: string) => void; onMudou: () => void;
+}) {
+  const st = status(d); const sd = saldo(d);
+  const nf = d.tipo === "PV" ? "NF-e" : "NFS-e";
+  const [itens, setItens] = useState<ItemDoc[] | null>(null);
+  const [pre, setPre] = useState<(Prevoo & { error?: string }) | null>(null);
+  const [verJson, setVerJson] = useState(false);
+  const [links, setLinks] = useState<Record<number, { xml?: string | null; pdf?: string | null }>>({});
+
+  useEffect(() => {
+    setItens(null); setPre(null);
+    if (!d.emite) return;
+    agir(d, "doc").then((r) => { if (r && r.documento) setItens(((r.documento as { itens: ItemDoc[] }).itens) ?? []); });
+    const esc = (e: KeyboardEvent) => { if (e.key === "Escape") fechar(); };
+    document.addEventListener("keydown", esc);
+    return () => document.removeEventListener("keydown", esc);
+  }, [d.chave]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  async function validar() {
+    const r = await agir(d, "prevoo");
+    if (r) setPre(r as unknown as Prevoo & { error?: string });
+  }
+  async function arquivo(id: number, qual: "xml" | "pdf") {
+    let l = links[id];
+    if (!l?.[qual]) {
+      const r = await fetch(`/api/faturamento/emissoes/${id}`, { cache: "no-store" }).then((x) => x.json()).catch(() => ({}));
+      if (r.error) { avisar(r.error); return; }
+      l = { xml: r.xml_url, pdf: r.pdf_url }; setLinks((m) => ({ ...m, [id]: l })); onMudou();
+    }
+    const url = l?.[qual];
+    if (url) window.open(url, "_blank", "noopener"); else avisar("Arquivo ainda não disponível");
+  }
+  async function atualizar(id: number) {
+    const r = await fetch(`/api/faturamento/emissoes/${id}`, { cache: "no-store" }).then((x) => x.json()).catch((e) => ({ error: String(e) }));
+    if (r.error) avisar(r.error); else { avisar(`Emissão #${id}: ${r.emissao.status}${r.emissao.mensagem ? ` — ${r.emissao.mensagem}` : ""}`); onMudou(); }
+  }
+
+  const itensOs = d.itens ?? [];
+  const pc = (s: string) => s === "autorizada" ? ["var(--f-ok-s)", "var(--f-ok)"] : s === "rejeitada" || s === "erro" ? ["var(--f-bad-s)", "var(--f-bad)"] : s === "cancelada" ? ["var(--f-mute-s)", "var(--f-tx3)"] : ["var(--f-warn-s)", "var(--f-warn)"];
+  return (
+    <>
+      <div className="fpv-scrim" onClick={fechar} />
+      <aside className="fpv-drawer">
+        <div className="dh">
+          <button className="x" onClick={fechar}>✕</button>
+          <div style={{ fontSize: 12, color: "var(--f-tx3)" }}>{d.origem} · {EMPRESAS[empresa] ?? empresa} · {d.tipo === "PV" ? `Pedido de venda → ${nf} mercantil` : `Ordem de serviço → ${nf}`} · {etapaRot(d)}</div>
+          <h2><span className={`tag ${d.tipo.toLowerCase()}`}>{d.tipo}</span>{d.rotulo} <span className={`pill ${ST[st].c}`} style={{ fontSize: 11.5 }}><i />{ST[st].l}</span></h2>
+          <div className="c">{limpo(d.cliente ?? "—")}{d.oc ? ` · OC ${d.oc}` : ""}{d.descricao ? <><br /><span style={{ color: "var(--f-tx3)" }}>{d.descricao}</span></> : null}</div>
+          <div className="dgrid">
+            <div><span>Valor total</span><b className="mono">{fmt(Number(d.valor))}</b></div>
+            <div><span>Faturado</span><b className="mono" style={{ color: "var(--f-ok)" }}>{fmt(Number(d.faturado))}</b></div>
+            <div><span>Falta faturar</span><b className="mono" style={{ color: sd > 0.01 ? "var(--f-warn)" : "var(--f-tx3)" }}>{fmt(sd)}</b></div>
+          </div>
+          <div style={{ marginTop: 12 }}><Prog d={d} largura="100%" /></div>
+        </div>
+
+        <div className="db">
+          {st !== "fat" && d.pend.map((p) => <div className="alert" key={p}>⚠ {p} — resolva no cadastro antes de emitir.</div>)}
+          {!d.emite && st !== "fat" && <div className="alert info">{d.emite_motivo}</div>}
+          {d.nfs.filter((n) => n.fonte === "painel" && (n.status === "rejeitada" || n.status === "erro")).slice(-1).map((n) => (
+            <div className="alert bad" key={n.id}>✕ {n.msg ?? "Rejeitada"}</div>
+          ))}
+
+          {pre && (
+            <>
+              <h4>Validação (pré-voo — nada foi enviado)</h4>
+              {pre.error ? <div className="alert bad">{pre.error}</div> : (
+                <>
+                  <div className={`alert ${pre.pode_emitir ? "ok" : "bad"}`}>{pre.pode_emitir ? "Pronto para emitir" : "Pendências — não emite"} · total {fmt(pre.total)} · {pre.ambiente === "producao" ? "PRODUÇÃO" : "homologação"}</div>
+                  {pre.checagens.map((c, k) => (
+                    <div className="chk" key={k}>
+                      <span style={{ color: c.ok ? "var(--f-ok)" : c.nivel === "erro" ? "var(--f-bad)" : "var(--f-warn)", fontWeight: 700 }}>{c.ok ? "✓" : c.nivel === "erro" ? "✕" : "!"}</span>{" "}
+                      {c.item}: <span style={{ color: "var(--f-tx3)" }}>{c.detalhe}</span>
+                    </div>
+                  ))}
+                  {pre.parcelas?.length > 0 && <div className="chk" style={{ marginTop: 8 }}><b>Contas a receber que nascem:</b> {pre.parcelas.map((p) => `${dataBR(p.vencimento)} ${fmt(p.valor)}`).join(" · ")}</div>}
+                  {!!pre.payload && <div><button className="btn ghost sm" onClick={() => setVerJson((v) => !v)}>{verJson ? "Esconder" : "Ver"} JSON que vai à Focus</button></div>}
+                  {verJson && <pre>{JSON.stringify(pre.payload, null, 1)}</pre>}
+                </>
+              )}
+            </>
+          )}
+
+          <h4>Itens</h4>
+          {d.emite ? (itens === null ? <div className="orig">Carregando itens…</div> : (
+            <table className="it">
+              <thead><tr><th>Item</th><th className="r">Qtd</th><th className="r">Unit.</th><th className="r">Total</th></tr></thead>
+              <tbody>
+                {itens.map((it, i) => {
+                  const t = it.quantidade * it.valor_unitario + Number(it.valor_frete ?? 0) - Number(it.valor_desconto ?? 0);
+                  return (
+                    <tr key={i}>
+                      <td>{limpo(it.descricao)}<div style={{ fontSize: 11, color: "var(--f-tx3)" }}>{it.codigo ?? ""}{it.ncm ? ` · NCM ${it.ncm}` : ""}{it.valor_frete ? ` · frete ${fmt(Number(it.valor_frete))}` : ""}</div></td>
+                      <td className="r mono">{it.quantidade} {it.unidade ?? ""}</td>
+                      <td className="r mono">{fmt(it.valor_unitario)}</td>
+                      <td className="r mono">{fmt(t)}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          )) : (
+            <table className="it">
+              <thead><tr><th>Serviço</th><th className="r">Qtd</th><th className="r">Total</th></tr></thead>
+              <tbody>{itensOs.map((it, i) => <tr key={i}><td>{limpo(it.desc ?? "")}</td><td className="r mono">{it.qtd ?? ""}</td><td className="r mono">{fmt(Number(it.vt ?? 0))}</td></tr>)}</tbody>
+            </table>
+          )}
+
+          <h4>Notas vinculadas ({d.nfs.length})</h4>
+          {d.nfs.length ? d.nfs.map((n, k) => {
+            const c = pc(n.status);
+            return (
+              <div className="nf" key={`${n.num}-${k}`}>
+                <div className="ic" style={{ background: c[0], color: c[1] }}>{n.num.startsWith("NF-e") ? "NF-e" : n.num.startsWith("Recibo") ? "REC" : "NFS"}</div>
+                <div className="info"><b>{n.num}</b>
+                  <span>{dataBR(n.data)} · {n.status}{n.ambiente !== "producao" ? " · homologação" : ""} · {n.fonte === "omie" ? "Omie" : "painel"}{n.msg && n.status !== "autorizada" ? ` · ${n.msg}` : ""}</span></div>
+                <b className="mono">{fmt(Number(n.valor))}</b>
+                {n.id && n.status === "processando" && <button className="btn ghost sm" onClick={() => atualizar(n.id!)}>Atualizar</button>}
+                {n.id && n.xml && <button className="btn ghost sm" onClick={() => arquivo(n.id!, "xml")}>XML</button>}
+                {n.id && n.pdf && <button className="btn ghost sm" onClick={() => arquivo(n.id!, "pdf")}>{n.num.startsWith("Recibo") ? "Recibo" : "PDF"}</button>}
+              </div>
+            );
+          }) : <div className="orig" style={{ fontSize: 12.5 }}>Nenhuma nota emitida ainda.</div>}
+
+          <h4>Histórico</h4>
+          <div className="timeline">
+            <div className="ok">{d.tipo === "PV" ? "Pedido lançado" : "OS aberta"}<small>{dataBR(d.emissao)} · {d.origem}</small></div>
+            {d.nfs.map((n, k) => <div key={k} className={n.status === "autorizada" ? "ok" : ""}>{n.num} — {n.status}<small>{dataBR(n.data)} · {fmt(Number(n.valor))}</small></div>)}
+            {sd > 0.01 && <div>Saldo de {fmt(sd)} aguardando faturamento<small>há {dias(d.emissao)} dias</small></div>}
+          </div>
+        </div>
+
+        <div className="df">
+          {sd > 0.01 && d.emite ? (
+            <>
+              <div className="sum">Emitir agora<b className="mono">{fmt(sd)}</b></div>
+              <button className="btn" disabled={!!ocupado} onClick={validar}>{ocupado === `prevoo:${d.chave}` ? "Validando…" : "Validar"}</button>
+              {d.origem === "Omie" && d.tipo === "PV" && <button className="btn" disabled={!!ocupado} onClick={() => agir(d, "ensaio")}>{ocupado === `ensaio:${d.chave}` ? "Enviando…" : "Ensaio"}</button>}
+              <button className="btn pri" disabled={!!ocupado || st === "pend" || st === "emis" || (pre != null && !pre.error && !pre.pode_emitir)}
+                onClick={async () => { const r = await agir(d, "emitir"); if (r) fechar(); }}>
+                {ocupado === `emitir:${d.chave}` ? "Emitindo…" : `Emitir ${nf}${Number(d.faturado) > 0 ? " do saldo" : ""}${prod ? "" : " (homolog.)"}`}
+              </button>
+            </>
+          ) : sd > 0.01 ? (
+            <div className="sum">{d.emite_motivo}</div>
+          ) : (
+            <><div className="sum">Documento 100% faturado<b style={{ color: "var(--f-ok)" }}>✓ {nfsAut(d).length} nota(s)</b></div>
+              <button className="btn" disabled title="Depende do Resend (RESEND_API_KEY)">Enviar ao cliente</button></>
+          )}
+        </div>
+      </aside>
+    </>
+  );
+}
+
+// ── Prontidão da NF-e de produção ────────────────────────────────────────────
+function Prontidao({ p, empresa, aberto, onMudou }: { p: Pront | null; empresa: string; aberto: boolean; onMudou: () => void }) {
+  if (!p) return null;
+  const cert = p.focus?.certificado_valido_ate ? Math.floor((new Date(p.focus.certificado_valido_ate).getTime() - Date.now()) / 864e5) : null;
+  const prod = p.config.ambiente === "producao" && p.config.producao_liberada;
+  async function omie(v: boolean) {
+    const txt = v ? `Confirma que a emissão de NF-e da ${empresa} FOI DESLIGADA NO OMIE e que ninguém mais vai emitir NF-e da ${empresa} por lá?` : "Desfazer a confirmação (volta a bloquear a produção)?";
+    if (!window.confirm(txt)) return;
+    const r = await fetch("/api/faturamento/prontidao", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ empresa, omie_desligado: v }) }).then((x) => x.json());
+    if (r.error) window.alert(r.error); else onMudou();
+  }
+  const itens = [
+    { rot: "Focus: NF-e habilitada", ok: !!p.focus?.habilita_nfe, det: p.focus_erro ?? (p.focus?.habilita_nfe ? "sim" : "não") },
+    { rot: "Token de produção", ok: p.token_producao_env, det: p.token_producao_env ? "configurado na Vercel" : `falta FOCUS_TOKEN_${empresa}` },
+    { rot: "Certificado A1", ok: cert != null && cert > 0, det: p.focus?.certificado_valido_ate ? `vence ${dataBR(p.focus.certificado_valido_ate)} (${cert} dias)` : "—" },
+    { rot: "Última NF-e no Omie", ok: true, det: p.ultima_nfe_omie ? `nº ${Number(p.ultima_nfe_omie.numero)} série ${Number(p.ultima_nfe_omie.serie)} em ${dataBR(p.ultima_nfe_omie.emissao)}` : "—" },
+    { rot: "Próxima NF-e do painel", ok: !p.conflito_numeracao, det: p.conflito_numeracao ?? `nº ${p.config.nfe_proximo_producao} série ${p.config.nfe_serie_producao}` },
+    { rot: "Omie desligado para NF-e", ok: !!p.config.omie_nfe_desligado_em, det: p.config.omie_nfe_desligado_em ? `confirmado em ${new Date(p.config.omie_nfe_desligado_em).toLocaleString("pt-BR")}` : "não confirmado" },
+    { rot: "Chave de produção", ok: prod, det: prod ? "LIGADA — emite NF-e real" : "desligada (homologação)" },
+  ];
+  const faltam = itens.filter((i) => !i.ok).length;
+  return (
+    <>
+      {cert != null && cert <= 20 && (
+        <div className={`alert ${cert <= 7 ? "bad" : ""}`}>
+          Certificado A1 da {empresa} vence em {cert} dia(s) ({dataBR(p.focus!.certificado_valido_ate!)}). Sem ele a Focus não emite: renove e envie o novo .pfx à Focus antes disso.
+        </div>
+      )}
+      {aberto && (
+        <div className="pront">
+          <div className="hd">
+            <b style={{ fontSize: 14 }}>NF-e mercantil {empresa} — prontidão para produção</b>
+            <span className={`pill ${prod ? "s-fat" : "s-emis"}`}><i />{prod ? "PRODUÇÃO" : "HOMOLOGAÇÃO"}</span>
+            <span className="orig">{faltam ? `${faltam} item(ns) pendente(s)` : "tudo pronto"}</span>
+            <span style={{ flex: 1 }} />
+            {p.pode_mudar && (p.config.omie_nfe_desligado_em
+              ? <button className="btn sm" onClick={() => omie(false)}>Desfazer &quot;Omie desligado&quot;</button>
+              : <button className="btn sm" onClick={() => omie(true)}>Confirmar: Omie desligado para NF-e</button>)}
+          </div>
+          <div className="grid">
+            {itens.map((i) => (
+              <div className="it" key={i.rot}>
+                <span style={{ color: i.ok ? "var(--f-ok)" : "var(--f-bad)", fontWeight: 700 }}>{i.ok ? "✓" : "✕"}</span> <b>{i.rot}</b>
+                <div>{i.det}</div>
+              </div>
+            ))}
+          </div>
+          <div className="orig" style={{ marginTop: 8 }}>Natureza: {p.config.natureza_operacao} · a chave de produção é ligada só pelo Benny.</div>
+        </div>
+      )}
+    </>
+  );
+}
+
+// ── Emissões (histórico de todas as notas do painel) ─────────────────────────
+const TIPO_DOC: Record<string, string> = { nfe: "NF-e", nfse: "NFS-e", recibo: "Recibo" };
+const ST_EM: Record<string, string> = { rascunho: "s-pend", processando: "s-emis", autorizada: "s-fat", rejeitada: "s-rej", cancelada: "s-pend", erro: "s-rej" };
+
+function Emissoes({ lista, q, onMudou, avisar }: { lista: Emissao[] | null; q: string; onMudou: () => void; avisar: (m: string) => void }) {
+  const [ocup, setOcup] = useState<number | null>(null);
+  if (!lista) return <div className="tablebox"><div className="empty">Carregando…</div></div>;
+  const vis = lista.filter((e) => !q || [e.cliente?.nome, e.numero, e.origem_id, e.origem_rotulo, String(e.id)].some((v) => (v ?? "").toLowerCase().includes(q.toLowerCase())));
+  async function abrir(e: Emissao, qual: "xml" | "pdf") {
+    setOcup(e.id);
+    const r = await fetch(`/api/faturamento/emissoes/${e.id}`, { cache: "no-store" }).then((x) => x.json()).catch((er) => ({ error: String(er) }));
+    setOcup(null);
+    if (r.error) { avisar(r.error); return; }
+    const url = qual === "xml" ? r.xml_url : r.pdf_url;
+    if (url) window.open(url, "_blank", "noopener"); else avisar("Arquivo ainda não disponível");
+  }
+  async function atualizar(e: Emissao) {
+    setOcup(e.id);
+    const r = await fetch(`/api/faturamento/emissoes/${e.id}`, { cache: "no-store" }).then((x) => x.json()).catch((er) => ({ error: String(er) }));
+    setOcup(null);
+    if (r.error) avisar(r.error); else onMudou();
+  }
+  async function cancelar(e: Emissao) {
+    const just = window.prompt("Justificativa do cancelamento (mín. 15 caracteres):", "Teste de homologação cancelado pelo painel");
+    if (!just) return;
+    setOcup(e.id);
+    const r = await fetch(`/api/faturamento/emissoes/${e.id}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ acao: "cancelar", justificativa: just }) }).then((x) => x.json());
+    setOcup(null);
+    if (r.error) avisar(r.error); else onMudou();
+  }
+  return (
+    <div className="tablebox">
+      {vis.length === 0 ? <div className="empty">Nenhuma emissão.</div> : (
+        <table className="fl">
+          <thead><tr><th>#</th><th>Data</th><th>Documento</th><th>Origem</th><th>Cliente</th><th className="r">Valor</th><th>Status</th><th className="r">Ações</th></tr></thead>
+          <tbody>
+            {vis.map((e) => (
+              <tr key={e.id}>
+                <td className="mono">{e.id}</td>
+                <td>{new Date(e.created_at).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}</td>
+                <td><b>{TIPO_DOC[e.tipo] ?? e.tipo}</b> {e.numero ? `nº ${e.numero}` : ""}{e.serie && e.tipo !== "recibo" ? ` · série ${e.serie}` : ""}
+                  <div className="orig" style={{ color: e.ambiente === "producao" ? "var(--f-ok)" : "var(--f-warn)", fontWeight: 600 }}>{e.empresa} · {e.ambiente === "producao" ? "PRODUÇÃO" : "HOMOLOGAÇÃO"}{e.ensaio ? " · ENSAIO" : ""}</div></td>
+                <td>{e.origem_rotulo ?? (e.origem_id ? `${e.origem_tipo.toUpperCase()} ${e.origem_id}` : e.origem_tipo)}</td>
+                <td><div className="cli">{limpo(e.cliente?.nome ?? "")}</div></td>
+                <td className="r mono">{fmt(Number(e.valor_total))}</td>
+                <td style={{ maxWidth: 300 }}>
+                  <span className={`pill ${ST_EM[e.status] ?? "s-pend"}`}><i />{e.status}</span>
+                  {e.receber_ids?.length ? <span className="orig"> · {e.receber_ids.length} parcela(s) a receber</span> : null}
+                  {e.mensagem && <div className="orig" style={{ marginTop: 3 }}>{e.mensagem}</div>}
+                </td>
+                <td><div className="rowact">
+                  {e.xml_path && <button className="btn ghost sm" disabled={ocup === e.id} onClick={() => abrir(e, "xml")}>XML</button>}
+                  {e.pdf_path && <button className="btn ghost sm" disabled={ocup === e.id} onClick={() => abrir(e, "pdf")}>{e.tipo === "recibo" ? "Recibo" : "PDF"}</button>}
+                  {["processando", "autorizada"].includes(e.status) && e.tipo !== "recibo" && <button className="btn ghost sm" disabled={ocup === e.id} onClick={() => atualizar(e)}>{ocup === e.id ? "…" : "Atualizar"}</button>}
+                  {e.status === "autorizada" && e.ambiente === "homologacao" && <button className="btn ghost sm danger" disabled={ocup === e.id} onClick={() => cancelar(e)}>Cancelar</button>}
+                </div></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </div>
   );
 }

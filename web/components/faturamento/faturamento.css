@@ -1,0 +1,230 @@
+/* Faturamento PV & OS (05/10/2026) — conceito do mockup
+   faturamento-pv-os-mockup.html: PV = produto/NF-e (ciano), OS = serviço/NFS-e
+   (violeta), estados com a mesma semântica de cor. Superfícies e texto usam os
+   tokens do painel (seguem o tema claro/escuro); só as cores de sentido são
+   próprias desta tela, com variante clara e escura como no mockup. */
+
+.fpv {
+  --f-card: var(--ww-panel);
+  --f-card2: var(--ww-panel-sunken);
+  --f-line: var(--ww-border);
+  --f-line2: var(--ww-border-strong);
+  --f-tx: var(--ww-text);
+  --f-tx2: var(--ww-text-muted);
+  --f-tx3: var(--ww-text-faint);
+  --f-blue: #2563eb; --f-blue-s: rgba(37, 99, 235, .10);
+  --f-pv: #0284c7; --f-pv-s: rgba(2, 132, 199, .10);
+  --f-os: #7c3aed; --f-os-s: rgba(124, 58, 237, .09);
+  --f-ok: #16a34a; --f-ok-s: rgba(22, 163, 74, .11);
+  --f-warn: #d97706; --f-warn-s: rgba(217, 119, 6, .12);
+  --f-bad: #dc2626; --f-bad-s: rgba(220, 38, 38, .10);
+  --f-mute: #64748b; --f-mute-s: rgba(100, 116, 139, .14);
+  --f-shadow: 0 10px 30px rgba(15, 23, 42, .08);
+  --f-bg2: var(--ww-panel);
+  color: var(--f-tx);
+  font-size: 13.5px;
+  letter-spacing: -.005em;
+}
+.dark .fpv {
+  --f-blue: #3b82f6; --f-blue-s: rgba(59, 130, 246, .14);
+  --f-pv: #38bdf8; --f-pv-s: rgba(56, 189, 248, .13);
+  --f-os: #a78bfa; --f-os-s: rgba(167, 139, 250, .14);
+  --f-ok: #22c55e; --f-ok-s: rgba(34, 197, 94, .13);
+  --f-warn: #f59e0b; --f-warn-s: rgba(245, 158, 11, .13);
+  --f-bad: #ef4444; --f-bad-s: rgba(239, 68, 68, .13);
+  --f-mute: #64748b; --f-mute-s: rgba(100, 116, 139, .16);
+  --f-shadow: 0 10px 30px rgba(0, 0, 0, .35);
+}
+.fpv .mono { font-variant-numeric: tabular-nums; }
+.fpv button { font-family: inherit; cursor: pointer; }
+.fpv button:disabled { cursor: default; opacity: .55; }
+
+/* cabeçalho */
+.fpv .head { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-bottom: 18px; }
+.fpv .crumb { color: var(--f-tx3); font-size: 12px; margin-bottom: 4px; }
+.fpv h1 { font-size: 26px; font-weight: 700; letter-spacing: -.02em; margin: 0; }
+.fpv .sub { color: var(--f-tx2); margin-top: 4px; }
+.fpv .sub b { color: var(--f-warn); font-weight: 600; }
+.fpv .sub b.prod { color: var(--f-ok); }
+.fpv .btn { border: 1px solid var(--f-line2); background: var(--f-card); color: var(--f-tx); padding: 8px 14px; border-radius: 10px; font-weight: 500; font-size: 13px; }
+.fpv .btn:hover:not(:disabled) { border-color: var(--f-tx3); }
+.fpv .btn.pri { background: var(--f-blue); border-color: var(--f-blue); color: #fff; }
+.fpv .btn.sm { padding: 5px 10px; font-size: 12px; border-radius: 8px; }
+.fpv .btn.ghost { background: transparent; border-color: transparent; color: var(--f-blue); }
+.fpv .btn.danger { color: var(--f-bad); }
+.fpv .actions { display: flex; gap: 8px; flex-wrap: wrap; }
+
+/* barra de período / segmentos */
+.fpv .toolbar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 16px; }
+.fpv .seg { display: inline-flex; background: var(--f-card); border: 1px solid var(--f-line); border-radius: 11px; padding: 3px; gap: 2px; }
+.fpv .seg button { border: 0; background: transparent; color: var(--f-tx2); padding: 6px 12px; border-radius: 8px; font-size: 12.5px; font-weight: 500; display: flex; align-items: center; gap: 6px; }
+.fpv .seg button.on { background: var(--f-card2); color: var(--f-tx); box-shadow: 0 1px 0 var(--f-line2), inset 0 0 0 1px var(--f-line2); }
+.fpv .seg .ct { font-size: 11px; color: var(--f-tx3); }
+.fpv .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+
+/* KPIs */
+.fpv .kpis { display: grid; grid-template-columns: repeat(6, 1fr); gap: 12px; margin-bottom: 14px; }
+.fpv .kpi { background: var(--f-card); border: 1px solid var(--f-line); border-radius: 16px; padding: 14px 16px; position: relative; overflow: hidden; transition: .15s; text-align: left; color: var(--f-tx); }
+.fpv .kpi.click { cursor: pointer; }
+.fpv .kpi.click:hover { border-color: var(--f-line2); transform: translateY(-1px); }
+.fpv .kpi.active { box-shadow: inset 0 0 0 1.5px var(--f-blue); }
+.fpv .kpi .lb { color: var(--f-tx2); font-size: 12px; }
+.fpv .kpi .v { font-size: 22px; font-weight: 700; letter-spacing: -.02em; margin-top: 8px; }
+.fpv .kpi .m { color: var(--f-tx3); font-size: 12px; margin-top: 3px; }
+.fpv .kpi .m b { color: var(--f-tx2); font-weight: 600; }
+.fpv .kpi .accent { position: absolute; left: 0; top: 14px; bottom: 14px; width: 3px; border-radius: 0 3px 3px 0; }
+.fpv .kpi .ring { position: absolute; right: 14px; top: 14px; }
+.fpv .split { display: flex; gap: 4px; margin-top: 10px; }
+.fpv .split span { height: 5px; border-radius: 3px; }
+
+/* painel PV × OS + aging */
+.fpv .mix { display: grid; grid-template-columns: 1.25fr 1fr; gap: 12px; margin-bottom: 16px; }
+.fpv .panel { background: var(--f-card); border: 1px solid var(--f-line); border-radius: 16px; padding: 16px; }
+.fpv .panel h3 { font-size: 14px; font-weight: 600; display: flex; align-items: center; gap: 8px; justify-content: space-between; margin: 0; }
+.fpv .panel h3 small { font-weight: 400; color: var(--f-tx3); font-size: 12px; }
+.fpv .typerow { display: grid; grid-template-columns: 150px 1fr 120px; gap: 14px; align-items: center; margin-top: 14px; }
+.fpv .typerow .nm { display: flex; flex-direction: column; gap: 2px; }
+.fpv .typerow .nm b { font-size: 13px; }
+.fpv .typerow .nm span { font-size: 11.5px; color: var(--f-tx3); }
+.fpv .stack { height: 26px; border-radius: 8px; overflow: hidden; display: flex; background: var(--f-card2); border: 1px solid var(--f-line); }
+.fpv .stack div { height: 100%; display: flex; align-items: center; padding-left: 8px; font-size: 11px; font-weight: 600; color: #fff; white-space: nowrap; overflow: hidden; }
+.fpv .typerow .tot { text-align: right; font-weight: 600; }
+.fpv .typerow .tot span { display: block; font-size: 11px; color: var(--f-tx3); font-weight: 400; }
+.fpv .legend { display: flex; gap: 14px; margin-top: 14px; flex-wrap: wrap; color: var(--f-tx2); font-size: 12px; }
+.fpv .legend i { width: 10px; height: 10px; border-radius: 3px; display: inline-block; margin-right: 6px; vertical-align: -1px; }
+.fpv .aging { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-top: 14px; }
+.fpv .ag { background: var(--f-card2); border: 1px solid var(--f-line); border-radius: 12px; padding: 10px 12px; }
+.fpv .ag .t { font-size: 11.5px; color: var(--f-tx3); }
+.fpv .ag .n { font-size: 16px; font-weight: 700; margin-top: 4px; }
+.fpv .ag .bar { height: 4px; border-radius: 2px; margin-top: 8px; background: var(--f-line); }
+.fpv .ag .bar i { display: block; height: 100%; border-radius: 2px; }
+.fpv .topcli { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; font-size: 12px; }
+.fpv .topcli .nm { width: 44%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--f-tx2); }
+.fpv .topcli .tr { flex: 1; height: 6px; background: var(--f-line); border-radius: 3px; }
+.fpv .topcli .tr i { display: block; height: 100%; background: var(--f-blue); border-radius: 3px; }
+
+/* filtros */
+.fpv .filters { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; background: var(--f-card); border: 1px solid var(--f-line); border-radius: 14px 14px 0 0; padding: 12px 14px; border-bottom: 0; }
+.fpv .search { flex: 1; min-width: 220px; position: relative; }
+.fpv .search input { width: 100%; background: var(--f-card2); border: 1px solid var(--f-line); color: var(--f-tx); padding: 8px 12px 8px 32px; border-radius: 10px; font-size: 13px; outline: none; font-family: inherit; }
+.fpv .search input:focus { border-color: var(--f-blue); }
+.fpv .search svg { position: absolute; left: 10px; top: 10px; color: var(--f-tx3); }
+.fpv .sel { background: var(--f-card2); border: 1px solid var(--f-line); color: var(--f-tx); padding: 7px 10px; border-radius: 10px; font-size: 12.5px; outline: none; font-family: inherit; }
+.fpv .chipf { border: 1px dashed var(--f-line2); background: transparent; color: var(--f-tx2); padding: 6px 10px; border-radius: 999px; font-size: 12px; }
+.fpv .chipf.on { border-style: solid; border-color: var(--f-blue); color: var(--f-tx); background: var(--f-blue-s); }
+
+/* barra de lote */
+.fpv .bulk { display: flex; align-items: center; gap: 12px; background: var(--f-blue); color: #fff; padding: 10px 14px; font-size: 13px; }
+.fpv .bulk .btn { background: rgba(255, 255, 255, .15); border-color: rgba(255, 255, 255, .25); color: #fff; }
+.fpv .bulk .btn.w { background: #fff; color: var(--f-blue); }
+
+/* tabela */
+.fpv .tablebox { background: var(--f-card); border: 1px solid var(--f-line); border-radius: 0 0 14px 14px; overflow: auto; max-height: calc(100vh - 140px); }
+.fpv table.fl { width: 100%; border-collapse: collapse; min-width: 1180px; }
+.fpv .fl th { font-size: 11.5px; font-weight: 500; color: var(--f-tx3); text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--f-line); background: var(--f-card); position: sticky; top: 0; z-index: 1; white-space: nowrap; cursor: pointer; user-select: none; }
+.fpv .fl th.r, .fpv .fl td.r { text-align: right; }
+.fpv .fl td { padding: 11px 12px; border-bottom: 1px solid var(--f-line); vertical-align: middle; }
+.fpv .fl tr.row { cursor: pointer; transition: background .1s; }
+.fpv .fl tr.row:hover td { background: var(--f-card2); }
+.fpv .fl tr.row.sel td { background: var(--f-blue-s); }
+.fpv .fl tfoot td { font-weight: 600; background: var(--f-card2); position: sticky; bottom: 0; }
+.fpv .doc { display: flex; align-items: center; gap: 8px; }
+.fpv .doc b { font-weight: 650; }
+.fpv .tag { font-size: 10.5px; font-weight: 700; padding: 2px 6px; border-radius: 6px; letter-spacing: .02em; }
+.fpv .tag.pv { background: var(--f-pv-s); color: var(--f-pv); }
+.fpv .tag.os { background: var(--f-os-s); color: var(--f-os); }
+.fpv .orig { font-size: 11px; color: var(--f-tx3); }
+.fpv .cli { max-width: 300px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fpv .cli small { display: block; color: var(--f-tx3); font-size: 11.5px; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fpv .pill { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 550; padding: 3px 9px; border-radius: 999px; white-space: nowrap; }
+.fpv .pill i { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.fpv .s-pend { background: var(--f-mute-s); color: var(--f-tx2); }
+.fpv .s-pronto { background: var(--f-blue-s); color: var(--f-blue); }
+.fpv .s-emis, .fpv .s-parc { background: var(--f-warn-s); color: var(--f-warn); }
+.fpv .s-fat { background: var(--f-ok-s); color: var(--f-ok); }
+.fpv .s-rej { background: var(--f-bad-s); color: var(--f-bad); }
+.fpv .prog { width: 130px; }
+.fpv .prog .b { height: 6px; border-radius: 3px; background: var(--f-line); overflow: hidden; display: flex; }
+.fpv .prog .b i { display: block; height: 100%; }
+.fpv .prog .l { display: flex; justify-content: space-between; font-size: 11px; color: var(--f-tx3); margin-top: 4px; }
+.fpv .age { font-size: 12px; }
+.fpv .age.hot { color: var(--f-bad); font-weight: 600; }
+.fpv .age.warm { color: var(--f-warn); }
+.fpv .rowact { display: flex; gap: 4px; justify-content: flex-end; white-space: nowrap; }
+.fpv .cb { width: 15px; height: 15px; accent-color: var(--f-blue); cursor: pointer; }
+.fpv .flag { font-size: 11px; color: var(--f-warn); display: flex; align-items: center; gap: 4px; margin-top: 3px; }
+.fpv .flag.bad { color: var(--f-bad); }
+.fpv .flag.mute { color: var(--f-tx3); }
+.fpv .empty { padding: 40px; text-align: center; color: var(--f-tx3); }
+
+/* kanban */
+.fpv .kanban { display: grid; grid-template-columns: repeat(5, minmax(250px, 1fr)); gap: 12px; overflow: auto; background: var(--f-card); border: 1px solid var(--f-line); border-radius: 0 0 14px 14px; padding: 14px; }
+.fpv .col { background: var(--f-card2); border: 1px solid var(--f-line); border-radius: 14px; display: flex; flex-direction: column; max-height: calc(100vh - 160px); min-height: 300px; }
+.fpv .colh { padding: 12px 12px 10px; border-bottom: 1px solid var(--f-line); }
+.fpv .colh .t { display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: 13px; }
+.fpv .colh .t .n { margin-left: auto; background: var(--f-card); border: 1px solid var(--f-line); border-radius: 999px; padding: 1px 8px; font-size: 11px; color: var(--f-tx2); }
+.fpv .colh .val { font-size: 17px; font-weight: 700; margin-top: 6px; letter-spacing: -.01em; }
+.fpv .colh .mini { display: flex; height: 4px; border-radius: 2px; overflow: hidden; margin-top: 8px; background: var(--f-line); }
+.fpv .colh .mini i { display: block; height: 100%; }
+.fpv .colh .hint { font-size: 11px; color: var(--f-tx3); margin-top: 6px; }
+.fpv .cards { padding: 10px; display: flex; flex-direction: column; gap: 8px; overflow: auto; flex: 1; }
+.fpv .kcard { background: var(--f-card); border: 1px solid var(--f-line); border-radius: 12px; padding: 11px 12px 11px 14px; cursor: pointer; transition: .12s; position: relative; text-align: left; color: var(--f-tx); width: 100%; }
+.fpv .kcard:hover { border-color: var(--f-line2); box-shadow: var(--f-shadow); }
+.fpv .kcard .top { display: flex; align-items: center; gap: 6px; }
+.fpv .kcard .top b { font-size: 13px; }
+.fpv .kcard .top .val { margin-left: auto; font-weight: 650; font-size: 13px; }
+.fpv .kcard .cl { font-size: 12px; color: var(--f-tx2); margin-top: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fpv .kcard .meta { display: flex; gap: 10px; font-size: 11px; color: var(--f-tx3); margin-top: 8px; align-items: center; }
+.fpv .kcard .meta .r { margin-left: auto; }
+.fpv .kcard .prog { width: 100%; margin-top: 8px; }
+.fpv .kcard .stripe { position: absolute; left: 0; top: 10px; bottom: 10px; width: 3px; border-radius: 0 3px 3px 0; }
+
+/* gaveta */
+.fpv-scrim { position: fixed; inset: 0; background: rgba(2, 6, 23, .5); z-index: 60; }
+.fpv-drawer { position: fixed; top: 0; right: 0; height: 100vh; width: min(640px, 100vw); background: var(--f-bg2); border-left: 1px solid var(--f-line); z-index: 61; display: flex; flex-direction: column; box-shadow: var(--f-shadow); }
+.fpv-drawer .dh { padding: 18px 20px; border-bottom: 1px solid var(--f-line); }
+.fpv-drawer .x { float: right; width: 32px; height: 32px; border-radius: 9px; border: 1px solid var(--f-line); background: var(--f-card); color: var(--f-tx2); }
+.fpv-drawer h2 { font-size: 20px; font-weight: 700; display: flex; align-items: center; gap: 8px; margin: 4px 0 0; flex-wrap: wrap; }
+.fpv-drawer .c { color: var(--f-tx2); margin-top: 4px; }
+.fpv-drawer .dgrid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 14px; }
+.fpv-drawer .dgrid div { background: var(--f-card); border: 1px solid var(--f-line); border-radius: 12px; padding: 10px 12px; }
+.fpv-drawer .dgrid span { font-size: 11px; color: var(--f-tx3); }
+.fpv-drawer .dgrid b { display: block; font-size: 16px; margin-top: 3px; }
+.fpv-drawer .db { padding: 18px 20px; overflow: auto; flex: 1; }
+.fpv-drawer h4 { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--f-tx3); font-weight: 600; margin: 18px 0 8px; }
+.fpv-drawer h4:first-child { margin-top: 0; }
+.fpv-drawer table.it { width: 100%; border-collapse: collapse; }
+.fpv-drawer .it th { padding: 6px 8px; font-size: 11px; font-weight: 500; color: var(--f-tx3); text-align: left; border-bottom: 1px solid var(--f-line); }
+.fpv-drawer .it td { padding: 8px; font-size: 12.5px; border-bottom: 1px solid var(--f-line); }
+.fpv-drawer .it .r { text-align: right; }
+.fpv-drawer .nf { display: flex; align-items: center; gap: 10px; background: var(--f-card); border: 1px solid var(--f-line); border-radius: 12px; padding: 10px 12px; margin-bottom: 8px; }
+.fpv-drawer .nf .ic { width: 34px; height: 34px; border-radius: 9px; display: grid; place-items: center; font-size: 10px; font-weight: 700; flex: none; }
+.fpv-drawer .nf .info { flex: 1; min-width: 0; }
+.fpv-drawer .nf .info b { font-size: 13px; }
+.fpv-drawer .nf .info span { display: block; font-size: 11.5px; color: var(--f-tx3); margin-top: 2px; }
+.fpv-drawer .timeline { border-left: 2px solid var(--f-line); margin-left: 6px; padding-left: 14px; }
+.fpv-drawer .timeline div { position: relative; font-size: 12.5px; color: var(--f-tx2); margin-bottom: 10px; }
+.fpv-drawer .timeline div::before { content: ""; position: absolute; left: -20px; top: 4px; width: 10px; height: 10px; border-radius: 50%; background: var(--f-bg2); border: 2px solid var(--f-line2); }
+.fpv-drawer .timeline div.ok::before { border-color: var(--f-ok); background: var(--f-ok); }
+.fpv-drawer .timeline small { display: block; color: var(--f-tx3); font-size: 11px; }
+.fpv-drawer .df { padding: 14px 20px; border-top: 1px solid var(--f-line); display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.fpv-drawer .df .sum { margin-right: auto; font-size: 12px; color: var(--f-tx2); }
+.fpv-drawer .df .sum b { display: block; font-size: 16px; color: var(--f-tx); }
+.fpv .alert, .fpv-drawer .alert { background: var(--f-warn-s); border: 1px solid rgba(245, 158, 11, .35); color: var(--f-warn); border-radius: 12px; padding: 10px 12px; font-size: 12.5px; margin-bottom: 14px; }
+.fpv .alert.bad, .fpv-drawer .alert.bad { background: var(--f-bad-s); border-color: rgba(239, 68, 68, .35); color: var(--f-bad); }
+.fpv .alert.info, .fpv-drawer .alert.info { background: var(--f-blue-s); border-color: rgba(59, 130, 246, .35); color: var(--f-blue); }
+.fpv .alert.ok, .fpv-drawer .alert.ok { background: var(--f-ok-s); border-color: rgba(34, 197, 94, .35); color: var(--f-ok); }
+.fpv-drawer .chk { font-size: 12.5px; margin-bottom: 4px; }
+.fpv-drawer pre { font-size: 11px; max-height: 320px; overflow: auto; background: var(--f-card2); border: 1px solid var(--f-line); border-radius: 10px; padding: 10px; }
+
+/* prontidão (NF-e de produção) */
+.fpv .pront { background: var(--f-card); border: 1px solid var(--f-line); border-radius: 16px; padding: 14px 16px; margin-bottom: 16px; }
+.fpv .pront .hd { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.fpv .pront .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 8px; margin-top: 12px; }
+.fpv .pront .it { font-size: 12.5px; }
+.fpv .pront .it div { color: var(--f-tx3); margin-left: 16px; }
+
+.fpv-toast { position: fixed; bottom: 22px; left: 50%; transform: translateX(-50%); background: var(--ww-text); color: var(--ww-panel); padding: 10px 16px; border-radius: 12px; font-weight: 550; z-index: 80; max-width: min(720px, 92vw); font-size: 13px; box-shadow: 0 10px 30px rgba(0,0,0,.3); }
+
+@media (max-width: 1200px) { .fpv .kpis { grid-template-columns: repeat(3, 1fr); } .fpv .mix { grid-template-columns: 1fr; } }
+@media (max-width: 720px) { .fpv .kpis { grid-template-columns: repeat(2, 1fr); } .fpv .typerow { grid-template-columns: 1fr; } .fpv .aging { grid-template-columns: repeat(2, 1fr); } }
