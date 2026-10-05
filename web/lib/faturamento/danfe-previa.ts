@@ -34,8 +34,8 @@ const fmtCep = (s?: string | null) => so(s).replace(/^(\d{5})(\d{3})$/, "$1-$2")
 
 /** Emitente a partir do cadastro de Empresas — sem consultar a Focus. */
 export async function emitenteLocal(empresa: string): Promise<Emitente> {
-  const { data } = await supaAdmin().schema("cadastros").from("aux")
-    .select("nome, dados").eq("registro", "empresas").eq("codigo", empresa).maybeSingle();
+  // schema cadastros não é exposto no PostgREST → função em orders (sql/74).
+  const { data } = await supaAdmin().schema("orders").rpc("fat_emitente_local", { p_empresa: empresa });
   const d = ((data as { dados?: Record<string, string> } | null)?.dados ?? {}) as Record<string, string>;
   const cfg = await configDe(empresa);
   const cidade = (d.cidade ?? "").replace(/\s*\([A-Z]{2}\)\s*$/, "");
@@ -132,18 +132,18 @@ export function danfeHtml(p: Payload, em: Emitente, o: { numero: number | null; 
   const cx = (rot: string, val: unknown, cls = "") => `<div class="cx ${cls}"><span>${rot}</span><b>${esc(val) || "&nbsp;"}</b></div>`;
   return `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>${o.previa ? "PRÉVIA " : ""}DANFE nº ${numero} série ${esc(o.serie)}</title>
 <style>
-@page{size:A4;margin:6mm}*{box-sizing:border-box}html,body{margin:0;background:#e9ecef}body{font-family:Arial,Helvetica,sans-serif;color:#000;font-size:7pt;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+@page{size:A4;margin:6mm}*{box-sizing:border-box}html,body{margin:0;background:#e9ecef}body{font-family:Arial,Helvetica,sans-serif;color:#000;font-size:7.5pt;-webkit-print-color-adjust:exact;print-color-adjust:exact}
 .barra{position:sticky;top:0;background:#111a2e;color:#fff;padding:8px 14px;font:13px Arial;display:flex;gap:12px;align-items:center;z-index:5}.barra button{background:#3b82f6;color:#fff;border:0;border-radius:6px;padding:6px 12px;cursor:pointer}
 .folha{width:198mm;margin:8mm auto;background:#fff;padding:3mm;position:relative;overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,.2)}
 .marca{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none;z-index:3}
 .marca span{transform:rotate(-35deg);font-size:46pt;font-weight:900;color:rgba(220,38,38,.18);white-space:nowrap;letter-spacing:2px}
-.row{display:flex;width:100%}.cx{border:1px solid #000;margin:-1px 0 0 -1px;padding:.6mm 1mm;flex:1;min-height:7.5mm;overflow:hidden}.cx span{display:block;font-size:5.5pt;text-transform:uppercase}.cx b{font-size:8pt;font-weight:normal;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.row{display:flex;width:100%}.cx{border:1px solid #000;margin:-1px 0 0 -1px;padding:.6mm 1mm;flex:1;min-height:7.5mm;overflow:hidden}.cx span{display:block;font-size:5.5pt;text-transform:uppercase}.cx b{font-size:8.5pt;font-weight:normal;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .tit{font-size:6.5pt;font-weight:bold;margin:2mm 0 .5mm;text-transform:uppercase}
 .canhoto{display:flex;border:1px dashed #000;margin-bottom:2mm}.canhoto .t{flex:1;padding:1mm;font-size:6.5pt;border-right:1px solid #000}.canhoto .n{width:32mm;text-align:center;padding:1mm;font-size:8pt}
 .cab{display:grid;grid-template-columns:78mm 34mm 1fr;border:1px solid #000}.cab>div{padding:1.5mm;border-right:1px solid #000}.cab>div:last-child{border-right:0}
 .emit b{font-size:10pt;display:block;margin-bottom:1mm}.danfe{text-align:center}.danfe h1{margin:0;font-size:13pt}.danfe .es{display:flex;justify-content:center;gap:2mm;align-items:center;margin:1mm 0}.danfe .es i{border:1px solid #000;padding:0 2mm;font-style:normal;font-size:11pt}
 .cod{height:11mm;background:repeating-linear-gradient(90deg,#000 0 1px,#fff 1px 3px,#000 3px 5px,#fff 5px 6px);opacity:.25;margin-bottom:1mm}
-table.prod{width:100%;border-collapse:collapse;font-size:6.5pt}table.prod th,table.prod td{border:1px solid #000;padding:.4mm .6mm;text-align:center}table.prod th{font-size:5.5pt}table.prod td.l{text-align:left}table.prod td.r{text-align:right}
+table.prod{width:100%;border-collapse:collapse;font-size:7pt}table.prod th,table.prod td{border:1px solid #000;padding:.4mm .6mm;text-align:center}table.prod th{font-size:5.5pt}table.prod td.l{text-align:left}table.prod td.r{text-align:right}
 .dups{display:flex;flex-wrap:wrap;border:1px solid #000}.dups div{padding:1mm 2mm;border-right:1px solid #000;font-size:7pt}
 .adic{display:grid;grid-template-columns:2fr 1fr}.adic>div{border:1px solid #000;margin:-1px 0 0 -1px;padding:1mm;min-height:28mm;font-size:7pt;white-space:pre-wrap}
 @media print{.barra{display:none}html,body{background:#fff}.folha{margin:0;box-shadow:none}}

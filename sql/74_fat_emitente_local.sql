@@ -1,0 +1,2 @@
+-- p74 (05/10/26): emitente para a prévia do DANFE sem consultar a Focus
+create or replace function orders.fat_emitente_local(p_empresa text) returns jsonb language sql stable security definer set search_path to 'orders','cadastros','public' as $$ select jsonb_build_object('nome', a.nome, 'dados', a.dados) from cadastros.aux a where a.registro = 'empresas' and a.codigo = p_empresa and not coalesce(a.inativo, false) limit 1 $$;
