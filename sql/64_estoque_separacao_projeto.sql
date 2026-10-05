@@ -1,4 +1,5 @@
 -- Estoque — Separação de material para PROJETO (05/10/26, pedido do Benny).
+-- Aplicado como migrações p63_estoque_separacao_projeto_1, _2 e p63b_separacao_desfazer_alias (omie-data, 05/10/26).
 -- "Quando fechamos um projeto temos que separar material para ele: movimentar como se já estivesse separado, em batelada."
 --
 -- Modelo: RESERVA por projeto (livro próprio), não um local novo.
