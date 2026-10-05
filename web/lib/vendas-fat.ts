@@ -40,6 +40,7 @@ export function docFat(d: VendaDoc): DocFat {
       projeto: d.projeto_codigo ?? null,
       vendedor: d.vendedor_codigo ?? null,
       conta_corrente: d.conta_codigo && /^\d+$/.test(d.conta_codigo) ? Number(d.conta_codigo) : null,
+      forma_recebimento: d.forma_recebimento ?? null,
       parcelas: d.parcelas.map((x) => x.dias != null
         ? { dias: x.dias, percentual: x.percentual ?? undefined }
         : { vencimento: x.vencimento, valor: Number(x.valor) }),

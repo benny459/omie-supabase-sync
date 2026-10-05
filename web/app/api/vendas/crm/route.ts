@@ -7,6 +7,7 @@
 //        Recebe o mesmo "cab/itens/parcelas" que o CRM montava para o Omie.
 // Autenticação: header x-compras-secret = COMPRAS_RC_SECRET (o mesmo da RC).
 // A rota é pública no middleware; a guarda é o segredo.
+import { FORMAS_RECEBIMENTO } from "@/lib/vendas";
 import { NextResponse } from "next/server";
 import { rpc } from "@/lib/compras-server";
 import { crmAutorizado, documento, erro, naoAutorizado, salvarVenda } from "@/lib/vendas-server";
@@ -18,6 +19,7 @@ export const dynamic = "force-dynamic";
 type CabCrm = {
   cliente_omie?: string | number; data?: string; etapa?: string; parcela?: string; n_parcelas?: number | string;
   categoria?: string; projeto?: string | number; conta?: string | number; vend?: string | number;
+  forma_recebimento?: string; parcela_desc?: string;
   cenario?: string | number; cf?: string; obs?: string; obs_nf?: string; num_pedido_cliente?: string; contato?: string;
 };
 type ItemCrm = {
@@ -72,12 +74,18 @@ export async function POST(req: Request) {
       numero: Number(x.numero_parcela) || k + 1, vencimento: isoDe(x.data_vencimento)!, valor: Number(x.valor) || 0,
       percentual: x.percentual ?? null, dias: x.quantidade_dias ?? null,
     }));
+    // CRM 2.6.622+: projeto e categoria de receita são obrigatórios (05/10/26).
+    if (!Number(cab.projeto)) return NextResponse.json({ error: "Projeto obrigatório: escolha o projeto do PV/OS no CRM" }, { status: 400 });
+    if (!txt(cab.categoria)) return NextResponse.json({ error: "Categoria de receita obrigatória: escolha a categoria do PV/OS no CRM" }, { status: 400 });
+    const forma = txt(cab.forma_recebimento)?.toUpperCase() ?? null;
+    if (forma && !FORMAS_RECEBIMENTO.some((f) => f.codigo === forma)) return NextResponse.json({ error: `Forma de recebimento inválida: ${forma}` }, { status: 400 });
     const p: VendaSalvar = {
       empresa, tipo, origem: "crm", proposta, cliente_codigo: String(cab.cliente_omie ?? ""),
       previsao: isoDe(cab.data), condicao_codigo: txt(cab.parcela),
       qtd_parcelas: Number(cab.n_parcelas) || null, projeto_codigo: Number(cab.projeto) ? String(cab.projeto) : null,
       categoria_codigo: txt(cab.categoria), vendedor_codigo: Number(cab.vend) ? String(cab.vend) : null,
       conta_codigo: Number(cab.conta) ? String(cab.conta) : null, cenario_impostos: txt(cab.cenario),
+      forma_recebimento: forma, condicao_descricao: txt(cab.parcela_desc),
       consumidor_final: txt(cab.cf), observacoes: txt(cab.obs), obs_nf: txt(cab.obs_nf),
       num_pedido_cliente: txt(cab.num_pedido_cliente), contato: txt(cab.contato), etapa: txt(cab.etapa),
       itens, parcelas,

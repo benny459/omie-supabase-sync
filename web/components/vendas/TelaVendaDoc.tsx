@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { Aviso, BotaoTela, CabecalhoTela, Carregando, PaginaNavy, brl, cartao } from "@/components/navy/tela/KitTela";
 import BotaoEmitirNf from "@/components/faturamento/BotaoEmitirNf";
 import type { DocFat } from "@/lib/faturamento/montar";
-import { STATUS_VENDA, type VendaDoc, type VendaItem, type VendaSalvar } from "@/lib/vendas";
+import { FORMAS_RECEBIMENTO, STATUS_VENDA, type VendaDoc, type VendaItem, type VendaSalvar } from "@/lib/vendas";
 import { BuscaPessoa, BuscaProposta } from "@/components/vendas/BuscasCrmCadastro";
 import { BotaoNovoProjeto } from "@/components/cadastros/NovoProjetoRapido";
 
@@ -72,7 +72,7 @@ export default function TelaVendaDoc({ id }: { id: number | null }) {
       id: d.id, empresa: d.empresa, tipo: d.tipo, cliente_codigo: d.cliente_codigo ?? "", proposta: d.proposta,
       previsao: d.previsao, condicao_codigo: d.condicao_codigo, qtd_parcelas: d.qtd_parcelas,
       projeto_codigo: d.projeto_codigo, categoria_codigo: d.categoria_codigo, vendedor_codigo: d.vendedor_codigo,
-      conta_codigo: d.conta_codigo, observacoes: d.observacoes, obs_nf: d.obs_nf, num_pedido_cliente: d.num_pedido_cliente,
+      conta_codigo: d.conta_codigo, forma_recebimento: d.forma_recebimento ?? null, observacoes: d.observacoes, obs_nf: d.obs_nf, num_pedido_cliente: d.num_pedido_cliente,
       contato: d.contato, valor_desconto: d.valor_desconto, valor_frete: d.valor_frete,
       itens: d.itens.map((i) => ({ codigo: i.codigo, ncod_prod: i.ncod_prod, descricao: i.descricao, unidade: i.unidade,
         ncm: i.ncm, cfop: i.cfop, quantidade: Number(i.quantidade), valor_unitario: Number(i.valor_unitario),
@@ -246,6 +246,12 @@ export default function TelaVendaDoc({ id }: { id: number | null }) {
           <select style={input} disabled={!editavel} value={form.condicao_codigo ?? ""} onChange={(e) => setF("condicao_codigo", e.target.value)}>
             <option value="">—</option>
             {op.condicoes.map((c) => <option key={c.codigo} value={c.codigo}>{c.codigo} · {c.descricao}</option>)}
+          </select>
+        </Campo>
+        <Campo rot="Forma de recebimento">
+          <select style={input} disabled={!editavel} value={form.forma_recebimento ?? ""} onChange={(e) => setF("forma_recebimento", e.target.value || null)}>
+            <option value="">—</option>
+            {FORMAS_RECEBIMENTO.map((f) => <option key={f.codigo} value={f.codigo}>{f.nome}</option>)}
           </select>
         </Campo>
         <Campo rot="Nº de parcelas"><input style={input} disabled={!editavel} inputMode="numeric" value={form.qtd_parcelas ?? ""}

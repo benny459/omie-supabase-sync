@@ -38,7 +38,7 @@ export type VendaDoc = {
   emissao: string; previsao: string | null;
   condicao_codigo: string | null; condicao: string | null; qtd_parcelas: number | null;
   projeto_codigo: string | null; projeto: string | null; categoria_codigo: string | null; categoria: string | null;
-  vendedor_codigo: string | null; conta_codigo: string | null;
+  vendedor_codigo: string | null; conta_codigo: string | null; forma_recebimento?: string | null;
   observacoes: string | null; obs_nf: string | null;
   valor_mercadorias: number; valor_desconto: number; valor_frete: number; valor_total: number;
   dt_fat: string | null; nf: string | null; chave_nfe: string | null; cancelado_motivo: string | null;
@@ -58,11 +58,19 @@ export type VendaSalvar = {
   id?: number; empresa?: string; tipo?: "PV" | "OS"; cliente_codigo: number | string;
   proposta?: string | null; previsao?: string | null; condicao_codigo?: string | null; qtd_parcelas?: number | null;
   projeto_codigo?: string | null; categoria_codigo?: string | null; vendedor_codigo?: string | null;
-  conta_codigo?: string | null; cenario_impostos?: string | null; consumidor_final?: string | null;
+  conta_codigo?: string | null; forma_recebimento?: string | null; condicao_descricao?: string | null;
+  cenario_impostos?: string | null; consumidor_final?: string | null;
   observacoes?: string | null; obs_nf?: string | null; num_pedido_cliente?: string | null; contato?: string | null;
   valor_desconto?: number | null; valor_frete?: number | null; etapa?: string | null; origem?: "painel" | "crm";
   itens: VendaItem[]; parcelas?: VendaParcela[];
 };
+
+/** Formas de recebimento (mesmos códigos do Faturamento e do CRM). */
+export const FORMAS_RECEBIMENTO: { codigo: string; nome: string }[] = [
+  { codigo: "BOL", nome: "Boleto" }, { codigo: "PIX", nome: "Pix" }, { codigo: "TRA", nome: "Transferência" },
+  { codigo: "TED", nome: "TED" }, { codigo: "DEP", nome: "Depósito" }, { codigo: "CRC", nome: "Cartão de crédito" },
+  { codigo: "CRD", nome: "Cartão de débito" }, { codigo: "DIN", nome: "Dinheiro" }, { codigo: "CHQ", nome: "Cheque" },
+];
 
 export const STATUS_VENDA: Record<VendaStatus, { rot: string; cor: string }> = {
   aberto: { rot: "Aberto", cor: "var(--ww-accent-text)" },

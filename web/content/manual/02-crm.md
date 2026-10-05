@@ -41,3 +41,5 @@ O CRM abre pela aba **CRM** da barra (dentro do portal). Aqui está o que mudou 
 **O item não tem fornecedor nem preço máximo na prévia da RC.** É normal quando a peça nunca foi comprada por um PC no painel ou quando ninguém cadastrou o preço máximo (em Estoque, na ficha do item).
 
 **Posso criar a RC sem código de item?** Pode. A linha entra como **item novo** e o comprador completa em Compras.
+
+> **Atenção:** ao criar o PV/OS pelo CRM, **projeto** e **categoria de receita** são obrigatórios — sem eles o pedido não é criado. A **forma de recebimento** e a **condição** escolhidas seguem para o Faturamento do painel.
