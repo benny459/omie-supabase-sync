@@ -73,6 +73,9 @@ export const CONF: Record<Registro, Conf> = {
       { k: "banco", rot: "Banco", tipo: "banco", larg: 2 },
       { k: "agencia", rot: "Agência", larg: 1 },
       { k: "conta", rot: "Conta", larg: 1 },
+      { k: "pix_tipo", rot: "Tipo da chave PIX", tipo: "sel", ops: [["", "—"], ["cnpj", "CNPJ"], ["cpf", "CPF"], ["email", "E-mail"], ["telefone", "Telefone"], ["aleatoria", "Aleatória"]], larg: 1 },
+      { k: "pix_chave", rot: "Chave PIX", larg: 2, dica: "sai no recibo/NF-e quando a forma de recebimento é PIX" },
+      { k: "beneficiario", rot: "Beneficiário", larg: 1, dica: "nome que o pagador vê (opcional)" },
       { k: "saldo_inicial", rot: "Saldo inicial (R$)", tipo: "num", larg: 1 },
       { k: "saldo_data", rot: "Data do saldo", tipo: "data", larg: 1 },
       { k: "limite", rot: "Limite (R$)", tipo: "num", larg: 1 },
@@ -207,10 +210,24 @@ export default function TelaAuxiliar({ reg }: { reg: Registro }) {
   const [mais, setMais] = useState(false);
   const [aberto, setAberto] = useState<{ id: number | null } | null>(null);
   const seq = useRef(0);
+  const alvo = useRef<string | null>(null);
 
   useEffect(() => {
     try { const e = localStorage.getItem("cad-emp"); if (e && (EMPRESAS as readonly string[]).includes(e)) setEmp(e); } catch {}
+    // Link direto (ex.: Nova emissão › "Cadastrar chave PIX nesta conta"): ?emp=SF&codigo=2252238644 abre a ficha.
+    const sp = new URLSearchParams(window.location.search);
+    const e2 = (sp.get("emp") ?? "").toUpperCase();
+    if (e2 && (EMPRESAS as readonly string[]).includes(e2)) setEmp(e2);
+    const cod = sp.get("codigo");
+    if (cod) alvo.current = cod;
   }, []);
+  useEffect(() => {
+    if (!alvo.current || !dados) return;
+    const l = dados.linhas.find((x) => String(x.codigo) === alvo.current || String(x.omieCodigo ?? "") === alvo.current);
+    if (l) { alvo.current = null; setAberto({ id: l.id }); }
+    else if (!busca) setBusca(alvo.current);
+    else alvo.current = null;
+  }, [dados, busca]);
 
   const url = useCallback((off = 0) =>
     `/api/cadastros/aux?reg=${reg}&emp=${emp}&q=${encodeURIComponent(busca)}${todos ? "&todos=1" : ""}${off ? `&off=${off}` : ""}`,

@@ -363,6 +363,7 @@ async function posAutorizacao(row: Emissao): Promise<Emissao> {
         forma: p.forma ?? cond?.forma_recebimento ?? null, condicao: cond?.codigo ?? cond?.descricao ?? null,
         centro_custo: cond?.centro_custo ?? null, vendedor: cond?.vendedor ?? null, contrato: cond?.contrato ?? null,
         retencoes: cond?.retencoes ?? null, conta: cond?.conta_nome ?? null,
+        instrucao: cond?.instrucao_pagamento ?? null,
       },
     }));
     const { data, error } = await supaAdmin().schema("finance").from("receber").insert(linhas).select("id");

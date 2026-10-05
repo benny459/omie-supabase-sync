@@ -33,7 +33,7 @@ type Opc = { codigo: string; nome: string };
 type Opcoes = {
   condicoes: (Opc & { dias: number[] | null })[];
   formas: (Opc & { tpag: string })[];
-  contas: { codigo: number; nome: string; tipo?: string }[];
+  contas: ContaRec[];
   categorias: Opc[]; projetos: Opc[]; centros: Opc[]; vendedores: Opc[];
 };
 type ParcelaHist = { numero?: string; vencimento?: string; valor?: number; dias?: number; forma?: string | null };
@@ -45,7 +45,37 @@ type Hist = {
   retem_iss?: boolean; valor_iss?: number;
 };
 type Parc = { vencimento: string; valor: number; forma: string };
+/** Conta de recebimento com os dados de pagamento (cadastros › bancos e contas). */
+type ContaRec = { codigo: number; nome: string; tipo?: string; banco?: string | null; agencia?: string | null; conta?: string | null;
+  pix_tipo?: string | null; pix_chave?: string | null; beneficiario?: string | null };
+const BANCOS: Record<string, string> = { "001": "Banco do Brasil", "033": "Santander", "104": "Caixa", "237": "Bradesco", "260": "Nubank", "301": "Conta Simples", "336": "C6 Bank", "341": "Itaú", "450": "Omie.CASH", "077": "Inter", "208": "BTG" };
+const FORMAS_BANCO = ["TRA", "TED", "DEP"];
+/** Instrução de pagamento para o documento e para cada parcela (05/10/26):
+ *  PIX → chave da conta; transferência/depósito → banco, agência e conta. */
+function instrucoes(formasUsadas: string[], c: ContaRec | undefined) {
+  const linhas: string[] = []; const faltas: string[] = [];
+  if (!c) return { linhas, faltas: formasUsadas.some((f) => f === "PIX" || FORMAS_BANCO.includes(f)) ? ["escolha a conta de recebimento"] : [] };
+  const quem = c.beneficiario ? ` — favorecido ${c.beneficiario}` : "";
+  if (formasUsadas.includes("PIX")) {
+    if (c.pix_chave) linhas.push(`Pagamento via PIX: chave ${c.pix_tipo ? `${c.pix_tipo.toUpperCase()} ` : ""}${c.pix_chave}${quem}`);
+    else faltas.push(`a conta “${c.nome}” não tem chave PIX cadastrada`);
+  }
+  if (formasUsadas.some((f) => FORMAS_BANCO.includes(f))) {
+    if (c.banco && c.agencia && c.conta) linhas.push(`Transferência/depósito: ${BANCOS[c.banco] ?? `Banco ${c.banco}`} (${c.banco}) Ag ${c.agencia} CC ${c.conta}${quem}`);
+    else faltas.push(`a conta “${c.nome}” está sem banco/agência/conta`);
+  }
+  return { linhas, faltas };
+}
 type Checagem = { item: string; ok: boolean; nivel: "erro" | "aviso"; detalhe: string };
+/** Próximos números (sem consumir) — orders.fat_proximos. */
+type Prox = { pv?: number; os?: number; nfe?: number | null; nfe_serie?: string; recibo?: number | null; ambiente?: string };
+/** Linha da carteira para "Faturar um PV/OS existente". */
+type CartDoc = { chave: string; tipo: "PV" | "OS"; rotulo: string; cliente: string | null; valor: number; faturado: number; emite: boolean; emite_motivo?: string; aguarda_nfse?: boolean };
+const DICA: Record<Tipo, string> = {
+  nfe: "Cria o PV na sequência e emite a NF-e na SEFAZ (Focus).",
+  recibo: "Cria a OS na sequência e gera o recibo de prestação de serviço.",
+  nfse: "Cria a OS na sequência; a NFS-e é emitida no portal da prefeitura e registrada depois (Registrar NFS-e).",
+};
 
 const VAZIO: ClienteFat = { nome: "", cnpj: "", ie: "", email: "", logradouro: "", numero: "", bairro: "", municipio: "", uf: "SP", cep: "" };
 const ITEM0: ItemFat = { codigo: "", descricao: "", quantidade: 1, valor_unitario: 0, unidade: "UN", ncm: "" };
@@ -113,8 +143,14 @@ export default function NovaEmissao({ config, aberto, fechar, avisar, onEmitido,
   const ativas = config.filter((c) => c.ativo);
   const [empresa, setEmpresa] = useState(ativas[0]?.empresa ?? "SF");
   const [tipo, setTipo] = useState<Tipo>("nfe");
-  const [origemTipo, setOrigemTipo] = useState("manual");
-  const [origemId, setOrigemId] = useState("");
+  const [modo, setModo] = useState<"novo" | "existente">("novo");
+  const [prox, setProx] = useState<Prox | null>(null);
+  const [cliCodigo, setCliCodigo] = useState("");
+  const [semProp, setSemProp] = useState(false);
+  const [semPropMotivo, setSemPropMotivo] = useState("");
+  const [carteira, setCarteira] = useState<CartDoc[] | null>(null);
+  const [buscaExist, setBuscaExist] = useState("");
+  const [criado, setCriado] = useState<{ id: number; label: string } | null>(null);
   const [chave, setChave] = useState<string | null>(null);
   const [rotulo, setRotulo] = useState<string | null>(null);
   const [cli, setCli] = useState<ClienteFat>(VAZIO);
@@ -157,35 +193,82 @@ export default function NovaEmissao({ config, aberto, fechar, avisar, onEmitido,
   const prod = cfg?.ambiente === "producao" && cfg?.producao_liberada && !teste;
   const ehOs = tipo !== "nfe";
 
-  // abrir: carrega opções e o documento inicial (linha da carteira)
+  /** Preenche a folha a partir de um PV/OS da carteira (gaveta ou "Faturar um existente"). */
+  function aplicarInicial(ini: Inicial) {
+    const d = ini.documento;
+    setModo("existente");
+    setChave(ini.chave ?? null); setRotulo(ini.rotulo ?? d.rotulo ?? null);
+    setTipo(ini.tipo ?? "nfe");
+    setCli(d.cliente); setItens(d.itens.map((i) => ({ ...i, valor_desconto: undefined, valor_frete: undefined, valor_outras: undefined })));
+    setDesconto(r2(d.itens.reduce((a, i) => a + (i.valor_desconto ?? 0), 0)));
+    setFrete(r2(d.itens.reduce((a, i) => a + (i.valor_frete ?? 0), 0)));
+    setOutras(r2(d.itens.reduce((a, i) => a + (i.valor_outras ?? 0), 0)));
+    setTransp(d.transporte ?? { modalidade: 9 }); setPedidoCli(d.pedido_cliente ?? ""); setObs(d.observacoes ?? ""); setInfoContrib(d.info_contribuinte ?? "");
+    const c = d.condicao;
+    if (c?.forma_recebimento) setForma(c.forma_recebimento);
+    if (c?.conta_corrente) setConta(c.conta_corrente);
+    if (c?.categoria) setCategoria(c.categoria);
+    if (c?.projeto) setProjeto(c.projeto);
+    const dias = (c?.parcelas ?? []).map((p) => p.dias ?? 0);
+    const tot = r2(d.itens.reduce((a, i) => a + i.quantidade * i.valor_unitario - (i.valor_desconto ?? 0) + (i.valor_frete ?? 0) + (i.valor_outras ?? 0), 0));
+    setParcs(gerarParcelas(tot, dias.length ? dias : [0], hoje(), c?.forma_recebimento ?? "BOL"));
+    setVerCliente(false);
+  }
+
+  function recarregarOpcoes() {
+    fetch(`/api/faturamento/nova?op=opcoes&emp=${empresa}`, { cache: "no-store" }).then((x) => x.json()).then((j) => { if (!j.error) setOpc(j); }).catch(() => null);
+  }
+  // Voltou de outra aba (ex.: cadastrou a chave PIX): atualiza contas e próximos números.
+  useEffect(() => {
+    if (!aberto) return;
+    const f = () => { recarregarOpcoes(); carregarProximos(); };
+    window.addEventListener("focus", f);
+    return () => window.removeEventListener("focus", f);
+  }, [aberto, empresa]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  function carregarProximos(emp = empresa) {
+    fetch(`/api/faturamento/nova?op=proximos&emp=${emp}`, { cache: "no-store" }).then((x) => x.json())
+      .then((j) => { if (!j.error) setProx(j); }).catch(() => null);
+  }
+
+  // abrir: carrega opções, próximos números e o documento inicial (linha da carteira)
   useEffect(() => {
     if (!aberto) return;
     vivo.current = true;
-    setTx(null); setPre(null);
+    setTx(null); setPre(null); setCriado(null);
     fetch(`/api/faturamento/nova?op=opcoes&emp=${empresa}`, { cache: "no-store" }).then((x) => x.json()).then((j) => { if (!j.error) setOpc(j); }).catch(() => null);
-    if (inicial) {
-      const d = inicial.documento;
-      setChave(inicial.chave ?? null); setRotulo(inicial.rotulo ?? d.rotulo ?? null);
-      setTipo(inicial.tipo ?? "nfe"); setOrigemTipo(inicial.origem_tipo ?? "manual"); setOrigemId(inicial.origem_id ?? "");
-      setCli(d.cliente); setItens(d.itens.map((i) => ({ ...i, valor_desconto: undefined, valor_frete: undefined, valor_outras: undefined })));
-      setDesconto(r2(d.itens.reduce((a, i) => a + (i.valor_desconto ?? 0), 0)));
-      setFrete(r2(d.itens.reduce((a, i) => a + (i.valor_frete ?? 0), 0)));
-      setOutras(r2(d.itens.reduce((a, i) => a + (i.valor_outras ?? 0), 0)));
-      setTransp(d.transporte ?? { modalidade: 9 }); setPedidoCli(d.pedido_cliente ?? ""); setObs(d.observacoes ?? ""); setInfoContrib(d.info_contribuinte ?? "");
-      const c = d.condicao;
-      if (c?.forma_recebimento) setForma(c.forma_recebimento);
-      if (c?.conta_corrente) setConta(c.conta_corrente);
-      if (c?.categoria) setCategoria(c.categoria);
-      if (c?.projeto) setProjeto(c.projeto);
-      const dias = (c?.parcelas ?? []).map((p) => p.dias ?? 0);
-      const tot = r2(d.itens.reduce((a, i) => a + i.quantidade * i.valor_unitario - (i.valor_desconto ?? 0) + (i.valor_frete ?? 0) + (i.valor_outras ?? 0), 0));
-      setParcs(gerarParcelas(tot, dias.length ? dias : [0], hoje(), c?.forma_recebimento ?? "BOL"));
-      setVerCliente(false);
-    }
+    carregarProximos();
+    if (inicial) aplicarInicial(inicial);
+    else { setModo("novo"); setChave(null); setRotulo(null); }
     const esc = (e: KeyboardEvent) => { if (e.key === "Escape") sair(); };
     document.addEventListener("keydown", esc);
     return () => { document.removeEventListener("keydown", esc); };
   }, [aberto]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => { if (aberto) carregarProximos(empresa); }, [empresa]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // "Faturar um PV/OS existente": carteira a faturar (nativos e Omie)
+  useEffect(() => {
+    if (!aberto || modo !== "existente" || chave || carteira) return;
+    fetch(`/api/faturamento/carteira?empresa=${empresa}`, { cache: "no-store" }).then((x) => x.json())
+      .then((j) => setCarteira(((j.docs ?? []) as CartDoc[]).filter((d) => Number(d.valor) - Number(d.faturado ?? 0) > 0.005)))
+      .catch(() => setCarteira([]));
+  }, [aberto, modo, chave, carteira, empresa]);
+
+  async function escolherExistente(d: CartDoc) {
+    setAviso(null);
+    if (!d.emite && !d.aguarda_nfse) { setAviso(`${d.rotulo}: ${d.emite_motivo ?? "não emite pelo painel"}`); return; }
+    const r = await fetch("/api/faturamento/carteira", { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ empresa, chave: d.chave, acao: "doc" }) }).then((x) => x.json()).catch((e) => ({ error: String(e) }));
+    if (r.error || !r.documento) { setAviso(r.error ?? "Não consegui abrir o documento"); return; }
+    aplicarInicial({ chave: d.chave, documento: r.documento, rotulo: d.rotulo,
+      tipo: d.tipo === "PV" ? "nfe" : (cfg?.tipo_os === "nfse" ? "nfse" : "recibo") });
+  }
+
+  function voltarNovo() {
+    setModo("novo"); setChave(null); setRotulo(null); setBuscaExist("");
+    setCli(VAZIO); setItens([ITEM0]); setParcs([]); setCliCodigo(""); setProposta("");
+  }
 
   // histórico do cliente quando o CNPJ/CPF muda
   const docCli = (cli.cnpj || cli.cpf || "").replace(/\D/g, "");
@@ -212,6 +295,9 @@ export default function NovaEmissao({ config, aberto, fechar, avisar, onEmitido,
   const liquido = r2(total - totRet);
   const somaParc = r2(parcs.reduce((a, p) => a + p.valor, 0));
   const parcOk = parcs.length > 0 && Math.abs(somaParc - liquido) < 0.005;
+  const contaSel = opc?.contas.find((c) => c.codigo === conta);
+  const formasUsadas = Array.from(new Set([forma, ...parcs.map((p) => p.forma)].filter(Boolean)));
+  const instr = instrucoes(formasUsadas, contaSel);
 
   function aplicarCondicao(codigo: string, tot = liquido) {
     setCond(codigo);
@@ -230,7 +316,7 @@ export default function NovaEmissao({ config, aberto, fechar, avisar, onEmitido,
     setPuxando(false);
     if (r.error) { setAviso(r.error); return; }
     if (r.disponivel === false) { setAviso(`${r.motivo} — preencha à mão.`); return; }
-    if (r.pessoa) setCli(clienteDaPessoa(r.pessoa));
+    if (r.pessoa) { setCli(clienteDaPessoa(r.pessoa)); if (r.pessoa.codigo != null) setCliCodigo(String(r.pessoa.codigo)); }
     const lado = tipo === "nfe" ? "PV" : "OS";
     type Ip = { lado: string; codigo: string | null; descricao: string; unidade: string; ncm: string | null; quantidade: number; valor_unitario: number };
     const doLado = (r.itens as Ip[]).filter((i) => i.lado === lado);
@@ -290,6 +376,7 @@ export default function NovaEmissao({ config, aberto, fechar, avisar, onEmitido,
       forma_recebimento: forma, conta_corrente: conta === "" ? null : Number(conta), conta_nome: contaNome,
       categoria: categoria || null, projeto: projeto || null, centro_custo: centro || null, vendedor: vendedor || null,
       contrato: contrato || null, retencoes: ehOs ? ret : null,
+      instrucao_pagamento: instr.linhas.join(" | ") || null,
     };
     return {
       empresa, cliente: cli, itens: its, condicao,
@@ -309,11 +396,30 @@ export default function NovaEmissao({ config, aberto, fechar, avisar, onEmitido,
     setPre(r.error ? { checagens: [], pode_emitir: false, error: r.error } : r);
   }
 
+  /** Documento novo: o que falta para criar o PV/OS na sequência. */
+  function faltaNovo(): string | null {
+    if (modo !== "novo" || teste) return null;
+    if (!cliCodigo) return "Escolha o cliente pela busca do cadastro (nome, fantasia ou CNPJ/CPF) — o PV/OS novo precisa do código do cadastro.";
+    if (!proposta.trim()) {
+      if (!admin) return "Escolha a proposta do CRM deste documento.";
+      if (!semProp) return "Escolha a proposta do CRM ou marque “sem proposta” e informe o motivo.";
+      if (semPropMotivo.trim().length < 5) return "Informe o motivo de lançar sem proposta (mín. 5 caracteres).";
+    }
+    return null;
+  }
+
   async function emitirAgora() {
-    if (!parcOk) { setAviso(`As parcelas (${fmt(somaParc)}) não somam o valor a receber (${fmt(liquido)}).`); return; }
-    const msg = prod
-      ? `EMITIR ${TIPO[tipo]} DE PRODUÇÃO (documento fiscal real) para ${cli.nome} — ${fmt(total)}?`
-      : `Emitir ${TIPO[tipo]} em HOMOLOGAÇÃO (sem valor fiscal)?`;
+    const falta = faltaNovo();
+    if (falta) { setAviso(falta); return; }
+    const soCriaOs = modo === "novo" && !chave && tipo === "nfse" && !teste;
+    if (!soCriaOs && !parcOk) { setAviso(`As parcelas (${fmt(somaParc)}) não somam o valor a receber (${fmt(liquido)}).`); return; }
+    const numTxt = modo === "novo" && !teste
+      ? (tipo === "nfe" ? ` (PV ${prox?.pv ?? "?"} · NF-e ${prox?.nfe ?? "?"})` : tipo === "recibo" ? ` (OS ${prox?.os ?? "?"} · Recibo ${prox?.recibo ?? "?"})` : ` (OS ${prox?.os ?? "?"})`) : "";
+    const msg = soCriaOs
+      ? `Criar a OS${numTxt} para ${cli.nome}? A NFS-e será emitida na prefeitura e registrada depois.`
+      : prod
+        ? `EMITIR ${TIPO[tipo]} DE PRODUÇÃO (documento fiscal real)${numTxt} para ${cli.nome} — ${fmt(total)}?`
+        : `Emitir ${TIPO[tipo]} em HOMOLOGAÇÃO (sem valor fiscal)?${modo === "novo" ? " Nenhum PV/OS será criado (teste)." : ""}`;
     if (!window.confirm(msg)) return;
     const documento = montarDocumento();
     setTx({ fase: "enviando", inicio: Date.now() });
@@ -321,10 +427,19 @@ export default function NovaEmissao({ config, aberto, fechar, avisar, onEmitido,
       ? await fetch("/api/faturamento/carteira", { method: "POST", headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ empresa, chave, acao: "emitir", documento }) }).then((x) => x.json()).catch((e) => ({ error: String(e) }))
       : await fetch("/api/faturamento/emitir", { method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ documento, tipo, origem_tipo: teste ? "teste" : origemTipo, origem_id: origemId || null,
+          body: JSON.stringify({ documento, tipo,
+            novo: teste ? null : { cliente_codigo: cliCodigo, proposta: proposta.trim() || null, sem_proposta_motivo: proposta.trim() ? null : semPropMotivo.trim() },
+            origem_tipo: teste ? "teste" : "manual",
             gerar_receber_homologacao: teste, forcar_homologacao: teste }) }).then((x) => x.json()).catch((e) => ({ error: String(e) }));
-    if (r.error || !r.emissao) { setTx({ fase: "final", inicio: Date.now(), erro: r.error ?? "Falha ao enviar" }); return; }
+    if (r.criado) { setCriado(r.criado); carregarProximos(); }
+    if (r.criado && !r.emissao && !r.error) {
+      setTx({ fase: "final", inicio: Date.now(), e: { status: "os_criada", tipo: "os" } });
+      onEmitido();
+      return;
+    }
+    if (r.error || !r.emissao) { setTx({ fase: "final", inicio: Date.now(), erro: r.error ?? "Falha ao enviar" }); if (r.criado) onEmitido(); return; }
     const e = r.emissao as Record<string, unknown>;
+    carregarProximos();
     onEmitido();
     if (e.status === "processando") { setTx({ fase: "processando", id: Number(e.id), inicio: Date.now(), e }); acompanhar(Number(e.id), Date.now()); }
     else await finalizar(Number(e.id));
@@ -359,7 +474,11 @@ export default function NovaEmissao({ config, aberto, fechar, avisar, onEmitido,
     fechar();
   }
 
-  function corrigir() { setTx(null); setPre(null); vivo.current = true; }
+  function corrigir() {
+    setTx(null); setPre(null); vivo.current = true;
+    // O PV/OS novo já existe: reenviar emite sobre ele (não cria outro).
+    if (criado) { setChave(`venda:${criado.id}`); setRotulo(criado.label); setModo("existente"); }
+  }
 
   if (!aberto) return null;
 
@@ -386,12 +505,13 @@ export default function NovaEmissao({ config, aberto, fechar, avisar, onEmitido,
   if (tx) {
     const e = (tx.e ?? {}) as Record<string, string | number | null | undefined>;
     const st = String(e.status ?? (tx.erro ? "erro" : tx.fase === "enviando" ? "enviando" : "processando"));
+    const osCriada = tx.fase === "final" && st === "os_criada";
     const okFinal = tx.fase === "final" && st === "autorizada";
-    const mal = tx.fase === "final" && !okFinal;
+    const mal = tx.fase === "final" && !okFinal && !osCriada;
     const seg = Math.round((agora - tx.inicio) / 1000);
     const msg = String(tx.erro ?? e.mensagem ?? "");
     const dica = mal ? dicaRejeicao(`${e.focus_status ?? ""} ${msg}`) : null;
-    const recibo = e.tipo === "recibo";
+    const recibo = e.tipo === "recibo" || osCriada;
     return (
       <div className="ne-fundo" onClick={(ev) => { if (ev.target === ev.currentTarget) sair(); }}>
         <div className="ne-folha" role="dialog" aria-label="Transmissão">
@@ -414,10 +534,17 @@ export default function NovaEmissao({ config, aberto, fechar, avisar, onEmitido,
                 <div className="ne-resultado proc"><h3>{tx.fase === "enviando" ? "Enviando…" : "Aguardando a SEFAZ…"}</h3>
                   <div style={{ fontSize: 13 }}>{msg || "Isso costuma levar de 5 a 30 segundos. Pode fechar esta janela — avisamos quando terminar."}</div></div>
               )}
+              {osCriada && (
+                <div className="ne-resultado ok">
+                  <h3>✓ {criado?.label ?? "OS"} criada</h3>
+                  <div style={{ fontSize: 13.5 }}>Emita a NFS-e no portal da prefeitura e registre-a aqui: na carteira, abra <b>{criado?.label}</b> › <b>Registrar NFS-e</b>. O contas a receber é criado no registro, pelo líquido.</div>
+                </div>
+              )}
               {okFinal && (
                 <div className="ne-resultado ok">
                   <h3>✓ {recibo ? "Recibo gerado" : `${TIPO[tipo]} autorizada`}</h3>
                   <div className="ne-kv">
+                    {(criado || e.origem_rotulo) && <><span>{tipo === "nfe" ? "Pedido (PV)" : "Ordem de serviço"}</span><span><b>{criado?.label ?? String(e.origem_rotulo)}</b>{criado ? " — criado agora, na sequência" : ""}</span></>}
                     <span>Número / série</span><span><b>{String(e.numero ?? "—")}</b> / {String(e.serie ?? "—")}</span>
                     {e.chave && <><span>Chave de acesso</span><span className="ne-mono">{String(e.chave)} <button className="ne-lk" onClick={() => { navigator.clipboard.writeText(String(e.chave)); avisar("Chave copiada"); }}>copiar</button></span></>}
                     {e.protocolo && <><span>Protocolo</span><span className="ne-mono">{String(e.protocolo)}</span></>}
@@ -450,6 +577,7 @@ export default function NovaEmissao({ config, aberto, fechar, avisar, onEmitido,
                   <h3>✕ {st === "rejeitada" ? "Rejeitada pela SEFAZ" : "Não foi possível emitir"}</h3>
                   <div style={{ fontSize: 13.5 }}>{e.focus_status ? <b>{String(e.focus_status)}: </b> : null}{msg || "Sem mensagem da SEFAZ."}</div>
                   {dica && <div className="ne-aviso">💡 {dica}</div>}
+                  {criado && <div className="ne-aviso">{criado.label} foi criado e continua <b>aberto</b> na carteira — corrija e emita de lá (ou aqui, em “Faturar um PV/OS existente”).</div>}
                   {!recibo && <div style={{ fontSize: 12, color: "var(--ww-text-muted)" }}>O número reservado foi devolvido à sequência (nenhuma nota ficou registrada na SEFAZ).</div>}
                   <div className="ne-linha"><button className="ne-btn pri" onClick={corrigir}>Corrigir e reenviar</button></div>
                 </div>
@@ -473,27 +601,39 @@ export default function NovaEmissao({ config, aberto, fechar, avisar, onEmitido,
         </div>
         <div className="ne-corpo">
           <div className="ne-main">
+            {!chave && (
+              <div className="ne-modo" role="tablist">
+                <button role="tab" className={modo === "novo" ? "on" : ""} onClick={() => modo !== "novo" && voltarNovo()}>Novo documento</button>
+                <button role="tab" className={modo === "existente" ? "on" : ""} onClick={() => { setModo("existente"); setCarteira(null); }}>Faturar um PV/OS existente</button>
+              </div>
+            )}
             <div className="ne-linha">
               <label className="ne-rot" style={{ width: 80 }}>Empresa
                 <select className="ne-in" value={empresa} disabled={!!chave} onChange={(e) => setEmpresa(e.target.value)}>
                   {ativas.map((c) => <option key={c.empresa} value={c.empresa}>{c.empresa}</option>)}
                 </select>
               </label>
-              <label className="ne-rot" style={{ width: 220 }}>Documento
+              <label className="ne-rot" style={{ width: 280 }}>Tipo de documento
                 <select className="ne-in" value={tipo} disabled={!!chave} onChange={(e) => setTipo(e.target.value as Tipo)}>
-                  <option value="nfe">NF-e mercantil (produtos / PV)</option>
-                  <option value="recibo">Recibo de prestação (OS)</option>
-                  <option value="nfse">NFS-e (OS)</option>
+                  <option value="nfe">NF-e (venda de produtos)</option>
+                  <option value="recibo">Recibo de serviço (OS)</option>
+                  <option value="nfse">NFS-e da prefeitura (registrar)</option>
                 </select>
+                <span className="ne-dica">{DICA[tipo]}</span>
               </label>
-              {!chave && <>
-                <label className="ne-rot" style={{ width: 110 }}>Origem
-                  <select className="ne-in" value={origemTipo} onChange={(e) => setOrigemTipo(e.target.value)}>
-                    <option value="manual">Manual</option><option value="pv">PV</option><option value="os">OS</option>
-                  </select>
-                </label>
-                <label className="ne-rot" style={{ width: 110 }}>Nº PV/OS<input className="ne-in" value={origemId} onChange={(e) => setOrigemId(e.target.value)} /></label>
-              </>}
+              {modo === "novo" && !chave && (
+                <div className="ne-nums" title="O número final é confirmado na emissão (outra emissão pode usar este antes)">
+                  {teste ? <span>Teste: nenhum PV/OS é criado e a numeração real não é usada</span> : <>
+                    <span className="k">Será gerado</span>
+                    {tipo === "nfe" && <b>PV nº {prox?.pv ?? "…"} · NF-e nº {prox?.nfe ?? "…"}{prox?.nfe_serie ? ` (série ${prox.nfe_serie})` : ""}</b>}
+                    {tipo === "recibo" && <b>OS nº {prox?.os ?? "…"} · Recibo nº {prox?.recibo ?? "…"}</b>}
+                    {tipo === "nfse" && <b>OS nº {prox?.os ?? "…"} <small>(NFS-e registrada depois)</small></b>}
+                    <span className="s">número automático — confirmado na emissão</span>
+                  </>}
+                </div>
+              )}
+              {chave && rotulo && <div className="ne-nums"><span className="k">Faturando</span><b>{rotulo}</b>
+                {!inicial && <button className="ne-lk" onClick={() => { setChave(null); setRotulo(null); setCarteira(null); }}>trocar</button>}</div>}
               {admin && !chave && (
                 <label style={{ fontSize: 12, display: "flex", gap: 6, alignItems: "center", marginLeft: "auto", color: "var(--ww-text-muted)" }}>
                   <input type="checkbox" checked={teste} onChange={(e) => setTeste(e.target.checked)} /> Teste (forçar homologação)
@@ -501,17 +641,44 @@ export default function NovaEmissao({ config, aberto, fechar, avisar, onEmitido,
               )}
             </div>
 
-            {!chave && (
+            {modo === "existente" && !chave && (
+              <div className="ne-exist">
+                <input className="ne-in" autoFocus placeholder="Buscar PV/OS a faturar: número ou cliente…" value={buscaExist} onChange={(e) => setBuscaExist(e.target.value)} />
+                <div className="ne-exist-lista">
+                  {carteira == null ? <div className="s">Carregando a carteira…</div> : (() => {
+                    const t = buscaExist.trim().toLowerCase().replace(/^(pv|os)\s*/, "");
+                    const l = carteira.filter((d) => !t || d.rotulo.toLowerCase().includes(t) || (d.cliente ?? "").toLowerCase().includes(t)).slice(0, 40);
+                    return l.length ? l.map((d) => (
+                      <button key={d.chave} className="ne-exist-item" onClick={() => escolherExistente(d)}>
+                        <span className={`tag ${d.tipo === "PV" ? "pv" : "os"}`}>{d.tipo}</span>
+                        <b>{d.rotulo}</b><span className="c">{d.cliente ?? "—"}</span>
+                        <span className="v">{fmt(Number(d.valor) - Number(d.faturado ?? 0))}</span>
+                      </button>
+                    )) : <div className="s">Nada a faturar com “{buscaExist}”.</div>;
+                  })()}
+                </div>
+              </div>
+            )}
+
+            {modo === "novo" && !chave && (
               <div className="ne-linha">
                 <label className="ne-rot" style={{ width: 300 }}>{puxando ? "Proposta do CRM — carregando…" : "Proposta do CRM (puxa cliente, itens e condição)"}
-                  <BuscaProposta valor={proposta} onTexto={setProposta} onEscolher={(p) => { setProposta(p.numero); puxarProposta(p.numero); }} />
+                  <BuscaProposta valor={proposta} onTexto={setProposta} onEscolher={(p) => { setProposta(p.numero); setSemProp(false); puxarProposta(p.numero); }} />
                 </label>
                 <label className="ne-rot" style={{ width: 380 }}>Cliente do cadastro (nome, fantasia ou CNPJ/CPF)
                   <BuscaPessoa valor="" empresa={empresa} onEscolher={async (c) => {
                     const p = await pessoaCompleta(c.id);
+                    setCliCodigo(String(c.codigo));
                     if (p) { setCli(clienteDaPessoa(p)); setVerCliente(false); } else setAviso("Não consegui abrir o cadastro escolhido");
                   }} />
                 </label>
+                {!teste && !proposta.trim() && admin && (
+                  <div className="ne-semprop">
+                    <label><input type="checkbox" checked={semProp} onChange={(e) => setSemProp(e.target.checked)} /> Sem proposta do CRM (admin)</label>
+                    {semProp && <input className="ne-in" placeholder="Motivo (obrigatório)" value={semPropMotivo} onChange={(e) => setSemPropMotivo(e.target.value)} />}
+                  </div>
+                )}
+                {!teste && !proposta.trim() && !admin && <span className="ne-dica" style={{ alignSelf: "end" }}>A proposta do CRM é obrigatória para um PV/OS novo.</span>}
               </div>
             )}
             {aviso && <div className="ne-aviso" onClick={() => setAviso(null)}>{aviso}</div>}
@@ -576,7 +743,6 @@ export default function NovaEmissao({ config, aberto, fechar, avisar, onEmitido,
                       setProjeto(String(p.codigo));
                     }} />
                 </div>
-                {sel("Centro de custo", centro, setCentro, opc?.centros ?? [], 200)}
                 {sel("Vendedor", vendedor, setVendedor, opc?.vendedores ?? [], 170)}
                 <label className="ne-rot" style={{ width: 160 }}>Contrato (CT)<input className="ne-in" value={contrato} onChange={(e) => setContrato(e.target.value)} /></label>
               </div>
@@ -603,6 +769,18 @@ export default function NovaEmissao({ config, aberto, fechar, avisar, onEmitido,
                   Soma das parcelas {fmt(somaParc)} {parcOk ? "✓" : `≠ a receber ${fmt(liquido)}`}
                 </span>
               </div>
+              {(instr.linhas.length > 0 || instr.faltas.length > 0) && (
+                <div className="ne-pag">
+                  {instr.linhas.map((l) => <div key={l}>💳 {l} <small>— sai no documento e em cada parcela</small></div>)}
+                  {instr.faltas.map((f) => (
+                    <div key={f} className="falta">⚠ {f}.{" "}
+                      {contaSel && <a className="ne-lk" href={`/cadastros/contas?emp=${empresa}&codigo=${contaSel.codigo}`} target="_blank" rel="noopener">
+                        {f.includes("PIX") ? "Cadastrar chave PIX nesta conta" : "Completar dados bancários"} ↗</a>}
+                      {contaSel && <button className="ne-lk" style={{ marginLeft: 10 }} onClick={recarregarOpcoes}>já cadastrei — atualizar</button>}
+                    </div>
+                  ))}
+                </div>
+              )}
             </section>
 
             {ehOs && (

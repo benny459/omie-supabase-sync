@@ -10,6 +10,7 @@ export const maxDuration = 30;
 /**
  * Nova emissão (folha dedicada, 05/10/26).
  *  GET ?op=opcoes&emp=SF              → condições, formas, contas, categorias, projetos, centros, vendedores
+ *  GET ?op=proximos&emp=SF             → próximos nº de PV, OS, NF-e e recibo (sem consumir)
  *  GET ?op=historico&emp=SF&doc=CNPJ  → últimos faturamentos do cliente ("usar como modelo")
  *  POST { op: "previa", documento }   → pré-voo (payload + checagens + parcelas), sem enviar nada
  */
@@ -56,6 +57,12 @@ export async function GET(req: NextRequest) {
   const op = sp.get("op") ?? "opcoes";
   const a = supaAdmin();
   try {
+    if (op === "proximos") {
+      // Próximos números (sem consumir): PV/OS (vendas.numeracao ⊕ Omie), NF-e e recibo (fat_config).
+      const { data, error } = await a.schema("orders").rpc("fat_proximos", { p_empresa: emp });
+      if (error) throw new Error(error.message);
+      return NextResponse.json(data ?? {});
+    }
     if (op === "historico") {
       const doc = (sp.get("doc") ?? "").replace(/\D/g, "");
       if (doc.length < 11) return NextResponse.json({ historico: [] });
@@ -68,7 +75,7 @@ export async function GET(req: NextRequest) {
       const r = await a.schema("orders").rpc("cad_aux_opcoes", { p_registro: registro, p_empresa: emp });
       return { data: (r.data ?? []) as unknown[], error: r.error };
     };
-    const [cond, contas, cats, proj, cc, vend] = await Promise.all([
+    const [cond, contas, cats, proj, cc, vend, contasAux] = await Promise.all([
       aux("condicoes"),
       a.schema("finance").from("contas_correntes").select("cod_cc,descricao,tipo_conta_corrente").eq("empresa", emp).neq("inativo", "S").order("descricao").limit(200),
       a.schema("finance").from("categorias").select("codigo,descricao").eq("empresa", emp).like("codigo", "1.%")
@@ -76,15 +83,24 @@ export async function GET(req: NextRequest) {
       a.schema("finance").from("projetos").select("codigo,nome").eq("empresa", emp).neq("inativo", "S").order("nome").limit(1000),
       aux("centros_custo"),
       aux("vendedores"),
+      aux("contas"),   // dados bancários + chave PIX (cadastros › bancos e contas)
     ]);
     const err = cond.error ?? contas.error ?? cats.error ?? proj.error ?? cc.error ?? vend.error;
     if (err) throw new Error(err.message);
     type Aux = { codigo: string; nome: string; dados: { dias?: number[] } | null };
+    type ContaAux = { codigo: string; dados: Record<string, unknown> | null };
+    const dadosConta = new Map(((contasAux.data ?? []) as ContaAux[]).map((c) => [String(c.codigo), c.dados ?? {}]));
+    const txt = (v: unknown) => (v == null || v === "" ? null : String(v));
     return NextResponse.json({
       condicoes: ((cond.data ?? []) as Aux[]).map((c) => ({ codigo: c.codigo, nome: c.nome, dias: diasDe(c.codigo, c.nome, c.dados) }))
         .sort((x, y) => x.codigo.localeCompare(y.codigo)),
       formas: FORMAS,
-      contas: (contas.data ?? []).map((c) => ({ codigo: Number(c.cod_cc), nome: c.descricao, tipo: c.tipo_conta_corrente })),
+      contas: (contas.data ?? []).map((c) => {
+        const d = dadosConta.get(String(c.cod_cc)) ?? {};
+        return { codigo: Number(c.cod_cc), nome: c.descricao, tipo: c.tipo_conta_corrente,
+          banco: txt(d.banco), agencia: txt(d.agencia), conta: txt(d.conta),
+          pix_tipo: txt(d.pix_tipo), pix_chave: txt(d.pix_chave), beneficiario: txt(d.beneficiario) };
+      }),
       categorias: (cats.data ?? []).map((c) => ({ codigo: c.codigo, nome: c.descricao })),
       projetos: (proj.data ?? []).map((p) => ({ codigo: String(p.codigo), nome: p.nome })),
       centros: ((cc.data ?? []) as Aux[]).map((c) => ({ codigo: c.codigo, nome: c.nome })),

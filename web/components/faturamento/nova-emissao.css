@@ -56,3 +56,28 @@
 .ne-kv span:nth-child(odd){color:var(--ww-text-faint,#6b7d9c)}
 .ne-mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;word-break:break-all}
 @media (max-width:1000px){.ne-corpo{grid-template-columns:1fr}.ne-lado{border-left:0;border-top:1px solid var(--ww-border,#1e2d48)}}
+/* Novo documento × Faturar existente + próximos números (05/10/26) */
+.ne-modo{display:inline-flex;gap:2px;padding:3px;border-radius:11px;border:1px solid var(--ww-border,#1e2d48);background:var(--ww-panel-sunken,rgba(0,0,0,.12));align-self:flex-start}
+.ne-modo button{border:0;background:none;color:var(--ww-text-muted,#9fb0cc);font:inherit;font-size:13px;font-weight:600;padding:7px 14px;border-radius:8px;cursor:pointer}
+.ne-modo button.on{background:var(--ww-panel-raised,#13203a);color:var(--ww-text,#e8eef8);box-shadow:inset 0 0 0 1px var(--ww-border-strong,#28395a)}
+.ne-dica{font-size:11px;font-weight:500;color:var(--ww-text-muted,#9fb0cc);line-height:1.35}
+.ne-nums{display:flex;flex-direction:column;gap:2px;padding:6px 12px;border-radius:10px;border:1px dashed var(--ww-border-strong,#28395a);font-size:12px}
+.ne-nums .k{font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--ww-text-faint,#6b7d9c);font-weight:700}
+.ne-nums b{font-size:14px;font-variant-numeric:tabular-nums}
+.ne-nums b small{font-weight:500;color:var(--ww-text-muted,#9fb0cc)}
+.ne-nums .s{font-size:10.5px;color:var(--ww-text-faint,#6b7d9c)}
+.ne-exist{display:flex;flex-direction:column;gap:8px}
+.ne-exist-lista{display:flex;flex-direction:column;gap:4px;max-height:320px;overflow:auto}
+.ne-exist-lista .s{font-size:12px;color:var(--ww-text-muted,#9fb0cc);padding:6px 2px}
+.ne-exist-item{display:grid;grid-template-columns:34px 90px minmax(0,1fr) auto;gap:10px;align-items:center;text-align:left;font:inherit;font-size:12.5px;color:inherit;background:none;border:1px solid var(--ww-border,#1e2d48);border-radius:9px;padding:7px 10px;cursor:pointer}
+.ne-exist-item:hover{border-color:var(--ww-border-strong,#28395a);background:var(--ww-panel-raised,#13203a)}
+.ne-exist-item .tag{font-size:10.5px;font-weight:700;padding:1px 6px;border-radius:999px;text-align:center;background:rgba(56,189,248,.14);color:#7dd3fc}
+.ne-exist-item .tag.os{background:rgba(167,139,250,.16);color:#c4b5fd}
+.ne-exist-item .c{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--ww-text-muted,#9fb0cc)}
+.ne-exist-item .v{font-variant-numeric:tabular-nums;font-weight:600}
+.ne-semprop{display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--ww-text-muted,#9fb0cc);min-width:240px}
+.ne-semprop label{display:flex;gap:6px;align-items:center}
+/* Instrução de pagamento (PIX / dados bancários) */
+.ne-pag{display:flex;flex-direction:column;gap:5px;font-size:12.5px;padding:8px 10px;border-radius:9px;background:rgba(34,197,94,.07);border:1px solid rgba(34,197,94,.25)}
+.ne-pag small{color:var(--ww-text-faint,#6b7d9c)}
+.ne-pag .falta{color:#fcd34d}

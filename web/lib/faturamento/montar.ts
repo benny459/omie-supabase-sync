@@ -79,6 +79,9 @@ export type CondicaoFat = {
   vendedor?: string | null;
   contrato?: string | null;
   retencoes?: RetencoesFat | null;
+  /** Instrução de pagamento (05/10/26): PIX/dados bancários da conta de recebimento —
+   *  sai no documento (infCpl da NF-e, quadro do recibo) e em cada parcela a receber. */
+  instrucao_pagamento?: string | null;
 };
 
 /** Soma das retenções que o tomador desconta do pagamento. */
@@ -241,6 +244,7 @@ export function montarNfe(doc: DocFat, em: Emitente, opts: { natureza: string; s
     opts.infoPadrao || null,
     consumidorFinal ? "Produto destinado a Consumidor Final." : null,
     doc.observacoes ? limpo(doc.observacoes) : null,
+    doc.condicao?.instrucao_pagamento ? limpo(doc.condicao.instrucao_pagamento) : null,
   ].filter(Boolean).map((t) => `${t};`).join(" ");
 
   const t = doc.transporte;
@@ -371,7 +375,7 @@ export function reciboHtml(doc: DocFat, em: Emitente, numero: number, homologaca
 .obj-cab span{background:#E5F8F7;line-height:6mm;padding:0 1mm}.obj-cab span+span{text-align:right}.obj-item{display:grid;grid-template-columns:1fr 30mm;font-size:8pt;line-height:4mm;margin-top:2mm}
 .obj-item p{margin:0;padding:0 1mm}.obj-item .v{text-align:right;padding-right:1mm}.totais{display:grid;grid-template-columns:21mm 20mm 30mm;margin:2mm 0 0 auto;width:71mm;font-size:8pt}
 .totais .h{background:#E5F8F7;font-weight:bold;text-align:right;line-height:5mm;padding-right:1mm}.totais .n{text-align:right;line-height:5mm;padding-right:1mm}
-.obs{font-size:7pt;line-height:3.5mm;padding:0 1mm}.homolog{border:2px solid #c00;color:#c00;font-weight:bold;text-align:center;padding:2mm;margin-bottom:4mm}</style></head>
+.pag{font-size:9pt;line-height:4.5mm;border:1px solid #00BFB7;padding:1.5mm 2mm;border-radius:1mm}.obs{font-size:7pt;line-height:3.5mm;padding:0 1mm}.homolog{border:2px solid #c00;color:#c00;font-weight:bold;text-align:center;padding:2mm;margin-bottom:4mm}</style></head>
 <body><div class="folha">
 ${homologacao ? '<div class="homolog">DOCUMENTO DE TESTE (HOMOLOGAÇÃO) — SEM VALOR</div>' : ""}
 <div class="topo"><div></div><div class="emp"><b>${esc(em.nome || "")}</b><br>CNPJ: ${esc(em.cnpj)}${em.inscricao_estadual ? ` | Inscrição Estadual: ${esc(em.inscricao_estadual)}` : ""}${em.inscricao_municipal ? ` | Inscrição Municipal: ${esc(em.inscricao_municipal)}` : ""}<br>${esc([em.logradouro, em.numero].filter(Boolean).join(", "))}${em.bairro ? ` - ${esc(em.bairro)}` : ""}<br>${esc(em.municipio || "")} - ${esc(em.uf || "")}${em.cep ? ` - CEP: ${esc(em.cep)}` : ""}${em.telefone ? `<br>Telefone: ${esc(em.telefone)}` : ""}</div></div>
@@ -381,6 +385,7 @@ ${homologacao ? '<div class="homolog">DOCUMENTO DE TESTE (HOMOLOGAÇÃO) — SEM
 <div class="linha"><div class="rot">Objeto:</div><div><div class="obj-cab"><span>Descrição</span><span>Valor Total</span></div>${itens}
 <div class="totais"><div class="h">Total Bruto</div><div class="h">Descontos</div><div class="h">Total Líquido</div><div class="n">${brl(total)}</div><div class="n">0,00</div><div class="n">${brl(total)}</div></div></div></div>
 <div class="linha"><div class="rot">Vencimento:</div><div class="val">${venc}</div></div>
+${doc.condicao?.instrucao_pagamento ? `<div class="linha"><div class="rot">Pagamento:</div><div class="pag">${esc(doc.condicao.instrucao_pagamento).replace(/ \| /g, "<br>")}</div></div>` : ""}
 <div class="linha"><div class="rot">Observações:</div><div class="obs">${doc.observacoes ? `${esc(doc.observacoes)}<br>` : ""}Conforme Lei Complementar 116/2003 de 31/07/03, que trata do VETO ao imposto sobre a prestação de serviço em Saneamento Ambiental, purificação e tratamento de água, esgotamento sanitário e Congêneres.</div></div>
 </div></body></html>`;
 }
