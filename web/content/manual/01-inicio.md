@@ -43,7 +43,19 @@ Clique em **Pesquisar…** (ou aperte **⌘K** no Mac / **Ctrl+K** no Windows) e
 
 ## Aparência
 
-No ícone de ajustes (☰ com barrinhas), escolha **Claro**, **Escuro** ou **Sistema** e a paleta dos gráficos. Ali também aparecem a versão do sistema e o horário da última sincronização.
+No ícone de ajustes (☰ com barrinhas), no alto à direita, cada pessoa monta o visual do seu jeito. A tela muda na hora, enquanto você mexe:
+
+- **Claro / Escuro / Sistema** — *Sistema* segue o modo do computador (claro de dia, escuro à noite, se o seu computador estiver assim).
+- **Tema de cor** — oito cores (azul, índigo, violeta, ametista, turquesa, esmeralda, âmbar e grafite). Cada uma tem versão clara e escura.
+- **Transparência** — de 0% (painéis sólidos) a 100% (painéis de vidro, com o fundo desfocado por trás). Se o computador estiver com "reduzir transparência" ligado, os painéis ficam sólidos.
+- **Fundo** — sólido, gradiente, aurora, malha, pontilhado ou uma **cor própria** (escolha no seletor de cor).
+- **Densidade** — *Compacta* aperta linhas de tabela e cartões para caber mais na tela.
+- **Tamanho da letra** — 90%, 100% ou 110%.
+- **Restaurar padrão** volta ao escuro azul, sem transparência.
+
+A escolha fica guardada no seu usuário: vale no **portal ALLKA**, no **painel** e nos **Serviços** (no computador), e acompanha você em qualquer navegador. O aplicativo dos técnicos no celular não muda.
+
+No mesmo menu ficam a **paleta dos gráficos**, a versão do sistema e o horário da última sincronização.
 
 > **Dica:** quando aparecer a faixa **“Nova versão disponível”**, clique em **Atualizar agora** para pegar as últimas melhorias.
 

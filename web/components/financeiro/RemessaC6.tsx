@@ -183,8 +183,8 @@ export default function RemessaC6({ refs, onClose, onDone }: { refs: string[]; o
                           <td><input type="checkbox" checked={l.incluir} onChange={(e) => set(l.ref, { incluir: e.target.checked })} /></td>
                           <td>
                             <input style={inp} value={l.nome} onChange={(e) => set(l.ref, { nome: e.target.value })} />
-                            <div className="sub2">{l.empresa}{l.empresa !== "SF" ? <span style={{ color: "#a78bfa" }}> (pago pela SF · intercompany)</span> : null} · venc {dbr(l.venc)}{l.enviado ? <span style={{ color: "#f59e0b" }}> · já foi na remessa #{l.enviado}</span> : null}</div>
-                            {l.incluir && f.length ? <div style={{ color: "#f87171", fontSize: 11.5, marginTop: 3 }}>falta: {f.join(", ")}
+                            <div className="sub2">{l.empresa}{l.empresa !== "SF" ? <span style={{ color: "var(--ap-t-violet)" }}> (pago pela SF · intercompany)</span> : null} · venc {dbr(l.venc)}{l.enviado ? <span style={{ color: "#f59e0b" }}> · já foi na remessa #{l.enviado}</span> : null}</div>
+                            {l.incluir && f.length ? <div style={{ color: "var(--ap-t-red)", fontSize: 11.5, marginTop: 3 }}>falta: {f.join(", ")}
                               {l.pessoa_id && !f.every((x) => ["valor", "data", "data no passado"].includes(x))
                                 ? <> · <a className="link" href={`/cadastros/${l.pessoa_id}/editar#pagamento`} target="_blank" rel="noreferrer">completar no cadastro ↗</a></> : null}</div> : null}
                           </td>
@@ -226,7 +226,7 @@ export default function RemessaC6({ refs, onClose, onDone }: { refs: string[]; o
             <span className="sub2" style={{ marginRight: "auto" }}>
               {ativos.length} pagamentos · <b className="num" style={{ color: "var(--tx)" }}>{brl(total)}</b>
               {(["PIX_CHAVE", "PIX_CONTA", "BOLETO", "TED"] as Modalidade[]).filter(porMod).map((m) => ` · ${MOD_LABEL[m]}: ${porMod(m)}`).join("")}
-              {comErro.length ? <span style={{ color: "#f87171" }}> · {comErro.length} com dados faltando</span> : null}
+              {comErro.length ? <span style={{ color: "var(--ap-t-red)" }}> · {comErro.length} com dados faltando</span> : null}
             </span>
           )}
           <button className="btn" onClick={onClose}>{feito ? "Fechar" : "Cancelar"}</button>

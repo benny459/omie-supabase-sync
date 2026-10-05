@@ -23,6 +23,7 @@
  * FINANCEIRO, BI, ADMIN) e o MESMO canViewArea/podeAbrirRota.
  */
 
+import PainelAparencia from "@/components/navy/PainelAparencia";
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { podeAbrirRota, canViewArea } from "@/lib/permissions";
@@ -256,8 +257,6 @@ function BotaoManual() {
   );
 }
 
-type Tema = "light" | "dark" | "system";
-
 /**
  * O botão dos sliders — onde vivem as opções que antes ocupavam a linha de
  * utilidades: tema, paleta dos gráficos, sincronização e versão.
@@ -268,19 +267,6 @@ type Tema = "light" | "dark" | "system";
 function Opcoes() {
   const [aberto, setAberto] = useState(false);
   const caixa = useFechaFora(aberto, () => setAberto(false));
-  const [tema, setTema] = useState<Tema>("dark");
-
-  useEffect(() => {
-    // Sem escolha gravada, o painel abre escuro, como o CRM novo ALLKA.
-    setTema((localStorage.getItem("ww-theme") as Tema) || "dark");
-  }, []);
-
-  function aplicar(t: Tema) {
-    setTema(t);
-    localStorage.setItem("ww-theme", t);
-    const sysDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
-    document.documentElement.classList.toggle("dark", t === "dark" || (t === "system" && sysDark));
-  }
 
   return (
     <div ref={caixa} style={{ position: "relative" }}>
@@ -290,11 +276,8 @@ function Opcoes() {
       </button>
       <div className="ab-painel" style={{ display: aberto ? "block" : "none" }}>
         <div className="ab-titulo">Aparência</div>
-        <div className="ab-seg">
-          {([["light", "Claro"], ["dark", "Escuro"], ["system", "Sistema"]] as [Tema, string][]).map(([id, rotulo]) => (
-            <button key={id} type="button" data-activo={tema === id ? "1" : undefined} onClick={() => aplicar(id)}>{rotulo}</button>
-          ))}
-        </div>
+        <PainelAparencia />
+        <div className="ab-sep" />
         <div className="ab-linha">
           <span style={{ flex: 1 }}>Paleta dos gráficos</span>
           <SeletorPaleta />

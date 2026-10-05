@@ -36,9 +36,9 @@ export default {
           // Allka Navy — um por token de app/globals.css. Os nomes sao os
           // mesmos do pacote, para a classe ler como o design fala.
           bg:            "rgb(var(--color-ww-bg) / <alpha-value>)",
-          panel:         "rgb(var(--color-ww-panel) / <alpha-value>)",
-          panelSunken:   "rgb(var(--color-ww-panelSunken) / <alpha-value>)",
-          sidebar:       "rgb(var(--color-ww-sidebar) / <alpha-value>)",
+          panel:         "rgb(var(--color-ww-panel) / calc(<alpha-value> * var(--ap-a, 1)))",
+          panelSunken:   "rgb(var(--color-ww-panelSunken) / calc(<alpha-value> * var(--ap-a, 1)))",
+          sidebar:       "rgb(var(--color-ww-sidebar) / calc(<alpha-value> * var(--ap-a, 1)))",
           border:        "rgb(var(--color-ww-border) / <alpha-value>)",
           borderStrong:  "rgb(var(--color-ww-borderStrong) / <alpha-value>)",
           borderSubtle:  "rgb(var(--color-ww-borderSubtle) / <alpha-value>)",
@@ -90,8 +90,8 @@ export default {
           brandDash:     "rgb(var(--color-ww-brandDash) / <alpha-value>)",
           editHi:        "rgb(var(--color-ww-editHi) / <alpha-value>)",
           editLine:      "rgb(var(--color-ww-editLine) / <alpha-value>)",
-          drawer:        "rgb(var(--color-ww-drawer) / <alpha-value>)",
-          drawerHead:    "rgb(var(--color-ww-drawerHead) / <alpha-value>)",
+          drawer:        "rgb(var(--color-ww-drawer) / calc(<alpha-value> * var(--ap-a, 1)))",
+          drawerHead:    "rgb(var(--color-ww-drawerHead) / calc(<alpha-value> * var(--ap-a, 1)))",
         },
       },
       fontFamily: {

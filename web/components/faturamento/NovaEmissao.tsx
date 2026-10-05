@@ -1460,9 +1460,9 @@ export default function NovaEmissao({ config, aberto, fechar, avisar, onEmitido,
           <button className="ne-btn" disabled={validando} onClick={validar}>{validando ? "Validando…" : "Validar"}</button>
           {tipo !== "nfse" && <button className="ne-btn" disabled={!cli.nome || !itens.some((i) => i.descricao)} onClick={() => previaDocumento(montarDocumento(), tipo === "recibo" ? "recibo" : "nfe", avisar)}
             title="Ver como o documento vai sair — sem enviar nada à SEFAZ e sem gastar numeração">{tipo === "recibo" ? "Pré-visualizar recibo" : "Pré-visualizar DANFE"}</button>}
-          {!naoVenda && faltaVenda() && <span className="ne-dica" style={{ color: "#fca5a5", maxWidth: 360 }}>{faltaVenda()}</span>}
-          {!faltaVenda() && !faltaNcm() && faltaEstoque() && <span className="ne-dica" style={{ color: "#fca5a5", maxWidth: 360 }}>{faltaEstoque()}</span>}
-          {!faltaVenda() && faltaNcm() && <span className="ne-dica" style={{ color: "#fca5a5", maxWidth: 360 }}>{faltaNcm()}</span>}
+          {!naoVenda && faltaVenda() && <span className="ne-dica" style={{ color: "var(--ap-t-red)", maxWidth: 360 }}>{faltaVenda()}</span>}
+          {!faltaVenda() && !faltaNcm() && faltaEstoque() && <span className="ne-dica" style={{ color: "var(--ap-t-red)", maxWidth: 360 }}>{faltaEstoque()}</span>}
+          {!faltaVenda() && faltaNcm() && <span className="ne-dica" style={{ color: "var(--ap-t-red)", maxWidth: 360 }}>{faltaNcm()}</span>}
           <button className={`ne-btn ${prod ? "perigo" : "pri"}`} disabled={!cli.nome || !itens.some((i) => i.descricao) || (precisaParcelas && !parcOk) || !!faltaVenda() || !!faltaNcm() || !!faltaEstoque()}
             title={faltaVenda() ?? faltaNcm() ?? faltaEstoque() ?? undefined} onClick={emitirAgora}>
             {`Emitir ${naoVenda ? OP_ROT[operacao as Exclude<OperacaoTipo, "venda">] : TIPO[tipo]}${prod ? " (PRODUÇÃO)" : " (homologação)"}`}

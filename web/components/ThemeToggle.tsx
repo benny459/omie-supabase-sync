@@ -1,31 +1,17 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { definirAparencia, useAparencia } from "@/lib/aparencia-store";
 
 type Theme = "light" | "dark" | "system";
 
 /**
  * Toggle 3-states: light → dark → system (segue prefers-color-scheme).
- * Persiste em localStorage (`ww-theme`). Aplica `.dark` no <html> imediatamente.
- * Lê o valor inicial direto do <html> — o script inline em layout.tsx já
- * aplicou a classe correta antes da hidratação.
+ * Grava no mesmo sítio do painel de Aparência (lib/aparencia-store).
  */
 export default function ThemeToggle() {
-  const [theme, setTheme] = useState<Theme>("dark");
-
-  useEffect(() => {
-    // Sem escolha gravada, o painel abre escuro, como o CRM novo ALLKA.
-    const saved = (localStorage.getItem("ww-theme") as Theme) || "dark";
-    setTheme(saved);
-  }, []);
-
-  function apply(t: Theme) {
-    setTheme(t);
-    localStorage.setItem("ww-theme", t);
-    const sysDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
-    const wantsDark = t === "dark" || (t === "system" && sysDark);
-    document.documentElement.classList.toggle("dark", wantsDark);
-  }
+  const modo = useAparencia().modo;
+  const theme: Theme = modo === "claro" ? "light" : modo === "sistema" ? "system" : "dark";
+  const apply = (t: Theme) => definirAparencia({ modo: t === "light" ? "claro" : t === "system" ? "sistema" : "escuro" });
 
   function cycle() {
     const next: Theme = theme === "light" ? "dark" : theme === "dark" ? "system" : "light";

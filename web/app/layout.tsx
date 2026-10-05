@@ -1,6 +1,9 @@
 import type { Metadata } from "next";
 import { Instrument_Sans, JetBrains_Mono, Outfit, Plus_Jakarta_Sans } from "next/font/google";
 import "./globals.css";
+import "./aparencia.css";
+import { SCRIPT_APARENCIA } from "@/lib/aparencia";
+import AparenciaSync from "@/components/navy/AparenciaSync";
 import UpdateBanner from "@/components/UpdateBanner";
 import CesarProvider from "@/components/cesar/CesarProvider";
 
@@ -31,18 +34,20 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   const version = process.env.NEXT_PUBLIC_APP_VERSION;
   return (
-    <html lang="pt-BR" className={`${jetbrains.variable} ${jakarta.variable} ${instrument.variable} ${outfit.variable}`}>
+    <html lang="pt-BR" suppressHydrationWarning className={`${jetbrains.variable} ${jakarta.variable} ${instrument.variable} ${outfit.variable}`}>
       <head>
         {version && <meta name="app-version" content={version} />}
-        {/* Aplica .dark ANTES da hidratação se o user preferiu — evita FOUC */}
+        {/* Aparência do usuário (modo, paleta, vidro, fundo…) ANTES da hidratação — evita FOUC */}
+        <script dangerouslySetInnerHTML={{ __html: SCRIPT_APARENCIA }} />
         <script
           dangerouslySetInnerHTML={{
-            __html: `(function(){try{var t=localStorage.getItem('ww-theme');var sysDark=window.matchMedia('(prefers-color-scheme: dark)').matches;if(t==='dark'||(t==='system'&&sysDark)||!t){document.documentElement.classList.add('dark');}var p=localStorage.getItem('ww-viz-palette');document.documentElement.setAttribute('data-palette',p||'tech');}catch(e){}})();`,
+            __html: `(function(){try{var p=localStorage.getItem('ww-viz-palette');document.documentElement.setAttribute('data-palette',p||'tech');}catch(e){}})();`,
           }}
         />
       </head>
       <body>
         <UpdateBanner />
+        <AparenciaSync />
         {/* Envolve tudo: o Cesar é alcançável do botão de qualquer gráfico e do
             lançador flutuante, e as duas portas têm que cair na MESMA conversa —
             senão "e comparado com julho?" recomeça do zero. */}

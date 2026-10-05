@@ -391,7 +391,7 @@
 :root[data-theme="light"] .op .tipo.mix{color:#7e22ce}
 /* Faixa do serviço (uma por pedido) */
 .op .svc{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:9px 14px;border-top:1px solid var(--ww-border-strong);background:rgba(249,115,22,.05);font-size:12.5px}
-.op .svc-k{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:#fb923c;font-weight:700}
+.op .svc-k{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--ap-t-orange);font-weight:700}
 .op .svc-os{color:var(--ww-info-text);text-decoration:none;font-weight:600}
 .op .svc-os:hover{text-decoration:underline}
 .op .svc-os.mute{color:var(--ww-text-faint);font-weight:400}
@@ -452,7 +452,7 @@
 .op .srv.atrasado .srv-k{color:var(--ww-crit)}
 .op .srv.vazio .srv-k{color:var(--ww-text-faint);display:block;margin-bottom:3px}
 .op .srv-l2{color:var(--ww-text-2,#d6deeb)}
-.op .srv-l1 .svc-os{color:#93c5fd}
+.op .srv-l1 .svc-os{color:var(--ap-t-blue)}
 :root[data-theme="light"] .op .srv-l1 .svc-os{color:#1d4ed8}
 /* Botão de limpar todos os filtros */
 .op .chip.limpar{border-color:var(--ww-crit);color:var(--ww-crit-text);background:var(--ww-crit-soft);font-weight:600}
@@ -469,7 +469,7 @@
 .op .pvid small b{color:var(--ww-text-2,#c9d6f2);font-weight:600}
 .op .balao{display:inline-flex;align-items:center;gap:3px;height:20px;padding:0 5px;border-radius:6px;border:1px solid var(--ww-border-strong);background:none;color:var(--ww-text-faint);cursor:pointer;font-size:11px;font-weight:700}
 .op .balao:hover{color:var(--ww-text);border-color:var(--ww-text-muted)}
-.op .balao.tem{color:#fbbf24;border-color:rgba(251,191,36,.45);background:rgba(251,191,36,.1)}
+.op .balao.tem{color:var(--ap-t-amber);border-color:rgba(251,191,36,.45);background:rgba(251,191,36,.1)}
 /* Painel de anotações */
 .op .notas-fundo{position:fixed;inset:0;background:rgba(3,7,18,.55);z-index:90;display:flex;justify-content:flex-end}
 .op .notas{width:min(440px,100vw);height:100%;background:var(--ww-panel);border-left:1px solid var(--ww-border-strong);display:flex;flex-direction:column;box-shadow:-20px 0 60px rgba(0,0,0,.4)}
