@@ -2,15 +2,16 @@ import Link from "next/link";
 import { requirePermissao } from "@/lib/require-area";
 import TitulosView from "@/components/TitulosView";
 import TelaTitulosNavy from "@/components/navy/tela/TelaTitulosNavy";
+import TelaPagarV3 from "@/components/financeiro/TelaPagarV3";
 
 export const dynamic = "force-dynamic";
 
-/* Desde 30/09/26 a tela é a recriação Navy (protótipo "Painel Allka finance").
-   A antiga continua em ?classica=1 para comparar lado a lado — a Navy traz
-   todos os campos dela, e é aí que se confere. */
-export default async function ContasPagarPage({ searchParams }: { searchParams: Promise<{ classica?: string }> }) {
+/* Desde 05/10/26 a tela é a v3 (mockup "contas-a-pagar-v3": pagar, programar
+   banco, baixar em lote, conciliar OFX). A Navy de 30/09 fica em ?navy=1 e a
+   antiga em ?classica=1 — todos os campos de título continuam lá. */
+export default async function ContasPagarPage({ searchParams }: { searchParams: Promise<{ classica?: string; navy?: string }> }) {
   await requirePermissao("financeiro.ver_pagar");
-  const { classica } = await searchParams;
+  const { classica, navy } = await searchParams;
 
   if (classica) {
     return (
@@ -28,6 +29,8 @@ export default async function ContasPagarPage({ searchParams }: { searchParams: 
       </div>
     );
   }
+
+  if (!navy) return <TelaPagarV3 />;
 
   return (
     <>
