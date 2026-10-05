@@ -11,6 +11,7 @@
  */
 
 import { ReservasDoItem } from "./Separacao";
+import NcmDoItem from "@/components/fiscal/NcmDoItem";
 import "./estoque.css";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -238,7 +239,7 @@ function Conteudo({ f, aba, setAba, ir, recarregar, itensTodos }: {
             <span>Código Omie {p.codigo_omie ?? (p.n_cod_prod < 0 ? "—" : p.codigo)}</span>
             {p.familia && <span>Família {p.familia}{p.familia_prefixo ? ` (${p.familia_prefixo})` : ""}</span>}
             {p.codigos_antigos.length > 0 && <span title="Códigos anteriores (apelidos)">antes: {p.codigos_antigos.join(", ")}</span>}
-            <span>{p.unidade}</span>{p.ncm && <span>NCM {p.ncm}</span>}{p.n_cod_prod > 0 && <span>id Omie {p.n_cod_prod}</span>}
+            <span>{p.unidade}</span><NcmDoItem emp={p.empresa} codigo={p.codigo_novo ?? p.codigo_omie ?? p.codigo} descricao={p.descricao} />{p.n_cod_prod > 0 && <span>id Omie {p.n_cod_prod}</span>}
             {precos[0] && <span>Fornecedor principal: {precos[0].fornecedor}</span>}
           </div>
           <div className="stats">

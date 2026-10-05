@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { ClienteFat, CondicaoFat, DocFat, ItemFat, OperacaoNfe, OperacaoTipo, RetencoesFat, TransporteFat } from "@/lib/faturamento/montar";
 import { BuscaPessoa, BuscaProposta, clienteDaPessoa, pessoaCompleta } from "@/components/vendas/BuscasCrmCadastro";
 import { BotaoNovoProjeto } from "@/components/cadastros/NovoProjetoRapido";
+import LocalizarNcm, { ncmFmt } from "@/components/fiscal/LocalizarNcm";
 import "./nova-emissao.css";
 
 /* Folha dedicada da Nova emissão (05/10/26). Pedido do Benny:
@@ -200,6 +201,9 @@ export default function NovaEmissao({ config, aberto, fechar, avisar, onEmitido,
   const [formaPorParcela, setFormaPorParcela] = useState(false);
   /** autocompletar de itens: linha ativa, termo e sugestões; dicas (CMC/compra/venda/saldo) por linha */
   const [itBusca, setItBusca] = useState<{ n: number; q: string } | null>(null);
+  // Localizador de NCM (05/10/26): linha aberta e NCMs que a tabela oficial recusou na última validação.
+  const [ncmBox, setNcmBox] = useState<number | null>(null);
+  const [ncmRuim, setNcmRuim] = useState<string[]>([]);
   const [itSug, setItSug] = useState<ItemCat[] | null>(null);
   const [dicas, setDicas] = useState<Record<number, DicaItem>>({});
   const [conta, setConta] = useState<number | "">("");
@@ -583,15 +587,31 @@ export default function NovaEmissao({ config, aberto, fechar, avisar, onEmitido,
     return null;
   }
 
+  /** NF-e: todo item precisa de NCM de 8 dígitos que exista na tabela oficial. */
+  const ncmDig = (v: string | null | undefined) => String(v ?? "").replace(/\D/g, "");
+  function faltaNcm(): string | null {
+    if (tipo !== "nfe") return null;
+    const ruim = itens.find((i) => i.descricao && (ncmDig(i.ncm).length !== 8 || ncmRuim.includes(ncmDig(i.ncm))));
+    return ruim ? `${ruim.descricao}: NCM ${ncmDig(ruim.ncm) ? "inválido" : "ausente"} — use “Localizar NCM” na linha do item.` : null;
+  }
+
   async function validar() {
     setValidando(true); setPre(null);
+    if (tipo === "nfe") {
+      const unicos = [...new Set(itens.map((i) => ncmDig(i.ncm)).filter((d) => d.length === 8))];
+      const res = await Promise.all(unicos.map((d) => fetch(`/api/fiscal/ncm?op=validar&ncm=${d}`).then((x) => x.json()).then((j) => [d, !!j.valido] as const).catch(() => [d, true] as const)));
+      setNcmRuim(res.filter(([, ok]) => !ok).map(([d]) => d));
+    }
     const r = await fetch("/api/faturamento/nova", { method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ op: "previa", documento: montarDocumento() }) }).then((x) => x.json()).catch((e) => ({ error: String(e) }));
     setValidando(false);
     const fv = faltaVenda();
     const locais: Checagem[] = fv ? [{ item: "Projeto / categoria / conta", ok: false, nivel: "erro", detalhe: fv }] : [];
+    const semNcm = tipo === "nfe" ? itens.filter((i) => i.descricao && ncmDig(i.ncm).length !== 8) : [];
+    for (const i of semNcm) locais.push({ item: "NCM", ok: false, nivel: "erro", detalhe: `${i.descricao}: NCM ausente — clique em “Localizar NCM” na linha do item` });
+    const fn = semNcm.length > 0;
     setPre(r.error ? { checagens: locais, pode_emitir: false, error: r.error }
-      : { ...r, checagens: [...locais, ...(r.checagens ?? [])], pode_emitir: !!r.pode_emitir && !fv });
+      : { ...r, checagens: [...locais, ...(r.checagens ?? [])], pode_emitir: !!r.pode_emitir && !fv && !fn });
   }
 
   /** Venda/recibo/NFS-e: projeto e categoria de receita são obrigatórios (05/10/26);
@@ -881,7 +901,16 @@ export default function NovaEmissao({ config, aberto, fechar, avisar, onEmitido,
               )}
             </div>
           </div>
-          <div className="ne-rod"><span style={{ flex: 1 }} /><button className="ne-btn" onClick={sair}>{tx.fase === "final" ? "Fechar" : "Fechar e avisar depois"}</button></div>
+          {ncmBox != null && itens[ncmBox] && (
+          <LocalizarNcm emp={empresa} descricao={itens[ncmBox].descricao ?? ""} codigo={itens[ncmBox].codigo || null} atual={itens[ncmBox].ncm}
+            onFechar={() => setNcmBox(null)}
+            onEscolher={(ncm, salvo) => {
+              const k = ncmBox; setNcmBox(null);
+              setItens((its) => its.map((x, i) => (i === k ? { ...x, ncm } : x)));
+              setNcmRuim((r) => r.filter((d) => d !== ncm));
+              avisar(`NCM ${ncmFmt(ncm)} aplicado${salvo ? " e salvo no cadastro do item" : " nesta nota"}.`);
+            }} />)}
+        <div className="ne-rod"><span style={{ flex: 1 }} /><button className="ne-btn" onClick={sair}>{tx.fase === "final" ? "Fechar" : "Fechar e avisar depois"}</button></div>
         </div>
       </div>
     );
@@ -1097,7 +1126,10 @@ export default function NovaEmissao({ config, aberto, fechar, avisar, onEmitido,
                             </button>)) : <div style={{ padding: 8, fontSize: 12.5 }}>Nenhum item no catálogo — preencha à mão.</div>}
                         </div>)}
                     </td>
-                    {tipo === "nfe" && <td><input className="ne-in" style={{ width: 96 }} value={it.ncm ?? ""} onChange={(e) => setItens(itens.map((x, i) => (i === n ? { ...x, ncm: e.target.value } : x)))} /></td>}
+                    {tipo === "nfe" && <td><input className="ne-in" style={{ width: 96 }} value={it.ncm ?? ""} onChange={(e) => setItens(itens.map((x, i) => (i === n ? { ...x, ncm: e.target.value } : x)))} />
+                      {(ncmDig(it.ncm).length !== 8 || ncmRuim.includes(ncmDig(it.ncm))) && it.descricao
+                        ? <div><button type="button" className="ncm-btn alerta" onClick={() => setNcmBox(n)}>{ncmDig(it.ncm) ? "NCM inválido — localizar" : "Localizar NCM"}</button></div>
+                        : <div><button type="button" className="ne-lk" style={{ fontSize: 11 }} onClick={() => setNcmBox(n)}>localizar</button></div>}</td>}
                     <td><input className="ne-in" style={{ width: 56 }} value={it.unidade ?? "UN"} onChange={(e) => setItens(itens.map((x, i) => (i === n ? { ...x, unidade: e.target.value } : x)))} /></td>
                     <td><input className="ne-in num" style={{ width: 80 }} type="number" step="0.01" value={it.quantidade}
                       max={it.quantidade_max ?? undefined} title={it.quantidade_max != null ? `máx. ${it.quantidade_max} (NF de origem)` : undefined}
@@ -1306,8 +1338,9 @@ export default function NovaEmissao({ config, aberto, fechar, avisar, onEmitido,
           {tipo !== "nfse" && <button className="ne-btn" disabled={!cli.nome || !itens.some((i) => i.descricao)} onClick={() => previaDocumento(montarDocumento(), tipo === "recibo" ? "recibo" : "nfe", avisar)}
             title="Ver como o documento vai sair — sem enviar nada à SEFAZ e sem gastar numeração">{tipo === "recibo" ? "Pré-visualizar recibo" : "Pré-visualizar DANFE"}</button>}
           {!naoVenda && faltaVenda() && <span className="ne-dica" style={{ color: "#fca5a5", maxWidth: 360 }}>{faltaVenda()}</span>}
-          <button className={`ne-btn ${prod ? "perigo" : "pri"}`} disabled={!cli.nome || !itens.some((i) => i.descricao) || (precisaParcelas && !parcOk) || !!faltaVenda()}
-            title={faltaVenda() ?? undefined} onClick={emitirAgora}>
+          {!faltaVenda() && faltaNcm() && <span className="ne-dica" style={{ color: "#fca5a5", maxWidth: 360 }}>{faltaNcm()}</span>}
+          <button className={`ne-btn ${prod ? "perigo" : "pri"}`} disabled={!cli.nome || !itens.some((i) => i.descricao) || (precisaParcelas && !parcOk) || !!faltaVenda() || !!faltaNcm()}
+            title={faltaVenda() ?? faltaNcm() ?? undefined} onClick={emitirAgora}>
             {`Emitir ${naoVenda ? OP_ROT[operacao as Exclude<OperacaoTipo, "venda">] : TIPO[tipo]}${prod ? " (PRODUÇÃO)" : " (homologação)"}`}
           </button>
         </div>

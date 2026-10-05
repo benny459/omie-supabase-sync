@@ -112,6 +112,17 @@ Na aba **Contratos recorrentes**:
 
 O botão **Prontidão** mostra se está tudo pronto para emitir (certificado, numeração, Omie desligado). A faixa amarela avisa quando o **certificado A1** está perto de vencer.
 
+## Como faço para achar o NCM de um item
+
+Toda NF-e precisa de um NCM válido (8 dígitos, da tabela oficial da Receita) em cada item. Sem ele, o botão **Emitir** fica bloqueado.
+
+1. Na linha do item, clique em **Localizar NCM** (aparece em vermelho quando falta ou está errado).
+2. No topo vêm as **sugestões para este item**, com o motivo: itens parecidos do nosso catálogo, a NF do fornecedor que vendeu a peça ou NF-e que já emitimos.
+3. Se nenhuma servir, busque pelo **código** (ex.: `7609`) ou por **palavras** (ex.: `acessórios tubos alumínio`). Cada resultado mostra o caminho completo na tabela.
+4. Clique no NCM certo. Com **salvar no cadastro do item** marcado, ele fica gravado na peça e nas próximas notas já vem preenchido.
+
+> **Atenção:** o NCM é responsabilidade fiscal. Na dúvida entre dois códigos, confirme com a contabilidade antes de emitir.
+
 ## Perguntas frequentes
 
 **Não acho uma OS faturada.** Ela pode estar fora do período escolhido — busque pelo número ou mude o período para **Tudo**.

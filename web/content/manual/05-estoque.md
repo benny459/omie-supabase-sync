@@ -36,6 +36,14 @@ Depois, na aba **Materiais separados** do projeto: **Devolver** (volta ao dispon
 - **Inventário**: contagem com janela própria; os ajustes são feitos só no painel.
 - **Duplicidades**: itens repetidos para **mesclar** (o custo médio é recalculado e o histórico de códigos fica guardado).
 
+## Como faço para corrigir o NCM de uma peça
+
+1. Em **Estoque**, use o filtro **Mais filtros › Sem NCM válido** para ver as peças sem NCM (ou com NCM que não existe mais na tabela oficial).
+2. Abra a peça. Ao lado da unidade aparece **sem NCM — localizar** (ou o NCM atual com **trocar**).
+3. Escolha uma sugestão ou busque por código/palavras, e clique. O NCM fica salvo no cadastro da peça e passa a sair nas notas.
+
+> **Dica:** a tabela NCM é a oficial da Receita (Siscomex) e se atualiza sozinha todo dia 1º.
+
 ## Perguntas frequentes
 
 **O projeto não aparece na separação.** Use **+ Criar projeto** na própria busca, ou cadastre em Cadastros → Projetos.

@@ -42,6 +42,8 @@ const PARA_QUE: Record<Aba, string> = {
 };
 type Filtro = { k: string; rotulo: string; f: (p: ItemEstoque) => boolean; title?: string };
 
+/** Itens sem NCM válido na tabela oficial (05/10/26) — preenchido por /api/fiscal/ncm?op=sem_ncm. */
+let SEM_NCM: Set<string> = new Set();
 const FILTROS: Filtro[] = [
   { k: "todos", rotulo: "Todos", f: () => true },
   { k: "saldo", rotulo: "Com saldo", f: (p) => p.saldo !== 0 },
@@ -52,6 +54,8 @@ const FILTROS: Filtro[] = [
   { k: "semalarme", rotulo: "Consumo sem alarme", f: (p) => consumoDia(p) > 0 && !temAlarme(p) },
   { k: "dup", rotulo: "Em duplicidade (itens)", f: (p) => p.duplicidade, title: "Itens que aparecem em algum grupo de duplicidade (a aba Duplicidades conta grupos)" },
   { k: "parado", rotulo: "Parado +180 d", f: parado },
+  { k: "semncm", rotulo: "Sem NCM válido", f: (p) => SEM_NCM.has(p.codigo_novo ?? "") || SEM_NCM.has(p.codigo_omie ?? "") || SEM_NCM.has(p.codigo),
+    title: "Sem NCM, ou NCM que não existe na tabela oficial — abra o item e use “Localizar NCM”" },
   { k: "audit", rotulo: "Com alerta de auditoria", f: (p) => alertasLista(p) > 0,
     title: "Saldo negativo (total ou por local), PC aberto > 60 dias, recebido a mais, duplicidade, consumo sem alarme ou CMC zerado. A ficha mostra também quebra de Kardex e preço fora da curva." },
 ];
@@ -111,6 +115,13 @@ export default function TelaEstoqueNavy({ clienteInicial, aba = "itens" }: { cli
   useAtalhoPaleta(abrirPal);
   useEffect(() => { try { if (new URL(window.location.href).searchParams.get("paleta")) setPal(true); } catch {} }, []);
 
+  const [ncmVersao, setNcmVersao] = useState(0);
+  useEffect(() => {
+    fetch("/api/fiscal/ncm?op=sem_ncm").then((r) => r.json()).then((j: { itens?: { codigo: string; codigo_omie: string | null }[] }) => {
+      SEM_NCM = new Set((j.itens ?? []).flatMap((i) => [i.codigo, i.codigo_omie]).filter((c): c is string => !!c));
+      setNcmVersao((v) => v + 1);
+    }).catch(() => null);
+  }, []);
   const todosItens = useMemo(() => dados?.itens ?? [], [dados]);
   /** Códigos mesclados em outro saem da lista (continuam no ⌘K e na ficha, com o aviso). */
   const itens = useMemo(() => todosItens.filter((p) => !p.mesclado_em), [todosItens]);
@@ -123,7 +134,7 @@ export default function TelaEstoqueNavy({ clienteInicial, aba = "itens" }: { cli
     if (t) rs = rs.filter((p) => textoBusca(p).toLowerCase().includes(t));
     const col = (COLS.find((c) => c.k === st.ordem[0]) ?? COLS[8]).v, d = st.ordem[1];
     return [...rs].sort((a, b) => { const x = col(a), y = col(b); return (x > y ? 1 : x < y ? -1 : 0) * d; });
-  }, [itens, st.filtro, st.busca, st.ordem, idsCliente]);
+  }, [itens, st.filtro, st.busca, st.ordem, idsCliente, ncmVersao]);
 
   const abrir = useCallback((p: ItemEstoque, aba?: string) => {
     const nav = lista.some((x) => x.n_cod_prod === p.n_cod_prod) ? lista : itens;
@@ -169,7 +180,7 @@ function AbaItens({ itens, lista, st, muda, abrir, cliente, carregandoCliente, l
   itens: ItemEstoque[]; lista: ItemEstoque[]; st: EstadoLista; muda: (p: Partial<EstadoLista>) => void;
   abrir: (p: ItemEstoque) => void; cliente: string | null; carregandoCliente: boolean; limparCliente: () => void; nDups: number; irDups: () => void;
 }) {
-  const conta = useMemo(() => Object.fromEntries(FILTROS.map((f) => [f.k, itens.filter(f.f).length])), [itens]);
+  const conta = useMemo(() => Object.fromEntries(FILTROS.map((f) => [f.k, itens.filter(f.f).length])), [itens, lista]);
   const vt = itens.reduce((s, p) => s + valorItem(p), 0);
   const parados = itens.filter(parado), vpar = parados.reduce((s, p) => s + valorItem(p), 0);
   const comSaldo = itens.filter((p) => p.saldo > 0).length;
@@ -182,7 +193,7 @@ function AbaItens({ itens, lista, st, muda, abrir, cliente, carregandoCliente, l
     </button>
   );
   const [maisAberto, setMaisAberto] = useState(false);
-  const MAIS = ["cobertura", "alarme", "semalarme", "dup", "audit"];
+  const MAIS = ["cobertura", "alarme", "semalarme", "dup", "semncm", "audit"];
   const filtroMais = MAIS.includes(st.filtro) ? FILTROS.find((f) => f.k === st.filtro) : null;
 
   // Organizar: A–Z (ordem da coluna escolhida) ou por família (grupos que abrem/fecham). Fica no navegador.

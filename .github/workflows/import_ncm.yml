@@ -1,0 +1,17 @@
+name: Tabela NCM oficial (Siscomex -> cadastros.ncm)
+# Atualiza a tabela NCM usada pelo "Localizar NCM" (05/10/26). Só leitura da fonte
+# pública da Receita/Siscomex; não toca no Omie. Rodar quando sair Resolução Gecex nova.
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "17 6 1 * *"   # dia 1 de cada mês, 03:17 BRT
+jobs:
+  ncm:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Carregar NCM
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: python3 scripts/import_ncm.py

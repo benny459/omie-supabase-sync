@@ -1,0 +1,13 @@
+-- 76 (05/10/26): Tabela NCM oficial + localizador de NCM.
+-- Aplicado como migrações p76_ncm_1_tabela … p76_ncm_7_validos_lote (MCP, omie-data).
+-- Objetos:
+--   cadastros.ncm (codigo, codigo_fmt, nivel, folha, descricao, caminho, busca, vigência, ato)
+--   cadastros.ncm_meta (versão carregada) · cadastros.ncm_hist (quem gravou NCM em qual item)
+--   orders.v_item_ncm — NCM efetivo do item (cadastro painel > espelho > fat_produto_fiscal > catálogo Omie)
+--   orders.ncm_carregar / ncm_finalizar — carga (scripts/import_ncm.py, workflow import_ncm.yml)
+--   orders.ncm_buscar(q) · ncm_sugerir(empresa, descricao, codigo) · ncm_valido(ncm) · ncm_validos(ncm[])
+--   orders.ncm_salvar_item(empresa, codigo, ncm, por, fonte) — grava em platform.estoque_item_cadastro
+--     e orders.fat_produto_fiscal (código nativo e código Omie), com histórico
+--   orders.ncm_pendencias(empresa)
+-- Fonte: https://portalunico.siscomex.gov.br/classif/api/publico/nomenclatura/download/json
+-- Para recriar as funções, ver as migrações p76_* no Supabase (supabase_migrations.schema_migrations).
