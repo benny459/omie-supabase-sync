@@ -121,7 +121,7 @@
 /* tabela */
 .fpv .tablebox { background: var(--f-card); border: 1px solid var(--f-line); border-radius: 0 0 14px 14px; overflow: auto; max-height: calc(100vh - 140px); }
 .fpv table.fl { width: 100%; border-collapse: collapse; min-width: 1180px; }
-.fpv .fl th { font-size: 11.5px; font-weight: 500; color: var(--f-tx3); text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--f-line); background: var(--f-card); position: sticky; top: 0; z-index: 1; white-space: nowrap; cursor: pointer; user-select: none; }
+.fpv .fl th { font-size: 12px; font-weight: 700; letter-spacing: .02em; text-transform: uppercase; color: var(--f-tx); background: var(--f-card2, var(--f-card)) !important; border-bottom: 2px solid var(--f-line2, var(--f-line)); text-align: left; padding: 10px 12px; position: sticky; top: 0; z-index: 1; white-space: nowrap; cursor: pointer; user-select: none; }
 .fpv .fl th.r, .fpv .fl td.r { text-align: right; }
 .fpv .fl td { padding: 11px 12px; border-bottom: 1px solid var(--f-line); vertical-align: middle; }
 .fpv .fl tr.row { cursor: pointer; transition: background .1s; }
@@ -294,3 +294,13 @@
 .fpv .recp th { text-align: left; font-weight: 600; color: var(--f-tx3); font-size: 11.5px; padding: 4px 6px; border-bottom: 1px solid var(--f-line); }
 .fpv .recp td { padding: 5px 6px; border-bottom: 1px solid var(--f-line); }
 .fpv .recp .r { text-align: right; }
+
+/* Recebimento: badge + dia (05/10/26) */
+.fpv .rec-cel { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.fpv .rec-b { font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 999px; border: 1px solid transparent; }
+.fpv .rec-b.ok { color: var(--f-ok); background: color-mix(in srgb, var(--f-ok) 14%, transparent); }
+.fpv .rec-b.bad { color: var(--f-bad); background: color-mix(in srgb, var(--f-bad) 14%, transparent); }
+.fpv .rec-b.warn { color: var(--f-warn); background: color-mix(in srgb, var(--f-warn) 14%, transparent); }
+.fpv .rec-b.info { color: var(--f-tx); background: color-mix(in srgb, var(--f-tx) 8%, transparent); }
+.fpv .rec-b.mut { color: var(--f-tx3); border-color: var(--f-line); }
+.fpv .rec-d { font-size: 12.5px; font-variant-numeric: tabular-nums; color: var(--f-tx2, var(--f-tx)); }

@@ -565,17 +565,21 @@ function Prog({ d, largura = 130 }: { d: Doc; largura?: number | string }) {
 
 function RecCell({ d, r }: { d: Doc; r?: RecRes }) {
   if (!r) return <span style={{ color: "var(--f-tx3)" }}>…</span>;
-  const s = (t: ReactNode, cor?: string, sub?: ReactNode) => <><span style={{ color: cor, fontWeight: cor ? 600 : 400, fontSize: 12.5 }}>{t}</span>{sub && <small style={{ display: "block", fontSize: 11, color: "var(--f-tx3)" }}>{sub}</small>}</>;
+  // Badge (recebido / a receber / vencido / parcial) + o dia. Sem frases por extenso.
+  const b = (rot: string, cls: string, dia?: string | null, tip?: string) => (
+    <span className="rec-cel" title={tip}><span className={`rec-b ${cls}`}>{rot}</span>{dia && <span className="rec-d">{dia}</span>}</span>
+  );
   if (r.n === 0) {
-    if (status(d) === "fat") return s("sem título", "var(--f-tx3)");
+    if (status(d) === "fat") return b("sem título", "mut");
     const base = d.previsao ?? new Date().toLocaleDateString("sv-SE");
     const dt = new Date(`${base}T12:00:00`); dt.setDate(dt.getDate() + (r.prazo_dias ?? 0));
-    return <span style={{ color: "var(--f-tx3)", fontSize: 12 }} title={`previsão de faturamento ${dataBR(d.previsao)} + ${r.prazo_dias ?? 0} dias da condição`}>previsto ~{dataBR(dt.toLocaleDateString("sv-SE"))}</span>;
+    return b("previsto", "mut", dataBR(dt.toLocaleDateString("sv-SE")), `previsão de faturamento ${dataBR(d.previsao)} + ${r.prazo_dias ?? 0} dias da condição`);
   }
-  const parc = r.n > 1 ? `${r.rec_n}/${r.n} parcelas` : null;
-  if (r.rec_n >= r.n) return s(`recebido ${dataBR(r.ult_receb)}`, "var(--f-ok)", r.n > 1 ? `${r.n} parcelas · ${fmt(r.recebido)}` : fmt(r.recebido));
-  if (r.vencidas > 0) return s(`vencido há ${dias(r.venc_antigo)} dias`, "var(--f-bad)", `${r.vencidas} parcela(s)${parc ? ` · ${parc}` : ""}`);
-  return s(`recebe ${dataBR(r.prox_venc)} · ${fmt(Number(r.prox_valor ?? 0))}`, undefined, r.rec_n > 0 ? `parcial ${parc}` : parc);
+  const tip = `${r.rec_n}/${r.n} parcela(s) recebida(s) · ${fmt(r.recebido)}`;
+  if (r.rec_n >= r.n) return b("recebido", "ok", dataBR(r.ult_receb), tip);
+  if (r.vencidas > 0) return b(r.rec_n > 0 ? `parcial ${r.rec_n}/${r.n}` : "vencido", "bad", dataBR(r.venc_antigo), `${r.vencidas} parcela(s) vencida(s) · ${tip}`);
+  if (r.rec_n > 0) return b(`parcial ${r.rec_n}/${r.n}`, "warn", dataBR(r.prox_venc), tip);
+  return b("a receber", "info", dataBR(r.prox_venc), `${fmt(Number(r.prox_valor ?? 0))} · ${tip}`);
 }
 
 function Emissao({ d }: { d: Doc }) {
