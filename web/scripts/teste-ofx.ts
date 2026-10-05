@@ -17,13 +17,14 @@ const sgml = (banco: string, ag: string, conta: string, trns: string, extra = ""
   `${SGML_CAB()}<OFX>\n<SIGNONMSGSRSV1><SONRS><STATUS><CODE>0<SEVERITY>INFO</STATUS><DTSERVER>20261005<LANGUAGE>POR</SONRS></SIGNONMSGSRSV1>\n<BANKMSGSRSV1><STMTTRNRS><TRNUID>1<STATUS><CODE>0<SEVERITY>INFO</STATUS>\n<STMTRS><CURDEF>BRL<BANKACCTFROM><BANKID>${banco}<BRANCHID>${ag}<ACCTID>${conta}<ACCTTYPE>${tipoCta}</BANKACCTFROM>\n<BANKTRANLIST><DTSTART>20261001<DTEND>20261003\n${trns}</BANKTRANLIST>${extra}</STMTRS></STMTTRNRS></BANKMSGSRSV1></OFX>\n`;
 const t = (dt: string, v: string, memo: string, fitid?: string, extra = "") =>
   `<STMTTRN><TRNTYPE>${v.startsWith("-") ? "DEBIT" : "CREDIT"}<DTPOSTED>${dt}<TRNAMT>${v}${fitid !== undefined ? `<FITID>${fitid}` : ""}${extra}<MEMO>${memo}</STMTTRN>\n`;
+const FUSO_BRT = "[" + "-3:BRT]", FUSO_EST = "[" + "-03:EST]"; // montado em partes: o Tailwind lê o código e via "[x:y]" como classe
 const latin1 = (s: string) => Uint8Array.from([...s].map((c) => c.charCodeAt(0) & 0xff));
 const utf8 = (s: string) => new TextEncoder().encode(s);
 
 // 1. Itaú — SGML, CHARSET 1252 com acentos, data com hora e fuso
 {
   const txt = sgml("0341", "1234", "56789-0",
-    t("20261001120000[-3:BRT]", "-150.00", "PIX ENVIADO JOÃO ÇÃ", "IT1") + t("20261002", "1000.00", "TED RECEBIDA", "IT2"),
+    t("20261001120000" + FUSO_BRT, "-150.00", "PIX ENVIADO JOÃO ÇÃ", "IT1") + t("20261002", "1000.00", "TED RECEBIDA", "IT2"),
     "<LEDGERBAL><BALAMT>2350.00<DTASOF>20261003</LEDGERBAL>");
   const e = lerOfx(decodificarOfx(latin1(txt)));
   eq("itau banco", e.banco, "341");
@@ -40,7 +41,7 @@ const utf8 = (s: string) => new TextEncoder().encode(s);
 }
 // 3. Santander — OFX 2.x XML com fechos, valor com vírgula
 {
-  const xml = `<?xml version="1.0" encoding="UTF-8"?>\n<?OFX OFXHEADER="200" VERSION="211"?>\n<OFX><BANKMSGSRSV1><STMTTRNRS><STMTRS><CURDEF>BRL</CURDEF><BANKACCTFROM><BANKID>033</BANKID><BRANCHID>3333</BRANCHID><ACCTID>130012345</ACCTID><ACCTTYPE>CHECKING</ACCTTYPE></BANKACCTFROM><BANKTRANLIST><DTSTART>20261001000000</DTSTART><DTEND>20261005000000</DTEND><STMTTRN><TRNTYPE>DEBIT</TRNTYPE><DTPOSTED>20261003000000[-03:EST]</DTPOSTED><TRNAMT>-1.234,56</TRNAMT><FITID>SAN1</FITID><MEMO>BOLETO PAGO</MEMO></STMTTRN></BANKTRANLIST><LEDGERBAL><BALAMT>100,00</BALAMT><DTASOF>20261005</DTASOF></LEDGERBAL></STMTRS></STMTTRNRS></BANKMSGSRSV1></OFX>`;
+  const xml = `<?xml version="1.0" encoding="UTF-8"?>\n<?OFX OFXHEADER="200" VERSION="211"?>\n<OFX><BANKMSGSRSV1><STMTTRNRS><STMTRS><CURDEF>BRL</CURDEF><BANKACCTFROM><BANKID>033</BANKID><BRANCHID>3333</BRANCHID><ACCTID>130012345</ACCTID><ACCTTYPE>CHECKING</ACCTTYPE></BANKACCTFROM><BANKTRANLIST><DTSTART>20261001000000</DTSTART><DTEND>20261005000000</DTEND><STMTTRN><TRNTYPE>DEBIT</TRNTYPE><DTPOSTED>20261003000000${FUSO_EST}</DTPOSTED><TRNAMT>-1.234,56</TRNAMT><FITID>SAN1</FITID><MEMO>BOLETO PAGO</MEMO></STMTTRN></BANKTRANLIST><LEDGERBAL><BALAMT>100,00</BALAMT><DTASOF>20261005</DTASOF></LEDGERBAL></STMTRS></STMTTRNRS></BANKMSGSRSV1></OFX>`;
   const e = lerOfx(decodificarOfx(utf8(xml)));
   eq("santander xml valor virgula", e.movimentos[0].valor, -1234.56);
   eq("santander saldo virgula", e.saldo_final, 100);

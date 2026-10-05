@@ -3,7 +3,7 @@
 // OFX 1.x (SGML: tags de folha sem fecho, cabeçalho "OFXHEADER:100") e 2.x
 // (XML), vários extratos no mesmo arquivo (conta corrente STMTRS e cartão
 // CCSTMTRS), saldos LEDGERBAL/AVAILBAL, datas com ou sem hora/fuso
-// ("20261002120000[-3:BRT]"), valor com vírgula ou ponto, charset detectado
+// ("20261002120000" seguido do fuso entre colchetes, ex. -3 BRT), valor com vírgula ou ponto, charset detectado
 // (UTF-8 / Windows-1252 / Latin-1). Sem biblioteca: os bancos variam nos
 // detalhes, e cada detalhe conhecido tem um caso em scripts/teste-ofx.ts.
 //
@@ -77,7 +77,7 @@ function folha(bloco: string, tag: string): string | null {
   return v ? entidades(v).replace(/\s+/g, " ").trim() || null : null;
 }
 
-/** "20261002", "20261002120000", "20261002120000.000[-3:BRT]", "2026-10-02T12:00:00" → "2026-10-02". */
+/** "20261002", "20261002120000", "20261002120000.000" + fuso entre colchetes, "2026-10-02T12:00:00" → "2026-10-02". */
 export function dataOfx(v: string | null): string | null {
   const s = (v ?? "").trim();
   const iso = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
