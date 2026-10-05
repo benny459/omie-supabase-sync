@@ -367,7 +367,7 @@ export function montarNfe(doc: DocFat, em: Emitente, opts: { natureza: string; s
     tipo_documento: 1,
     local_destino: mesmaUF ? 1 : 2,
     finalidade_emissao: devol ? 4 : 1,
-    ...(devol && ref?.chave ? { notas_referenciadas: [{ chave_nfe: so(ref.chave) }] } : {}),
+    // A NF de origem vai POR ITEM (DFeReferenciado): a SEFAZ rejeita referência no cabeçalho e no item ao mesmo tempo.
     consumidor_final: consumidorFinal ? 1 : 0,
     presenca_comprador: 9,
     cnpj_emitente: so(em.cnpj),

@@ -52,7 +52,7 @@ async function um(nome: string, doc: DocFat) {
   console.log(JSON.stringify({
     id: e.id, ambiente: e.ambiente, status: e.status, focus_status: e.focus_status, mensagem: e.mensagem, erros: e.erros,
     numero: e.numero, serie: e.serie, chave: e.chave, gerar_receber: e.gerar_receber, receber_ids: e.receber_ids, operacao: e.operacao,
-    natureza: p?.natureza_operacao, finalidade: p?.finalidade_emissao, refs: p?.notas_referenciadas, pagamento: p?.formas_pagamento,
+    natureza: p?.natureza_operacao, finalidade: p?.finalidade_emissao, refs: ((p?.items ?? []) as Record<string, unknown>[]).map((x) => [x.chave_acesso_dfe_referenciado, x.numero_item_dfe_referenciado]), pagamento: p?.formas_pagamento,
     tem_duplicatas: !!p?.duplicatas, cfop: it0.cfop, csosn: it0.icms_situacao_tributaria, icms: [it0.icms_base_calculo, it0.icms_aliquota, it0.icms_valor],
     pis: [it0.pis_situacao_tributaria, it0.pis_aliquota_porcentual], infCpl: p?.informacoes_adicionais_contribuinte,
   }, null, 2));
