@@ -13,6 +13,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { baixarCSV, hoje, nomeLocal, normMov, somaDias, type ItemEstoque, type MovEstoque } from "@/lib/estoque";
 import { Pill, Thumb, brl, ddmm, dsem, invalidarItens, kbrl, postar, q, useToast } from "./comum";
 import { ModalNovaMov } from "./NovaMovimentacao";
+import { ModalSeparacao } from "./Separacao";
 export { ModalNovaMov };
 
 export type TipoMov = { id: number; codigo: string; nome: string; sentido: "entra" | "sai" | "transfere"; origem: "manual" | "omie" | "inventario";
@@ -69,6 +70,7 @@ function AbaMovsCliente({ porId, itens, abrir }: {
   const [lotes, setLotes] = useState<Map<number, LoteMov>>(new Map());
   const [lotesAbertos, setLotesAbertos] = useState<Set<number>>(new Set());
   const [nova, setNova] = useState(false);
+  const [separar, setSeparar] = useState(false);
   const [config, setConfig] = useState(false);
   const [toast, avisar] = useToast();
   const [versao, setVersao] = useState(0);
@@ -198,6 +200,7 @@ function AbaMovsCliente({ porId, itens, abrir }: {
       <div className="sp" />
       <button className="btn sm" onClick={csv} disabled={carregando}>CSV</button>
       {apoio?.admin && <button className="btn sm" onClick={() => setConfig(true)}>Configurar tipos</button>}
+      <button className="btn sm" onClick={() => setSeparar(true)} title="Reservar material para um projeto, em lote (devolver e consumir também)">Separar p/ projeto</button>
       <button className="btn sm pri" onClick={() => setNova(true)} disabled={!apoio}>+ Nova movimentação</button>
     </div>
     {erro && <div className="aviso t-crit">{erro}</div>}
@@ -275,6 +278,7 @@ function AbaMovsCliente({ porId, itens, abrir }: {
         </table>
       </div>
     </div>
+    {separar && <ModalSeparacao fechar={() => { setSeparar(false); setVersao((x) => x + 1); }} />}
     {nova && apoio && <ModalNovaMov itens={itens} apoio={apoio} fechar={() => setNova(false)}
       ok={(lt) => { setNova(false); avisar(lt.status === "pendente" ? `Lote #${lt.id} lançado — aguardando aprovação do administrador` : `Lote #${lt.id} lançado (${lt.n_linhas} linha${lt.n_linhas > 1 ? "s" : ""}) — saldo atualizado`, "ok"); invalidarItens(); setVersao((x) => x + 1); }} />}
     {config && apoio && <ModalConfigMov apoio={apoio} fechar={() => setConfig(false)} mudou={(a) => setApoio((x) => (x ? { ...x, ...a } : x))} />}

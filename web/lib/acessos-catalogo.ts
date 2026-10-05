@@ -10,6 +10,7 @@ export type Chave =
   | "compras.dispensar_nf" | "compras.conferir" | "compras.enviar_fornecedor"
   | "estoque.acesso" | "estoque.ver_custos" | "estoque.ajustar" | "estoque.mesclar"
   | "estoque.senha_inventario" | "estoque.codigos" | "estoque.config_mov" | "estoque.aprovar_perdas"
+  | "estoque.separar_projeto"
   | "financeiro.ver_pagar" | "financeiro.ver_receber" | "financeiro.editar_titulo"
   | "financeiro.baixar" | "financeiro.conciliar";
 
@@ -34,6 +35,7 @@ export const CATALOGO: ItemCatalogo[] = [
   { chave: "estoque.codigos",           modulo: "estoque", rotulo: "Famílias, códigos e fotos",     descricao: "Revisão de famílias, códigos novos, busca de fotos", padrao: "admin" },
   { chave: "estoque.config_mov",        modulo: "estoque", rotulo: "Configurar tipos de movimentação", descricao: "Tipos e justificativas",                       padrao: "admin" },
   { chave: "estoque.aprovar_perdas",    modulo: "estoque", rotulo: "Aprovar perdas e cancelar movimentos", descricao: "Perdas, avarias, descartes",                padrao: "admin" },
+  { chave: "estoque.separar_projeto",   modulo: "estoque", rotulo: "Separar material para projeto", descricao: "Reservar, devolver e consumir material de projetos (em lote)", padrao: "erp" },
   { chave: "financeiro.ver_pagar",      modulo: "financeiro", rotulo: "Ver contas a pagar",         descricao: "Títulos a Pagar",                                  padrao: "erp" },
   { chave: "financeiro.ver_receber",    modulo: "financeiro", rotulo: "Ver contas a receber",       descricao: "Títulos a Receber",                                padrao: "erp" },
   { chave: "financeiro.editar_titulo",  modulo: "financeiro", rotulo: "Incluir / excluir título",   descricao: "Criar ou excluir títulos",                         padrao: "erp" },
@@ -46,8 +48,8 @@ export const MODULO_LABEL: Record<ModuloPerm, string> = { compras: "Compras", es
 /** Perfis prontos: aplicar e depois ajustar à mão. */
 export const PERFIS: Record<string, { rotulo: string; chaves: Chave[] }> = {
   comprador:  { rotulo: "Comprador", chaves: ["compras.acesso", "compras.ver_valores", "compras.gerar_pc_nf", "compras.conferir", "compras.enviar_fornecedor", "estoque.acesso", "estoque.ver_custos"] },
-  almoxarife: { rotulo: "Almoxarife", chaves: ["compras.acesso", "compras.conferir", "estoque.acesso", "estoque.ajustar"] },
+  almoxarife: { rotulo: "Almoxarife", chaves: ["compras.acesso", "compras.conferir", "estoque.acesso", "estoque.ajustar", "estoque.separar_projeto"] },
   financeiro: { rotulo: "Financeiro", chaves: ["compras.acesso", "compras.ver_valores", "compras.conferir", "financeiro.ver_pagar", "financeiro.ver_receber", "financeiro.editar_titulo", "financeiro.baixar", "financeiro.conciliar", "estoque.acesso", "estoque.ver_custos"] },
-  gestor:     { rotulo: "Gestor", chaves: ["compras.acesso", "compras.ver_valores", "compras.aprovar", "compras.gerar_pc_nf", "compras.dispensar_nf", "compras.conferir", "compras.enviar_fornecedor", "estoque.acesso", "estoque.ver_custos", "estoque.ajustar", "estoque.aprovar_perdas", "financeiro.ver_pagar", "financeiro.ver_receber"] },
+  gestor:     { rotulo: "Gestor", chaves: ["compras.acesso", "compras.ver_valores", "compras.aprovar", "compras.gerar_pc_nf", "compras.dispensar_nf", "compras.conferir", "compras.enviar_fornecedor", "estoque.acesso", "estoque.ver_custos", "estoque.ajustar", "estoque.aprovar_perdas", "estoque.separar_projeto", "financeiro.ver_pagar", "financeiro.ver_receber"] },
   administrador: { rotulo: "Administrador", chaves: CATALOGO.map((c) => c.chave) },
 };

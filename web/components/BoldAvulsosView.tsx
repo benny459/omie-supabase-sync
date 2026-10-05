@@ -1,5 +1,6 @@
 "use client";
 
+import { BadgeSeparadoProjeto } from "@/components/navy/estoque/Separacao";
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
@@ -2430,13 +2431,15 @@ export function projetoDoBucket(
 }
 
 export function LinkAbrirProjeto({ codProj, empresaProj }: { codProj: number; empresaProj: string }) {
-  return (
+  return (<>
+    <BadgeSeparadoProjeto codProj={codProj} />
     <a href={`/projetos/${codProj}/materiais?empresa=${encodeURIComponent(empresaProj)}`}
       onClick={(e) => e.stopPropagation()}
       title="Fechamento do CRM, fluxo de caixa e lista de materiais deste projeto"
       className="inline-flex items-center gap-1 px-3 py-1 rounded-md text-[11.5px] font-semibold border border-sky-400 dark:border-sky-700 bg-sky-50 dark:bg-sky-950/40 text-sky-800 dark:text-sky-200 hover:bg-sky-100 dark:hover:bg-sky-900/50 transition whitespace-nowrap">
       📂 <span>Abrir projeto</span> <span className="opacity-60">→</span>
     </a>
+  </>
   );
 }
 

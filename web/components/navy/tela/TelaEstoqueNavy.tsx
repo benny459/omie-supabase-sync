@@ -320,7 +320,7 @@ function LinhaItem({ p, abrir }: { p: ItemEstoque; abrir: (p: ItemEstoque) => vo
         </div>
       </td>
       <td><Pill t={st} tom={tom} /></td>
-      <td className="r" style={{ fontWeight: 600, color: p.saldo < 0 ? "var(--ww-crit-text)" : undefined }}>{q(p.saldo)}</td>
+      <td className="r" style={{ fontWeight: 600, color: p.saldo < 0 ? "var(--ww-crit-text)" : undefined }}>{q(p.saldo)}{p.reservado_proj ? <div className="disp-res" title={`Separado para ${p.n_projetos} projeto(s) — disponível = saldo − separado`}>disp. {q(p.saldo - p.reservado_proj)} · sep. {q(p.reservado_proj)}</div> : null}</td>
       <td className="r opt">{p.pendente ? q(p.pendente) : <span className="mini">—</span>}</td>
       <td className="opt"><Pill t={al} tom={atom} /></td>
       <td>

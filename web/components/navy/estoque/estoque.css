@@ -329,3 +329,8 @@
 .est .cod-hist { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 10px 16px; border-bottom: 1px solid var(--ww-border); }
 .est .cod-chip { display: inline-flex; gap: 4px; align-items: center; padding: 3px 8px; border-radius: 10px; border: 1px solid var(--ww-border); background: var(--ww-panel-sunken); font-size: 12px; }
 .est .cod-chip.atual { border-color: var(--ww-ok); }
+
+/* Separação p/ projeto (05/10/26) */
+.est-ov .modal.sep-proj { width: min(1150px, 100%); }
+.est-ov .modal.sep-proj .tabela td .inp { height: 30px; }
+.est .disp-res { font-size: 11px; color: var(--ww-text-faint); white-space: nowrap; }

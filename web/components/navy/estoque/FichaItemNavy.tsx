@@ -10,6 +10,7 @@
  * Foto: bucket privado "produtos" (FotoItem). Pedir compra: fase 2 (botão "em breve").
  */
 
+import { ReservasDoItem } from "./Separacao";
 import "./estoque.css";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -215,6 +216,7 @@ function Conteudo({ f, aba, setAba, ir, recarregar, itensTodos }: {
         })}
       </div>
     )}
+    <ReservasDoItem n_cod_prod={p.n_cod_prod} />
     <div className="cartao">
       <div className="ficha-top">
         <FotoItem n={p.n_cod_prod} avisar={avisar} />
@@ -224,6 +226,7 @@ function Conteudo({ f, aba, setAba, ir, recarregar, itensTodos }: {
             <Pill t={alarme(p)[0]} tom={alarme(p)[1]} />
             {temDup && <Pill t="possível duplicidade" tom="violet" />}
             {p.ajuste !== 0 && <Pill t="saldo ajustado no painel" tom="info" />}
+            {p.reservado_proj ? <Pill t={`${q(p.reservado_proj)} separado p/ ${p.n_projetos} projeto(s) · disponível ${q(p.saldo - p.reservado_proj)}`} tom="info" /> : null}
             {p.omie_status === "ok" && <Pill t="✓ no Omie" tom="ok" />}
             {p.omie_status === "erro" && <Pill t={`Omie: erro — ${p.omie_erro ?? ""}`} tom="crit" title={p.omie_erro ?? undefined} />}
             {p.n_cod_prod < 0 && p.omie_status !== "erro" && <Pill t="só no painel (ainda sem id do Omie)" tom="warn" />}

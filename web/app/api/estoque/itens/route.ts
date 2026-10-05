@@ -14,11 +14,19 @@ export async function GET() {
   const q = await quemEstoque();
   if (q instanceof NextResponse) return q;
   try {
-    const [rows, dups, fotos] = await Promise.all([
+    const [rows, dups, fotos, reservas] = await Promise.all([
       todasParalelo((de, ate) => orders().from("v_estoque_item").select("*").order("descricao").order("n_cod_prod").range(de, ate)),
       todas((de, ate) => orders().from("v_estoque_duplicidade").select("*").range(de, ate)),
       todas((de, ate) => platform().from("estoque_foto").select("empresa, n_cod_prod, path").range(de, ate)),
+      // separação p/ projeto (sql/63): reservado por item; disponível = saldo − reservado_proj
+      todas((de, ate) => orders().from("v_estoque_reserva_item").select("empresa, n_cod_prod, reservado_proj, n_projetos").range(de, ate)).catch(() => []),
     ]);
+    const res = new Map((reservas as { empresa: string; n_cod_prod: number; reservado_proj: number; n_projetos: number }[])
+      .map((x) => [`${x.empresa}:${x.n_cod_prod}`, x]));
+    for (const r of rows as Record<string, unknown>[]) {
+      const x = res.get(`${r.empresa}:${r.n_cod_prod}`);
+      if (x) { r.reservado_proj = Number(x.reservado_proj) || 0; r.n_projetos = Number(x.n_projetos) || 0; }
+    }
     // fotos: URL assinada do bucket privado (nunca o link externo)
     const fs = fotos as { empresa: string; n_cod_prod: number; path: string }[];
     const urls = await urlsAssinadas(fs.map((f) => f.path)).catch(() => new Map<string, string>());

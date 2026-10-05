@@ -34,6 +34,8 @@ export type ItemEstoque = {
   omie_status: "nao_enviado" | "ok" | "erro" | "desligado" | null; omie_erro: string | null;
   /** Principal de mesclagem: CMC = média ponderada pelo estoque positivo de cada código (cmc_partes); cmc_proprio = o do Omie. */
   cmc_ponderado: boolean; cmc_proprio: number; cmc_partes: { codigo: string; qtd: number; cmc: number; proprio?: boolean }[] | null;
+  /** Separação p/ projeto (sql/63): total reservado para projetos e em quantos; disponível = saldo − reservado_proj. */
+  reservado_proj?: number; n_projetos?: number;
 };
 
 export type AjusteEstoque = {
@@ -102,6 +104,8 @@ export function normItem(r: Record<string, unknown>): ItemEstoque {
     omie_status: (r.omie_status as ItemEstoque["omie_status"]) ?? null, omie_erro: (r.omie_erro as string) || null,
     cmc_ponderado: !!r.cmc_ponderado, cmc_proprio: n(r.cmc_proprio ?? r.cmc),
     cmc_partes: Array.isArray(r.cmc_partes) ? (r.cmc_partes as Record<string, unknown>[]).map((x) => ({ codigo: String(x.codigo), qtd: n(x.qtd), cmc: n(x.cmc), proprio: !!x.proprio })) : null,
+
+    reservado_proj: n(r.reservado_proj), n_projetos: n(r.n_projetos),
   };
 }
 
