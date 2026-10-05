@@ -86,6 +86,29 @@ export async function GET(req: NextRequest) {
   const op = sp.get("op") ?? "opcoes";
   const a = supaAdmin();
   try {
+    if (op === "sem_estoque") {
+      // Linhas da folha (CRM, rascunho antigo, digitadas) cujo código não é item nosso: com o produto
+      // de compra correspondente, para "Criar item nosso" / "Vincular" na própria linha (05/10/26).
+      const cods = (sp.get("cods") ?? "").split(",").map((c) => c.trim()).filter(Boolean).slice(0, 200);
+      const sem = await codigosSemEstoque(emp, cods);
+      if (!sem.length) return NextResponse.json({ sem: [] });
+      const [cat, fis] = await Promise.all([
+        a.schema("orders").from("mv_catalogo_compra").select("ncod_prod,codigo,descricao,unidade,ultimo_preco,ultima_compra,fornecedor,fornecedor_cod")
+          .eq("empresa", emp).in("codigo", sem),
+        a.schema("orders").from("fat_produto_fiscal").select("codigo_produto,ncm").eq("empresa", emp).in("codigo_produto", sem),
+      ]);
+      type Cat = { ncod_prod: number; codigo: string; descricao: string; unidade: string | null; ultimo_preco: number | null; ultima_compra: string | null;
+        fornecedor: string | null; fornecedor_cod: number | null };
+      const cMap = new Map(((cat.data ?? []) as Cat[]).map((c) => [c.codigo.toUpperCase(), c]));
+      const nMap = new Map(((fis.data ?? []) as { codigo_produto: string; ncm: string | null }[]).map((f) => [f.codigo_produto.toUpperCase(), f.ncm]));
+      return NextResponse.json({ sem: sem.map((codigo) => {
+        const c = cMap.get(codigo.toUpperCase());
+        const compra: CodigoCompra | null = c ? { n_cod_prod: Number(c.ncod_prod), codigo: c.codigo, descricao: c.descricao, unidade: c.unidade,
+          ultimo_preco: c.ultimo_preco, ultima_compra: c.ultima_compra, fornecedor: c.fornecedor, fornecedor_cod: c.fornecedor_cod,
+          ncm: nMap.get(codigo.toUpperCase()) ?? null } : null;
+        return { codigo, compra };
+      }) });
+    }
     if (op === "itens") {
       // Autocompletar dos itens da folha (05/10/26): catálogo nativo + fiscal + CMC/última compra/saldo
       // + último preço vendido a este cliente (espelho dos PVs).

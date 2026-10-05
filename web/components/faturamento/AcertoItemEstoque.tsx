@@ -52,6 +52,8 @@ export default function AcertoItemEstoque({ empresa, compra, onFechar, onPronto 
   }, [q, empresa]);
 
   async function vincular(destino: number, codigo: string) {
+    // sem produto de compra identificado (código digitado/antigo): só troca a linha pelo item nosso
+    if (!compra.n_cod_prod) { onPronto(codigo); return; }
     setOcupado(true); setErro(null);
     const r = await fetch("/api/estoque/vinculos", { method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ acao: "vincular", emp: empresa, origem: compra.n_cod_prod, destino }) }).then((x) => x.json()).catch((e) => ({ error: String(e) }));

@@ -212,6 +212,8 @@ export default function NovaEmissao({ config, aberto, fechar, avisar, onEmitido,
   const [itComp, setItComp] = useState<CodCompra[]>([]);
   /** acertar código de compra: cadastrar no estoque / vincular a item existente (linha n) */
   const [acerto, setAcerto] = useState<{ n: number; c: CodCompra } | null>(null);
+  // linhas cujo código não é item nosso (vindas do CRM, de rascunho antigo ou digitadas) → chip "código de compra"
+  const [semEst, setSemEst] = useState<Record<string, CodCompra | null>>({});
   const [dicas, setDicas] = useState<Record<number, DicaItem>>({});
   const [conta, setConta] = useState<number | "">("");
   const [categoria, setCategoria] = useState("");
@@ -456,9 +458,9 @@ export default function NovaEmissao({ config, aberto, fechar, avisar, onEmitido,
 
   /** Escolheu um item do catálogo: preenche a linha. Remessa/conserto/devolução vão pelo custo médio
    *  (CMC → última compra); venda pelo último preço vendido a este cliente. Sempre editável. */
-  function escolherItem(n: number, c: ItemCat) {
+  function escolherItem(n: number, c: ItemCat, manterValor = false) {
     const custo = c.cmc ?? c.ultimo_preco ?? null;
-    const vu = naoVenda ? custo : tipo === "nfe" ? c.ultima_venda : null;
+    const vu = manterValor ? null : naoVenda ? custo : tipo === "nfe" ? c.ultima_venda : null;
     setItens((its) => its.map((x, i) => (i === n ? {
       ...x, codigo: c.codigo, descricao: c.descricao, unidade: c.unidade || "UN", ncm: c.ncm ?? x.ncm ?? "",
       cest: c.cest ?? x.cest ?? null, origem: c.origem ?? x.origem ?? 0, nativo: !!c.nativo,
@@ -473,8 +475,31 @@ export default function NovaEmissao({ config, aberto, fechar, avisar, onEmitido,
     const j = await fetch(`/api/faturamento/nova?op=itens&emp=${empresa}&q=${encodeURIComponent(codigo)}${cliCodigo ? `&cli=${encodeURIComponent(cliCodigo)}` : ""}&estoque=1`, { cache: "no-store" })
       .then((x) => x.json()).catch(() => ({}));
     const it = ((j.itens ?? []) as ItemCat[]).find((x) => x.codigo.toUpperCase() === codigo.toUpperCase()) ?? (j.itens ?? [])[0];
-    if (it) escolherItem(n, it);
+    // substitui a linha no lugar: quantidade e valor da linha continuam (05/10/26)
+    if (it) escolherItem(n, it, true);
     setAcerto(null);
+  }
+
+  // Quais códigos das linhas não são item nosso (NF-e movimenta estoque)
+  const codsLinhas = tipo === "nfe" ? [...new Set(itens.map((i) => (i.codigo ?? "").trim()).filter(Boolean))].sort().join(",") : "";
+  useEffect(() => {
+    if (!codsLinhas) { setSemEst({}); return; }
+    const t = window.setTimeout(() => {
+      fetch(`/api/faturamento/nova?op=sem_estoque&emp=${empresa}&cods=${encodeURIComponent(codsLinhas)}`, { cache: "no-store" })
+        .then((x) => x.json()).then((j) => setSemEst(Object.fromEntries(((j.sem ?? []) as { codigo: string; compra: CodCompra | null }[]).map((x) => [x.codigo.toUpperCase(), x.compra]))))
+        .catch(() => {});
+    }, 400);
+    return () => window.clearTimeout(t);
+  }, [codsLinhas, empresa]);
+  const linhaCompra = (it: { codigo?: string | null }) => tipo === "nfe" && !!(it.codigo ?? "").trim() && (it.codigo ?? "").trim().toUpperCase() in semEst;
+  /** Abre o acerto da linha: produto de compra do catálogo, ou os dados da própria linha. */
+  function acertarLinha(n: number) {
+    const it = itens[n];
+    const c = semEst[(it.codigo ?? "").trim().toUpperCase()];
+    setAcerto({ n, c: {
+      n_cod_prod: c?.n_cod_prod ?? 0, codigo: c?.codigo ?? it.codigo ?? null, descricao: c?.descricao ?? it.descricao ?? "",
+      unidade: it.unidade || c?.unidade || null, ultimo_preco: c?.ultimo_preco ?? (it.valor_unitario || null), ultima_compra: c?.ultima_compra ?? null,
+      fornecedor: c?.fornecedor ?? null, fornecedor_cod: c?.fornecedor_cod ?? null, ncm: (it.ncm || c?.ncm) ?? null } });
   }
 
   // relógio do painel de transmissão
@@ -596,6 +621,8 @@ export default function NovaEmissao({ config, aberto, fechar, avisar, onEmitido,
     if (tipo !== "nfe") return null;
     const ruim = itens.find((i) => !(i.codigo ?? "").trim());
     if (ruim) return "Há item sem código — escolha o item do estoque pela busca (nome ou código).";
+    const comp = itens.find((i) => linhaCompra(i));
+    if (comp) return `${comp.codigo} é código de compra — substitua por um item nosso (Criar item nosso ou Vincular, na linha).`;
     return null;
   }
 
@@ -633,7 +660,9 @@ export default function NovaEmissao({ config, aberto, fechar, avisar, onEmitido,
     const locais: Checagem[] = fv ? [{ item: "Projeto / categoria / conta", ok: false, nivel: "erro", detalhe: fv }] : [];
     const semNcm = tipo === "nfe" ? itens.filter((i) => i.descricao && ncmDig(i.ncm).length !== 8) : [];
     for (const i of semNcm) locais.push({ item: "NCM", ok: false, nivel: "erro", detalhe: `${i.descricao}: NCM ausente — clique em “Localizar NCM” na linha do item` });
-    const fn = semNcm.length > 0;
+    const fe = faltaEstoque();
+    if (fe) locais.push({ item: "Itens do estoque", ok: false, nivel: "erro", detalhe: fe });
+    const fn = semNcm.length > 0 || !!fe;
     setPre(r.error ? { checagens: locais, pode_emitir: false, error: r.error }
       : { ...r, checagens: [...locais, ...(r.checagens ?? [])], pode_emitir: !!r.pode_emitir && !fv && !fn });
   }
@@ -1143,7 +1172,10 @@ export default function NovaEmissao({ config, aberto, fechar, avisar, onEmitido,
                       const dc = dicas[n];
                       const acima = operacao !== "devolucao" && dc?.saldo != null && it.quantidade > (dc.saldo ?? 0) && (dc.saldo ?? 0) > 0;
                       const partes: { t: string; ruim?: boolean }[] = [];
-                      if (tipo === "nfe" && it.codigo && it.nativo === false) partes.push({ t: "código digitado à mão — escolha o item do estoque pela busca", ruim: true });
+                      const ehCompra = linhaCompra(it);
+                      if (tipo === "nfe" && it.codigo && it.nativo === false && !ehCompra) partes.push({ t: "código digitado à mão — escolha o item do estoque pela busca", ruim: true });
+                      if ((it.unidade ?? "").trim().toUpperCase() === "MM" && /cabo|fio|eletroduto|mangueira|tubo|perfil|cordoalha/i.test(it.descricao ?? ""))
+                        partes.push({ t: "unidade MM para este item? confira o cadastro (normalmente M)", ruim: true });
                       if (it.quantidade_max != null) partes.push({ t: `máx. ${it.quantidade_max} (NF de origem)`, ruim: it.quantidade > it.quantidade_max });
                       if (operacao !== "devolucao" && dc?.saldo != null) partes.push((dc.saldo ?? 0) < 0
                         ? { t: `disp. ${dc.saldo} — saldo do estoque inconsistente, conferir no Inventário (não bloqueia a nota)`, ruim: true }
@@ -1153,7 +1185,7 @@ export default function NovaEmissao({ config, aberto, fechar, avisar, onEmitido,
                       if (dc?.ultimo_preco != null) partes.push({ t: `últ. compra ${fmt(dc.ultimo_preco)}` });
                       if (tipo === "nfe" && !naoVenda && dc?.ultima_venda != null) partes.push({ t: `últ. venda ${fmt(dc.ultima_venda)}` });
                       return (
-                        <div key={n} className="ne-it">
+                        <div key={n} className={`ne-it${ehCompra ? " compra" : ""}`}>
                           <div className="ne-it-lin">
                             <input className="ne-in ne-it-cod" aria-label="Código" value={it.codigo ?? ""} placeholder="código"
                               onChange={(e) => { setItens(itens.map((x, i) => (i === n ? { ...x, codigo: e.target.value, nativo: false } : x))); setItBusca({ n, q: e.target.value }); }}
@@ -1204,6 +1236,12 @@ export default function NovaEmissao({ config, aberto, fechar, avisar, onEmitido,
                             <span className="ne-it-tot">{fmt(it.quantidade * it.valor_unitario)}</span>
                             <button type="button" className="ne-it-rem" title="remover item" aria-label="remover item" onClick={() => { setItens(itens.length > 1 ? itens.filter((_, i) => i !== n) : [ITEM0]); setDicas({}); }}>×</button>
                           </div>
+                          {ehCompra && <div className="ne-it-compra">
+                            <span className="ne-chip-compra" title="Produto de compra do Omie que não é item do nosso estoque — não pode sair na nota">código de compra</span>
+                            <span className="ne-dica">substitua por um item nosso:</span>
+                            <button type="button" className="ne-btn" onClick={() => acertarLinha(n)}>Criar item nosso</button>
+                            <button type="button" className="ne-btn" onClick={() => acertarLinha(n)}>Vincular a item existente</button>
+                          </div>}
                           {(partes.length > 0 || ncmMal) && <div className="ne-it-dicas">
                             {ncmMal && <span className="ruim">{ncmDig(it.ncm) ? "NCM inválido" : "sem NCM"} — <button type="button" className="ne-lk" onClick={() => setNcmBox(n)}>localizar NCM</button></span>}
                             {partes.map((p, k) => <span key={k} className={p.ruim ? "ruim" : undefined}>{p.t}</span>)}
@@ -1400,9 +1438,10 @@ export default function NovaEmissao({ config, aberto, fechar, avisar, onEmitido,
           {tipo !== "nfse" && <button className="ne-btn" disabled={!cli.nome || !itens.some((i) => i.descricao)} onClick={() => previaDocumento(montarDocumento(), tipo === "recibo" ? "recibo" : "nfe", avisar)}
             title="Ver como o documento vai sair — sem enviar nada à SEFAZ e sem gastar numeração">{tipo === "recibo" ? "Pré-visualizar recibo" : "Pré-visualizar DANFE"}</button>}
           {!naoVenda && faltaVenda() && <span className="ne-dica" style={{ color: "#fca5a5", maxWidth: 360 }}>{faltaVenda()}</span>}
+          {!faltaVenda() && !faltaNcm() && faltaEstoque() && <span className="ne-dica" style={{ color: "#fca5a5", maxWidth: 360 }}>{faltaEstoque()}</span>}
           {!faltaVenda() && faltaNcm() && <span className="ne-dica" style={{ color: "#fca5a5", maxWidth: 360 }}>{faltaNcm()}</span>}
-          <button className={`ne-btn ${prod ? "perigo" : "pri"}`} disabled={!cli.nome || !itens.some((i) => i.descricao) || (precisaParcelas && !parcOk) || !!faltaVenda() || !!faltaNcm()}
-            title={faltaVenda() ?? faltaNcm() ?? undefined} onClick={emitirAgora}>
+          <button className={`ne-btn ${prod ? "perigo" : "pri"}`} disabled={!cli.nome || !itens.some((i) => i.descricao) || (precisaParcelas && !parcOk) || !!faltaVenda() || !!faltaNcm() || !!faltaEstoque()}
+            title={faltaVenda() ?? faltaNcm() ?? faltaEstoque() ?? undefined} onClick={emitirAgora}>
             {`Emitir ${naoVenda ? OP_ROT[operacao as Exclude<OperacaoTipo, "venda">] : TIPO[tipo]}${prod ? " (PRODUÇÃO)" : " (homologação)"}`}
           </button>
         </div>
