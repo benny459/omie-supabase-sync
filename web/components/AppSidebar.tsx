@@ -25,7 +25,7 @@ export type NavItem = {
   secao?: string;
 };
 
-export type Grupo = "operacao" | "compras" | "vendas" | "estoque" | "financeiro" | "bi";
+export type Grupo = "operacao" | "compras" | "vendas" | "estoque" | "financeiro" | "faturamento" | "bi";
 export const GRUPOS: { id: Grupo; label: string; desc: string }[] = [
   { id: "operacao",   label: "Operação",   desc: "Avulsos, Projetos, PCs — o dia a dia" },
   { id: "compras",    label: "Compras",    desc: "Pedidos e requisições de compra (Omie)" },
@@ -354,10 +354,11 @@ export const FINANCEIRO: NavItem[] = [
   },
   {
     // Emissão de NF-e / NFS-e / recibo pela Focus, sem Omie (P5, 05/10/26).
+    // Desde 05/10/26 é aba própria na barra (a seguir a Financeiro), não item do Financeiro.
     href: "/faturamento",
     area: "erp",
-    grupo: "financeiro",
-    label: "Faturamento (emitir NF)",
+    grupo: "faturamento",
+    label: "Faturamento",
     tone: "text-sky-600",
     icon: (
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className="w-5 h-5" strokeLinecap="round" strokeLinejoin="round">

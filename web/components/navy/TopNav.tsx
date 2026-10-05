@@ -111,9 +111,7 @@ export default function TopNav({ userEmail, isPlatformAdmin, telasRh = [] }: { u
      Gestão) e põe o Sistema na engrenagem. Área sem item visível não aparece. */
   const modulos: ModuloBarra[] = [];
   modulos.push({ id: "crm", nome: "CRM", href: `${PORTAL_SSO}/w/waterworks/crm`, externo: true, titulo: "CRM no portal ALLKA" });
-  if (isPlatformAdmin) {
-    modulos.push({ id: "crm-allka", nome: "CRM ALLKA", selo: "novo", href: `${PORTAL_SSO}/w/waterworks/crm/novo`, externo: true, titulo: "O CRM no padrão ALLKA, em ajustes" });
-  }
+  // CRM ALLKA (novo) saiu da barra a 05/10/26 — abre-se só pelo Início do portal.
   const sistema = itensDaArea("sistema");
   if (sistema.length > 0) {
     modulos.push({ id: "sistema", nome: "Sistema", href: sistema[0].href, itens: paraItens(sistema) });
@@ -153,6 +151,11 @@ export default function TopNav({ userEmail, isPlatformAdmin, telasRh = [] }: { u
         ].filter(Boolean).join(" · "),
       } : undefined,
     });
+  }
+  // Faturamento (05/10/26): aba própria, a seguir a Financeiro — emissão de NF pela Focus.
+  const fat = FINANCEIRO.find((m) => m.href === "/faturamento");
+  if (fat && visivel(fat)) {
+    modulos.push({ id: "faturamento", nome: "Faturamento", href: fat.href, titulo: "Emitir NF-e / NFS-e / recibo e acompanhar emissões" });
   }
   modulos.push({ id: "servicos", nome: "Serviços", href: "https://app.waterworks.com.br", externo: true, titulo: "Plataforma de serviços (login próprio)" });
   // RH (03/10/26): módulo próprio, logo a seguir a Serviços, igual ao portal.
