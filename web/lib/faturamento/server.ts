@@ -58,7 +58,7 @@ function ambienteDe(cfg: Config): Ambiente {
   return "homologacao";
 }
 
-async function emitente(cfg: Config): Promise<Emitente> {
+export async function emitente(cfg: Config): Promise<Emitente> {
   if (!cfg.cnpj) throw new Error(`Empresa ${cfg.empresa} sem CNPJ configurado`);
   const e = await empresaFocus(cfg.cnpj);
   return {

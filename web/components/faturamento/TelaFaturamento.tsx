@@ -17,7 +17,10 @@ import "./faturamento.css";
    Benny). O Kanban mostra as etapas derivadas dos dados (não se arrasta). */
 
 // ── tipos ────────────────────────────────────────────────────────────────────
+type RecParc = { parcela: string | null; vencimento: string | null; valor: number; recebido: number; pago_em: string | null; status: string | null; forma: string | null; conta: string | null; nf: string | null; origem: string | null };
+type RecRes = { n: number; rec_n: number; total: number; recebido: number; prox_venc: string | null; prox_valor: number | null; vencidas: number; venc_antigo: string | null; ult_receb: string | null; prazo_dias: number | null; parcelas: RecParc[] };
 type Nf = {
+  nid?: string | null; chave?: string | null;
   id?: number; num: string; valor: number; status: string; data: string | null; ambiente: string;
   msg?: string | null; xml?: boolean; pdf?: boolean; fonte: "omie" | "painel" | "prefeitura";
   nfse_manual?: boolean; municipio?: string;
@@ -142,6 +145,21 @@ export default function TelaFaturamento() {
   const [verPront, setVerPront] = useState(false);
   const [secao, setSecao] = useState<"carteira" | "contratos">("carteira");
 
+  // Contas a receber de cada documento (sql/72) — carregadas depois da lista, em lotes.
+  const [rec, setRec] = useState<Record<string, RecRes>>({});
+  useEffect(() => {
+    if (!docs?.length) return;
+    let vivo = true;
+    const labels = [...new Set(docs.map((d) => d.rotulo))];
+    const lotes: string[][] = [];
+    for (let i = 0; i < labels.length; i += 120) lotes.push(labels.slice(i, i + 120));
+    lotes.forEach((ls) => {
+      fetch("/api/faturamento/receber", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ empresa, labels: ls }) })
+        .then((r) => (r.ok ? r.json() : {})).then((j) => { if (vivo) setRec((o) => ({ ...o, ...(j as Record<string, RecRes>) })); }).catch(() => null);
+    });
+    return () => { vivo = false; };
+  }, [docs, empresa]);
+
   const avisar = useCallback((m: string) => { setToast(m); window.setTimeout(() => setToast((t) => (t === m ? null : t)), 4200); }, []);
 
   const carregar = useCallback(async () => {
@@ -198,7 +216,8 @@ export default function TelaFaturamento() {
     if (chips.has("prevatras") && !((prevDias(d) ?? 1) < 0)) return false;
     if (q) {
       const h = `${d.rotulo} ${d.cliente ?? ""} ${d.fantasia ?? ""} ${d.razao ?? ""} ${d.oc ?? ""} ${d.descricao ?? ""} ${d.proposta ?? ""} ${d.nfs.map((n) => n.num).join(" ")}`.toLowerCase();
-      if (!h.includes(q.toLowerCase())) return false;
+      // Todas as palavras precisam aparecer (ex.: "diaverum sorocaba" acha "DIAVERUM - SOROCABA").
+      if (!q.toLowerCase().split(/\s+/).filter(Boolean).every((w) => h.includes(w))) return false;
     }
     return true;
   }), [base, orig, fst, kpi, chips, q]);
@@ -389,7 +408,7 @@ export default function TelaFaturamento() {
           </div>
         )}
 
-        {view === "list" && (docs ? <Lista rows={ordenados} sel={sel} setSel={setSel} sort={sort} setSort={setSort} abrir={setAberto} ocupado={ocupado} agir={agir} prod={prod} registrar={(d) => setRegNfse([d.chave])} salvarPrevisao={salvarPrevisao} /> : null)}
+        {view === "list" && (docs ? <Lista rows={ordenados} sel={sel} setSel={setSel} sort={sort} setSort={setSort} abrir={setAberto} ocupado={ocupado} agir={agir} prod={prod} registrar={(d) => setRegNfse([d.chave])} salvarPrevisao={salvarPrevisao} rec={rec} /> : null)}
         {view === "kanban" && (docs ? <Kanban rows={filtrados} abrir={setAberto} /> : null)}
         {view === "emissoes" && <Emissoes lista={emissoes} q={q} onMudou={carregar} avisar={avisar} />}
         {view === "nfse" && <NfseRegistradas empresa={empresa} q={q} onMudou={carregar} avisar={avisar} />}
@@ -400,7 +419,7 @@ export default function TelaFaturamento() {
         </p>
         </>}
 
-        {docAberto && <Gaveta d={docAberto} empresa={empresa} prod={prod} ocupado={ocupado} agir={agir} fechar={() => setAberto(null)} avisar={avisar} onMudou={carregar}
+        {docAberto && <Gaveta d={docAberto} r={rec[docAberto.rotulo.toUpperCase()]} empresa={empresa} prod={prod} ocupado={ocupado} agir={agir} fechar={() => setAberto(null)} avisar={avisar} onMudou={carregar}
           abrirFolha={async () => {
             const r = await agir(docAberto, "doc");
             if (!r?.documento) return;
@@ -544,6 +563,21 @@ function Prog({ d, largura = 130 }: { d: Doc; largura?: number | string }) {
   );
 }
 
+function RecCell({ d, r }: { d: Doc; r?: RecRes }) {
+  if (!r) return <span style={{ color: "var(--f-tx3)" }}>…</span>;
+  const s = (t: ReactNode, cor?: string, sub?: ReactNode) => <><span style={{ color: cor, fontWeight: cor ? 600 : 400, fontSize: 12.5 }}>{t}</span>{sub && <small style={{ display: "block", fontSize: 11, color: "var(--f-tx3)" }}>{sub}</small>}</>;
+  if (r.n === 0) {
+    if (status(d) === "fat") return s("sem título", "var(--f-tx3)");
+    const base = d.previsao ?? new Date().toLocaleDateString("sv-SE");
+    const dt = new Date(`${base}T12:00:00`); dt.setDate(dt.getDate() + (r.prazo_dias ?? 0));
+    return <span style={{ color: "var(--f-tx3)", fontSize: 12 }} title={`previsão de faturamento ${dataBR(d.previsao)} + ${r.prazo_dias ?? 0} dias da condição`}>previsto ~{dataBR(dt.toLocaleDateString("sv-SE"))}</span>;
+  }
+  const parc = r.n > 1 ? `${r.rec_n}/${r.n} parcelas` : null;
+  if (r.rec_n >= r.n) return s(`recebido ${dataBR(r.ult_receb)}`, "var(--f-ok)", r.n > 1 ? `${r.n} parcelas · ${fmt(r.recebido)}` : fmt(r.recebido));
+  if (r.vencidas > 0) return s(`vencido há ${dias(r.venc_antigo)} dias`, "var(--f-bad)", `${r.vencidas} parcela(s)${parc ? ` · ${parc}` : ""}`);
+  return s(`recebe ${dataBR(r.prox_venc)} · ${fmt(Number(r.prox_valor ?? 0))}`, undefined, r.rec_n > 0 ? `parcial ${parc}` : parc);
+}
+
 function Emissao({ d }: { d: Doc }) {
   const x = dias(d.emissao);
   const aberto = status(d) !== "fat";
@@ -606,10 +640,10 @@ function Acoes({ d, ocupado, agir, abrir, prod, registrar }: { d: Doc; ocupado: 
   </>;
 }
 
-function Lista({ rows, sel, setSel, sort, setSort, abrir, ocupado, agir, prod, registrar, salvarPrevisao }: {
+function Lista({ rows, sel, setSel, sort, setSort, abrir, ocupado, agir, prod, registrar, salvarPrevisao, rec }: {
   rows: Doc[]; sel: Set<string>; setSel: (s: Set<string>) => void; sort: { k: string; d: 1 | -1 }; setSort: (s: { k: string; d: 1 | -1 }) => void;
   abrir: (k: string) => void; ocupado: string | null; agir: (d: Doc, a: "prevoo" | "ensaio" | "emitir") => unknown; prod: boolean; registrar: (d: Doc) => void;
-  salvarPrevisao: (d: Doc, data: string | null) => void;
+  salvarPrevisao: (d: Doc, data: string | null) => void; rec: Record<string, RecRes>;
 }) {
   const [limite, setLimite] = useState(200);
   if (!rows.length) return <div className="tablebox"><div className="empty">Nenhum documento com esses filtros.</div></div>;
@@ -629,7 +663,7 @@ function Lista({ rows, sel, setSel, sort, setSort, abrir, ocupado, agir, prod, r
             }} />
           </th>
           {th("doc", "Documento")}{th("cliente", "Cliente / OC")}{th("emissao", "Emissão")}{th("previsao", "Previsão fat.")}{th("valor", "Valor total", "r")}
-          {th("faturado", "Faturado", "r")}{th("saldo", "Falta faturar", "r")}{th("pct", "Cobertura")}<th>Status</th><th className="r">Ações</th>
+          {th("faturado", "Faturado", "r")}{th("saldo", "Falta faturar", "r")}{th("pct", "Cobertura")}<th>Recebimento</th><th>Status</th><th className="r">Ações</th>
         </tr></thead>
         <tbody>
           {rows.slice(0, limite).map((d) => {
@@ -661,6 +695,7 @@ function Lista({ rows, sel, setSel, sort, setSort, abrir, ocupado, agir, prod, r
                 <td className="r mono" style={{ color: Number(d.faturado) ? "var(--f-ok)" : "var(--f-tx3)" }}>{Number(d.faturado) ? fmt(Number(d.faturado)) : "—"}</td>
                 <td className="r mono" style={{ fontWeight: 650, color: sd > 0.01 ? "var(--f-tx)" : "var(--f-tx3)" }}>{sd > 0.01 ? fmt(sd) : "—"}</td>
                 <td><Prog d={d} /></td>
+                <td><RecCell d={d} r={rec[d.rotulo.toUpperCase()]} /></td>
                 <td>{d.aguarda_nfse && st !== "fat"
                   ? <span className="pill s-nfse"><i />Aguardando NFS-e (prefeitura)</span>
                   : <span className={`pill ${ST[st].c}`}><i />{ST[st].l}</span>}
@@ -673,7 +708,7 @@ function Lista({ rows, sel, setSel, sort, setSort, abrir, ocupado, agir, prod, r
         <tfoot><tr>
           <td /><td colSpan={4}>{rows.length} documentos{rows.length > limite && <button className="btn ghost sm" onClick={() => setLimite((l) => l + 300)}>ver mais</button>}</td>
           <td className="r mono">{fmt(tot)}</td><td className="r mono" style={{ color: "var(--f-ok)" }}>{fmt(fat)}</td><td className="r mono">{fmt(tot - fat)}</td>
-          <td colSpan={3}><div className="prog" style={{ width: 200 }}><div className="b"><i style={{ width: `${tot ? (fat / tot) * 100 : 0}%`, background: "var(--f-ok)" }} /></div><div className="l"><span>{tot ? Math.round((fat / tot) * 100) : 0}% faturado</span></div></div></td>
+          <td colSpan={4}><div className="prog" style={{ width: 200 }}><div className="b"><i style={{ width: `${tot ? (fat / tot) * 100 : 0}%`, background: "var(--f-ok)" }} /></div><div className="l"><span>{tot ? Math.round((fat / tot) * 100) : 0}% faturado</span></div></div></td>
         </tr></tfoot>
       </table>
     </div>
@@ -728,8 +763,8 @@ function Kanban({ rows, abrir }: { rows: Doc[]; abrir: (k: string) => void }) {
 }
 
 // ── Gaveta do documento ──────────────────────────────────────────────────────
-function Gaveta({ d, empresa, prod, ocupado, agir, fechar, avisar, onMudou, registrar, abrirFolha }: {
-  d: Doc; empresa: string; prod: boolean; ocupado: string | null;
+function Gaveta({ d, r, empresa, prod, ocupado, agir, fechar, avisar, onMudou, registrar, abrirFolha }: {
+  d: Doc; r?: RecRes; empresa: string; prod: boolean; ocupado: string | null;
   agir: (d: Doc, a: "prevoo" | "ensaio" | "emitir" | "doc") => Promise<Record<string, unknown> | null>;
   fechar: () => void; avisar: (m: string) => void; onMudou: () => void; registrar: () => void; abrirFolha: () => void;
 }) {
@@ -863,10 +898,35 @@ function Gaveta({ d, empresa, prod, ocupado, agir, fechar, avisar, onMudou, regi
                 {n.id && n.status === "processando" && <button className="btn ghost sm" onClick={() => atualizar(n.id!)}>Atualizar</button>}
                 {n.id && n.xml && <button className="btn ghost sm" onClick={() => arquivo(n.id!, "xml")}>XML</button>}
                 {n.id && n.pdf && <button className="btn ghost sm" onClick={() => arquivo(n.id!, "pdf")}>{n.num.startsWith("Recibo") ? "Recibo" : "PDF"}</button>}
+                {n.fonte === "omie" && n.num.startsWith("Recibo") && d.tipo === "OS" &&
+                  <a className="btn ghost sm" target="_blank" rel="noreferrer" href={`/api/faturamento/documento-omie?empresa=${empresa}&tipo=recibo&os=${d.codigo}`}>Ver recibo</a>}
+                {n.fonte === "omie" && n.nid && <>
+                  <a className="btn ghost sm" target="_blank" rel="noreferrer" href={`/api/faturamento/documento-omie?empresa=${empresa}&tipo=nfe&nid=${n.nid}&fmt=pdf`} title="DANFE (pedido ao Omie na 1ª vez, depois fica guardado)">DANFE</a>
+                  <a className="btn ghost sm" target="_blank" rel="noreferrer" href={`/api/faturamento/documento-omie?empresa=${empresa}&tipo=nfe&nid=${n.nid}&fmt=xml`}>XML</a>
+                </>}
+                {n.chave && <button className="btn ghost sm" title="Copiar a chave e abrir a consulta pública da SEFAZ"
+                  onClick={() => { navigator.clipboard?.writeText(n.chave!).catch(() => null); window.open("https://www.nfe.fazenda.gov.br/portal/consultaRecaptcha.aspx?tipoConsulta=resumo&tipoConteudo=7PhJ+gAVw2g=", "_blank"); avisar("Chave copiada — cole na consulta da SEFAZ"); }}>SEFAZ</button>}
                 </>}
               </div>
             );
           }) : <div className="orig" style={{ fontSize: 12.5 }}>Nenhuma nota emitida ainda.</div>}
+
+          <h4>Recebimento {r && r.n > 0 && <small style={{ fontWeight: 400, color: "var(--f-tx3)" }}>· {r.rec_n}/{r.n} recebida(s) · {fmt(r.recebido)} de {fmt(r.total)}</small>}
+            <a href={`/financeiro/receber?busca=${encodeURIComponent(d.rotulo)}`} style={{ float: "right", fontSize: 12, fontWeight: 500 }}>abrir no Receber ↗</a></h4>
+          {!r ? <div className="orig" style={{ fontSize: 12.5 }}>Carregando…</div>
+            : r.n === 0 ? <div className="orig" style={{ fontSize: 12.5 }}>{st === "fat" ? "Nenhum título a receber ligado a este documento." : <>Ainda não faturado · <RecCell d={d} r={r} /></>}</div>
+            : <table className="recp"><thead><tr><th>Parcela</th><th>Vencimento</th><th className="r">Valor</th><th>Situação</th><th>Forma · conta</th></tr></thead>
+              <tbody>{r.parcelas.map((p, k) => {
+                const ok = p.recebido >= p.valor - 0.01; const venc = !ok && p.vencimento && p.vencimento < new Date().toLocaleDateString("sv-SE");
+                return <tr key={k}>
+                  <td className="mono">{p.parcela ?? `${k + 1}`}</td><td className="mono">{dataBR(p.vencimento)}</td>
+                  <td className="r mono">{fmt(p.valor)}</td>
+                  <td>{ok ? <span style={{ color: "var(--f-ok)" }}>recebido {dataBR(p.pago_em)}</span>
+                    : p.recebido > 0 ? <span style={{ color: "var(--f-warn)" }}>parcial {fmt(p.recebido)}</span>
+                    : venc ? <span style={{ color: "var(--f-bad)" }}>vencido há {dias(p.vencimento)} dias</span> : <span>em aberto</span>}</td>
+                  <td style={{ color: "var(--f-tx3)" }}>{[p.forma, p.conta].filter(Boolean).join(" · ") || "—"}</td>
+                </tr>;
+              })}</tbody></table>}
 
           <h4>Histórico</h4>
           <div className="timeline">

@@ -356,12 +356,13 @@ const MESES = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julh
 
 /** Recibo de Prestação de Serviço — réplica do modelo do Omie
  *  (docs/modelos/recibo-prestacao-servico.html). HTML pronto para imprimir/PDF. */
-export function reciboHtml(doc: DocFat, em: Emitente, numero: number, homologacao: boolean) {
+export function reciboHtml(doc: DocFat, em: Emitente, numero: number, homologacao: boolean, dataEmissao?: string | null) {
   const c = doc.cliente;
   const total = totalItens(doc.itens);
   const ps = parcelas(total, doc.condicao);
   const n = String(numero).padStart(10, "0");
-  const h = new Date(Date.now() - 3 * 3600_000);
+  // Data do recibo: a da emissão (2ª via de recibo já emitido) ou hoje.
+  const h = dataEmissao && /^\d{4}-\d{2}-\d{2}/.test(dataEmissao) ? new Date(`${dataEmissao.slice(0, 10)}T12:00:00Z`) : new Date(Date.now() - 3 * 3600_000);
   const data = `${h.getUTCDate()} de ${MESES[h.getUTCMonth()]} de ${h.getUTCFullYear()}`;
   const doc_cli = so(c.cnpj) ? `CNPJ: ${so(c.cnpj).replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, "$1.$2.$3/$4-$5")}` : `CPF: ${so(c.cpf)}`;
   const venc = ps.map((p) => `dia ${p.vencimento.split("-").reverse().join("/")} no valor de R$ ${brl(p.valor)}`).join("<br>");

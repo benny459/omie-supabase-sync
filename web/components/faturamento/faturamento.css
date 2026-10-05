@@ -290,3 +290,7 @@
 .fpv .cli .razao { display: block; color: var(--f-tx3); font-size: 11px; font-weight: 400; }
 .fpv .prevbtn { background: transparent; border: 1px dashed transparent; border-radius: 8px; padding: 2px 6px; margin: -2px -6px; text-align: left; color: var(--f-tx); cursor: pointer; font: inherit; }
 .fpv .prevbtn:hover { border-color: var(--f-line2, var(--f-line)); }
+.fpv .recp { width: 100%; border-collapse: collapse; font-size: 12.5px; margin-bottom: 8px; }
+.fpv .recp th { text-align: left; font-weight: 600; color: var(--f-tx3); font-size: 11.5px; padding: 4px 6px; border-bottom: 1px solid var(--f-line); }
+.fpv .recp td { padding: 5px 6px; border-bottom: 1px solid var(--f-line); }
+.fpv .recp .r { text-align: right; }

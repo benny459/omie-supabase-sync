@@ -87,7 +87,7 @@ em as (
 nfo as (
   select n.raw -> 'compl' ->> 'nIdPedido' as pid,
          jsonb_agg(jsonb_build_object('num', 'NF-e ' || (n.numero)::int, 'valor', n.valor_total, 'status', 'autorizada',
-           'data', n.emissao, 'ambiente', 'producao', 'fonte', 'omie') order by n.emissao) as nfs
+           'data', n.emissao, 'ambiente', 'producao', 'fonte', 'omie', 'nid', n.raw -> 'compl' ->> 'nIdNF', 'chave', n.raw -> 'compl' ->> 'cChaveNFe') order by n.emissao) as nfs
   from sales.nfe_saida n
   where n.empresa = p_empresa and not n.cancelada and n.raw -> 'compl' ->> 'nIdPedido' is not null
   group by 1
@@ -237,11 +237,25 @@ select jsonb_build_object(
        where status = 'aberto' or coalesce(dt_fat, emissao) >= (select desde from par)
     ) t
     where (select q from par) is null
-       or lower(concat_ws(' ', d->>'rotulo', d->>'cliente', d->>'razao', d->>'fantasia', d->>'oc', d->>'descricao', d->>'proposta'))
-          like '%' || (select q from par) || '%'), '[]'::jsonb),
+       or not exists (select 1 from unnest(regexp_split_to_array((select q from par), '\s+')) w
+                    where w <> '' and lower(concat_ws(' ', d->>'rotulo', d->>'cliente', d->>'razao', d->>'fantasia', d->>'oc', d->>'descricao', d->>'proposta'))
+                          not like '%' || w || '%')), '[]'::jsonb),
   'busca', (select q from par)
 );
 $function$;
 
 revoke all on function orders.fat_carteira(text, date, text) from public, anon, authenticated;
 grant execute on function orders.fat_carteira(text, date, text) to service_role;
+
+-- Contas a receber por PV/OS da carteira (aplicado como p72_fat_previsao_5_receber_resumo).
+-- Ver a definição em orders.fat_receber_resumo(text, text[]): mesma resolução PV × OS de sales.rentab_cadeia.
+
+create or replace function orders.fat_cliente_doc(p_empresa text, p_codigo bigint)
+returns jsonb language sql stable security definer set search_path to '' as $$
+  select to_jsonb(x) from (
+    select razao_social, nome_fantasia, cnpj_cpf, inscricao_estadual, email, logradouro, numero, complemento,
+           bairro, cidade, uf, cidade_ibge, cep, telefone
+      from cadastros.pessoas where empresa = p_empresa and codigo = p_codigo limit 1) x
+$$;
+revoke all on function orders.fat_cliente_doc(text, bigint) from public, anon, authenticated;
+grant execute on function orders.fat_cliente_doc(text, bigint) to service_role;
