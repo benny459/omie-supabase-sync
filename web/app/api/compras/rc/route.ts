@@ -32,7 +32,8 @@ export async function POST(req: Request) {
   if (!autorizado(req)) return NextResponse.json({ error: "não autorizado" }, { status: 401 });
   const b = await req.json().catch(() => null) as {
     empresa?: string; proposta?: string; label?: string; por?: string; previsao?: string;
-    itens?: { cod?: string; ncodProd?: number; desc: string; un?: string; qtd: number; custo: number }[];
+    itens?: { cod?: string; ncodProd?: number; desc: string; un?: string; qtd: number; custo: number;
+      obs?: string; fornecedor?: string; fornCod?: number }[];
   } | null;
   const empresa = (b?.empresa ?? "SF").toUpperCase();
   const proposta = String(b?.proposta ?? "").trim(), label = String(b?.label ?? "").toUpperCase().replace(/\s/g, "");
@@ -44,14 +45,21 @@ export async function POST(req: Request) {
     const { data: venda } = await supaAdmin().schema("sales").from("v_erp_vendas")
       .select("cliente, projeto, codigo_projeto").eq("empresa", empresa).eq("label", label).limit(1).maybeSingle();
     const v = venda as { cliente?: string; projeto?: string; codigo_projeto?: string } | null;
+    // Fornecedor sugerido pelo CRM (prévia da RC, 05/10/26): vai na obs de cada
+    // item e, se todos os itens trazem o mesmo, também no cabeçalho.
+    const forns = [...new Set(b.itens.map((i) => (i.fornecedor ?? "").trim()).filter(Boolean))];
+    const fornUnico = forns.length === 1 && b.itens.every((i) => (i.fornecedor ?? "").trim() === forns[0]) ? forns[0] : null;
+    const fornCods = [...new Set(b.itens.map((i) => i.fornCod).filter((c): c is number => typeof c === "number" && c > 0))];
     const r = await rpc<{ id: number; num: string }>("compras_salvar", {
       p: {
         tipo: "RC", emp: empresa, pv: label, pvCliente: v?.cliente ?? null, proj: v?.projeto ?? null,
         projCod: v?.codigo_projeto && /^\d+$/.test(v.codigo_projeto) ? v.codigo_projeto : null,
         previsao: b.previsao ?? null,
+        ...(fornUnico ? { forn: fornUnico, fornCod: fornCods.length === 1 ? fornCods[0] : null } : {}),
         obsInt: `${label} — RC automática ${marca(proposta)}, custos máximos da CP${b.por ? ` · emitida por ${b.por}` : ""}`,
         itens: b.itens.map((i) => ({ cod: i.cod ?? null, ncodProd: i.ncodProd ?? null, desc: i.desc, un: i.un ?? "UN",
-          qtd: Number(i.qtd) || 1, vu: Math.round((Number(i.custo) || 0) * 100) / 100 })),
+          qtd: Number(i.qtd) || 1, vu: Math.round((Number(i.custo) || 0) * 100) / 100,
+          obs: [i.obs?.trim(), i.fornecedor?.trim() ? `Fornecedor sugerido: ${i.fornecedor.trim()}` : ""].filter(Boolean).join(" · ") || null })),
         origemDe: `Criada pelo CRM (proposta ${proposta})`,
       },
       p_por: b.por ? `CRM · ${b.por}` : "CRM", p_uid: null,
@@ -61,6 +69,18 @@ export async function POST(req: Request) {
     await rpc("vendas_refrescar").catch(() => null); // Avulsos mostra a RC na hora (P1)
     return NextResponse.json({ ok: true, id: r.id, numero_rc: r.num, label });
   } catch (e) { return NextResponse.json({ error: (e as Error).message }, { status: 400 }); }
+}
+
+// GET ?op=proximo&empresa=SF — número que a próxima RC/PC deve receber (prévia,
+// não reserva: o número final é confirmado ao gravar).
+export async function GET(req: Request) {
+  if (!autorizado(req)) return NextResponse.json({ error: "não autorizado" }, { status: 401 });
+  const u = new URL(req.url);
+  if (u.searchParams.get("op") !== "proximo") return NextResponse.json({ error: "op inválida" }, { status: 400 });
+  const empresa = (u.searchParams.get("empresa") ?? "SF").toUpperCase();
+  const { data, error } = await supaAdmin().schema("compras").rpc("proximo_numero_previa", { p_empresa: empresa });
+  if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+  return NextResponse.json({ empresa, proximo: data, aviso: "prévia — confirmado ao gravar" });
 }
 
 export async function DELETE(req: Request) {
