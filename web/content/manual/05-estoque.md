@@ -36,6 +36,17 @@ Depois, na aba **Materiais separados** do projeto: **Devolver** (volta ao dispon
 - **Inventário**: contagem com janela própria; os ajustes são feitos só no painel.
 - **Duplicidades**: itens repetidos para **mesclar** (o custo médio é recalculado e o histórico de códigos fica guardado).
 
+## Como faço para acertar os códigos de compra (peça comprada que não é item nosso)
+
+Peça comprada pelo Omie com código do fornecedor (ex.: `3019075`) e que nunca virou item do estoque **não entra em nota que movimenta estoque** (remessa, conserto, devolução, venda de produto). Para acertar:
+
+1. Abra **Estoque › Códigos de compra**. A lista mostra os códigos comprados nos últimos 12 meses sem item nosso, com até 3 sugestões parecidas.
+2. Se a sugestão for a mesma peça, clique em **vincular** ao lado dela. Para vários de uma vez, use **Vincular … muito parecidos (≥ 90%)**.
+3. Se não houver item nosso, clique em **Acertar…** › **Cadastrar no estoque**: a família vem sugerida e a descrição, NCM, unidade e último preço já vêm preenchidos. O item ganha o próximo código da família.
+4. Errou? Na aba **Vinculados**, clique em **desfazer**.
+
+> **Atenção:** item cadastrado assim nasce com saldo 0 (a tela mostra quanto foi comprado). Registre o saldo conferido em **Estoque › Inventário**.
+
 ## Como faço para corrigir o NCM de uma peça
 
 1. Em **Estoque**, use o filtro **Mais filtros › Sem NCM válido** para ver as peças sem NCM (ou com NCM que não existe mais na tabela oficial).

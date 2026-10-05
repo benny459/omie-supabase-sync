@@ -91,6 +91,17 @@ Em **+ Nova emissão › Tipo de documento**, escolha:
 
 > **Dica:** a nota sai no mesmo formato do Omie: devolução com a NF de origem referenciada e “Motivo da Devolucao” nas informações complementares; remessa com “Projeto · Cliente · Motivo”.
 
+### Só entram itens do nosso estoque
+
+Na NF-e (remessa, conserto, devolução, venda de produto) a busca de itens mostra **primeiro os itens do nosso estoque**. Quem digita o código do fornecedor ou o código antigo do Omie também cai no item nosso (aparece "cód. compra 3019075" ao lado).
+
+Códigos de compra sem item nosso aparecem separados, em **Códigos de compra sem item nosso**, e não vão direto para a nota:
+
+- **Vincular a existente**: escolha o item nosso (os mais parecidos vêm primeiro) — o código de compra fica ligado a ele de vez.
+- **Cadastrar no estoque**: cria o item com o próximo código da família e já coloca na nota.
+
+> **Atenção:** a nota não emite com item sem código do estoque ("vincule ou cadastre"). Saldo zerado **não** bloqueia: aparece só o aviso "saldo do item ainda não conferido".
+
 ## NFS-e da prefeitura
 
 A NFS-e continua sendo emitida no portal da prefeitura. Depois:

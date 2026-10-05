@@ -3,6 +3,7 @@ import { exigirFaturamento, falha } from "@/lib/faturamento/auth";
 import { emitir, urlArquivo, type OrigemTipo, type TipoDoc } from "@/lib/faturamento/server";
 import { rpc } from "@/lib/compras-server";
 import { salvarVenda } from "@/lib/vendas-server";
+import { codigosSemEstoque, MSG_SEM_ESTOQUE } from "@/lib/estoque-vinculos";
 import type { DocFat } from "@/lib/faturamento/montar";
 import type { VendaSalvar } from "@/lib/vendas";
 
@@ -43,6 +44,12 @@ export async function POST(req: NextRequest) {
   let criado: { id: number; label: string } | null = null;
 
   try {
+    // NF-e movimenta estoque: só itens do estoque nosso (código novo), nunca código de compra solto (05/10/26).
+    if (tipo === "nfe") {
+      const sem = await codigosSemEstoque(doc.empresa, doc.itens.map((i) => i.codigo ?? ""));
+      if (doc.itens.some((i) => !(i.codigo ?? "").trim())) return falha("Há item sem código — escolha o item do estoque pela busca antes de emitir.");
+      if (sem.length) return falha(MSG_SEM_ESTOQUE(sem));
+    }
     // Teste (homologação forçada): não cria PV/OS — não consome a numeração real.
     if (body.novo && !body.forcar_homologacao) {
       const n = body.novo;

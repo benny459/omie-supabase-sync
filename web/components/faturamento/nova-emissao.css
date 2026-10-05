@@ -88,3 +88,18 @@
 td > .ne-exist-lista{background:var(--ww-panel,#0f1a2c);border:1px solid var(--ww-border-strong,#28395a);border-radius:10px;padding:6px;box-shadow:0 10px 30px rgba(0,0,0,.35)}
 .ne-exist-it{display:block;width:100%;text-align:left;font:inherit;font-size:12.5px;color:inherit;background:none;border:1px solid transparent;border-radius:8px;padding:6px 8px;cursor:pointer}
 .ne-exist-it:hover{border-color:var(--ww-border-strong,#28395a);background:var(--ww-panel-raised,#13203a)}
+
+/* Itens que movem estoque (05/10/26): códigos de compra sem item nosso + acerto (vincular/cadastrar) */
+.ne-comp { border-top: 1px dashed var(--ww-border, rgba(255,255,255,.15)); margin-top: 4px; padding-top: 4px; opacity: .92; }
+.ne-comp-tit { font-size: 11.5px; font-weight: 600; color: var(--ww-text-muted, #9aa8c3); padding: 6px 10px 2px; }
+.ne-comp-tit small { font-weight: 400; }
+.ne-comp-it { display: flex; align-items: center; gap: 8px; padding: 6px 10px; font-size: 12.5px; color: var(--ww-text-muted, #9aa8c3); }
+.ne-comp-it small { color: var(--ww-text-faint, #6b7a99); font-size: 11px; }
+.ne-comp-cod { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11.5px; padding: 1px 6px; border-radius: 6px; border: 1px dashed currentColor; }
+.ne-acerto { border: 1px solid var(--ww-accent, #3b82f6); border-radius: 12px; padding: 12px 14px; margin: 0 0 12px; background: color-mix(in srgb, var(--ww-accent, #3b82f6) 6%, transparent); }
+.ne-acerto-cab { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; font-size: 13px; }
+.ne-acerto-cab small { display: block; color: var(--ww-text-muted, #9aa8c3); font-size: 11.5px; margin-top: 2px; }
+.ne-acerto-sec { margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--ww-border, rgba(255,255,255,.1)); }
+.ne-acerto-tit { font-size: 12.5px; font-weight: 600; margin-bottom: 4px; }
+.ne-acerto-tit small { font-weight: 400; color: var(--ww-text-muted, #9aa8c3); }
+.ne-acerto-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }

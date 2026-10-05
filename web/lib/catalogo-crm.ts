@@ -7,6 +7,7 @@
 import "server-only";
 import { supaAdmin } from "@/lib/supabase-admin";
 import { casarCatalogo, produtosComCodigoAtual } from "@/lib/catalogo";
+import { buscarItensEstoque } from "@/lib/estoque-vinculos";
 
 const orders = () => supaAdmin().schema("orders");
 
@@ -51,8 +52,30 @@ const n = (v: unknown) => (v == null || v === "" ? null : Number(v));
 export async function buscarItensCrm(q: string, lim = 10, comHistorico = 3, empresa = "SF"): Promise<ItemCrm[]> {
   const termo = q.trim();
   if (termo.length < 2) return [];
-  const base = (await produtosComCodigoAtual(termo)).slice(0, Math.max(1, Math.min(lim, 12)));
+  const max = Math.max(1, Math.min(lim, 12));
+  // Itens NOSSOS do estoque primeiro (05/10/26): código de compra que já foi
+  // vinculado vem como o item nosso; os demais produtos de compra vêm depois.
+  const [compra, est] = await Promise.all([
+    produtosComCodigoAtual(termo),
+    buscarItensEstoque(empresa, termo, max).catch(() => ({ nativos: [], compra: [] })),
+  ]);
+  type Base = (typeof compra)[number];
+  const nat: Base[] = est.nativos.map((x) => ({
+    ncod_prod: x.n_cod_prod, codigo: x.codigo, codigo_omie: x.codigo_omie, via: x.via ?? undefined, descricao: x.descricao,
+    unidade: x.unidade ?? "UN", ultimo_preco: x.ultimo_preco, ultima_compra: null, fornecedor: null, qtd_compras: null,
+  } as unknown as Base));
+  const vistos = new Set(nat.map((b) => Number(b.ncod_prod)));
+  // código de compra já vinculado a item nosso não aparece de novo (o item nosso já está na lista)
+  const ids = compra.map((b) => Number(b.ncod_prod)).filter((x) => !vistos.has(x));
+  const vinc = ids.length ? await supaAdmin().schema("platform").from("estoque_item_vinculo").select("n_cod_prod_origem")
+    .eq("empresa", empresa).is("desfeito_em", null).in("n_cod_prod_origem", ids) : { data: [] };
+  const jaVinc = new Set(((vinc.data ?? []) as { n_cod_prod_origem: number }[]).map((v) => Number(v.n_cod_prod_origem)));
+  const doCompra = compra.filter((b) => !vistos.has(Number(b.ncod_prod)) && !jaVinc.has(Number(b.ncod_prod)));
+  const base = [...nat, ...doCompra].slice(0, max);
   const info = await infos(empresa, base.map((b) => Number(b.ncod_prod)));
+  // dentro do que veio do catálogo de compra, quem tem código nosso sobe
+  base.sort((a, b) => Number(vistos.has(Number(b.ncod_prod)) || !!info.get(Number(b.ncod_prod))?.codigo_novo)
+    - Number(vistos.has(Number(a.ncod_prod)) || !!info.get(Number(a.ncod_prod))?.codigo_novo));
   const out: ItemCrm[] = base.map((b) => {
     const i = info.get(Number(b.ncod_prod));
     return {

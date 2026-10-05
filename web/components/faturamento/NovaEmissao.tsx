@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import AcertoItemEstoque from "./AcertoItemEstoque";
 import type { ClienteFat, CondicaoFat, DocFat, ItemFat, OperacaoNfe, OperacaoTipo, RetencoesFat, TransporteFat } from "@/lib/faturamento/montar";
 import { BuscaPessoa, BuscaProposta, clienteDaPessoa, pessoaCompleta } from "@/components/vendas/BuscasCrmCadastro";
 import { BotaoNovoProjeto } from "@/components/cadastros/NovoProjetoRapido";
@@ -103,7 +104,10 @@ const ITEM0: ItemFat = { codigo: "", descricao: "", quantidade: 1, valor_unitari
 /** Sugestão do catálogo nativo para uma linha de item (05/10/26). */
 type ItemCat = { codigo: string; codigo_omie: string | null; descricao: string; unidade: string; ncm: string | null; cest: string | null;
   origem: number | null; cmc: number | null; saldo: number | null; ultimo_preco: number | null; ultima_compra: string | null;
-  ultima_venda: number | null; ultima_venda_em: string | null };
+  ultima_venda: number | null; ultima_venda_em: string | null; via?: string | null; nativo?: boolean };
+/** Código de compra (produto do Omie fora do estoque nosso) — só entra na nota depois de vincular/cadastrar. */
+type CodCompra = { n_cod_prod: number; codigo: string | null; descricao: string; unidade: string | null; ultimo_preco: number | null;
+  ultima_compra: string | null; fornecedor: string | null; fornecedor_cod: number | null; ncm: string | null };
 type DicaItem = { cmc: number | null; ultimo_preco: number | null; ultima_venda: number | null; saldo: number | null };
 const r2 = (n: number) => Math.round(n * 100) / 100;
 const fmt = (n: number) => n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -205,6 +209,9 @@ export default function NovaEmissao({ config, aberto, fechar, avisar, onEmitido,
   const [ncmBox, setNcmBox] = useState<number | null>(null);
   const [ncmRuim, setNcmRuim] = useState<string[]>([]);
   const [itSug, setItSug] = useState<ItemCat[] | null>(null);
+  const [itComp, setItComp] = useState<CodCompra[]>([]);
+  /** acertar código de compra: cadastrar no estoque / vincular a item existente (linha n) */
+  const [acerto, setAcerto] = useState<{ n: number; c: CodCompra } | null>(null);
   const [dicas, setDicas] = useState<Record<number, DicaItem>>({});
   const [conta, setConta] = useState<number | "">("");
   const [categoria, setCategoria] = useState("");
@@ -441,11 +448,11 @@ export default function NovaEmissao({ config, aberto, fechar, avisar, onEmitido,
   useEffect(() => {
     if (!aberto || !itBusca || itBusca.q.trim().length < 2) { setItSug(null); return; }
     const t = window.setTimeout(() => {
-      fetch(`/api/faturamento/nova?op=itens&emp=${empresa}&q=${encodeURIComponent(itBusca.q.trim())}${cliCodigo ? `&cli=${encodeURIComponent(cliCodigo)}` : ""}`, { cache: "no-store" })
-        .then((x) => x.json()).then((j) => setItSug(j.itens ?? [])).catch(() => setItSug([]));
+      fetch(`/api/faturamento/nova?op=itens&emp=${empresa}&q=${encodeURIComponent(itBusca.q.trim())}${cliCodigo ? `&cli=${encodeURIComponent(cliCodigo)}` : ""}${tipo === "nfe" ? "&estoque=1" : ""}`, { cache: "no-store" })
+        .then((x) => x.json()).then((j) => { setItSug(j.itens ?? []); setItComp(j.compra ?? []); }).catch(() => { setItSug([]); setItComp([]); });
     }, 280);
     return () => window.clearTimeout(t);
-  }, [itBusca, empresa, cliCodigo, aberto]);
+  }, [itBusca, empresa, cliCodigo, aberto, tipo]);
 
   /** Escolheu um item do catálogo: preenche a linha. Remessa/conserto/devolução vão pelo custo médio
    *  (CMC → última compra); venda pelo último preço vendido a este cliente. Sempre editável. */
@@ -454,11 +461,20 @@ export default function NovaEmissao({ config, aberto, fechar, avisar, onEmitido,
     const vu = naoVenda ? custo : tipo === "nfe" ? c.ultima_venda : null;
     setItens((its) => its.map((x, i) => (i === n ? {
       ...x, codigo: c.codigo, descricao: c.descricao, unidade: c.unidade || "UN", ncm: c.ncm ?? x.ncm ?? "",
-      cest: c.cest ?? x.cest ?? null, origem: c.origem ?? x.origem ?? 0,
+      cest: c.cest ?? x.cest ?? null, origem: c.origem ?? x.origem ?? 0, nativo: !!c.nativo,
       valor_unitario: vu != null ? Math.round(vu * 100) / 100 : x.valor_unitario,
     } : x)));
     setDicas((d) => ({ ...d, [n]: { cmc: c.cmc, ultimo_preco: c.ultimo_preco, ultima_venda: c.ultima_venda, saldo: c.saldo } }));
-    setItBusca(null); setItSug(null);
+    setItBusca(null); setItSug(null); setItComp([]);
+  }
+
+  /** Depois de vincular/cadastrar: busca o item nativo pelo código novo e põe na linha. */
+  async function usarNativo(n: number, codigo: string) {
+    const j = await fetch(`/api/faturamento/nova?op=itens&emp=${empresa}&q=${encodeURIComponent(codigo)}${cliCodigo ? `&cli=${encodeURIComponent(cliCodigo)}` : ""}&estoque=1`, { cache: "no-store" })
+      .then((x) => x.json()).catch(() => ({}));
+    const it = ((j.itens ?? []) as ItemCat[]).find((x) => x.codigo.toUpperCase() === codigo.toUpperCase()) ?? (j.itens ?? [])[0];
+    if (it) escolherItem(n, it);
+    setAcerto(null);
   }
 
   // relógio do painel de transmissão
@@ -575,6 +591,14 @@ export default function NovaEmissao({ config, aberto, fechar, avisar, onEmitido,
   }
 
   /** NF-e não-venda: o que falta antes de emitir. */
+  /** NF-e movimenta estoque: toda linha precisa ser item do estoque nosso (busca/vínculo/cadastro). */
+  function faltaEstoque(): string | null {
+    if (tipo !== "nfe") return null;
+    const ruim = itens.find((i) => !(i.codigo ?? "").trim());
+    if (ruim) return "Há item sem código — escolha o item do estoque pela busca (nome ou código).";
+    return null;
+  }
+
   function faltaOperacao(): string | null {
     if (!naoVenda) return null;
     if (!cli.nome || !(cli.cnpj || cli.cpf)) return "Escolha o destinatário.";
@@ -603,7 +627,7 @@ export default function NovaEmissao({ config, aberto, fechar, avisar, onEmitido,
       setNcmRuim(res.filter(([, ok]) => !ok).map(([d]) => d));
     }
     const r = await fetch("/api/faturamento/nova", { method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ op: "previa", documento: montarDocumento() }) }).then((x) => x.json()).catch((e) => ({ error: String(e) }));
+      body: JSON.stringify({ op: "previa", documento: montarDocumento(), tipo }) }).then((x) => x.json()).catch((e) => ({ error: String(e) }));
     setValidando(false);
     const fv = faltaVenda();
     const locais: Checagem[] = fv ? [{ item: "Projeto / categoria / conta", ok: false, nivel: "erro", detalhe: fv }] : [];
@@ -637,7 +661,7 @@ export default function NovaEmissao({ config, aberto, fechar, avisar, onEmitido,
   }
 
   async function emitirAgora() {
-    const falta = faltaNovo() ?? faltaOperacao() ?? faltaVenda();
+    const falta = faltaEstoque() ?? faltaNovo() ?? faltaOperacao() ?? faltaVenda();
     if (falta) { setAviso(falta); return; }
     const soCriaOs = modo === "novo" && !chave && tipo === "nfse" && !teste;
     if (!soCriaOs && precisaParcelas && !parcOk) { setAviso(`As parcelas (${fmt(somaParc)}) não somam o valor a receber (${fmt(liquido)}).`); return; }
@@ -1103,16 +1127,18 @@ export default function NovaEmissao({ config, aberto, fechar, avisar, onEmitido,
             </section>
 
             <section className="ne-sec" id="ne-sec-itens">
+              {acerto && <AcertoItemEstoque empresa={empresa} compra={acerto.c} onFechar={() => setAcerto(null)}
+                onPronto={(codigo) => usarNativo(acerto.n, codigo)} />}
               <h3>Itens <small>{itens.length} item(ns) · bruto {fmt(bruto)}</small></h3>
               <table className="ne-tab">
                 <thead><tr><th>Código</th><th>Descrição</th>{tipo === "nfe" && <th>NCM</th>}<th>Un</th><th className="r">Qtd</th>{operacao === "devolucao" && naoVenda && <><th className="r">Item na NF</th><th className="r">ICMS %</th></>}<th className="r">Valor unit.</th><th className="r">Total</th><th /></tr></thead>
                 <tbody>{itens.map((it, n) => (
                   <tr key={n}>
                     <td><input className="ne-in" style={{ width: 110 }} value={it.codigo ?? ""} placeholder="código"
-                      onChange={(e) => { setItens(itens.map((x, i) => (i === n ? { ...x, codigo: e.target.value } : x))); setItBusca({ n, q: e.target.value }); }}
+                      onChange={(e) => { setItens(itens.map((x, i) => (i === n ? { ...x, codigo: e.target.value, nativo: false } : x))); setItBusca({ n, q: e.target.value }); }}
                       onBlur={() => window.setTimeout(() => setItBusca((b) => (b?.n === n ? null : b)), 200)} /></td>
                     <td style={{ position: "relative" }}><input className="ne-in" style={{ width: "100%", minWidth: 220 }} value={it.descricao ?? ""} placeholder="busque pelo nome ou código"
-                      onChange={(e) => { setItens(itens.map((x, i) => (i === n ? { ...x, descricao: e.target.value } : x))); setItBusca({ n, q: e.target.value }); }}
+                      onChange={(e) => { setItens(itens.map((x, i) => (i === n ? { ...x, descricao: e.target.value, nativo: false } : x))); setItBusca({ n, q: e.target.value }); }}
                       onBlur={() => window.setTimeout(() => setItBusca((b) => (b?.n === n ? null : b)), 200)} />
                       {itBusca?.n === n && itSug && (
                         <div className="ne-exist-lista" style={{ position: "absolute", top: "100%", left: 0, minWidth: 460, zIndex: 6, maxHeight: 280 }}>
@@ -1123,8 +1149,23 @@ export default function NovaEmissao({ config, aberto, fechar, avisar, onEmitido,
                                 {[c.ncm && `NCM ${c.ncm}`, c.cmc != null && `CMC ${fmt(c.cmc)}`, c.ultimo_preco != null && `últ. compra ${fmt(c.ultimo_preco)}`,
                                   c.ultima_venda != null && `vendido a este cliente ${fmt(c.ultima_venda)}`, c.saldo != null && `disp. ${c.saldo}`].filter(Boolean).join(" · ")}
                               </small>
-                            </button>)) : <div style={{ padding: 8, fontSize: 12.5 }}>Nenhum item no catálogo — preencha à mão.</div>}
+                            </button>)) : <div style={{ padding: 8, fontSize: 12.5 }}>{tipo === "nfe" ? "Nenhum item do estoque com esse nome/código." : "Nenhum item no catálogo — preencha à mão."}</div>}
+                          {tipo === "nfe" && itComp.length > 0 && (
+                            <div className="ne-comp">
+                              <div className="ne-comp-tit">Códigos de compra sem item nosso <small>— não movimentam estoque: cadastre no estoque ou vincule a um item existente</small></div>
+                              {itComp.map((c) => (
+                                <div key={c.n_cod_prod} className="ne-comp-it">
+                                  <div style={{ flex: 1, minWidth: 0 }}>
+                                    <span className="ne-comp-cod">{c.codigo ?? c.n_cod_prod}</span> {c.descricao}
+                                    <small style={{ display: "block" }}>{[c.fornecedor && `forn. ${c.fornecedor}`, c.ultimo_preco != null && `últ. compra ${fmt(c.ultimo_preco)}`,
+                                      c.ultima_compra && new Date(`${c.ultima_compra}T12:00:00`).toLocaleDateString("pt-BR")].filter(Boolean).join(" · ")}</small>
+                                  </div>
+                                  <button type="button" className="ne-lk" onMouseDown={(e) => { e.preventDefault(); setAcerto({ n, c }); setItBusca(null); }}>Cadastrar no estoque</button>
+                                  <button type="button" className="ne-lk" onMouseDown={(e) => { e.preventDefault(); setAcerto({ n, c }); setItBusca(null); }}>Vincular a existente</button>
+                                </div>))}
+                            </div>)}
                         </div>)}
+                      {tipo === "nfe" && it.codigo && it.nativo === false && <div className="ne-dica" style={{ color: "#fca5a5" }}>código digitado à mão — escolha o item do estoque pela busca</div>}
                     </td>
                     {tipo === "nfe" && <td><input className="ne-in" style={{ width: 96 }} value={it.ncm ?? ""} onChange={(e) => setItens(itens.map((x, i) => (i === n ? { ...x, ncm: e.target.value } : x)))} />
                       {(ncmDig(it.ncm).length !== 8 || ncmRuim.includes(ncmDig(it.ncm))) && it.descricao
@@ -1136,7 +1177,7 @@ export default function NovaEmissao({ config, aberto, fechar, avisar, onEmitido,
                       onChange={(e) => setItens(itens.map((x, i) => (i === n ? { ...x, quantidade: Number(e.target.value) } : x)))} />
                       {it.quantidade_max != null && <div className="ne-dica" style={it.quantidade > it.quantidade_max ? { color: "#fca5a5" } : undefined}>máx. {it.quantidade_max}</div>}
                       {operacao !== "devolucao" && dicas[n]?.saldo != null && <div className="ne-dica" style={it.quantidade > (dicas[n]?.saldo ?? 0) ? { color: "#fca5a5" } : undefined}>
-                        disp. {dicas[n]?.saldo}{it.quantidade > (dicas[n]?.saldo ?? 0) ? " — acima do estoque" : ""}</div>}</td>
+                        {(dicas[n]?.saldo ?? 0) <= 0 ? "saldo do item ainda não conferido (não bloqueia a nota)" : `disp. ${dicas[n]?.saldo}${it.quantidade > (dicas[n]?.saldo ?? 0) ? " — acima do estoque" : ""}`}</div>}</td>
                     {operacao === "devolucao" && naoVenda && <td><input className="ne-in num" style={{ width: 56 }} type="number" min={1} title="nº do item na NF de origem" value={it.ref_item ?? n + 1}
                       onChange={(e) => setItens(itens.map((x, i) => (i === n ? { ...x, ref_item: Number(e.target.value) || null } : x)))} /></td>}
                     {operacao === "devolucao" && naoVenda && <td><input className="ne-in num" style={{ width: 64 }} type="number" step="0.01" value={it.icms_aliquota ?? 0}

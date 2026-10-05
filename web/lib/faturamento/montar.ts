@@ -50,6 +50,8 @@ export type ItemFat = {
   valor_desconto?: number | null;
   valor_frete?: number | null;   // frete rateado no item (o Omie rateia o frete do PV pelos itens)
   valor_outras?: number | null;  // outras despesas acessórias rateadas no item
+  /** Folha (05/10/26): a linha veio de item NATIVO do estoque (busca/vínculo/cadastro); só informativo. */
+  nativo?: boolean | null;
   servico_lc116?: string | null;               // NFS-e: item da LC116 (ex.: 0703)
   codigo_tributario_municipio?: string | null; // NFS-e: código municipal do serviço
   /** Devolução (05/10/26): tributação espelhada da NF de origem. */

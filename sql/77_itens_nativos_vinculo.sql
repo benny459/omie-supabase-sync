@@ -1,0 +1,29 @@
+-- 77 (05/10/26): notas que movimentam estoque só com item NOSSO (código novo do estoque).
+-- Aplicado via MCP como p76_itens_nativos_vinculo, p76b_fat_itens_validar, p76c/p76d (estoque_vinculo_info).
+-- Para recriar as funções, ver essas migrações no Supabase (supabase_migrations.schema_migrations).
+--
+-- Tabela
+--   platform.estoque_item_vinculo — código de compra (produto do Omie que nunca entrou no estoque nativo)
+--     → item nosso. (empresa, n_cod_prod_origem, codigo_origem, descricao_origem, fornecedor, fornecedor_cod,
+--     n_cod_prod_destino, origem 'manual'|'auto_desc'|'cadastro', confianca, lote, criado_por/em, desfeito_em/por)
+--     Único ativo por (empresa, n_cod_prod_origem). RLS ligado, só service_role. Desfazer = desfeito_em (nada é apagado).
+--
+-- Funções (orders.*, SECURITY DEFINER, só service_role)
+--   estoque_item_nativo(empresa, prod)        → id do item nativo (vínculo → dono da mescla → ele mesmo), se tiver código atual
+--   fat_itens_buscar(empresa, q, lim)         → {nativos, compra}: nativos por código novo/Omie/descrição, código antigo
+--                                               (v_item_codigo_resolvido) e vínculo; compra = mv_catalogo_compra sem item nativo
+--   fat_itens_validar(empresa, codigos[])     → códigos da nota que não resolvem para item nativo (bloqueiam a NF-e)
+--   estoque_vinculo_salvar(empresa, origem, destino, por, tipo, confianca, lote)
+--                                             → grava o vínculo (desfaz o anterior) e, havendo CNPJ do fornecedor,
+--                                               o de-para da conferência (compras_alias_salvar)
+--   estoque_vinculo_desfazer(id, por)
+--   estoque_vinculo_pendentes(empresa, dias, lim) → códigos de compra dos PCs dos últimos N dias sem item nativo,
+--                                               com até 3 sugestões por semelhança de descrição (pg_trgm)
+--   estoque_vinculo_info(empresa, origem)     → já tem posição no estoque (saldo/CMC)? quanto foi comprado/recebido/saiu
+--
+-- Dados (05/10/26): 1.315 códigos comprados em 12 meses; 994 já eram item nosso; 321 sem item.
+--   11 vinculados automaticamente (descrição normalizada idêntica a um único item nosso):
+--   origem='auto_desc', lote='auto_desc_20261005' — para desfazer:
+--   update platform.estoque_item_vinculo set desfeito_em = now(), desfeito_por = '<quem>'
+--    where lote = 'auto_desc_20261005' and desfeito_em is null;
+--   310 pendentes → tela Estoque › Códigos de compra (/estoque/codigos-compra).

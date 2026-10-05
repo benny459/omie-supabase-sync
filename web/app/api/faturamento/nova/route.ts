@@ -3,6 +3,7 @@ import { exigirFaturamento, falha } from "@/lib/faturamento/auth";
 import { prevoo } from "@/lib/faturamento/server";
 import { supaAdmin } from "@/lib/supabase-admin";
 import type { DocFat } from "@/lib/faturamento/montar";
+import { buscarItensEstoque, codigosSemEstoque, MSG_SEM_ESTOQUE, type CodigoCompra } from "@/lib/estoque-vinculos";
 import { buscarItensCrm } from "@/lib/catalogo-crm";
 
 export const dynamic = "force-dynamic";
@@ -89,8 +90,20 @@ export async function GET(req: NextRequest) {
       // Autocompletar dos itens da folha (05/10/26): catálogo nativo + fiscal + CMC/última compra/saldo
       // + último preço vendido a este cliente (espelho dos PVs).
       const termo = (sp.get("q") ?? "").trim();
-      if (termo.length < 2) return NextResponse.json({ itens: [] });
-      const base = await buscarItensCrm(termo, 10, 0, emp);
+      if (termo.length < 2) return NextResponse.json({ itens: [], compra: [] });
+      // NF-e (venda/remessa/conserto/devolução) movimenta estoque: só itens NATIVOS; código de compra
+      // resolvido para o item nosso, ou devolvido à parte em "compra" para vincular/cadastrar (05/10/26).
+      let compra: CodigoCompra[] = [];
+      let base: { codigo: string | null; codigo_omie: string | null; descricao: string; unidade: string | null; cmc: number | null; saldo: number | null;
+        ultimo_preco: number | null; ultima_compra?: string | null; via?: string | null; n_cod_prod?: number; ncm?: string | null }[];
+      if (sp.get("estoque") === "1") {
+        const r = await buscarItensEstoque(emp, termo, 10);
+        compra = r.compra;
+        base = r.nativos.map((x) => ({ codigo: x.codigo, codigo_omie: x.codigo_omie, descricao: x.descricao, unidade: x.unidade, cmc: x.cmc,
+          saldo: x.saldo, ultimo_preco: x.ultimo_preco, ultima_compra: null, via: x.via, n_cod_prod: x.n_cod_prod, ncm: x.ncm }));
+      } else {
+        base = await buscarItensCrm(termo, 10, 0, emp);
+      }
       const cods = [...new Set(base.flatMap((b) => [b.codigo, b.codigo_omie]).filter((c): c is string => !!c))];
       const [fis, vend] = await Promise.all([
         cods.length ? a.schema("orders").from("fat_produto_fiscal").select("codigo_produto,ncm,cest,origem,unidade").eq("empresa", emp).in("codigo_produto", cods) : Promise.resolve({ data: [] }),
@@ -106,9 +119,10 @@ export async function GET(req: NextRequest) {
         const f = (b.codigo && fMap.get(b.codigo)) || (b.codigo_omie && fMap.get(b.codigo_omie)) || null;
         const v = (b.codigo && vMap.get(b.codigo)) || (b.codigo_omie && vMap.get(b.codigo_omie)) || null;
         return { codigo: b.codigo ?? b.codigo_omie ?? "", codigo_omie: b.codigo_omie, descricao: b.descricao, unidade: f?.unidade || b.unidade || "UN",
-          ncm: f?.ncm ?? null, cest: f?.cest ?? null, origem: f?.origem ?? null, cmc: b.cmc, saldo: b.saldo,
-          ultimo_preco: b.ultimo_preco, ultima_compra: b.ultima_compra, ultima_venda: v ? Number(v.valor_unitario) : null, ultima_venda_em: v?.d_inc_d ?? null };
-      }) });
+          ncm: f?.ncm ?? b.ncm ?? null, cest: f?.cest ?? null, origem: f?.origem ?? null, cmc: b.cmc, saldo: b.saldo,
+          ultimo_preco: b.ultimo_preco, ultima_compra: b.ultima_compra ?? null, ultima_venda: v ? Number(v.valor_unitario) : null, ultima_venda_em: v?.d_inc_d ?? null,
+          via: b.via ?? null, nativo: sp.get("estoque") === "1" };
+      }), compra });
     }
     if (op === "proximos") {
       // Próximos números (sem consumir): PV/OS (vendas.numeracao ⊕ Omie), NF-e e recibo (fat_config).
@@ -220,10 +234,21 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const q = await exigirFaturamento();
   if (q instanceof NextResponse) return q;
-  const body = await req.json().catch(() => ({})) as { op?: string; documento?: DocFat };
+  const body = await req.json().catch(() => ({})) as { op?: string; documento?: DocFat; tipo?: string };
   if (body.op !== "previa" || !body.documento) return falha("op/documento inválidos");
   try {
-    return NextResponse.json(await prevoo(body.documento, {}));
+    const r = await prevoo(body.documento, {});
+    // NF-e movimenta estoque: todo item precisa ser do estoque nosso (código novo) — 05/10/26.
+    if (body.tipo === "nfe") {
+      const sem = await codigosSemEstoque(body.documento.empresa, body.documento.itens.map((i) => i.codigo ?? ""));
+      const semCodigo = body.documento.itens.some((i) => !(i.codigo ?? "").trim());
+      if (sem.length || semCodigo) {
+        r.checagens.push({ item: "Itens do estoque", ok: false, nivel: "erro",
+          detalhe: semCodigo && !sem.length ? "Há item sem código — escolha o item do estoque pela busca." : MSG_SEM_ESTOQUE(sem) });
+        r.pode_emitir = false;
+      } else r.checagens.push({ item: "Itens do estoque", ok: true, nivel: "erro", detalhe: "Todos os itens têm código do estoque." });
+    }
+    return NextResponse.json(r);
   } catch (e) {
     return falha(e);
   }

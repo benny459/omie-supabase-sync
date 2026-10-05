@@ -220,6 +220,18 @@ export const MODULES: NavItem[] = [
     ),
   },
   {
+    href: "/estoque/codigos-compra",
+    area: "erp",
+    grupo: "estoque",
+    label: "Códigos de compra",
+    tone: "text-orange-600",
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className="w-5 h-5" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M10 14a4 4 0 0 0 5.66 0l3-3a4 4 0 0 0-5.66-5.66l-1 1"/><path d="M14 10a4 4 0 0 0-5.66 0l-3 3a4 4 0 0 0 5.66 5.66l1-1"/>
+      </svg>
+    ),
+  },
+  {
     href: "/relatorios/compras-por-cliente",
     area: "bi",
     grupo: "bi",
