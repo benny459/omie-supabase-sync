@@ -31,15 +31,28 @@ export async function exigirCadastros(): Promise<QuemCad | NextResponse> {
   return { perms, email: user?.email ?? "painel", pode, editar };
 }
 
+/** Erro do banco com o código e o detalhe (a guarda de duplicados manda os candidatos no detalhe). */
+export class ErroCad extends Error {
+  constructor(message: string, public code?: string, public details?: string) { super(message); }
+}
+
 export async function rpcCad<T = unknown>(fn: string, args: Record<string, unknown> = {}): Promise<T> {
   const { data, error } = await supaAdmin().schema("orders").rpc(fn, args);
-  if (error) throw new Error(error.message);
+  if (error) throw new ErroCad(error.message, error.code, error.details ?? undefined);
   return data as T;
 }
 
-/** Erro de regra (raise exception no banco) vira 400 com a mensagem. */
+/** Possível duplicado (sql/59, SQLSTATE P0D01): devolve os candidatos para "já existe — usar este". */
+export function candidatosDoErro(e: unknown): unknown[] | null {
+  if (!(e instanceof ErroCad) || e.code !== "P0D01") return null;
+  try { const c = JSON.parse(e.details ?? "[]"); return Array.isArray(c) ? c : []; } catch { return []; }
+}
+
+/** Erro de regra (raise exception no banco) vira 400 com a mensagem; duplicado vira 409 com os candidatos. */
 export function erroCad(e: unknown) {
   const msg = e instanceof Error ? e.message : String(e);
+  const candidatos = candidatosDoErro(e);
+  if (candidatos) return NextResponse.json({ error: msg, duplicado: true, candidatos }, { status: 409 });
   return NextResponse.json({ error: msg }, { status: 400 });
 }
 

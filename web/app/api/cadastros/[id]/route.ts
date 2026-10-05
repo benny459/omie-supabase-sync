@@ -37,6 +37,7 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
   if (!Number.isFinite(id)) return NextResponse.json({ error: "id inválido" }, { status: 400 });
   try {
     const body = (await req.json()) as Record<string, unknown>;
+    delete body.forcar; delete body.forcarMotivo;
     return NextResponse.json(await rpcCad("cadastros_salvar", { p: { ...body, id }, p_por: q.email }));
   } catch (e) { return erroCad(e); }
 }

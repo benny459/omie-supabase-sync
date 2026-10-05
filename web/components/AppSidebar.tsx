@@ -25,13 +25,14 @@ export type NavItem = {
   secao?: string;
 };
 
-export type Grupo = "operacao" | "compras" | "vendas" | "estoque" | "financeiro" | "faturamento" | "bi";
+export type Grupo = "operacao" | "compras" | "vendas" | "estoque" | "financeiro" | "faturamento" | "cadastros" | "bi";
 export const GRUPOS: { id: Grupo; label: string; desc: string }[] = [
   { id: "operacao",   label: "Operação",   desc: "Avulsos, Projetos, PCs — o dia a dia" },
   { id: "compras",    label: "Compras",    desc: "Pedidos e requisições de compra (Omie)" },
   { id: "vendas",     label: "Vendas",     desc: "Pedidos de venda e ordens de serviço (Omie)" },
   { id: "estoque",    label: "Estoque",    desc: "Posição, movimentação e Kardex" },
   { id: "financeiro", label: "Financeiro", desc: "Títulos a pagar e a receber" },
+  { id: "cadastros",  label: "Cadastros",  desc: "Clientes, fornecedores e itens — um cadastro só para todas as plataformas, sem duplicados" },
   { id: "bi",         label: "BI",         desc: "Relatórios e dashboards — Geral, Compras, Vendas, Financeiro" },
 ];
 export const SECOES_BI = ["Geral", "Compras", "Vendas", "Financeiro"];
@@ -325,13 +326,13 @@ export const FINANCEIRO: NavItem[] = [
       </svg>
     ),
   },
-  // Cadastros próprios (05/10/26): clientes e fornecedores vivem no painel,
-  // não mais só no espelho do Omie. Ficam no Financeiro (cobrança e pagamento),
-  // com a mesma área ERP de Compras e dos títulos.
+  // Cadastros próprios (05/10/26): clientes e fornecedores vivem no painel e
+  // abastecem todas as plataformas (cadastro único, sem duplicados — sql/57).
+  // Desde 05/10/26 são um módulo próprio na barra (Cadastros), não itens do Financeiro.
   {
     href: "/cadastros/clientes",
     area: "erp",
-    grupo: "financeiro",
+    grupo: "cadastros",
     label: "Clientes",
     tone: "text-sky-600",
     icon: (
@@ -343,7 +344,7 @@ export const FINANCEIRO: NavItem[] = [
   {
     href: "/cadastros/fornecedores",
     area: "erp",
-    grupo: "financeiro",
+    grupo: "cadastros",
     label: "Fornecedores",
     tone: "text-violet-600",
     icon: (
@@ -351,7 +352,33 @@ export const FINANCEIRO: NavItem[] = [
         <path d="M3 21V9l6-4v4l6-4v4l6-4v16H3z"/><path d="M7 17h2M11 17h2M15 17h2"/>
       </svg>
     ),
+  },  {
+    // Itens: o catálogo do Estoque (códigos próprios) — o mesmo que o CRM e Compras usam.
+    href: "/cadastros/itens",
+    area: "erp",
+    grupo: "cadastros",
+    label: "Itens (catálogo)",
+    tone: "text-amber-600",
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className="w-5 h-5" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M12 3l8 4.5v9L12 21l-8-4.5v-9z"/><path d="M4 7.5l8 4.5 8-4.5M12 12v9"/>
+      </svg>
+    ),
   },
+  {
+    // Duplicados que já existem: mesclar / agrupar / "não é duplicado" (sql/57).
+    href: "/cadastros/duplicidades",
+    area: "erp",
+    grupo: "cadastros",
+    label: "Duplicidades",
+    tone: "text-rose-600",
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className="w-5 h-5" strokeLinecap="round" strokeLinejoin="round">
+        <rect x="3" y="3" width="12" height="12" rx="2"/><rect x="9" y="9" width="12" height="12" rx="2"/>
+      </svg>
+    ),
+  },
+
   {
     // Emissão de NF-e / NFS-e / recibo pela Focus, sem Omie (P5, 05/10/26).
     // Desde 05/10/26 é aba própria na barra (a seguir a Financeiro), não item do Financeiro.

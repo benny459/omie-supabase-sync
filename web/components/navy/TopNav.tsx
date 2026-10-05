@@ -125,7 +125,7 @@ export default function TopNav({ userEmail, isPlatformAdmin }: { userEmail?: str
     .filter((m) => pathname === m.href || pathname.startsWith(m.href + "/"))
     .sort((a, b) => b.href.length - a.href.length)[0] ?? null, [pathname, todos]);
   const areaDaRota: Area | null = ADMIN.some((m) => pathname.startsWith(m.href)) || pathname.startsWith("/owner")
-    ? "sistema" : (itemDaRota ? grupoNaBarra(itemDaRota) ?? null : null);
+    ? "sistema" : pathname.startsWith("/cadastros") ? "cadastros" : (itemDaRota ? grupoNaBarra(itemDaRota) ?? null : null);
 
   function navegar(href: string) {
     if (href === pathname) return;

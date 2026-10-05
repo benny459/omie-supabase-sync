@@ -65,7 +65,7 @@ export interface BarraAllkaProps {
 }
 
 /* ── Identidade de cada módulo — cópia de lib/modulos-identidade.ts do portal ── */
-type Icone = "crm" | "estrela" | "operacao" | "servicos" | "compras" | "estoque" | "financeiro" | "faturamento" | "bi" | "rh" | "sistema" | "modulo";
+type Icone = "crm" | "estrela" | "operacao" | "servicos" | "compras" | "estoque" | "financeiro" | "faturamento" | "cadastros" | "bi" | "rh" | "sistema" | "modulo";
 type Grupo = "comercial" | "operacao" | "gestao" | "outros";
 const IDENT: Record<string, { cor: string; icone: Icone; grupo: Grupo | "sistema"; ordem: number }> = {
   crm: { cor: "#9A82FF", icone: "crm", grupo: "comercial", ordem: 1 },
@@ -76,6 +76,7 @@ const IDENT: Record<string, { cor: string; icone: Icone; grupo: Grupo | "sistema
   estoque: { cor: "#F5C542", icone: "estoque", grupo: "operacao", ordem: 13 },
   financeiro: { cor: "#5C8BFF", icone: "financeiro", grupo: "gestao", ordem: 20 },
   faturamento: { cor: "#4FD1E8", icone: "faturamento", grupo: "gestao", ordem: 20.5 },
+  cadastros: { cor: "#E58BF2", icone: "cadastros", grupo: "gestao", ordem: 20.7 },
   bi: { cor: "#FF6FB5", icone: "bi", grupo: "gestao", ordem: 21 },
   rh: { cor: "#7DD3A8", icone: "rh", grupo: "gestao", ordem: 22 },
   sistema: { cor: "#8A93A3", icone: "sistema", grupo: "sistema", ordem: 99 },
@@ -92,6 +93,7 @@ const TRACOS: Record<Icone, ReactNode> = {
   estoque: (<><path d="M12 3l8 4.5v9L12 21l-8-4.5v-9z" /><path d="M4 7.5l8 4.5 8-4.5M12 12v9" /></>),
   financeiro: <path d="M4 18V9M10 18V5M16 18v-7M22 18H2" />,
   faturamento: (<><path d="M6 3h12v18l-2.5-1.6L13 21l-2.5-1.6L8 21l-2-1.3z" /><path d="M9 8h6M9 11.5h6M9 15h3.5" /></>),
+  cadastros: (<><rect x="5" y="3" width="14" height="18" rx="2" /><circle cx="12" cy="10" r="2.6" /><path d="M8 17c.6-2 2.1-3 4-3s3.4 1 4 3M3 7h2M3 12h2M3 17h2" /></>),
   bi: (<><path d="M4 20V4M4 20h16" /><path d="M7 15l4-4 3 3 5-6" /></>),
   rh: (<><rect x="3.5" y="5" width="17" height="14" rx="2.5" /><circle cx="9" cy="11" r="2.2" /><path d="M5.8 16.2c.5-1.7 1.7-2.6 3.2-2.6s2.7.9 3.2 2.6M14.5 10h3.5M14.5 13.5h2.5" /></>),
   sistema: (<><circle cx="12" cy="12" r="3" /><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1 7 17M17 7l2.1-2.1" /></>),

@@ -8,10 +8,10 @@
 // A chave abaixo é a ANON do Supabase do CRM: pública por natureza (já viaja
 // no bundle do próprio CRM) e read-only via RLS. Nada aqui escreve no CRM.
 
-const CRM_URL = "https://epoazrnafevkirxhkmog.supabase.co";
-const CRM_ANON =
+export const CRM_URL = "https://epoazrnafevkirxhkmog.supabase.co";
+export const CRM_ANON =
   "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVwb2F6cm5hZmV2a2lyeGhrbW9nIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzIzNjk5OTEsImV4cCI6MjA4Nzk0NTk5MX0.duK7ykVjoP1eCiFn1ono1Ka-VGdQUbdUbgCmdnL7wKY";
-const CRM_EMPRESA = "b1bf590f-c281-41f8-9968-a70b0dc02b31";
+export const CRM_EMPRESA = "b1bf590f-c281-41f8-9968-a70b0dc02b31";
 
 export type ParcelaCrm = {
   pct: number;

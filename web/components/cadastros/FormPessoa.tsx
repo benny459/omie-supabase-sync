@@ -8,7 +8,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { EMPRESAS, docValido, mascaraDoc, pedir, type Contato, type Papel, type Pessoa } from "./comum";
+import { EMPRESAS, ErroPedido, ListaCandidatos, docValido, mascaraDoc, pedir, type Candidato, type Contato, type Papel, type Pessoa } from "./comum";
 
 type Form = {
   empresa: string; cliente: boolean; fornecedor: boolean; transportadora: boolean;
@@ -41,6 +41,24 @@ export default function FormPessoa({ id }: { id?: number }) {
   const [aviso, setAviso] = useState<string | null>(null);
   const [indo, setIndo] = useState(false);
   const [consultando, setConsultando] = useState<"" | "cnpj" | "cep">("");
+  // "Já existe?" (sql/59): enquanto se digita, procura o mesmo CNPJ/CPF em qualquer
+  // empresa do grupo e nomes parecidos — para abrir o existente em vez de duplicar.
+  const [cands, setCands] = useState<Candidato[]>([]);
+  const [bloqueio, setBloqueio] = useState<Candidato[] | null>(null);
+  const [forcar, setForcar] = useState<{ on: boolean; motivo: string }>({ on: false, motivo: "" });
+  const chaveBusca = f ? `${f.doc.replace(/\D/g, "")}|${f.razao.trim()}|${f.cidade.trim()}|${f.empresa}` : "";
+  useEffect(() => {
+    if (!f) return;
+    const d = f.doc.replace(/\D/g, ""), r = f.razao.trim();
+    if ((d.length !== 11 && d.length !== 14) && r.length < 4) { setCands([]); return; }
+    const t = setTimeout(async () => {
+      const qs = new URLSearchParams({ razao: r, doc: d.length === 11 || d.length === 14 ? d : "", cidade: f.cidade, telefone: f.telefone, email: f.email, empresa: f.empresa });
+      if (editando && id != null) qs.set("excluir", String(id));
+      try { setCands((await pedir<{ candidatos: Candidato[] }>(`/api/cadastros/candidatos?${qs}`)).candidatos); } catch { setCands([]); }
+    }, 350);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chaveBusca]);
 
   useEffect(() => {
     if (!editando) return;
@@ -76,6 +94,9 @@ export default function FormPessoa({ id }: { id?: number }) {
   if (!(f.cliente || f.fornecedor || f.transportadora)) erros.push("Marque cliente, fornecedor ou transportadora");
   if (docDig && !docValido(docDig)) erros.push(docDig.length === 11 ? "CPF inválido" : docDig.length === 14 ? "CNPJ inválido" : "CNPJ (14) ou CPF (11 dígitos)");
   if (!docDig && !editando) erros.push("Informe o CNPJ ou CPF");
+  const mesmoDocAqui = cands.find((c) => c.forte && c.empresa === f.empresa && c.doc && c.doc.replace(/\D/g, "") === docDig);
+  if (mesmoDocAqui && (!editando || mesmoDocAqui.id !== id)) erros.push(`Este CNPJ/CPF já está cadastrado em ${f.empresa} (código ${mesmoDocAqui.codigo}) — abra o existente`);
+  const mesmoDocOutra = !mesmoDocAqui ? cands.find((c) => c.forte && c.doc && c.doc.replace(/\D/g, "") === docDig && c.empresa !== f.empresa) : undefined;
   for (const [k, l] of [["email", "E-mail"], ["emailCobranca", "E-mail de cobrança"], ["emailNfe", "E-mail para NF-e"]] as const) {
     if (!emailOk(f[k])) erros.push(`${l} inválido`);
   }
@@ -107,10 +128,14 @@ export default function FormPessoa({ id }: { id?: number }) {
     setIndo(true); setErro(null);
     try {
       const body = { ...f, pf: docDig.length === 11, simples: f.simples === "" ? null : f.simples === "sim",
-        contatos: f.contatos.filter((c) => Object.values(c).some((v) => String(v ?? "").trim())) };
+        contatos: f.contatos.filter((c) => Object.values(c).some((v) => String(v ?? "").trim())),
+        ...(forcar.on ? { forcar: true, forcarMotivo: forcar.motivo } : {}) };
       const p = await pedir<Pessoa>(editando ? `/api/cadastros/${id}` : "/api/cadastros", { method: editando ? "PUT" : "POST", body: JSON.stringify(body) });
       router.push(`/cadastros/${p.id}?salvo=1`);
-    } catch (e) { setErro((e as Error).message); setIndo(false); }
+    } catch (e) {
+      setErro((e as Error).message); setIndo(false);
+      if (e instanceof ErroPedido && e.candidatos) setBloqueio(e.candidatos);
+    }
   };
 
   const papel: Papel = f.cliente && !f.fornecedor ? "cliente" : "fornecedor";
@@ -205,6 +230,21 @@ export default function FormPessoa({ id }: { id?: number }) {
           <label className="f s12">Observações<textarea className="inp" {...campo("obs")} /></label>
         </div>
 
+        {bloqueio && bloqueio.length > 0 ? (
+          <ListaCandidatos itens={bloqueio} titulo="Já existe — use o cadastro existente em vez de criar outro" onAbrir={(c) => router.push(`/cadastros/${c.id}`)} />
+        ) : cands.length > 0 && (
+          <ListaCandidatos itens={cands.slice(0, 5)}
+            titulo={mesmoDocOutra ? `Esta empresa já existe em ${mesmoDocOutra.empresa} — ao cadastrar em ${f.empresa}, fica ligada à mesma pessoa (dados partilhados)` : "Cadastros parecidos que já existem"}
+            onAbrir={(c) => router.push(`/cadastros/${c.id}`)} />
+        )}
+        {bloqueio && !editando && (
+          <div className="aviso t-off" style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+            <label className="check"><input type="checkbox" checked={forcar.on} onChange={(e) => setForcar({ ...forcar, on: e.target.checked })} />
+              Não é a mesma pessoa — criar mesmo assim (só administrador)</label>
+            {forcar.on && <input className="inp" style={{ flex: 1, minWidth: 220 }} placeholder="Motivo (fica no histórico)" value={forcar.motivo}
+              onChange={(e) => setForcar({ ...forcar, motivo: e.target.value })} />}
+          </div>
+        )}
         {aviso && <div className="aviso t-info">{aviso}</div>}
         {erros.length > 0 && <div className="aviso t-warn">{erros.join(" · ")}</div>}
         {erro && <div className="aviso t-crit">{erro}</div>}
@@ -212,7 +252,7 @@ export default function FormPessoa({ id }: { id?: number }) {
         <div className="filtros" style={{ justifyContent: "flex-end" }}>
           <span className="mini" style={{ marginRight: "auto" }}>Fica só no painel. Nada é enviado ao Omie.</span>
           <button className="btn" onClick={() => router.back()}>Cancelar</button>
-          <button className="btn pri" disabled={indo || erros.length > 0} onClick={salvar}>{indo ? "Salvando…" : editando ? "Salvar cadastro" : "Cadastrar"}</button>
+          <button className="btn pri" disabled={indo || erros.length > 0 || (forcar.on && !forcar.motivo.trim())} onClick={salvar}>{indo ? "Salvando…" : editando ? "Salvar cadastro" : "Cadastrar"}</button>
         </div>
       </div>
     </div>

@@ -27,6 +27,8 @@ export async function POST(req: Request) {
   try {
     const body = (await req.json()) as Record<string, unknown>;
     delete body.id;
+    // Criar mesmo havendo um cadastro parecido: só administrador, e com motivo (fica no histórico).
+    if (!q.perms.is_admin) { delete body.forcar; delete body.forcarMotivo; }
     return NextResponse.json(await rpcCad("cadastros_salvar", { p: body, p_por: q.email }));
   } catch (e) { return erroCad(e); }
 }
