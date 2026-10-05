@@ -48,7 +48,7 @@
 .fpv .sub b.prod { color: var(--f-ok); }
 .fpv .btn { border: 1px solid var(--f-line2); background: var(--f-card); color: var(--f-tx); padding: 8px 14px; border-radius: 10px; font-weight: 500; font-size: 13px; }
 .fpv .btn:hover:not(:disabled) { border-color: var(--f-tx3); }
-.fpv .btn.pri { background: var(--f-blue); border-color: var(--f-blue); color: #fff; }
+.fpv .btn.pri { background: var(--ww-accent); border-color: var(--ww-accent); color: #fff; }
 .fpv .btn.sm { padding: 5px 10px; font-size: 12px; border-radius: 8px; }
 .fpv .btn.ghost { background: transparent; border-color: transparent; color: var(--f-blue); }
 .fpv .btn.danger { color: var(--f-bad); }

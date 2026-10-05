@@ -381,3 +381,8 @@ html { --ap-fonte: 1; font-size: calc(100% * var(--ap-fonte)); }
 .apz-cor input { width: 34px; height: 24px; padding: 0; border: 1px solid var(--ab-line); border-radius: 6px; background: none; }
 .apz-restaurar { display: block; width: calc(100% - 20px); margin: 4px 10px 2px; padding: 6px 0; border-radius: 9px; font-size: 12.5px; border: 1px solid var(--ab-line); color: var(--ab-fg); }
 .apz-restaurar:hover { background: var(--ab-hover); }
+
+/* Contraste (WCAG AA, 05/10/26): o texto "fraco" passava em 2:1 no claro e
+   4:1 no escuro. Sobe para ≥4,5:1 sobre painel e fundo nos dois modos. */
+:root { --color-ww-textFaint: 100 112 133; --ww-text-faint: #647085; --ww-off-text: #647085; }
+.dark { --color-ww-textFaint: 127 146 172; --ww-text-faint: #7f92ac; }
