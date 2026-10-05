@@ -97,6 +97,19 @@ async function extras() {
   };
 }
 
+/** Pendentes de excluídos no Omie, paginando (o PostgREST corta em 1000 linhas). */
+async function excluidosTodos() {
+  const out: { ref: string; natureza: string }[] = [];
+  for (let de = 0; de < 20000; de += 1000) {
+    const { data, error } = await fin().rpc("titulos_excluidos_pendentes", {}).range(de, de + 999);
+    if (error) throw error;
+    const lote = (data ?? []) as { ref: string; natureza: string }[];
+    out.push(...lote);
+    if (lote.length < 1000) break;
+  }
+  return out;
+}
+
 /** Nome curto do fornecedor (fantasia) + razão social, categoria herdada do PC
  *  quando o título não tem, e títulos que já sumiram do Omie (sql/75). */
 async function nomesECategorias(rows: Linha[]) {
@@ -105,7 +118,7 @@ async function nomesECategorias(rows: Linha[]) {
   const [cl, pd, ex] = await Promise.all([
     cods.length ? fin().from("clientes").select("empresa, codigo_cliente_omie, nome_fantasia, razao_social").in("codigo_cliente_omie", cods) : Promise.resolve({ data: [] }),
     pcs.length ? supaAdmin().schema("compras").from("pedidos").select("empresa, numero, categoria_desc").in("numero", pcs) : Promise.resolve({ data: [] }),
-    fin().rpc("titulos_excluidos_pendentes", {}),
+    excluidosTodos(),
   ]);
   const nomes: Record<string, [string, string]> = {};
   for (const c of (cl.data ?? []) as { empresa: string; codigo_cliente_omie: number; nome_fantasia: string | null; razao_social: string | null }[]) {
@@ -115,7 +128,7 @@ async function nomesECategorias(rows: Linha[]) {
   for (const p of (pd.data ?? []) as { empresa: string; numero: string; categoria_desc: string | null }[]) {
     if (p.categoria_desc) catpc[`${p.empresa}|${p.numero}`] = p.categoria_desc;
   }
-  const excl = ((ex.data ?? []) as { ref: string; natureza: string }[]).filter((x) => x.natureza === "P").map((x) => x.ref);
+  const excl = ex.filter((x) => x.natureza === "P").map((x) => x.ref);
   return { nomes, catpc, excl };
 }
 
@@ -148,9 +161,8 @@ export async function GET(req: Request) {
   }
 
   if (u.searchParams.get("excluidos")) {
-    const { data, error } = await fin().rpc("titulos_excluidos_pendentes", {});
-    if (error) return erroDb(error);
-    return NextResponse.json({ excluidos: (data ?? []).filter((x: { natureza: string }) => x.natureza === "P") });
+    try { return NextResponse.json({ excluidos: (await excluidosTodos()).filter((x) => x.natureza === "P") }); }
+    catch (e) { return erroDb(e as { message?: string }); }
   }
 
   const mov = Number(u.searchParams.get("mov") ?? 0);
