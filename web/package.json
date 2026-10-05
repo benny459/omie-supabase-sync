@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "deploy": "npm version patch --no-git-tag-version && vercel --prod --yes"
+    "deploy": "../scripts/publicar-painel.sh"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.124.0",
