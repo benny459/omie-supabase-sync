@@ -6,6 +6,7 @@
  * em receber-v1-motor.ts ligado a /api/financeiro/receber.
  */
 import { useEffect, useRef, useState } from "react";
+import { CasarHost } from "./CasarPainel";
 import Link from "next/link";
 import { useUserPerms } from "../UserPermsProvider";
 import NovoTituloModal from "../NovoTituloModal";
@@ -24,9 +25,16 @@ export default function TelaReceberV1() {
     motor.current = montarReceberV1({ root: ref.current, admin, onNovaConta: () => setNova(true) });
     return () => motor.current?.destruir();
   }, [admin]);
+  // painel "Casar" (conciliação com busca) — recarrega depois de casar/criar/ignorar
+  useEffect(() => {
+    const h = () => { motor.current?.recarregar(); };
+    window.addEventListener("conc:atualizar", h);
+    return () => window.removeEventListener("conc:atualizar", h);
+  }, []);
 
   return (
     <>
+      <CasarHost />
       <div className="cp3" ref={ref}>
         <div className="wrap">
           <div className="hdr">

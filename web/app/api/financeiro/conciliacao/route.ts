@@ -9,6 +9,14 @@
 //       { acao: "regra_criar", contem, acao_regra: "ignorar"|"lancar", categoria?, descricao?, natureza?, empresa?, cod_cc?, valor_max? }
 //       { acao: "regra_remover", id }   { acao: "regras_aplicar", empresa, cod_cc, de?, ate? }
 //  GET  ?regras=1 → regras de conciliação
+//  GET  ?candidatos=<mov>&q&vmin&vmax&venc_de&venc_ate&todas=1 → painel "Casar" (sql/73): candidatos com
+//       motivos (valor, vencimento, CNPJ/nome/NF no histórico, nosso número, aprendido) de TODOS os
+//       títulos em aberto (Omie + painel), grupos de parcelas e busca livre
+//  GET  ?transferencia=<mov> → movimentos opostos de outras contas (transferência entre contas)
+//  POST { acao: "casar", movimento_id, itens: [{ ref: "o:|p:|r:…", valor, juros?, desconto?, multa? }], aprender? }
+//       { acao: "aceitar_lote", movimentos: [ids], limiar? } → 1º candidato (≥ limiar, sem empate) de cada um
+//       { acao: "transferencia", movimento_id, par? }  { acao: "transferencia_desfazer", movimento_id }
+//       { acao: "lancar", …, pessoa? } → com fornecedor/cliente do cadastro
 //       { acao: "auto", empresa, cod_cc, de?, ate? } → conciliação automática (só o
 //       que é praticamente certo: valor exato + CNPJ/documento; grupo do mesmo documento)
 import { NextResponse } from "next/server";
@@ -23,6 +31,24 @@ export async function GET(req: Request) {
   const a = await exigir("financeiro.conciliar");
   if (a instanceof NextResponse) return a;
   const u = new URL(req.url);
+  const candMov = Number(u.searchParams.get("candidatos") ?? 0);
+  if (candMov) {
+    const num = (k: string) => { const v = u.searchParams.get(k); return v && v.trim() !== "" && Number.isFinite(Number(v.replace(",", "."))) ? Number(v.replace(",", ".")) : null; };
+    const dt = (k: string) => { const v = u.searchParams.get(k) ?? ""; return ISO.test(v) ? v : null; };
+    const { data, error } = await fin().rpc("conciliacao_candidatos", {
+      p_movimento_id: candMov, p_q: (u.searchParams.get("q") ?? "").trim() || null,
+      p_vmin: num("vmin"), p_vmax: num("vmax"), p_venc_de: dt("venc_de"), p_venc_ate: dt("venc_ate"),
+      p_todas_empresas: u.searchParams.get("todas") === "1", p_lim: Math.min(200, Number(u.searchParams.get("lim") ?? 60) || 60),
+    });
+    if (error) return erroDb(error);
+    return NextResponse.json({ ...(data as object), pode_baixar: !!a.pode["financeiro.baixar"] });
+  }
+  const trMov = Number(u.searchParams.get("transferencia") ?? 0);
+  if (trMov) {
+    const { data, error } = await fin().rpc("transferencia_candidatos", { p_movimento_id: trMov });
+    if (error) return erroDb(error);
+    return NextResponse.json({ candidatos: data ?? [] });
+  }
   if (u.searchParams.get("regras")) {
     const { data, error } = await fin().from("conciliacao_regras").select("*").eq("ativo", true).order("id", { ascending: false });
     if (error) return erroDb(error);
@@ -43,6 +69,8 @@ export async function POST(req: Request) {
   const a = await exigir("financeiro.conciliar");
   if (a instanceof NextResponse) return a;
   let b: { acao?: string; movimento_id?: number; itens?: { titulo: string; valor: number; forcar?: boolean; obs?: string }[]; motivo?: string;
+           casar?: { ref: string; valor: number; juros?: number; desconto?: number; multa?: number; obs?: string }[]; aprender?: boolean;
+           movimentos?: number[]; limiar?: number; par?: number | null; pessoa?: string | null;
            empresa?: string; cod_cc?: number; de?: string; ate?: string; categoria?: string; descricao?: string;
            contem?: string; acao_regra?: string; natureza?: string; valor_max?: number; id?: number };
   try { b = await req.json(); } catch { return NextResponse.json({ error: "JSON inválido" }, { status: 400 }); }
@@ -84,11 +112,46 @@ export async function POST(req: Request) {
     if (r.error) return erroDb(r.error);
     return NextResponse.json(r.data);
   }
+  if (b.acao === "aceitar_lote") {
+    if (!a.pode["financeiro.baixar"]) return NextResponse.json({ error: "Sem permissão (financeiro.baixar)" }, { status: 403 });
+    const ids = (b.movimentos ?? []).map(Number).filter((n) => n > 0).slice(0, 25);
+    const limiar = Math.max(60, Number(b.limiar ?? 80) || 80);
+    const usados = new Set<string>(); let ok = 0; const pulados: { id: number; motivo: string }[] = []; const erros: { id: number; erro: string }[] = [];
+    for (const id of ids) {
+      const c = await fin().rpc("conciliacao_candidatos", { p_movimento_id: id, p_lim: 5 });
+      if (c.error) { erros.push({ id, erro: c.error.message }); continue; }
+      const d = c.data as { movimento: { restante: number }; candidatos: { ref: string; saldo: number; score: number }[]; grupos: { itens: { ref: string; saldo: number }[]; motivos: string[] }[] };
+      const rest = Number(d.movimento?.restante ?? 0);
+      const [c1, c2] = d.candidatos ?? [];
+      let itens: { ref: string; valor: number }[] | null = null;
+      if (c1 && c1.score >= limiar && !(c2 && c2.score >= c1.score) && Math.abs(Number(c1.saldo) - rest) < 0.005) itens = [{ ref: c1.ref, valor: rest }];
+      else if (!c1 && d.grupos?.length === 1 && d.grupos[0].motivos.length > 1) itens = d.grupos[0].itens.map((x) => ({ ref: x.ref, valor: Number(x.saldo) }));
+      if (!itens) { pulados.push({ id, motivo: c1 ? `melhor ${c1.score} pts${c2 && c2.score >= c1.score ? " (empate)" : ""}` : "sem candidato" }); continue; }
+      if (itens.some((x) => usados.has(x.ref))) { pulados.push({ id, motivo: "título já usado neste lote" }); continue; }
+      const r = await fin().rpc("conciliar_casar", { p_movimento_id: id, p_itens: itens, p_aprender: true, p_usuario: a.email });
+      if (r.error) { erros.push({ id, erro: r.error.message }); continue; }
+      ok++; itens.forEach((x) => usados.add(x.ref));
+    }
+    return NextResponse.json({ ok: true, conciliados: ok, pulados, erros });
+  }
   const mov = Number(b.movimento_id ?? 0);
   if (!mov) return NextResponse.json({ error: "movimento_id obrigatório" }, { status: 400 });
 
   let r;
-  if (b.acao === "conciliar") {
+  if (b.acao === "casar") {
+    if (!a.pode["financeiro.baixar"]) return NextResponse.json({ error: "Sem permissão (financeiro.baixar)" }, { status: 403 });
+    const n2 = (v: unknown) => Math.round((Number(v) || 0) * 100) / 100;
+    const itens = (b.casar ?? []).filter((i) => i && /^[opr]:/.test(String(i.ref)) && Number(i.valor) > 0)
+      .map((i) => ({ ref: String(i.ref), valor: n2(i.valor), juros: n2(i.juros), desconto: n2(i.desconto), multa: n2(i.multa),
+                     ...(i.obs ? { obs: String(i.obs).slice(0, 300) } : {}) }));
+    if (!itens.length) return NextResponse.json({ error: "Escolha ao menos um título" }, { status: 400 });
+    r = await fin().rpc("conciliar_casar", { p_movimento_id: mov, p_itens: itens, p_aprender: b.aprender !== false, p_usuario: a.email });
+  } else if (b.acao === "transferencia") {
+    if (!a.pode["financeiro.baixar"]) return NextResponse.json({ error: "Sem permissão (financeiro.baixar)" }, { status: 403 });
+    r = await fin().rpc("transferencia_marcar", { p_movimento_id: mov, p_par: b.par ? Number(b.par) : null, p_usuario: a.email });
+  } else if (b.acao === "transferencia_desfazer") {
+    r = await fin().rpc("transferencia_desfazer", { p_movimento_id: mov, p_usuario: a.email });
+  } else if (b.acao === "conciliar") {
     // conciliar dá baixa: exige também a permissão de baixar
     if (!a.pode["financeiro.baixar"]) return NextResponse.json({ error: "Sem permissão (financeiro.baixar)" }, { status: 403 });
     const itens = (b.itens ?? []).filter((i) => i && i.titulo && Number(i.valor) > 0)
@@ -97,7 +160,9 @@ export async function POST(req: Request) {
     r = await fin().rpc("conciliar", { p_movimento_id: mov, p_itens: itens, p_usuario: a.email });
   } else if (b.acao === "lancar") {
     if (!a.pode["financeiro.baixar"]) return NextResponse.json({ error: "Sem permissão (financeiro.baixar)" }, { status: 403 });
-    r = await fin().rpc("movimento_lancar", { p_movimento_id: mov, p_categoria: String(b.categoria ?? ""), p_descricao: b.descricao ?? null, p_usuario: a.email });
+    r = b.pessoa
+      ? await fin().rpc("movimento_lancar_pessoa", { p_movimento_id: mov, p_categoria: String(b.categoria ?? ""), p_descricao: b.descricao ?? null, p_pessoa_codigo: String(b.pessoa), p_usuario: a.email })
+      : await fin().rpc("movimento_lancar", { p_movimento_id: mov, p_categoria: String(b.categoria ?? ""), p_descricao: b.descricao ?? null, p_usuario: a.email });
   } else if (b.acao === "desfazer") {
     r = await fin().rpc("conciliacao_desfazer", { p_movimento_id: mov, p_motivo: b.motivo ?? null, p_usuario: a.email });
   } else if (b.acao === "ignorar" || b.acao === "reativar") {

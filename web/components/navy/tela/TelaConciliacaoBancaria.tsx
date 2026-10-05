@@ -11,8 +11,10 @@
  * título (pagar/receber). "Desfazer" estorna as baixas; "ignorar" é para
  * tarifas, transferências entre contas e afins (com motivo).
  *
- * Só títulos do painel entram aqui (previsões de PC e contas a receber
- * nascidas no painel); os do Omie continuam a ser baixados no Omie.
+ * Painel "Casar" (05/10/26, sql/73): clicar num movimento pendente abre à direita os
+ * candidatos de TODOS os títulos em aberto (Omie + painel) com motivos, busca livre
+ * (nome, CNPJ, NF, PV/OS/PC, valor, vencimento), seleção múltipla com diferença
+ * (juros/desconto/parcial), criar título, transferência e ignorar — ver CasarPainel.
  *
  * Importação (05/10/26): qualquer banco — OFX 1.x/2.x (vários extratos, cartão),
  * CSV ou XLSX com mapa de colunas guardado por conta. Assistente: arquivo →
@@ -28,6 +30,7 @@ import {
   brl, cartao, ddmmaa, hojeISO, somaDias, type Kpi,
 } from "./KitTela";
 import { StatusPill, type Tom } from "../primitivos";
+import { CasarHost, abrirCasar } from "../../financeiro/CasarPainel";
 
 type Conta = { empresa: string; cod_cc: number; descricao: string; codigo_banco: string | null; numero_conta_corrente: string | null; tipo_conta_corrente: string | null };
 type Sug = {
@@ -40,7 +43,7 @@ type Mov = {
   id: number; data: string; valor: number; tipo: string | null; memo: string | null; nome: string | null; fitid: string;
   checknum: string | null; arquivo: string | null; casado: number; ignorado: boolean; ignorado_motivo: string | null;
   estado: "pendente" | "parcial" | "conciliado" | "omie" | "ignorado"; baixas: BaixaMov[]; sugestoes: Sug[];
-  origem?: string | null; auto?: boolean; omie_titulo?: number | null;
+  origem?: string | null; auto?: boolean; omie_titulo?: number | null; transferencia_par?: number | null;
 };
 type MovPrev = { data: string; valor: number; memo: string | null; nome: string | null; fitid: string };
 type ExtPrev = {
@@ -122,6 +125,12 @@ export default function TelaConciliacaoBancaria() {
     } catch (e) { setErro((e as Error).message); }
   }, [conta, de, ate]);
   useEffect(() => { setMovs(null); carregar(); }, [carregar, refresh]);
+  // o painel "Casar" avisa quando muda alguma coisa
+  useEffect(() => {
+    const h = () => carregar();
+    window.addEventListener("conc:atualizar", h);
+    return () => window.removeEventListener("conc:atualizar", h);
+  }, [carregar]);
   useEffect(() => { try { if (conta) localStorage.setItem("concil-conta", conta); } catch { /* ok */ } }, [conta]);
 
   /** Passo 1: prévia (nada é gravado). CSV/XLSX sem mapa → passo de mapear colunas. */
@@ -219,8 +228,9 @@ export default function TelaConciliacaoBancaria() {
       if (alvo && (alvo.tagName === "INPUT" || alvo.tagName === "SELECT" || alvo.tagName === "TEXTAREA")) return;
       if (!lista.length) return;
       const i = lista.findIndex((m) => m.id === aberto);
-      if (e.key === "j" || e.key === "ArrowDown") { e.preventDefault(); setAberto(lista[Math.min(i + 1, lista.length - 1)].id); }
-      else if (e.key === "k" || e.key === "ArrowUp") { e.preventDefault(); setAberto(lista[Math.max(i - 1, 0)].id); }
+      const ir = (mm: Mov) => { setAberto(mm.id); if (mm.estado === "pendente" || mm.estado === "parcial") abrirCasar(mm.id); };
+      if (e.key === "j" || e.key === "ArrowDown") { e.preventDefault(); ir(lista[Math.min(i + 1, lista.length - 1)]); }
+      else if (e.key === "k" || e.key === "ArrowUp") { e.preventDefault(); ir(lista[Math.max(i - 1, 0)]); }
       else if (e.key === "Escape") setAberto(null);
       else if (e.key === "Enter" && i >= 0 && podeBaixar && !ocupado) {
         const m = lista[i]; const s1 = m.sugestoes[0];
@@ -237,29 +247,25 @@ export default function TelaConciliacaoBancaria() {
     return () => window.removeEventListener("keydown", tecla);
   });
 
-  /** Aceita de uma vez a 1ª sugestão de cada pendente visível com score ≥ 80 (sem empate, título liberado). */
+  /** Aceita de uma vez o 1º candidato (Omie + painel, ≥ 80 pts, sem empate, valor exato) dos pendentes visíveis. */
   async function aceitarEmLote() {
-    const alvo = lista.filter((m) => m.estado === "pendente" && m.sugestoes[0] && m.sugestoes[0].score >= 80
-      && !(m.sugestoes[1] && m.sugestoes[1].score >= m.sugestoes[0].score)
-      && !(m.sugestoes[0].natureza === "P" && m.sugestoes[0].fase !== "liberado"));
-    if (!alvo.length) { setAviso("Nenhuma sugestão com 80+ pontos para aceitar neste filtro."); return; }
-    if (!window.confirm(`Aceitar a 1ª sugestão de ${alvo.length} movimento(s)?`)) return;
-    setOcupado(true); setErro(null);
-    let ok = 0; const usados = new Set<string>();
-    for (const m of alvo) {
-      const s1 = m.sugestoes[0];
-      const resto = Math.round((Math.abs(m.valor) - m.casado) * 100) / 100;
-      const itens = s1.grupo && s1.itens?.length ? s1.itens.map((x) => ({ titulo: x.titulo, valor: x.saldo })) : [{ titulo: s1.titulo, valor: Math.min(s1.saldo, resto) }];
-      if (itens.some((x) => usados.has(x.titulo))) continue;
+    const alvo = lista.filter((m) => m.estado === "pendente").map((m) => m.id).slice(0, 25);
+    if (!alvo.length) { setAviso("Nenhum movimento pendente neste filtro."); return; }
+    if (!window.confirm(`Procurar e aceitar o 1º candidato seguro (80+ pontos, valor exato, sem empate) de ${alvo.length} movimento(s)?`)) return;
+    setOcupado(true); setErro(null); setAviso(null);
+    try {
       const r = await fetch("/api/financeiro/conciliacao", { method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ acao: "conciliar", movimento_id: m.id, itens }) });
-      if (r.ok) { ok++; itens.forEach((x) => usados.add(x.titulo)); }
-    }
-    setOcupado(false); setAviso(`${ok} movimento(s) conciliados em lote.`); setRefresh((n) => n + 1);
+        body: JSON.stringify({ acao: "aceitar_lote", movimentos: alvo, limiar: 80 }) });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.error ?? `HTTP ${r.status}`);
+      setAviso(`${j.conciliados} movimento(s) conciliados em lote · ${j.pulados?.length ?? 0} deixados para conferir${j.erros?.length ? ` · ${j.erros.length} com erro` : ""}.`);
+      setRefresh((n) => n + 1);
+    } catch (e) { setErro((e as Error).message); } finally { setOcupado(false); }
   }
 
   return (
     <PaginaNavy>
+      <CasarHost />
       <CabecalhoTela
         area="Financeiro"
         titulo="Conciliação bancária"
@@ -268,7 +274,7 @@ export default function TelaConciliacaoBancaria() {
           <input ref={inputArq} type="file" accept=".ofx,.OFX,.qfx,.csv,.txt,.xlsx,.xls,application/x-ofx" style={{ display: "none" }}
             onChange={(e) => { const f = e.target.files?.[0]; if (f) previaArquivo(f); }} />
           <BotaoTela onClick={() => setVerRegras((v) => !v)}>{verRegras ? "Fechar regras" : "Regras"}</BotaoTela>
-          {podeBaixar && <BotaoTela disabled={ocupado} onClick={aceitarEmLote} title="Aceita a 1ª sugestão (80+ pontos, sem empate) dos pendentes visíveis">Aceitar sugestões</BotaoTela>}
+          {podeBaixar && <BotaoTela disabled={ocupado} onClick={aceitarEmLote} title="Aceita o 1º candidato seguro (80+ pontos, valor exato, sem empate) dos pendentes visíveis — até 25 por vez">Aceitar sugestões</BotaoTela>}
           {contaSel && (
             <BotaoTela disabled={ocupado} title="Concilia sozinho só o que é praticamente certo: valor exato + CNPJ ou nº do documento, ou soma exata das parcelas do mesmo documento"
               onClick={async () => {
@@ -287,7 +293,7 @@ export default function TelaConciliacaoBancaria() {
         </>}
       />
 
-      <FaixaFiltros busca={q} onBusca={setQ} placeholder="Histórico, valor, documento…">
+      <FaixaFiltros busca={q} onBusca={setQ} placeholder="Histórico, valor, documento… (clique num pendente para casar · j/k navega · / busca no painel)">
         <select value={conta} onChange={(e) => setConta(e.target.value)} style={campo} title="Conta corrente">
           {!conta && <option value="">Escolha a conta…</option>}
           {contas.map((c) => <option key={chaveConta(c)} value={chaveConta(c)}>{c.empresa} · {c.descricao}</option>)}
@@ -342,7 +348,10 @@ export default function TelaConciliacaoBancaria() {
           {lista.map((m) => (
             <LinhaMov key={m.id} m={m} titulos={titulos} aberto={aberto === m.id} podeBaixar={podeBaixar} ocupado={ocupado}
               empresa={contaSel?.empresa ?? "SF"} codCc={contaSel?.cod_cc ?? null}
-              onToggle={() => setAberto(aberto === m.id ? null : m.id)} acao={acao} />
+              onToggle={() => {
+                if ((m.estado === "pendente" || m.estado === "parcial") && aberto !== m.id) { setAberto(m.id); abrirCasar(m.id); return; }
+                setAberto(aberto === m.id ? null : m.id);
+              }} acao={acao} />
           ))}
         </div>
       )}
@@ -388,7 +397,12 @@ function LinhaMov({ m, titulos, aberto, podeBaixar, ocupado, onToggle, acao, emp
           {m.valor < 0 ? "−" : "+"}{brl(Math.abs(m.valor))}
           {m.estado === "parcial" && <span style={{ display: "block", fontSize: 11, fontWeight: 500, color: "var(--ww-text-faint)" }}>falta {brl(restante)}</span>}
         </span>
-        <StatusPill tone={ESTADO[m.estado].tom}>{ESTADO[m.estado].label}</StatusPill>
+        <span style={{ display: "inline-flex", gap: 6, alignItems: "center" }}>
+          {(m.estado === "pendente" || m.estado === "parcial") && podeBaixar && (
+            <button type="button" style={pilula("var(--ww-accent-text)")} onClick={(e) => { e.stopPropagation(); abrirCasar(m.id); }}>casar…</button>
+          )}
+          <StatusPill tone={ESTADO[m.estado].tom}>{ESTADO[m.estado].label}</StatusPill>
+        </span>
       </div>
 
       {aberto && (
@@ -489,7 +503,10 @@ function LinhaMov({ m, titulos, aberto, podeBaixar, ocupado, onToggle, acao, emp
 
           {!m.baixas.length && m.estado !== "omie" && (
             <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-              {m.ignorado ? (
+              {m.ignorado && m.transferencia_par ? (
+                <button type="button" disabled={ocupado} style={pilula("var(--ww-text-muted)")}
+                  onClick={() => acao({ acao: "transferencia_desfazer", movimento_id: m.id }, "Transferência desfeita nos dois extratos")}>desfazer transferência</button>
+              ) : m.ignorado ? (
                 <button type="button" disabled={ocupado} style={pilula("var(--ww-text-muted)")}
                   onClick={() => acao({ acao: "reativar", movimento_id: m.id }, "Movimento reativado")}>reativar</button>
               ) : (<>
