@@ -98,7 +98,30 @@ def focus():
     print("Focus: token_producao presente =", bool(e.get("token_producao")), "| token_homologacao presente =", bool(e.get("token_homologacao")))
 
 
+def so_xml(ids):
+    """Modo enxuto: só dfedocs/ObterNfe para ids conhecidos (espelho), 1 chamada cada, com pausa."""
+    import time
+    for nid in ids:
+        try:
+            x = fetch_omie(URL_DFE, "ObterNfe", "SF", {"nIdNfe": int(nid)})
+            xml = x.get("cXmlNfe") or ""
+            if xml:
+                with open(f"{SAIDA}/nf_id_{nid}.xml", "w") as f:
+                    f.write(xml)
+            print(f"id {nid}: xml {'ok' if xml else 'vazio'}")
+        except Exception as e:  # noqa: BLE001
+            print(f"ObterNfe {nid}: {e}")
+            if "MISUSE" in str(e) or "REDUNDANT" in str(e).upper():
+                print("Limite do Omie — parando.")
+                break
+        time.sleep(4)
+
+
 if __name__ == "__main__":
+    ids = [i for i in os.environ.get("NFE_REF_IDS", "").replace(" ", "").split(",") if i]
+    if ids:
+        so_xml(ids)
+        sys.exit(0)
     notas, resumo = ultimas_omie()
     with open(f"{SAIDA}/resumo_series.json", "w") as f:
         json.dump(resumo, f)

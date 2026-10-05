@@ -7,6 +7,10 @@ on:
         description: "Quantas NF-e recentes detalhar"
         required: false
         default: "8"
+      ids:
+        description: "Só XML destes nIdNF (separados por vírgula) — modo enxuto"
+        required: false
+        default: ""
 
 jobs:
   ref:
@@ -25,6 +29,7 @@ jobs:
           OMIE_APP_SECRET_SF: ${{ secrets.OMIE_APP_SECRET_SF }}
           FOCUS_TOKEN_MASTER: ${{ secrets.FOCUS_TOKEN_MASTER }}
           NFE_REF_N: ${{ github.event.inputs.n || '8' }}
+          NFE_REF_IDS: ${{ github.event.inputs.ids || '' }}
           PYTHONUNBUFFERED: "1"
         run: python3 scripts/nfe_sf_referencia.py
       - uses: actions/upload-artifact@v4
