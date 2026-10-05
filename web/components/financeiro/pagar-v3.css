@@ -246,10 +246,10 @@
 .cp3 .verdict.dir{background:var(--panel2);border:1px solid var(--line2);color:var(--tx2)}
 .cp3 .box{border:1px solid var(--line2);border-radius:12px;padding:14px;background:var(--panel2)}
 .cp3 .box h4{margin:0 0 12px;font-size:13.5px}
-.cp3 .frm{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.cp3 .frm{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px}
 .cp3 .frm label{font-size:11.5px;color:var(--tx2);display:flex;flex-direction:column;gap:4px}
 .cp3 .frm label.full{grid-column:1/-1}
-.cp3 .frm input,.cp3 .frm select{background:var(--bg);border:1px solid var(--line2);border-radius:9px;padding:8px 10px;color:var(--tx);font:inherit;outline:none}
+.cp3 .frm input,.cp3 .frm select{min-width:0;background:var(--bg);border:1px solid var(--line2);border-radius:9px;padding:8px 10px;color:var(--tx);font:inherit;outline:none}
 .cp3 .frm input:focus,.cp3 .frm select:focus{border-color:var(--sf)}
 .cp3 .frm .need{border-color:var(--amber)}
 .cp3 .ovr{display:flex;gap:8px;align-items:flex-start;margin-top:10px;font-size:12px;color:#fecaca}
