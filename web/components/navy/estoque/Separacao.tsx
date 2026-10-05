@@ -19,6 +19,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { nomeLocal, textoBusca, type ItemEstoque } from "@/lib/estoque";
 import { Pill, brl, postar, q, useItensEstoque, useToast, invalidarItens } from "./comum";
+import { ModalNovoProjeto } from "@/components/cadastros/NovoProjetoRapido";
 import "./estoque.css";
 
 type Tipo = "separar" | "devolver" | "consumir";
@@ -70,6 +71,7 @@ function BuscaProjeto({ valor, setValor }: { valor: Projeto | null; setValor: (p
   const [txt, setTxt] = useState(valor?.nome ?? "");
   const [lista, setLista] = useState<Projeto[] | null>(null);
   const [aberto, setAberto] = useState(false);
+  const [criar, setCriar] = useState(false);
   useEffect(() => { setTxt(valor?.nome ?? ""); }, [valor]);
   useEffect(() => {
     if (!aberto) return;
@@ -92,8 +94,19 @@ function BuscaProjeto({ valor, setValor }: { valor: Projeto | null; setValor: (p
               <b>{p.nome}</b>{p.separados ? <span className="mini"> · {p.separados} item(ns) já separado(s)</span> : null}
             </button>
           ))}
-          {lista && !lista.length && <div className="mini" style={{ padding: 8 }}>Nenhum projeto com “{txt}”.</div>}
+          {lista && !lista.length && (
+            <div className="mini" style={{ padding: 8, display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+              Nenhum projeto com “{txt}”.
+              <button type="button" className="btn sm" onMouseDown={(e) => e.preventDefault()} onClick={() => { setCriar(true); setAberto(false); }}>
+                + Criar projeto
+              </button>
+            </div>
+          )}
         </div>
+      )}
+      {criar && (
+        <ModalNovoProjeto sugestao={{ nome: txt.trim() || null }} fechar={() => setCriar(false)}
+          onCriado={(p) => { setCriar(false); const novo = { codigo: p.codigo, nome: p.nome, separados: 0 }; setValor(novo); setTxt(p.nome); }} />
       )}
     </div>
   );

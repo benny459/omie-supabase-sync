@@ -5,11 +5,17 @@
 //   POST { acao: "pedidos", desde?: "AAAA-MM-DD", texto?, cliente?, limite? }  → formato do omie_pedidos_cache
 //   POST { acao: "consultar", tipo: "PV"|"OS", numero }                        → código e itens
 //   POST { acao: "prazos_compra", pedidos: string[] }                          → condição de cada PC
+//   POST { acao: "sugestao_projeto", empresa }                                 → próximo PJ/CT livre
+//   POST { acao: "criar_projeto", empresa, tipo: "PJ"|"CT", nome, cliente_codigo?, cliente_nome?,
+//          responsavel?, orcamento?, data_inicio?, proposta?, por? }           → { projeto: { codigo, nome } }
+//          (05/10/26: "+ Novo projeto" no PV/OS do CRM; mesma função e mesma trava de
+//           duplicados do Cadastros; parecido → 409 { candidatos } para "usar este")
 // Autenticação: header x-compras-secret = COMPRAS_RC_SECRET (o mesmo da RC e do PV/OS).
-// Rota pública no middleware (/api/crm/erp); a guarda é o segredo. Só leitura.
+// Rota pública no middleware (/api/crm/erp); a guarda é o segredo. Só leitura, exceto criar_projeto.
 import { NextResponse } from "next/server";
 import { rpc } from "@/lib/compras-server";
 import { crmAutorizado, naoAutorizado } from "@/lib/vendas-server";
+import { rpcCad, erroCad } from "@/lib/cadastros-server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -22,6 +28,8 @@ export async function POST(req: Request) {
   const b = (await req.json().catch(() => null)) as {
     acao?: string; empresa?: string; lista?: string; desde?: string; texto?: string; cliente?: number | string;
     limite?: number; tipo?: string; numero?: string | number; pedidos?: unknown[];
+    nome?: string; cliente_codigo?: number | string | null; cliente_nome?: string | null; responsavel?: string | null;
+    orcamento?: number | string | null; data_inicio?: string | null; proposta?: string | null; por?: string | null;
   } | null;
   const empresa = String(b?.empresa ?? "SF").toUpperCase();
   try {
@@ -49,7 +57,34 @@ export async function POST(req: Request) {
       if (!pedidos.length) return NextResponse.json({ error: "pedidos[] obrigatório" }, { status: 400 });
       return NextResponse.json({ prazos: await rpc("crm_erp_prazos_compra", { p_empresa: empresa, p_pedidos: pedidos }) });
     }
-    return NextResponse.json({ error: "acao inválida (lista | pedidos | consultar | prazos_compra)" }, { status: 400 });
+    if (b?.acao === "sugestao_projeto") {
+      return NextResponse.json(await rpcCad("cad_aux_sugestao", { p_registro: "projetos", p_empresa: empresa, p_extra: {} }));
+    }
+    if (b?.acao === "criar_projeto") {
+      const nome = String(b.nome ?? "").trim().slice(0, 120);
+      if (!nome) return NextResponse.json({ error: "nome obrigatório" }, { status: 400 });
+      const tipo = b.tipo === "CT" ? "CT" : "PJ";
+      const sug = await rpcCad<Record<string, unknown>>("cad_aux_sugestao", { p_registro: "projetos", p_empresa: empresa, p_extra: {} });
+      const cli = Number(b.cliente_codigo);
+      const orc = b.orcamento == null || b.orcamento === "" ? null : Number(String(b.orcamento).replace(",", "."));
+      const dados: Record<string, unknown> = {
+        tipo, status: "ativo", numero: sug?.[tipo] != null ? Number(sug[tipo]) : null,
+        cliente_codigo: Number.isFinite(cli) && cli > 0 ? cli : null,
+        cliente_nome: b.cliente_nome ? String(b.cliente_nome).slice(0, 160) : null,
+        responsavel: b.responsavel ? String(b.responsavel).slice(0, 80) : null,
+        orcamento: orc != null && Number.isFinite(orc) ? orc : null,
+        data_inicio: /^\d{4}-\d{2}-\d{2}$/.test(String(b.data_inicio ?? "")) ? b.data_inicio : new Date().toISOString().slice(0, 10),
+        obs: b.proposta ? `Proposta ${String(b.proposta).slice(0, 60)} (CRM)` : null,
+      };
+      try {
+        const r = await rpcCad<{ codigo: number; nome: string }>("cad_aux_salvar", {
+          p: { registro: "projetos", empresa, nome, dados },
+          p_por: `crm:${String(b.por ?? "").slice(0, 80) || "crm"}`,
+        });
+        return NextResponse.json({ projeto: { codigo: Number(r.codigo), nome: r.nome } });
+      } catch (e) { return erroCad(e); }
+    }
+    return NextResponse.json({ error: "acao inválida (lista | pedidos | consultar | prazos_compra | sugestao_projeto | criar_projeto)" }, { status: 400 });
   } catch (e) {
     return NextResponse.json({ error: (e as Error).message }, { status: 500 });
   }

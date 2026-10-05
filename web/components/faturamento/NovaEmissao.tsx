@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ClienteFat, CondicaoFat, DocFat, ItemFat, RetencoesFat, TransporteFat } from "@/lib/faturamento/montar";
 import { BuscaPessoa, BuscaProposta, clienteDaPessoa, pessoaCompleta } from "@/components/vendas/BuscasCrmCadastro";
+import { BotaoNovoProjeto } from "@/components/cadastros/NovoProjetoRapido";
 import "./nova-emissao.css";
 
 /* Folha dedicada da Nova emissão (05/10/26). Pedido do Benny:
@@ -566,6 +567,15 @@ export default function NovaEmissao({ config, aberto, fechar, avisar, onEmitido,
               <div className="ne-linha">
                 {sel("Categoria de receita", categoria, setCategoria, (opc?.categorias ?? []).map((c) => ({ codigo: c.codigo, nome: `${c.codigo} ${c.nome}` })), 260)}
                 {sel("Projeto", projeto, setProjeto, opc?.projetos ?? [], 260)}
+                <div style={{ alignSelf: "flex-end", paddingBottom: 2 }}>
+                  <BotaoNovoProjeto compacto rotulo="+ Novo projeto" empresa={empresa}
+                    sugestao={{ nome: cli.nome || null, clienteNome: cli.nome || null, orcamento: total || null }}
+                    onCriado={(p) => {
+                      setOpc((o) => (o && !o.projetos.some((x) => String(x.codigo) === String(p.codigo))
+                        ? { ...o, projetos: [{ codigo: String(p.codigo), nome: p.nome }, ...o.projetos] } : o));
+                      setProjeto(String(p.codigo));
+                    }} />
+                </div>
                 {sel("Centro de custo", centro, setCentro, opc?.centros ?? [], 200)}
                 {sel("Vendedor", vendedor, setVendedor, opc?.vendedores ?? [], 170)}
                 <label className="ne-rot" style={{ width: 160 }}>Contrato (CT)<input className="ne-in" value={contrato} onChange={(e) => setContrato(e.target.value)} /></label>

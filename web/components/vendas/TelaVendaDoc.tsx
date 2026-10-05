@@ -7,6 +7,7 @@ import BotaoEmitirNf from "@/components/faturamento/BotaoEmitirNf";
 import type { DocFat } from "@/lib/faturamento/montar";
 import { STATUS_VENDA, type VendaDoc, type VendaItem, type VendaSalvar } from "@/lib/vendas";
 import { BuscaPessoa, BuscaProposta } from "@/components/vendas/BuscasCrmCadastro";
+import { BotaoNovoProjeto } from "@/components/cadastros/NovoProjetoRapido";
 
 /* PV / OS nativo do painel (P1, 05/10/26): cria, edita, cancela e emite a NF
    (motor da Focus, P5). Os documentos que o CRM cria pelo caminho nativo
@@ -52,6 +53,8 @@ export default function TelaVendaDoc({ id }: { id: number | null }) {
   const [semProposta, setSemProposta] = useState<string | null>(null);
   const [avisoProp, setAvisoProp] = useState<string | null>(null);
   const [puxando, setPuxando] = useState(false);
+  // Título da proposta puxada: dá o nome sugerido ao "+ Novo projeto".
+  const [propTitulo, setPropTitulo] = useState<string | null>(null);
 
   const carregar = useCallback(async () => {
     setErro(null);
@@ -116,6 +119,7 @@ export default function TelaVendaDoc({ id }: { id: number | null }) {
       const itens = (doLado.length ? doLado : (r.itens as Ip[])).map((i) => ({ codigo: i.codigo ?? "", ncod_prod: i.ncod_prod, descricao: i.descricao,
         unidade: i.unidade || "UN", ncm: i.ncm ?? "", quantidade: Number(i.quantidade) || 1, valor_unitario: Number(i.valor_unitario) || 0 }));
       const p = r.proposta as { numero: string; titulo: string | null; contato: string | null };
+      setPropTitulo(p.titulo ?? null);
       return {
         ...f, tipo, proposta: p.numero,
         cliente_codigo: r.pessoa?.codigo ?? f.cliente_codigo,
@@ -245,10 +249,25 @@ export default function TelaVendaDoc({ id }: { id: number | null }) {
         <Campo rot="Nº de parcelas"><input style={input} disabled={!editavel} inputMode="numeric" value={form.qtd_parcelas ?? ""}
           onChange={(e) => setF("qtd_parcelas", Number(e.target.value) || null)} placeholder="pela condição" /></Campo>
         <Campo rot="Projeto" largura={2}>
-          <select style={input} disabled={!editavel} value={form.projeto_codigo ?? ""} onChange={(e) => setF("projeto_codigo", e.target.value || null)}>
-            <option value="">—</option>
-            {op.projetos.map((p) => <option key={p.codigo} value={String(p.codigo)}>{p.nome}</option>)}
-          </select>
+          <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+            <select style={{ ...input, flex: 1, minWidth: 0 }} disabled={!editavel} value={form.projeto_codigo ?? ""} onChange={(e) => setF("projeto_codigo", e.target.value || null)}>
+              <option value="">—</option>
+              {op.projetos.map((p) => <option key={p.codigo} value={String(p.codigo)}>{p.nome}</option>)}
+            </select>
+            {editavel && (
+              <BotaoNovoProjeto compacto rotulo="+ Novo" empresa={form.empresa ?? "SF"}
+                sugestao={{
+                  nome: [clienteNome, propTitulo].filter(Boolean).join(" — ") || null,
+                  clienteCodigo: form.cliente_codigo || null, clienteNome: clienteNome || null,
+                  orcamento: form.itens?.reduce((t, i) => t + (Number(i.quantidade) || 0) * (Number(i.valor_unitario) || 0), 0) || null,
+                  obs: form.proposta ? `Proposta ${form.proposta}` : null,
+                }}
+                onCriado={(p) => {
+                  setOp((o) => o.projetos.some((x) => String(x.codigo) === String(p.codigo)) ? o : { ...o, projetos: [{ codigo: p.codigo, nome: p.nome }, ...o.projetos] });
+                  setF("projeto_codigo", String(p.codigo));
+                }} />
+            )}
+          </div>
         </Campo>
         <Campo rot="Categoria" largura={2}>
           <select style={input} disabled={!editavel} value={form.categoria_codigo ?? ""} onChange={(e) => setF("categoria_codigo", e.target.value || null)}>

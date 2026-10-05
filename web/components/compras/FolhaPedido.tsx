@@ -12,6 +12,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import CodigoHoje from "./CodigoHoje";
 import Autocompletar, { type Opcao } from "./Autocompletar";
+import { BotaoNovoProjeto } from "@/components/cadastros/NovoProjetoRapido";
 import {
   ETAPAS, ETAPA, APROV_LABEL, TIPOS_FRETE, UFS, TIPOS_DOC, DEPTOS_PADRAO,
   money, num2, qtd as fq, parseNum, hoje, dBR, totais, totalItem, gerarParcelas, infoPreco, itemVazio, novaChave, erroVinculo,
@@ -820,7 +821,14 @@ export default function FolhaPedido({
                       <Autocompletar<{ cod: number; nome: string }> value={D.proj} disabled={ro} placeholder="Busque o projeto (PJ…, 41_VP…)"
                         onChange={(v) => set({ proj: v, projCod: null })}
                         fonte={(q) => (refs?.projetos ?? []).filter((p) => !q || p.nome.toLowerCase().includes(q)).slice(0, 14).map((p) => ({ label: p.nome, v: p }))}
-                        onPick={(o) => set({ proj: o.v.nome, projCod: o.v.cod })} /></div>
+                        onPick={(o) => set({ proj: o.v.nome, projCod: o.v.cod })} />
+                      {!ro && (
+                        <div style={{ marginTop: 6 }}>
+                          <BotaoNovoProjeto compacto empresa={D.emp || "SF"}
+                            sugestao={{ nome: D.pvCliente || null, clienteNome: D.pvCliente || null, obs: D.pv ? `Venda ${D.pv}` : null }}
+                            onCriado={(p) => set({ proj: p.nome, projCod: p.codigo })} />
+                        </div>
+                      )}</div>
                     <div className="f s4"><label>Conta Corrente</label>
                       <select className="in" disabled={ro} value={D.contaCod ?? ""} onChange={(e) => { const c = refs?.contas.find((x) => String(x.cod) === e.target.value); set({ contaCod: c?.cod ?? null, conta: c?.desc ?? "" }); }}>
                         <option value="">{D.conta && !refs?.contas.some((c) => c.cod === D.contaCod) ? D.conta : "—"}</option>
