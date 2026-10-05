@@ -17,7 +17,7 @@ const SF = {
 const DEVOL: DocFat = {
   empresa: "SF", cliente: SF,
   itens: [{ codigo: "TESTE-DEV-01", descricao: "TESTE E2E - CANALETA PVC (DEVOLUCAO)", quantidade: 2, quantidade_max: 9, valor_unitario: 69.82, unidade: "UN",
-    ncm: "39259090", origem: 0, icms_aliquota: 18, pis_cst: "01", pis_aliquota: 1.65, cofins_cst: "01", cofins_aliquota: 7.6, info_item: "-105074B2-" }],
+    ncm: "39259090", origem: 0, icms_aliquota: 18, pis_cst: "01", pis_aliquota: 1.65, cofins_cst: "01", cofins_aliquota: 7.6, info_item: "-105074B2-", ref_item: 1 }],
   condicao: { parcelas: [] },
   operacao: {
     tipo: "devolucao", motivo: "TESTE E2E - Mercadoria em desacordo com o pedido",

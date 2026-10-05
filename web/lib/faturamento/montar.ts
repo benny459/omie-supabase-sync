@@ -60,6 +60,8 @@ export type ItemFat = {
   info_item?: string | null;
   /** Só na tela: quantidade da NF de origem (a devolução não pode passar dela). */
   quantidade_max?: number | null;
+  /** Devolução: nº do item na NF de origem (DFeReferenciado/nItem — NT 2025.002, obrigatório desde 01/09/2026). */
+  ref_item?: number | null;
 };
 
 /** NF-e que não é venda (05/10/26) — modalidades que a SF emitia no Omie:
@@ -324,6 +326,11 @@ export function montarNfe(doc: DocFat, em: Emitente, opts: { natureza: string; s
       ...(devol ? icmsDevolucao(bruto - (i.valor_desconto ?? 0), i.icms_aliquota) : { icms_situacao_tributaria: "102" }),
       ...pisCofins(devol ? i : null, bruto - (i.valor_desconto ?? 0)),
       ...(infoItem(i, cest) ? { informacoes_adicionais_item: infoItem(i, cest) } : {}),
+      // Devolução: documento referenciado POR ITEM (rejeição 321 sem isto, desde 01/09/2026).
+      ...(devol && doc.operacao?.nf_ref?.chave ? {
+        chave_acesso_dfe_referenciado: so(doc.operacao.nf_ref.chave),
+        numero_item_dfe_referenciado: String(i.ref_item ?? n + 1),
+      } : {}),
     };
   });
   const icmsBase = devol ? r2(items.reduce((a, it) => a + Number((it as { icms_base_calculo?: number }).icms_base_calculo ?? 0), 0)) : 0;

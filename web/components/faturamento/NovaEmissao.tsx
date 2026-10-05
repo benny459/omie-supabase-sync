@@ -318,7 +318,7 @@ export default function NovaEmissao({ config, aberto, fechar, avisar, onEmitido,
       setItens(n.itens.map((i) => ({ codigo: i.codigo, descricao: i.descricao, unidade: i.unidade || "UN", ncm: i.ncm ?? "", cest: i.cest ?? null,
         quantidade: i.quantidade, quantidade_max: i.quantidade, valor_unitario: i.valor_unitario, origem: i.origem ?? 0,
         icms_aliquota: i.icms_aliquota, pis_cst: i.pis_cst, pis_aliquota: i.pis_aliquota, cofins_cst: i.cofins_cst, cofins_aliquota: i.cofins_aliquota,
-        info_item: i.codigo ? `-${i.codigo}-` : null })));
+        info_item: i.codigo ? `-${i.codigo}-` : null, ref_item: i.ref_item ?? null })));
     } else setAviso("Esta NF não tem os itens no sistema (só o resumo). Informe os itens devolvidos e a alíquota de ICMS da nota de origem.");
     if (n.emitente_doc) {
       const r = await fetch(`/api/faturamento/nova?op=pessoa_doc&emp=${empresa}&doc=${n.emitente_doc}`, { cache: "no-store" }).then((x) => x.json()).catch(() => null);
@@ -853,7 +853,7 @@ export default function NovaEmissao({ config, aberto, fechar, avisar, onEmitido,
             <section className="ne-sec">
               <h3>Itens <small>{itens.length} item(ns) · bruto {fmt(bruto)}</small></h3>
               <table className="ne-tab">
-                <thead><tr><th>Código</th><th>Descrição</th>{tipo === "nfe" && <th>NCM</th>}<th>Un</th><th className="r">Qtd</th>{operacao === "devolucao" && naoVenda && <th className="r">ICMS %</th>}<th className="r">Valor unit.</th><th className="r">Total</th><th /></tr></thead>
+                <thead><tr><th>Código</th><th>Descrição</th>{tipo === "nfe" && <th>NCM</th>}<th>Un</th><th className="r">Qtd</th>{operacao === "devolucao" && naoVenda && <><th className="r">Item na NF</th><th className="r">ICMS %</th></>}<th className="r">Valor unit.</th><th className="r">Total</th><th /></tr></thead>
                 <tbody>{itens.map((it, n) => (
                   <tr key={n}>
                     <td><input className="ne-in" style={{ width: 110 }} value={it.codigo ?? ""} onChange={(e) => setItens(itens.map((x, i) => (i === n ? { ...x, codigo: e.target.value } : x)))} /></td>
@@ -864,6 +864,8 @@ export default function NovaEmissao({ config, aberto, fechar, avisar, onEmitido,
                       max={it.quantidade_max ?? undefined} title={it.quantidade_max != null ? `máx. ${it.quantidade_max} (NF de origem)` : undefined}
                       onChange={(e) => setItens(itens.map((x, i) => (i === n ? { ...x, quantidade: Number(e.target.value) } : x)))} />
                       {it.quantidade_max != null && <div className="ne-dica" style={it.quantidade > it.quantidade_max ? { color: "#fca5a5" } : undefined}>máx. {it.quantidade_max}</div>}</td>
+                    {operacao === "devolucao" && naoVenda && <td><input className="ne-in num" style={{ width: 56 }} type="number" min={1} title="nº do item na NF de origem" value={it.ref_item ?? n + 1}
+                      onChange={(e) => setItens(itens.map((x, i) => (i === n ? { ...x, ref_item: Number(e.target.value) || null } : x)))} /></td>}
                     {operacao === "devolucao" && naoVenda && <td><input className="ne-in num" style={{ width: 64 }} type="number" step="0.01" value={it.icms_aliquota ?? 0}
                       onChange={(e) => setItens(itens.map((x, i) => (i === n ? { ...x, icms_aliquota: Number(e.target.value) } : x)))} /></td>}
                     <td><input className="ne-in num" style={{ width: 110 }} type="number" step="0.01" value={it.valor_unitario} onChange={(e) => setItens(itens.map((x, i) => (i === n ? { ...x, valor_unitario: Number(e.target.value) } : x)))} /></td>

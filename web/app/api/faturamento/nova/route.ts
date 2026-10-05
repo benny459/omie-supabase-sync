@@ -21,6 +21,7 @@ type NfOrigemItem = {
   codigo: string; descricao: string; ncm: string | null; cest: string | null; cfop: string | null; unidade: string;
   quantidade: number; valor_unitario: number; origem: number | null;
   icms_aliquota: number | null; pis_cst: string | null; pis_aliquota: number | null; cofins_cst: string | null; cofins_aliquota: number | null;
+  ref_item: number | null;
 };
 const nOuNull = (v: unknown) => (v == null || v === "" ? null : Number(v));
 /** Itens da NF de entrada a partir do JSON completo da Focus (requisicao_nota_fiscal.itens). */
@@ -36,6 +37,7 @@ function itensFocus(det: Record<string, unknown> | null): NfOrigemItem[] {
     icms_aliquota: nOuNull(i.icms_aliquota),
     pis_cst: i.pis_situacao_tributaria ? String(i.pis_situacao_tributaria) : null, pis_aliquota: nOuNull(i.pis_aliquota_porcentual),
     cofins_cst: i.cofins_situacao_tributaria ? String(i.cofins_situacao_tributaria) : null, cofins_aliquota: nOuNull(i.cofins_aliquota_porcentual),
+    ref_item: nOuNull(i.numero_item),
   }));
 }
 
