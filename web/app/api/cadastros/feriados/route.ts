@@ -2,18 +2,16 @@
 //  GET ?ano=2026            → lista (todas as abrangências)
 //  POST { acao: "salvar", data, nome, abrangencia, ativo }  · { acao: "excluir", data, abrangencia }
 import { NextResponse } from "next/server";
-import { exigir, erroDb } from "@/lib/financeiro-baixas";
-import { supaAdmin } from "@/lib/supabase-admin";
+import { exigir, erroDb, fin } from "@/lib/financeiro-baixas";
 
 export const runtime = "nodejs";
 const ISO = /^\d{4}-\d{2}-\d{2}$/;
-const tab = () => supaAdmin().schema("cadastros").from("feriados");
 
 export async function GET(req: Request) {
   const a = await exigir();
   if (a instanceof NextResponse) return a;
   const ano = Number(new URL(req.url).searchParams.get("ano") ?? new Date().getFullYear());
-  const { data, error } = await tab().select("*").gte("data", `${ano}-01-01`).lte("data", `${ano}-12-31`).order("data");
+  const { data, error } = await fin().rpc("feriados_listar", { p_de: `${ano}-01-01`, p_ate: `${ano}-12-31` });
   return error ? erroDb(error) : NextResponse.json({ feriados: data, pode: !!a.pode["financeiro.editar_titulo"] });
 }
 
@@ -25,10 +23,10 @@ export async function POST(req: Request) {
   if (!b.data || !ISO.test(b.data)) return NextResponse.json({ error: "data inválida" }, { status: 400 });
   const abr = (b.abrangencia ?? "nacional").trim() || "nacional";
   if (b.acao === "excluir") {
-    const { error } = await tab().delete().eq("data", b.data).eq("abrangencia", abr);
+    const { error } = await fin().rpc("feriado_excluir", { p_data: b.data, p_abrangencia: abr });
     return error ? erroDb(error) : NextResponse.json({ ok: true });
   }
   if (!b.nome?.trim()) return NextResponse.json({ error: "nome obrigatório" }, { status: 400 });
-  const { error } = await tab().upsert({ data: b.data, nome: b.nome.trim(), abrangencia: abr, ativo: b.ativo !== false, atualizado_por: a.email, atualizado_em: new Date().toISOString() }, { onConflict: "data,abrangencia" });
+  const { error } = await fin().rpc("feriado_salvar", { p_data: b.data, p_nome: b.nome.trim(), p_abrangencia: abr, p_ativo: b.ativo !== false, p_usuario: a.email });
   return error ? erroDb(error) : NextResponse.json({ ok: true });
 }

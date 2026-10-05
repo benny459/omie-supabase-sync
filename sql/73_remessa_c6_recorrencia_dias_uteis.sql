@@ -657,3 +657,53 @@ insert into cadastros.feriados (data, nome, abrangencia, ativo) values
 ('2030-01-25', 'Aniversário de São Paulo', 'São Paulo', false),
 ('2030-03-26', 'Aniversário de Barueri', 'Barueri', false)
 on conflict (data, abrangencia) do nothing;
+
+-- ── 5. Acesso pela API (o schema cadastros não é exposto) — migração p73g ─
+create or replace function finance.feriados_listar(p_de date, p_ate date)
+returns jsonb language sql stable security definer set search_path = finance, public as $$
+  select coalesce(jsonb_agg(jsonb_build_object('data', data, 'nome', nome, 'abrangencia', abrangencia, 'ativo', ativo) order by data, abrangencia), '[]'::jsonb)
+    from cadastros.feriados where data between p_de and p_ate
+$$;
+create or replace function finance.feriado_salvar(p_data date, p_nome text, p_abrangencia text, p_ativo boolean, p_usuario text)
+returns jsonb language sql security definer set search_path = finance, public as $$
+  insert into cadastros.feriados (data, nome, abrangencia, ativo, atualizado_por, atualizado_em)
+  values (p_data, p_nome, coalesce(nullif(trim(p_abrangencia), ''), 'nacional'), coalesce(p_ativo, true), p_usuario, now())
+  on conflict (data, abrangencia) do update set nome = excluded.nome, ativo = excluded.ativo, atualizado_por = excluded.atualizado_por, atualizado_em = now()
+  returning jsonb_build_object('ok', true)
+$$;
+create or replace function finance.feriado_excluir(p_data date, p_abrangencia text)
+returns jsonb language sql security definer set search_path = finance, public as $$
+  with d as (delete from cadastros.feriados where data = p_data and abrangencia = p_abrangencia returning 1)
+  select jsonb_build_object('ok', true, 'n', (select count(*) from d))
+$$;
+create or replace function finance.pessoa_pagamento_obter(p_pessoa_id bigint)
+returns jsonb language sql stable security definer set search_path = finance, public as $$
+  select to_jsonb(pg) from cadastros.pessoas_pagamento pg where pg.pessoa_id = p_pessoa_id
+$$;
+create or replace function finance.pessoa_pagamento_salvar(p_pessoa_id bigint, p jsonb, p_usuario text)
+returns jsonb language plpgsql security definer set search_path = finance, public as $$
+begin
+  if not exists (select 1 from cadastros.pessoas where id = p_pessoa_id) then raise exception 'Cadastro % não encontrado', p_pessoa_id; end if;
+  insert into cadastros.pessoas_pagamento (pessoa_id, atualizado_por, atualizado_em) values (p_pessoa_id, p_usuario, now())
+  on conflict (pessoa_id) do nothing;
+  update cadastros.pessoas_pagamento set
+    pix_tipo = case when p ? 'pix_tipo' then nullif(p->>'pix_tipo', '') else pix_tipo end,
+    pix_chave = case when p ? 'pix_chave' then nullif(trim(p->>'pix_chave'), '') else pix_chave end,
+    banco_compe = case when p ? 'banco_compe' then nullif(p->>'banco_compe', '') else banco_compe end,
+    agencia = case when p ? 'agencia' then nullif(p->>'agencia', '') else agencia end,
+    conta = case when p ? 'conta' then nullif(p->>'conta', '') else conta end,
+    conta_tipo = case when p ? 'conta_tipo' then nullif(p->>'conta_tipo', '') else conta_tipo end,
+    titular_nome = case when p ? 'titular_nome' then nullif(p->>'titular_nome', '') else titular_nome end,
+    titular_doc = case when p ? 'titular_doc' then nullif(p->>'titular_doc', '') else titular_doc end,
+    atualizado_por = p_usuario, atualizado_em = now()
+  where pessoa_id = p_pessoa_id;
+  insert into finance.financeiro_audit (usuario, acao, entidade, entidade_id, detalhe)
+  values (p_usuario, 'dados_pagamento', 'pessoa', p_pessoa_id::text, p);
+  return jsonb_build_object('ok', true);
+end $$;
+revoke all on function finance.feriados_listar(date, date), finance.feriado_salvar(date, text, text, boolean, text),
+  finance.feriado_excluir(date, text), finance.pessoa_pagamento_obter(bigint), finance.pessoa_pagamento_salvar(bigint, jsonb, text)
+  from public, anon, authenticated;
+grant execute on function finance.feriados_listar(date, date), finance.feriado_salvar(date, text, text, boolean, text),
+  finance.feriado_excluir(date, text), finance.pessoa_pagamento_obter(bigint), finance.pessoa_pagamento_salvar(bigint, jsonb, text)
+  to service_role;

@@ -35,7 +35,7 @@ export async function GET(req: Request) {
   const pag = Number(u.searchParams.get("pagamento") ?? 0);
   if (pag) {
     const [d, bs] = await Promise.all([
-      supaAdmin().schema("cadastros").from("pessoas_pagamento").select("*").eq("pessoa_id", pag).maybeSingle(),
+      fin().rpc("pessoa_pagamento_obter", { p_pessoa_id: pag }),
       fin().from("bancos_ispb").select("compe, ispb, nome").order("nome"),
     ]);
     return NextResponse.json({ dados: d.data ?? null, bancos: bs.data ?? [] });
@@ -70,12 +70,9 @@ export async function POST(req: Request) {
 
   if (b.acao === "salvar_pagamento") {
     if (!b.pessoa_id || !b.dados) return NextResponse.json({ error: "pessoa_id e dados obrigatórios" }, { status: 400 });
-    const d = b.dados;
-    const { error } = await supaAdmin().schema("cadastros").from("pessoas_pagamento").upsert({
-      pessoa_id: b.pessoa_id, pix_tipo: d.pix_tipo ?? null, pix_chave: d.pix_chave ?? null,
-      banco_compe: d.banco_compe ?? null, agencia: d.agencia ?? null, conta: d.conta ?? null, conta_tipo: d.conta_tipo ?? null,
-      titular_nome: d.titular_nome ?? null, titular_doc: d.titular_doc ?? null, atualizado_por: a.email, atualizado_em: new Date().toISOString(),
-    }, { onConflict: "pessoa_id" });
+    const permitidos = ["pix_tipo", "pix_chave", "banco_compe", "agencia", "conta", "conta_tipo", "titular_nome", "titular_doc"];
+    const dados = Object.fromEntries(Object.entries(b.dados).filter(([k]) => permitidos.includes(k)));
+    const { error } = await fin().rpc("pessoa_pagamento_salvar", { p_pessoa_id: b.pessoa_id, p: dados, p_usuario: a.email });
     return error ? erroDb(error) : NextResponse.json({ ok: true });
   }
 
@@ -131,8 +128,7 @@ export async function POST(req: Request) {
       if (!l.pessoa_id || vistos.has(l.pessoa_id) || l.modalidade === "BOLETO") continue;
       vistos.add(l.pessoa_id);
       const dados = l.modalidade === "PIX_CHAVE" ? { pix_chave: l.chave } : { banco_compe: l.compe, agencia: l.agencia, conta: l.conta, conta_tipo: l.contaTipo };
-      const { data: atual } = await supaAdmin().schema("cadastros").from("pessoas_pagamento").select("*").eq("pessoa_id", l.pessoa_id).maybeSingle();
-      await supaAdmin().schema("cadastros").from("pessoas_pagamento").upsert({ ...(atual ?? {}), pessoa_id: l.pessoa_id, ...dados, atualizado_por: a.email, atualizado_em: new Date().toISOString() }, { onConflict: "pessoa_id" });
+      await fin().rpc("pessoa_pagamento_salvar", { p_pessoa_id: l.pessoa_id, p: dados, p_usuario: a.email });
     }
   }
 

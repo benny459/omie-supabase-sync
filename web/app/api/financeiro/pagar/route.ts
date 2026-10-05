@@ -78,7 +78,7 @@ async function extras() {
     fin().rpc("pagar_v3_previsoes", {}),
     fin().rpc("remessa_enviados", {}),
     fin().from("pagar_previsto").select("id, serie_id, serie_seq, parcelas_total").not("serie_id", "is", null).neq("status", "cancelado"),
-    supaAdmin().schema("cadastros").from("feriados").select("data").eq("ativo", true).gte("data", hoje.slice(0, 4) + "-01-01"),
+    fin().rpc("feriados_listar", { p_de: hoje.slice(0, 4) + "-01-01", p_ate: (Number(hoje.slice(0, 4)) + 2) + "-12-31" }),
   ]);
   const serie: Record<string, { id: string; seq: number; n: number | null }> = {};
   for (const x of (se.data ?? []) as { id: number; serie_id: string; serie_seq: number; parcelas_total: number | null }[]) {
@@ -88,7 +88,7 @@ async function extras() {
     prev: (pv.data ?? {}) as Record<string, [string, boolean]>,
     env: (env.data ?? {}) as Record<string, unknown>,
     serie,
-    feriados: ((fe.data ?? []) as { data: string }[]).map((f) => f.data),
+    feriados: ((fe.data ?? []) as { data: string; ativo: boolean }[]).filter((f) => f.ativo).map((f) => f.data),
   };
 }
 
