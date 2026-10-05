@@ -257,7 +257,29 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const q = await exigirFaturamento();
   if (q instanceof NextResponse) return q;
-  const body = await req.json().catch(() => ({})) as { op?: string; documento?: DocFat; tipo?: string };
+  const body = await req.json().catch(() => ({})) as { op?: string; documento?: DocFat; tipo?: string;
+    empresa?: string; codigo?: string | number; dados?: Record<string, unknown> };
+  // Dados de pagamento da conta de recebimento (chave PIX / banco), gravados no
+  // cadastro da conta sem sair da emissão (05/10/26). Só estes campos.
+  if (body.op === "conta_pagamento") {
+    try {
+      const emp = String(body.empresa ?? "SF").toUpperCase();
+      const cod = String(body.codigo ?? "").trim();
+      if (!cod) return falha("conta inválida");
+      const PERMITIDOS = ["pix_tipo", "pix_chave", "beneficiario", "banco", "agencia", "conta"];
+      const dados: Record<string, string | null> = {};
+      for (const k of PERMITIDOS) {
+        if (body.dados && k in body.dados) { const v = String(body.dados[k] ?? "").trim(); dados[k] = v || null; }
+      }
+      const a = supaAdmin();
+      const { data: id, error: e1 } = await a.schema("orders").rpc("cad_aux_id", { p_registro: "contas", p_empresa: emp, p_codigo: cod });
+      if (e1) throw new Error(e1.message);
+      if (!id) return falha("Conta não encontrada no cadastro");
+      const r = await a.schema("orders").rpc("cad_aux_salvar", { p: { id, dados }, p_por: q.email });
+      if (r.error) throw new Error(r.error.message);
+      return NextResponse.json({ ok: true, conta: r.data });
+    } catch (e) { return falha(e); }
+  }
   if (body.op !== "previa" || !body.documento) return falha("op/documento inválidos");
   try {
     // Recibo não passa pela SEFAZ: sem NCM/IE/numeração de NF-e (05/10/26).

@@ -1,0 +1,8 @@
+-- p79 / p79b / p79c (05/10/26) — aplicados via MCP no omie-data.
+-- p79:  cadastros.aux_candidatos: "mesma conta bancária" só com o MESMO tipo (CC, CA, cartão…),
+--       porque o Omie tem várias contas lógicas no mesmo banco/agência/conta.
+--       + cadastros.aux_edicao_muda_chave(reg, antes, depois, nome_antes, nome_depois).
+-- p79b: orders.cad_aux_salvar: numa edição só procura duplicidade se mudou nome/dados-chave
+--       (PIX, beneficiário, obs nunca bloqueiam). Patch por replace do trecho "cand := …".
+-- p79c: orders.cad_aux_id(registro, empresa, codigo) → id (service_role).
+-- Ver as definições vivas com pg_get_functiondef.

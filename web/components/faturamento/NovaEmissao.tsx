@@ -519,6 +519,7 @@ export default function NovaEmissao({ config, aberto, fechar, avisar, onEmitido,
   const somaParc = r2(parcs.reduce((a, p) => a + p.valor, 0));
   const parcOk = parcs.length > 0 && Math.abs(somaParc - liquido) < 0.005;
   const contaSel = opc?.contas.find((c) => c.codigo === conta);
+  const [pagEdit, setPagEdit] = useState<{ pix: boolean } | null>(null);
   const formasUsadas = Array.from(new Set([forma, ...parcs.map((p) => p.forma)].filter(Boolean)));
   const instr = instrucoes(formasUsadas, contaSel);
 
@@ -1325,11 +1326,19 @@ export default function NovaEmissao({ config, aberto, fechar, avisar, onEmitido,
                   {instr.linhas.map((l) => <div key={l}>💳 {l} <small>— sai no documento e em cada parcela</small></div>)}
                   {instr.faltas.map((f) => (
                     <div key={f} className="falta">⚠ {f}.{" "}
-                      {contaSel && <a className="ne-lk" href={`/cadastros/contas?emp=${empresa}&codigo=${contaSel.codigo}`} target="_blank" rel="noopener">
-                        {f.includes("PIX") ? "Cadastrar chave PIX nesta conta" : "Completar dados bancários"} ↗</a>}
-                      {contaSel && <button className="ne-lk" style={{ marginLeft: 10 }} onClick={recarregarOpcoes}>já cadastrei — atualizar</button>}
+                      {contaSel && <button className="ne-lk" onClick={() => setPagEdit({ pix: f.includes("PIX") })}>
+                        {f.includes("PIX") ? `Cadastrar chave PIX em “${contaSel.nome}”` : `Completar dados bancários de “${contaSel.nome}”`}</button>}
+                      {contaSel && <a className="ne-lk" style={{ marginLeft: 10, opacity: .75 }} href={`/cadastros/contas?emp=${empresa}&codigo=${contaSel.codigo}`} target="_blank" rel="noopener">abrir cadastro completo ↗</a>}
                     </div>
                   ))}
+                  {pagEdit && contaSel && (
+                    <ContaPagamentoInline empresa={empresa} conta={contaSel} pix={pagEdit.pix}
+                      onFechar={() => setPagEdit(null)}
+                      onSalvo={(d) => {
+                        setOpc((o) => o ? { ...o, contas: o.contas.map((c) => c.codigo === contaSel.codigo ? { ...c, ...d } : c) } : o);
+                        setPagEdit(null);
+                      }} />
+                  )}
                 </div>
               )}
             </section>}
@@ -1482,4 +1491,66 @@ export async function previaDocumento(documento: unknown, tipo: "nfe" | "recibo"
   const html = r ? await r.text() : "<p>Falha ao gerar a prévia</p>";
   if (!r || !r.ok) avisar?.("Não foi possível gerar a prévia");
   if (w) { w.document.open(); w.document.write(html); w.document.close(); }
+}
+
+
+/** Dados de pagamento da conta (PIX / banco) editados ali mesmo na emissão — 05/10/26.
+ *  Grava no cadastro da conta (Cadastros › Bancos e contas) sem sair da folha. */
+function ContaPagamentoInline({ empresa, conta, pix, onFechar, onSalvo }: {
+  empresa: string; conta: ContaRec; pix: boolean;
+  onFechar: () => void; onSalvo: (d: Partial<ContaRec>) => void;
+}) {
+  const [tipo, setTipo] = useState(conta.pix_tipo ?? "");
+  const [chave, setChave] = useState(conta.pix_chave ?? "");
+  const [benef, setBenef] = useState(conta.beneficiario ?? "");
+  const [banco, setBanco] = useState(conta.banco ?? "");
+  const [ag, setAg] = useState(conta.agencia ?? "");
+  const [cc, setCc] = useState(conta.conta ?? "");
+  const [salvando, setSalvando] = useState(false);
+  const [erro, setErro] = useState<string | null>(null);
+  async function salvar() {
+    setErro(null);
+    if (pix && !chave.trim()) { setErro("Informe a chave PIX"); return; }
+    setSalvando(true);
+    const dados: Partial<ContaRec> = pix
+      ? { pix_tipo: tipo || null, pix_chave: chave.trim(), beneficiario: benef.trim() || null }
+      : { banco: banco.trim() || null, agencia: ag.trim() || null, conta: cc.trim() || null, beneficiario: benef.trim() || null };
+    try {
+      const r = await fetch("/api/faturamento/nova", { method: "POST", headers: { "content-type": "application/json" },
+        body: JSON.stringify({ op: "conta_pagamento", empresa, codigo: String(conta.codigo), dados }) });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error((j as { error?: string }).error || "Falha ao salvar");
+      onSalvo(dados);
+    } catch (e) { setErro((e as Error).message); } finally { setSalvando(false); }
+  }
+  return (
+    <div className="ne-pag-inline" role="dialog" aria-label="Dados de pagamento da conta"
+      style={{ marginTop: 8, padding: 12, border: "1px solid var(--f-line, rgba(255,255,255,.12))", borderRadius: 10, background: "var(--f-card2, rgba(255,255,255,.03))" }}>
+      <div style={{ fontWeight: 600, marginBottom: 8 }}>
+        {pix ? "Chave PIX" : "Dados bancários"} de “{conta.nome}” <small style={{ opacity: .7, fontWeight: 400 }}>— grava no cadastro da conta</small>
+      </div>
+      <div className="ne-linha" style={{ flexWrap: "wrap", gap: 8 }}>
+        {pix ? (<>
+          <label className="ne-rot" style={{ width: 150 }}>Tipo da chave
+            <select className="ne-in" value={tipo} onChange={(e) => setTipo(e.target.value)}>
+              <option value="">—</option><option value="cnpj">CNPJ</option><option value="cpf">CPF</option>
+              <option value="email">E-mail</option><option value="telefone">Telefone</option><option value="aleatoria">Aleatória</option>
+            </select></label>
+          <label className="ne-rot" style={{ flex: 1, minWidth: 220 }}>Chave PIX
+            <input className="ne-in" autoFocus value={chave} onChange={(e) => setChave(e.target.value)} placeholder="ex.: 12.345.678/0001-90" /></label>
+        </>) : (<>
+          <label className="ne-rot" style={{ width: 90 }}>Banco<input className="ne-in" value={banco} onChange={(e) => setBanco(e.target.value)} /></label>
+          <label className="ne-rot" style={{ width: 110 }}>Agência<input className="ne-in" value={ag} onChange={(e) => setAg(e.target.value)} /></label>
+          <label className="ne-rot" style={{ width: 150 }}>Conta<input className="ne-in" value={cc} onChange={(e) => setCc(e.target.value)} /></label>
+        </>)}
+        <label className="ne-rot" style={{ width: 220 }}>Beneficiário (opcional)
+          <input className="ne-in" value={benef} onChange={(e) => setBenef(e.target.value)} /></label>
+      </div>
+      {erro && <div className="falta" style={{ marginTop: 6 }}>⚠ {erro}</div>}
+      <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+        <button className="ne-btn pri" disabled={salvando} onClick={salvar}>{salvando ? "Salvando…" : "Salvar na conta"}</button>
+        <button className="ne-btn" onClick={onFechar}>Cancelar</button>
+      </div>
+    </div>
+  );
 }
