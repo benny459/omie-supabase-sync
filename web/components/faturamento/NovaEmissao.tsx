@@ -302,13 +302,13 @@ export default function NovaEmissao({ config, aberto, fechar, avisar, onEmitido,
 
   // Devolução: busca a NF de entrada (Focus + espelho do Omie)
   useEffect(() => {
-    if (!aberto || operacao !== "devolucao" || nfBusca.trim().length < 2) { setNfLista(null); return; }
+    if (!aberto || operacao !== "devolucao" || nfBusca.trim().length < 2 || nfRef?.numero && nfBusca.startsWith(`${nfRef.numero} · `)) { setNfLista(null); return; }
     const t = window.setTimeout(() => {
       fetch(`/api/faturamento/nova?op=nf_origem&emp=${empresa}&q=${encodeURIComponent(nfBusca.trim())}`, { cache: "no-store" })
         .then((x) => x.json()).then((j) => setNfLista(j.notas ?? [])).catch(() => setNfLista([]));
     }, 300);
     return () => window.clearTimeout(t);
-  }, [nfBusca, operacao, empresa, aberto]);
+  }, [nfBusca, operacao, empresa, aberto]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /** Escolheu a NF de origem: destinatário = fornecedor (cadastro) e itens da nota. */
   async function escolherNfOrigem(n: NfOrigem) {
