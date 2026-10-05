@@ -39,10 +39,11 @@ const rotulo: CSSProperties = { fontSize: 11.5, color: "var(--ww-text-faint)", f
 const VAZIO: ClienteFat = { nome: "", cnpj: "", ie: "", email: "", logradouro: "", numero: "", bairro: "", municipio: "", uf: "SP", cep: "" };
 
 /** Dados fictícios para validar o fluxo em homologação (nada vai a cliente real). */
+/* Destinatário de teste: a própria WaterWorks (CNPJ do grupo, existe na Receita — a SEFAZ de homologação valida). */
 const TESTE: { cliente: ClienteFat; itens: ItemFat[]; parcelas: string } = {
   cliente: {
-    nome: "TESTE E2E CLIENTE LTDA", cnpj: "07504505000132", ie: "", email: "",
-    logradouro: "Rua Teste", numero: "100", bairro: "Centro", municipio: "Barueri", codigo_municipio: "3505708", uf: "SP", cep: "06401000",
+    nome: "TESTE E2E CLIENTE LTDA", cnpj: "07578898000129", ie: "", email: "",
+    logradouro: "Rua Teste", numero: "100", bairro: "Centro", municipio: "São Paulo", codigo_municipio: "3550308", uf: "SP", cep: "01310100",
   },
   itens: [{ codigo: "TESTE-E2E-01", descricao: "TESTE E2E - ELEMENTO FILTRANTE", quantidade: 2, valor_unitario: 150, unidade: "UN", ncm: "84212100" }],
   parcelas: "30/60",

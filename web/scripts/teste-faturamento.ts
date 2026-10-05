@@ -13,8 +13,8 @@ import type { DocFat } from "../lib/faturamento/montar";
 const DOC: DocFat = {
   empresa: "SF",
   cliente: {
-    nome: "TESTE E2E CLIENTE LTDA", cnpj: "07504505000132", ie: "",
-    logradouro: "Rua Teste", numero: "100", bairro: "Centro", municipio: "Barueri", codigo_municipio: "3505708", uf: "SP", cep: "06401000",
+    nome: "TESTE E2E CLIENTE LTDA", cnpj: "07578898000129", ie: "",
+    logradouro: "Rua Teste", numero: "100", bairro: "Centro", municipio: "São Paulo", codigo_municipio: "3550308", uf: "SP", cep: "01310100",
   },
   itens: [{ codigo: "TESTE-E2E-01", descricao: "TESTE E2E - ELEMENTO FILTRANTE", quantidade: 2, valor_unitario: 150, unidade: "UN", ncm: "84212100" }],
   condicao: { parcelas: [{ dias: 30 }, { dias: 60 }] },
