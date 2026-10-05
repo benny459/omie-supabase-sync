@@ -394,3 +394,23 @@ html { --ap-fonte: 1; font-size: calc(100% * var(--ap-fonte)); }
    4:1 no escuro. Sobe para ≥4,5:1 sobre painel e fundo nos dois modos. */
 :root { --color-ww-textFaint: 100 112 133; --ww-text-faint: #647085; --ww-off-text: #647085; }
 .dark { --color-ww-textFaint: 127 146 172; --ww-text-faint: #7f92ac; }
+
+/* Janelas por cima da tela (modais, folhas, gavetas, menus) ficam SEMPRE
+   opacas, mesmo com vidro ligado — a transparência só vale para a tela de
+   base (05/10/26, Benny: "tela em cima da outra não pode ter transparência"). */
+html[data-vidro] :is([role="dialog"], [role="alertdialog"], [role="menu"], [role="listbox"], [aria-modal="true"],
+  .ne-folha, .ne-acerto, .ne-pag-inline, [class*="modal"], [class*="Modal"], [class*="drawer"], [class*="Drawer"],
+  [class*="gaveta"], [class*="popover"], [data-radix-popper-content-wrapper]) {
+  --ap-a: 1;
+  --ww-panel: rgb(var(--color-ww-panel));
+  --ww-panel-grad: rgb(var(--color-ww-panel));
+  --ww-panel-sunken: rgb(var(--color-ww-panelSunken));
+  --ww-sidebar: rgb(var(--color-ww-sidebar));
+  --ww-row-l1: rgb(var(--color-ww-rowL1));
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+html[data-vidro] :is([role="dialog"], [aria-modal="true"], .ne-folha, [class*="modal"], [class*="drawer"], [class*="gaveta"]) * {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
