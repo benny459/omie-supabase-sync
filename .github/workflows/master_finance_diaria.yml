@@ -1,4 +1,10 @@
 name: MASTER Finance Diaria (Omie -> Supabase)
+# 05/10/26 — CONGELAMENTO autorizado pelo Benny ("Pode congelar"): o Omie deixou
+# de ser fonte de títulos. No agendamento roda SÓ o passo 4 (Extratos CC), que
+# alimenta o Omie Cash e o razão — OMIE-LEITURA-PERMITIDA. Os passos 1, 2, 3 e 5
+# continuam disponíveis só à mão (workflow_dispatch). Para religar: apagar as
+# linhas "if: github.event_name == 'workflow_dispatch'  # CONGELADO" (ver
+# docs/omie-congelamento-financeiro.md).
 
 # Executa ContasPagar -> ContasReceber -> PesquisaTitulos -> ExtratosCC em sequencia.
 # Disparado 2x ao dia (slots configuraveis via painel web) + manual.
@@ -48,6 +54,7 @@ jobs:
       # 1. Contas a Pagar (ListarContasPagar)
       # -----------------------------------------
       - name: "1 Contas a Pagar"
+        if: github.event_name == 'workflow_dispatch'  # CONGELADO 05/10/26 (Omie não é mais fonte de títulos)
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
@@ -67,12 +74,14 @@ jobs:
         continue-on-error: true
 
       - name: "Pausa entre modulos (30s)"
+        if: github.event_name == 'workflow_dispatch'  # CONGELADO 05/10/26 (Omie não é mais fonte de títulos)
         run: sleep 30
 
       # -----------------------------------------
       # 2. Contas a Receber (ListarContasReceber)
       # -----------------------------------------
       - name: "2 Contas a Receber"
+        if: github.event_name == 'workflow_dispatch'  # CONGELADO 05/10/26 (Omie não é mais fonte de títulos)
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
@@ -92,12 +101,14 @@ jobs:
         continue-on-error: true
 
       - name: "Pausa entre modulos (30s)"
+        if: github.event_name == 'workflow_dispatch'  # CONGELADO 05/10/26 (Omie não é mais fonte de títulos)
         run: sleep 30
 
       # -----------------------------------------
       # 3. Pesquisa Titulos (PesquisarLancamentos)
       # -----------------------------------------
       - name: "3 Pesquisa Titulos"
+        if: github.event_name == 'workflow_dispatch'  # CONGELADO 05/10/26 (Omie não é mais fonte de títulos)
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
@@ -117,6 +128,7 @@ jobs:
         continue-on-error: true
 
       - name: "Pausa entre modulos (30s)"
+        if: github.event_name == 'workflow_dispatch'  # CONGELADO 05/10/26 (Omie não é mais fonte de títulos)
         run: sleep 30
 
       # -----------------------------------------
@@ -148,6 +160,7 @@ jobs:
         continue-on-error: true
 
       - name: "Pausa entre modulos (30s)"
+        if: github.event_name == 'workflow_dispatch'  # CONGELADO 05/10/26 (Omie não é mais fonte de títulos)
         run: sleep 30
 
       # -----------------------------------------
@@ -158,6 +171,7 @@ jobs:
       # projeto novo do Omie não tem row em finance.projetos ainda.
       # -----------------------------------------
       - name: "5 Finance Cadastros (diario)"
+        if: github.event_name == 'workflow_dispatch'  # CONGELADO 05/10/26 (Omie não é mais fonte de títulos)
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
