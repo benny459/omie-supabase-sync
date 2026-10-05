@@ -5,6 +5,7 @@ import { NextResponse } from "next/server";
 import { supaAdmin } from "@/lib/supabase-admin";
 import { loadPerms } from "@/lib/require-area";
 import { canViewArea } from "@/lib/permissions";
+import { RECIBO_CSS } from "@/lib/faturamento/montar";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -19,6 +20,8 @@ export async function GET(req: Request) {
   const { data, error } = await supaAdmin().storage.from(BUCKET).download(p);
   if (error || !data) return NextResponse.json({ error: "Documento não encontrado" }, { status: 404 });
   let html = new TextDecoder("utf-8").decode(await data.arrayBuffer());
+  // Recibos guardados antes do layout novo: troca o estilo pelo atual (o conteúdo fica igual).
+  if (/\/recibo\//.test(p) && html.includes('class="folha"')) html = html.replace(/<style>@page[\s\S]*?<\/style>/, RECIBO_CSS);
   const barra = `<div class="__barra" style="position:sticky;top:0;z-index:9;display:flex;gap:8px;justify-content:flex-end;padding:8px 12px;background:#0f172a;font:13px system-ui,sans-serif"><button onclick="window.print()" style="background:#2563eb;color:#fff;border:0;border-radius:8px;padding:6px 14px;cursor:pointer">Imprimir / salvar PDF</button><button onclick="window.close()" style="background:#334155;color:#fff;border:0;border-radius:8px;padding:6px 14px;cursor:pointer">Fechar</button></div><style>@media print{.__barra{display:none!important}}</style>`;
   html = /<body[^>]*>/i.test(html) ? html.replace(/<body([^>]*)>/i, `<body$1>${barra}`) : barra + html;
   if (!/<meta[^>]+charset/i.test(html)) html = html.replace(/<head>/i, '<head><meta charset="utf-8">');

@@ -474,6 +474,27 @@ const brl = (n: number) => n.toLocaleString("pt-BR", { minimumFractionDigits: 2,
 const esc = (s: string) => s.replace(/[&<>"]/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[ch]!);
 const MESES = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
 
+/** Estilo do recibo — exportado para a 2ª via reaplicar o layout atual
+ *  aos recibos já guardados (05/10/26: margens e quebras de linha). */
+export const RECIBO_CSS = `<style>@page{size:A4;margin:0}*{box-sizing:border-box}html,body{margin:0;background:#fff}body{font-family:Helvetica,Arial,sans-serif;color:#1a1a1a;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+.folha{width:210mm;min-height:297mm;position:relative;margin:0 auto;padding:14mm 16mm 16mm;overflow-wrap:anywhere;word-break:break-word}
+.topo{display:flex;justify-content:flex-end;padding-bottom:4mm;border-bottom:0.6mm solid #00BFB7}
+.emp{text-align:right;font-size:8.5pt;line-height:1.55;max-width:130mm}.emp b{font-size:12.5pt}
+.titulo{text-align:center;font-size:15pt;font-weight:bold;margin:9mm 0 7mm}
+.linha{display:grid;grid-template-columns:34mm minmax(0,1fr);column-gap:4mm;margin-top:5mm;align-items:start}
+.rot{background:#00BFB7;color:#fff;font-weight:bold;font-size:9.5pt;text-align:right;line-height:6.5mm;padding:0 2mm;border-radius:0.8mm}
+.val{font-size:10pt;line-height:6.5mm}.cli{font-size:8.5pt;line-height:1.55;padding-top:0.6mm}.cli b{font-size:10.5pt;display:block;margin-bottom:0.6mm}
+.cli .mail{display:block;color:#333}
+.obj-cab{display:grid;grid-template-columns:minmax(0,1fr) 32mm;font-size:8.5pt;font-weight:bold}
+.obj-cab span{background:#E5F8F7;line-height:6.5mm;padding:0 2mm}.obj-cab span+span{text-align:right}
+.obj-item{display:grid;grid-template-columns:minmax(0,1fr) 32mm;font-size:8.5pt;line-height:1.5;padding:2mm 0;border-bottom:0.2mm solid #e3e3e3}
+.obj-item p{margin:0;padding:0 2mm}.obj-item .v{text-align:right;padding-right:2mm;white-space:nowrap}
+.totais{display:grid;grid-template-columns:repeat(3,28mm);margin:3mm 0 0 auto;width:84mm;font-size:8.5pt}
+.totais .h{background:#E5F8F7;font-weight:bold;text-align:right;line-height:5.5mm;padding-right:2mm}.totais .n{text-align:right;line-height:6mm;padding-right:2mm}.totais .n:last-child{font-weight:bold}
+.pag{font-size:9pt;line-height:1.6;border:1px solid #00BFB7;padding:2mm 3mm;border-radius:1mm}
+.obs{font-size:8pt;line-height:1.55;padding:0.8mm 0 0;text-align:justify}.obs .lei{display:block;margin-top:1.5mm;color:#444}
+.homolog{border:2px solid #c00;color:#c00;font-weight:bold;text-align:center;padding:2mm;margin-bottom:4mm}</style>`;
+
 /** Recibo de Prestação de Serviço — réplica do modelo do Omie
  *  (docs/modelos/recibo-prestacao-servico.html). HTML pronto para imprimir/PDF. */
 export function reciboHtml(doc: DocFat, em: Emitente, numero: number, homologacao: boolean, dataEmissao?: string | null) {
@@ -488,25 +509,17 @@ export function reciboHtml(doc: DocFat, em: Emitente, numero: number, homologaca
   const venc = ps.map((p) => `dia ${p.vencimento.split("-").reverse().join("/")} no valor de R$ ${brl(p.valor)}`).join("<br>");
   const itens = doc.itens.map((i) => `<div class="obj-item"><div class="desc"><p>${esc(i.descricao)}</p></div><div class="v">${brl(i.quantidade * i.valor_unitario)}</div></div>`).join("");
   return `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>Recibo de Prestação de Serviço nº ${n}</title>
-<style>@page{size:A4;margin:0}*{box-sizing:border-box}html,body{margin:0;background:#fff}body{font-family:Helvetica,Arial,sans-serif;color:#000;-webkit-print-color-adjust:exact;print-color-adjust:exact}
-.folha{width:210mm;min-height:297mm;position:relative;margin:0 auto;padding:6mm 10mm}.topo{display:flex;justify-content:space-between;align-items:flex-start}
-.emp{text-align:right;font-size:8pt;line-height:1.5}.emp b{font-size:12pt}.titulo{text-align:center;font-size:15pt;font-weight:bold;margin:8mm 0 6mm}
-.linha{display:grid;grid-template-columns:40mm 1fr;column-gap:1mm;margin-top:3mm}.rot{background:#00BFB7;color:#fff;font-weight:bold;font-size:10pt;text-align:right;height:6mm;line-height:6mm;padding-right:1mm}
-.val{font-size:10pt;line-height:6mm}.cli{font-size:8pt;line-height:1.4}.cli b{font-size:10pt}.obj-cab{display:grid;grid-template-columns:1fr 30mm;font-size:8pt;font-weight:bold}
-.obj-cab span{background:#E5F8F7;line-height:6mm;padding:0 1mm}.obj-cab span+span{text-align:right}.obj-item{display:grid;grid-template-columns:1fr 30mm;font-size:8pt;line-height:4mm;margin-top:2mm}
-.obj-item p{margin:0;padding:0 1mm}.obj-item .v{text-align:right;padding-right:1mm}.totais{display:grid;grid-template-columns:21mm 20mm 30mm;margin:2mm 0 0 auto;width:71mm;font-size:8pt}
-.totais .h{background:#E5F8F7;font-weight:bold;text-align:right;line-height:5mm;padding-right:1mm}.totais .n{text-align:right;line-height:5mm;padding-right:1mm}
-.pag{font-size:9pt;line-height:4.5mm;border:1px solid #00BFB7;padding:1.5mm 2mm;border-radius:1mm}.obs{font-size:7pt;line-height:3.5mm;padding:0 1mm}.homolog{border:2px solid #c00;color:#c00;font-weight:bold;text-align:center;padding:2mm;margin-bottom:4mm}</style></head>
+${RECIBO_CSS}</head>
 <body><div class="folha">
 ${homologacao ? '<div class="homolog">DOCUMENTO DE TESTE (HOMOLOGAÇÃO) — SEM VALOR</div>' : ""}
 <div class="topo"><div></div><div class="emp"><b>${esc(em.nome || "")}</b><br>CNPJ: ${esc(em.cnpj)}${em.inscricao_estadual ? ` | Inscrição Estadual: ${esc(em.inscricao_estadual)}` : ""}${em.inscricao_municipal ? ` | Inscrição Municipal: ${esc(em.inscricao_municipal)}` : ""}<br>${esc([em.logradouro, em.numero].filter(Boolean).join(", "))}${em.bairro ? ` - ${esc(em.bairro)}` : ""}<br>${esc(em.municipio || "")} - ${esc(em.uf || "")}${em.cep ? ` - CEP: ${esc(em.cep)}` : ""}${em.telefone ? `<br>Telefone: ${esc(em.telefone)}` : ""}</div></div>
 <div class="titulo">Recibo de Prestação de Serviço nº ${n}</div>
 <div class="linha"><div class="rot">Emissão:</div><div class="val">${esc(em.municipio || "Barueri")} (${esc(em.uf || "SP")}), ${data}.</div></div>
-<div class="linha"><div class="rot">Cliente:</div><div class="cli"><b>${esc(c.nome)}</b><br>${doc_cli}${c.email ? `<br>${esc(c.email)}` : ""}<br>${esc([c.logradouro, c.numero, c.complemento].filter(Boolean).join(", "))} - ${esc(c.bairro)}<br>${esc(c.municipio)} - ${esc(c.uf)} - CEP: ${esc(so(c.cep))}${c.telefone ? `<br>Telefone: ${esc(c.telefone)}` : ""}</div></div>
+<div class="linha"><div class="rot">Cliente:</div><div class="cli"><b>${esc(c.nome)}</b><div>${doc_cli}</div>${c.email ? c.email.split(/[,;]\s*/).filter(Boolean).map((m) => `<span class="mail">${esc(m)}</span>`).join("") : ""}<div>${esc([c.logradouro, c.numero, c.complemento].filter(Boolean).join(", "))} - ${esc(c.bairro)}</div><div>${esc(c.municipio)} - ${esc(c.uf)} - CEP: ${esc(so(c.cep))}</div>${c.telefone ? `<div>Telefone: ${esc(c.telefone)}</div>` : ""}</div></div>
 <div class="linha"><div class="rot">Objeto:</div><div><div class="obj-cab"><span>Descrição</span><span>Valor Total</span></div>${itens}
 <div class="totais"><div class="h">Total Bruto</div><div class="h">Descontos</div><div class="h">Total Líquido</div><div class="n">${brl(total)}</div><div class="n">0,00</div><div class="n">${brl(total)}</div></div></div></div>
 <div class="linha"><div class="rot">Vencimento:</div><div class="val">${venc}</div></div>
 ${doc.condicao?.instrucao_pagamento ? `<div class="linha"><div class="rot">Pagamento:</div><div class="pag">${esc(doc.condicao.instrucao_pagamento).replace(/ \| /g, "<br>")}</div></div>` : ""}
-<div class="linha"><div class="rot">Observações:</div><div class="obs">${doc.observacoes ? `${esc(doc.observacoes)}<br>` : ""}Conforme Lei Complementar 116/2003 de 31/07/03, que trata do VETO ao imposto sobre a prestação de serviço em Saneamento Ambiental, purificação e tratamento de água, esgotamento sanitário e Congêneres.</div></div>
+<div class="linha"><div class="rot">Observações:</div><div class="obs">${doc.observacoes ? esc(doc.observacoes) : ""}<span class="lei">Conforme Lei Complementar 116/2003 de 31/07/03, que trata do VETO ao imposto sobre a prestação de serviço em Saneamento Ambiental, purificação e tratamento de água, esgotamento sanitário e Congêneres.</span></div></div>
 </div></body></html>`;
 }
