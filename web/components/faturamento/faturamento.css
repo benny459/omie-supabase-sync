@@ -201,7 +201,7 @@
 .fpv-drawer .nf .ic { width: 34px; height: 34px; border-radius: 9px; display: grid; place-items: center; font-size: 10px; font-weight: 700; flex: none; }
 .fpv-drawer .nf .info { flex: 1; min-width: 0; }
 .fpv-drawer .nf .info b { font-size: 13px; }
-.fpv-drawer .nf .info span { display: block; font-size: 11.5px; color: var(--f-tx3); margin-top: 2px; }
+.fpv-drawer .nf .info span { overflow-wrap: anywhere; display: block; font-size: 11.5px; color: var(--f-tx3); margin-top: 2px; }
 .fpv-drawer .timeline { border-left: 2px solid var(--f-line); margin-left: 6px; padding-left: 14px; }
 .fpv-drawer .timeline div { position: relative; font-size: 12.5px; color: var(--f-tx2); margin-bottom: 10px; }
 .fpv-drawer .timeline div::before { content: ""; position: absolute; left: -20px; top: 4px; width: 10px; height: 10px; border-radius: 50%; background: var(--f-bg2); border: 2px solid var(--f-line2); }
@@ -214,7 +214,7 @@
 .fpv .alert.bad, .fpv-drawer .alert.bad { background: var(--f-bad-s); border-color: rgba(239, 68, 68, .35); color: var(--f-bad); }
 .fpv .alert.info, .fpv-drawer .alert.info { background: var(--f-blue-s); border-color: rgba(59, 130, 246, .35); color: var(--f-blue); }
 .fpv .alert.ok, .fpv-drawer .alert.ok { background: var(--f-ok-s); border-color: rgba(34, 197, 94, .35); color: var(--f-ok); }
-.fpv-drawer .chk { font-size: 12.5px; margin-bottom: 4px; }
+.fpv-drawer .chk { font-size: 12.5px; margin-bottom: 4px; overflow-wrap: anywhere; }
 .fpv-drawer pre { font-size: 11px; max-height: 320px; overflow: auto; background: var(--f-card2); border: 1px solid var(--f-line); border-radius: 10px; padding: 10px; }
 
 /* prontidão (NF-e de produção) */
