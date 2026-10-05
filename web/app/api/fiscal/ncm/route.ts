@@ -1,6 +1,7 @@
 // /api/fiscal/ncm — localizador de NCM (05/10/26).
 //   GET ?q=…                      busca na tabela oficial (Siscomex) por código ou palavras
 //   GET ?op=sugerir&desc=…&cod=…  sugestões ranqueadas (catálogo, NF de fornecedor, NF-e do Omie)
+//   GET ?op=compras&desc=…&cod=…  "Das nossas compras": NCM das NF-e recebidas / PCs do Omie deste item ou parecidos
 //   GET ?op=validar&ncm=…         existe e é folha de 8 dígitos?
 //   GET ?op=pendencias            itens do estoque sem NCM / com NCM inválido
 //   POST {codigo, ncm}            grava o NCM no cadastro do item (painel + dados fiscais), com histórico
@@ -41,6 +42,12 @@ export async function GET(req: NextRequest) {
       const desc = (sp.get("desc") ?? "").trim(), cod = (sp.get("cod") ?? "").trim();
       if (desc.length < 3 && !cod) return NextResponse.json({ sugestoes: [] });
       return NextResponse.json({ sugestoes: await rpc("ncm_sugerir", { p_empresa: emp, p_descricao: desc, p_codigo: cod || null }) ?? [] });
+    }
+    if (op === "compras") {
+      // NCM que veio nas NF-e/PCs dos fornecedores para este item (código, vínculos, códigos antigos) ou parecidos
+      const desc = (sp.get("desc") ?? "").trim(), cod = (sp.get("cod") ?? "").trim();
+      if (desc.length < 3 && !cod) return NextResponse.json({ compras: [] });
+      return NextResponse.json({ compras: await rpc("ncm_das_compras", { p_empresa: emp, p_descricao: desc, p_codigo: cod || null }) ?? [] });
     }
     if (op === "validar") return NextResponse.json({ valido: await rpc<boolean>("ncm_valido", { p: sp.get("ncm") ?? "" }) });
     if (op === "pendencias") return NextResponse.json(await rpc("ncm_pendencias", { p_empresa: emp }));

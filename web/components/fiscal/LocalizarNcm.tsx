@@ -6,6 +6,8 @@ import { useEffect, useRef, useState } from "react";
 import "./localizar-ncm.css";
 
 type Res = { codigo: string; codigo_fmt: string; descricao: string; caminho: string | null };
+type Compra = { ncm: string; codigo_fmt: string; descricao_ncm: string; fornecedor: string | null; nf: string | null; data: string | null;
+  xprod: string | null; cprod: string | null; fonte: string; deste_item: boolean; vezes: number; sim: number };
 type Sug = { ncm: string; codigo_fmt: string; descricao_ncm: string; caminho: string | null; fontes: string; motivo: string; score: number };
 
 export const ncmFmt = (n: string | null | undefined) => {
@@ -28,6 +30,7 @@ export default function LocalizarNcm({ emp = "SF", descricao, codigo, atual, onE
   const [q, setQ] = useState("");
   const [res, setRes] = useState<Res[] | null>(null);
   const [sug, setSug] = useState<Sug[] | null>(null);
+  const [comp, setComp] = useState<Compra[] | null>(null);
   const [salvar, setSalvar] = useState(!!codigo);
   const [msg, setMsg] = useState<string | null>(null);
   const [gravando, setGravando] = useState(false);
@@ -37,6 +40,8 @@ export default function LocalizarNcm({ emp = "SF", descricao, codigo, atual, onE
   useEffect(() => {
     const p = new URLSearchParams({ op: "sugerir", emp, desc: descricao ?? "", cod: codigo ?? "" });
     fetch(`/api/fiscal/ncm?${p}`).then((r) => r.json()).then((j) => setSug(j.sugestoes ?? [])).catch(() => setSug([]));
+    const pc = new URLSearchParams({ op: "compras", emp, desc: descricao ?? "", cod: codigo ?? "" });
+    fetch(`/api/fiscal/ncm?${pc}`).then((r) => r.json()).then((j) => setComp(j.compras ?? [])).catch(() => setComp([]));
   }, [emp, descricao, codigo]);
   useEffect(() => {
     if (q.trim().length < 2) { setRes(null); return; }
@@ -78,7 +83,13 @@ export default function LocalizarNcm({ emp = "SF", descricao, codigo, atual, onE
           value={q} onChange={(e) => setQ(e.target.value)} />
         <div className="ncm-lista">
           {!q.trim() && (<>
-            <div className="ncm-sec">Sugestões para este item</div>
+            <div className="ncm-sec">Das nossas compras</div>
+            {comp === null ? <div className="ncm-vazio">procurando nas NF-e e pedidos dos fornecedores…</div>
+              : comp.length ? comp.map((c) => linha(c.ncm, c.codigo_fmt, c.descricao_ncm, null,
+                  <small className="mot">{c.deste_item ? "✓ deste item · " : "item parecido · "}{c.fornecedor ?? "fornecedor ?"}{c.nf ? ` · ${/^PC /.test(c.nf) ? c.nf : `NF ${c.nf}`}` : ""}{c.data ? ` · ${new Date(`${c.data}T12:00:00`).toLocaleDateString("pt-BR")}` : ""}
+                    {c.vezes > 1 ? ` · ${c.vezes}×` : ""}<span className="cam" style={{ display: "block" }}>“{c.xprod}”{c.cprod ? ` (cód. ${c.cprod})` : ""}</span></small>))
+              : <div className="ncm-vazio">Nenhuma compra deste item (ou parecido) com NCM.</div>}
+            <div className="ncm-sec">Sugestões do catálogo</div>
             {sug === null ? <div className="ncm-vazio">buscando no nosso histórico…</div>
               : sug.length ? sug.map((s) => linha(s.ncm, s.codigo_fmt, s.descricao_ncm, s.caminho,
                   <small className="mot">✓ {s.motivo}{s.fontes ? ` · ${s.fontes}` : ""}</small>))

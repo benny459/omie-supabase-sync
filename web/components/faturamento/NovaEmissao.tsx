@@ -825,7 +825,7 @@ export default function NovaEmissao({ config, aberto, fechar, avisar, onEmitido,
     }
     if (!vivo.current) return;
     setRascDifs([`Rascunho salvo em ${new Date(salvoEm).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })} — revalidado agora.`, ...difs]);
-    validar();
+    validarRef.current();
   }
 
   function sair() {
@@ -847,6 +847,10 @@ export default function NovaEmissao({ config, aberto, fechar, avisar, onEmitido,
   // Referência sempre atual do estado (o setTimeout do carregamento lê o estado já aplicado).
   const estadoRef = useRef(estadoRascunho);
   estadoRef.current = estadoRascunho;
+  // a revalidação ao reabrir roda num timeout criado ANTES do rascunho ser aplicado: chama a validação
+  // do render atual (senão valida a folha vazia — "Cliente sem nome · 0 itens", 05/10/26)
+  const validarRef = useRef(validar);
+  validarRef.current = validar;
   const salvarRef = useRef(salvarRascunho);
   salvarRef.current = salvarRascunho;
   // Salva sozinho a cada ~20 s quando há mudanças (nunca durante/depois da transmissão).
@@ -1080,7 +1084,7 @@ export default function NovaEmissao({ config, aberto, fechar, avisar, onEmitido,
                 ) : (
                   <div className="ne-linha">
                     <label className="ne-rot" style={{ width: 380 }}>Destinatário (cliente ou fornecedor do cadastro)
-                      <BuscaPessoa valor="" empresa={empresa} onEscolher={async (c) => {
+                      <BuscaPessoa valor="" empresa={empresa} placeholder={cli.nome ? `${cli.nome} (escolhido) — digite para trocar` : undefined} onEscolher={async (c) => {
                         const p = await pessoaCompleta(c.id);
                         setCliCodigo(String(c.codigo));
                         if (p) { const cl = clienteDaPessoa(p); setCli(cl); setVerCliente(false); if (!cliProjeto) setCliProjeto(cl.nome); }
@@ -1122,7 +1126,7 @@ export default function NovaEmissao({ config, aberto, fechar, avisar, onEmitido,
                   <BuscaProposta valor={proposta} onTexto={setProposta} onEscolher={(p) => { setProposta(p.numero); setSemProp(false); puxarProposta(p.numero); }} />
                 </label>
                 <label className="ne-rot" style={{ width: 380 }}>Cliente do cadastro (nome, fantasia ou CNPJ/CPF)
-                  <BuscaPessoa valor="" empresa={empresa} onEscolher={async (c) => {
+                  <BuscaPessoa valor="" empresa={empresa} placeholder={cli.nome ? `${cli.nome} (escolhido) — digite para trocar` : undefined} onEscolher={async (c) => {
                     const p = await pessoaCompleta(c.id);
                     setCliCodigo(String(c.codigo));
                     if (p) { setCli(clienteDaPessoa(p)); setVerCliente(false); } else setAviso("Não consegui abrir o cadastro escolhido");

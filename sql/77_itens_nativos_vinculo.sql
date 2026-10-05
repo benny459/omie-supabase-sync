@@ -27,3 +27,8 @@
 --   update platform.estoque_item_vinculo set desfeito_em = now(), desfeito_por = '<quem>'
 --    where lote = 'auto_desc_20261005' and desfeito_em is null;
 --   310 pendentes → tela Estoque › Códigos de compra (/estoque/codigos-compra).
+--
+-- p77_vinculo_pendentes_rapido: estoque_vinculo_pendentes em plpgsql com temporário + índice trigram (37 s → 1,2 s).
+-- p77b_ncm_das_compras: orders.ncm_das_compras(empresa, descricao, codigo) → NCM das NF-e recebidas (focus_recebidos,
+--   itens do XML) e dos PCs do Omie (pedidos_compra.cncm) deste item (código, vínculos, códigos antigos) ou de
+--   descrição parecida; usado no "Das nossas compras" do Localizar NCM.
