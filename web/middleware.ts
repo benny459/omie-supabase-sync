@@ -41,6 +41,15 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
+  // Acesso com senha provisória (05/10/26): até criar a própria senha, tudo leva
+  // a /reset (que limpa a marca ao gravar). APIs ficam de fora.
+  if (user && user.user_metadata?.must_change_password === true && !pathname.startsWith("/api/") && pathname !== "/reset") {
+    const url = request.nextUrl.clone();
+    url.pathname = "/reset";
+    url.search = "?primeiro=1";
+    return NextResponse.redirect(url);
+  }
+
   // Evita que usuário autenticado fique no /login
   if (user && pathname === "/login") {
     const url = request.nextUrl.clone();

@@ -40,7 +40,7 @@ export default function ResetPage() {
     if (pw1 !== pw2) { setMsg({ kind: "err", text: "As senhas não conferem." }); return; }
     setLoading(true); setMsg(null);
     const supa = supaBrowser();
-    const { error } = await supa.auth.updateUser({ password: pw1 });
+    const { error } = await supa.auth.updateUser({ password: pw1, data: { must_change_password: false } });
     setLoading(false);
     if (error) { setMsg({ kind: "err", text: error.message }); return; }
     setMsg({ kind: "ok", text: "Senha alterada com sucesso. Redirecionando…" });
