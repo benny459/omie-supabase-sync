@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState, type MouseEvent, type ReactN
 import { PaginaNavy } from "@/components/navy/tela/KitTela";
 import { limpo } from "@/lib/faturamento/montar";
 import NovaEmissao, { type ConfigFat } from "@/components/faturamento/NovaEmissao";
+import RegistrarNfse from "@/components/faturamento/RegistrarNfse";
 import "./faturamento.css";
 
 /* Faturamento PV & OS (05/10/2026) — conceito do mockup do Benny
@@ -17,13 +18,16 @@ import "./faturamento.css";
 // ── tipos ────────────────────────────────────────────────────────────────────
 type Nf = {
   id?: number; num: string; valor: number; status: string; data: string | null; ambiente: string;
-  msg?: string | null; xml?: boolean; pdf?: boolean; fonte: "omie" | "painel";
+  msg?: string | null; xml?: boolean; pdf?: boolean; fonte: "omie" | "painel" | "prefeitura";
+  nfse_manual?: boolean; municipio?: string;
 };
 type Doc = {
   chave: string; codigo: number | string; tipo: "PV" | "OS"; rotulo: string; origem: string; etapa: string | null;
   cliente: string | null; oc: string | null; valor: number; emissao: string | null; faturado: number;
   nfs: Nf[]; pend: string[]; emite: boolean; emite_motivo?: string; descricao?: string | null;
   itens?: { desc: string | null; qtd: number | null; vt: number | null }[];
+  /** OS: aceita NFS-e da prefeitura registrada no painel (sql/59). */
+  nfse?: boolean; nfse_registrada?: boolean; aguarda_nfse?: boolean;
 };
 type St = "pend" | "pronto" | "emis" | "rej" | "parc" | "fat";
 type Checagem = { item: string; ok: boolean; nivel: "erro" | "aviso"; detalhe: string };
@@ -57,6 +61,8 @@ const dataBR = (iso: string | null | undefined) => (iso ? new Date(iso.slice(0, 
 const curto = (s: string | null) => limpo(s ?? "").replace(/ S\.?\/?A\.?$| LTDA\.?$/i, "").replace("SOC BEN ISRAELITA BRAS HOSP", "HOSP.").replace("SOC .BENEF .DE SRAS.", "");
 const saldo = (d: Doc) => Math.max(0, Number(d.valor) - Number(d.faturado));
 const nfsAut = (d: Doc) => d.nfs.filter((n) => n.status === "autorizada" && n.ambiente === "producao");
+/** OS que ainda não tem NFS-e registrada e tem saldo a faturar. */
+const semNfse = (d: Doc) => d.tipo === "OS" && !!d.nfse && !d.nfse_registrada && status(d) !== "fat";
 
 function status(d: Doc): St {
   if (Number(d.faturado) >= Number(d.valor) - 0.01 && Number(d.valor) > 0) return "fat";
@@ -107,7 +113,8 @@ export default function TelaFaturamento() {
   const [empresa, setEmpresa] = useState("SF");
   const [periodo, setPeriodo] = useState("mes");
   const [tipo, setTipo] = useState<"all" | "PV" | "OS">("all");
-  const [view, setView] = useState<"list" | "kanban" | "emissoes">("list");
+  const [view, setView] = useState<"list" | "kanban" | "emissoes" | "nfse">("list");
+  const [regNfse, setRegNfse] = useState<string[] | null>(null);
   const [q, setQ] = useState("");
   const [orig, setOrig] = useState("");
   const [fst, setFst] = useState<"" | St>("");
@@ -161,6 +168,7 @@ export default function TelaFaturamento() {
     if (chips.has("semoc") && d.oc) return false;
     if (chips.has("old") && dias(d.emissao) <= 30) return false;
     if (chips.has("saldo") && st === "fat") return false;
+    if (chips.has("semnfse") && !semNfse(d)) return false;
     if (q) {
       const h = `${d.rotulo} ${d.cliente ?? ""} ${d.oc ?? ""} ${d.descricao ?? ""} ${d.nfs.map((n) => n.num).join(" ")}`.toLowerCase();
       if (!h.includes(q.toLowerCase())) return false;
@@ -293,12 +301,13 @@ export default function TelaFaturamento() {
             <button className={view === "list" ? "on" : ""} onClick={() => setView("list")}>☰ Lista</button>
             <button className={view === "kanban" ? "on" : ""} onClick={() => setView("kanban")}>▦ Kanban</button>
             <button className={view === "emissoes" ? "on" : ""} onClick={() => setView("emissoes")}>⎙ Emissões</button>
+            <button className={view === "nfse" ? "on" : ""} onClick={() => setView("nfse")}>🏛 NFS-e registradas</button>
           </div>
           <div className="search">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></svg>
             <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar PV, OS, cliente, OC, NF…" />
           </div>
-          {view !== "emissoes" && <>
+          {view !== "emissoes" && view !== "nfse" && <>
             <select className="sel" value={orig} onChange={(e) => setOrig(e.target.value)}>
               <option value="">Origem: todas</option><option>Omie</option><option>Painel</option><option>CRM</option>
             </select>
@@ -306,8 +315,9 @@ export default function TelaFaturamento() {
               <option value="">Status: todos</option>
               {(Object.keys(ST) as St[]).map((k) => <option key={k} value={k}>{ST[k].l}</option>)}
             </select>
-            {([["semoc", "Sem OC"], ["old", "> 30 dias"], ["saldo", "Só com saldo"]] as const).map(([k, l]) => (
-              <button key={k} className={`chipf ${chips.has(k) ? "on" : ""}`} onClick={() => setChips((s) => { const n = new Set(s); if (n.has(k)) n.delete(k); else n.add(k); return n; })}>{l}</button>
+            {([["semoc", "Sem OC"], ["old", "> 30 dias"], ["saldo", "Só com saldo"], ["semnfse", `OS sem NFS-e · ${(docs ?? []).filter(semNfse).length}`]] as const).map(([k, l]) => (
+              <button key={k} className={`chipf ${chips.has(k) ? "on" : ""}`} title={k === "semnfse" ? "OS faturáveis sem NFS-e registrada (emitida na prefeitura)" : undefined}
+                onClick={() => setChips((s) => { const n = new Set(s); if (n.has(k)) n.delete(k); else n.add(k); return n; })}>{l}</button>
             ))}
           </>}
         </div>
@@ -317,19 +327,28 @@ export default function TelaFaturamento() {
             <span style={{ marginLeft: "auto" }} />
             <button className="btn sm" onClick={() => setSel(new Set())}>Limpar</button>
             <button className="btn sm w" disabled={!!ocupado} onClick={validarLote}>{ocupado ? "Validando…" : "Validar lote"}</button>
+            {(() => {
+              const oss = (docs ?? []).filter((d) => sel.has(d.chave) && semNfse(d));
+              return oss.length > 0 && oss.length === sel.size
+                ? <button className="btn sm" onClick={() => setRegNfse(oss.map((d) => d.chave))}>Registrar NFS-e ({oss.length} OS)</button> : null;
+            })()}
           </div>
         )}
 
-        {view === "list" && (docs ? <Lista rows={ordenados} sel={sel} setSel={setSel} sort={sort} setSort={setSort} abrir={setAberto} ocupado={ocupado} agir={agir} prod={prod} /> : null)}
+        {view === "list" && (docs ? <Lista rows={ordenados} sel={sel} setSel={setSel} sort={sort} setSort={setSort} abrir={setAberto} ocupado={ocupado} agir={agir} prod={prod} registrar={(d) => setRegNfse([d.chave])} /> : null)}
         {view === "kanban" && (docs ? <Kanban rows={filtrados} abrir={setAberto} /> : null)}
         {view === "emissoes" && <Emissoes lista={emissoes} q={q} onMudou={carregar} avisar={avisar} />}
+        {view === "nfse" && <NfseRegistradas empresa={empresa} q={q} onMudou={carregar} avisar={avisar} />}
 
         <p style={{ color: "var(--f-tx3)", fontSize: 12, marginTop: 12 }}>
-          Carteira: PV/OS em aberto (todas as datas) + faturados no período. PV do Omie fatura pelo painel (NF-e, Focus); OS do Omie continua no Omie até a NFS-e do painel ficar pronta.
+          Carteira: PV/OS em aberto (todas as datas) + faturados no período. PV do Omie fatura pelo painel (NF-e, Focus). NFS-e: emita no portal da prefeitura e registre-a aqui (Registrar NFS-e) — cria o contas a receber pelo líquido e marca a OS como faturada no painel.
           Envio ao cliente por e-mail depende do Resend (RESEND_API_KEY) — até lá, abra o PDF/XML e envie o link.
         </p>
 
-        {docAberto && <Gaveta d={docAberto} empresa={empresa} prod={prod} ocupado={ocupado} agir={agir} fechar={() => setAberto(null)} avisar={avisar} onMudou={carregar} />}
+        {docAberto && <Gaveta d={docAberto} empresa={empresa} prod={prod} ocupado={ocupado} agir={agir} fechar={() => setAberto(null)} avisar={avisar} onMudou={carregar}
+          registrar={() => { setRegNfse([docAberto.chave]); setAberto(null); }} />}
+        {regNfse && <RegistrarNfse empresa={empresa} chaves={regNfse} avisar={avisar} fechar={() => setRegNfse(null)}
+          feito={() => { setRegNfse(null); setSel(new Set()); carregar(); }} />}
         {toast && <div className="fpv-toast" onClick={() => setToast(null)}>{toast}</div>}
       </div>
     </PaginaNavy>
@@ -469,16 +488,18 @@ function Idade({ d }: { d: Doc }) {
   return <><span className={`age ${x > 60 ? "hot" : x > 30 ? "warm" : ""}`}>{x} dias</span><small style={{ display: "block", color: "var(--f-tx3)", fontSize: 11 }}>{dataBR(d.emissao)}</small></>;
 }
 
-function Acoes({ d, ocupado, agir, abrir, prod }: { d: Doc; ocupado: string | null; agir: (d: Doc, a: "prevoo" | "ensaio" | "emitir") => unknown; abrir: (k: string) => void; prod: boolean }) {
+function Acoes({ d, ocupado, agir, abrir, prod, registrar }: { d: Doc; ocupado: string | null; agir: (d: Doc, a: "prevoo" | "ensaio" | "emitir") => unknown; abrir: (k: string) => void; prod: boolean; registrar: (d: Doc) => void }) {
   const st = status(d);
   const ocup = (a: string) => ocupado === `${a}:${d.chave}`;
   const pare = (f: () => void) => (e: MouseEvent) => { e.stopPropagation(); f(); };
   if (st === "fat") return <button className="btn ghost sm" onClick={pare(() => abrir(d.chave))}>Notas</button>;
-  if (!d.emite) return <span className="orig" title={d.emite_motivo}>fatura no Omie</span>;
+  const btnNfse = semNfse(d) ? <button className="btn sm" style={{ borderColor: "var(--f-os)", color: "var(--f-os)" }} disabled={!!ocupado} onClick={pare(() => registrar(d))}>Registrar NFS-e</button> : null;
+  if (!d.emite || d.aguarda_nfse) return btnNfse ?? <span className="orig" title={d.emite_motivo}>fatura no Omie</span>;
   if (st === "pend") return <button className="btn ghost sm" onClick={pare(() => abrir(d.chave))}>Resolver</button>;
   if (st === "rej") return <button className="btn ghost sm" style={{ color: "var(--f-bad)" }} onClick={pare(() => abrir(d.chave))}>Ver rejeição</button>;
   if (st === "emis") return <button className="btn ghost sm" onClick={pare(() => abrir(d.chave))}>Atualizar</button>;
   return <>
+    {d.tipo === "OS" && btnNfse}
     <button className="btn ghost sm" disabled={!!ocupado} onClick={pare(() => abrir(d.chave))}>Validar</button>
     <button className="btn sm pri" disabled={!!ocupado} onClick={pare(() => { agir(d, "emitir"); })}>
       {ocup("emitir") ? "Emitindo…" : `${st === "parc" ? "Emitir saldo" : `Emitir ${d.tipo === "PV" ? "NF-e" : "NFS-e"}`}${prod ? "" : " (homolog.)"}`}
@@ -486,9 +507,9 @@ function Acoes({ d, ocupado, agir, abrir, prod }: { d: Doc; ocupado: string | nu
   </>;
 }
 
-function Lista({ rows, sel, setSel, sort, setSort, abrir, ocupado, agir, prod }: {
+function Lista({ rows, sel, setSel, sort, setSort, abrir, ocupado, agir, prod, registrar }: {
   rows: Doc[]; sel: Set<string>; setSel: (s: Set<string>) => void; sort: { k: string; d: 1 | -1 }; setSort: (s: { k: string; d: 1 | -1 }) => void;
-  abrir: (k: string) => void; ocupado: string | null; agir: (d: Doc, a: "prevoo" | "ensaio" | "emitir") => unknown; prod: boolean;
+  abrir: (k: string) => void; ocupado: string | null; agir: (d: Doc, a: "prevoo" | "ensaio" | "emitir") => unknown; prod: boolean; registrar: (d: Doc) => void;
 }) {
   const [limite, setLimite] = useState(200);
   if (!rows.length) return <div className="tablebox"><div className="empty">Nenhum documento com esses filtros.</div></div>;
@@ -536,8 +557,11 @@ function Lista({ rows, sel, setSel, sort, setSort, abrir, ocupado, agir, prod }:
                 <td className="r mono" style={{ color: Number(d.faturado) ? "var(--f-ok)" : "var(--f-tx3)" }}>{Number(d.faturado) ? fmt(Number(d.faturado)) : "—"}</td>
                 <td className="r mono" style={{ fontWeight: 650, color: sd > 0.01 ? "var(--f-tx)" : "var(--f-tx3)" }}>{sd > 0.01 ? fmt(sd) : "—"}</td>
                 <td><Prog d={d} /></td>
-                <td><span className={`pill ${ST[st].c}`}><i />{ST[st].l}</span></td>
-                <td><div className="rowact"><Acoes d={d} ocupado={ocupado} agir={agir} abrir={abrir} prod={prod} /></div></td>
+                <td>{d.aguarda_nfse && st !== "fat"
+                  ? <span className="pill s-nfse"><i />Aguardando NFS-e (prefeitura)</span>
+                  : <span className={`pill ${ST[st].c}`}><i />{ST[st].l}</span>}
+                  {d.nfse_registrada && <div className="orig" style={{ color: "var(--f-os)" }}>NFS-e registrada</div>}</td>
+                <td><div className="rowact"><Acoes d={d} ocupado={ocupado} agir={agir} abrir={abrir} prod={prod} registrar={registrar} /></div></td>
               </tr>
             );
           })}
@@ -599,10 +623,10 @@ function Kanban({ rows, abrir }: { rows: Doc[]; abrir: (k: string) => void }) {
 }
 
 // ── Gaveta do documento ──────────────────────────────────────────────────────
-function Gaveta({ d, empresa, prod, ocupado, agir, fechar, avisar, onMudou }: {
+function Gaveta({ d, empresa, prod, ocupado, agir, fechar, avisar, onMudou, registrar }: {
   d: Doc; empresa: string; prod: boolean; ocupado: string | null;
   agir: (d: Doc, a: "prevoo" | "ensaio" | "emitir" | "doc") => Promise<Record<string, unknown> | null>;
-  fechar: () => void; avisar: (m: string) => void; onMudou: () => void;
+  fechar: () => void; avisar: (m: string) => void; onMudou: () => void; registrar: () => void;
 }) {
   const st = status(d); const sd = saldo(d);
   const nf = d.tipo === "PV" ? "NF-e" : "NFS-e";
@@ -623,6 +647,12 @@ function Gaveta({ d, empresa, prod, ocupado, agir, fechar, avisar, onMudou }: {
   async function validar() {
     const r = await agir(d, "prevoo");
     if (r) setPre(r as unknown as Prevoo & { error?: string });
+  }
+  async function arquivoNfse(id: number, qual: "xml" | "pdf") {
+    const r = await fetch(`/api/faturamento/nfse/${id}`, { cache: "no-store" }).then((x) => x.json()).catch((e) => ({ error: String(e) }));
+    if (r.error) { avisar(r.error); return; }
+    const url = qual === "xml" ? r.xml_url : r.pdf_url;
+    if (url) window.open(url, "_blank", "noopener"); else avisar("Arquivo não enviado no registro");
   }
   async function arquivo(id: number, qual: "xml" | "pdf") {
     let l = links[id];
@@ -717,11 +747,16 @@ function Gaveta({ d, empresa, prod, ocupado, agir, fechar, avisar, onMudou }: {
               <div className="nf" key={`${n.num}-${k}`}>
                 <div className="ic" style={{ background: c[0], color: c[1] }}>{n.num.startsWith("NF-e") ? "NF-e" : n.num.startsWith("Recibo") ? "REC" : "NFS"}</div>
                 <div className="info"><b>{n.num}</b>
-                  <span>{dataBR(n.data)} · {n.status}{n.ambiente !== "producao" ? " · homologação" : ""} · {n.fonte === "omie" ? "Omie" : "painel"}{n.msg && n.status !== "autorizada" ? ` · ${n.msg}` : ""}</span></div>
+                  <span>{dataBR(n.data)} · {n.status}{n.ambiente !== "producao" ? " · homologação" : ""} · {n.fonte === "omie" ? "Omie" : n.fonte === "prefeitura" ? `prefeitura${n.municipio ? ` de ${n.municipio}` : ""} · registrada no painel` : "painel"}{n.msg && n.status !== "autorizada" ? ` · ${n.msg}` : ""}</span></div>
                 <b className="mono">{fmt(Number(n.valor))}</b>
+                {n.nfse_manual ? <>
+                  {n.id && n.xml && <button className="btn ghost sm" onClick={() => arquivoNfse(n.id!, "xml")}>XML</button>}
+                  {n.id && n.pdf && <button className="btn ghost sm" onClick={() => arquivoNfse(n.id!, "pdf")}>PDF</button>}
+                </> : <>
                 {n.id && n.status === "processando" && <button className="btn ghost sm" onClick={() => atualizar(n.id!)}>Atualizar</button>}
                 {n.id && n.xml && <button className="btn ghost sm" onClick={() => arquivo(n.id!, "xml")}>XML</button>}
                 {n.id && n.pdf && <button className="btn ghost sm" onClick={() => arquivo(n.id!, "pdf")}>{n.num.startsWith("Recibo") ? "Recibo" : "PDF"}</button>}
+                </>}
               </div>
             );
           }) : <div className="orig" style={{ fontSize: 12.5 }}>Nenhuma nota emitida ainda.</div>}
@@ -738,6 +773,7 @@ function Gaveta({ d, empresa, prod, ocupado, agir, fechar, avisar, onMudou }: {
           {sd > 0.01 && d.emite ? (
             <>
               <div className="sum">Emitir agora<b className="mono">{fmt(sd)}</b></div>
+              {semNfse(d) && <button className="btn" onClick={registrar}>Registrar NFS-e</button>}
               <button className="btn" disabled={!!ocupado} onClick={validar}>{ocupado === `prevoo:${d.chave}` ? "Validando…" : "Validar"}</button>
               {d.origem === "Omie" && d.tipo === "PV" && <button className="btn" disabled={!!ocupado} onClick={() => agir(d, "ensaio")}>{ocupado === `ensaio:${d.chave}` ? "Enviando…" : "Ensaio"}</button>}
               <button className="btn pri" disabled={!!ocupado || st === "pend" || st === "emis" || (pre != null && !pre.error && !pre.pode_emitir)}
@@ -746,7 +782,8 @@ function Gaveta({ d, empresa, prod, ocupado, agir, fechar, avisar, onMudou }: {
               </button>
             </>
           ) : sd > 0.01 ? (
-            <div className="sum">{d.emite_motivo}</div>
+            <><div className="sum">{d.emite_motivo}</div>
+              {semNfse(d) && <button className="btn pri" onClick={registrar}>Registrar NFS-e</button>}</>
           ) : (
             <><div className="sum">Documento 100% faturado<b style={{ color: "var(--f-ok)" }}>✓ {nfsAut(d).length} nota(s)</b></div>
               <button className="btn" disabled title="Depende do Resend (RESEND_API_KEY)">Enviar ao cliente</button></>
@@ -866,6 +903,81 @@ function Emissoes({ lista, q, onMudou, avisar }: { lista: Emissao[] | null; q: s
                   {e.pdf_path && <button className="btn ghost sm" disabled={ocup === e.id} onClick={() => abrir(e, "pdf")}>{e.tipo === "recibo" ? "Recibo" : "PDF"}</button>}
                   {["processando", "autorizada"].includes(e.status) && e.tipo !== "recibo" && <button className="btn ghost sm" disabled={ocup === e.id} onClick={() => atualizar(e)}>{ocup === e.id ? "…" : "Atualizar"}</button>}
                   {e.status === "autorizada" && e.ambiente === "homologacao" && <button className="btn ghost sm danger" disabled={ocup === e.id} onClick={() => cancelar(e)}>Cancelar</button>}
+                </div></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </div>
+  );
+}
+
+// ── NFS-e emitidas na prefeitura e registradas no painel (sql/59) ───────────
+type RegNfse = {
+  id: number; municipio: string; numero: string; codigo_verificacao: string | null; data_emissao: string; competencia: string | null;
+  valor_servicos: number; valor_liquido: number; iss_retido: boolean; valor_iss: number; tomador_nome: string | null; tomador_doc: string | null;
+  os: { chave: string; rotulo: string; valor: number }[]; parcelas: { vencimento: string; valor: number }[]; receber_ids: string[] | null;
+  pdf_path: string | null; xml_path: string | null; status: "registrada" | "cancelada"; criado_por: string | null; criado_em: string;
+  cancelado_em: string | null; cancelado_por: string | null; cancelado_motivo: string | null; observacao: string | null;
+};
+
+function NfseRegistradas({ empresa, q, onMudou, avisar }: { empresa: string; q: string; onMudou: () => void; avisar: (m: string) => void }) {
+  const [lista, setLista] = useState<RegNfse[] | null>(null);
+  const [ocup, setOcup] = useState<number | null>(null);
+  const carregar = useCallback(() => {
+    fetch(`/api/faturamento/nfse?empresa=${empresa}`, { cache: "no-store" }).then((r) => r.json())
+      .then((j) => { if (j.error) avisar(j.error); setLista(j.registros ?? []); }).catch((e) => avisar(String(e)));
+  }, [empresa, avisar]);
+  useEffect(() => { carregar(); }, [carregar]);
+  if (!lista) return <div className="tablebox"><div className="empty">Carregando…</div></div>;
+  const vis = lista.filter((r) => !q || [r.numero, r.municipio, r.tomador_nome, r.codigo_verificacao, ...r.os.map((o) => o.rotulo)]
+    .some((v) => (v ?? "").toLowerCase().includes(q.toLowerCase())));
+  async function arquivo(r: RegNfse, qual: "pdf" | "xml") {
+    setOcup(r.id);
+    const j = await fetch(`/api/faturamento/nfse/${r.id}`, { cache: "no-store" }).then((x) => x.json()).catch((e) => ({ error: String(e) }));
+    setOcup(null);
+    if (j.error) { avisar(j.error); return; }
+    const url = qual === "pdf" ? j.pdf_url : j.xml_url;
+    if (url) window.open(url, "_blank", "noopener"); else avisar("Arquivo não enviado no registro");
+  }
+  async function cancelar(r: RegNfse) {
+    const motivo = window.prompt(`Cancelar o registro da NFS-e ${r.numero}? As parcelas a receber (sem baixa) são apagadas e a OS volta a "a faturar".\nMotivo:`, "");
+    if (!motivo) return;
+    setOcup(r.id);
+    const j = await fetch(`/api/faturamento/nfse/${r.id}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ acao: "cancelar", motivo }) })
+      .then((x) => x.json()).catch((e) => ({ error: String(e) }));
+    setOcup(null);
+    if (j.error) { avisar(j.error); return; }
+    avisar(`Registro da NFS-e ${r.numero} cancelado`);
+    carregar(); onMudou();
+  }
+  const ativas = vis.filter((r) => r.status === "registrada");
+  return (
+    <div className="tablebox nfse-reg">
+      <div className="orig" style={{ padding: "10px 14px" }}>
+        {ativas.length} NFS-e registrada(s) · serviços {fmt(ativas.reduce((a, r) => a + Number(r.valor_servicos), 0))} · a receber {fmt(ativas.reduce((a, r) => a + Number(r.valor_liquido), 0))}
+      </div>
+      {vis.length === 0 ? <div className="empty">Nenhuma NFS-e registrada ainda. Use “Registrar NFS-e” numa OS da carteira.</div> : (
+        <table className="fl">
+          <thead><tr><th>NFS-e</th><th>Emissão</th><th>OS</th><th>Tomador</th><th className="r">Serviços</th><th className="r">A receber</th><th>Status</th><th className="r">Ações</th></tr></thead>
+          <tbody>
+            {vis.map((r) => (
+              <tr key={r.id} style={r.status === "cancelada" ? { opacity: 0.55 } : undefined}>
+                <td><b>NFS-e {r.numero}</b><span className="orig">{r.municipio}{r.codigo_verificacao ? ` · verif. ${r.codigo_verificacao}` : ""}</span></td>
+                <td>{dataBR(r.data_emissao)}{r.competencia && <span className="orig">comp. {r.competencia.slice(5, 7)}/{r.competencia.slice(0, 4)}</span>}</td>
+                <td>{r.os.map((o) => <div key={o.chave}><span className="tag os">OS</span> {o.rotulo}</div>)}</td>
+                <td><div className="cli">{limpo(r.tomador_nome ?? "—")}<small>{r.tomador_doc ?? ""}</small></div></td>
+                <td className="r mono">{fmt(Number(r.valor_servicos))}{r.iss_retido && <span className="orig">ISS retido {fmt(Number(r.valor_iss))}</span>}</td>
+                <td className="r mono">{fmt(Number(r.valor_liquido))}<span className="orig">{r.parcelas.map((p) => `${dataBR(p.vencimento)}`).join(" · ")}</span></td>
+                <td>{r.status === "registrada"
+                  ? <span className="pill s-fat"><i />registrada</span>
+                  : <><span className="pill s-pend"><i />cancelada</span><span className="orig">{r.cancelado_motivo}</span></>}
+                  <span className="orig">por {r.criado_por ?? "—"}</span></td>
+                <td><div className="rowact">
+                  {r.pdf_path && <button className="btn ghost sm" disabled={ocup === r.id} onClick={() => arquivo(r, "pdf")}>PDF</button>}
+                  {r.xml_path && <button className="btn ghost sm" disabled={ocup === r.id} onClick={() => arquivo(r, "xml")}>XML</button>}
+                  {r.status === "registrada" && <button className="btn ghost sm danger" disabled={ocup === r.id} onClick={() => cancelar(r)}>Cancelar</button>}
                 </div></td>
               </tr>
             ))}

@@ -228,3 +228,21 @@
 
 @media (max-width: 1200px) { .fpv .kpis { grid-template-columns: repeat(3, 1fr); } .fpv .mix { grid-template-columns: 1fr; } }
 @media (max-width: 720px) { .fpv .kpis { grid-template-columns: repeat(2, 1fr); } .fpv .typerow { grid-template-columns: 1fr; } .fpv .aging { grid-template-columns: repeat(2, 1fr); } }
+
+/* Registrar NFS-e (sql/59) — formulário na gaveta */
+.fpv-form .row { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
+.fpv-form .fld { display: flex; flex-direction: column; gap: 4px; font-size: 11.5px; color: var(--f-tx3); }
+.fpv-form .fld.chk { flex-direction: row; align-items: center; gap: 6px; font-size: 12.5px; color: var(--f-tx2); align-self: flex-end; padding-bottom: 8px; }
+.fpv-form .inp { background: var(--f-card2); border: 1px solid var(--f-line); color: var(--f-tx); padding: 7px 10px; border-radius: 9px; font-size: 13px; font-family: inherit; outline: none; min-width: 0; }
+.fpv-form .inp:focus { border-color: var(--f-blue); }
+.fpv-form .inp.r { text-align: right; font-variant-numeric: tabular-nums; }
+.fpv-form .inp[type="file"] { padding: 5px 8px; font-size: 12px; }
+.fpv-form .sug { position: absolute; left: 0; right: 0; top: calc(100% + 4px); background: var(--f-bg2); border: 1px solid var(--f-line2); border-radius: 10px; box-shadow: var(--f-shadow); z-index: 5; max-height: 280px; overflow: auto; }
+.fpv-form .sug button { display: flex; flex-direction: column; align-items: flex-start; width: 100%; text-align: left; background: none; border: 0; border-bottom: 1px solid var(--f-line); padding: 8px 12px; color: var(--f-tx); cursor: pointer; }
+.fpv-form .sug button:hover { background: var(--f-card2); }
+.fpv-form .sug button span { font-size: 11.5px; color: var(--f-tx3); }
+.fpv-form .liq { background: var(--f-os-s); border: 1px solid var(--f-line); border-radius: 10px; padding: 9px 12px; margin: 4px 0 6px; }
+.fpv-form .liq b { font-size: 15px; margin: 0 4px; color: var(--f-tx); }
+.fpv .pill.s-nfse { background: var(--f-os-s); color: var(--f-os); }
+.fpv .pill.s-nfse i { background: var(--f-os); }
+.fpv .nfse-reg td .orig { display: block; }
