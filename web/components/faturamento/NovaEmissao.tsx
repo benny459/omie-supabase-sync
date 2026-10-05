@@ -812,9 +812,12 @@ export default function NovaEmissao({ config, aberto, fechar, avisar, onEmitido,
   async function conferirRascunho(p: Partial<EstadoRasc>, salvoEm: string) {
     const difs: string[] = [];
     const naoV = p.tipo === "nfe" && p.operacao && p.operacao !== "venda";
-    for (const it of (p.itens ?? []).filter((i) => i.codigo).slice(0, 15)) {
-      const r = await fetch(`/api/faturamento/nova?op=itens&emp=${p.empresa ?? empresa}&q=${encodeURIComponent(it.codigo)}`, { cache: "no-store" })
-        .then((x) => x.json()).catch(() => null);
+    const lista = (p.itens ?? []).filter((i) => i.codigo).slice(0, 15);
+    // em paralelo (em série levava ~15 s para 7 itens antes de revalidar)
+    const resps = await Promise.all(lista.map((it) => fetch(`/api/faturamento/nova?op=itens&emp=${p.empresa ?? empresa}&q=${encodeURIComponent(it.codigo)}`, { cache: "no-store" })
+      .then((x) => x.json()).catch(() => null)));
+    for (const [k, it] of lista.entries()) {
+      const r = resps[k];
       const a = ((r?.itens ?? []) as { codigo: string; codigo_omie?: string | null; cmc: number | null; saldo: number | null }[])
         .find((x) => x.codigo === it.codigo || x.codigo_omie === it.codigo);
       if (!a) continue;
@@ -1240,7 +1243,7 @@ export default function NovaEmissao({ config, aberto, fechar, avisar, onEmitido,
                             <button type="button" className="ne-it-rem" title="remover item" aria-label="remover item" onClick={() => { setItens(itens.length > 1 ? itens.filter((_, i) => i !== n) : [ITEM0]); setDicas({}); }}>×</button>
                           </div>
                           {ehCompra && <div className="ne-it-compra">
-                            <span className="ne-chip-compra" title="Produto de compra do Omie que não é item do nosso estoque — não pode sair na nota">código de compra</span>
+                            <span className="ne-chip-compra" title="Código que não é item do nosso estoque — não pode sair na nota">{semEst[(it.codigo ?? "").trim().toUpperCase()] ? "código de compra" : "código fora do estoque"}</span>
                             <span className="ne-dica">substitua por um item nosso:</span>
                             <button type="button" className="ne-btn" onClick={() => acertarLinha(n)}>Criar item nosso</button>
                             <button type="button" className="ne-btn" onClick={() => acertarLinha(n)}>Vincular a item existente</button>
