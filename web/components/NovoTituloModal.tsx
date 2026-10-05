@@ -2,7 +2,7 @@
 
 // Modal "Nova conta" (a pagar ou a receber) via /api/financeiro/titulos/incluir.
 // Pagar e receber nascem só no painel (05/10/26): a pagar em
-// finance.pagar_previsto (origem manual, sql/65), a receber em finance.receber.
+// finance.pagar_previsto (origem manual, sql/67), a receber em finance.receber.
 // O Omie não recebe nada.
 
 import { useEffect, useRef, useState } from "react";

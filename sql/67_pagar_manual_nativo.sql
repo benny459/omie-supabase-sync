@@ -1,4 +1,4 @@
--- 65 · Conta a pagar manual NATIVA (05/10/26, saída do Omie — P-FIN pequeno)
+-- 67 · Conta a pagar manual NATIVA (05/10/26, saída do Omie — P-FIN pequeno)
 --
 -- Até aqui o "+ Nova conta" a pagar criava o título NO OMIE (IncluirContaPagar)
 -- e o excluir apagava lá (ExcluirContaPagar). Agora a conta nasce no painel,

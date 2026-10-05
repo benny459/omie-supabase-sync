@@ -1,5 +1,5 @@
 // POST /api/financeiro/titulos/incluir — "+ Nova conta". Nada vai ao Omie.
-//  · pagar   — desde 05/10/26 (sql/65) nasce no painel: finance.pagar_previsto
+//  · pagar   — desde 05/10/26 (sql/67) nasce no painel: finance.pagar_previsto
 //              com origem_titulo='manual' (finance.pagar_manual_incluir). Entra
 //              no Contas a Pagar, no BI/fluxo de caixa e na baixa/conciliação.
 //  · receber — desde 01/10/26 grava SÓ em finance.receber (sql/20).

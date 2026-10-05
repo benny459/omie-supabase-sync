@@ -1,5 +1,5 @@
 // POST /api/financeiro/titulos/excluir — par do /incluir.
-//  · pagar   — desde 05/10/26 (sql/65) só a conta lançada à mão no painel
+//  · pagar   — desde 05/10/26 (sql/67) só a conta lançada à mão no painel
 //              (finance.pagar_manual_excluir); nada vai ao Omie. Títulos do
 //              Omie e previsões de PC não se excluem daqui.
 //  · receber — desde 01/10/26 apaga só a linha NOSSA (finance.receber) criada
