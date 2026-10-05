@@ -14,6 +14,7 @@ import NovoTituloModal from "../NovoTituloModal";
 import FornecedorDrawer from "../FornecedorDrawer";
 import RemessaC6 from "./RemessaC6";
 import SerieDialog from "./SerieDialog";
+import EditarTituloModal from "./EditarTituloModal";
 import { montarPagarV3 } from "./pagar-v3-motor";
 import "./pagar-v3.css";
 
@@ -25,6 +26,7 @@ export default function TelaPagarV3() {
   const [forn, setForn] = useState<{ cod: number; emp: string } | null>(null);
   const [remessa, setRemessa] = useState<string[] | null>(null);
   const [serie, setSerie] = useState<{ id: string; ref: string } | null>(null);
+  const [editar, setEditar] = useState<string | null>(null);
   const admin = !!perms?.is_admin;
 
   useEffect(() => {
@@ -36,6 +38,7 @@ export default function TelaPagarV3() {
       onFornecedor: (cod, emp) => setForn({ cod, emp }),
       onRemessa: (refs) => setRemessa(refs),
       onSerie: (id, ref) => setSerie({ id, ref }),
+      onEditar: (ref) => setEditar(ref),
     });
     return () => motor.current?.destruir();
   }, [admin]);
@@ -161,6 +164,7 @@ export default function TelaPagarV3() {
       {nova && <NovoTituloModal tipo="pagar" onClose={() => setNova(false)} onCreated={() => motor.current?.recarregar()} />}
       {forn && <FornecedorDrawer cod={forn.cod} empresa={forn.emp} tipo="pagar" rotulo="Fornecedor" onClose={() => setForn(null)} />}
       {remessa && <RemessaC6 refs={remessa} onClose={() => setRemessa(null)} onDone={() => motor.current?.recarregar()} />}
+      {editar && <EditarTituloModal tipo="pagar" refTit={editar} onClose={() => setEditar(null)} onDone={() => motor.current?.recarregar()} />}
       {serie && <SerieDialog serieId={serie.id} refAtual={serie.ref} onClose={() => setSerie(null)} onDone={() => motor.current?.recarregar()} />}
     </>
   );

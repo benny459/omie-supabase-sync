@@ -15,6 +15,8 @@ type Opts = {
   onRemessa: (refs: string[]) => void;
   /** Série de recorrência (editar esta / próximas / todas, encerrar, excluir). */
   onSerie: (serieId: string, ref: string) => void;
+  /** Editar o título (valor, vencimento, previsão, categoria…) — EditarTituloModal (sql/80). */
+  onEditar: (ref: string) => void;
 };
 
 const EMPS = ["CD", "SF", "WW"];
@@ -37,7 +39,7 @@ export function montarPagarV3(o: Opts) {
   const q = (id) => root.querySelector("#" + id);
   const qa = (sel) => root.querySelectorAll(sel);
   let TODAY = new Date(new Date().toLocaleDateString("sv-SE", { timeZone: "America/Sao_Paulo" }) + "T00:00:00");
-  let rows = [], BANKS = [], AGG = {}, PODE = { baixar: false, conciliar: false, incluir: false }, EXCL = [];
+  let rows = [], BANKS = [], AGG = {}, PODE = { baixar: false, conciliar: false, incluir: false, editar: false }, EXCL = [];
   // Nome curto: fantasia; sem fantasia, a razão sem os termos genéricos (05/10/26 — "nomeação").
   const GEN = /^(COMERCIO|COMERCIAL|IMPORTACAO|IMPORTADORA|EXPORTACAO|E|DE|DO|DA|DOS|DAS|PRODUTOS|LTDA\.?|EIRELI|S\.?A\.?|ME|EPP|SOCIEDADE|INDUSTRIA|SERVICOS)$/i;
   function curto(razao) { const w = String(razao || "").split(/\s+/).filter(Boolean); const out = []; for (const x of w) { if (out.length >= 2 && GEN.test(x)) break; out.push(x); if (out.length >= 3) break; } return out.join(" ") || String(razao || ""); }
@@ -93,7 +95,7 @@ export function montarPagarV3(o: Opts) {
       BANKS = (j.banks ?? []).map((b) => ({ emp: b[0], cod: Number(b[1]), desc: b[2], tipo: b[3], saldo: Number(b[4]) || 0, dt: b[5], ofx: b[6], pend: Number(b[7]) || 0 }));
       AGG = j.agg ?? {};
       const prog = j.prog ?? {};
-      const PREV = j.prev ?? {}, ENV = j.env ?? {}, SERIE = j.serie ?? {}, NOMES = j.nomes ?? {}, CATPC = j.catpc ?? {};
+      const PREV = j.prev ?? {}, ENV = j.env ?? {}, SERIE = j.serie ?? {}, NOMES = j.nomes ?? {}, CATPC = j.catpc ?? {}, AJ = j.ajustes ?? {};
       EXCL = j.excl ?? []; const EX = new Set(EXCL);
       FERIADOS = new Set(j.feriados ?? []);
       const sel = new Set([...S.sel].map((i) => rows[i]?.ref).filter(Boolean));
@@ -105,7 +107,7 @@ export function montarPagarV3(o: Opts) {
         return { id: i, ref: x[0], emp: x[1], venc: x[2], d, dias: Math.round((d - TODAY) / DAY), v: Number(x[3]), forn: x[4], cat: x[5] ?? "", proj: x[6] ?? "",
           doc: x[7] ?? "", parc: x[8] ?? "", conta: x[9] ?? "", cod_cc, cod: x[11], apr: x[12], pc: x[13], etapa: x[14], nf: x[15], aprov: x[16], tipo: x[17],
           div: !!x[18], st: x[19], cnpj: x[20], orig: x[21], vdoc: Number(x[22]) || 0, cod_forn: x[23], fase: x[25], paid: null,
-          vd, repr: !!(pv && pv[1]), env: ENV[x[0]] ?? null, serie: SERIE[x[0]] ?? null, nfdoc: x[24] ? String(x[24]).replace(/^0+/, "") : "",
+          vd, repr: !!(pv && pv[1]), env: ENV[x[0]] ?? null, serie: SERIE[x[0]] ?? null, aj: AJ[x[0]] ?? null, nfdoc: x[24] ? String(x[24]).replace(/^0+/, "") : "",
           excl: EX.has(x[0]), ...(() => { const n = NOMES[x[1] + "|" + x[23]]; const raz = (n && n[1]) || x[4] || ""; const fan = n && n[0]; const catH = !x[5] && x[13] ? CATPC[x[1] + "|" + String(x[13]).split(",")[0].trim()] : null;
             return { forn: fan || curto(raz), razao: raz, cat: x[5] || catH || "", catHer: !!catH }; })(),
           bank: prog[x[0]] != null ? Number(prog[x[0]]) : def };
@@ -418,10 +420,11 @@ export function montarPagarV3(o: Opts) {
       return `<tr data-id="${r.id}" class="${S.sel.has(r.id) ? "sel" : ""}"><td>${PODE.baixar ? `<input type="checkbox" class="ck" data-id="${r.id}" ${S.sel.has(r.id) ? "checked" : ""}>` : ""}</td>
       <td class="${r.dias < 0 ? "od" : r.dias === 0 ? "td" : ""}">${dm(r.d)} <span class="sub2">${r.dias < 0 ? r.dias + "d" : r.dias === 0 ? "hoje" : "+" + r.dias + "d"}</span>${+r.d !== +r.vd || r.repr ? `<div class="sub2" title="Vencimento do documento${r.repr ? " · previsão reprogramada" : ""}">venc ${dm(r.vd)}${r.repr ? ' · <span style="color:#a78bfa">reprog.</span>' : ""}</div>` : ""}</td>
       <td><span class="emp ${r.emp}">${r.emp}</span></td><td title="${esc(r.razao || r.forn)}" style="font-weight:500">${esc(r.forn)}${r.razao && r.razao !== r.forn ? `<div class="sub2" style="max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(r.razao)}</div>` : ""}</td><td class="${r.cat ? "" : "nocat"}" style="color:var(--tx2)" title="${r.catHer ? "Categoria herdada do pedido de compra" : ""}">${esc(r.cat || "Sem categoria")}${r.catHer ? '<div class="sub2">do PC</div>' : ""}</td>
-      <td>${compra}</td><td>${nf}</td><td>${r.excl ? '<span class="bdg b-bloq" title="Este título já não existe no Omie (foi refeito/excluído lá) — não pagar">Excluído no Omie</span>' : badge(r.st)}</td><td><select class="bsel ${r.bank ? (r.bank !== r.cod_cc ? "chg" : "") : "need"}" data-bk="${r.id}" title="Conta prevista no Omie: ${esc(r.conta)}" ${PODE.baixar ? "" : "disabled"}><option value="">Escolher banco…</option>${bankGroupsHtml(r.emp, r.bank)}</select>${interco(r, r.bank) ? `<div class="sub2" style="color:#a78bfa" title="Título da ${r.emp} pago por conta da ${interco(r, r.bank)} — fica registado como intercompany">pago pela ${interco(r, r.bank)}</div>` : ""}${r.env ? `<div class="sub2" style="color:#38bdf8" title="Arquivo de remessa #${r.env.id} gerado em ${new Date(r.env.em).toLocaleString("pt-BR")}">↗ enviado ${esc(r.env.banco)} · pagto ${dm(new Date(r.env.data + "T00:00:00"))}</div>` : ""}</td><td class="r" style="font-weight:650">${brl(r.v)}</td>
-      <td class="r">${PODE.baixar ? `<button class="btn sm" data-bx="${r.id}">Baixar</button>` : ""}</td></tr>`;
+      <td>${compra}</td><td>${nf}</td><td>${r.excl ? '<span class="bdg b-bloq" title="Este título já não existe no Omie (foi refeito/excluído lá) — não pagar">Excluído no Omie</span>' : badge(r.st)}</td><td><select class="bsel ${r.bank ? (r.bank !== r.cod_cc ? "chg" : "") : "need"}" data-bk="${r.id}" title="Conta prevista no Omie: ${esc(r.conta)}" ${PODE.baixar ? "" : "disabled"}><option value="">Escolher banco…</option>${bankGroupsHtml(r.emp, r.bank)}</select>${interco(r, r.bank) ? `<div class="sub2" style="color:#a78bfa" title="Título da ${r.emp} pago por conta da ${interco(r, r.bank)} — fica registado como intercompany">pago pela ${interco(r, r.bank)}</div>` : ""}${r.env ? `<div class="sub2" style="color:#38bdf8" title="Arquivo de remessa #${r.env.id} gerado em ${new Date(r.env.em).toLocaleString("pt-BR")}">↗ enviado ${esc(r.env.banco)} · pagto ${dm(new Date(r.env.data + "T00:00:00"))}</div>` : ""}</td><td class="r" style="font-weight:650">${brl(r.v)}${r.aj?.novo?.valor != null ? `<div class="sub2" title="Valor ajustado no painel">ajustado · orig. ${brl(Number(r.aj.orig?.valor ?? 0))}</div>` : ""}</td>
+      <td class="r" style="white-space:nowrap">${PODE.editar ? `<button class="btn sm" data-ed="${r.id}" title="Editar título (valor, vencimento, categoria…)">✎</button> ` : ""}${PODE.baixar ? `<button class="btn sm" data-bx="${r.id}">Baixar</button>` : ""}</td></tr>`;
     }).join("")}</tbody>`;
     qa("#tbl tbody tr").forEach((tr) => (tr.onclick = (e) => { if (e.target.classList.contains("ck") || e.target.tagName === "SELECT" || e.target.tagName === "OPTION") return; openDrawer(+tr.dataset.id); }));
+    qa("#tbl [data-ed]").forEach((b) => (b.onclick = (e) => { e.stopPropagation(); o.onEditar(rows[+b.dataset.ed].ref); }));
     qa("#tbl tbody .ck").forEach((cx) => (cx.onchange = () => { const id = +cx.dataset.id; cx.checked ? S.sel.add(id) : S.sel.delete(id); cx.closest("tr").classList.toggle("sel", cx.checked); renderAbar(); }));
     const ckAll = q("ckAll"); if (ckAll) ckAll.onchange = (e) => { show.forEach((r) => (e.target.checked ? S.sel.add(r.id) : S.sel.delete(r.id))); renderTable(); };
     qa("#tbl .bsel").forEach((x) => { x.onclick = (e) => e.stopPropagation(); x.onchange = () => programar([rows[+x.dataset.bk]], x.value ? +x.value : null); });
@@ -503,12 +506,12 @@ export function montarPagarV3(o: Opts) {
         <div><span>Vencimento (documento)</span>${r.vd.toLocaleDateString("pt-BR")}</div>
         <div class="full" style="grid-column:1/-1"><span>Previsão de pagamento</span>
           <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:4px"><input type="date" id="pvData" value="${iso(r.d)}" style="max-width:170px;height:30px;padding:0 8px;border-radius:7px;border:1px solid var(--line2);background:var(--bg);color:var(--tx);color-scheme:dark light;font:inherit"><button class="btn sm" id="pvOk">Reprogramar</button>${r.repr ? '<button class="link" id="pvReg">voltar à regra do dia útil</button>' : ""}<span id="pvAv" class="sub2" style="color:#f59e0b"></span></div>
-          <div class="sub2" id="pvHist" style="margin-top:4px">${r.repr ? "reprogramada · carregando histórico…" : +r.d !== +r.vd ? "dia útil seguinte ao vencimento (regra)" : ""}</div></div><div><span>Valor em aberto</span><b class="num" style="font-size:16px">${brl(r.v)}</b>${r.vdoc && Math.abs(r.vdoc - r.v) > 0.01 ? `<div class="sub2">documento ${brl(r.vdoc)}</div>` : ""}</div>
+          <div class="sub2" id="pvHist" style="margin-top:4px">${r.repr ? "reprogramada · carregando histórico…" : +r.d !== +r.vd ? "dia útil seguinte ao vencimento (regra)" : ""}</div></div><div><span>Valor em aberto</span><b class="num" style="font-size:16px">${brl(r.v)}</b>${r.vdoc && Math.abs(r.vdoc - r.v) > 0.01 ? `<div class="sub2">documento ${brl(r.vdoc)}</div>` : ""}${r.aj?.novo?.valor != null ? `<div class="sub2">valor ajustado (orig. ${brl(Number(r.aj.orig?.valor ?? 0))})${PODE.editar ? ' · <button class="link" id="dDesAj">desfazer ajuste</button>' : ""}</div>` : ""}</div>
         <div><span>Categoria</span><span class="${r.cat ? "" : "nocat"}">${esc(r.cat || "Sem categoria")}</span></div><div><span>Projeto</span>${esc(r.proj || "—")}</div>
         <div><span>Documento / Parcela</span>${esc(r.doc || "—")} · ${esc(r.parc || "—")}</div><div><span>Tipo doc.</span>${esc(r.tipo === "99999" ? "Outros" : r.tipo || "—")}</div>
         <div><span>Conta prevista</span>${esc(r.conta || "—")}</div><div><span>${r.orig === "o" ? "Cód. título Omie" : "Previsão do PC"}</span><span class="mono">${r.orig === "o" ? r.cod : esc(r.ref)}</span></div>
       </div>
-      ${r.cod_forn ? `<div style="margin:-6px 0 14px"><button class="link" id="dForn">Ver fornecedor (histórico) →</button></div>` : ""}
+      <div style="margin:-6px 0 14px;display:flex;gap:14px;flex-wrap:wrap;align-items:center">${PODE.editar ? `<button class="btn sm" id="dEdit" title="Valor, vencimento, previsão, categoria, conta, projeto, observação">Editar título…</button>` : ""}${r.cod_forn ? `<button class="link" id="dForn">Ver fornecedor (histórico) →</button>` : ""}</div>
       ${r.serie ? `<div class="box" style="margin-bottom:12px"><h4>Conta recorrente</h4><div class="sub2">Ocorrência ${r.serie.seq}${r.serie.n ? " de " + r.serie.n : ""} da série</div><div style="margin-top:8px"><button class="btn sm" id="dSerie">Editar / encerrar série…</button></div></div>` : ""}
       ${PODE.baixar ? `<div class="box"><h4>Baixar título</h4>
         <div class="frm">
@@ -530,6 +533,9 @@ export function montarPagarV3(o: Opts) {
     ov.classList.add("on"); dr.classList.add("on");
     q("dX").onclick = closeAll;
     if (q("dForn")) q("dForn").onclick = () => o.onFornecedor(Number(r.cod_forn), r.emp);
+    if (q("dEdit")) q("dEdit").onclick = () => { closeAll(); o.onEditar(r.ref); };
+    if (q("dDesAj")) q("dDesAj").onclick = async () => { if (!confirm(`Voltar ao valor original do Omie (${brl(Number(r.aj.orig?.valor ?? 0))})?`)) return;
+      try { await api({ acao: "desfazer_ajuste", ref: r.ref }); toast("Ajuste desfeito — voltou ao valor do Omie"); closeAll(); await recarregarTudo(); } catch (e) { toast(e.message, true); } };
     fetch(`/api/financeiro/pagar?ciclo=${encodeURIComponent(r.ref)}`, { cache: "no-store" }).then((x) => x.json()).then((j) => { const el = q("dCiclo"); if (el) el.innerHTML = cicloHtml(j.ciclo); }).catch(() => { const el = q("dCiclo"); if (el) el.innerHTML = '<h4>Ciclo do pagamento</h4><div class="sub2">não foi possível carregar</div>'; });
     if (q("dSerie")) q("dSerie").onclick = () => { closeAll(); o.onSerie(r.serie.id, r.ref); };
     const pvAviso = () => { const v = q("pvData").value; q("pvAv").textContent = v && naoUtil(v) ? "⚠ dia não útil — o banco só processa no próximo dia útil" : ""; };

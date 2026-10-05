@@ -1,10 +1,10 @@
 ---
 titulo: Contas a Receber
-resumo: Previsão de entrada, cobrança, renegociação e baixa dos recebimentos.
+resumo: Previsão de entrada, cobrança, renegociação, editar conta e baixa dos recebimentos.
 icone: 💰
 area: erp
 rotas: /financeiro/receber
-caminhos: web/components/financeiro/TelaReceberV1.tsx, web/components/financeiro/receber-v1-motor.ts, web/app/api/financeiro/receber
+caminhos: web/components/financeiro/TelaReceberV1.tsx, web/components/financeiro/receber-v1-motor.ts, web/components/financeiro/EditarTituloModal.tsx, web/lib/financeiro-editar.ts, web/app/api/financeiro/receber
 atualizado: 2026-10-05
 ---
 
@@ -30,6 +30,16 @@ atualizado: 2026-10-05
 
 - **Alterar previsão** muda quando você espera receber (o vencimento do documento não muda).
 - **Marcar como renegociado** registra o acordo; dá para desfazer.
+
+## Como faço para editar uma conta a receber
+
+1. Clique no **✎** da linha ou abra a conta e clique em **Editar conta…**.
+2. Mude valor, vencimento, previsão, categoria, conta corrente, projeto ou observação (em conta do painel também cliente e documento).
+3. Em recorrência, escolha **Só esta** ou **Esta e as próximas desta série**.
+4. **Salvar** — o BI, o fluxo de caixa e a conciliação já veem o novo valor.
+
+- **Conta do Omie:** o ajuste fica no painel (o Omie não é alterado); a linha mostra **ajustado · orig. R$ X** e a gaveta tem **desfazer ajuste**.
+- O valor não pode ficar abaixo do que já foi recebido.
 
 ## Como faço para registrar um recebimento
 

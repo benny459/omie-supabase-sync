@@ -11,6 +11,7 @@ import Link from "next/link";
 import { useUserPerms } from "../UserPermsProvider";
 import NovoTituloModal from "../NovoTituloModal";
 import { montarReceberV1 } from "./receber-v1-motor";
+import EditarTituloModal from "./EditarTituloModal";
 import "./pagar-v3.css";
 
 export default function TelaReceberV1() {
@@ -18,11 +19,12 @@ export default function TelaReceberV1() {
   const ref = useRef<HTMLDivElement>(null);
   const motor = useRef<{ recarregar: () => Promise<void>; destruir: () => void } | null>(null);
   const [nova, setNova] = useState(false);
+  const [editar, setEditar] = useState<string | null>(null);
   const admin = !!perms?.is_admin;
 
   useEffect(() => {
     if (!ref.current) return;
-    motor.current = montarReceberV1({ root: ref.current, admin, onNovaConta: () => setNova(true) });
+    motor.current = montarReceberV1({ root: ref.current, admin, onNovaConta: () => setNova(true), onEditar: (r) => setEditar(r) });
     return () => motor.current?.destruir();
   }, [admin]);
   // painel "Casar" (conciliação com busca) — recarrega depois de casar/criar/ignorar
@@ -145,6 +147,7 @@ export default function TelaReceberV1() {
         <div className="cfpop" id="cfPop" />
       </div>
 
+      {editar && <EditarTituloModal tipo="receber" refTit={editar} onClose={() => setEditar(null)} onDone={() => motor.current?.recarregar()} />}
       {nova && <NovoTituloModal tipo="receber" onClose={() => setNova(false)} onCreated={() => motor.current?.recarregar()} />}
     </>
   );

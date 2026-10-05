@@ -13,11 +13,14 @@
 //  POST { acao: "renegociar", ids, motivo?, desfazer? }
 //  POST { acao: "programar", ids, empresa, cod_cc | null }
 //  POST { acao: "estornar", baixa_id, motivo } · { acao: "ignorar" | "desfazer", movimento_id, … }
+//  GET  ?editar=<ref r:uuid> → dados da conta para o modal "Editar" (sql/80)
+//  POST { acao: "editar", ref, campos, escopo?, motivo? } · { acao: "desfazer_ajuste", ref }  (financeiro.editar_titulo)
 //
 // Nada é escrito no Omie: recebimento de conta do Omie fica com omie_status
 // 'nao_enviado'; previsão ajustada vai para finance.previsao_override; boleto não é gerado.
 import { NextResponse } from "next/server";
 import { exigir, fin, erroDb } from "@/lib/financeiro-baixas";
+import { dadosParaEditar, editarTitulo, desfazerAjuste, type CamposEditar } from "@/lib/financeiro-editar";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -42,6 +45,11 @@ export async function GET(req: Request) {
     const { data, error } = await fin().rpc("receber_v1_cobrancas_de", { p_id: cob });
     return error ? erroDb(error) : NextResponse.json({ cobrancas: data });
   }
+  const editar = u.searchParams.get("editar");
+  if (editar) {
+    if (!a.pode["financeiro.editar_titulo"]) return NextResponse.json({ error: "Sem permissão (financeiro.editar_titulo)" }, { status: 403 });
+    return dadosParaEditar(editar);
+  }
   const mov = Number(u.searchParams.get("mov") ?? 0);
   if (mov) {
     if (!a.pode["financeiro.conciliar"]) return NextResponse.json({ error: "Sem permissão (financeiro.conciliar)" }, { status: 403 });
@@ -50,13 +58,14 @@ export async function GET(req: Request) {
     return error ? erroDb(error) : NextResponse.json({ movimentos: data });
   }
 
-  const { data, error } = await fin().rpc("receber_v1_dados", {});
+  const [{ data, error }, aj] = await Promise.all([fin().rpc("receber_v1_dados", {}), fin().rpc("titulo_ajustes_mapa", { p_natureza: "R" })]);
   if (error) return erroDb(error);
   return NextResponse.json({
     ...(data as object),
+    ajustes: aj.data ?? {},
     pode: {
       baixar: !!a.pode["financeiro.baixar"], conciliar: !!a.pode["financeiro.conciliar"],
-      incluir: !!a.pode["financeiro.editar_titulo"], cobrar: !!a.pode["financeiro.editar_titulo"] || !!a.pode["financeiro.baixar"],
+      incluir: !!a.pode["financeiro.editar_titulo"], editar: !!a.pode["financeiro.editar_titulo"], cobrar: !!a.pode["financeiro.editar_titulo"] || !!a.pode["financeiro.baixar"],
     },
   }, { headers: { "Cache-Control": "no-store" } });
 }
@@ -66,8 +75,17 @@ type Item = { id?: string; valor?: number; cod_cc?: number | null; desconto?: nu
 export async function POST(req: Request) {
   let b: { acao?: string; itens?: Item[]; data?: string; obs?: string; lote?: boolean; baixa_id?: number; motivo?: string;
            ids?: string[]; empresa?: string; cod_cc?: number | null; movimento_id?: number; ignorar?: boolean;
-           canal?: string; contato?: string; nota?: string; nova_previsao?: string; desfazer?: boolean };
+           canal?: string; contato?: string; nota?: string; nova_previsao?: string; desfazer?: boolean;
+           ref?: string; campos?: CamposEditar; escopo?: string };
   try { b = await req.json(); } catch { return NextResponse.json({ error: "JSON inválido" }, { status: 400 }); }
+
+  if (b.acao === "editar" || b.acao === "desfazer_ajuste") {
+    const r = await exigir("financeiro.ver_receber", "financeiro.editar_titulo");
+    if (r instanceof NextResponse) return r;
+    const ref = String(b.ref ?? "");
+    if (b.acao === "desfazer_ajuste") return desfazerAjuste(ref, r.email);
+    return editarTitulo("R", ref, b.campos ?? {}, b.escopo ?? "esta", b.motivo?.trim() || null, r.email);
+  }
 
   const conc = b.acao === "conciliar" || b.acao === "ignorar" || b.acao === "desfazer";
   const gestao = b.acao === "previsao" || b.acao === "cobranca" || b.acao === "renegociar";

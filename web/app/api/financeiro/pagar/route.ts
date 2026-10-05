@@ -19,16 +19,21 @@
 //  GET  ?ciclo=<ref>         → ciclo do pagamento (PC → NFs → parcelas → pagamentos), sql/75 finance.pagar_ciclo
 //  GET  ?excluidos=1         → títulos que sumiram do Omie e seguem abertos aqui (sql/75)
 //  POST { acao: "excluidos_marcar" | "excluidos_desfazer", refs }  (admin / financeiro.editar_titulo)
+//  GET  ?editar=<ref>        → dados do título para o modal "Editar" (sql/80 titulo_para_editar)
+//  POST { acao: "editar", ref, campos, escopo?, motivo? } · { acao: "desfazer_ajuste", ref }
+//                              (financeiro.editar_titulo; ver lib/financeiro-editar.ts)
 //  GET também devolve nomes (cod_forn → [fantasia, razão]), catpc (pc → categoria do PC)
 //  e excl (refs de títulos já excluídos no Omie ainda por marcar).
 //  GET também devolve prev (ref → [previsão efetiva, reprogramada?]), env (ref → remessa ao banco),
 //  serie (ref → {id, seq}) e feriados (datas, p/ avisar previsão em dia não útil).
+//  GET também devolve ajustes (ref → {orig, novo, …}) dos títulos do Omie ajustados no painel (sql/80).
 //
 // Título do Omie baixado aqui fica PAGO no painel e com omie_status 'nao_enviado' —
 // nada é escrito no Omie (a lista sai em ?baixas=omie para baixar lá à mão).
 import { NextResponse } from "next/server";
 import { exigir, fin, erroDb } from "@/lib/financeiro-baixas";
 import { supaAdmin } from "@/lib/supabase-admin";
+import { dadosParaEditar, editarTitulo, desfazerAjuste, type CamposEditar } from "@/lib/financeiro-editar";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -79,11 +84,12 @@ async function carregar() {
  *  séries de recorrência e feriados (sql/73). */
 async function extras() {
   const hoje = new Date().toLocaleDateString("sv-SE", { timeZone: "America/Sao_Paulo" });
-  const [pv, env, se, fe] = await Promise.all([
+  const [pv, env, se, fe, aj] = await Promise.all([
     fin().rpc("pagar_v3_previsoes", {}),
     fin().rpc("remessa_enviados", {}),
     fin().from("pagar_previsto").select("id, serie_id, serie_seq, parcelas_total").not("serie_id", "is", null).neq("status", "cancelado"),
     fin().rpc("feriados_listar", { p_de: hoje.slice(0, 4) + "-01-01", p_ate: (Number(hoje.slice(0, 4)) + 2) + "-12-31" }),
+    fin().rpc("titulo_ajustes_mapa", { p_natureza: "P" }),
   ]);
   const serie: Record<string, { id: string; seq: number; n: number | null }> = {};
   for (const x of (se.data ?? []) as { id: number; serie_id: string; serie_seq: number; parcelas_total: number | null }[]) {
@@ -94,6 +100,7 @@ async function extras() {
     env: (env.data ?? {}) as Record<string, unknown>,
     serie,
     feriados: ((fe.data ?? []) as { data: string; ativo: boolean }[]).filter((f) => f.ativo).map((f) => f.data),
+    ajustes: (aj.data ?? {}) as Record<string, unknown>,
   };
 }
 
@@ -152,6 +159,12 @@ export async function GET(req: Request) {
     return NextResponse.json({ historico: data });
   }
 
+  const editar = u.searchParams.get("editar");
+  if (editar) {
+    if (!a.pode["financeiro.editar_titulo"]) return NextResponse.json({ error: "Sem permissão (financeiro.editar_titulo)" }, { status: 403 });
+    return dadosParaEditar(editar);
+  }
+
   const ciclo = u.searchParams.get("ciclo");
   if (ciclo) {
     if (!/^[op]:\d+$/.test(ciclo)) return NextResponse.json({ error: "ref inválida" }, { status: 400 });
@@ -181,7 +194,7 @@ export async function GET(req: Request) {
       ...dados,
       ...extra,
       ...nomes,
-      pode: { baixar: !!a.pode["financeiro.baixar"], conciliar: !!a.pode["financeiro.conciliar"], incluir: !!a.pode["financeiro.editar_titulo"] },
+      pode: { baixar: !!a.pode["financeiro.baixar"], conciliar: !!a.pode["financeiro.conciliar"], incluir: !!a.pode["financeiro.editar_titulo"], editar: !!a.pode["financeiro.editar_titulo"] },
     }, { headers: { "Cache-Control": "no-store" } });
   } catch (e) {
     return erroDb(e as { message?: string });
@@ -192,7 +205,8 @@ type Item = { ref?: string; valor?: number; cod_cc?: number | null; desconto?: n
 
 export async function POST(req: Request) {
   let b: { acao?: string; itens?: Item[]; data?: string | null; obs?: string; lote?: boolean; baixa_id?: number; motivo?: string;
-           refs?: string[]; empresa?: string; cod_cc?: number | null; movimento_id?: number; ignorar?: boolean };
+           refs?: string[]; empresa?: string; cod_cc?: number | null; movimento_id?: number; ignorar?: boolean;
+           ref?: string; campos?: CamposEditar; escopo?: string };
   try { b = await req.json(); } catch { return NextResponse.json({ error: "JSON inválido" }, { status: 400 }); }
 
   if (b.acao === "excluidos_marcar" || b.acao === "excluidos_desfazer") {
@@ -205,6 +219,15 @@ export async function POST(req: Request) {
     const args = b.acao === "excluidos_marcar" ? { p_refs: refs, p_por: r.email, p_motivo: b.motivo ?? "sumiu do Omie (relatório 02/10/2026)" } : { p_refs: refs, p_por: r.email };
     const { data, error } = await fin().rpc(fn, args);
     return error ? erroDb(error) : NextResponse.json({ ok: true, n: data });
+  }
+
+  // Editar título (valor, vencimento, previsão, categoria, …) / desfazer ajuste do Omie — sql/80.
+  if (b.acao === "editar" || b.acao === "desfazer_ajuste") {
+    const r = await exigir("financeiro.ver_pagar", "financeiro.editar_titulo");
+    if (r instanceof NextResponse) return r;
+    const ref = String(b.ref ?? "");
+    if (b.acao === "desfazer_ajuste") return desfazerAjuste(ref, r.email);
+    return editarTitulo("P", ref, b.campos ?? {}, b.escopo ?? "esta", b.motivo?.trim() || null, r.email);
   }
 
   const conc = b.acao === "conciliar" || b.acao === "ignorar" || b.acao === "desfazer";

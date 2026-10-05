@@ -6,6 +6,8 @@ type Opts = {
   root: HTMLElement;
   admin: boolean;
   onNovaConta: () => void;
+  /** Editar a conta (valor, vencimento, previsão, categoria…) — EditarTituloModal (sql/80). */
+  onEditar: (ref: string) => void;
 };
 
 const EMPS = ["CD", "SF", "WW"];
@@ -27,7 +29,7 @@ export function montarReceberV1(o: Opts) {
   const q = (id) => root.querySelector("#" + id);
   const qa = (sel) => root.querySelectorAll(sel);
   let TODAY = new Date(new Date().toLocaleDateString("sv-SE", { timeZone: "America/Sao_Paulo" }) + "T00:00:00");
-  let rows = [], BANKS = [], PONT = { n: 0, pct: null }, PODE = { baixar: false, conciliar: false, incluir: false, cobrar: false };
+  let rows = [], BANKS = [], PONT = { n: 0, pct: null }, PODE = { baixar: false, conciliar: false, incluir: false, cobrar: false, editar: false };
   let MOV = [], MOVLOAD = false, BAIXAS = [], vivo = true, carregando = true, erro = "";
 
   const S = { emp: "ALL", q: "", base: "prev", agMode: "dia", agHide: {}, agSel: 0, vcEmp: "SF", vcRange: 60, vcCut: null, rkDim: "cli", rkOpen: null,
@@ -82,7 +84,7 @@ export function montarReceberV1(o: Opts) {
       TODAY = new Date(j.hoje + "T00:00:00");
       PODE = j.pode ?? PODE; PONT = j.pont30 ?? PONT;
       BANKS = (j.banks ?? []).map((b) => ({ emp: b[0], cod: Number(b[1]), desc: b[2], tipo: b[3], saldo: Number(b[4]) || 0, dt: b[5], ofx: b[6], pend: Number(b[7]) || 0 }));
-      const prog = j.prog ?? {};
+      const prog = j.prog ?? {}; const AJ = j.ajustes ?? {};
       const sel = new Set([...S.sel].map((i) => rows[i]?.ref).filter(Boolean));
       rows = (j.rows ?? []).map((x, i) => {
         const d = pd(x[2]); const prev = pd(x[17] || x[21] || x[2]);
@@ -91,7 +93,7 @@ export function montarReceberV1(o: Opts) {
         const o2 = { id: i, ref: x[0], uid: x[30], emp: x[1], venc: x[2], d, diasV: Math.round((d - TODAY) / DAY), v: Number(x[3]), forn: x[4], cat: x[5] ?? "", proj: x[6] ?? "",
           doc: x[7] ?? "", parc: x[8] ?? "", conta: x[9] ?? "", cod_cc, cod: x[11], bol: !!x[12], nbol: x[13] ?? "", nf: x[14] ?? "", tipo: x[15], reneg: !!x[16], pOv: x[17],
           atr: x[18] != null ? Number(x[18]) : null, pont: x[19] != null ? Number(x[19]) : null, nh: x[20] != null ? Number(x[20]) : null, prevD: prev, cnpj: x[22] ?? "",
-          orig: x[23], vdoc: Number(x[24]) || 0, cod_cli: x[25], ncob: Number(x[26]) || 0, pedido: x[27], rotulo: x[28], pessoa: x[29], paid: null,
+          orig: x[23], vdoc: Number(x[24]) || 0, cod_cli: x[25], ncob: Number(x[26]) || 0, pedido: x[27], rotulo: x[28], pessoa: x[29], paid: null, aj: AJ[x[0]] ?? null,
           bank: prog[x[0]] != null ? Number(prog[x[0]]) : def };
         o2.prom = o2.diasV < 0 && prev > d && prev >= TODAY;
         o2.diasP = o2.diasV < 0 && !o2.prom ? o2.diasV : Math.round((prev - TODAY) / DAY);
@@ -316,8 +318,9 @@ export function montarReceberV1(o: Opts) {
       <td><span class="emp ${r.emp}">${r.emp}</span></td><td title="${esc(r.forn)} · ${esc(r.cnpj)}" style="font-weight:500">${esc(r.forn)}</td><td style="color:var(--tx2)">${esc(r.cat || "Sem categoria")}</td>
       <td>${cob}</td><td>${badge(r.st)}${r.ncob ? `<div class="sub2">cobrado ${r.ncob}x</div>` : ""}</td><td>${histTag(r)}</td>
       <td><select class="bsel ${r.bank ? (r.bank !== r.cod_cc ? "chg" : "") : "need"}" data-bk="${r.id}" title="Conta no Omie: ${esc(r.conta)}" ${PODE.baixar ? "" : "disabled"}><option value="">Escolher banco…</option>${bankGroupsHtml(r.emp, r.bank)}</select>${interco(r, r.bank) ? `<div class="sub2" style="color:#a78bfa" title="Título da ${r.emp} recebido em conta da ${interco(r, r.bank)} — intercompany">recebe na ${interco(r, r.bank)}</div>` : ""}</td>
-      <td class="r" style="font-weight:650">${brl(r.v)}</td><td class="r">${PODE.baixar ? `<button class="btn sm">Receber</button>` : ""}</td></tr>`; }).join("")}</tbody>`;
+      <td class="r" style="font-weight:650">${brl(r.v)}${r.aj?.novo?.valor != null ? `<div class="sub2" title="Valor ajustado no painel">ajustado · orig. ${brl(Number(r.aj.orig?.valor ?? 0))}</div>` : ""}</td><td class="r" style="white-space:nowrap">${PODE.editar ? `<button class="btn sm" data-ed="${r.id}" title="Editar conta (valor, vencimento, categoria…)">✎</button> ` : ""}${PODE.baixar ? `<button class="btn sm">Receber</button>` : ""}</td></tr>`; }).join("")}</tbody>`;
     qa("#tbl tbody tr").forEach((tr) => (tr.onclick = (e) => { if (e.target.classList.contains("ck") || e.target.tagName === "SELECT" || e.target.tagName === "OPTION") return; openDrawer(+tr.dataset.id); }));
+    qa("#tbl [data-ed]").forEach((b) => (b.onclick = (e) => { e.stopPropagation(); o.onEditar(rows[+b.dataset.ed].ref); }));
     qa("#tbl tbody .ck").forEach((cx) => (cx.onchange = () => { const id = +cx.dataset.id; cx.checked ? S.sel.add(id) : S.sel.delete(id); cx.closest("tr").classList.toggle("sel", cx.checked); renderAbar(); }));
     q("ckAll").onchange = (e) => { show.forEach((r) => (e.target.checked ? S.sel.add(r.id) : S.sel.delete(r.id))); renderTable(); };
     qa("#tbl .bsel").forEach((x) => { x.onclick = (e) => e.stopPropagation(); x.onchange = () => programar([rows[+x.dataset.bk]], x.value ? +x.value : null); });
@@ -369,14 +372,14 @@ export function montarReceberV1(o: Opts) {
     <div class="dbody">
       <div class="verdict ${vcls}"><b>${SIT[r.st].l}</b><span>${SIT[r.st].d}</span></div>
       <div class="dgrid">
-        <div><span>Vencimento</span>${r.d.toLocaleDateString("pt-BR")}</div><div><span>Valor em aberto</span><b class="num" style="font-size:16px">${brl(r.v)}</b>${r.vdoc && Math.abs(r.vdoc - r.v) > 0.01 ? `<div class="sub2">documento ${brl(r.vdoc)}</div>` : ""}</div>
+        <div><span>Vencimento</span>${r.d.toLocaleDateString("pt-BR")}</div><div><span>Valor em aberto</span><b class="num" style="font-size:16px">${brl(r.v)}</b>${r.vdoc && Math.abs(r.vdoc - r.v) > 0.01 ? `<div class="sub2">documento ${brl(r.vdoc)}</div>` : ""}${r.aj?.novo?.valor != null ? `<div class="sub2">valor ajustado (orig. ${brl(Number(r.aj.orig?.valor ?? 0))})${PODE.editar ? ' · <button class="link" id="dDesAj">desfazer ajuste</button>' : ""}</div>` : ""}</div>
         <div><span>Previsão de recebimento</span>${r.prevD.toLocaleDateString("pt-BR")}${r.pOv ? ' <span class="flag">AJUSTADA</span>' : ""}</div><div><span>Histórico do cliente (12m)</span>${histTag(r)}${r.nh ? ` <span class="sub2">· ${r.nh} títulos</span>` : ""}</div>
         <div><span>Categoria</span>${esc(r.cat || "Sem categoria")}</div><div><span>Projeto / contrato</span>${esc(r.proj || "—")}</div>
         <div><span>Cobrança</span>${r.bol ? 'Boleto <span class="mono">' + esc(r.nbol || "—") + "</span>" : r.tipo === "NFS" ? "NF de serviço " + esc(r.nf || "") : '<span style="color:#fb923c">Sem boleto</span>'}</div><div><span>Doc / NF / Parcela</span>${esc(r.doc || "—")}${r.nf ? " · NF " + esc(r.nf) : ""} · ${esc(r.parc || "—")}</div>
         <div><span>CNPJ</span><span class="mono">${esc(r.cnpj || "—")}</span></div><div><span>Outros em aberto deste cliente</span>${others.length ? `${others.length} · ${brl(sum(others))}` : "nenhum"}</div>
         <div><span>Origem</span>${r.orig === "painel" ? "Conta do painel (faturamento)" : "Omie · cód. " + esc(r.cod)}</div><div><span>Pedido</span>${r.rotulo ? `<a class="link" href="/bi/rentabilidade?pedido=${encodeURIComponent(r.rotulo)}&empresa=${r.emp}">${esc(r.rotulo)} · rentabilidade →</a>` : esc(r.pedido || "—")}</div>
       </div>
-      ${r.pessoa ? `<div style="margin:-6px 0 12px"><a class="link" href="/cadastros/${r.pessoa}">Ficha do cliente (histórico completo) →</a></div>` : ""}
+      <div style="margin:-6px 0 12px;display:flex;gap:14px;flex-wrap:wrap;align-items:center">${PODE.editar ? `<button class="btn sm" id="dEdit" title="Valor, vencimento, previsão, categoria, conta, projeto, observação">Editar conta…</button>` : ""}${r.pessoa ? `<a class="link" href="/cadastros/${r.pessoa}">Ficha do cliente (histórico completo) →</a>` : ""}</div>
       <div class="tabs2" id="dTabs">${PODE.baixar ? '<button data-v="rec" class="on">Receber</button>' : ""}${PODE.cobrar ? '<button data-v="prev">Alterar previsão</button><button data-v="cob">Registrar cobrança</button>' : ""}${r.bol || r.diasV < 0 ? "" : '<button data-v="bol">Emitir boleto</button>'}</div>
       <div class="box" id="dBox"></div>
       <div id="dCobH" style="margin-top:14px;font-size:12px;color:var(--tx2)"></div>
@@ -384,6 +387,9 @@ export function montarReceberV1(o: Opts) {
     <div class="df" id="dFoot"></div>`;
     ov.classList.add("on"); dr.classList.add("on");
     q("dX").onclick = closeAll;
+    if (q("dEdit")) q("dEdit").onclick = () => { closeAll(); o.onEditar(r.ref); };
+    if (q("dDesAj")) q("dDesAj").onclick = async () => { if (!confirm(`Voltar ao valor original do Omie (${brl(Number(r.aj.orig?.valor ?? 0))})?`)) return;
+      try { await api({ acao: "desfazer_ajuste", ref: r.ref }); toast("Ajuste desfeito — voltou ao valor do Omie"); closeAll(); await recarregarTudo(); } catch (e) { toast(e.message, true); } };
     if (r.ncob) fetch(`/api/financeiro/receber?cobrancas=${r.uid}`).then((x) => x.json()).then((j) => { const l = j.cobrancas ?? []; if (!l.length || !q("dCobH")) return; q("dCobH").innerHTML = `<b style="color:var(--tx)">Cobranças registradas</b>${l.map((c) => `<div style="padding:6px 0;border-bottom:1px solid var(--line)">${new Date(c.em).toLocaleDateString("pt-BR")} · ${esc(c.canal)}${c.contato ? " · " + esc(c.contato) : ""} · ${esc(c.nota || "—")}${c.nova_previsao ? " · nova previsão " + dm(pd(c.nova_previsao)) : ""} <span class="sub2">· ${esc(String(c.por || "").split("@")[0])}</span></div>`).join("")}`; }).catch(() => {});
     const tab = (t) => {
       qa("#dTabs button").forEach((b) => b.classList.toggle("on", b.dataset.v === t));

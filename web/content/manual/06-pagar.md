@@ -1,10 +1,10 @@
 ---
 titulo: Contas a Pagar
-resumo: Agenda, bancos, pode-pagar, reprogramar previsão, baixa em lote, arquivo C6 e contas recorrentes.
+resumo: Agenda, bancos, pode-pagar, editar título, reprogramar previsão, baixa em lote, arquivo C6 e contas recorrentes.
 icone: 💸
 area: erp
 rotas: /financeiro/pagar
-caminhos: web/components/financeiro/TelaPagarV3.tsx, web/components/financeiro/pagar-v3-motor.ts, web/components/financeiro/RemessaC6.tsx, web/components/financeiro/SerieDialog.tsx, web/components/NovoTituloModal.tsx, web/app/api/financeiro/pagar
+caminhos: web/components/financeiro/TelaPagarV3.tsx, web/components/financeiro/pagar-v3-motor.ts, web/components/financeiro/RemessaC6.tsx, web/components/financeiro/SerieDialog.tsx, web/components/financeiro/EditarTituloModal.tsx, web/lib/financeiro-editar.ts, web/components/NovoTituloModal.tsx, web/app/api/financeiro/pagar
 atualizado: 2026-10-05
 ---
 
@@ -67,6 +67,18 @@ O título da CD fica **PAGO** e o sistema registra sozinho "**CD deve à SF**" e
 
 > **Atenção:** a despesa continua na DRE da empresa dona do título (CD); o caixa sai da conta que pagou (SF).
 
+## Como faço para editar um título (valor, vencimento, categoria…)
+
+1. Clique no **✎** da linha ou abra o título e clique em **Editar título…**.
+2. Mude o que precisar: valor, vencimento, previsão, categoria, conta corrente, projeto e observação. Em conta lançada no painel também dá para trocar o fornecedor e o documento.
+3. Se o título é de uma **recorrência** (do Omie ou do painel), escolha em **Aplicar a**: **Só esta** ou **Esta e as próximas desta série** (no painel também **Todas**). O vencimento só muda na ocorrência aberta.
+4. Clique em **Salvar**. O BI, o fluxo de caixa, a conciliação, o arquivo C6 e as fichas já veem o novo valor.
+
+- **Título do Omie:** a alteração fica guardada no painel — o Omie não é alterado. A linha mostra **ajustado · orig. R$ X** e, na gaveta, **desfazer ajuste** volta ao valor original.
+- **Previsão de PC:** mudar o valor exige **motivo**, porque o total das parcelas deixa de bater com o pedido de compra.
+- O valor nunca pode ficar **abaixo do que já foi pago**.
+- Precisa da permissão **Editar títulos** (financeiro.editar_titulo). Toda edição fica no histórico de auditoria.
+
 ## Nova conta e contas recorrentes
 
 1. Clique em **+ Nova conta**, escolha fornecedor, categoria, conta, projeto, vencimento e valor.
@@ -78,5 +90,7 @@ O título da CD fica **PAGO** e o sistema registra sozinho "**CD deve à SF**" e
 ## Perguntas frequentes
 
 **Paguei e o título continua em aberto.** Confira se a baixa foi registrada (Baixas de hoje) ou concilie o extrato.
+
+**O valor de uma conta recorrente veio diferente este mês.** Abra o título, **Editar título…**, mude o valor e deixe **Só esta**. Se mudou de vez, use **Esta e as próximas desta série**.
 
 **Onde vejo o detalhe de um título do Omie?** Clique na linha; a gaveta mostra PC, NF, histórico e o fornecedor.
