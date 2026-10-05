@@ -103,3 +103,29 @@ td > .ne-exist-lista{background:var(--ww-panel,#0f1a2c);border:1px solid var(--w
 .ne-acerto-tit { font-size: 12.5px; font-weight: 600; margin-bottom: 4px; }
 .ne-acerto-tit small { font-weight: 400; color: var(--ww-text-muted, #9aa8c3); }
 .ne-acerto-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+/* Itens em grade (05/10/26): cabe na coluna da folha; dicas numa linha só embaixo do item */
+.ne-itens{display:flex;flex-direction:column;gap:2px;min-width:0;container-type:inline-size}
+.ne-it-cab,.ne-it-lin{display:grid;grid-template-columns:var(--ne-cols);gap:6px;align-items:center;min-width:0}
+.ne-it-cab{font-size:11px;color:var(--ww-text-faint,#6b7d9c);font-weight:600;padding:2px 0 4px;border-bottom:1px solid var(--ww-border,#1e2d48)}
+.ne-it-cab .r{text-align:right}
+.ne-it{padding:5px 0;border-bottom:1px solid var(--ww-border,#1e2d48)}
+.ne-it-lin>*{min-width:0}
+.ne-it-lin .ne-in{width:100%}
+.ne-it-ncm{display:flex;gap:4px;align-items:center}
+.ne-it-ncm .ne-in{flex:1}
+.ne-in.ruim{border-color:rgba(239,68,68,.6);background:rgba(239,68,68,.08)}
+.ne-ncm-lupa{flex:none;width:30px;height:32px;border-radius:8px;border:1px solid var(--ww-border-strong,#28395a);background:none;cursor:pointer;font-size:13px;line-height:1}
+.ne-ncm-lupa.ruim{border-color:rgba(239,68,68,.6);background:rgba(239,68,68,.12)}
+.ne-it-tot{text-align:right;font-size:12.5px;font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ne-it-rem{width:26px;height:26px;border-radius:7px;border:0;background:none;color:var(--ww-text-faint,#6b7d9c);font-size:18px;line-height:1;cursor:pointer}
+.ne-it-rem:hover{color:#fca5a5;background:rgba(239,68,68,.1)}
+.ne-it-dicas{display:flex;flex-wrap:wrap;gap:4px 12px;font-size:11px;color:var(--ww-text-muted,#9fb0cc);padding:3px 2px 0 116px}
+.ne-it-dicas .ruim{color:#fca5a5}
+.ne-it-dicas .ne-lk{font-size:11px;padding:0}
+@container (max-width:860px){
+  .ne-it-cab{display:none}
+  .ne-it-lin{grid-template-columns:repeat(6,minmax(0,1fr))}
+  .ne-it-lin .ne-it-cod{grid-column:span 2}
+  .ne-it-lin .ne-it-desc{grid-column:span 4}
+  .ne-it-dicas{padding-left:2px}
+}

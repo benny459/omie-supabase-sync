@@ -1130,16 +1130,37 @@ export default function NovaEmissao({ config, aberto, fechar, avisar, onEmitido,
               {acerto && <AcertoItemEstoque empresa={empresa} compra={acerto.c} onFechar={() => setAcerto(null)}
                 onPronto={(codigo) => usarNativo(acerto.n, codigo)} />}
               <h3>Itens <small>{itens.length} item(ns) · bruto {fmt(bruto)}</small></h3>
-              <table className="ne-tab">
-                <thead><tr><th>Código</th><th>Descrição</th>{tipo === "nfe" && <th>NCM</th>}<th>Un</th><th className="r">Qtd</th>{operacao === "devolucao" && naoVenda && <><th className="r">Item na NF</th><th className="r">ICMS %</th></>}<th className="r">Valor unit.</th><th className="r">Total</th><th /></tr></thead>
-                <tbody>{itens.map((it, n) => (
-                  <tr key={n}>
-                    <td><input className="ne-in" style={{ width: 110 }} value={it.codigo ?? ""} placeholder="código"
-                      onChange={(e) => { setItens(itens.map((x, i) => (i === n ? { ...x, codigo: e.target.value, nativo: false } : x))); setItBusca({ n, q: e.target.value }); }}
-                      onBlur={() => window.setTimeout(() => setItBusca((b) => (b?.n === n ? null : b)), 200)} /></td>
-                    <td style={{ position: "relative" }}><input className="ne-in" style={{ width: "100%", minWidth: 220 }} value={it.descricao ?? ""} placeholder="busque pelo nome ou código"
-                      onChange={(e) => { setItens(itens.map((x, i) => (i === n ? { ...x, descricao: e.target.value, nativo: false } : x))); setItBusca({ n, q: e.target.value }); }}
-                      onBlur={() => window.setTimeout(() => setItBusca((b) => (b?.n === n ? null : b)), 200)} />
+              {(() => {
+                const devol = operacao === "devolucao" && naoVenda;
+                // Grade que cabe na coluna da folha (05/10/26, pedido do Benny): dicas numa linha só, embaixo do item
+                const cols = ["110px", "minmax(180px,1fr)", ...(tipo === "nfe" ? ["136px"] : []), "58px", "78px", ...(devol ? ["58px", "64px"] : []), "108px", "100px", "26px"].join(" ");
+                return (
+                  <div className="ne-itens" style={{ ["--ne-cols" as string]: cols }}>
+                    <div className="ne-it-cab"><span>Código</span><span>Descrição</span>{tipo === "nfe" && <span>NCM</span>}<span>Un</span><span className="r">Qtd</span>
+                      {devol && <><span className="r">Item NF</span><span className="r">ICMS %</span></>}<span className="r">Valor unit.</span><span className="r">Total</span><span /></div>
+                    {itens.map((it, n) => {
+                      const ncmMal = tipo === "nfe" && !!it.descricao && (ncmDig(it.ncm).length !== 8 || ncmRuim.includes(ncmDig(it.ncm)));
+                      const dc = dicas[n];
+                      const acima = operacao !== "devolucao" && dc?.saldo != null && it.quantidade > (dc.saldo ?? 0) && (dc.saldo ?? 0) > 0;
+                      const partes: { t: string; ruim?: boolean }[] = [];
+                      if (tipo === "nfe" && it.codigo && it.nativo === false) partes.push({ t: "código digitado à mão — escolha o item do estoque pela busca", ruim: true });
+                      if (it.quantidade_max != null) partes.push({ t: `máx. ${it.quantidade_max} (NF de origem)`, ruim: it.quantidade > it.quantidade_max });
+                      if (operacao !== "devolucao" && dc?.saldo != null) partes.push((dc.saldo ?? 0) < 0
+                        ? { t: `disp. ${dc.saldo} — saldo do estoque inconsistente, conferir no Inventário (não bloqueia a nota)`, ruim: true }
+                        : (dc.saldo ?? 0) === 0 ? { t: "saldo do item ainda não conferido (não bloqueia a nota)" }
+                        : { t: `disp. ${dc.saldo}${acima ? " — acima do estoque" : ""}`, ruim: acima });
+                      if (dc?.cmc != null) partes.push({ t: `CMC ${fmt(dc.cmc)}` });
+                      if (dc?.ultimo_preco != null) partes.push({ t: `últ. compra ${fmt(dc.ultimo_preco)}` });
+                      if (tipo === "nfe" && !naoVenda && dc?.ultima_venda != null) partes.push({ t: `últ. venda ${fmt(dc.ultima_venda)}` });
+                      return (
+                        <div key={n} className="ne-it">
+                          <div className="ne-it-lin">
+                            <input className="ne-in ne-it-cod" aria-label="Código" value={it.codigo ?? ""} placeholder="código"
+                              onChange={(e) => { setItens(itens.map((x, i) => (i === n ? { ...x, codigo: e.target.value, nativo: false } : x))); setItBusca({ n, q: e.target.value }); }}
+                              onBlur={() => window.setTimeout(() => setItBusca((b) => (b?.n === n ? null : b)), 200)} />
+                            <div className="ne-it-desc" style={{ position: "relative" }}><input className="ne-in" aria-label="Descrição" style={{ width: "100%" }} value={it.descricao ?? ""} placeholder="busque pelo nome ou código"
+                              onChange={(e) => { setItens(itens.map((x, i) => (i === n ? { ...x, descricao: e.target.value, nativo: false } : x))); setItBusca({ n, q: e.target.value }); }}
+                              onBlur={() => window.setTimeout(() => setItBusca((b) => (b?.n === n ? null : b)), 200)} />
                       {itBusca?.n === n && itSug && (
                         <div className="ne-exist-lista" style={{ position: "absolute", top: "100%", left: 0, minWidth: 460, zIndex: 6, maxHeight: 280 }}>
                           {itSug.length ? itSug.map((c) => (
@@ -1165,32 +1186,32 @@ export default function NovaEmissao({ config, aberto, fechar, avisar, onEmitido,
                                 </div>))}
                             </div>)}
                         </div>)}
-                      {tipo === "nfe" && it.codigo && it.nativo === false && <div className="ne-dica" style={{ color: "#fca5a5" }}>código digitado à mão — escolha o item do estoque pela busca</div>}
-                    </td>
-                    {tipo === "nfe" && <td><input className="ne-in" style={{ width: 96 }} value={it.ncm ?? ""} onChange={(e) => setItens(itens.map((x, i) => (i === n ? { ...x, ncm: e.target.value } : x)))} />
-                      {(ncmDig(it.ncm).length !== 8 || ncmRuim.includes(ncmDig(it.ncm))) && it.descricao
-                        ? <div><button type="button" className="ncm-btn alerta" onClick={() => setNcmBox(n)}>{ncmDig(it.ncm) ? "NCM inválido — localizar" : "Localizar NCM"}</button></div>
-                        : <div><button type="button" className="ne-lk" style={{ fontSize: 11 }} onClick={() => setNcmBox(n)}>localizar</button></div>}</td>}
-                    <td><input className="ne-in" style={{ width: 56 }} value={it.unidade ?? "UN"} onChange={(e) => setItens(itens.map((x, i) => (i === n ? { ...x, unidade: e.target.value } : x)))} /></td>
-                    <td><input className="ne-in num" style={{ width: 80 }} type="number" step="0.01" value={it.quantidade}
-                      max={it.quantidade_max ?? undefined} title={it.quantidade_max != null ? `máx. ${it.quantidade_max} (NF de origem)` : undefined}
-                      onChange={(e) => setItens(itens.map((x, i) => (i === n ? { ...x, quantidade: Number(e.target.value) } : x)))} />
-                      {it.quantidade_max != null && <div className="ne-dica" style={it.quantidade > it.quantidade_max ? { color: "#fca5a5" } : undefined}>máx. {it.quantidade_max}</div>}
-                      {operacao !== "devolucao" && dicas[n]?.saldo != null && <div className="ne-dica" style={it.quantidade > (dicas[n]?.saldo ?? 0) ? { color: "#fca5a5" } : undefined}>
-                        {(dicas[n]?.saldo ?? 0) <= 0 ? "saldo do item ainda não conferido (não bloqueia a nota)" : `disp. ${dicas[n]?.saldo}${it.quantidade > (dicas[n]?.saldo ?? 0) ? " — acima do estoque" : ""}`}</div>}</td>
-                    {operacao === "devolucao" && naoVenda && <td><input className="ne-in num" style={{ width: 56 }} type="number" min={1} title="nº do item na NF de origem" value={it.ref_item ?? n + 1}
-                      onChange={(e) => setItens(itens.map((x, i) => (i === n ? { ...x, ref_item: Number(e.target.value) || null } : x)))} /></td>}
-                    {operacao === "devolucao" && naoVenda && <td><input className="ne-in num" style={{ width: 64 }} type="number" step="0.01" value={it.icms_aliquota ?? 0}
-                      onChange={(e) => setItens(itens.map((x, i) => (i === n ? { ...x, icms_aliquota: Number(e.target.value) } : x)))} /></td>}
-                    <td><input className="ne-in num" style={{ width: 110 }} type="number" step="0.01" value={it.valor_unitario} onChange={(e) => setItens(itens.map((x, i) => (i === n ? { ...x, valor_unitario: Number(e.target.value) } : x)))} />
-                      {dicas[n] && (dicas[n].cmc != null || dicas[n].ultimo_preco != null || dicas[n].ultima_venda != null) && <div className="ne-dica">
-                        {[dicas[n].cmc != null && `CMC ${fmt(dicas[n].cmc!)}`, dicas[n].ultimo_preco != null && `últ. compra ${fmt(dicas[n].ultimo_preco!)}`,
-                          tipo === "nfe" && !naoVenda && dicas[n].ultima_venda != null && `últ. venda ${fmt(dicas[n].ultima_venda!)}`].filter(Boolean).join(" · ")}</div>}</td>
-                    <td className="r">{fmt(it.quantidade * it.valor_unitario)}</td>
-                    <td><button className="ne-lk" onClick={() => { setItens(itens.length > 1 ? itens.filter((_, i) => i !== n) : [ITEM0]); setDicas({}); }}>remover</button></td>
-                  </tr>))}
-                </tbody>
-              </table>
+                            </div>
+                            {tipo === "nfe" && <div className="ne-it-ncm">
+                              <input className={`ne-in${ncmMal ? " ruim" : ""}`} aria-label="NCM" placeholder="NCM" value={it.ncm ?? ""} title={ncmMal ? (ncmDig(it.ncm) ? "NCM inválido" : "sem NCM") : undefined}
+                                onChange={(e) => setItens(itens.map((x, i) => (i === n ? { ...x, ncm: e.target.value } : x)))} />
+                              <button type="button" className={`ne-ncm-lupa${ncmMal ? " ruim" : ""}`} title="Localizar NCM" aria-label="Localizar NCM" onClick={() => setNcmBox(n)}>🔍</button>
+                            </div>}
+                            <input className="ne-in" aria-label="Unidade" value={it.unidade ?? "UN"} onChange={(e) => setItens(itens.map((x, i) => (i === n ? { ...x, unidade: e.target.value } : x)))} />
+                            <input className={`ne-in num${(it.quantidade_max != null && it.quantidade > it.quantidade_max) || acima ? " ruim" : ""}`} aria-label="Quantidade" type="number" step="0.01" value={it.quantidade}
+                              max={it.quantidade_max ?? undefined} title={it.quantidade_max != null ? `máx. ${it.quantidade_max} (NF de origem)` : undefined}
+                              onChange={(e) => setItens(itens.map((x, i) => (i === n ? { ...x, quantidade: Number(e.target.value) } : x)))} />
+                            {devol && <input className="ne-in num" aria-label="Item na NF de origem" type="number" min={1} title="nº do item na NF de origem" value={it.ref_item ?? n + 1}
+                              onChange={(e) => setItens(itens.map((x, i) => (i === n ? { ...x, ref_item: Number(e.target.value) || null } : x)))} />}
+                            {devol && <input className="ne-in num" aria-label="ICMS %" type="number" step="0.01" value={it.icms_aliquota ?? 0}
+                              onChange={(e) => setItens(itens.map((x, i) => (i === n ? { ...x, icms_aliquota: Number(e.target.value) } : x)))} />}
+                            <input className="ne-in num" aria-label="Valor unitário" type="number" step="0.01" value={it.valor_unitario} onChange={(e) => setItens(itens.map((x, i) => (i === n ? { ...x, valor_unitario: Number(e.target.value) } : x)))} />
+                            <span className="ne-it-tot">{fmt(it.quantidade * it.valor_unitario)}</span>
+                            <button type="button" className="ne-it-rem" title="remover item" aria-label="remover item" onClick={() => { setItens(itens.length > 1 ? itens.filter((_, i) => i !== n) : [ITEM0]); setDicas({}); }}>×</button>
+                          </div>
+                          {(partes.length > 0 || ncmMal) && <div className="ne-it-dicas">
+                            {ncmMal && <span className="ruim">{ncmDig(it.ncm) ? "NCM inválido" : "sem NCM"} — <button type="button" className="ne-lk" onClick={() => setNcmBox(n)}>localizar NCM</button></span>}
+                            {partes.map((p, k) => <span key={k} className={p.ruim ? "ruim" : undefined}>{p.t}</span>)}
+                          </div>}
+                        </div>);
+                    })}
+                  </div>);
+              })()}
               <div><button className="ne-lk" onClick={() => setItens([...itens, { ...ITEM0 }])}>+ item</button></div>
               <div className="ne-linha">
                 {num("Desconto (R$)", desconto, setDesconto)}
