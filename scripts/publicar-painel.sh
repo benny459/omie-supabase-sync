@@ -16,6 +16,10 @@ if PROD=$(git rev-parse -q --verify "prod-painel^{commit}" 2>/dev/null); then
 fi
 echo "✓ Travas OK: $(git log --oneline -1)"
 [ "${PUBLICAR_TESTE:-0}" = 1 ] && { echo "(teste: não publiquei)"; exit 0; }
+# Manual: "o que mudou" fresco do git no que vai para o ar (05/10/26); o
+# arquivo volta ao commitado depois, para a árvore ficar limpa.
+(cd web && node scripts/manual-gerar.mjs >/dev/null 2>&1 || true)
 (cd web && vercel --prod --yes -m gitCommitSha="$(git rev-parse HEAD)" -m gitCommitRef=main)
+git checkout -- web/lib/manual-dados.json web/lib/manual-rotas.json 2>/dev/null || true
 git tag -f prod-painel HEAD >/dev/null && git push -q -f origin refs/tags/prod-painel
 echo "✓ Publicado e marcado (prod-painel = $(git rev-parse --short HEAD))"

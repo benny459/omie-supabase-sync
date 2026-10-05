@@ -34,6 +34,7 @@ import VersionWatcher from "../VersionWatcher";
 import SeletorPaleta from "../viz/SeletorPaleta";
 import { useCesar } from "../cesar/CesarProvider";
 import { supaBrowser } from "@/lib/supabase";
+import { slugDaRota } from "@/lib/manual-rotas";
 import BarraAllka, {
   Avatar, BotaoAssistente, IconeOpcoes, useFechaFora,
   type ItemModulo, type ModuloBarra,
@@ -236,8 +237,22 @@ function Direita() {
     <>
       <GlobalSearch gatilho="campo" />
       <BotaoAssistente nome="Pergunte ao Cesar" onClick={() => abrir()} activo={aberto} />
+      <BotaoManual />
       <Opcoes />
     </>
+  );
+}
+
+/* "?" — abre o manual na página da tela atual (05/10/26). */
+function BotaoManual() {
+  const pathname = usePathname() ?? "/";
+  const slug = pathname.startsWith("/manual") ? null : slugDaRota(pathname);
+  const href = slug ? `/manual/${slug}` : "/manual";
+  return (
+    <a className="ab-icone" href={href} title="Manual desta tela" aria-label="Manual"
+      style={{ fontWeight: 700, fontSize: 15, display: "grid", placeItems: "center", textDecoration: "none" }}>
+      ?
+    </a>
   );
 }
 
