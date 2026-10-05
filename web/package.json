@@ -1,6 +1,6 @@
 {
   "name": "waterworks-approvals-web",
-  "version": "1.6.248",
+  "version": "1.6.249",
   "private": true,
   "scripts": {
     "dev": "next dev",
