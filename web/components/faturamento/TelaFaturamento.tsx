@@ -161,7 +161,7 @@ export default function TelaFaturamento() {
     let vivo = true;
     const labels = [...new Set(docs.map((d) => d.rotulo))];
     const lotes: string[][] = [];
-    for (let i = 0; i < labels.length; i += 120) lotes.push(labels.slice(i, i + 120));
+    for (let i = 0; i < labels.length; i += 80) lotes.push(labels.slice(i, i + 80));
     lotes.forEach((ls) => {
       fetch("/api/faturamento/receber", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ empresa, labels: ls }) })
         .then((r) => (r.ok ? r.json() : {})).then((j) => { if (vivo) setRec((o) => ({ ...o, ...(j as Record<string, RecRes>) })); }).catch(() => null);
@@ -185,7 +185,10 @@ export default function TelaFaturamento() {
       if (c && !c.error) setPront(c);
       setEmissoes((d.emissoes ?? []).filter((e: Emissao) => e.empresa === empresa));
     } catch (e) {
-      setErro(e instanceof Error ? e.message : String(e));
+      const m = e instanceof Error ? e.message : String(e);
+      setErro(/statement timeout|canceling statement|timeout/i.test(m)
+        ? "A consulta demorou demais — tente de novo (ou refine a busca/período). Clique para fechar."
+        : m);
     }
   }, [empresa, periodo, qServ]);
   useEffect(() => { carregar(); }, [carregar]);
@@ -270,8 +273,8 @@ export default function TelaFaturamento() {
     setRascNova(null);
     const r = await agir(d, "doc");
     if (!r?.documento) return;
-    setInicialNova({ chave: d.chave, documento: r.documento as Inicial["documento"], tipo: d.tipo === "PV" ? "nfe" : undefined,
-      origem_tipo: d.tipo === "PV" ? "pv" : "os", rotulo: d.rotulo, secao: secao ?? null });
+    setInicialNova({ chave: d.chave, documento: r.documento as Inicial["documento"], tipo: d.tipo === "PV" ? "nfe" : d.origem === "Omie" ? "recibo" : undefined,
+      origem_tipo: d.tipo === "PV" ? "pv" : d.origem === "Omie" ? "os_omie" : "os", rotulo: d.rotulo, secao: secao ?? null });
     setAberto(null); setNova(true);
   }
 
@@ -282,7 +285,7 @@ export default function TelaFaturamento() {
       const r = await agir(d, "prevoo");
       if (r && r.pode_emitir) ok++; else ruim++;
     }
-    avisar(`Validação em lote: ${ok} pronto(s) para emitir · ${ruim} com pendência${lista.length < sel.size ? ` · ${sel.size - lista.length} OS do Omie fora do lote` : ""}`);
+    avisar(`Validação em lote: ${ok} pronto(s) para emitir · ${ruim} com pendência${lista.length < sel.size ? ` · ${sel.size - lista.length} fora do lote (não emitem)` : ""}`);
   }
 
   function exportar() {
@@ -442,7 +445,7 @@ export default function TelaFaturamento() {
           continuar={(id) => { setInicialNova(null); setRascNova(id); setNova(true); }} />}
 
         <p style={{ color: "var(--f-tx3)", fontSize: 12, marginTop: 12 }}>
-          Carteira: PV/OS em aberto (todas as datas) + faturados no período. PV do Omie fatura pelo painel (NF-e, Focus). NFS-e: emita no portal da prefeitura e registre-a aqui (Registrar NFS-e) — cria o contas a receber pelo líquido e marca a OS como faturada no painel.
+          Carteira: PV/OS em aberto (todas as datas) + faturados no período. PV do Omie fatura pelo painel (NF-e, Focus); OS (do Omie ou do painel) emite recibo pelo painel (Revisar e emitir recibo). NFS-e: emita no portal da prefeitura e registre-a aqui (Registrar NFS-e) — cria o contas a receber pelo líquido e marca a OS como faturada no painel.
           Envio ao cliente por e-mail depende do Resend (RESEND_API_KEY) — até lá, abra o PDF/XML e envie o link.
         </p>
         </>}
@@ -652,17 +655,17 @@ function Acoes({ d, ocupado, abrir, prod, registrar, revisar }: { d: Doc; ocupad
   const pare = (f: () => void) => (e: MouseEvent) => { e.stopPropagation(); f(); };
   if (st === "fat") return <button className="btn ghost sm" onClick={pare(() => abrir(d.chave))}>Notas</button>;
   const btnNfse = semNfse(d) ? <button className="btn sm" style={{ borderColor: "var(--f-os)", color: "var(--f-os)" }} disabled={!!ocupado} onClick={pare(() => registrar(d))}>Registrar NFS-e</button> : null;
-  if (!d.emite || d.aguarda_nfse) return btnNfse ?? <span className="orig" title={d.emite_motivo}>fatura no Omie</span>;
+  if (!d.emite || d.aguarda_nfse) return btnNfse ?? <span className="orig" title={d.emite_motivo}>{d.emite_motivo ? "não emite" : "—"}</span>;
   if (st === "pend") return <button className="btn ghost sm" onClick={pare(() => abrir(d.chave))}>Resolver</button>;
   if (st === "rej") return <button className="btn ghost sm" style={{ color: "var(--f-bad)" }} onClick={pare(() => abrir(d.chave))}>Ver rejeição</button>;
   if (st === "emis") return <button className="btn ghost sm" onClick={pare(() => abrir(d.chave))}>Atualizar</button>;
   return <>
-    {d.tipo === "OS" && btnNfse}
     <button className="btn ghost sm" disabled={!!ocupado} onClick={pare(() => abrir(d.chave))}>Validar</button>
-    <button className="btn sm pri" disabled={!!ocupado} title="Abre a folha completa: cliente, itens, recebimento, prévia do DANFE — a emissão só acontece lá"
+    <button className="btn sm pri" disabled={!!ocupado} title={`Abre a folha completa: cliente, itens, recebimento, prévia do ${d.tipo === "PV" ? "DANFE" : "recibo"} — a emissão só acontece lá`}
       onClick={pare(() => revisar?.(d))}>
-      {`Revisar e emitir${st === "parc" ? " saldo" : ""}${prod ? "" : " (homolog.)"}`}
+      {`Revisar e emitir${d.tipo === "OS" ? " recibo" : ""}${st === "parc" ? " saldo" : ""}${prod ? "" : " (homolog.)"}`}
     </button>
+    {d.tipo === "OS" && btnNfse}
   </>;
 }
 
@@ -796,7 +799,7 @@ function Gaveta({ d, r, empresa, prod, ocupado, agir, fechar, avisar, onMudou, r
   fechar: () => void; avisar: (m: string) => void; onMudou: () => void; registrar: () => void; abrirFolha: (secao?: Inicial["secao"]) => void;
 }) {
   const st = status(d); const sd = saldo(d);
-  const nf = d.tipo === "PV" ? "NF-e" : "NFS-e";
+  const nf = d.tipo === "PV" ? "NF-e" : "recibo";
   const [itens, setItens] = useState<ItemDoc[] | null>(null);
   const [pre, setPre] = useState<(Prevoo & { error?: string }) | null>(null);
   const [verJson, setVerJson] = useState(false);
@@ -973,11 +976,11 @@ function Gaveta({ d, r, empresa, prod, ocupado, agir, fechar, avisar, onMudou, r
           {sd > 0.01 && d.emite ? (
             <>
               <div className="sum">Emitir agora<b className="mono">{fmt(sd)}</b></div>
-              {semNfse(d) && <button className="btn" onClick={registrar}>Registrar NFS-e</button>}
               <button className="btn" disabled={!!ocupado} onClick={validar}>{ocupado === `prevoo:${d.chave}` ? "Validando…" : "Validar"}</button>
               {d.origem === "Omie" && d.tipo === "PV" && <button className="btn" disabled={!!ocupado} onClick={() => agir(d, "ensaio")}>{ocupado === `ensaio:${d.chave}` ? "Enviando…" : "Ensaio"}</button>}
-              {!semNfse(d) && <button className="btn" title="Ver como vai sair — nada é enviado à SEFAZ"
-                onClick={() => window.open(`/api/faturamento/previa?empresa=${empresa}&chave=${encodeURIComponent(d.chave)}`, "_blank")}>{d.tipo === "PV" ? "Pré-visualizar DANFE" : "Pré-visualizar recibo"}</button>}
+              {semNfse(d) && <button className="btn" onClick={registrar} title="NFS-e emitida no portal da prefeitura: registre-a aqui em vez do recibo">Registrar NFS-e</button>}
+              <button className="btn" title="Ver como vai sair — nada é enviado nem numerado"
+                onClick={() => window.open(`/api/faturamento/previa?empresa=${empresa}&chave=${encodeURIComponent(d.chave)}`, "_blank")}>{d.tipo === "PV" ? "Pré-visualizar DANFE" : "Pré-visualizar recibo"}</button>
               <button className="btn pri" disabled={!!ocupado || st === "pend" || st === "emis"} onClick={() => abrirFolha()}
                 title="Abre a folha completa (cliente, itens, recebimento, prévia) — a emissão acontece lá, depois de revisar">
                 {`Revisar e emitir ${nf}${Number(d.faturado) > 0 ? " do saldo" : ""}${prod ? "" : " (homolog.)"}`}

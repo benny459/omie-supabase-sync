@@ -1,7 +1,8 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { supaAdmin } from "@/lib/supabase-admin";
 import { exigirFaturamento, falha } from "@/lib/faturamento/auth";
-import { documentoPvOmie, emitir, emitirPvOmie, prevoo, urlArquivo } from "@/lib/faturamento/server";
+import { bloqueioOsOmie, documentoOsOmie, documentoPvOmie, emitir, emitirOsOmie, emitirPvOmie, prevoo, prevooRecibo, urlArquivo } from "@/lib/faturamento/server";
+import { totalDoc } from "@/lib/faturamento/montar";
 import { docFat, documento } from "@/lib/vendas-server";
 import type { DocFat } from "@/lib/faturamento/montar";
 
@@ -16,7 +17,8 @@ export const maxDuration = 60;
      prevoo  → checagens completas sem enviar;
      ensaio  → mesma nota na HOMOLOGAÇÃO (só PV do Omie);
      emitir  → emissão no ambiente da empresa (produção só com a chave do Benny).
-   OS do Omie não emitem por aqui (NFS-e pelo painel ainda não existe). */
+   OS do Omie ("os_omie:<codigo_os>", 05/10/26): emitem RECIBO pelo painel
+   (numeração recibo_proximo); NFS-e da prefeitura só se registra. */
 
 export async function GET(req: NextRequest) {
   const q = await exigirFaturamento();
@@ -34,7 +36,8 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const q = await exigirFaturamento();
   if (q instanceof NextResponse) return q;
-  const b = (await req.json().catch(() => ({}))) as { chave?: string; acao?: string; empresa?: string; documento?: DocFat | null };
+  const b = (await req.json().catch(() => ({}))) as { chave?: string; acao?: string; empresa?: string; documento?: DocFat | null; forcar_homologacao?: boolean };
+  if (b.forcar_homologacao && !q.admin) return falha("Só administradores podem forçar homologação", 403);
   const [tipo, idTxt] = String(b.chave ?? "").split(":");
   const id = Number(idTxt);
   const empresa = b.empresa || "SF";
@@ -74,7 +77,19 @@ export async function POST(req: NextRequest) {
       }
       if (b.acao === "ensaio") return falha("Ensaio só existe para PV do Omie — use Validar");
     }
-    if (tipo === "os_omie") return falha("OS do Omie: emissão de NFS-e pelo painel ainda não disponível — fature no Omie");
+    if (tipo === "os_omie") {
+      const { bruto, doc } = await documentoOsOmie(empresa, id);
+      if (b.acao === "doc") return NextResponse.json({ documento: doc, condicao: bruto.condicao, parcelas_dias: bruto.parcelas_dias, bloqueio: bloqueioOsOmie(bruto) });
+      if (b.acao === "prevoo") {
+        const pre = await prevooRecibo(b.documento ? { ...b.documento, empresa, rotulo: doc.rotulo } : doc, { bloqueio: bloqueioOsOmie(bruto), total_os: totalDoc(doc.itens) });
+        return NextResponse.json({ documento: doc, ...pre });
+      }
+      if (b.acao === "emitir") {
+        const e = await emitirOsOmie(empresa, id, { criado_por: q.email, documento: b.documento ?? null, forcar_homologacao: !!b.forcar_homologacao });
+        return NextResponse.json({ emissao: e, xml_url: null, pdf_url: await urlArquivo(e.pdf_path) });
+      }
+      if (b.acao === "ensaio") return falha("OS do Omie: use “Teste (forçar homologação)” na folha");
+    }
     return falha("ação inválida");
   } catch (e) {
     return falha(e);

@@ -4,6 +4,7 @@ import { HOST, baixar, chamar, empresaFocus, tokenDe, type Ambiente } from "./fo
 import { NATUREZA_OP, montarNfe, montarNfse, operacaoDe, parcelas, reciboHtml, semCobranca, totalDoc, totalItens, totalRetencoes, validar, type DocFat, type Emitente } from "./montar";
 import { codigosSemEstoque, MSG_SEM_ESTOQUE } from "@/lib/estoque-vinculos";
 import { checarDoc, docFatPvOmie, type Checagem, type PvOmieDoc } from "./pv-omie";
+import { docFatOsOmie, type OsOmieDoc } from "./os-omie";
 
 /**
  * Motor de faturamento do painel (P5, 05/10/2026).
@@ -17,7 +18,7 @@ import { checarDoc, docFatPvOmie, type Checagem, type PvOmieDoc } from "./pv-omi
  */
 
 export type TipoDoc = "nfe" | "nfse" | "recibo";
-export type OrigemTipo = "pv" | "os" | "venda" | "manual" | "teste" | "pv_omie";
+export type OrigemTipo = "pv" | "os" | "venda" | "manual" | "teste" | "pv_omie" | "os_omie";
 
 export type Config = {
   empresa: string; cnpj: string | null; ativo: boolean; ambiente: Ambiente; producao_liberada: boolean;
@@ -466,5 +467,76 @@ export async function emitirPvOmie(empresa: string, codigo: number, o: { ensaio?
   return emitir(doc, {
     tipo: "nfe", origem_tipo: "pv_omie", origem_id: String(codigo), origem_rotulo: doc.rotulo ?? null,
     ensaio: !!o.ensaio, criado_por: o.criado_por,
+  });
+}
+
+/** OS do Omie → documento do RECIBO (espelho), sem enviar nada (05/10/26). */
+export async function documentoOsOmie(empresa: string, codigo: number) {
+  const { data, error } = await supaAdmin().schema("orders").rpc("fat_os_omie_doc", { p_empresa: empresa, p_codigo: String(codigo) });
+  if (error) throw new Error(error.message);
+  if (!data) throw new Error(`OS ${codigo} não encontrada no espelho do Omie`);
+  const bruto = data as OsOmieDoc;
+  return { bruto, doc: docFatOsOmie(empresa, bruto) };
+}
+
+/** Por que esta OS do Omie não pode virar recibo (já faturada em algum lugar). */
+export function bloqueioOsOmie(b: OsOmieDoc): string | null {
+  const os = b.os as Record<string, unknown>;
+  if (b.emissao_painel) return `o painel já emitiu ${b.emissao_painel.tipo === "recibo" ? "o recibo" : "documento"} ${b.emissao_painel.numero ?? `#${b.emissao_painel.id}`} (${b.emissao_painel.status})`;
+  if (b.nfse_registrada) return "já tem NFS-e registrada no painel";
+  if (os.num_recibo) return `o Omie já emitiu o recibo ${os.num_recibo}`;
+  if (os.faturada === "S") return "a OS já está faturada no Omie";
+  return null;
+}
+
+/** Pré-voo do RECIBO: sem NCM/IE/SEFAZ — só cadastro, origem, financeiro e numeração. */
+export async function prevooRecibo(doc: DocFat, extra: { bloqueio?: string | null; total_os?: number | null }) {
+  const cfg = await configDe(doc.empresa);
+  const checagens: Checagem[] = [];
+  const add = (item: string, ok: boolean, detalhe: string, nivel: "erro" | "aviso" = "erro") => checagens.push({ item, ok, nivel, detalhe });
+  const c = doc.cliente;
+  const so = (v: unknown) => String(v ?? "").replace(/\D/g, "");
+  add("Sem faturamento anterior", !extra.bloqueio, extra.bloqueio ?? "ok");
+  add("Cliente: CNPJ/CPF", !!(so(c.cnpj) || so(c.cpf)), so(c.cnpj) || so(c.cpf) || "faltando");
+  add("Cliente: endereço", !!(c.logradouro && c.municipio), [c.logradouro, c.numero, c.bairro, c.municipio].filter(Boolean).join(", ") || "faltando", "aviso");
+  add("Itens", doc.itens.length > 0, `${doc.itens.length} item(ns)`);
+  for (const i of doc.itens) if (!(i.quantidade > 0 && i.valor_unitario > 0)) add(`Qtd/valor — ${i.codigo}`, false, `${i.quantidade} × ${i.valor_unitario}`);
+  if (extra.total_os != null) {
+    const t = totalDoc(doc.itens);
+    add("Total do recibo = total da OS", Math.abs(t - Number(extra.total_os)) < 0.02, `recibo ${t.toFixed(2)} · OS ${Number(extra.total_os).toFixed(2)}`, "aviso");
+  }
+  add("Projeto", !!doc.condicao?.projeto, doc.condicao?.projeto ? String(doc.condicao.projeto) : "obrigatório");
+  add("Categoria de receita", !!doc.condicao?.categoria, doc.condicao?.categoria ? String(doc.condicao.categoria) : "obrigatória");
+  const inval = validar(doc);
+  add("Documento válido", !inval, inval ?? "ok");
+  const prod = cfg.ambiente === "producao" && cfg.producao_liberada;
+  add("Ambiente", true, prod ? `PRODUÇÃO — recibo nº ${cfg.recibo_proximo ?? "?"}` : "homologação (numeração de teste)", "aviso");
+  if (prod) add("Numeração do recibo", cfg.recibo_proximo != null, cfg.recibo_proximo != null ? `próximo recibo: ${cfg.recibo_proximo}` : "configure recibo_proximo");
+  const total = totalDoc(doc.itens);
+  const ret = totalRetencoes(doc.condicao?.retencoes);
+  const liquido = Math.round((total - ret) * 100) / 100;
+  const ps = parcelas(liquido, doc.condicao);
+  const explicitas = doc.condicao?.parcelas ?? [];
+  const somaInformada = explicitas.every((p) => p.valor != null) && explicitas.length
+    ? Math.round(explicitas.reduce((a, p) => a + Number(p.valor ?? 0), 0) * 100) / 100 : liquido;
+  add(ret ? "Parcelas somam o líquido (total − retenções)" : "Parcelas somam o total", Math.abs(somaInformada - liquido) < 0.005,
+    `${ps.map((p) => `${p.vencimento} R$ ${p.valor.toFixed(2)}${p.forma ? ` ${p.forma}` : ""}`).join(" · ")}${Math.abs(somaInformada - liquido) >= 0.005 ? ` — informado R$ ${somaInformada.toFixed(2)}, esperado R$ ${liquido.toFixed(2)}` : ""}`);
+  const bloqueia = checagens.some((x) => !x.ok && x.nivel === "erro");
+  return { checagens, payload: null, total, liquido, retencoes: ret, parcelas: ps, pode_emitir: !bloqueia, ambiente: prod ? "producao" : "homologacao" };
+}
+
+/** Emite o RECIBO de uma OS do Omie pelo painel (05/10/26 — a SF não fatura
+ *  mais recibo no Omie). Numeração de produção do painel (recibo_proximo),
+ *  contas a receber pelas parcelas revistas na folha. Não escreve no Omie: a OS
+ *  fica faturada só no painel (fat_emissoes origem os_omie). */
+export async function emitirOsOmie(empresa: string, codigo: number, o: { criado_por: string; documento?: DocFat | null; forcar_homologacao?: boolean }) {
+  const base = await documentoOsOmie(empresa, codigo);
+  const doc: DocFat = o.documento ? { ...o.documento, empresa, rotulo: base.doc.rotulo } : base.doc;
+  const pre = await prevooRecibo(doc, { bloqueio: bloqueioOsOmie(base.bruto), total_os: totalDoc(base.doc.itens) });
+  const erros = pre.checagens.filter((c) => !c.ok && c.nivel === "erro");
+  if (erros.length) throw new Error("Pré-voo com pendências: " + erros.map((c) => `${c.item} (${c.detalhe})`).join("; "));
+  return emitir(doc, {
+    tipo: "recibo", origem_tipo: "os_omie", origem_id: String(codigo), origem_rotulo: doc.rotulo ?? null,
+    criado_por: o.criado_por, forcar_homologacao: !!o.forcar_homologacao, gerar_receber_homologacao: !!o.forcar_homologacao,
   });
 }

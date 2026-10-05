@@ -13,7 +13,7 @@ atualizado: 2026-10-05
 ## A carteira (Pedidos & Ordens de Serviço)
 
 - Escolha **Todos / PV · Produto / OS · Serviço** e o **Período** (Mês, Trimestre, Ano, 12 meses, Tudo). Os filtros ativos aparecem como etiquetas com **×** e **Limpar filtros**.
-- Ao **buscar** (cliente, nome fantasia, PV, OS, OC, NF), a busca procura em **todos os períodos**.
+- Ao **buscar** (cliente, nome fantasia, PV, OS, OC, NF), a busca procura em **todos os períodos**. Se a consulta demorar, aparece "A consulta demorou demais — tente de novo".
 - Colunas principais:
   - **Cliente**: nome fantasia em destaque e a razão social embaixo.
   - **Emissão**: data do PV/OS e, se ainda não faturado, **há N dias**.
@@ -47,6 +47,19 @@ atualizado: 2026-10-05
 
 **Itens com busca no catálogo:** em cada linha de item, digite parte do **nome ou do código** (novo ou do Omie) e escolha da lista. A linha já vem com código, descrição, NCM, unidade e o valor: na **simples remessa, conserto e devolução** pelo **custo médio (CMC)** — ou a última compra; na **venda**, pelo último preço vendido a esse cliente. Abaixo aparecem o CMC, a última compra e o **disponível em estoque** (em vermelho se a quantidade passar dele). Tudo continua editável.
 8. Confira a **Prévia das contas a receber**, clique em **Pré-visualizar DANFE** (ou recibo) para ver o documento, depois **Validar** e, por fim, **Emitir**.
+
+## Como faço para emitir o recibo de uma OS (inclusive OS do Omie)
+
+A maioria das OS fatura por **recibo**, emitido **pelo painel** — também as OS que nasceram no Omie. Nada é gravado no Omie.
+
+1. Abra a OS na carteira (busque pelo cliente ou pelo número, ex.: **OS4729**).
+2. Clique em **Revisar e emitir recibo** (botão principal). Se a OS foi faturada por **NFS-e** da prefeitura, use **Registrar NFS-e** (botão secundário) em vez do recibo.
+3. A folha abre **já preenchida e editável**: cliente, itens, **condição e parcelas (vencimentos)**, **forma de pagamento**, **conta** (a dos "DADOS BANCÁRIOS" da OS, ex.: Bradesco ag. 0368 c/c 266910-2), **categoria**, **projeto** (obrigatório), retenções (ISS/INSS) e observações. Mude o que precisar.
+4. **Pré-visualizar recibo** mostra o documento com o que você editou; **Validar** confere tudo.
+5. **Emitir** gera o recibo com a numeração do painel (continua de onde o Omie parou, ex.: nº 4646), cria as **contas a receber** com as parcelas da folha e marca a OS como **faturada no painel**.
+6. A mesma OS **não pode ser faturada duas vezes**: se já tem recibo (do Omie ou do painel) ou NFS-e registrada, a emissão é bloqueada.
+
+> **Teste sem gastar número:** administradores podem marcar **Teste (forçar homologação)** na folha — sai um recibo de teste, sem usar a numeração real.
 
 ## Como faço para mudar forma de pagamento, conta ou outro dado da nota
 

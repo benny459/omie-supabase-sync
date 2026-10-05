@@ -6,7 +6,7 @@ import type { DocFat } from "@/lib/faturamento/montar";
 export const dynamic = "force-dynamic";
 
 /* Prévia antes de emitir (05/10/26) — NÃO chama a Focus/SEFAZ nem reserva número.
-   GET  ?chave=pv_omie:<cod>|venda:<id>[&empresa=SF][&tipo=nfe|recibo] → HTML do DANFE/recibo (nova aba)
+   GET  ?chave=pv_omie:<cod>|os_omie:<cod>|venda:<id>[&empresa=SF][&tipo=nfe|recibo] → HTML do DANFE/recibo (nova aba)
    POST { acao: "html", documento, tipo }       → HTML a partir da folha (dados editados)
    POST { acao: "resumo", chave | documento }   → resumo para a gaveta (destinatário, parcelas,
                                                   transporte, CFOP/NCM, inf. complementares, pendências) */
@@ -38,9 +38,9 @@ export async function POST(req: NextRequest) {
       return html(await previaHtml({ ...b.documento, empresa }, b.tipo ?? "nfe"));
     }
     if (b.acao === "resumo") {
-      if (b.documento) return NextResponse.json(await resumoEmissao({ ...b.documento, empresa }, {}));
+      if (b.documento) return NextResponse.json(await resumoEmissao({ ...b.documento, empresa }, {}, b.tipo ?? "nfe"));
       const { doc, tipo, extra } = await docDaChave(String(b.chave ?? ""), empresa);
-      return NextResponse.json({ tipo, documento: doc, ...(await resumoEmissao(doc, extra)) });
+      return NextResponse.json({ tipo, documento: doc, ...(await resumoEmissao(doc, extra, tipo)) });
     }
     return falha("ação inválida");
   } catch (e) {

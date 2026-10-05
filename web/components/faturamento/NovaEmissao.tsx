@@ -278,7 +278,8 @@ export default function NovaEmissao({ config, aberto, fechar, avisar, onEmitido,
     limparFolha();
     setModo("existente");
     setChave(ini.chave ?? null); setRotulo(ini.rotulo ?? d.rotulo ?? null);
-    setTipo(ini.tipo ?? "nfe");
+    // OS do Omie (05/10/26): sempre recibo emitido pelo painel
+    setTipo(ini.chave?.startsWith("os_omie:") ? "recibo" : ini.tipo ?? "nfe");
     setCli(d.cliente); setItens(d.itens.map((i) => ({ ...i, valor_desconto: undefined, valor_frete: undefined, valor_outras: undefined })));
     setDesconto(r2(d.itens.reduce((a, i) => a + (i.valor_desconto ?? 0), 0)));
     setFrete(r2(d.itens.reduce((a, i) => a + (i.valor_frete ?? 0), 0)));
@@ -384,7 +385,7 @@ export default function NovaEmissao({ config, aberto, fechar, avisar, onEmitido,
       body: JSON.stringify({ empresa, chave: d.chave, acao: "doc" }) }).then((x) => x.json()).catch((e) => ({ error: String(e) }));
     if (r.error || !r.documento) { setAviso(r.error ?? "Não consegui abrir o documento"); return; }
     aplicarInicial({ chave: d.chave, documento: r.documento, rotulo: d.rotulo,
-      tipo: d.tipo === "PV" ? "nfe" : (cfg?.tipo_os === "nfse" ? "nfse" : "recibo") });
+      tipo: d.tipo === "PV" ? "nfe" : d.chave.startsWith("os_omie:") || cfg?.tipo_os !== "nfse" ? "recibo" : "nfse" });
   }
 
   function voltarNovo() {
@@ -653,8 +654,12 @@ export default function NovaEmissao({ config, aberto, fechar, avisar, onEmitido,
       const res = await Promise.all(unicos.map((d) => fetch(`/api/fiscal/ncm?op=validar&ncm=${d}`).then((x) => x.json()).then((j) => [d, !!j.valido] as const).catch(() => [d, true] as const)));
       setNcmRuim(res.filter(([, ok]) => !ok).map(([d]) => d));
     }
-    const r = await fetch("/api/faturamento/nova", { method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ op: "previa", documento: montarDocumento(), tipo }) }).then((x) => x.json()).catch((e) => ({ error: String(e) }));
+    // OS do Omie: o pré-voo da linha também confere se já foi faturada (Omie/painel/NFS-e).
+    const r = chave?.startsWith("os_omie:")
+      ? await fetch("/api/faturamento/carteira", { method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ empresa, chave, acao: "prevoo", documento: montarDocumento() }) }).then((x) => x.json()).catch((e) => ({ error: String(e) }))
+      : await fetch("/api/faturamento/nova", { method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ op: "previa", documento: montarDocumento(), tipo }) }).then((x) => x.json()).catch((e) => ({ error: String(e) }));
     setValidando(false);
     const fv = faltaVenda();
     const locais: Checagem[] = fv ? [{ item: "Projeto / categoria / conta", ok: false, nivel: "erro", detalhe: fv }] : [];
@@ -695,7 +700,8 @@ export default function NovaEmissao({ config, aberto, fechar, avisar, onEmitido,
     const soCriaOs = modo === "novo" && !chave && tipo === "nfse" && !teste;
     if (!soCriaOs && precisaParcelas && !parcOk) { setAviso(`As parcelas (${fmt(somaParc)}) não somam o valor a receber (${fmt(liquido)}).`); return; }
     const numTxt = modo === "novo" && !teste
-      ? (naoVenda ? ` (NF-e ${prox?.nfe ?? "?"})` : tipo === "nfe" ? ` (PV ${prox?.pv ?? "?"} · NF-e ${prox?.nfe ?? "?"})` : tipo === "recibo" ? ` (OS ${prox?.os ?? "?"} · Recibo ${prox?.recibo ?? "?"})` : ` (OS ${prox?.os ?? "?"})`) : "";
+      ? (naoVenda ? ` (NF-e ${prox?.nfe ?? "?"})` : tipo === "nfe" ? ` (PV ${prox?.pv ?? "?"} · NF-e ${prox?.nfe ?? "?"})` : tipo === "recibo" ? ` (OS ${prox?.os ?? "?"} · Recibo ${prox?.recibo ?? "?"})` : ` (OS ${prox?.os ?? "?"})`)
+      : chave?.startsWith("os_omie:") && !teste ? ` (Recibo ${prox?.recibo ?? "?"})` : "";
     const msg = soCriaOs
       ? `Criar a OS${numTxt} para ${cli.nome}? A NFS-e será emitida na prefeitura e registrada depois.`
       : prod
@@ -706,7 +712,7 @@ export default function NovaEmissao({ config, aberto, fechar, avisar, onEmitido,
     setTx({ fase: "enviando", inicio: Date.now() });
     const r = chave
       ? await fetch("/api/faturamento/carteira", { method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ empresa, chave, acao: "emitir", documento }) }).then((x) => x.json()).catch((e) => ({ error: String(e) }))
+          body: JSON.stringify({ empresa, chave, acao: "emitir", documento, forcar_homologacao: teste }) }).then((x) => x.json()).catch((e) => ({ error: String(e) }))
       : await fetch("/api/faturamento/emitir", { method: "POST", headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ documento, tipo,
             novo: teste || naoVenda ? null : { cliente_codigo: cliCodigo, proposta: proposta.trim() || null, sem_proposta_motivo: proposta.trim() ? null : semPropMotivo.trim() },
@@ -1020,8 +1026,10 @@ export default function NovaEmissao({ config, aberto, fechar, avisar, onEmitido,
                 </div>
               )}
               {chave && rotulo && <div className="ne-nums"><span className="k">Faturando</span><b>{rotulo}</b>
+                {chave.startsWith("os_omie:") && !teste && prod && <b>· Recibo nº {prox?.recibo ?? "…"}</b>}
+                {chave.startsWith("os_omie:") && teste && <span>· teste: numeração real não é usada</span>}
                 {!inicial && <button className="ne-lk" onClick={() => { setChave(null); setRotulo(null); setCarteira(null); }}>trocar</button>}</div>}
-              {admin && !chave && (
+              {admin && (!chave || chave.startsWith("os_omie:")) && (
                 <label style={{ fontSize: 12, display: "flex", gap: 6, alignItems: "center", marginLeft: "auto", color: "var(--ww-text-muted)" }}>
                   <input type="checkbox" checked={teste} onChange={(e) => setTeste(e.target.checked)} /> Teste (forçar homologação)
                 </label>

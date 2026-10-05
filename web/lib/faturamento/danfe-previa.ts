@@ -15,7 +15,7 @@ import {
   type DocFat, type Emitente,
 } from "@/lib/faturamento/montar";
 import { checarDoc, type Checagem } from "@/lib/faturamento/pv-omie";
-import { configDe, documentoPvOmie } from "@/lib/faturamento/server";
+import { bloqueioOsOmie, configDe, documentoOsOmie, documentoPvOmie, prevooRecibo } from "@/lib/faturamento/server";
 import { docFat, documento } from "@/lib/vendas-server";
 
 const so = (s?: string | null) => (s ?? "").replace(/\D/g, "");
@@ -68,24 +68,33 @@ export async function docDaChave(chave: string, empresa: string) {
     const cfg = await configDe(empresa);
     return { doc: docFat(d), tipo: d.tipo === "PV" ? "nfe" as const : (cfg.tipo_os === "nfse" ? "nfse" as const : "recibo" as const), extra: { total_pv: Number(d.valor_total) } };
   }
-  throw new Error("Prévia disponível para PV do Omie e PV/OS do painel");
+  if (tipo === "os_omie") {
+    // OS do Omie (05/10/26): sai como RECIBO do painel.
+    const { bruto, doc } = await documentoOsOmie(empresa, id);
+    return { doc, tipo: "recibo" as const, extra: { bloqueio: bloqueioOsOmie(bruto), total_os: totalDoc(doc.itens) } as ExtraResumo };
+  }
+  throw new Error("Prévia disponível para PV do Omie, OS do Omie e PV/OS do painel");
 }
 
 type Payload = ReturnType<typeof montarNfe>;
 
 /** Resumo da emissão para a gaveta: o payload exato, parcelas, textos e pendências. */
-export async function resumoEmissao(doc: DocFat, extra: Parameters<typeof checarDoc>[1]) {
+type ExtraResumo = Parameters<typeof checarDoc>[1] & { bloqueio?: string | null; total_os?: number | null };
+export async function resumoEmissao(doc: DocFat, extra: ExtraResumo, tipo: "nfe" | "nfse" | "recibo" = "nfe") {
   const cfg = await configDe(doc.empresa);
   const em = await emitenteLocal(doc.empresa);
-  const checagens: Checagem[] = checarDoc(doc, extra);
+  // Recibo: sem SEFAZ — as checagens são as do recibo (sem NCM/IE).
+  const checagens: Checagem[] = tipo === "recibo"
+    ? (await prevooRecibo(doc, { bloqueio: extra.bloqueio, total_os: extra.total_os ?? extra.total_pv })).checagens
+    : checarDoc(doc, extra);
   const inval = validar(doc);
-  if (inval) checagens.push({ item: "Documento válido", ok: false, nivel: "erro", detalhe: inval });
+  if (inval && tipo !== "recibo") checagens.push({ item: "Documento válido", ok: false, nivel: "erro", detalhe: inval });
   const c = doc.cliente;
   const aviso = (item: string, ok: boolean, detalhe: string) => { if (!ok) checagens.push({ item, ok, nivel: "aviso", detalhe }); };
-  aviso("E-mail do cliente", !!c.email, "sem e-mail — a NF-e sai sem e-mail do destinatário");
-  aviso("Código IBGE do município", !!so(c.codigo_municipio), "sem código IBGE — confira o cadastro");
+  if (tipo !== "recibo") aviso("E-mail do cliente", !!c.email, "sem e-mail — a NF-e sai sem e-mail do destinatário");
+  if (tipo !== "recibo") aviso("Código IBGE do município", !!so(c.codigo_municipio), "sem código IBGE — confira o cadastro");
   aviso("CEP", so(c.cep).length === 8, "CEP incompleto");
-  aviso("NCM dos itens", doc.itens.every((i) => so(i.ncm).length === 8), "há item sem NCM de 8 dígitos");
+  if (tipo !== "recibo") aviso("NCM dos itens", doc.itens.every((i) => so(i.ncm).length === 8), "há item sem NCM de 8 dígitos");
   aviso("Forma de pagamento", !!(doc.condicao?.forma_pagamento || doc.condicao?.forma_recebimento), "defina a forma de pagamento — clique em editar (Recebimento)");
   const payload: Payload = montarNfe(doc, em, {
     natureza: cfg.natureza_operacao, serie: cfg.nfe_serie_producao, numero: cfg.nfe_proximo_producao, infoPadrao: cfg.info_complementar_padrao,

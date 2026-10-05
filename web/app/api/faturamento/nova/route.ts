@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { exigirFaturamento, falha } from "@/lib/faturamento/auth";
-import { prevoo } from "@/lib/faturamento/server";
+import { prevoo, prevooRecibo } from "@/lib/faturamento/server";
 import { supaAdmin } from "@/lib/supabase-admin";
 import type { DocFat } from "@/lib/faturamento/montar";
 import { buscarItensEstoque, codigosSemEstoque, MSG_SEM_ESTOQUE, type CodigoCompra } from "@/lib/estoque-vinculos";
@@ -260,6 +260,8 @@ export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => ({})) as { op?: string; documento?: DocFat; tipo?: string };
   if (body.op !== "previa" || !body.documento) return falha("op/documento inválidos");
   try {
+    // Recibo não passa pela SEFAZ: sem NCM/IE/numeração de NF-e (05/10/26).
+    if (body.tipo === "recibo") return NextResponse.json(await prevooRecibo(body.documento, {}));
     const r = await prevoo(body.documento, {});
     // NF-e movimenta estoque: todo item precisa ser do estoque nosso (código novo) — 05/10/26.
     if (body.tipo === "nfe") {
