@@ -35,6 +35,9 @@ export default function CadastroItem({ codigo }: { codigo?: string }) {
   const [parecidos, setParecidos] = useState<Parecido[]>([]);
   const [enviarOmie, setEnviarOmie] = useState(true);
   const [indo, setIndo] = useState(false);
+  // Preço máximo de compra (P7): opcional; CP, RC e PC avisam quando passam dele.
+  const [pmax, setPmax] = useState("");
+  const [pmaxAntes, setPmaxAntes] = useState("");
   const [feito, setFeito] = useState<{ codigo: string; n_cod_prod: number; omie: { ok: boolean; erro?: string } | null; cadastro_id: number } | null>(null);
 
   useEffect(() => {
@@ -52,6 +55,12 @@ export default function CadastroItem({ codigo }: { codigo?: string }) {
         if (!r.ok) throw new Error(j.error ?? r.statusText);
         setBase(j);
         const it = j.item as Record<string, unknown> | null;
+        if (it?.n_cod_prod != null) {
+          const pm = await fetch(`/api/estoque/preco-max?prods=${it.n_cod_prod}`, { cache: "no-store" }).then((x) => (x.ok ? x.json() : {})).catch(() => ({}));
+          const v = (pm as Record<string, number>)[String(it.n_cod_prod)];
+          const s0 = v != null ? String(v).replace(".", ",") : "";
+          setPmax(s0); setPmaxAntes(s0);
+        }
         if (it) setF({
           descricao: String(it.descricao ?? ""), familia_id: it.familia_id != null ? String(it.familia_id) : "", codigo: String(it.codigo_novo ?? ""),
           unidade: String(it.unidade ?? "UN"), ncm: String(it.ncm ?? "").replace(/\D/g, ""), ean: String(it.ean ?? ""),
@@ -117,6 +126,10 @@ export default function CadastroItem({ codigo }: { codigo?: string }) {
       for (const k of Object.keys(body)) if (body[k] === "") delete body[k];
       const r = await postar<{ codigo: string; n_cod_prod: number; omie: { ok: boolean; erro?: string } | null; cadastro_id: number }>("/api/estoque/cadastro", body);
       invalidarItens();
+      if (pmax.trim() !== pmaxAntes.trim() && r.n_cod_prod) {
+        try { await postar("/api/estoque/preco-max", { n_cod_prod: r.n_cod_prod, preco_maximo: pmax.trim() ? (pmax.includes(",") ? pmax.replace(/\./g, "").replace(",", ".") : pmax) : null }); setPmaxAntes(pmax); }
+        catch (e) { setErro(`Item salvo, mas o preço máximo não: ${(e as Error).message}`); }
+      }
       setFeito(r);
     } catch (e) { setErro((e as Error).message); } finally { setIndo(false); }
   };
@@ -183,6 +196,7 @@ export default function CadastroItem({ codigo }: { codigo?: string }) {
           <label className="f s3">NCM (8 dígitos)<input className="inp mono" value={f.ncm} onChange={(e) => setF({ ...f, ncm: e.target.value.replace(/[^\d.]/g, "") })} placeholder="8421.21.00" /></label>
           <label className="f s3">EAN (opcional)<input className="inp mono" {...campo("ean")} /></label>
           <label className="f s3">CMC / preço de referência<input className="inp" inputMode="decimal" {...campo("preco_ref")} placeholder="0,00" /></label>
+          <label className="f s3">Preço máximo de compra<input className="inp" inputMode="decimal" value={pmax} onChange={(e) => setPmax(e.target.value.replace(/[^\d.,]/g, ""))} placeholder="opcional" title="CP do CRM, RC e PC avisam quando o valor passa deste limite" /></label>
           <label className="f s3">Local padrão<select className="inp" {...campo("local_padrao")}>{LOCAIS.map((l) => <option key={l} value={l}>{nomeLocal(l)}</option>)}</select></label>
           <label className="f s2">Mínimo<input className="inp" inputMode="decimal" {...campo("minimo")} /></label>
           <label className="f s2">Pedir em<input className="inp" inputMode="decimal" {...campo("ponto_pedido")} /></label>

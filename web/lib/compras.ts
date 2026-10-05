@@ -57,7 +57,8 @@ export type PedidoLista = {
 };
 
 // ── Pedido completo (folha) ─────────────────────────────────────────────────
-export type ItemRc = { itemId: number; num: string; idx: number; desc: string; qtd: number };
+export type ItemRc = { itemId: number; num: string; idx: number; desc: string; qtd: number;
+  /** valor da RC (custo máximo da CP quando veio do CRM) — o PC avisa se passar dele */ vuMax?: number };
 export type Item = {
   id?: number; key: string; cod?: string | null; ncodProd?: number | null; desc: string; un: string;
   qtd: number; vu: number; desc0: number; ipi: number; st: number; ncm?: string | null; local?: string | null;

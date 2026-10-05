@@ -90,6 +90,7 @@ export default function FolhaPedido({
   const [picker, setPicker] = useState(false);
   const [colar, setColar] = useState<string | null>(null);
   const salvosRc = useRef<Record<number, number>>({}); // rcItemId → qtd já gravada por ESTE pedido
+  const [pmax, setPmax] = useState<Record<number, number | null>>({}); // n_cod_prod → preço máximo de compra (Estoque)
 
   const ro = D?.origem === "omie";
   const isRC = D?.tipo === "RC";
@@ -118,7 +119,7 @@ export default function FolhaPedido({
               .filter((x) => x.rest > 0);
             base.itens = linhas.map(({ it, rest }) => ({
               ...itemVazio(), cod: it.cod, ncodProd: it.ncodProd, desc: it.desc, un: it.un, qtd: rest, vu: Number(it.vu) || 0,
-              ncm: it.ncm, local: it.local, rc: { itemId: it.id!, num: rc.num, idx: it.seq ?? 0, desc: it.desc, qtd: Number(it.qtd) || 0 },
+              ncm: it.ncm, local: it.local, rc: { itemId: it.id!, num: rc.num, idx: it.seq ?? 0, desc: it.desc, qtd: Number(it.qtd) || 0, vuMax: Number(it.vu) || undefined },
             }));
             base.proj = rc.proj; base.projCod = rc.projCod; base.pv = rc.pv; base.pvCliente = rc.pvCliente;
             base.comprador = rc.comprador; base.compradorCod = rc.compradorCod; base.cat = rc.cat; base.catCod = rc.catCod;
@@ -145,6 +146,19 @@ export default function FolhaPedido({
     if (!igual) setD((d) => (d ? { ...d, parcelas: novas } : d));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [t.total, D?.parc, D?.previsao, isRC, ro, parcEditadas, refs]);
+
+  // Preço máximo de compra cadastrado no Estoque (P7): só avisa, não bloqueia.
+  useEffect(() => {
+    if (!D) return;
+    const falta = [...new Set(D.itens.map((i) => Number(i.ncodProd)).filter((x) => Number.isFinite(x) && x !== 0 && !(x in pmax)))];
+    if (!falta.length) return;
+    (async () => {
+      try {
+        const m = await json<Record<string, number>>(await fetch(`/api/estoque/preco-max?prods=${falta.join(",")}`));
+        setPmax((x) => { const n = { ...x }; for (const id of falta) n[id] = m[String(id)] ?? null; return n; });
+      } catch { setPmax((x) => { const n = { ...x }; for (const id of falta) n[id] = null; return n; }); }
+    })();
+  }, [D, pmax]);
 
   // Histórico de preço por código de produto (carrega o que faltar).
   useEffect(() => {
@@ -186,7 +200,7 @@ export default function FolhaPedido({
     const novos: Item[] = sel.map(({ itemId, qtd }) => {
       const it = rc.itens.find((x) => x.id === itemId)!;
       return { ...itemVazio(), cod: it.cod ?? "", desc: it.desc, un: it.un ?? "UN", qtd, vu: Number(it.vu) || 0, ncm: it.ncm,
-        rc: { itemId: it.id, num: rc.num, idx: it.seq, desc: it.desc, qtd: Number(it.qtd) || 0 } };
+        rc: { itemId: it.id, num: rc.num, idx: it.seq, desc: it.desc, qtd: Number(it.qtd) || 0, vuMax: Number(it.vu) || undefined } };
     });
     setD((d) => d ? {
       ...d, itens: [...d.itens, ...novos],
@@ -544,6 +558,18 @@ export default function FolhaPedido({
                                       {!ro && <button className="linkbtn" onClick={() => setItem(i, { rc: null })} title="Desvincular da requisição">desvincular</button>}
                                     </div>
                                   )}
+                                  {(() => {
+                                    const lim = it.ncodProd ? pmax[Number(it.ncodProd)] : null;
+                                    const acimaLim = lim != null && it.vu > lim + 0.005;
+                                    const acimaRc = !isRC && it.rc?.vuMax != null && it.vu > it.rc.vuMax + 0.005;
+                                    if (!acimaLim && !acimaRc) return null;
+                                    return (
+                                      <div className="hint" style={{ color: "var(--ww-crit-text)" }}>
+                                        {acimaLim && <>▲ acima do preço máximo do item ({money(lim!)}) </>}
+                                        {acimaRc && <>▲ acima do valor da RC {it.rc!.num} ({money(it.rc!.vuMax!)} — custo máximo orçado)</>}
+                                      </div>
+                                    );
+                                  })()}
                                   {it.cod && (pi ? (
                                     <div className="pricecmp">
                                       <span className={`pill ${cls}`}>{Math.abs(pi.dif) < 1 ? "= " : pi.dif > 0 ? "▲ " : "▼ "}{num2(Math.abs(pi.dif))}% vs {pi.sameForn ? "último deste fornecedor" : "última compra"}</span>
