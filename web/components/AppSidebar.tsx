@@ -325,6 +325,33 @@ export const FINANCEIRO: NavItem[] = [
       </svg>
     ),
   },
+  // Cadastros próprios (05/10/26): clientes e fornecedores vivem no painel,
+  // não mais só no espelho do Omie. Ficam no Financeiro (cobrança e pagamento),
+  // com a mesma área ERP de Compras e dos títulos.
+  {
+    href: "/cadastros/clientes",
+    area: "erp",
+    grupo: "financeiro",
+    label: "Clientes",
+    tone: "text-sky-600",
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className="w-5 h-5" strokeLinecap="round" strokeLinejoin="round">
+        <circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><path d="M16 4.5a3.5 3.5 0 0 1 0 7M18.5 20a6.5 6.5 0 0 0-3-5.5"/>
+      </svg>
+    ),
+  },
+  {
+    href: "/cadastros/fornecedores",
+    area: "erp",
+    grupo: "financeiro",
+    label: "Fornecedores",
+    tone: "text-violet-600",
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className="w-5 h-5" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M3 21V9l6-4v4l6-4v4l6-4v16H3z"/><path d="M7 17h2M11 17h2M15 17h2"/>
+      </svg>
+    ),
+  },
   {
     // Emissão de NF-e / NFS-e / recibo pela Focus, sem Omie (P5, 05/10/26).
     href: "/faturamento",

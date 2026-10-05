@@ -321,7 +321,8 @@ export default function FolhaPedido({
                         toast(f.ultCat ? "Categoria, contato e condição sugeridos pelo último pedido deste fornecedor" : "Fornecedor selecionado");
                       }} />
                     {errs.forn ? <span className="errmsg">{errs.forn}</span>
-                      : D.cnpj ? <span className="hint">CNPJ {D.cnpj}</span> : null}
+                      : D.cnpj ? <span className="hint">CNPJ {D.cnpj}</span>
+                      : !ro && !D.fornCod ? <span className="hint">Não achou? <a href={`/cadastros/novo?papel=fornecedor&emp=${D.emp}${D.forn ? `&razao=${encodeURIComponent(D.forn)}` : ""}`} target="_blank" rel="noreferrer" style={{ textDecoration: "underline" }}>Cadastrar fornecedor</a> (abre em outra aba; depois é só buscar de novo)</span> : null}
                   </div>
                   <div className="f s3"><label htmlFor="dPrev">{isRC ? "Data sugerida" : "Previsão de Entrega"}</label>
                     <input className="in" type="date" id="dPrev" value={D.previsao || ""} disabled={ro} onChange={(e) => set({ previsao: e.target.value })} /></div>

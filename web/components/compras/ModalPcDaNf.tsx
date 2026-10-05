@@ -13,7 +13,7 @@ import { money, dBR, type Refs } from "@/lib/compras";
 
 type ItemPrevia = { desc: string; descNf: string; cod: string | null; casado: boolean; codForn: string | null; ncm: string | null;
   un: string; qtd: number; vu: number; desc0: number; ipi: number; st: number };
-type Previa = { chave: string; numero: string; emissao: string; valorNf: number; forn: string; fornCod: number | null; fornCadastrado: boolean;
+type Previa = { chave: string; numero: string; emissao: string; valorNf: number; emp: string; forn: string; fornCod: number | null; fornCadastrado: boolean;
   cnpj: string; catCod: string | null; cat: string | null; conta: string | null; frete: { valor: number; seguro: number; outras: number };
   itens: ItemPrevia[]; parcelas: { venc: string; valor: number }[] };
 
@@ -71,7 +71,7 @@ export default function ModalPcDaNf({ chave, refs, onClose, onGerado, toast }: {
           <div style={{ padding: "14px 18px", display: "grid", gap: 14 }}>
             <div className="pcnf-cab">
               <div><small className="faint">Fornecedor</small><b>{d.forn}</b>
-                <span className="faint" style={{ fontSize: 12 }}>{d.cnpj}{d.fornCadastrado ? " · cadastrado" : " · ⚠ não achei no cadastro do Omie (fica só o nome/CNPJ)"}</span></div>
+                <span className="faint" style={{ fontSize: 12 }}>{d.cnpj}{d.fornCadastrado ? " · cadastrado" : <> · ⚠ não está no cadastro de fornecedores (fica só o nome/CNPJ) — <a href={`/cadastros/novo?papel=fornecedor&emp=${d.emp}&doc=${encodeURIComponent(d.cnpj)}&razao=${encodeURIComponent(d.forn)}`} target="_blank" rel="noreferrer" style={{ textDecoration: "underline" }}>cadastrar</a></>}</span></div>
               <div><small className="faint">NF-e</small><b className="num">Nº {d.numero}</b><span className="faint" style={{ fontSize: 12 }}>emitida {dBR(d.emissao, true)} · {money(Number(d.valorNf))}</span></div>
             </div>
 
