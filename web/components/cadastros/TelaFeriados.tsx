@@ -51,7 +51,7 @@ export default function TelaFeriados() {
             <tr key={f.data + f.abrangencia} style={{ opacity: f.ativo ? 1 : 0.55 }}>
               <td className="mono">{dbr(f.data)}</td><td>{f.nome}</td><td>{f.abrangencia}</td>
               <td><input type="checkbox" checked={f.ativo} disabled={!pode} onChange={(e) => post({ acao: "salvar", ...f, ativo: e.target.checked })} /></td>
-              <td>{pode && <button className="btn sm crit" onClick={() => post({ acao: "excluir", data: f.data, abrangencia: f.abrangencia })}>Excluir</button>}</td>
+              <td>{pode && <button className="btn sm" onClick={() => post({ acao: "excluir", data: f.data, abrangencia: f.abrangencia })}>Excluir</button>}</td>
             </tr>
           ))}
           {!lista.length && <tr><td colSpan={5} className="mini">Nenhum feriado cadastrado em {ano}.</td></tr>}
