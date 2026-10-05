@@ -277,7 +277,7 @@ export async function GET(req: Request) {
     {
       const dig = (v: unknown) => String(v ?? "").replace(/\D/g, "");
       for (const r of rows as (TituloRow & { fase?: string; pedido_id?: number })[]) {
-        if (r.pedido_id && r.fase) {           // linha do painel (v_pagar_previsto)
+        if ((r.pedido_id || (r as { pagar_id?: number }).pagar_id) && r.fase) {   // linha do painel (v_pagar_previsto, PC ou manual)
           r.fase_pagar = r.fase as TituloRow["fase_pagar"]; r.fase_pedido = r.numero_pedido ?? undefined;
           continue;
         }

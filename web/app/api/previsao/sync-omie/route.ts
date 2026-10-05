@@ -41,6 +41,12 @@ type Pendente = {
 };
 
 export async function POST(req: Request) {
+  // 05/10/26 — saída do Omie: o painel não escreve mais previsões no Omie. A
+  // previsão reprogramada fica em finance.previsao_override e já é a usada pelo
+  // BI e pelo fluxo de caixa. Rota mantida só para histórico do log.
+  if (process.env.OMIE_ESCRITA_PREVISAO !== "on") {
+    return NextResponse.json({ error: "Envio de previsões ao Omie desligado — a previsão vale só no painel." }, { status: 410 });
+  }
   const supa = await supaServer();
   const { data: { user } } = await supa.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

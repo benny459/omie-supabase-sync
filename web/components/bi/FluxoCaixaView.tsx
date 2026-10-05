@@ -363,6 +363,11 @@ const COLS_CONTAS: Col<ContaRow>[] = [
   { key: "dt_ultimo", label: "Últ. lanç.", tipo: "date",  w: 100 },
 ];
 
+
+/** Desde 05/10/26 o painel não escreve mais no Omie: a previsão reprogramada
+ *  fica só aqui (finance.previsao_override) e é o que o BI e o fluxo usam. */
+const ENVIO_OMIE = false;
+
 export default function FluxoCaixaView() {
   // Guarda o PRESET, não o número: "esta semana" precisa recalcular os dias a
   // cada render, senão vira um valor congelado no dia em que foi clicado.
@@ -639,8 +644,9 @@ export default function FluxoCaixaView() {
       .filter(([cod]) => !filtro || filtro.has(cod))
       .map(([cod, dia]) => ({ cod, dia }));
     if (!alvos.length) return;
-    if (!(await gravar(alvos))) return;   // não gravou: não vai pro ERP
-    await enviarOmie(false, alvos.map((a) => a.cod));
+    // Desde 05/10/26 a previsão vive só no painel (finance.previsao_override):
+    // o Omie deixou de ser atualizado. Gravar aqui é o passo inteiro.
+    if (!(await gravar(alvos))) return;
     // Limpa só o que foi, senão mandar UMA linha apagaria as outras que a
     // pessoa ainda estava avaliando.
     setRascunho((prev) => {
@@ -1580,7 +1586,7 @@ export default function FluxoCaixaView() {
                   lida como um segundo passo obrigatório; como botão junto de
                   PDF e Excel, é só mais uma ação da mesa — e o estado real
                   (quais linhas faltam) já está marcado na coluna Omie. */}
-              {podeEditar && pendentesOmieGeral.length > 0 && (
+              {ENVIO_OMIE && podeEditar && pendentesOmieGeral.length > 0 && (
                 <button type="button" disabled={syncing}
                   onClick={() => enviarOmie(false, pendentesOmieGeral.map((t) => t.cod_titulo))}
                   title={`${pendentesOmieGeral.length} título(s) com data nova que o Omie ainda não recebeu · ${
@@ -1635,9 +1641,9 @@ export default function FluxoCaixaView() {
               className="text-[11px] text-ww-textFaint hover:text-ww-text">descartar</button>
             <button type="button" disabled={salvando || syncing}
               onClick={() => void mandarProOmie()}
-              title="Grava a data no painel e manda pro Omie de uma vez"
+              title="Grava a nova data no painel (vale para o BI e o fluxo de caixa)"
               className="ml-auto px-3.5 py-1.5 text-[12px] rounded-md bg-ww-accent text-white font-bold hover:brightness-110 transition disabled:opacity-40">
-              {salvando || syncing ? "Enviando…" : `Mandar pro Omie (${destinos.size})`}
+              {salvando || syncing ? "Enviando…" : `Gravar previsão (${destinos.size})`}
             </button>
           </div>
         )}
@@ -1685,17 +1691,17 @@ export default function FluxoCaixaView() {
                   era o que fazia o título sumir entre um e outro. */}
               <button type="button" disabled={destinos.size === 0 || salvando || syncing}
                 title={rateioOn
-                  ? (destinos.size ? `Grava e envia ${destinos.size} título(s) nas datas do rateio`
+                  ? (destinos.size ? `Grava ${destinos.size} título(s) nas datas do rateio`
                                    : "Preencha ao menos uma data no rateio")
                   : dataLote && !dataUtil(dataLote) ? "Informe uma data a partir de hoje"
                   : foraDaJanela(dataLote) ? "Vai gravar, mas cai depois do fim da janela — não aparece na curva"
-                  : "Grava a data nova e manda pro Omie de uma vez"}
+                  : "Grava a data nova no painel"}
                 onClick={() => void mandarProOmie()}
                 className="px-3.5 py-1 text-[11.5px] rounded-md border-2 border-ww-accent bg-ww-accent text-white hover:brightness-110 transition font-bold disabled:opacity-30 disabled:bg-transparent disabled:text-ww-textFaint disabled:border-ww-border">
                 {salvando || syncing ? "Enviando…"
                   : destinos.size === 0
                     ? (rateioOn ? "Preencha o rateio ↓" : "Escolha a data")
-                    : `Mandar pro Omie (${destinos.size})`}
+                    : `Gravar previsão (${destinos.size})`}
               </button>
 
               <div className="ml-auto">
@@ -1712,6 +1718,7 @@ export default function FluxoCaixaView() {
                       titulo="Divide a seleção em até 3 datas, por proporção de valor">
                       ⑃ Dividir em até 3 datas {rateioOn ? "· ligado" : ""}
                     </ItemMenu>
+                    {ENVIO_OMIE && <>
                     <ItemMenu onClick={() => enviarOmie(true, selecionados)} disabled={syncing}
                       titulo="Lista o que seria enviado, sem chamar o Omie e sem alterar nada">
                       Conferir envio (não altera nada)
@@ -1723,6 +1730,7 @@ export default function FluxoCaixaView() {
                         : `Envia ao Omie ${selPendenteOmie} reprogramação(ões) desta seleção`}>
                       {syncing ? "Enviando…" : `Enviar seleção ao Omie (${selPendenteOmie})`}
                     </ItemMenu>
+                    </>}
                     <div className="h-px bg-ww-border my-1" />
                     {selRenegociando < selecionados.length && (
                       <ItemMenu disabled={salvando} tom="violeta"
@@ -2182,15 +2190,15 @@ export default function FluxoCaixaView() {
                       {podeEditar && destinos.has(t.cod_titulo) ? (
                         <button type="button" disabled={salvando || syncing}
                           onClick={() => void mandarProOmie([t.cod_titulo])}
-                          title={`Grava ${diaBr(destinos.get(t.cod_titulo)!)} e manda só este pro Omie`}
+                          title={`Grava ${diaBr(destinos.get(t.cod_titulo)!)} no painel`}
                           className="px-1.5 py-0.5 text-[10px] rounded bg-ww-accent text-white font-semibold hover:brightness-110 transition disabled:opacity-40">
-                          {salvando || syncing ? "…" : "↑ Mandar"}
+                          {salvando || syncing ? "…" : "Gravar"}
                         </button>
-                      ) : t.sincronizado_omie ? (
+                      ) : ENVIO_OMIE && t.sincronizado_omie ? (
                         <span className="text-[10px] text-emerald-600 dark:text-emerald-400" title="Já enviado pro Omie">
                           ✓ enviado
                         </span>
-                      ) : pendente && podeEditar ? (
+                      ) : ENVIO_OMIE && pendente && podeEditar ? (
                         <button type="button" disabled={syncing}
                           onClick={() => enviarOmie(false, [t.cod_titulo])}
                           title="Enviar esta previsão pro Omie"

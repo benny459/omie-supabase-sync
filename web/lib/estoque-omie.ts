@@ -9,12 +9,13 @@ import "server-only";
  * Resposta: { codigo_produto, codigo_produto_integracao, codigo_status ("0" = ok), descricao_status }.
  * O Omie responde HTTP 200 mesmo com erro (faultstring/faultcode) — sempre olhar o corpo.
  *
- * Desligar sem deploy: env ESTOQUE_OMIE_ESCRITA=off. Só a SF tem chave na Vercel; CD/WW dão erro claro.
+ * Desde 05/10/26 desligado por padrão (saída do Omie); religar só com env ESTOQUE_OMIE_ESCRITA=on. Só a SF tem chave na Vercel; CD/WW dão erro claro.
  */
 
 const URL_PRODUTOS = "https://app.omie.com.br/api/v1/geral/produtos/";
 
-export const escritaOmieLigada = () => (process.env.ESTOQUE_OMIE_ESCRITA ?? "on").toLowerCase() !== "off";
+// 05/10/26 — saída do Omie: desligado por padrão; só escreve com ESTOQUE_OMIE_ESCRITA=on.
+export const escritaOmieLigada = () => (process.env.ESTOQUE_OMIE_ESCRITA ?? "off").toLowerCase() === "on";
 
 export function credsOmie(empresa: string): { app_key: string; app_secret: string } | null {
   const k = process.env[`OMIE_APP_KEY_${empresa.toUpperCase()}`], s = process.env[`OMIE_APP_SECRET_${empresa.toUpperCase()}`];

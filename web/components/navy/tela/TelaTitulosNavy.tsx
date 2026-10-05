@@ -571,7 +571,8 @@ export default function TelaTitulosNavy({ tipo }: { tipo: Tipo }) {
               const dias = r.dias_para_vencer;
               const doc = r.numero_documento_fiscal ? `NF ${r.numero_documento_fiscal}` : (r.numero_documento || "Título");
               // Só a conta nascida no painel e ainda sem título do Omie se apaga daqui.
-              const apagavel = tipo === "receber" && r.origem_registro === "painel" && !r.codigo_lancamento_omie && r.id;
+              const apagavel = tipo === "receber" ? (r.origem_registro === "painel" && !r.codigo_lancamento_omie && r.id)
+                : (r.origem === "MANUAL" && !!r.pagar_id);
               const diverg = r.conferencia === "divergente" ? fmtDiverg(r) : "";
               // baixa no painel: previsão de PC (pagar) ou conta nascida no painel (receber)
               const jaPago = tipo === "pagar" ? num(r.valor_pago) > 0 : num(r.valor_pago_painel) > 0;
@@ -593,11 +594,11 @@ export default function TelaTitulosNavy({ tipo }: { tipo: Tipo }) {
                       </button>
                     )}
                     {apagavel && !jaPago && (
-                      <button type="button" disabled={excluindo === r.id} title="Excluir esta conta (só existe no painel)"
+                      <button type="button" disabled={excluindo === (tipo === "pagar" ? `p${r.pagar_id}` : r.id)} title="Excluir esta conta (só existe no painel)"
                         onClick={() => excluir(r)}
                         style={{ fontSize: 11, padding: "2px 8px", borderRadius: 999, cursor: "pointer",
                                  border: "1px solid var(--ww-border-strong)", background: "transparent", color: "var(--ww-crit-text)" }}>
-                        {excluindo === r.id ? "excluindo…" : "excluir"}
+                        {excluindo === (tipo === "pagar" ? `p${r.pagar_id}` : r.id) ? "excluindo…" : "excluir"}
                       </button>
                     )}
                   </span>
@@ -619,11 +620,12 @@ export default function TelaTitulosNavy({ tipo }: { tipo: Tipo }) {
   const abertosIniciais = modo === "aberto" ? ["g:hoje", ...(nVencidos <= 8 ? ["g:vencidos"] : [])] : [];
 
   async function excluir(r: Row) {
-    if (!r.id || !window.confirm(`Excluir a conta de ${brl(num(r.valor_documento))} de ${r.contraparte ?? "—"} (venc. ${ddmm(r.vencimento)})?`)) return;
-    setExcluindo(r.id);
+    const chave = tipo === "pagar" ? (r.pagar_id ? `p${r.pagar_id}` : "") : (r.id ?? "");
+    if (!chave || !window.confirm(`Excluir a conta de ${brl(num(r.valor_documento))} de ${r.contraparte ?? "—"} (venc. ${ddmm(r.vencimento)})?`)) return;
+    setExcluindo(chave);
     try {
       const res = await fetch("/api/financeiro/titulos/excluir", { method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ tipo, id: r.id }) });
+        body: JSON.stringify(tipo === "pagar" ? { tipo, pagar_id: r.pagar_id } : { tipo, id: r.id }) });
       const j = await res.json();
       if (!res.ok) throw new Error(j.error ?? `HTTP ${res.status}`);
       setRefresh((n) => n + 1);
