@@ -8,6 +8,7 @@
  */
 import { supaAdmin } from "../lib/supabase-admin";
 import { atualizar, buscar, cancelar, configDe, emitir, type TipoDoc } from "../lib/faturamento/server";
+import { HOST, chamar, tokenDe } from "../lib/faturamento/focus";
 import type { DocFat } from "../lib/faturamento/montar";
 
 const DOC: DocFat = {
@@ -64,6 +65,16 @@ async function um(tipo: TipoDoc) {
 
 async function main() {
   const modo = (process.env.MODO || "nfe").toLowerCase();
+  if (modo === "consulta") {
+    // Resposta completa da Focus para a última NFS-e (diagnóstico de rejeição).
+    const { data } = await supaAdmin().schema("orders").from("fat_emissoes").select("ref,tipo,ambiente").eq("tipo", "nfse").order("id", { ascending: false }).limit(1);
+    const r0 = data?.[0];
+    if (!r0 || r0.ambiente !== "homologacao") return;
+    const tok = await tokenDe("SF", "15766003000108", "homologacao");
+    const r = await chamar(HOST.homologacao, tok, "GET", `/v2/nfse/${r0.ref}?completa=1`);
+    console.log(r.status, r.texto.slice(0, 4000));
+    return;
+  }
   const tipos: TipoDoc[] = modo === "todos" ? ["recibo", "nfe", "nfse"] : [modo as TipoDoc];
   let ok = true;
   for (const t of tipos) {
