@@ -80,7 +80,7 @@ type Resolvido = { codigo_usado: string; n_cod_prod_usado: number; origem: strin
   codigo_atual: string | null; codigo_omie_atual: string | null; descricao_atual: string | null };
 
 /** Resolve códigos (ou ids do Omie) guardados em propostas antigas para o item de hoje. */
-export async function resolverCodigosCrm(codigos: string[], empresa = "SF"): Promise<Record<string, ItemCrm>> {
+export async function resolverCodigosCrm(codigos: string[], empresa = "SF", comHistorico = 0): Promise<Record<string, ItemCrm>> {
   const pedidos = [...new Set(codigos.map((c) => String(c ?? "").trim()).filter(Boolean))].slice(0, 500);
   if (!pedidos.length) return {};
   const { data, error } = await orders().rpc("item_codigo_resolver", { p_empresa: empresa, p_codigos: pedidos });
@@ -106,20 +106,30 @@ export async function resolverCodigosCrm(codigos: string[], empresa = "SF"): Pro
       qtd_compras: null, preco_maximo: n(i?.preco_maximo),
     };
   }
+  // Com histórico, a última compra diz o fornecedor e a data — a RC do CRM
+  // sugere o fornecedor que praticou o custo (05/10/26).
+  if (comHistorico > 0) {
+    await Promise.all(Object.values(out).map(async (it) => {
+      const h = await historico(it.codigo, comHistorico);
+      it.historico = h;
+      if (h[0]) { it.fornecedor = h[0].f; it.ultima_compra = h[0].d; it.ultimo_preco = it.ultimo_preco ?? h[0].vu; }
+    }));
+  }
   return out;
 }
 
 /** Casa linhas de texto livre (CP sem código) com o catálogo: só devolve as
  *  que casam com segurança (texto muito parecido E medidas batendo). */
-export async function casarItensCrm(textos: string[], empresa = "SF"): Promise<(ItemCrm | null)[]> {
+export async function casarItensCrm(textos: string[], empresa = "SF", comHistorico = 0): Promise<(ItemCrm | null)[]> {
   const cas = await casarCatalogo(textos.slice(0, 400));
   const ok = cas.map((c) => (c.status === "ok" && c.melhor ? String(c.melhor.ncod_prod) : null));
-  const res = await resolverCodigosCrm(ok.filter((x): x is string => !!x), empresa);
+  const res = await resolverCodigosCrm(ok.filter((x): x is string => !!x), empresa, comHistorico);
   return ok.map((id, k) => {
     if (!id) return null;
     const r = res[id];
     const m = cas[k].melhor!;
-    if (r) return { ...r, via: undefined, ultimo_preco: n(m.ultimo_preco) ?? r.ultimo_preco, ultima_compra: m.ultima_compra, fornecedor: m.fornecedor };
+    if (r) return { ...r, via: undefined, ultimo_preco: n(m.ultimo_preco) ?? r.ultimo_preco,
+      ultima_compra: m.ultima_compra ?? r.ultima_compra, fornecedor: m.fornecedor ?? r.fornecedor };
     return { ncod_prod: Number(m.ncod_prod), codigo: m.codigo, codigo_omie: m.codigo, descricao: m.descricao, unidade: m.unidade ?? "UN",
       cmc: null, saldo: null, ultimo_preco: n(m.ultimo_preco), ultima_compra: m.ultima_compra, fornecedor: m.fornecedor,
       qtd_compras: n(m.qtd_compras), preco_maximo: null };
