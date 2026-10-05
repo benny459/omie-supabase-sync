@@ -163,7 +163,7 @@ export function montarPagarV3(o: Opts) {
     let cum = 0; const line = []; const tot = sum(b.filter((r) => vis.includes(r.emp))) || 1;
     bk.forEach((x, i) => {
       const X = pl + i * cw + (cw - bw) / 2; let y = H - pb; const d = new Date(+TODAY + (day ? i : i * 7) * DAY);
-      if (day && (d.getDay() === 0 || d.getDay() === 6)) g += `<rect x="${pl + i * cw}" y="${pt}" width="${cw}" height="${H - pt - pb}" style="fill:var(--panel2)"/>`;
+      if (day && (d.getDay() === 0 || d.getDay() === 6)) g += `<rect x="${pl + i * cw}" y="${pt}" width="${cw}" height="${H - pt - pb}" style="fill:var(--tx);fill-opacity:.035"/>`;
       const isSel = S.agSel === i; if (isSel) g += `<rect x="${pl + i * cw + 1}" y="${pt}" width="${cw - 2}" height="${H - pt - pb}" fill="#3b82f62a" rx="4"/>`;
       vis.forEach((e) => { const v = x.by[e] || 0; if (!v) return; const h = ((H - pt - pb) * v) / top; y -= h; g += `<rect x="${X}" y="${y}" width="${bw}" height="${Math.max(h, 1)}" fill="${EC[e]}" rx="2" opacity="${S.agSel != null && !isSel ? 0.45 : 1}"/>`; });
       const t = Object.values(x.by).reduce((a, c) => a + c, 0);
@@ -476,7 +476,7 @@ export function montarPagarV3(o: Opts) {
       const v = num(q("bVal").value); q("dOk").disabled = true;
       try {
         await api({ acao: "baixar", data: q("bData").value, lote: false, itens: [{ ref: r.ref, valor: v, cod_cc: +q("bBanco").value, desconto: num(q("bDesc").value), juros: num(q("bJur").value), multa: num(q("bMul").value), forcar: blocked, obs: q("bObs").value }] });
-        closeAll(); toast(`Baixa registrada · ${r.forn.slice(0, 28)} · ${brl(v)} · ${bankDesc(+q("bBanco").value)}`);
+        const bn = bankDesc(+q("bBanco").value); closeAll(); if (v >= r.v - 0.005) r.paid = true; else r.v = +(r.v - v).toFixed(2); render(); toast(`Baixa registrada · ${r.forn.slice(0, 28)} · ${brl(v)} · ${bn}`);
         S.sel.delete(id); await recarregarTudo();
       } catch (e) { toast(e.message, true); q("dOk").disabled = false; }
     };
@@ -505,7 +505,7 @@ export function montarPagarV3(o: Opts) {
       const bk = {}; md.querySelectorAll(".lb").forEach((s) => (bk[s.dataset.e] = +s.value)); q("mOk").disabled = true;
       try {
         await api({ acao: "baixar", lote: true, data: q("lData").value, obs: q("lObs").value, itens: sel.map((r) => ({ ref: r.ref, valor: r.v, cod_cc: bk[r.emp] })) });
-        closeAll(); toast(`${sel.length} títulos baixados · ${brl(sum(sel))}`); S.sel.clear(); await recarregarTudo();
+        closeAll(); sel.forEach((r) => (r.paid = true)); S.sel.clear(); render(); toast(`${sel.length} títulos baixados · ${brl(sum(sel))}`); await recarregarTudo();
       } catch (e) { toast(e.message, true); q("mOk").disabled = false; }
     };
   }

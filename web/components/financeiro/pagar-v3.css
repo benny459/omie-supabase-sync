@@ -313,3 +313,23 @@ html:not(.dark) .cp3 .toast{background:#f0fdf4;color:#166534}
 html:not(.dark) .cp3 .ov{background:#0f172a55}
 html:not(.dark) .cp3 .nocat,html:not(.dark) .cp3 .flag{color:#b45309 !important}
 html:not(.dark) .cp3 .bsel.need{color:#b45309}
+
+/* ── Receber v1 (mockup "contas-a-receber-v1") — mesmas bases, classes próprias ── */
+.cp3 .b-cobrar{background:rgba(239,68,68,.14);color:#f87171}
+.cp3 .b-prom{background:rgba(245,158,11,.13);color:#fbbf24}
+.cp3 .b-reneg{background:rgba(139,92,246,.16);color:#c4b5fd}
+.cp3 .b-bol{background:rgba(34,197,94,.12);color:#4ade80}
+.cp3 .b-nfs{background:rgba(96,165,250,.14);color:#93c5fd}
+.cp3 .b-semb{background:rgba(251,146,60,.13);color:#fdba74}
+.cp3 .hist{font-size:11px;white-space:nowrap}
+.cp3 .hist.g{color:#4ade80}.cp3 .hist.m{color:#fbbf24}.cp3 .hist.b{color:#f87171}.cp3 .hist.n{color:var(--tx3)}
+.cp3 .basesw{display:flex;align-items:center;gap:8px;color:var(--tx3);font-size:12px}
+.cp3 .tabs2{display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap}
+.cp3 .tabs2 button{background:var(--panel2);border:1px solid var(--line2);border-radius:8px;padding:6px 12px;font-size:12px;color:var(--tx2);font-weight:600}
+.cp3 .tabs2 button.on{background:var(--sf);border-color:var(--sf);color:#fff}
+.cp3 .kpi.green .v{color:#86efac}
+.cp3 .ent{color:#86efac}
+html:not(.dark) .cp3 .ent,html:not(.dark) .cp3 .kpi.green .v{color:#15803d}
+html:not(.dark) .cp3 .b-cobrar{color:#dc2626}html:not(.dark) .cp3 .b-prom{color:#b45309}html:not(.dark) .cp3 .b-reneg{color:#6d28d9}
+html:not(.dark) .cp3 .b-bol{color:#15803d}html:not(.dark) .cp3 .b-nfs{color:#1d4ed8}html:not(.dark) .cp3 .b-semb{color:#c2410c}
+html:not(.dark) .cp3 .hist.g{color:#15803d}html:not(.dark) .cp3 .hist.m{color:#b45309}html:not(.dark) .cp3 .hist.b{color:#dc2626}

@@ -2,15 +2,17 @@ import Link from "next/link";
 import { requirePermissao } from "@/lib/require-area";
 import TitulosView from "@/components/TitulosView";
 import TelaTitulosNavy from "@/components/navy/tela/TelaTitulosNavy";
+import TelaReceberV1 from "@/components/financeiro/TelaReceberV1";
 
 export const dynamic = "force-dynamic";
 
-/* Desde 30/09/26 a tela é a recriação Navy (protótipo "Painel Allka finance").
-   A antiga continua em ?classica=1 para comparar lado a lado — a Navy traz
-   todos os campos dela, e é aí que se confere. */
-export default async function ContasReceberPage({ searchParams }: { searchParams: Promise<{ classica?: string }> }) {
+/* Desde 05/10/26 a tela é a v1 do mockup "contas-a-receber-v1" (previsão ×
+   vencimento, situação de cobrança, histórico do cliente, receber/lote,
+   cobrança, conciliação de créditos). A Navy de 30/09 fica em ?navy=1 e a
+   antiga em ?classica=1. */
+export default async function ContasReceberPage({ searchParams }: { searchParams: Promise<{ classica?: string; navy?: string }> }) {
   await requirePermissao("financeiro.ver_receber");
-  const { classica } = await searchParams;
+  const { classica, navy } = await searchParams;
 
   if (classica) {
     return (
@@ -28,6 +30,8 @@ export default async function ContasReceberPage({ searchParams }: { searchParams
       </div>
     );
   }
+
+  if (!navy) return <TelaReceberV1 />;
 
   return (
     <>
