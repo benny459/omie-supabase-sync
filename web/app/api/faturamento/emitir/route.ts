@@ -18,13 +18,17 @@ export async function POST(req: NextRequest) {
   let body: {
     documento?: DocFat; tipo?: TipoDoc; origem_tipo?: OrigemTipo; origem_id?: string | null;
     gerar_receber_homologacao?: boolean;
+    /** Só admin: força homologação (teste da Nova emissão sem emitir em produção). */
+    forcar_homologacao?: boolean;
   };
   try { body = await req.json(); } catch { return falha("JSON inválido"); }
   if (!body.documento) return falha("documento é obrigatório");
+  if (body.forcar_homologacao && !q.admin) return falha("Só administradores podem forçar homologação", 403);
   try {
     const e = await emitir(body.documento, {
       tipo: body.tipo, origem_tipo: body.origem_tipo, origem_id: body.origem_id ?? null,
       gerar_receber_homologacao: !!body.gerar_receber_homologacao, criado_por: q.email,
+      forcar_homologacao: !!body.forcar_homologacao,
     });
     return NextResponse.json({ emissao: e, xml_url: await urlArquivo(e.xml_path), pdf_url: await urlArquivo(e.pdf_path) });
   } catch (e) {

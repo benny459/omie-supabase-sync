@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState, type MouseEvent, type ReactNode } from "react";
 import { PaginaNavy } from "@/components/navy/tela/KitTela";
 import { limpo } from "@/lib/faturamento/montar";
-import NovaEmissao, { type ConfigFat } from "@/components/faturamento/NovaEmissao";
+import NovaEmissao, { type ConfigFat, type Inicial } from "@/components/faturamento/NovaEmissao";
 import RegistrarNfse from "@/components/faturamento/RegistrarNfse";
 import "./faturamento.css";
 
@@ -126,6 +126,7 @@ export default function TelaFaturamento() {
   const [sort, setSort] = useState<{ k: string; d: 1 | -1 }>({ k: "emissao", d: -1 });
   const [aberto, setAberto] = useState<string | null>(null);
   const [nova, setNova] = useState(false);
+  const [inicialNova, setInicialNova] = useState<Inicial | null>(null);
   const [ocupado, setOcupado] = useState<string | null>(null);
   const [verPront, setVerPront] = useState(false);
 
@@ -249,25 +250,14 @@ export default function TelaFaturamento() {
             <button className="btn" onClick={exportar}>Exportar</button>
             <button className="btn" onClick={() => { setDocs(null); carregar(); }}>Recarregar</button>
             <button className="btn" onClick={() => setVerPront((v) => !v)}>Prontidão</button>
-            <button className="btn pri" onClick={() => setNova((v) => !v)}>{nova ? "Fechar" : "+ Nova emissão"}</button>
+            <button className="btn pri" onClick={() => { setInicialNova(null); setNova(true); }}>+ Nova emissão</button>
           </div>
         </div>
 
         {erro && <div className="alert bad" onClick={() => setErro(null)}>{erro}</div>}
         <Prontidao p={pront} empresa={empresa} aberto={verPront} onMudou={carregar} />
-        {nova && (
-          <div style={{ marginBottom: 16 }}>
-            <NovaEmissao config={config} ocupado={ocupado === "nova"} onEmitir={async (body) => {
-              setOcupado("nova");
-              const r = await fetch("/api/faturamento/emitir", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })
-                .then((x) => x.json()).catch((e) => ({ error: String(e) }));
-              setOcupado(null);
-              if (r.error) { avisar(r.error); return; }
-              avisar(`Emissão #${r.emissao.id}: ${r.emissao.status}${r.emissao.mensagem ? ` — ${r.emissao.mensagem}` : ""}`);
-              setNova(false); carregar();
-            }} />
-          </div>
-        )}
+        <NovaEmissao config={config} aberto={nova} inicial={inicialNova} admin={!!pront?.pode_mudar}
+          fechar={() => { setNova(false); setInicialNova(null); }} avisar={avisar} onEmitido={carregar} />
 
         <div className="toolbar">
           <div className="seg">
@@ -348,6 +338,13 @@ export default function TelaFaturamento() {
         </p>
 
         {docAberto && <Gaveta d={docAberto} empresa={empresa} prod={prod} ocupado={ocupado} agir={agir} fechar={() => setAberto(null)} avisar={avisar} onMudou={carregar}
+          abrirFolha={async () => {
+            const r = await agir(docAberto, "doc");
+            if (!r?.documento) return;
+            setInicialNova({ chave: docAberto.chave, documento: r.documento as Inicial["documento"], tipo: docAberto.tipo === "PV" ? "nfe" : undefined,
+              origem_tipo: docAberto.tipo === "PV" ? "pv" : "os", rotulo: docAberto.rotulo });
+            setAberto(null); setNova(true);
+          }}
           registrar={() => { setRegNfse([docAberto.chave]); setAberto(null); }} />}
         {regNfse && <RegistrarNfse empresa={empresa} chaves={regNfse} avisar={avisar} fechar={() => setRegNfse(null)}
           feito={() => { setRegNfse(null); setSel(new Set()); carregar(); }} />}
@@ -627,10 +624,10 @@ function Kanban({ rows, abrir }: { rows: Doc[]; abrir: (k: string) => void }) {
 }
 
 // ── Gaveta do documento ──────────────────────────────────────────────────────
-function Gaveta({ d, empresa, prod, ocupado, agir, fechar, avisar, onMudou, registrar }: {
+function Gaveta({ d, empresa, prod, ocupado, agir, fechar, avisar, onMudou, registrar, abrirFolha }: {
   d: Doc; empresa: string; prod: boolean; ocupado: string | null;
   agir: (d: Doc, a: "prevoo" | "ensaio" | "emitir" | "doc") => Promise<Record<string, unknown> | null>;
-  fechar: () => void; avisar: (m: string) => void; onMudou: () => void; registrar: () => void;
+  fechar: () => void; avisar: (m: string) => void; onMudou: () => void; registrar: () => void; abrirFolha: () => void;
 }) {
   const st = status(d); const sd = saldo(d);
   const nf = d.tipo === "PV" ? "NF-e" : "NFS-e";
@@ -778,6 +775,7 @@ function Gaveta({ d, empresa, prod, ocupado, agir, fechar, avisar, onMudou, regi
             <>
               <div className="sum">Emitir agora<b className="mono">{fmt(sd)}</b></div>
               {semNfse(d) && <button className="btn" onClick={registrar}>Registrar NFS-e</button>}
+              <button className="btn" disabled={!!ocupado} onClick={abrirFolha} title="Revisar recebimento, parcelas, forma, conta e emitir na folha dedicada">Revisar e emitir…</button>
               <button className="btn" disabled={!!ocupado} onClick={validar}>{ocupado === `prevoo:${d.chave}` ? "Validando…" : "Validar"}</button>
               {d.origem === "Omie" && d.tipo === "PV" && <button className="btn" disabled={!!ocupado} onClick={() => agir(d, "ensaio")}>{ocupado === `ensaio:${d.chave}` ? "Enviando…" : "Ensaio"}</button>}
               <button className="btn pri" disabled={!!ocupado || st === "pend" || st === "emis" || (pre != null && !pre.error && !pre.pode_emitir)}

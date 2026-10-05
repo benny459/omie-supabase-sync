@@ -49,12 +49,43 @@ export type ItemFat = {
   origem?: number | null;       // origem da mercadoria (0 nacional, 1 importação direta...)
   valor_desconto?: number | null;
   valor_frete?: number | null;   // frete rateado no item (o Omie rateia o frete do PV pelos itens)
+  valor_outras?: number | null;  // outras despesas acessórias rateadas no item
   servico_lc116?: string | null;               // NFS-e: item da LC116 (ex.: 0703)
   codigo_tributario_municipio?: string | null; // NFS-e: código municipal do serviço
 };
 
-export type ParcelaCond = { dias?: number; vencimento?: string; percentual?: number; valor?: number };
-export type CondicaoFat = { parcelas?: ParcelaCond[]; forma_pagamento?: string; descricao?: string };
+/** forma: tipo de documento do título a receber (BOL, PIX, TRF, CRT, DIN, CHQ, REC…). */
+export type ParcelaCond = { dias?: number; vencimento?: string; percentual?: number; valor?: number; forma?: string | null };
+/** Retenções da OS/NFS-e: o que o tomador retém sai do valor a receber. */
+export type RetencoesFat = {
+  iss_retido?: boolean; iss?: number | null; ir?: number | null; pis?: number | null;
+  cofins?: number | null; csll?: number | null; inss?: number | null;
+};
+/** Seção "Recebimento" da Nova emissão (05/10/26): condição, parcelas, forma,
+ *  conta, categoria, projeto, centro de custo, vendedor e retenções. As
+ *  parcelas a receber são criadas exatamente daqui. */
+export type CondicaoFat = {
+  parcelas?: ParcelaCond[];
+  /** tPag da NF-e (15 boleto, 17 PIX, 18 transferência, 03 crédito, 04 débito, 01 dinheiro, 02 cheque). */
+  forma_pagamento?: string;
+  descricao?: string;
+  codigo?: string | null;              // código da condição (cadastros › condições)
+  forma_recebimento?: string | null;   // tipo de documento padrão das parcelas (BOL, PIX…)
+  conta_corrente?: number | null;      // cod_cc da conta de recebimento
+  conta_nome?: string | null;
+  categoria?: string | null;           // código da categoria de receita
+  projeto?: string | null;             // código do projeto
+  centro_custo?: string | null;
+  vendedor?: string | null;
+  contrato?: string | null;
+  retencoes?: RetencoesFat | null;
+};
+
+/** Soma das retenções que o tomador desconta do pagamento. */
+export function totalRetencoes(r?: RetencoesFat | null) {
+  if (!r) return 0;
+  return r2((r.iss_retido ? r.iss ?? 0 : 0) + (r.ir ?? 0) + (r.pis ?? 0) + (r.cofins ?? 0) + (r.csll ?? 0) + (r.inss ?? 0));
+}
 
 export type DocFat = {
   empresa: string;
@@ -107,9 +138,10 @@ export function totalItens(itens: ItemFat[]) {
   return r2(itens.reduce((s, i) => s + r2(i.quantidade * i.valor_unitario), 0));
 }
 
-/** Valor da nota: produtos − descontos + frete rateado. */
+/** Valor da nota: produtos − descontos + frete + outras despesas (rateados nos itens). */
 export function totalDoc(itens: ItemFat[]) {
-  return r2(totalItens(itens) - itens.reduce((s, i) => s + (i.valor_desconto ?? 0), 0) + itens.reduce((s, i) => s + (i.valor_frete ?? 0), 0));
+  return r2(totalItens(itens) - itens.reduce((s, i) => s + (i.valor_desconto ?? 0), 0) + itens.reduce((s, i) => s + (i.valor_frete ?? 0), 0)
+    + itens.reduce((s, i) => s + (i.valor_outras ?? 0), 0));
 }
 
 /** Parcelas com vencimento e valor; a última absorve o arredondamento. */
@@ -124,7 +156,7 @@ export function parcelas(total: number, cond?: CondicaoFat | null, base = hojeIS
       d.setUTCDate(d.getUTCDate() + (p.dias ?? 0));
       venc = d.toISOString().slice(0, 10);
     }
-    return { numero: String(i + 1).padStart(3, "0"), vencimento: venc, valor };
+    return { numero: String(i + 1).padStart(3, "0"), vencimento: venc, valor, forma: p.forma ?? cond?.forma_recebimento ?? null };
   });
   const soma = r2(out.reduce((s, p) => s + p.valor, 0));
   out[out.length - 1].valor = r2(out[out.length - 1].valor + (total - soma));
@@ -159,7 +191,8 @@ export function montarNfe(doc: DocFat, em: Emitente, opts: { natureza: string; s
   const indIE = c.indicador_ie ?? (ieDig ? "1" : /isent/i.test(c.ie ?? "") ? "2" : "9");
   const desconto = r2(doc.itens.reduce((s, i) => s + (i.valor_desconto ?? 0), 0));
   const frete = r2(doc.itens.reduce((s, i) => s + (i.valor_frete ?? 0), 0));
-  const total = r2(totalItens(doc.itens) - desconto + frete);
+  const outras = r2(doc.itens.reduce((s, i) => s + (i.valor_outras ?? 0), 0));
+  const total = r2(totalItens(doc.itens) - desconto + frete + outras);
   const ps = parcelas(total, doc.condicao);
   const aPrazo = ps.length > 1 || ps.some((p) => p.vencimento > hojeISO());
   const consumidorFinal = doc.consumidor_final ?? indIE !== "1";
@@ -186,6 +219,7 @@ export function montarNfe(doc: DocFat, em: Emitente, opts: { natureza: string; s
       valor_bruto: bruto,
       ...(i.valor_desconto ? { valor_desconto: r2(i.valor_desconto) } : {}),
       ...(i.valor_frete ? { valor_frete: r2(i.valor_frete) } : {}),
+      ...(i.valor_outras ? { valor_outras_despesas: r2(i.valor_outras) } : {}),
       unidade_tributavel: un,
       quantidade_tributavel: i.quantidade,
       valor_unitario_tributavel: i.valor_unitario,
@@ -256,6 +290,7 @@ export function montarNfe(doc: DocFat, em: Emitente, opts: { natureza: string; s
     valor_produtos: totalItens(doc.itens),
     ...(desconto ? { valor_desconto: desconto } : {}),
     ...(frete ? { valor_frete: frete } : {}),
+    ...(outras ? { valor_outras_despesas: outras } : {}),
     valor_total: total,
     // Cobrança sempre, como o Omie: fatura = nº da NF, duplicatas 001, 002…
     numero_fatura: String(opts.numero ?? "1"),
@@ -297,7 +332,13 @@ export function montarNfse(doc: DocFat, em: Emitente, opts: {
     servico: {
       valor_servicos: total,
       discriminacao: discriminacao.slice(0, 2000),
-      iss_retido: false,
+      iss_retido: !!doc.condicao?.retencoes?.iss_retido,
+      ...(doc.condicao?.retencoes?.iss ? { valor_iss: r2(doc.condicao.retencoes.iss) } : {}),
+      ...(doc.condicao?.retencoes?.ir ? { valor_ir: r2(doc.condicao.retencoes.ir) } : {}),
+      ...(doc.condicao?.retencoes?.pis ? { valor_pis: r2(doc.condicao.retencoes.pis) } : {}),
+      ...(doc.condicao?.retencoes?.cofins ? { valor_cofins: r2(doc.condicao.retencoes.cofins) } : {}),
+      ...(doc.condicao?.retencoes?.csll ? { valor_csll: r2(doc.condicao.retencoes.csll) } : {}),
+      ...(doc.condicao?.retencoes?.inss ? { valor_inss: r2(doc.condicao.retencoes.inss) } : {}),
       ...((doc.itens[0]?.servico_lc116 || opts.itemListaServico) ? { item_lista_servico: doc.itens[0]?.servico_lc116 || opts.itemListaServico } : {}),
       ...((doc.itens[0]?.codigo_tributario_municipio || opts.codigoTributario) ? { codigo_tributario_municipio: doc.itens[0]?.codigo_tributario_municipio || opts.codigoTributario } : {}),
       ...(opts.aliquota != null ? { aliquota: opts.aliquota } : {}),

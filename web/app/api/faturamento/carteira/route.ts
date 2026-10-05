@@ -3,6 +3,7 @@ import { supaAdmin } from "@/lib/supabase-admin";
 import { exigirFaturamento, falha } from "@/lib/faturamento/auth";
 import { documentoPvOmie, emitir, emitirPvOmie, prevoo, urlArquivo } from "@/lib/faturamento/server";
 import { docFat, documento } from "@/lib/vendas-server";
+import type { DocFat } from "@/lib/faturamento/montar";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -31,7 +32,7 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const q = await exigirFaturamento();
   if (q instanceof NextResponse) return q;
-  const b = (await req.json().catch(() => ({}))) as { chave?: string; acao?: string; empresa?: string };
+  const b = (await req.json().catch(() => ({}))) as { chave?: string; acao?: string; empresa?: string; documento?: DocFat | null };
   const [tipo, idTxt] = String(b.chave ?? "").split(":");
   const id = Number(idTxt);
   const empresa = b.empresa || "SF";
@@ -48,7 +49,7 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ documento: doc, ...pre });
       }
       if (b.acao === "ensaio" || b.acao === "emitir") {
-        const e = await emitirPvOmie(empresa, id, { ensaio: b.acao === "ensaio", criado_por: q.email });
+        const e = await emitirPvOmie(empresa, id, { ensaio: b.acao === "ensaio", criado_por: q.email, documento: b.documento ?? null });
         return NextResponse.json({ emissao: e, xml_url: await urlArquivo(e.xml_path), pdf_url: await urlArquivo(e.pdf_path) });
       }
     }
@@ -62,7 +63,8 @@ export async function POST(req: NextRequest) {
       }
       if (b.acao === "emitir") {
         if (d.status !== "aberto") return falha(`${d.label} não está em aberto (${d.status})`);
-        const e = await emitir(doc, {
+        const final = b.documento ? { ...b.documento, empresa: doc.empresa, rotulo: doc.rotulo } : doc;
+        const e = await emitir(final, {
           tipo: d.tipo === "PV" ? "nfe" : undefined, origem_tipo: d.tipo === "OS" ? "os" : "pv",
           origem_id: String(id), origem_rotulo: d.label, criado_por: q.email,
         });

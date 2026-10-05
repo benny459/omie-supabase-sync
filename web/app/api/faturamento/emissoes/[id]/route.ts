@@ -1,13 +1,19 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { exigirFaturamento, falha } from "@/lib/faturamento/auth";
 import { atualizar, cancelar, urlArquivo } from "@/lib/faturamento/server";
+import { supaAdmin } from "@/lib/supabase-admin";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
 async function resposta(id: number) {
   const e = await atualizar(id);
-  return NextResponse.json({ emissao: e, xml_url: await urlArquivo(e.xml_path), pdf_url: await urlArquivo(e.pdf_path) });
+  // Parcelas a receber criadas por esta emissão (painel de transmissão da Nova emissão).
+  const receber = e.receber_ids?.length
+    ? (await supaAdmin().schema("finance").from("receber")
+        .select("id,numero_parcela,vencimento,valor,numero_documento,extras").in("id", e.receber_ids).order("vencimento")).data ?? []
+    : [];
+  return NextResponse.json({ emissao: e, xml_url: await urlArquivo(e.xml_path), pdf_url: await urlArquivo(e.pdf_path), receber });
 }
 
 /** GET — consulta a Focus (se ainda processando) e devolve links assinados. */

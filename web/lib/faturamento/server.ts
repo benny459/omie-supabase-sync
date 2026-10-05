@@ -1,7 +1,7 @@
 import "server-only";
 import { supaAdmin } from "@/lib/supabase-admin";
 import { HOST, baixar, chamar, empresaFocus, tokenDe, type Ambiente } from "./focus";
-import { montarNfe, montarNfse, parcelas, reciboHtml, totalDoc, totalItens, validar, type DocFat, type Emitente } from "./montar";
+import { montarNfe, montarNfse, parcelas, reciboHtml, totalDoc, totalItens, totalRetencoes, validar, type DocFat, type Emitente } from "./montar";
 import { checarDoc, docFatPvOmie, type Checagem, type PvOmieDoc } from "./pv-omie";
 
 /**
@@ -35,7 +35,7 @@ export type Emissao = {
   origem_tipo: OrigemTipo; origem_id: string | null; origem_rotulo: string | null; ensaio: boolean;
   cliente: DocFat["cliente"]; itens: DocFat["itens"]; condicao: DocFat["condicao"];
   payload: unknown; status: string; focus_status: string | null; mensagem: string | null; erros: unknown;
-  numero: string | null; serie: string | null; chave: string | null; valor_total: number;
+  numero: string | null; serie: string | null; chave: string | null; valor_total: number; protocolo?: string | null;
   xml_path: string | null; pdf_path: string | null; receber_ids: string[] | null; gerar_receber: boolean;
   autorizada_em: string | null; cancelada_em: string | null; criado_por: string | null; created_at: string;
 };
@@ -95,6 +95,9 @@ export type EmitirOpts = {
    *  destinatária (a SEFAZ de homologação recusa CNPJ de terceiros). Não gera
    *  receber nem marca a origem. */
   ensaio?: boolean;
+  /** Teste (só admin): força HOMOLOGAÇÃO mantendo o destinatário e a seção de
+   *  recebimento — usado para validar a Nova emissão sem emitir em produção. */
+  forcar_homologacao?: boolean;
 };
 
 /** Devolve a numeração reservada quando o documento não chegou a existir
@@ -120,9 +123,9 @@ export async function emitir(doc: DocFat, o: EmitirOpts): Promise<Emissao> {
   let reservado: { campo: string; numero: number | null } | null = null;
   const cfg = await configDe(doc.empresa);
   if (!cfg.ativo) throw new Error(`Faturamento pelo painel não habilitado para ${doc.empresa}`);
-  const amb: Ambiente = o.ensaio ? "homologacao" : ambienteDe(cfg);
+  const amb: Ambiente = o.ensaio || o.forcar_homologacao ? "homologacao" : ambienteDe(cfg);
   if (o.ensaio) doc = await comoEnsaio(doc, cfg);
-  const origemTipo: OrigemTipo = o.ensaio ? "teste" : (o.origem_tipo ?? "manual");
+  const origemTipo: OrigemTipo = o.ensaio || o.forcar_homologacao ? "teste" : (o.origem_tipo ?? "manual");
   const tipo: TipoDoc = o.tipo ?? (origemTipo === "os" ? cfg.tipo_os : "nfe");
   const inval = validar(doc);
   if (inval) throw new Error(inval);
@@ -245,10 +248,16 @@ export async function prevoo(doc: DocFat, extra: Parameters<typeof checarDoc>[1]
     natureza: cfg.natureza_operacao, serie: cfg.nfe_serie_producao, numero: cfg.nfe_proximo_producao, infoPadrao: cfg.info_complementar_padrao,
   }) : null;
   const total = payload ? Number((payload as { valor_total: number }).valor_total) : totalDoc(doc.itens);
-  const ps = parcelas(total, doc.condicao);
-  add("Parcelas somam o total", Math.abs(ps.reduce((a, p) => a + p.valor, 0) - total) < 0.005, ps.map((p) => `${p.vencimento} R$ ${p.valor.toFixed(2)}`).join(" · "));
+  const ret = totalRetencoes(doc.condicao?.retencoes);
+  const liquido = Math.round((total - ret) * 100) / 100;
+  const ps = parcelas(liquido, doc.condicao);
+  const explicitas = doc.condicao?.parcelas ?? [];
+  const somaInformada = explicitas.every((p) => p.valor != null) && explicitas.length
+    ? Math.round(explicitas.reduce((a, p) => a + Number(p.valor ?? 0), 0) * 100) / 100 : liquido;
+  add(ret ? "Parcelas somam o líquido (total − retenções)" : "Parcelas somam o total", Math.abs(somaInformada - liquido) < 0.005,
+    `${ps.map((p) => `${p.vencimento} R$ ${p.valor.toFixed(2)}${p.forma ? ` ${p.forma}` : ""}`).join(" · ")}${Math.abs(somaInformada - liquido) >= 0.005 ? ` — informado R$ ${somaInformada.toFixed(2)}, esperado R$ ${liquido.toFixed(2)}` : ""}`);
   const bloqueia = checagens.some((c) => !c.ok && c.nivel === "erro");
-  return { checagens, payload, total, parcelas: ps, pode_emitir: !bloqueia, ambiente: prod ? "producao" : "homologacao" };
+  return { checagens, payload, total, liquido, retencoes: ret, parcelas: ps, pode_emitir: !bloqueia, ambiente: prod ? "producao" : "homologacao" };
 }
 
 async function emitirRecibo(row: Emissao, doc: DocFat, em: Emitente, cfg: Config, amb: Ambiente) {
@@ -299,6 +308,7 @@ export async function atualizar(id: number): Promise<Emissao> {
     campos.serie = j.serie ?? row.serie;
     campos.chave = j.chave_nfe ? j.chave_nfe.replace(/\D/g, "") : (j.codigo_verificacao ?? row.chave); // chave só com os 44 dígitos
     campos.autorizada_em = row.autorizada_em ?? new Date().toISOString();
+    if (j.protocolo) campos.protocolo = j.protocolo;
     const base = `${row.empresa}/${row.ambiente}/${row.tipo}/${row.id}-${j.numero ?? "sn"}`;
     const xml = j.caminho_xml_nota_fiscal;
     const pdf = j.caminho_danfe ?? j.url_danfse ?? j.url;
@@ -320,7 +330,11 @@ async function guardar(host: string, token: string, caminho: string, path: strin
 async function posAutorizacao(row: Emissao): Promise<Emissao> {
   let receber = row.receber_ids;
   if (row.gerar_receber && !receber?.length) {
-    const ps = parcelas(Number(row.valor_total), row.condicao);
+    // Valor a receber = total do documento − retenções que o tomador desconta.
+    // As parcelas saem exatamente da seção "Recebimento" (datas, valores, forma).
+    const cond = row.condicao;
+    const liquido = Math.round((Number(row.valor_total) - totalRetencoes(cond?.retencoes)) * 100) / 100;
+    const ps = parcelas(liquido, cond);
     const c = row.cliente;
     const doc = row.tipo === "recibo" ? `REC ${row.numero}` : `${row.tipo === "nfe" ? "NF-e" : "NFS-e"} ${row.numero}`;
     const hoje = new Date(Date.now() - 3 * 3600_000).toISOString().slice(0, 10);
@@ -337,11 +351,19 @@ async function posAutorizacao(row: Emissao): Promise<Emissao> {
       vencimento: p.vencimento,
       previsao: p.vencimento,
       valor: p.valor,
+      codigo_categoria: cond?.categoria ?? null,
+      codigo_projeto: cond?.projeto ?? null,
+      id_conta_corrente: cond?.conta_corrente ?? null,
       origem: "painel",
       conferencia: "so_painel",
       observacao: row.ambiente === "homologacao" ? "HOMOLOGAÇÃO — documento de teste, sem valor fiscal" : null,
       created_by: row.criado_por,
-      extras: { fat_emissao_id: row.id, ambiente: row.ambiente, tipo: row.tipo, origem_tipo: row.origem_tipo },
+      extras: {
+        fat_emissao_id: row.id, ambiente: row.ambiente, tipo: row.tipo, origem_tipo: row.origem_tipo,
+        forma: p.forma ?? cond?.forma_recebimento ?? null, condicao: cond?.codigo ?? cond?.descricao ?? null,
+        centro_custo: cond?.centro_custo ?? null, vendedor: cond?.vendedor ?? null, contrato: cond?.contrato ?? null,
+        retencoes: cond?.retencoes ?? null, conta: cond?.conta_nome ?? null,
+      },
     }));
     const { data, error } = await supaAdmin().schema("finance").from("receber").insert(linhas).select("id");
     if (error) return await patch(row.id, { mensagem: `Autorizada, mas falhou criar contas a receber: ${error.message}` });
@@ -409,8 +431,12 @@ export async function urlArquivo(path: string | null) {
 /** Emite a NF-e de um PV do Omie (espelho). Em produção bloqueia se o Omie já
  *  faturou o PV, se o painel já emitiu, ou se alguma checagem do pré-voo falhar.
  *  Não escreve no Omie: o PV fica faturado só no painel (fat_emissoes). */
-export async function emitirPvOmie(empresa: string, codigo: number, o: { ensaio?: boolean; criado_por: string }) {
-  const { bruto, doc } = await documentoPvOmie(empresa, codigo);
+export async function emitirPvOmie(empresa: string, codigo: number, o: { ensaio?: boolean; criado_por: string; documento?: DocFat | null }) {
+  const base = await documentoPvOmie(empresa, codigo);
+  const bruto = base.bruto;
+  // Folha de emissão (05/10/26): o documento pode vir revisto pelo usuário
+  // (recebimento, parcelas, OC, observações); as travas do PV continuam.
+  const doc: DocFat = o.documento ? { ...o.documento, empresa, rotulo: base.doc.rotulo } : base.doc;
   if (!o.ensaio) {
     const pre = await prevoo(doc, { nf_omie: bruto.nf_omie, emissao_painel: bruto.emissao_painel, etapa: String(bruto.pv.etapa ?? ""), total_pv: Number(bruto.pv.valor_total) });
     const erros = pre.checagens.filter((c) => !c.ok && c.nivel === "erro");
