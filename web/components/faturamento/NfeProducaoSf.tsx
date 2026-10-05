@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState, type CSSProperties } from "react";
 import { Aviso, BotaoTela, brl, cartao } from "@/components/navy/tela/KitTela";
+import { limpo } from "@/lib/faturamento/montar";
 
 /* NF-e mercantil em produção pelo painel (05/10/2026): prontidão (Focus,
    certificado A1, numeração, Omie desligado) e a fila dos PVs do Omie em
@@ -54,7 +55,7 @@ export default function NfeProducaoSf({ empresa = "SF", onEmitido }: { empresa?:
     if (qual === "emitir") {
       const prod = p?.config.ambiente === "producao" && p?.config.producao_liberada;
       const msg = prod
-        ? `EMITIR NF-e DE PRODUÇÃO (documento fiscal real) do ${pv.rotulo} — ${pv.cliente} — ${brl(pv.valor_total)}?\n\nNúmero: ${p?.config.nfe_proximo_producao} série ${p?.config.nfe_serie_producao}.`
+        ? `EMITIR NF-e DE PRODUÇÃO (documento fiscal real) do ${pv.rotulo} — ${limpo(pv.cliente)} — ${brl(pv.valor_total)}?\n\nNúmero: ${p?.config.nfe_proximo_producao} série ${p?.config.nfe_serie_producao}.`
         : `Emitir o ${pv.rotulo} em HOMOLOGAÇÃO (sem valor fiscal)?`;
       if (!window.confirm(msg)) return;
     }
@@ -147,7 +148,7 @@ export default function NfeProducaoSf({ empresa = "SF", onEmitido }: { empresa?:
                     <tr style={{ borderBottom: "1px solid var(--ww-border)" }}>
                       <td style={td}><b>{pv.rotulo}</b></td>
                       <td style={td}>{ETAPA[pv.etapa] ?? pv.etapa}</td>
-                      <td style={{ ...td, maxWidth: 320 }}>{pv.cliente}</td>
+                      <td style={{ ...td, maxWidth: 320 }}>{limpo(pv.cliente)}</td>
                       <td style={td}>{pv.num_pedido_cliente ?? "—"}</td>
                       <td style={{ ...td, textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{brl(Number(pv.valor_total))}</td>
                       <td style={{ ...td, whiteSpace: "nowrap" }}>
