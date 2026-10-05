@@ -96,6 +96,7 @@ export async function emitir(doc: DocFat, o: EmitirOpts): Promise<Emissao> {
   const tipo: TipoDoc = o.tipo ?? (origemTipo === "os" ? cfg.tipo_os : "nfe");
   const inval = validar(doc);
   if (inval) throw new Error(inval);
+  if (tipo === "nfse" && !doc.cliente.email) throw new Error("NFS-e (Barueri) exige e-mail do tomador");
 
   if (o.origem_id) {
     const { data: ja } = await db().from("fat_emissoes").select("id,status")
