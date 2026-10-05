@@ -275,3 +275,18 @@
   background: var(--f-card); border: 1px solid var(--f-line); border-radius: 9px; padding: 7px 9px; color: var(--f-tx); font-size: 13px; }
 .fpv .ctr-cli { display: flex; align-items: center; gap: 8px; color: var(--f-tx); font-size: 13px; }
 .fpv .ctr-item { display: grid; grid-template-columns: 1fr 70px 60px 110px 34px; gap: 6px; margin-bottom: 6px; }
+
+/* sql/72 — filtros ativos visíveis, período na barra da lista, previsão. */
+.fpv .per { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--f-tx2); font-weight: 600; }
+.fpv .per .sel { font-weight: 650; color: var(--f-tx); border-color: var(--f-blue); }
+.fpv .ativos { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 8px 0 10px; }
+.fpv .fchip { display: inline-flex; align-items: center; gap: 6px; padding: 3px 4px 3px 10px; border-radius: 999px;
+  background: color-mix(in srgb, var(--f-blue) 14%, transparent); border: 1px solid color-mix(in srgb, var(--f-blue) 45%, transparent);
+  color: var(--f-tx); font-size: 12px; font-weight: 600; }
+.fpv .fchip button { border: 0; background: transparent; color: var(--f-tx2); font-size: 14px; line-height: 1; padding: 0 6px; cursor: pointer; border-radius: 999px; }
+.fpv .fchip button:hover { color: var(--f-bad); }
+.fpv .ativos .cont { margin-left: auto; font-size: 12px; color: var(--f-tx3); }
+.fpv .ativos .cont b { color: var(--f-tx); }
+.fpv .cli .razao { display: block; color: var(--f-tx3); font-size: 11px; font-weight: 400; }
+.fpv .prevbtn { background: transparent; border: 1px dashed transparent; border-radius: 8px; padding: 2px 6px; margin: -2px -6px; text-align: left; color: var(--f-tx); cursor: pointer; font: inherit; }
+.fpv .prevbtn:hover { border-color: var(--f-line2, var(--f-line)); }

@@ -23,8 +23,10 @@ export async function GET(req: NextRequest) {
   if (q instanceof NextResponse) return q;
   const empresa = req.nextUrl.searchParams.get("empresa") || "SF";
   const desde = req.nextUrl.searchParams.get("desde");
+  // Com texto de busca, a carteira procura em todos os períodos (sql/72).
+  const busca = (req.nextUrl.searchParams.get("busca") ?? "").trim().slice(0, 80) || null;
   const { data, error } = await supaAdmin().schema("orders")
-    .rpc("fat_carteira", { p_empresa: empresa, p_desde: desde && /^\d{4}-\d{2}-\d{2}$/.test(desde) ? desde : null });
+    .rpc("fat_carteira", { p_empresa: empresa, p_desde: desde && /^\d{4}-\d{2}-\d{2}$/.test(desde) ? desde : null, p_busca: busca });
   if (error) return falha(error.message, 500);
   return NextResponse.json(data);
 }

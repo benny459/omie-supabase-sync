@@ -31,6 +31,9 @@ type Doc = {
   nfse?: boolean; nfse_registrada?: boolean; aguarda_nfse?: boolean;
   /** PV/OS nativo: proposta do CRM ligada (ou o motivo de lançar sem ela). */
   proposta?: string | null; sem_proposta?: string | null;
+  /** Nome fantasia (linha principal) e razão social; previsão de faturamento (sql/72). */
+  fantasia?: string | null; razao?: string | null;
+  previsao?: string | null; previsao_origem?: "omie" | "painel" | "documento" | null; previsao_original?: string | null;
 };
 type St = "pend" | "pronto" | "emis" | "rej" | "parc" | "fat";
 type Checagem = { item: string; ok: boolean; nivel: "erro" | "aviso"; detalhe: string };
@@ -100,7 +103,8 @@ const etapaRot = (d: Doc) => (d.origem === "Omie" ? (d.tipo === "PV" ? ETAPA_PV 
 function desdePeriodo(p: string): string {
   const h = hoje();
   const y = h.getFullYear(), m = h.getMonth();
-  const d = p === "ano" ? new Date(y, 0, 1) : p === "tri" ? new Date(y, Math.floor(m / 3) * 3, 1) : new Date(y, m, 1);
+  const d = p === "tudo" ? new Date(2000, 0, 1) : p === "12m" ? new Date(y, m - 11, 1)
+    : p === "ano" ? new Date(y, 0, 1) : p === "tri" ? new Date(y, Math.floor(m / 3) * 3, 1) : new Date(y, m, 1);
   return d.toLocaleDateString("sv-SE");
 }
 const MESES = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
@@ -119,6 +123,12 @@ export default function TelaFaturamento() {
   const [view, setView] = useState<"list" | "kanban" | "emissoes" | "nfse">("list");
   const [regNfse, setRegNfse] = useState<string[] | null>(null);
   const [q, setQ] = useState("");
+  // Busca no servidor (todos os períodos) a partir de 3 letras, com pausa.
+  const [qServ, setQServ] = useState("");
+  useEffect(() => {
+    const t = window.setTimeout(() => setQServ(q.trim().length >= 3 ? q.trim() : ""), 350);
+    return () => window.clearTimeout(t);
+  }, [q]);
   const [orig, setOrig] = useState("");
   const [fst, setFst] = useState<"" | St>("");
   const [chips, setChips] = useState<Set<string>>(new Set());
@@ -137,7 +147,7 @@ export default function TelaFaturamento() {
   const carregar = useCallback(async () => {
     try {
       const [a, b, c, d] = await Promise.all([
-        fetch(`/api/faturamento/carteira?empresa=${empresa}&desde=${desdePeriodo(periodo)}`, { cache: "no-store" }).then((r) => r.json()),
+        fetch(`/api/faturamento/carteira?empresa=${empresa}&desde=${desdePeriodo(periodo)}${qServ ? `&busca=${encodeURIComponent(qServ)}` : ""}`, { cache: "no-store" }).then((r) => r.json()),
         fetch("/api/faturamento/config", { cache: "no-store" }).then((r) => r.json()),
         fetch(`/api/faturamento/prontidao?empresa=${empresa}`, { cache: "no-store" }).then((r) => r.json()).catch(() => null),
         fetch("/api/faturamento/emissoes", { cache: "no-store" }).then((r) => r.json()).catch(() => ({})),
@@ -150,8 +160,19 @@ export default function TelaFaturamento() {
     } catch (e) {
       setErro(e instanceof Error ? e.message : String(e));
     }
-  }, [empresa, periodo]);
+  }, [empresa, periodo, qServ]);
   useEffect(() => { carregar(); }, [carregar]);
+
+  async function salvarPrevisao(d: Doc, data: string | null) {
+    const r = await fetch("/api/faturamento/previsao", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ chave: d.chave, data }) });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) { avisar(j.error ?? "Não foi possível gravar a previsão"); return; }
+    avisar(data ? `Previsão de ${d.rotulo} → ${dataBR(data)}` : `Previsão de ${d.rotulo} voltou à original`);
+    setDocs((ds) => (ds ?? []).map((x) => x.chave !== d.chave ? x : {
+      ...x, previsao: data ?? x.previsao_original ?? null,
+      previsao_origem: data ? "painel" : (x.previsao_original ? (x.origem === "Omie" ? "omie" : "documento") : null),
+    }));
+  }
 
   const cfg = config.find((c) => c.empresa === empresa);
   const prod = cfg?.ambiente === "producao" && !!cfg?.producao_liberada;
@@ -174,8 +195,9 @@ export default function TelaFaturamento() {
     if (chips.has("old") && dias(d.emissao) <= 30) return false;
     if (chips.has("saldo") && st === "fat") return false;
     if (chips.has("semnfse") && !semNfse(d)) return false;
+    if (chips.has("prevatras") && !((prevDias(d) ?? 1) < 0)) return false;
     if (q) {
-      const h = `${d.rotulo} ${d.cliente ?? ""} ${d.oc ?? ""} ${d.descricao ?? ""} ${d.proposta ?? ""} ${d.nfs.map((n) => n.num).join(" ")}`.toLowerCase();
+      const h = `${d.rotulo} ${d.cliente ?? ""} ${d.fantasia ?? ""} ${d.razao ?? ""} ${d.oc ?? ""} ${d.descricao ?? ""} ${d.proposta ?? ""} ${d.nfs.map((n) => n.num).join(" ")}`.toLowerCase();
       if (!h.includes(q.toLowerCase())) return false;
     }
     return true;
@@ -184,7 +206,7 @@ export default function TelaFaturamento() {
   const ordenados = useMemo(() => {
     const k = sort.k, dir = sort.d;
     const val = (d: Doc): number | string => k === "saldo" ? saldo(d) : k === "pct" ? Number(d.faturado) / (Number(d.valor) || 1)
-      : k === "valor" || k === "faturado" ? Number(d[k]) : k === "emissao" ? d.emissao ?? "" : k === "doc" ? d.rotulo : (d.cliente ?? "");
+      : k === "valor" || k === "faturado" ? Number(d[k]) : k === "emissao" ? d.emissao ?? "" : k === "previsao" ? d.previsao ?? "9999" : k === "doc" ? d.rotulo : (d.cliente ?? "");
     return [...filtrados].sort((a, b) => { const x = val(a), y = val(b); return (x > y ? 1 : x < y ? -1 : 0) * dir; });
   }, [filtrados, sort]);
 
@@ -234,7 +256,18 @@ export default function TelaFaturamento() {
 
   const docAberto = aberto ? (docs ?? []).find((d) => d.chave === aberto) ?? null : null;
   const h = hoje();
-  const rotPeriodo: Record<string, string> = { mes: `${MESES[h.getMonth()]}/${String(h.getFullYear()).slice(2)}`, tri: "Trimestre", ano: String(h.getFullYear()) };
+  const rotPeriodo: Record<string, string> = { mes: `${MESES[h.getMonth()]}/${String(h.getFullYear()).slice(2)}`, tri: "Trimestre", ano: String(h.getFullYear()), "12m": "12 meses", tudo: "Tudo" };
+  const ativos: { k: string; l: string; limpar: () => void }[] = [
+    ...(qServ ? [] : [{ k: "per", l: `Período: ${rotPeriodo[periodo]}`, limpar: () => setPeriodo("mes") }]),
+    ...(q ? [{ k: "q", l: `Busca: “${q}”${qServ ? " (todos os períodos)" : ""}`, limpar: () => setQ("") }] : []),
+    ...(tipo !== "all" ? [{ k: "tipo", l: `Tipo: ${tipo}`, limpar: () => setTipo("all") }] : []),
+    ...(orig ? [{ k: "orig", l: `Origem: ${orig}`, limpar: () => setOrig("") }] : []),
+    ...(fst ? [{ k: "st", l: `Status: ${ST[fst].l}`, limpar: () => setFst("") }] : []),
+    ...(kpi ? [{ k: "kpi", l: `Indicador: ${kpi}`, limpar: () => setKpi(null) }] : []),
+    ...[...chips].map((c) => ({ k: `c-${c}`, l: ({ semoc: "Sem OC", old: "> 30 dias", saldo: "Só com saldo", semnfse: "OS sem NFS-e", prevatras: "Previsão atrasada" } as Record<string, string>)[c] ?? c,
+      limpar: () => setChips((s) => { const n = new Set(s); n.delete(c); return n; }) })),
+  ];
+  const limparFiltros = () => { setQ(""); setTipo("all"); setOrig(""); setFst(""); setKpi(null); setChips(new Set()); setPeriodo("mes"); };
 
   return (
     <PaginaNavy>
@@ -283,7 +316,7 @@ export default function TelaFaturamento() {
             ))}
           </div>
           <div className="seg">
-            {(["mes", "tri", "ano"] as const).map((p) => (
+            {(["mes", "tri", "ano", "12m", "tudo"] as const).map((p) => (
               <button key={p} className={periodo === p ? "on" : ""} onClick={() => setPeriodo(p)} title="Período do faturado (a carteira em aberto aparece sempre)">{rotPeriodo[p]}</button>
             ))}
           </div>
@@ -308,9 +341,16 @@ export default function TelaFaturamento() {
             <button className={view === "emissoes" ? "on" : ""} onClick={() => setView("emissoes")}>⎙ Emissões</button>
             <button className={view === "nfse" ? "on" : ""} onClick={() => setView("nfse")}>🏛 NFS-e registradas</button>
           </div>
+          <label className="per" title="Período do faturado — a carteira em aberto aparece sempre; com busca, procura em todos os períodos">
+            <span>Período</span>
+            <select className="sel" value={qServ ? "busca" : periodo} disabled={!!qServ} onChange={(e) => setPeriodo(e.target.value)}>
+              {qServ && <option value="busca">Todos (busca)</option>}
+              {(["mes", "tri", "ano", "12m", "tudo"] as const).map((p) => <option key={p} value={p}>{rotPeriodo[p]}</option>)}
+            </select>
+          </label>
           <div className="search">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></svg>
-            <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar PV, OS, cliente, OC, NF…" />
+            <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar PV, OS, cliente (nome fantasia), OC, NF… — procura em todos os períodos" />
           </div>
           {view !== "emissoes" && view !== "nfse" && <>
             <select className="sel" value={orig} onChange={(e) => setOrig(e.target.value)}>
@@ -320,12 +360,21 @@ export default function TelaFaturamento() {
               <option value="">Status: todos</option>
               {(Object.keys(ST) as St[]).map((k) => <option key={k} value={k}>{ST[k].l}</option>)}
             </select>
-            {([["semoc", "Sem OC"], ["old", "> 30 dias"], ["saldo", "Só com saldo"], ["semnfse", `OS sem NFS-e · ${(docs ?? []).filter(semNfse).length}`]] as const).map(([k, l]) => (
+            {([["semoc", "Sem OC"], ["old", "> 30 dias"], ["saldo", "Só com saldo"], ["prevatras", `Previsão atrasada · ${(docs ?? []).filter((d) => (prevDias(d) ?? 1) < 0).length}`], ["semnfse", `OS sem NFS-e · ${(docs ?? []).filter(semNfse).length}`]] as const).map(([k, l]) => (
               <button key={k} className={`chipf ${chips.has(k) ? "on" : ""}`} title={k === "semnfse" ? "OS faturáveis sem NFS-e registrada (emitida na prefeitura)" : undefined}
                 onClick={() => setChips((s) => { const n = new Set(s); if (n.has(k)) n.delete(k); else n.add(k); return n; })}>{l}</button>
             ))}
           </>}
         </div>
+        {view !== "emissoes" && view !== "nfse" && (
+          <div className="ativos">
+            {ativos.map((a) => <span key={a.k} className="fchip">{a.l}<button onClick={a.limpar} title="Tirar este filtro">×</button></span>)}
+            {ativos.length > 1 && <button className="btn ghost sm" onClick={limparFiltros}>Limpar filtros</button>}
+            <span className="cont">
+              {docs ? <><b>{filtrados.length}</b> documento(s){qServ ? " · busca em todos os períodos" : ` · faturados só de ${rotPeriodo[periodo]} (em aberto: todas as datas)`}</> : "carregando…"}
+            </span>
+          </div>
+        )}
         {view === "list" && sel.size > 0 && (
           <div className="bulk">
             <span><b>{sel.size}</b> selecionados · saldo <b>{fmt((docs ?? []).filter((d) => sel.has(d.chave)).reduce((a, d) => a + saldo(d), 0))}</b></span>
@@ -340,7 +389,7 @@ export default function TelaFaturamento() {
           </div>
         )}
 
-        {view === "list" && (docs ? <Lista rows={ordenados} sel={sel} setSel={setSel} sort={sort} setSort={setSort} abrir={setAberto} ocupado={ocupado} agir={agir} prod={prod} registrar={(d) => setRegNfse([d.chave])} /> : null)}
+        {view === "list" && (docs ? <Lista rows={ordenados} sel={sel} setSel={setSel} sort={sort} setSort={setSort} abrir={setAberto} ocupado={ocupado} agir={agir} prod={prod} registrar={(d) => setRegNfse([d.chave])} salvarPrevisao={salvarPrevisao} /> : null)}
         {view === "kanban" && (docs ? <Kanban rows={filtrados} abrir={setAberto} /> : null)}
         {view === "emissoes" && <Emissoes lista={emissoes} q={q} onMudou={carregar} avisar={avisar} />}
         {view === "nfse" && <NfseRegistradas empresa={empresa} q={q} onMudou={carregar} avisar={avisar} />}
@@ -495,10 +544,47 @@ function Prog({ d, largura = 130 }: { d: Doc; largura?: number | string }) {
   );
 }
 
-function Idade({ d }: { d: Doc }) {
+function Emissao({ d }: { d: Doc }) {
   const x = dias(d.emissao);
-  if (status(d) === "fat") return <span className="age" style={{ color: "var(--f-tx3)" }}>{dataBR(d.emissao)}</span>;
-  return <><span className={`age ${x > 60 ? "hot" : x > 30 ? "warm" : ""}`}>{x} dias</span><small style={{ display: "block", color: "var(--f-tx3)", fontSize: 11 }}>{dataBR(d.emissao)}</small></>;
+  const aberto = status(d) !== "fat";
+  return <>
+    <b className="mono" style={{ fontWeight: 650 }}>{dataBR(d.emissao)}</b>
+    {aberto && d.emissao && <small className={`age ${x > 30 ? "hot" : x > 15 ? "warm" : ""}`} style={{ display: "block", fontSize: 11 }}>há {x} dia{x === 1 ? "" : "s"}</small>}
+  </>;
+}
+
+/** Dias até a previsão (negativo = atrasada); null quando já faturado ou sem previsão. */
+function prevDias(d: Doc): number | null {
+  if (!d.previsao || status(d) === "fat") return null;
+  return -dias(d.previsao);
+}
+function PrevAlerta({ d }: { d: Doc }) {
+  const n = prevDias(d);
+  if (n === null) return null;
+  if (n < 0) return <small className="age hot" style={{ display: "block", fontSize: 11 }}>atrasado {-n} dia{n === -1 ? "" : "s"}</small>;
+  if (n === 0) return <small className="age warm" style={{ display: "block", fontSize: 11 }}>hoje</small>;
+  if (n <= 3) return <small className="age warm" style={{ display: "block", fontSize: 11 }}>vence em {n} dia{n === 1 ? "" : "s"}</small>;
+  return <small style={{ display: "block", fontSize: 11, color: "var(--f-tx3)" }}>em {n} dias</small>;
+}
+function Previsao({ d, salvar }: { d: Doc; salvar: (d: Doc, data: string | null) => void }) {
+  const [ed, setEd] = useState(false);
+  if (status(d) === "fat") return <span style={{ color: "var(--f-tx3)" }}>{d.previsao ? dataBR(d.previsao) : "—"}</span>;
+  if (ed) return (
+    <span style={{ display: "inline-flex", gap: 4, alignItems: "center" }}>
+      <input type="date" className="sel" autoFocus defaultValue={d.previsao ?? ""} style={{ width: 140 }}
+        onKeyDown={(e) => { if (e.key === "Escape") setEd(false); }}
+        onBlur={(e) => { const v = e.currentTarget.value || null; setEd(false); if (v !== (d.previsao ?? null)) salvar(d, v); }} />
+      {d.previsao_origem === "painel" && <button className="btn ghost sm" title={`Voltar à original (${d.previsao_original ? dataBR(d.previsao_original) : "sem data"})`}
+        onMouseDown={(e) => { e.preventDefault(); setEd(false); salvar(d, null); }}>↺</button>}
+    </span>
+  );
+  return (
+    <button type="button" className="prevbtn" onClick={() => setEd(true)}
+      title={`Clique para mudar · ${d.previsao_origem === "painel" ? "corrigida no painel" : d.previsao_origem === "omie" ? "do Omie" : d.previsao_origem === "documento" ? "do pedido" : "sem previsão"}`}>
+      <b className="mono">{d.previsao ? dataBR(d.previsao) : "definir"}</b>{d.previsao_origem === "painel" && <span style={{ color: "var(--f-blue)", marginLeft: 4 }}>•</span>}
+      <PrevAlerta d={d} />
+    </button>
+  );
 }
 
 function Acoes({ d, ocupado, agir, abrir, prod, registrar }: { d: Doc; ocupado: string | null; agir: (d: Doc, a: "prevoo" | "ensaio" | "emitir") => unknown; abrir: (k: string) => void; prod: boolean; registrar: (d: Doc) => void }) {
@@ -520,9 +606,10 @@ function Acoes({ d, ocupado, agir, abrir, prod, registrar }: { d: Doc; ocupado: 
   </>;
 }
 
-function Lista({ rows, sel, setSel, sort, setSort, abrir, ocupado, agir, prod, registrar }: {
+function Lista({ rows, sel, setSel, sort, setSort, abrir, ocupado, agir, prod, registrar, salvarPrevisao }: {
   rows: Doc[]; sel: Set<string>; setSel: (s: Set<string>) => void; sort: { k: string; d: 1 | -1 }; setSort: (s: { k: string; d: 1 | -1 }) => void;
   abrir: (k: string) => void; ocupado: string | null; agir: (d: Doc, a: "prevoo" | "ensaio" | "emitir") => unknown; prod: boolean; registrar: (d: Doc) => void;
+  salvarPrevisao: (d: Doc, data: string | null) => void;
 }) {
   const [limite, setLimite] = useState(200);
   if (!rows.length) return <div className="tablebox"><div className="empty">Nenhum documento com esses filtros.</div></div>;
@@ -541,7 +628,7 @@ function Lista({ rows, sel, setSel, sort, setSort, abrir, ocupado, agir, prod, r
               const n = new Set(sel); selecionaveis.forEach((d) => (todos ? n.delete(d.chave) : n.add(d.chave))); setSel(n);
             }} />
           </th>
-          {th("doc", "Documento")}{th("cliente", "Cliente / OC")}{th("emissao", "Idade")}{th("valor", "Valor total", "r")}
+          {th("doc", "Documento")}{th("cliente", "Cliente / OC")}{th("emissao", "Emissão")}{th("previsao", "Previsão fat.")}{th("valor", "Valor total", "r")}
           {th("faturado", "Faturado", "r")}{th("saldo", "Falta faturar", "r")}{th("pct", "Cobertura")}<th>Status</th><th className="r">Ações</th>
         </tr></thead>
         <tbody>
@@ -561,13 +648,15 @@ function Lista({ rows, sel, setSel, sort, setSort, abrir, ocupado, agir, prod, r
                   {!d.proposta && d.sem_proposta && <div className="orig" style={{ color: "var(--f-warn)" }} title={d.sem_proposta}>sem proposta</div>}
                 </td>
                 <td>
-                  <div className="cli" title={limpo(d.cliente ?? "")}>{limpo(d.cliente ?? "—")}
+                  <div className="cli" title={limpo(d.razao ?? d.cliente ?? "")}>{limpo(d.fantasia || d.cliente || d.razao || "—")}
+                    {d.razao && d.fantasia && limpo(d.razao) !== limpo(d.fantasia) && <small className="razao">{limpo(d.razao)}</small>}
                     <small>{d.oc ? `OC ${d.oc}` : <span style={{ color: "var(--f-warn)" }}>sem OC</span>}{d.descricao ? ` · ${d.descricao}` : ""}</small>
                   </div>
                   {st !== "fat" && d.pend.map((p) => <div className="flag" key={p}>⚠ {p}</div>)}
                   {st === "rej" && rej && <div className="flag bad">✕ {rej.msg ?? "rejeitada"}</div>}
                 </td>
-                <td><Idade d={d} /></td>
+                <td><Emissao d={d} /></td>
+                <td onClick={(e) => e.stopPropagation()}><Previsao d={d} salvar={salvarPrevisao} /></td>
                 <td className="r mono">{fmt(Number(d.valor))}</td>
                 <td className="r mono" style={{ color: Number(d.faturado) ? "var(--f-ok)" : "var(--f-tx3)" }}>{Number(d.faturado) ? fmt(Number(d.faturado)) : "—"}</td>
                 <td className="r mono" style={{ fontWeight: 650, color: sd > 0.01 ? "var(--f-tx)" : "var(--f-tx3)" }}>{sd > 0.01 ? fmt(sd) : "—"}</td>
@@ -582,7 +671,7 @@ function Lista({ rows, sel, setSel, sort, setSort, abrir, ocupado, agir, prod, r
           })}
         </tbody>
         <tfoot><tr>
-          <td /><td colSpan={3}>{rows.length} documentos{rows.length > limite && <button className="btn ghost sm" onClick={() => setLimite((l) => l + 300)}>ver mais</button>}</td>
+          <td /><td colSpan={4}>{rows.length} documentos{rows.length > limite && <button className="btn ghost sm" onClick={() => setLimite((l) => l + 300)}>ver mais</button>}</td>
           <td className="r mono">{fmt(tot)}</td><td className="r mono" style={{ color: "var(--f-ok)" }}>{fmt(fat)}</td><td className="r mono">{fmt(tot - fat)}</td>
           <td colSpan={3}><div className="prog" style={{ width: 200 }}><div className="b"><i style={{ width: `${tot ? (fat / tot) * 100 : 0}%`, background: "var(--f-ok)" }} /></div><div className="l"><span>{tot ? Math.round((fat / tot) * 100) : 0}% faturado</span></div></div></td>
         </tr></tfoot>
@@ -617,11 +706,12 @@ function Kanban({ rows, abrir }: { rows: Doc[]; abrir: (k: string) => void }) {
                   <button type="button" className="kcard" key={d.chave} onClick={() => abrir(d.chave)}>
                     <span className="stripe" style={{ background: d.tipo === "PV" ? "var(--f-pv)" : "var(--f-os)" }} />
                     <div className="top"><span className={`tag ${d.tipo.toLowerCase()}`}>{d.tipo}</span><b>{d.rotulo}</b><span className="val mono">{fmt(st === "fat" ? Number(d.valor) : saldo(d))}</span></div>
-                    <div className="cl" title={limpo(d.cliente ?? "")}>{curto(d.cliente)}</div>
+                    <div className="cl" title={limpo(d.razao ?? d.cliente ?? "")}>{curto(d.fantasia || d.cliente)}</div>
                     {(st === "parc" || st === "fat") && <Prog d={d} largura="100%" />}
                     {st !== "fat" && d.pend.map((p) => <div className="flag" key={p}>⚠ {p}</div>)}
                     {st === "rej" && <div className="flag bad">✕ {rej?.msg ?? "rejeitada"}</div>}
                     {st === "emis" && <div className="flag">⟳ Aguardando SEFAZ</div>}
+                    {st !== "fat" && d.previsao && <div className="orig">Previsão {dataBR(d.previsao)} <PrevAlerta d={d} /></div>}
                     <div className="meta"><span>{d.oc ? `OC ${d.oc}` : "sem OC"}</span><span>{d.origem}</span>
                       <span className={`r ${st !== "fat" && x > 60 ? "age hot" : st !== "fat" && x > 30 ? "age warm" : ""}`}>{st === "fat" ? `✓ ${nfsAut(d).length} NF` : `${x}d`}</span></div>
                   </button>
@@ -694,10 +784,12 @@ function Gaveta({ d, empresa, prod, ocupado, agir, fechar, avisar, onMudou, regi
           <button className="x" onClick={fechar}>✕</button>
           <div style={{ fontSize: 12, color: "var(--f-tx3)" }}>{d.origem} · {EMPRESAS[empresa] ?? empresa} · {d.tipo === "PV" ? `Pedido de venda → ${nf} mercantil` : `Ordem de serviço → ${nf}`} · {etapaRot(d)}</div>
           <h2><span className={`tag ${d.tipo.toLowerCase()}`}>{d.tipo}</span>{d.rotulo} <span className={`pill ${ST[st].c}`} style={{ fontSize: 11.5 }}><i />{ST[st].l}</span></h2>
-          <div className="c">{limpo(d.cliente ?? "—")}{d.oc ? ` · OC ${d.oc}` : ""}{d.proposta ? ` · proposta ${d.proposta}` : d.sem_proposta ? ` · sem proposta (${d.sem_proposta})` : ""}{d.descricao ? <><br /><span style={{ color: "var(--f-tx3)" }}>{d.descricao}</span></> : null}</div>
+          <div className="c">{limpo(d.fantasia || d.cliente || "—")}{d.razao && d.fantasia ? ` (${limpo(d.razao)})` : ""}{d.oc ? ` · OC ${d.oc}` : ""}{d.proposta ? ` · proposta ${d.proposta}` : d.sem_proposta ? ` · sem proposta (${d.sem_proposta})` : ""}{d.descricao ? <><br /><span style={{ color: "var(--f-tx3)" }}>{d.descricao}</span></> : null}</div>
           <div className="dgrid">
             <div><span>Valor total</span><b className="mono">{fmt(Number(d.valor))}</b></div>
             <div><span>Faturado</span><b className="mono" style={{ color: "var(--f-ok)" }}>{fmt(Number(d.faturado))}</b></div>
+            <div><span>Emissão</span><b className="mono">{dataBR(d.emissao)}</b></div>
+            <div><span>Previsão fat.</span><b className="mono">{d.previsao ? dataBR(d.previsao) : "—"}</b><PrevAlerta d={d} /></div>
             <div><span>Falta faturar</span><b className="mono" style={{ color: sd > 0.01 ? "var(--f-warn)" : "var(--f-tx3)" }}>{fmt(sd)}</b></div>
           </div>
           <div style={{ marginTop: 12 }}><Prog d={d} largura="100%" /></div>
