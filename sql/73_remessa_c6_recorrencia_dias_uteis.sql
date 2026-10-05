@@ -707,3 +707,32 @@ revoke all on function finance.feriados_listar(date, date), finance.feriado_salv
 grant execute on function finance.feriados_listar(date, date), finance.feriado_salvar(date, text, text, boolean, text),
   finance.feriado_excluir(date, text), finance.pessoa_pagamento_obter(bigint), finance.pessoa_pagamento_salvar(bigint, jsonb, text)
   to service_role;
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- p73h — previsão do título nativo a pagar chega ao BI (fluxo projetado).
+-- v_titulos_bi usa o vencimento como dt_previsao_d dos nativos; o fluxo lê
+-- coalesce(previsao_override.dt_previsao_nova, dt_previsao_d). Espelha aqui a
+-- data_previsao (regra do dia útil ou reprogramação) quando difere do vencimento.
+-- ─────────────────────────────────────────────────────────────────────────────
+create or replace function finance.tg_pagar_previsao_bi() returns trigger language plpgsql security definer set search_path = finance, public as $$
+declare v_cod bigint := -(1000000000000 + new.id);
+begin
+  if new.status = 'previsto' and new.data_previsao is not null and new.data_previsao is distinct from new.vencimento then
+    insert into finance.previsao_override (cod_titulo, dt_previsao_nova, observacao, atualizado_em)
+    values (v_cod, new.data_previsao, case when coalesce((new.extras->>'previsao_manual')::boolean, false) then 'reprogramada no painel' else 'dia útil (regra)' end, now())
+    on conflict (cod_titulo) do update set dt_previsao_nova = excluded.dt_previsao_nova, observacao = excluded.observacao, atualizado_em = now();
+  else
+    delete from finance.previsao_override where cod_titulo = v_cod;
+  end if;
+  return new;
+end $$;
+drop trigger if exists tg_pagar_previsao_bi on finance.pagar_previsto;
+create trigger tg_pagar_previsao_bi after insert or update of data_previsao, vencimento, status, extras on finance.pagar_previsto
+  for each row execute function finance.tg_pagar_previsao_bi();
+
+insert into finance.previsao_override (cod_titulo, dt_previsao_nova, observacao, atualizado_em)
+select -(1000000000000 + id), data_previsao,
+       case when coalesce((extras->>'previsao_manual')::boolean, false) then 'reprogramada no painel' else 'dia útil (regra)' end, now()
+  from finance.pagar_previsto
+ where status = 'previsto' and data_previsao is not null and data_previsao <> vencimento
+on conflict (cod_titulo) do nothing;
