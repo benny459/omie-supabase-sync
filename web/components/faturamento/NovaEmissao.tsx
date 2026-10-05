@@ -214,6 +214,8 @@ export default function NovaEmissao({ config, aberto, fechar, avisar, onEmitido,
   const [acerto, setAcerto] = useState<{ n: number; c: CodCompra } | null>(null);
   // linhas cujo código não é item nosso (vindas do CRM, de rascunho antigo ou digitadas) → chip "código de compra"
   const [semEst, setSemEst] = useState<Record<string, CodCompra | null>>({});
+  const [ladoFechado, setLadoFechado] = useState(false);
+  const [verOk, setVerOk] = useState(false);
   const [dicas, setDicas] = useState<Record<number, DicaItem>>({});
   const [conta, setConta] = useState<number | "">("");
   const [categoria, setCategoria] = useState("");
@@ -960,15 +962,6 @@ export default function NovaEmissao({ config, aberto, fechar, avisar, onEmitido,
               )}
             </div>
           </div>
-          {ncmBox != null && itens[ncmBox] && (
-          <LocalizarNcm emp={empresa} descricao={itens[ncmBox].descricao ?? ""} codigo={itens[ncmBox].codigo || null} atual={itens[ncmBox].ncm}
-            onFechar={() => setNcmBox(null)}
-            onEscolher={(ncm, salvo) => {
-              const k = ncmBox; setNcmBox(null);
-              setItens((its) => its.map((x, i) => (i === k ? { ...x, ncm } : x)));
-              setNcmRuim((r) => r.filter((d) => d !== ncm));
-              avisar(`NCM ${ncmFmt(ncm)} aplicado${salvo ? " e salvo no cadastro do item" : " nesta nota"}.`);
-            }} />)}
         <div className="ne-rod"><span style={{ flex: 1 }} /><button className="ne-btn" onClick={sair}>{tx.fase === "final" ? "Fechar" : "Fechar e avisar depois"}</button></div>
         </div>
       </div>
@@ -984,7 +977,7 @@ export default function NovaEmissao({ config, aberto, fechar, avisar, onEmitido,
           <span className={`amb ${prod ? "prod" : "hom"}`}>{prod ? "PRODUÇÃO — documento fiscal real" : "HOMOLOGAÇÃO — sem valor fiscal"}</span>
           <button className="ne-x" onClick={sair} aria-label="Fechar">✕</button>
         </div>
-        <div className="ne-corpo">
+        <div className={`ne-corpo${ladoFechado ? " lado-fechado" : ""}`}>
           <div className="ne-main">
             {!chave && !naoVenda && (
               <div className="ne-modo" role="tablist">
@@ -1164,13 +1157,11 @@ export default function NovaEmissao({ config, aberto, fechar, avisar, onEmitido,
             </section>
 
             <section className="ne-sec" id="ne-sec-itens">
-              {acerto && <AcertoItemEstoque empresa={empresa} compra={acerto.c} onFechar={() => setAcerto(null)}
-                onPronto={(codigo) => usarNativo(acerto.n, codigo)} />}
               <h3>Itens <small>{itens.length} item(ns) · bruto {fmt(bruto)}</small></h3>
               {(() => {
                 const devol = operacao === "devolucao" && naoVenda;
                 // Grade que cabe na coluna da folha (05/10/26, pedido do Benny): dicas numa linha só, embaixo do item
-                const cols = ["110px", "minmax(180px,1fr)", ...(tipo === "nfe" ? ["136px"] : []), "58px", "78px", ...(devol ? ["58px", "64px"] : []), "108px", "100px", "26px"].join(" ");
+                const cols = ["100px", "minmax(160px,1fr)", ...(tipo === "nfe" ? ["128px"] : []), "52px", "72px", ...(devol ? ["54px", "60px"] : []), "100px", "96px", "26px"].join(" ");
                 return (
                   <div className="ne-itens" style={{ ["--ne-cols" as string]: cols }}>
                     <div className="ne-it-cab"><span>Código</span><span>Descrição</span>{tipo === "nfe" && <span>NCM</span>}<span>Un</span><span className="r">Qtd</span>
@@ -1387,7 +1378,9 @@ export default function NovaEmissao({ config, aberto, fechar, avisar, onEmitido,
             </section>
           </div>
 
-          <aside className="ne-lado">
+          {ladoFechado ? <aside className="ne-lado fechado"><button type="button" className="ne-lado-tog" title="Mostrar histórico e validação" onClick={() => setLadoFechado(false)}>‹</button></aside>
+          : <aside className="ne-lado">
+            <button type="button" className="ne-lado-tog" title="Recolher painel" onClick={() => setLadoFechado(true)}>›</button>
             <div>
               <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8 }}>Últimos faturamentos {cli.nome ? <span style={{ fontWeight: 400, color: "var(--ww-text-muted)" }}>· {cli.nome.slice(0, 28)}</span> : null}</div>
               {!docCli ? <div style={{ fontSize: 12.5, color: "var(--ww-text-muted)" }}>Escolha o cliente para ver o histórico.</div>
@@ -1425,14 +1418,29 @@ export default function NovaEmissao({ config, aberto, fechar, avisar, onEmitido,
               <div>
                 <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8 }}>Validação {pre.error ? "" : pre.pode_emitir ? "✓ pronta para emitir" : "— há pendências"}</div>
                 {pre.error ? <div className="ne-aviso mal">{pre.error}</div> : (
-                  <div className="ne-chk">{pre.checagens.map((c, k) => (
+                  <div className="ne-chk">{pre.checagens.filter((c) => !c.ok || verOk).map((c, k) => (
                     <div key={k} className={c.ok ? "ok" : c.nivel === "erro" ? "err" : "av"}><span>{c.ok ? "✓" : c.nivel === "erro" ? "✕" : "!"}</span><span><b>{c.item}</b> — {c.detalhe}</span></div>))}
+                    {pre.checagens.some((c) => c.ok) && <button type="button" className="ne-lk" style={{ fontSize: 12, textAlign: "left" }} onClick={() => setVerOk((v) => !v)}>
+                      {verOk ? "esconder as verificações ok" : `✓ ${pre.checagens.filter((c) => c.ok).length} verificações ok`}</button>}
                   </div>
                 )}
               </div>
             )}
-          </aside>
+          </aside>}
         </div>
+          {ncmBox != null && itens[ncmBox] && (
+          <LocalizarNcm emp={empresa} descricao={itens[ncmBox].descricao ?? ""} codigo={itens[ncmBox].codigo || null} atual={itens[ncmBox].ncm}
+            onFechar={() => setNcmBox(null)}
+            onEscolher={(ncm, salvo) => {
+              const k = ncmBox; setNcmBox(null);
+              setItens((its) => its.map((x, i) => (i === k ? { ...x, ncm } : x)));
+              setNcmRuim((r) => r.filter((d) => d !== ncm));
+              avisar(`NCM ${ncmFmt(ncm)} aplicado${salvo ? " e salvo no cadastro do item" : " nesta nota"}.`);
+            }} />)}
+          {acerto && (
+            <div className="ne-acerto-fundo" onMouseDown={(e) => { if (e.target === e.currentTarget) setAcerto(null); }}>
+              <AcertoItemEstoque empresa={empresa} compra={acerto.c} onFechar={() => setAcerto(null)} onPronto={(codigo) => usarNativo(acerto.n, codigo)} />
+            </div>)}
         <div className="ne-rod">
           <span className="tot">Total <b>{fmt(total)}</b></span>
           {ehOs && totRet > 0 && <span className="tot">A receber <b>{fmt(liquido)}</b></span>}

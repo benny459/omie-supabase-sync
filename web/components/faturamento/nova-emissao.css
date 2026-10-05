@@ -1,13 +1,17 @@
 /* Folha dedicada da Nova emissão (05/10/26) — "tela separada, caixa grande". */
 .ne-fundo{position:fixed;inset:0;z-index:80;background:rgba(5,10,20,.62);backdrop-filter:blur(3px);display:flex;justify-content:center;align-items:stretch;padding:2.5vh 2vw}
-.ne-folha{width:min(1280px,96vw);display:flex;flex-direction:column;background:var(--ww-panel,#0f1a2c);color:var(--ww-text,#e8eef8);border:1px solid var(--ww-border-strong,#28395a);border-radius:16px;box-shadow:0 30px 80px rgba(0,0,0,.45);overflow:hidden}
+.ne-folha{width:min(1680px,96vw);display:flex;flex-direction:column;background:var(--ww-panel,#0f1a2c);color:var(--ww-text,#e8eef8);border:1px solid var(--ww-border-strong,#28395a);border-radius:16px;box-shadow:0 30px 80px rgba(0,0,0,.45);overflow:hidden}
 .ne-topo{display:flex;align-items:center;gap:14px;padding:16px 22px;border-bottom:1px solid var(--ww-border,#1e2d48)}
 .ne-topo h2{margin:0;font-size:19px;font-weight:700;letter-spacing:-.01em}
 .ne-topo .amb{font-size:12px;font-weight:700;padding:3px 9px;border-radius:999px}
 .ne-topo .amb.prod{color:#fca5a5;background:rgba(239,68,68,.14)}
 .ne-topo .amb.hom{color:#fcd34d;background:rgba(245,158,11,.14)}
 .ne-x{margin-left:auto;background:none;border:1px solid var(--ww-border-strong,#28395a);color:inherit;border-radius:9px;width:34px;height:34px;cursor:pointer;font-size:16px}
-.ne-corpo{flex:1;overflow:auto;display:grid;grid-template-columns:minmax(0,1fr) 360px}
+.ne-corpo{flex:1;overflow:auto;display:grid;grid-template-columns:minmax(0,1fr) 320px}
+.ne-corpo.lado-fechado{grid-template-columns:minmax(0,1fr) 40px}
+.ne-lado{position:relative}
+.ne-lado.fechado{padding:10px 4px}
+.ne-lado-tog{align-self:flex-end;width:28px;height:28px;border-radius:8px;border:1px solid var(--ww-border-strong,#28395a);background:none;color:var(--ww-text-muted,#9fb0cc);cursor:pointer;font-size:16px;line-height:1}
 .ne-main{padding:18px 22px 30px;display:flex;flex-direction:column;gap:18px;min-width:0}
 .ne-lado{border-left:1px solid var(--ww-border,#1e2d48);padding:18px;display:flex;flex-direction:column;gap:16px;background:var(--ww-panel-sunken,rgba(0,0,0,.12))}
 .ne-sec{border:1px solid var(--ww-border,#1e2d48);border-radius:12px;padding:14px 16px;display:flex;flex-direction:column;gap:12px}
@@ -119,10 +123,10 @@ td > .ne-exist-lista,.ne-it-desc > .ne-exist-lista{background:var(--ww-panel,#0f
 .ne-it-tot{text-align:right;font-size:12.5px;font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .ne-it-rem{width:26px;height:26px;border-radius:7px;border:0;background:none;color:var(--ww-text-faint,#6b7d9c);font-size:18px;line-height:1;cursor:pointer}
 .ne-it-rem:hover{color:#fca5a5;background:rgba(239,68,68,.1)}
-.ne-it-dicas{display:flex;flex-wrap:wrap;gap:4px 12px;font-size:11px;color:var(--ww-text-muted,#9fb0cc);padding:3px 2px 0 116px}
+.ne-it-dicas{display:flex;flex-wrap:wrap;gap:4px 12px;font-size:11px;color:var(--ww-text-muted,#9fb0cc);padding:3px 2px 0 106px}
 .ne-it-dicas .ruim{color:#fca5a5}
 .ne-it-dicas .ne-lk{font-size:11px;padding:0}
-@container (max-width:860px){
+@container (max-width:740px){
   .ne-it-cab,.ne-it-lin{grid-template-columns:minmax(0,1.3fr) minmax(0,.55fr) minmax(0,.8fr) minmax(0,1fr) minmax(0,1fr) 26px;row-gap:4px}
   .ne-it-cab>:nth-child(1),.ne-it-lin .ne-it-cod{grid-column:span 2}
   .ne-it-cab>:nth-child(2),.ne-it-lin .ne-it-desc{grid-column:span 4}
@@ -132,3 +136,5 @@ td > .ne-exist-lista,.ne-it-desc > .ne-exist-lista{background:var(--ww-panel,#0f
 .ne-it-compra .ne-btn{height:26px;padding:0 10px;font-size:11.5px}
 .ne-chip-compra{font-size:10.5px;font-weight:700;padding:2px 8px;border-radius:999px;background:rgba(245,158,11,.16);color:#fbbf24;border:1px solid rgba(245,158,11,.4);white-space:nowrap}
 .ne-it.compra .ne-it-lin .ne-it-cod{border-color:rgba(245,158,11,.6)}
+.ne-acerto-fundo{position:fixed;inset:0;z-index:110;background:rgba(5,10,20,.55);display:flex;align-items:flex-start;justify-content:center;padding:7vh 16px}
+.ne-acerto-fundo>.ne-acerto{width:min(860px,100%);max-height:84vh;overflow:auto;margin:0;background:var(--ww-panel,#0f1a2c);box-shadow:0 24px 70px rgba(0,0,0,.45)}

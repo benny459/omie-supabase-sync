@@ -87,9 +87,9 @@ export default function TelaVinculosCompra() {
         {aba === "pend" && <input className="ne-in" style={{ flex: 1, maxWidth: 420 }} placeholder="Buscar código, descrição ou fornecedor…" value={q} onChange={(e) => setQ(e.target.value)} />}
       </div>
       {msg && <div className="ne-aviso" style={{ marginBottom: 10 }}>{msg}</div>}
-      {acerto && <AcertoItemEstoque empresa="SF" compra={{ n_cod_prod: acerto.n_cod_prod, codigo: acerto.codigo, descricao: acerto.descricao, unidade: null,
+      {acerto && <div className="ne-acerto-fundo" onMouseDown={(e) => { if (e.target === e.currentTarget) setAcerto(null); }}><AcertoItemEstoque empresa="SF" compra={{ n_cod_prod: acerto.n_cod_prod, codigo: acerto.codigo, descricao: acerto.descricao, unidade: null,
         ultimo_preco: acerto.preco, fornecedor: acerto.fornecedor, ncm: null }} onFechar={() => setAcerto(null)}
-        onPronto={(cod) => { setAcerto(null); setMsg(`${acerto.codigo ?? acerto.n_cod_prod} agora é o item ${cod}.`); carregar(); }} />}
+        onPronto={(cod) => { setAcerto(null); setMsg(`${acerto.codigo ?? acerto.n_cod_prod} agora é o item ${cod}.`); carregar(); }} /></div>}
 
       {aba === "pend" ? (
         <table className="ne-tab" style={{ width: "100%" }}>
