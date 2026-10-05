@@ -121,12 +121,17 @@ pcs as (
    where (pcc.empresa, pcc.cnumero) in (select empresa, pc from janela where pc is not null)
 ),
 apr_ap as (
-  select j.ref, array_agg(distinct ap.status) st,
-         (array_agg(ap.aprovador_email) filter (where ap.status like 'APROVADO%'))[1] aprovador
-    from janela j
-    join pcs on pcs.empresa = j.empresa and pcs.cnumero = j.pc
-    join approval.approvals ap on ap.empresa = pcs.empresa and (ap.ncod_ped = pcs.ncod_ped or ap.pc_numero_manual = pcs.cnumero)
-   group by j.ref
+  select ref, array_agg(distinct status) st,
+         (array_agg(aprovador_email) filter (where status like 'APROVADO%'))[1] aprovador
+    from (select j.ref, ap.status, ap.aprovador_email
+            from janela j
+            join pcs on pcs.empresa = j.empresa and pcs.cnumero = j.pc
+            join approval.approvals ap on ap.empresa = pcs.empresa and ap.ncod_ped = pcs.ncod_ped
+          union
+          select j.ref, ap.status, ap.aprovador_email
+            from janela j
+            join approval.approvals ap on ap.empresa = j.empresa and ap.pc_numero_manual = j.pc) z
+   group by ref
 ),
 apr as (
   select j.ref, x.st, x.aprovador, cp.etapa, cp.nf, cp.aprov_status, cp.aprov_por
