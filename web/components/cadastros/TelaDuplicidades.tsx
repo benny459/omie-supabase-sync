@@ -54,10 +54,14 @@ export default function TelaDuplicidades() {
   const [previa, setPrevia] = useState(false);
   const [motivoLote, setMotivoLote] = useState("duplicado do Omie (muito provável)");
 
-  const carregar = async () => {
-    try { setD(await pedir<Resp>("/api/cadastros/duplicidades")); setErro(null); } catch (e) { setErro((e as Error).message); }
+  // Carrega só a aba aberta (a de empresas diferentes tem ~1.800 grupos: mostra 300, "Agrupar todos" vai ao servidor).
+  const carregar = async (a: Aba = aba) => {
+    try {
+      setD(await pedir<Resp>(`/api/cadastros/duplicidades?aba=${a}&lim=${a === "outra_empresa" ? 300 : 2000}`)); setErro(null);
+    } catch (e) { setErro((e as Error).message); }
   };
-  useEffect(() => { carregar(); }, []);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { carregar(aba); }, [aba]);
 
   const casa = (g: Grupo) => !busca.trim() || g.membros.some((m) =>
     `${m.razao} ${m.fantasia ?? ""} ${m.doc ?? ""} ${m.codigo}`.toLowerCase().includes(busca.toLowerCase()));
@@ -89,10 +93,10 @@ export default function TelaDuplicidades() {
   };
 
   const agruparTodos = () => {
-    const lote = grupos.map((g) => g.membros.map((m) => m.id));
-    if (!lote.length) return;
-    if (!window.confirm(`Agrupar ${lote.length} grupos de empresas diferentes (mesmo nome, sem CNPJ/CPF diferente)? Os códigos não mudam; cada grupo passa a ser uma pessoa só. Dá para desfazer um a um.`)) return;
-    acao("lote-agrupar", { acao: "agrupar_lote", grupos: lote, motivo: "mesmo nome em empresas diferentes (lote)" }, `${lote.length} grupos agrupados`);
+    const n = d?.resumo.outraEmpresa ?? 0;
+    if (!n) return;
+    if (!window.confirm(`Agrupar ${n} grupos de empresas diferentes (mesmo nome, sem CNPJ/CPF diferente)? Os códigos não mudam; cada grupo passa a ser uma pessoa só. Dá para desfazer um a um.`)) return;
+    acao("lote-agrupar", { acao: "agrupar_lote", todas: true, motivo: "mesmo nome em empresas diferentes (lote)" }, (x) => `${x.ok} cadastros agrupados`);
   };
 
   const mesclarProvaveis = () => {
@@ -134,7 +138,7 @@ export default function TelaDuplicidades() {
 
       <div className="filtros">
         {ABAS.map(([k, t, n]) => (
-          <button key={k} className={`btn sm ${aba === k ? "pri" : ""}`} onClick={() => { setAba(k); setPrevia(false); }}>{t} · {n}</button>
+          <button key={k} className={`btn sm ${aba === k ? "pri" : ""}`} onClick={() => { setAba(k); setPrevia(false); setFica({}); }}>{t} · {n}</button>
         ))}
         <input className="inp" style={{ marginLeft: "auto", width: 260 }} placeholder="Filtrar por nome, CNPJ ou código" value={busca} onChange={(e) => setBusca(e.target.value)} />
       </div>
@@ -192,7 +196,7 @@ export default function TelaDuplicidades() {
       {aba === "outra_empresa" && d.admin && grupos.length > 0 && (
         <div className="aviso t-info" style={{ display: "flex", gap: 10, alignItems: "center" }}>
           <span style={{ flex: 1 }}>Mesmo nome em SF/CD/WW, sem CNPJ/CPF diferente a separá-los. Agrupar não muda códigos — só passam a ser uma pessoa só.</span>
-          <button className="btn sm pri" disabled={ocupado !== null} onClick={agruparTodos}>{ocupado === "lote-agrupar" ? "Agrupando…" : `Agrupar todos (${grupos.length})`}</button>
+          <button className="btn sm pri" disabled={ocupado !== null} onClick={agruparTodos}>{ocupado === "lote-agrupar" ? "Agrupando…" : `Agrupar todos (${r.outraEmpresa})`}</button>
         </div>
       )}
 
@@ -288,7 +292,8 @@ export default function TelaDuplicidades() {
               </div>
             );
           })}
-          {grupos.length > 200 && <div className="mini">Mostrando 200 de {grupos.length} — use o filtro.</div>}
+          {(grupos.length > 200 || (aba === "outra_empresa" && r.outraEmpresa > grupos.length)) &&
+            <div className="mini">Mostrando {Math.min(200, grupos.length)} de {aba === "outra_empresa" ? r.outraEmpresa : grupos.length} — use o filtro.</div>}
         </div>
       )}
     </div>

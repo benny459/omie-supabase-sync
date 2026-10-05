@@ -321,3 +321,13 @@ grant execute on function orders.cadastros_desfazer_lote(text, text) to service_
 -- Recalcula de hora a hora (ao minuto 45, depois do sync do Omie ao 35).
 select cron.schedule('cadastros-dup-refresh', '45 * * * *', 'select orders.cadastros_dup_refresh()');
 select orders.cadastros_dup_refresh();
+
+-- p61c (aplicado): cadastros_duplicidades_v2(p_lim int, p_aba text) — devolve só os grupos da aba
+--   (provavel | duvidoso | outra_empresa); a de empresas diferentes tem ~1.800 grupos (2 MB).
+-- p61d (aplicado): ids de todos os grupos de um tipo, para "Agrupar todos" no servidor.
+create or replace function orders.cadastros_dup_ids(p_tipo text) returns jsonb
+language sql stable security definer set search_path to 'cadastros', 'public' as $$
+  select coalesce(jsonb_agg(to_jsonb(ids) order by chave), '[]'::jsonb) from cadastros.dup_grupos where tipo = p_tipo
+$$;
+revoke all on function orders.cadastros_dup_ids(text) from public, anon, authenticated;
+grant execute on function orders.cadastros_dup_ids(text) to service_role;

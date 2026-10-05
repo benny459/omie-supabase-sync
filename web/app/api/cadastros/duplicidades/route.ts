@@ -1,7 +1,7 @@
-// GET  /api/cadastros/duplicidades            → grupos pré-calculados (sql/61) com nível de confiança
+// GET  /api/cadastros/duplicidades?aba=provavel|duvidoso|outra_empresa|ignorados|feitas → grupos pré-calculados (sql/61)
 // POST /api/cadastros/duplicidades
 //   { acao: "mesclar", sobrevivente, absorvido, motivo }   (admin) — mesma empresa: mescla; empresas diferentes: agrupa
-//   { acao: "agrupar_lote", grupos: [[idSobrevivente, ...ids]], motivo }  (admin)
+//   { acao: "agrupar_lote", grupos: [[idSobrevivente, ...ids]] | todas: true, motivo }  (admin)
 //   { acao: "mesclar_provaveis", chaves?: string[], motivo }  (admin) — um lote, desfazível
 //   { acao: "desfazer_lote", lote }                        (admin)
 //   { acao: "ignorar", ids: [..] }                         "não é duplicado"
@@ -19,9 +19,11 @@ export async function GET(req: Request) {
   const q = await exigirCadastros();
   if (q instanceof NextResponse) return q;
   if (!q.editar) return NextResponse.json({ error: "Sem permissão" }, { status: 403 });
-  const lim = Math.min(5000, Math.max(50, Number(new URL(req.url).searchParams.get("lim")) || 2000));
+  const sp = new URL(req.url).searchParams;
+  const lim = Math.min(5000, Math.max(50, Number(sp.get("lim")) || 2000));
+  const aba = ["provavel", "duvidoso", "outra_empresa", "ignorados", "feitas"].includes(sp.get("aba") ?? "") ? sp.get("aba") : "duvidoso";
   try {
-    return NextResponse.json({ ...(await rpcCad<object>("cadastros_duplicidades_v2", { p_lim: lim })), admin: q.perms.is_admin });
+    return NextResponse.json({ ...(await rpcCad<object>("cadastros_duplicidades_v2", { p_lim: lim, p_aba: aba })), admin: q.perms.is_admin });
   } catch (e) { return erroCad(e); }
 }
 
@@ -44,7 +46,10 @@ export async function POST(req: Request) {
       }
       case "agrupar_lote": {
         if (!q.perms.is_admin) return soAdmin();
-        const grupos = Array.isArray(b.grupos) ? (b.grupos as unknown[]).slice(0, 2500) : [];
+        // "todas": todos os grupos de empresas diferentes da lista pré-calculada (a tela só mostra uma parte).
+        const grupos = b.todas === true
+          ? await rpcCad<unknown[]>("cadastros_dup_ids", { p_tipo: "outra_empresa" })
+          : Array.isArray(b.grupos) ? (b.grupos as unknown[]).slice(0, 2500) : [];
         let ok = 0; const erros: string[] = []; const mexidos: number[] = [];
         for (const g of grupos) {
           const ids = (Array.isArray(g) ? g : []).map(Number).filter(Number.isFinite);
