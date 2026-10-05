@@ -121,7 +121,7 @@ export function danfeHtml(p: Payload, em: Emitente, o: { numero: number | null; 
     uf: pp.uf_destinatario as string, fone: pp.telefone_destinatario as string | undefined, ie: pp.inscricao_estadual_destinatario as string | undefined,
   };
   const emissao = dataBR(String(p.data_emissao));
-  const dups = (p.duplicatas ?? []) as { numero: string; data_vencimento: string; valor: number }[];
+  const dups = ((pp as { duplicatas?: unknown }).duplicatas ?? []) as { numero: string; data_vencimento: string; valor: number }[]; // remessa/devolução sem cobrança: sem duplicatas
   const vol = ((pp.volumes as { quantidade?: number; especie?: string; peso_bruto?: number; peso_liquido?: number }[] | undefined) ?? [])[0] ?? {};
   const chave = "0000 0000 0000 0000 0000 0000 0000 0000 0000 0000 0000";
   const linhas = p.items.map((i) => `<tr>
