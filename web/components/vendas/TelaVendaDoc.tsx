@@ -199,7 +199,7 @@ export default function TelaVendaDoc({ id }: { id: number | null }) {
       {editavel && !String(form.proposta ?? "").trim() && !(doc as unknown as { proposta_dispensa_motivo?: string } | null)?.proposta_dispensa_motivo && (
         <div style={{ ...cartao, display: "flex", gap: 10, alignItems: "end", flexWrap: "wrap" }}>
           <div style={{ fontSize: 12.5, color: "var(--ww-text-muted)", flex: "1 1 260px" }}>
-            Todo PV/OS precisa da <b>proposta do CRM</b> — procure-a no campo acima (puxa cliente, itens e condição).
+            Todo PV/OS precisa da <b>proposta do CRM</b> — procure-a no campo “Proposta (CRM)” abaixo (puxa cliente, itens e condição).
             Só um administrador pode lançar sem proposta, com o motivo registado.
           </div>
           <label style={{ fontSize: 12.5, display: "flex", gap: 6, alignItems: "center" }}>
