@@ -346,7 +346,9 @@ export default function TelaConciliacaoBancaria() {
       {!!lista.length && (
         <div style={{ ...cartao, padding: 0, overflow: "hidden" }}>
           {lista.map((m) => (
-            <LinhaMov key={m.id} m={m} titulos={titulos} aberto={aberto === m.id} podeBaixar={podeBaixar} ocupado={ocupado}
+            <LinhaMov key={m.id} m={m} titulos={titulos} podeBaixar={podeBaixar} ocupado={ocupado}
+              // pendentes abrem o painel "Casar" à direita; os demais (conciliado/ignorado) expandem aqui para desfazer/reativar
+              aberto={aberto === m.id && m.estado !== "pendente" && m.estado !== "parcial"}
               empresa={contaSel?.empresa ?? "SF"} codCc={contaSel?.cod_cc ?? null}
               onToggle={() => {
                 if ((m.estado === "pendente" || m.estado === "parcial") && aberto !== m.id) { setAberto(m.id); abrirCasar(m.id); return; }

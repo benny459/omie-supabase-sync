@@ -124,8 +124,9 @@ export default function CasarPainel({ movimentoId, onFechar }: { movimentoId: nu
       const n = { ...s };
       if (!ligar) { delete n[ref]; return n; }
       const usado = Object.values(s).reduce((a, x) => a + num(x.valor), 0);
+      // sugere o que ainda falta casar no movimento (nunca mais que o saldo do título)
       const v = Math.max(0, Math.min(Number(cand.saldo), r2(restante - usado)));
-      n[ref] = { valor: fmtIn(v > 0 ? v : Number(cand.saldo)), cand };
+      n[ref] = { valor: fmtIn(v), cand };
       return n;
     });
   }
