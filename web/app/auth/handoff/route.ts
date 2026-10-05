@@ -4,7 +4,7 @@ import { supaServer } from "@/lib/supabase-server";
 // Login único portal → painel (03/10/26, autorizado pelo Benny). O portal
 // (allka.ai, mesmo Supabase) gerou um link de uso único para o utilizador;
 // aqui ele vira sessão do painel. Destino só dentro do painel.
-const DESTINOS = ["/avulsos", "/projetos", "/pcs", "/erp", "/estoque", "/financeiro", "/bi", "/relatorios", "/configuracoes"];
+const DESTINOS = ["/avulsos", "/projetos", "/pcs", "/erp", "/estoque", "/financeiro", "/bi", "/relatorios", "/configuracoes", "/cadastros", "/faturamento"];
 
 function destinoValido(next: string | null): string {
   if (!next || !next.startsWith("/") || next.startsWith("//") || next.includes("\\")) return "/avulsos";
