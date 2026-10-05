@@ -474,6 +474,16 @@ const brl = (n: number) => n.toLocaleString("pt-BR", { minimumFractionDigits: 2,
 const esc = (s: string) => s.replace(/[&<>"]/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[ch]!);
 const MESES = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
 
+/** Bloco "Pagamento" do recibo: forma + instrução (PIX/banco). Exportado para
+ *  a 2ª via completar recibos guardados sem ele (05/10/26). */
+export function reciboPagamentoHtml(forma: string | null | undefined, instrucao: string | null | undefined) {
+  const NOMES: Record<string, string> = { PIX: "PIX", BOL: "Boleto", TRA: "Transferência", TED: "TED", DEP: "Depósito", DIN: "Dinheiro", CHQ: "Cheque", CRT: "Cartão" };
+  const f = forma ? (NOMES[forma.toUpperCase()] ?? forma) : "";
+  const linhas = [f ? `Forma de pagamento: ${f}` : "", ...(instrucao ?? "").split(" | ")].map((l) => l.trim()).filter(Boolean);
+  if (!linhas.length) return "";
+  return `<div class="linha"><div class="rot">Pagamento:</div><div class="pag">${linhas.map(esc).join("<br>")}</div></div>`;
+}
+
 /** Estilo do recibo — exportado para a 2ª via reaplicar o layout atual
  *  aos recibos já guardados (05/10/26: margens e quebras de linha). */
 export const RECIBO_CSS = `<style>@page{size:A4;margin:0}*{box-sizing:border-box}html,body{margin:0;background:#fff}body{font-family:Helvetica,Arial,sans-serif;color:#1a1a1a;-webkit-print-color-adjust:exact;print-color-adjust:exact}
@@ -519,7 +529,7 @@ ${homologacao ? '<div class="homolog">DOCUMENTO DE TESTE (HOMOLOGAÇÃO) — SEM
 <div class="linha"><div class="rot">Objeto:</div><div><div class="obj-cab"><span>Descrição</span><span>Valor Total</span></div>${itens}
 <div class="totais"><div class="h">Total Bruto</div><div class="h">Descontos</div><div class="h">Total Líquido</div><div class="n">${brl(total)}</div><div class="n">0,00</div><div class="n">${brl(total)}</div></div></div></div>
 <div class="linha"><div class="rot">Vencimento:</div><div class="val">${venc}</div></div>
-${doc.condicao?.instrucao_pagamento ? `<div class="linha"><div class="rot">Pagamento:</div><div class="pag">${esc(doc.condicao.instrucao_pagamento).replace(/ \| /g, "<br>")}</div></div>` : ""}
+${reciboPagamentoHtml(doc.condicao?.forma_recebimento ?? null, doc.condicao?.instrucao_pagamento)}
 <div class="linha"><div class="rot">Observações:</div><div class="obs">${doc.observacoes ? esc(doc.observacoes) : ""}<span class="lei">Conforme Lei Complementar 116/2003 de 31/07/03, que trata do VETO ao imposto sobre a prestação de serviço em Saneamento Ambiental, purificação e tratamento de água, esgotamento sanitário e Congêneres.</span></div></div>
 </div></body></html>`;
 }

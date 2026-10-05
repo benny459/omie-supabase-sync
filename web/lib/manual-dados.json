@@ -1,5 +1,5 @@
 {
- "geradoEm": "2026-10-05T16:01:50.352Z",
+ "geradoEm": "2026-10-05T18:46:14.811Z",
  "paginas": [
   {
    "slug": "inicio",
@@ -12,8 +12,28 @@
     "/manual"
    ],
    "atualizado": "2026-10-05",
-   "corpo": "\n## Como entrar\n\n1. Abra **https://allka.ai** no navegador do computador.\n2. Clique em **Entrar com Google** e escolha a sua conta **@waterworks.com.br** — ou use o mesmo **e-mail e senha** que você já usava no painel.\n3. Abre o **Início da WaterWorks**, com os cartões de cada área.\n\n> **Dica:** é um login só. Depois de entrar no portal, ao clicar em Operação, Compras, Faturamento, Financeiro, Cadastros, CRM, Serviços ou RH, o sistema já abre logado — não pede senha de novo.\n\n> **Atenção:** os **técnicos de campo** continuam entrando como sempre, pelo celular, em **app.waterworks.com.br**. Nada mudou para eles.\n\n## A barra de cima\n\nA barra é igual no portal, no painel e nos Serviços:\n\n| Grupo | Abas |\n|---|---|\n| Comercial | **CRM** |\n| Operação | **Operação**, **Serviços**, **Compras**, **Estoque** |\n| Gestão | **Financeiro**, **Faturamento**, **Cadastros**, **BI**, **RH** |\n\n- Passe o mouse numa aba para ver o menu dela (por exemplo, **Estoque ▾** → Itens, Catálogo, Movimentação, Inventário, Duplicidades).\n- O número vermelho em **Compras** mostra NF-e que chegaram sem pedido e requisições novas.\n- O **logo Allka** (à esquerda) leva de volta ao **Início**, de qualquer tela.\n- A **engrenagem** (à direita) é o **Sistema**: usuários, perfis e permissões.\n- O botão **?** abre este manual na página da tela em que você está.\n\n## Pesquisar (⌘K)\n\nClique em **Pesquisar…** (ou aperte **⌘K** no Mac / **Ctrl+K** no Windows) e digite um cliente, PV, OS, PC, NF ou item. Escolha o resultado para abrir direto.\n\n## Assistentes\n\n- **Pergunte ao Cesar** (no painel) e **Pergunte à Aria** (no portal e nos Serviços) respondem perguntas sobre os seus dados em português — por exemplo, “quanto falta faturar da Diaverum?”.\n\n## Aparência\n\nNo ícone de ajustes (☰ com barrinhas), escolha **Claro**, **Escuro** ou **Sistema** e a paleta dos gráficos. Ali também aparecem a versão do sistema e o horário da última sincronização.\n\n> **Dica:** quando aparecer a faixa **“Nova versão disponível”**, clique em **Atualizar agora** para pegar as últimas melhorias.\n\n## Perguntas frequentes\n\n**Não vejo uma aba que meu colega vê.** Cada pessoa vê só o que o perfil dela permite. Peça ao administrador para liberar em **Sistema → Perfis e Permissões**.\n\n**Esqueci a senha.** Use **Entrar com Google** com a conta da empresa, ou “Esqueci a senha” na tela de login.\n\n**O link antigo (painel.waterworks.com.br) ainda funciona?** Funciona, mas o caminho oficial é **allka.ai**.\n",
+   "corpo": "\n## Como entrar\n\n1. Abra **https://allka.ai** no navegador do computador.\n2. Clique em **Entrar com Google** e escolha a sua conta **@waterworks.com.br** — ou use o mesmo **e-mail e senha** que você já usava no painel.\n3. Abre o **Início da WaterWorks**, com os cartões de cada área.\n\n> **Dica:** é um login só. Depois de entrar no portal, ao clicar em Operação, Compras, Faturamento, Financeiro, Cadastros, CRM, Serviços ou RH, o sistema já abre logado — não pede senha de novo.\n\n> **Atenção:** os **técnicos de campo** continuam entrando como sempre, pelo celular, em **app.waterworks.com.br**. Nada mudou para eles.\n\n## A barra de cima\n\nA barra é igual no portal, no painel e nos Serviços:\n\n| Grupo | Abas |\n|---|---|\n| Comercial | **CRM** |\n| Operação | **Operação**, **Serviços**, **Compras**, **Estoque** |\n| Gestão | **Financeiro**, **Faturamento**, **Cadastros**, **BI**, **RH** |\n\n- Passe o mouse numa aba para ver o menu dela (por exemplo, **Estoque ▾** → Itens, Catálogo, Movimentação, Inventário, Duplicidades).\n- O número vermelho em **Compras** mostra NF-e que chegaram sem pedido e requisições novas.\n- O **logo Allka** (à esquerda) leva de volta ao **Início**, de qualquer tela.\n- A **engrenagem** (à direita) é o **Sistema**: usuários, perfis e permissões.\n- O botão **?** abre este manual na página da tela em que você está.\n\n## Pesquisar (⌘K)\n\nClique em **Pesquisar…** (ou aperte **⌘K** no Mac / **Ctrl+K** no Windows) e digite um cliente, PV, OS, PC, NF ou item. Escolha o resultado para abrir direto.\n\n## Assistentes\n\n- **Pergunte ao Cesar** (no painel) e **Pergunte à Aria** (no portal e nos Serviços) respondem perguntas sobre os seus dados em português — por exemplo, “quanto falta faturar da Diaverum?”.\n\n## Aparência\n\nNo ícone de ajustes (☰ com barrinhas), no alto à direita, cada pessoa monta o visual do seu jeito. A tela muda na hora, enquanto você mexe:\n\n- **Claro / Escuro / Sistema** — *Sistema* segue o modo do computador (claro de dia, escuro à noite, se o seu computador estiver assim).\n- **Tema de cor** — oito cores (azul, índigo, violeta, ametista, turquesa, esmeralda, âmbar e grafite). Cada uma tem versão clara e escura.\n- **Transparência** — de 0% (painéis sólidos) a 100% (painéis de vidro, com o fundo desfocado por trás). Se o computador estiver com \"reduzir transparência\" ligado, os painéis ficam sólidos.\n- **Fundo** — sólido, gradiente, aurora, malha, pontilhado ou uma **cor própria** (escolha no seletor de cor).\n- **Densidade** — *Compacta* aperta linhas de tabela e cartões para caber mais na tela.\n- **Tamanho da letra** — 90%, 100% ou 110%.\n- **Restaurar padrão** volta ao escuro azul, sem transparência.\n\nA escolha fica guardada no seu usuário: vale no **portal ALLKA**, no **painel** e nos **Serviços** (no computador), e acompanha você em qualquer navegador. O aplicativo dos técnicos no celular não muda.\n\nNo mesmo menu ficam a **paleta dos gráficos**, a versão do sistema e o horário da última sincronização.\n\n> **Dica:** quando aparecer a faixa **“Nova versão disponível”**, clique em **Atualizar agora** para pegar as últimas melhorias.\n\n## Perguntas frequentes\n\n**Não vejo uma aba que meu colega vê.** Cada pessoa vê só o que o perfil dela permite. Peça ao administrador para liberar em **Sistema → Perfis e Permissões**.\n\n**Esqueci a senha.** Use **Entrar com Google** com a conta da empresa, ou “Esqueci a senha” na tela de login.\n\n**O link antigo (painel.waterworks.com.br) ainda funciona?** Funciona, mas o caminho oficial é **allka.ai**.\n",
    "mudancas": [
+    {
+     "hash": "32f97c5",
+     "data": "2026-10-05",
+     "texto": "aparência: /api/aparencia/sync para os Serviços lerem e gravarem a preferência pelo e-mail (passe HMAC do cadastro único)"
+    },
+    {
+     "hash": "4da760f",
+     "data": "2026-10-05",
+     "texto": "aparência por usuário: modo claro/escuro/sistema, 8 temas de cor, transparência (vidro), fundos, densidade e tamanho da letra — gravada em platform.aparencia_usuario e partilhada com portal e Serviços; cores fixas trocadas por tokens nas telas novas; manual (Início › Aparência)"
+    },
+    {
+     "hash": "ccb3264",
+     "data": "2026-10-05",
+     "texto": "fiscal: Localizar NCM — tabela oficial Siscomex (cadastros.ncm), sugestões do catálogo/NF de fornecedor/NF-e Omie, grava no cadastro do item; trava de NCM na emissão; filtro 'Sem NCM válido' e NCM na ficha do Estoque (sql/76)"
+    },
+    {
+     "hash": "ddd0089",
+     "data": "2026-10-05",
+     "texto": "acesso com senha provisória: painel obriga a criar a senha no 1º acesso (/reset limpa a marca) + manual Sistema"
+    },
     {
      "hash": "ecf13ed",
      "data": "2026-10-05",
@@ -53,26 +73,6 @@
      "hash": "f584f8b",
      "data": "2026-10-05",
      "texto": "estoque: separação de material para projeto (reserva por projeto, lote separar/devolver/consumir, desfazer) — tela em Movimentação, aba Materiais separados no projeto, selo na lista de Projetos, disponível × separado"
-    },
-    {
-     "hash": "05c255a",
-     "data": "2026-10-05",
-     "texto": "Cadastros: todos os cadastros do Omie no painel (projetos, bancos/contas, categorias, centros de custo, condições, tipos de documento, vendedores, serviços, unidades, empresas, transportadoras)"
-    },
-    {
-     "hash": "0b1c01c",
-     "data": "2026-10-05",
-     "texto": "cadastros sem duplicados + módulo Cadastros + ficha 360"
-    },
-    {
-     "hash": "d9f6ab9",
-     "data": "2026-10-05",
-     "texto": "lacunas da validação final: rentabilidade paginada no servidor, sugestão de conciliação em grupo, filtro de status em /api/vendas, RH na barra pedido depois de montar"
-    },
-    {
-     "hash": "46e4287",
-     "data": "2026-10-05",
-     "texto": "barra: Faturamento vira aba própria (depois de Financeiro); CRM ALLKA sai da barra (fica no Início do portal)"
     }
    ]
   },
@@ -86,8 +86,13 @@
     "/crm"
    ],
    "atualizado": "2026-10-05",
-   "corpo": "\nO CRM abre pela aba **CRM** da barra (dentro do portal). Aqui está o que mudou no caminho **proposta → pedido → compra**.\n\n## Composição de preços (CP) com os nossos códigos\n\n1. Na CP da proposta, busque a peça pelo **código novo**, pelo **código antigo do Omie** ou pela descrição.\n2. O sistema mostra o **código atual**, o **custo médio (CMC)**, a **última compra** (fornecedor e data) e o **preço máximo** do item, se houver.\n3. Se o custo digitado passar do preço máximo, aparece um alerta na linha.\n\n> **Dica:** propostas antigas mostram o código de hoje automaticamente, mesmo que tenham sido feitas com o código do Omie.\n\n## Como faço para criar o PV/OS de uma proposta ganha\n\n1. Abra a proposta e clique para **criar o PV/OS**.\n2. Confira os **itens**: dá para **trocar, adicionar e remover** itens (por exemplo, trocar 3 itens por um kit). O botão de criar só libera quando o **total fecha com o valor da proposta** — use **ajustar ao valor** se precisar.\n3. Escolha **onde o pedido nasce no painel**: **Avulsos** (padrão) ou **Projeto**. Propostas de projeto (OPJ) já abrem em Projeto e só emitem com um projeto escolhido.\n4. Se o projeto ainda não existe, clique em **+ Novo projeto** (veja abaixo).\n5. Confira a **prévia da requisição de compra (RC)**: número previsto, itens, fornecedor sugerido e custo. Dá para editar antes de criar.\n6. Confirme. O PV/OS e a RC aparecem na hora em **Operação → Avulsos** e em **Faturamento**.\n\n> **Atenção:** enquanto a chave **“CRM cria PV/OS: no painel”** (em Operação → Pedidos · PV/OS) estiver desligada, o PV/OS ainda é criado no Omie. Com ela ligada, nasce no painel com a numeração seguinte.\n\n## + Novo projeto\n\n1. Ao lado do campo **Projeto**, clique em **+ Novo projeto**.\n2. A janela já vem preenchida com o **cliente da proposta**, o **valor**, o **responsável** e o **próximo código livre** (PJ… para projeto, CT… para contrato).\n3. Salve. O projeto é criado no cadastro central, **já fica selecionado** e você continua de onde parou.\n\n> **Atenção:** se já existir um projeto com nome parecido para o mesmo cliente, aparece **“Já existe — usar este”**, para não duplicar.\n\n## Perguntas frequentes\n\n**O item não tem fornecedor nem preço máximo na prévia da RC.** É normal quando a peça nunca foi comprada por um PC no painel ou quando ninguém cadastrou o preço máximo (em Estoque, na ficha do item).\n\n**Posso criar a RC sem código de item?** Pode. A linha entra como **item novo** e o comprador completa em Compras.\n",
+   "corpo": "\nO CRM abre pela aba **CRM** da barra (dentro do portal). Aqui está o que mudou no caminho **proposta → pedido → compra**.\n\n## Composição de preços (CP) com os nossos códigos\n\n1. Na CP da proposta, busque a peça pelo **código novo**, pelo **código antigo do Omie** ou pela descrição.\n2. O sistema mostra o **código atual**, o **custo médio (CMC)**, a **última compra** (fornecedor e data) e o **preço máximo** do item, se houver.\n3. Se o custo digitado passar do preço máximo, aparece um alerta na linha.\n\n> **Dica:** propostas antigas mostram o código de hoje automaticamente, mesmo que tenham sido feitas com o código do Omie.\n\n## Como faço para criar o PV/OS de uma proposta ganha\n\n1. Abra a proposta e clique para **criar o PV/OS**.\n2. Confira os **itens**: dá para **trocar, adicionar e remover** itens (por exemplo, trocar 3 itens por um kit). O botão de criar só libera quando o **total fecha com o valor da proposta** — use **ajustar ao valor** se precisar.\n3. Escolha **onde o pedido nasce no painel**: **Avulsos** (padrão) ou **Projeto**. Propostas de projeto (OPJ) já abrem em Projeto e só emitem com um projeto escolhido.\n4. Se o projeto ainda não existe, clique em **+ Novo projeto** (veja abaixo).\n5. Confira a **prévia da requisição de compra (RC)**: número previsto, itens, fornecedor sugerido e custo. Dá para editar antes de criar.\n6. Confirme. O PV/OS e a RC aparecem na hora em **Operação → Avulsos** e em **Faturamento**.\n\n> **Atenção:** enquanto a chave **“CRM cria PV/OS: no painel”** (em Operação → Pedidos · PV/OS) estiver desligada, o PV/OS ainda é criado no Omie. Com ela ligada, nasce no painel com a numeração seguinte.\n\n## + Novo projeto\n\n1. Ao lado do campo **Projeto**, clique em **+ Novo projeto**.\n2. A janela já vem preenchida com o **cliente da proposta**, o **valor**, o **responsável** e o **próximo código livre** (PJ… para projeto, CT… para contrato).\n3. Salve. O projeto é criado no cadastro central, **já fica selecionado** e você continua de onde parou.\n\n> **Atenção:** se já existir um projeto com nome parecido para o mesmo cliente, aparece **“Já existe — usar este”**, para não duplicar.\n\n## Perguntas frequentes\n\n**O item não tem fornecedor nem preço máximo na prévia da RC.** É normal quando a peça nunca foi comprada por um PC no painel ou quando ninguém cadastrou o preço máximo (em Estoque, na ficha do item).\n\n**Posso criar a RC sem código de item?** Pode. A linha entra como **item novo** e o comprador completa em Compras.\n\n> **Atenção:** ao criar o PV/OS pelo CRM, **projeto** e **categoria de receita** são obrigatórios — sem eles o pedido não é criado. A **forma de recebimento** e a **condição** escolhidas seguem para o Faturamento do painel.\n",
    "mudancas": [
+    {
+     "hash": "d103459",
+     "data": "2026-10-05",
+     "texto": "vendas: /api/vendas/crm exige projeto e categoria (CRM 2.6.622); forma de recebimento e descrição da condição gravadas no PV/OS e pré-preenchidas na emissão; campo Forma no formulário nativo (sql/76)"
+    },
     {
      "hash": "19e6d62",
      "data": "2026-10-05",
@@ -151,6 +156,21 @@
    "corpo": "\n## Avulsos\n\nA lista de **pedidos de venda (PV/OS)** com as compras ligadas a cada um.\n\n- Cada pedido mostra a **barra da cadeia**: Requisição → Pedido de compra → Aprovação → Recebido → Conferido → **Pago** → Faturado → **Recebido**.\n- A coluna **M.B.** é a margem bruta (venda menos compras ligadas).\n- Use as abas **Em aberto / Faturados / Todos**, a busca e os filtros rápidos (Pode faturar, Venda em atraso, Compra em atraso, Minha aprovação, Sem PC, etc.).\n- Alterne a visão entre **Lista, Tabela, Kanban e Linha do tempo**.\n\n## Projetos\n\n1. Abra **Operação → Projetos** e clique no projeto.\n2. A página do projeto tem o plano (CP/MC), a lista de materiais e a aba **Materiais separados**.\n3. Na lista de projetos, um selo mostra **“N itens separados · R$ · x% da lista”** quando já há material separado — clique para ir direto à aba.\n\n## Pedidos · PV/OS\n\n- **PV** = venda de produtos (sai NF-e). **OS** = serviço (sai recibo ou NFS-e).\n- Em **ERP → Vendas** você vê os PV/OS do painel e do Omie. Admins veem a chave **“CRM cria PV/OS: no Omie / no painel”**.\n- **Novo PV/OS** pelo painel: precisa estar ligado a uma **proposta do CRM** (busca pelo número, cliente ou título). Só admin pode marcar “sem proposta”, com motivo.\n\n> **Atenção:** a numeração é única e sequencial (próximo PV e próxima OS). Não crie PV/OS no Omie — o número pode repetir.\n\n## Perguntas frequentes\n\n**Não acho um pedido em Avulsos.** Confira a aba (Em aberto/Faturados/Todos) e limpe os filtros rápidos.\n\n**A margem não aparece.** A M.B. só é calculada quando o pedido tem compras (PCs) ligadas.\n",
    "mudancas": [
     {
+     "hash": "4da760f",
+     "data": "2026-10-05",
+     "texto": "aparência por usuário: modo claro/escuro/sistema, 8 temas de cor, transparência (vidro), fundos, densidade e tamanho da letra — gravada em platform.aparencia_usuario e partilhada com portal e Serviços; cores fixas trocadas por tokens nas telas novas; manual (Início › Aparência)"
+    },
+    {
+     "hash": "d103459",
+     "data": "2026-10-05",
+     "texto": "vendas: /api/vendas/crm exige projeto e categoria (CRM 2.6.622); forma de recebimento e descrição da condição gravadas no PV/OS e pré-preenchidas na emissão; campo Forma no formulário nativo (sql/76)"
+    },
+    {
+     "hash": "4628cd9",
+     "data": "2026-10-05",
+     "texto": "faturamento: condição/categoria/projeto/vendedor/conta vêm do PV/OS; forma única (por parcela só se marcar); projeto e categoria obrigatórios para emitir e no PV/OS do painel"
+    },
+    {
      "hash": "1304730",
      "data": "2026-10-05",
      "texto": "+ Novo projeto rápido: criar e já usar o projeto no PV/OS, Nova emissão, PC/RC e separação; /api/crm/erp criar_projeto e sugestao_projeto para o CRM"
@@ -194,21 +214,6 @@
      "hash": "f1d0ba4",
      "data": "2026-10-03",
      "texto": "design: títulos 26/600 e indicadores 24/700 também em Operação e Estoque; nome do assistente só ≥1500px"
-    },
-    {
-     "hash": "3872ff2",
-     "data": "2026-10-03",
-     "texto": "design: barra do topo igual à do portal ALLKA + escala de texto do CRM novo"
-    },
-    {
-     "hash": "aaef06e",
-     "data": "2026-10-01",
-     "texto": "operacao: nome do item da RC por inteiro (quebra de linha + tooltip)"
-    },
-    {
-     "hash": "3a9fadb",
-     "data": "2026-10-01",
-     "texto": "Operação: 'todos ▾' no título das colunas do pedido (Material, Status, Prev. material) e Material na barra de seleção em massa"
     }
    ]
   },
@@ -296,8 +301,23 @@
     "/estoque"
    ],
    "atualizado": "2026-10-05",
-   "corpo": "\n## Itens e ficha do item\n\n- **Estoque → Itens** lista os itens com saldo, custo médio (CMC) e foto. A coluna de saldo mostra **“disp. X · sep. Y”** quando há material separado para projetos.\n- Na **ficha do item**: códigos (novo e antigo do Omie), família, fornecedores, histórico de compras, onde está separado e o **Preço máximo de compra**.\n\n> **Dica:** o **Preço máximo de compra** é usado no CRM e em Compras para avisar quando um custo passa do limite. Preencha nos itens mais comprados.\n\n## Movimentação\n\nEm **Estoque → Movimentação**, lance entradas, saídas, transferências e ajustes, informando cliente, projeto e solicitante.\n\n## Como faço para separar material para um projeto (em lote)\n\n1. Vá em **Estoque → Movimentação → + Separar material** (“Separação de material para projeto”).\n2. Busque o **projeto** pelo código (ex.: PJ364) ou nome e informe **quem pediu**.\n3. A tela traz os itens das RCs/PCs do projeto com **Necessário, Já separado e Disponível**. A quantidade vem sugerida — ajuste se precisar, ou **Colar do Excel** (código;qtd).\n4. Itens em falta aparecem destacados; use **Abrir Compras (RC) ↗** para pedir.\n5. **Confirmar**. Sai um lote só, com registro de quem e quando — dá para **Desfazer lote**.\n\nDepois, na aba **Materiais separados** do projeto: **Devolver** (volta ao disponível) ou **Consumir** (baixa e lança o custo no projeto), por linha ou em lote.\n\n> **Atenção:** separar não muda o saldo total — só tira do **disponível** para os outros.\n\n## Inventário e duplicidades\n\n- **Inventário**: contagem com janela própria; os ajustes são feitos só no painel.\n- **Duplicidades**: itens repetidos para **mesclar** (o custo médio é recalculado e o histórico de códigos fica guardado).\n\n## Perguntas frequentes\n\n**O projeto não aparece na separação.** Use **+ Criar projeto** na própria busca, ou cadastre em Cadastros → Projetos.\n",
+   "corpo": "\n## Itens e ficha do item\n\n- **Estoque → Itens** lista os itens com saldo, custo médio (CMC) e foto. A coluna de saldo mostra **“disp. X · sep. Y”** quando há material separado para projetos.\n- Na **ficha do item**: códigos (novo e antigo do Omie), família, fornecedores, histórico de compras, onde está separado e o **Preço máximo de compra**.\n\n> **Dica:** o **Preço máximo de compra** é usado no CRM e em Compras para avisar quando um custo passa do limite. Preencha nos itens mais comprados.\n\n## Movimentação\n\nEm **Estoque → Movimentação**, lance entradas, saídas, transferências e ajustes, informando cliente, projeto e solicitante.\n\n## Como faço para separar material para um projeto (em lote)\n\n1. Vá em **Estoque → Movimentação → + Separar material** (“Separação de material para projeto”).\n2. Busque o **projeto** pelo código (ex.: PJ364) ou nome e informe **quem pediu**.\n3. A tela traz os itens das RCs/PCs do projeto com **Necessário, Já separado e Disponível**. A quantidade vem sugerida — ajuste se precisar, ou **Colar do Excel** (código;qtd).\n4. Itens em falta aparecem destacados; use **Abrir Compras (RC) ↗** para pedir.\n5. **Confirmar**. Sai um lote só, com registro de quem e quando — dá para **Desfazer lote**.\n\nDepois, na aba **Materiais separados** do projeto: **Devolver** (volta ao disponível) ou **Consumir** (baixa e lança o custo no projeto), por linha ou em lote.\n\n> **Atenção:** separar não muda o saldo total — só tira do **disponível** para os outros.\n\n## Inventário e duplicidades\n\n- **Inventário**: contagem com janela própria; os ajustes são feitos só no painel.\n- **Duplicidades**: itens repetidos para **mesclar** (o custo médio é recalculado e o histórico de códigos fica guardado).\n\n## Como faço para acertar os códigos de compra (peça comprada que não é item nosso)\n\nPeça comprada pelo Omie com código do fornecedor (ex.: `3019075`) e que nunca virou item do estoque **não entra em nota que movimenta estoque** (remessa, conserto, devolução, venda de produto). Para acertar:\n\n1. Abra **Estoque › Códigos de compra**. A lista mostra os códigos comprados nos últimos 12 meses sem item nosso, com até 3 sugestões parecidas.\n2. Se a sugestão for a mesma peça, clique em **vincular** ao lado dela. Para vários de uma vez, use **Vincular … muito parecidos (≥ 90%)**.\n3. Se não houver item nosso, clique em **Acertar…** › **Cadastrar no estoque**: a família vem sugerida e a descrição, NCM, unidade e último preço já vêm preenchidos. O item ganha o próximo código da família.\n4. Errou? Na aba **Vinculados**, clique em **desfazer**.\n\n> **Atenção:** item cadastrado assim nasce com saldo 0 (a tela mostra quanto foi comprado). Registre o saldo conferido em **Estoque › Inventário**.\n\n## Como faço para corrigir o NCM de uma peça\n\n1. Em **Estoque**, use o filtro **Mais filtros › Sem NCM válido** para ver as peças sem NCM (ou com NCM que não existe mais na tabela oficial).\n2. Abra a peça. Ao lado da unidade aparece **sem NCM — localizar** (ou o NCM atual com **trocar**).\n3. Escolha uma sugestão ou busque por código/palavras, e clique. O NCM fica salvo no cadastro da peça e passa a sair nas notas.\n\n> **Dica:** a tabela NCM é a oficial da Receita (Siscomex) e se atualiza sozinha todo dia 1º.\n\n## Perguntas frequentes\n\n**O projeto não aparece na separação.** Use **+ Criar projeto** na própria busca, ou cadastre em Cadastros → Projetos.\n",
    "mudancas": [
+    {
+     "hash": "4c138c3",
+     "data": "2026-10-05",
+     "texto": "estoque: Criar item nosso não para sem família — sem parecido forte, sugere a família e candidatos pelos itens nossos da mesma palavra (CABO FLEX…); unidade do produto de compra no cadastro"
+    },
+    {
+     "hash": "91f0031",
+     "data": "2026-10-05",
+     "texto": "estoque: notas que movem estoque só com item nosso — busca nativa na NF-e (código de compra/antigo resolve para o item nosso), códigos de compra sem item em grupo à parte com Vincular/Cadastrar no estoque (trava de duplicados, saldo do Omie preservado, saldo estimado pelas compras), trava na prévia/emissão/PV; tela Estoque › Códigos de compra (310 pendentes com sugestões, vínculo em lote, desfazer); catálogo do CRM prioriza itens nossos (sql/77)"
+    },
+    {
+     "hash": "ccb3264",
+     "data": "2026-10-05",
+     "texto": "fiscal: Localizar NCM — tabela oficial Siscomex (cadastros.ncm), sugestões do catálogo/NF de fornecedor/NF-e Omie, grava no cadastro do item; trava de NCM na emissão; filtro 'Sem NCM válido' e NCM na ficha do Estoque (sql/76)"
+    },
     {
      "hash": "1304730",
      "data": "2026-10-05",
@@ -342,36 +362,46 @@
      "hash": "d29212b",
      "data": "2026-10-02",
      "texto": "estoque: resolvedor de codigos (platform.v_item_codigo_resolvido + orders.item_codigo_resolver + GET/POST /api/estoque/resolver): qualquer codigo/id ja usado -> item de hoje, com origem omie/mesclado/recodificado/fornecedor, desde/por (sql 47)"
-    },
-    {
-     "hash": "2cc5a88",
-     "data": "2026-10-02",
-     "texto": "estoque: revisao de familias com IA (2a passada nas sem sugestao, cache, teto em media salvo NCM/vizinhos concordarem, propostas de familia nova) tambem no Recalcular e no Novo item; Codigos novos avisa e pede confirmacao extra se a revisao foi concluida com itens sem decisao; autocompletar casa palavra por palavra (sql 46)"
-    },
-    {
-     "hash": "45e42df",
-     "data": "2026-10-02",
-     "texto": "estoque: Movimentacao renderiza so no cliente (aberta pelo endereco direto a aba nao hidratava)"
-    },
-    {
-     "hash": "5d1c53a",
-     "data": "2026-10-02",
-     "texto": "estoque: Nova movimentacao em lote (cabecalho + grade de linhas, Enter abre a proxima, colar do Excel, totais e avisos; lancamento atomico; aprovacao por lote) e autocompletar de cliente/projeto/PV-OS/PC dos nossos cadastros; lotes agrupados na Movimentacao (sql 45)"
     }
    ]
   },
   {
    "slug": "pagar",
    "titulo": "Contas a Pagar",
-   "resumo": "Agenda, bancos, pode-pagar, reprogramar previsão, baixa em lote, arquivo C6 e contas recorrentes.",
+   "resumo": "Agenda, bancos, pode-pagar, editar título, reprogramar previsão, baixa em lote, arquivo C6 e contas recorrentes.",
    "icone": "💸",
    "area": "erp",
    "rotas": [
     "/financeiro/pagar"
    ],
    "atualizado": "2026-10-05",
-   "corpo": "\n**Financeiro → Títulos a Pagar** junta os títulos do Omie (até o corte) e as contas nascidas no painel (previsões de PC e contas lançadas aqui).\n\n## O que tem na tela\n\n- **Indicadores clicáveis**: vencidos, hoje, 7, 30 e 90 dias e bloqueados — clique para filtrar.\n- **Próximos 30 dias · por empresa**: agenda por dia ou semana. Clique num dia para ver o detalhe e **Baixar liberados**.\n- **Bancos**: saldo de cada conta, último extrato e quanto está programado.\n- **Vencidos · onde está o dinheiro**: ranking por fornecedor, categoria, projeto ou status.\n- **Pagamentos**: a tabela, com filtros estilo Excel, colunas de **Compra** e **NF**, e exportação.\n\n## Vencimento × previsão\n\n- **Vencimento** é o que está no documento — não muda.\n- **Previsão** é quando você vai pagar. Ela começa no vencimento; se cair em fim de semana ou feriado, vai para o **próximo dia útil** (feriados em Cadastros → Feriados).\n- Para mudar: abra o título e clique em **Reprogramar previsão** — ou selecione vários e reprograme em lote. A nova data muda o **fluxo de caixa**, a agenda e os indicadores.\n\n## Pode pagar?\n\nO título mostra o caminho **PC → aprovação → NF → pagamento**. Título sem NF ou sem aprovação fica **bloqueado**. Para pagar mesmo assim é preciso escrever uma **justificativa**.\n\n## Como faço para pagar (dar baixa)\n\n1. Abra o título e informe valor, data, conta e, se houver, **juros, multa ou desconto** (pode ser parcial).\n2. Ou selecione vários e use **Baixar em lote** (os bloqueados ficam de fora).\n3. Em **Baixas de hoje** dá para **estornar** um lançamento errado.\n\n## Como faço para gerar o arquivo do C6\n\n1. Selecione os títulos e clique em **Arquivo C6** (“Gerar arquivo C6 — pagamentos em lote”).\n2. Escolha o modelo: **Pagamentos de contas (Pix, boleto, TED)** ou **Salários via Pix**.\n3. Confira cada linha. Se faltar chave Pix ou conta do fornecedor, use **completar no cadastro ↗**.\n4. Baixe o arquivo e suba no portal do C6. A baixa no sistema vem depois, pela conciliação.\n\n## Nova conta e contas recorrentes\n\n1. Clique em **+ Nova conta**, escolha fornecedor, categoria, conta, projeto, vencimento e valor.\n2. Em **Recorrência**, escolha a frequência (mensal, trimestral, anual…) e quantas vezes, até quando ou sem fim.\n3. Para mudar uma conta recorrente: **Só esta ocorrência**, **Esta e as próximas** ou **Todas (as não pagas)**. Também dá para **Encerrar série** ou **Excluir série** (só sem pagamentos).\n\n> **Atenção:** o Omie não recebe mais nada. Contas novas, baixas e previsões ficam só aqui — e o BI e o fluxo de caixa já enxergam.\n\n## Perguntas frequentes\n\n**Paguei e o título continua em aberto.** Confira se a baixa foi registrada (Baixas de hoje) ou concilie o extrato.\n\n**Onde vejo o detalhe de um título do Omie?** Clique na linha; a gaveta mostra PC, NF, histórico e o fornecedor.\n",
+   "corpo": "\n**Financeiro → Títulos a Pagar** junta os títulos do Omie (até o corte) e as contas nascidas no painel (previsões de PC e contas lançadas aqui).\n\n## O que tem na tela\n\n- **Indicadores clicáveis**: vencidos, hoje, 7, 30 e 90 dias e bloqueados — clique para filtrar.\n- **Próximos 30 dias · por empresa**: agenda por dia ou semana. Clique num dia para ver o detalhe e **Baixar liberados**.\n- **Bancos**: saldo de cada conta, último extrato e quanto está programado.\n- **Vencidos · onde está o dinheiro**: ranking por fornecedor, categoria, projeto ou status.\n- **Pagamentos**: a tabela, com filtros estilo Excel, colunas de **Compra** e **NF**, e exportação.\n\n## Vencimento × previsão\n\n- **Vencimento** é o que está no documento — não muda.\n- **Previsão** é quando você vai pagar. Ela começa no vencimento; se cair em fim de semana ou feriado, vai para o **próximo dia útil** (feriados em Cadastros → Feriados).\n- Para mudar: abra o título e clique em **Reprogramar previsão** — ou selecione vários e reprograme em lote. A nova data muda o **fluxo de caixa**, a agenda e os indicadores.\n\n## Pode pagar?\n\nO título mostra o caminho **PC → aprovação → NF → pagamento**. Título sem NF ou sem aprovação fica **bloqueado**. Para pagar mesmo assim é preciso escrever uma **justificativa**.\n\n## Ciclo do pagamento — tenho certeza de que está em aberto?\n\nAo abrir um título, o quadro **Ciclo do pagamento** mostra o caminho inteiro do pedido de compra até o pagamento:\n\n1. No topo, o **veredito**: \"Em aberto — pode pagar\", \"Já pago em dd/mm\", \"Pago parcialmente\", \"Possível duplicidade — conferir\" ou \"Excluído no Omie — não pagar\".\n2. O **PC**: número, total, quem aprovou e quando foi recebido.\n3. As **NFs** do PC com o valor de cada uma, e quanto do PC ainda está sem NF.\n4. Todas as **parcelas** dessas NFs: vencimento, valor e situação (em aberto, programado, enviado ao banco, pago com data, excluído no Omie). A linha do título que você abriu aparece marcada \"← este\".\n5. Os totais: valor das NFs, quanto já foi pago e quanto ainda está em aberto.\n\nNa tabela, a coluna NF mostra **NF e parcela** (ex.: \"NF 11924 · parc 002/002\"), para distinguir títulos parecidos do mesmo pedido.\n\n> **Atenção:** quando o financeiro refazia as parcelas no Omie, os títulos antigos sumiam de lá mas continuavam na nossa base. Esses títulos aparecem com o selo vermelho **\"Excluído no Omie\"** e um aviso no topo da lista — **não pague**. O botão \"Tirar todos do contas a pagar\" retira-os da lista (dá para desfazer).\n\n## Como faço para pagar (dar baixa)\n\n1. Abra o título e informe valor, data, conta e, se houver, **juros, multa ou desconto** (pode ser parcial).\n2. Ou selecione vários e use **Baixar em lote** (os bloqueados ficam de fora).\n3. Em **Baixas de hoje** dá para **estornar** um lançamento errado.\n\n## Como faço para gerar o arquivo do C6\n\n1. Selecione os títulos e clique em **Arquivo C6** (“Gerar arquivo C6 — pagamentos em lote”).\n2. Escolha o modelo: **Pagamentos de contas (Pix, boleto, TED)** ou **Salários via Pix**.\n3. Confira cada linha. Se faltar chave Pix ou conta do fornecedor, use **completar no cadastro ↗**.\n4. Baixe o arquivo e suba no portal do C6. A baixa no sistema vem depois, pela conciliação.\n\n## Pagar conta de outra empresa do grupo (intercompany)\n\nUma conta da **CD** ou da **WW** pode ser paga por um banco da **SF** (C6, Bradesco, Omie.CASH).\n\n1. Na coluna **Banco p/ pagar**, abra a lista: aparecem as contas de todas as empresas do grupo — as da própria empresa primeiro, as outras marcadas \"gera intercompany\".\n2. Escolha, por exemplo, **SF · C6 Bank** para um título da CD. Embaixo aparece \"pago pela SF\".\n3. Dê a baixa normalmente (individual, em lote ou pelo arquivo do C6 + conciliação).\n\nO título da CD fica **PAGO** e o sistema registra sozinho \"**CD deve à SF**\" em **Financeiro → Intercompany**. Estornar a baixa anula esse registro.\n\n> **Atenção:** a despesa continua na DRE da empresa dona do título (CD); o caixa sai da conta que pagou (SF).\n\n## Como faço para editar um título (valor, vencimento, categoria…)\n\n1. Clique no **✎** da linha ou abra o título e clique em **Editar título…**.\n2. Mude o que precisar: valor, vencimento, previsão, categoria, conta corrente, projeto e observação. Em conta lançada no painel também dá para trocar o fornecedor e o documento.\n3. Se o título é de uma **recorrência** (do Omie ou do painel), escolha em **Aplicar a**: **Só esta** ou **Esta e as próximas desta série** (no painel também **Todas**). O vencimento só muda na ocorrência aberta.\n4. Clique em **Salvar**. O BI, o fluxo de caixa, a conciliação, o arquivo C6 e as fichas já veem o novo valor.\n\n- **Título do Omie:** a alteração fica guardada no painel — o Omie não é alterado. A linha mostra **ajustado · orig. R$ X** e, na gaveta, **desfazer ajuste** volta ao valor original.\n- **Previsão de PC:** mudar o valor exige **motivo**, porque o total das parcelas deixa de bater com o pedido de compra.\n- O valor nunca pode ficar **abaixo do que já foi pago**.\n- Precisa da permissão **Editar títulos** (financeiro.editar_titulo). Toda edição fica no histórico de auditoria.\n\n## Nova conta e contas recorrentes\n\n1. Clique em **+ Nova conta**, escolha fornecedor, categoria, conta, projeto, vencimento e valor.\n2. Em **Recorrência**, escolha a frequência (mensal, trimestral, anual…) e quantas vezes, até quando ou sem fim.\n3. Para mudar uma conta recorrente: **Só esta ocorrência**, **Esta e as próximas** ou **Todas (as não pagas)**. Também dá para **Encerrar série** ou **Excluir série** (só sem pagamentos).\n\n> **Atenção:** o Omie não recebe mais nada. Contas novas, baixas e previsões ficam só aqui — e o BI e o fluxo de caixa já enxergam.\n\n## Perguntas frequentes\n\n**Paguei e o título continua em aberto.** Confira se a baixa foi registrada (Baixas de hoje) ou concilie o extrato.\n\n**O valor de uma conta recorrente veio diferente este mês.** Abra o título, **Editar título…**, mude o valor e deixe **Só esta**. Se mudou de vez, use **Esta e as próximas desta série**.\n\n**Onde vejo o detalhe de um título do Omie?** Clique na linha; a gaveta mostra PC, NF, histórico e o fornecedor.\n",
    "mudancas": [
+    {
+     "hash": "9179b05",
+     "data": "2026-10-05",
+     "texto": "financeiro: editar título no Pagar v3 e Receber v1 — valor, vencimento, previsão, categoria, conta, projeto, obs (fornecedor/cliente e documento nas contas do painel); título do Omie via sobreposição finance.titulo_ajustes (Omie intocado, BI/fluxo/conciliação/C6 veem), desfazer ajuste e 'esta e as próximas' da recorrência; previsão de PC exige motivo; valor nunca abaixo do pago; manual (sql/80)"
+    },
+    {
+     "hash": "4da760f",
+     "data": "2026-10-05",
+     "texto": "aparência por usuário: modo claro/escuro/sistema, 8 temas de cor, transparência (vidro), fundos, densidade e tamanho da letra — gravada em platform.aparencia_usuario e partilhada com portal e Serviços; cores fixas trocadas por tokens nas telas novas; manual (Início › Aparência)"
+    },
+    {
+     "hash": "ed13b05",
+     "data": "2026-10-05",
+     "texto": "pagar: lista de excluídos no Omie paginada (passava de 1000)"
+    },
+    {
+     "hash": "f0b4697",
+     "data": "2026-10-05",
+     "texto": "pagar: ciclo do pagamento (PC→NFs→parcelas→pagos), NF·parcela na linha, nome fantasia/razão, categoria do PC e títulos excluídos no Omie fora do contas a pagar (sql/75)"
+    },
+    {
+     "hash": "911ce7e",
+     "data": "2026-10-05",
+     "texto": "financeiro: pagar/receber por banco de outra empresa do grupo + intercompany (registo automático, tela, conciliação entre empresas, C6 com títulos CD/WW)"
+    },
     {
      "hash": "97df47c",
      "data": "2026-10-05",
@@ -406,46 +436,31 @@
      "hash": "edaf83b",
      "data": "2026-10-05",
      "texto": "status único dos títulos: baixas do painel valem no BI, fluxo de caixa, fichas e telas antigas (Omie não é mais atualizado)"
-    },
-    {
-     "hash": "0404578",
-     "data": "2026-10-05",
-     "texto": "receber v1: tela nova do mockup contas-a-receber-v1 (previsão×vencimento, situação de cobrança, histórico do cliente, inadimplência+ranking, receber individual/lote, alterar previsão, cobrança, renegociado, banco programado, conciliação de créditos, baixas de hoje) + sql/60; pagar v3: atualização imediata após baixa, fim de semana discreto"
-    },
-    {
-     "hash": "1b07d5b",
-     "data": "2026-10-05",
-     "texto": "pagar v3: tela nova do mockup contas-a-pagar-v3 (KPIs, agenda 30d, bancos, vencidos+ranking, pagamentos com status pgto, banco programado, baixa individual/lote, conciliação OFX, baixas de hoje) + sql/57"
-    },
-    {
-     "hash": "be5ff1d",
-     "data": "2026-10-01",
-     "texto": "receber: contas nascem no painel (finance.receber) e o Omie entra conferido sem duplicar (v1.6.117)"
-    },
-    {
-     "hash": "b9c4205",
-     "data": "2026-09-28",
-     "texto": "financeiro: Nova conta passa de 9 para 21 campos do Omie"
-    },
-    {
-     "hash": "61c11b9",
-     "data": "2026-09-28",
-     "texto": "painel: módulo Financeiro operacional — Títulos a Pagar/Receber (clone Omie)"
     }
    ]
   },
   {
    "slug": "receber",
    "titulo": "Contas a Receber",
-   "resumo": "Previsão de entrada, cobrança, renegociação e baixa dos recebimentos.",
+   "resumo": "Previsão de entrada, cobrança, renegociação, editar conta e baixa dos recebimentos.",
    "icone": "💰",
    "area": "erp",
    "rotas": [
     "/financeiro/receber"
    ],
    "atualizado": "2026-10-05",
-   "corpo": "\n**Financeiro → Títulos a Receber** mostra o que os clientes devem: títulos do Omie e as parcelas criadas pelo **Faturamento** do painel.\n\n## O que tem na tela\n\n- **Base de datas**: alterne entre **Previsão** e **Vencimento**.\n- **Indicadores** e **Pontualidade 30 dias**.\n- **Próximos 30 dias · entradas por empresa** e **Bancos** (com o previsto para os próximos 7 dias).\n- **Inadimplência · quem está devendo**: o que está para **cobrar** e o que já foi **prometido**, por faixa de atraso.\n- **Recebimentos**: a tabela com Previsão, Cobrança, Situação e o histórico de pontualidade do cliente.\n\n## Como faço para cobrar um cliente\n\n1. Abra o título e clique em **Cobrar** (“Registrar cobrança”).\n2. Informe canal, contato, nota e, se o cliente prometeu, a **nova previsão**.\n3. Use **Copiar mensagem** para mandar pelo WhatsApp ou e-mail. O histórico fica no título.\n\n> **Dica:** selecione vários títulos para cobrar ou alterar a previsão de uma vez.\n\n## Renegociar e alterar previsão\n\n- **Alterar previsão** muda quando você espera receber (o vencimento do documento não muda).\n- **Marcar como renegociado** registra o acordo; dá para desfazer.\n\n## Como faço para registrar um recebimento\n\n1. Abra o título e clique em **Receber** (com juros, multa ou desconto; pode ser parcial).\n2. Ou selecione vários e use **Receber em lote**.\n3. O melhor caminho é **conciliar o extrato**: veja a página Conciliação.\n\n> **Atenção:** **Emitir boleto** ainda não está disponível (depende do banco).\n\n## Perguntas frequentes\n\n**De onde vêm as parcelas?** Do Faturamento: ao emitir NF-e/recibo ou registrar NFS-e, as parcelas são criadas exatamente como na tela de emissão.\n\n**Como abro a rentabilidade do pedido?** Na gaveta do título, use o link do PV/OS.\n",
+   "corpo": "\n**Financeiro → Títulos a Receber** mostra o que os clientes devem: títulos do Omie e as parcelas criadas pelo **Faturamento** do painel.\n\n## O que tem na tela\n\n- **Base de datas**: alterne entre **Previsão** e **Vencimento**.\n- **Indicadores** e **Pontualidade 30 dias**.\n- **Próximos 30 dias · entradas por empresa** e **Bancos** (com o previsto para os próximos 7 dias).\n- **Inadimplência · quem está devendo**: o que está para **cobrar** e o que já foi **prometido**, por faixa de atraso.\n- **Recebimentos**: a tabela com Previsão, Cobrança, Situação e o histórico de pontualidade do cliente.\n\n## Como faço para cobrar um cliente\n\n1. Abra o título e clique em **Cobrar** (“Registrar cobrança”).\n2. Informe canal, contato, nota e, se o cliente prometeu, a **nova previsão**.\n3. Use **Copiar mensagem** para mandar pelo WhatsApp ou e-mail. O histórico fica no título.\n\n> **Dica:** selecione vários títulos para cobrar ou alterar a previsão de uma vez.\n\n## Renegociar e alterar previsão\n\n- **Alterar previsão** muda quando você espera receber (o vencimento do documento não muda).\n- **Marcar como renegociado** registra o acordo; dá para desfazer.\n\n## Como faço para editar uma conta a receber\n\n1. Clique no **✎** da linha ou abra a conta e clique em **Editar conta…**.\n2. Mude valor, vencimento, previsão, categoria, conta corrente, projeto ou observação (em conta do painel também cliente e documento).\n3. Em recorrência, escolha **Só esta** ou **Esta e as próximas desta série**.\n4. **Salvar** — o BI, o fluxo de caixa e a conciliação já veem o novo valor.\n\n- **Conta do Omie:** o ajuste fica no painel (o Omie não é alterado); a linha mostra **ajustado · orig. R$ X** e a gaveta tem **desfazer ajuste**.\n- O valor não pode ficar abaixo do que já foi recebido.\n\n## Como faço para registrar um recebimento\n\n1. Abra o título e clique em **Receber** (com juros, multa ou desconto; pode ser parcial).\n2. Ou selecione vários e use **Receber em lote**.\n3. O melhor caminho é **conciliar o extrato**: veja a página Conciliação.\n\n> **Atenção:** **Emitir boleto** ainda não está disponível (depende do banco).\n\n## Perguntas frequentes\n\n**De onde vêm as parcelas?** Do Faturamento: ao emitir NF-e/recibo ou registrar NFS-e, as parcelas são criadas exatamente como na tela de emissão.\n\n**Como abro a rentabilidade do pedido?** Na gaveta do título, use o link do PV/OS.\n",
    "mudancas": [
+    {
+     "hash": "9179b05",
+     "data": "2026-10-05",
+     "texto": "financeiro: editar título no Pagar v3 e Receber v1 — valor, vencimento, previsão, categoria, conta, projeto, obs (fornecedor/cliente e documento nas contas do painel); título do Omie via sobreposição finance.titulo_ajustes (Omie intocado, BI/fluxo/conciliação/C6 veem), desfazer ajuste e 'esta e as próximas' da recorrência; previsão de PC exige motivo; valor nunca abaixo do pago; manual (sql/80)"
+    },
+    {
+     "hash": "911ce7e",
+     "data": "2026-10-05",
+     "texto": "financeiro: pagar/receber por banco de outra empresa do grupo + intercompany (registo automático, tela, conciliação entre empresas, C6 com títulos CD/WW)"
+    },
     {
      "hash": "5836ada",
      "data": "2026-10-05",
@@ -473,7 +488,7 @@
     "/financeiro/conciliacao"
    ],
    "atualizado": "2026-10-05",
-   "corpo": "\nConciliar é ligar cada lançamento do extrato ao título que ele paga ou recebe. Quando você concilia, o título fica **PAGO** ou **RECEBIDO** em todo o sistema (telas, BI e fluxo de caixa).\n\n## Como faço para importar o extrato\n\n1. Em **Financeiro → Conciliação bancária**, clique em **Importar OFX**.\n2. Funciona com **OFX de qualquer banco** e também **CSV/Excel** (na primeira vez você indica as colunas; o sistema lembra).\n3. Veja a **prévia**: conta reconhecida, período, saldo inicial e final, lançamentos repetidos.\n4. Se a conta não for reconhecida, escolha uma ou **+ cadastrar conta**.\n5. Confirme.\n\n> **Dica:** lançamentos que já estavam importados não entram de novo.\n\n## Como faço para casar um lançamento com o título\n\n1. Clique no lançamento **pendente**. Abre o painel **Casar**.\n2. Veja as **sugestões**, cada uma com o motivo (valor exato, data perto do vencimento, CNPJ ou nome no histórico, nº da NF/PV/OS, casamentos anteriores) e os **grupos** de parcelas cuja soma bate.\n3. Não achou? Use a **busca**: nome ou fantasia do cliente/fornecedor, CNPJ, nº da NF, PV, OS, PC, valor ou vencimento.\n4. Marque um ou mais títulos. O painel mostra o total contra o valor do extrato.\n5. Sobrou diferença? Escolha **lançar como juros/multa**, **quitar com desconto** ou **deixar o resto pendente**.\n6. Confirme.\n\nAtalhos: **j/k** navegam, **/** vai para a busca, **Enter** casa, **Esc** fecha.\n\n## Quando não existe título\n\n- **Criar título e conciliar**: escolha o cliente/fornecedor e a categoria (tarifa, juros, rendimento…).\n- **Transferência entre contas**: o sistema procura o lançamento do outro lado.\n- **Ignorar** com motivo.\n\n## Regras e conciliação automática\n\n- **Regras**: “Sempre que o histórico contiver X → categoria Y / ignorar”. Valem para as próximas importações (**Aplicar regras agora**).\n- **Aceitar sugestões** casa de uma vez só as de alta certeza.\n- **Conciliar automaticamente** roda o casamento automático; o que foi casado assim fica marcado **automático** e pode ser desfeito.\n- O sistema **aprende**: depois que você liga um nome do histórico a um cliente, as próximas sugestões desse cliente sobem.\n\n## Omie Cash\n\nO **Omie Cash** funciona como uma conta bancária: os movimentos entram sozinhos de hora em hora e passam pela conciliação automática.\n\n## Perguntas frequentes\n\n**Concilei errado.** Use **desfazer** no lançamento (ou desfazer transferência).\n\n**Os botões não aparecem para mim.** Baixar e conciliar dependem das permissões “Baixar / estornar título” e “Conciliação bancária”.\n",
+   "corpo": "\nConciliar é ligar cada lançamento do extrato ao título que ele paga ou recebe. Quando você concilia, o título fica **PAGO** ou **RECEBIDO** em todo o sistema (telas, BI e fluxo de caixa).\n\n## Como faço para importar o extrato\n\n1. Em **Financeiro → Conciliação bancária**, clique em **Importar OFX**.\n2. Funciona com **OFX de qualquer banco** e também **CSV/Excel** (na primeira vez você indica as colunas; o sistema lembra).\n3. Veja a **prévia**: conta reconhecida, período, saldo inicial e final, lançamentos repetidos.\n4. Se a conta não for reconhecida, escolha uma ou **+ cadastrar conta**.\n5. Confirme.\n\n> **Dica:** lançamentos que já estavam importados não entram de novo.\n\n## Como faço para casar um lançamento com o título\n\n1. Clique no lançamento **pendente**. Abre o painel **Casar**.\n2. Veja as **sugestões**, cada uma com o motivo (valor exato, data perto do vencimento, CNPJ ou nome no histórico, nº da NF/PV/OS, casamentos anteriores) e os **grupos** de parcelas cuja soma bate.\n3. Não achou? Use a **busca**: nome ou fantasia do cliente/fornecedor, CNPJ, nº da NF, PV, OS, PC, valor ou vencimento.\n4. Marque um ou mais títulos. O painel mostra o total contra o valor do extrato.\n5. Sobrou diferença? Escolha **lançar como juros/multa**, **quitar com desconto** ou **deixar o resto pendente**.\n6. Confirme.\n\nAtalhos: **j/k** navegam, **/** vai para a busca, **Enter** casa, **Esc** fecha.\n\n## Quando não existe título\n\n- **Criar título e conciliar**: escolha o cliente/fornecedor e a categoria (tarifa, juros, rendimento…).\n- **Transferência entre contas**: o sistema procura o lançamento do outro lado.\n- **Ignorar** com motivo.\n\n## Regras e conciliação automática\n\n- **Regras**: “Sempre que o histórico contiver X → categoria Y / ignorar”. Valem para as próximas importações (**Aplicar regras agora**).\n- **Aceitar sugestões** casa de uma vez só as de alta certeza.\n- **Conciliar automaticamente** roda o casamento automático; o que foi casado assim fica marcado **automático** e pode ser desfeito.\n- O sistema **aprende**: depois que você liga um nome do histórico a um cliente, as próximas sugestões desse cliente sobem.\n\n## Omie Cash\n\nO **Omie Cash** funciona como uma conta bancária: os movimentos entram sozinhos de hora em hora e passam pela conciliação automática.\n\n## Perguntas frequentes\n\n**Concilei errado.** Use **desfazer** no lançamento (ou desfazer transferência).\n\n**Os botões não aparecem para mim.** Baixar e conciliar dependem das permissões “Baixar / estornar título” e “Conciliação bancária”.\n\n## Movimento de um banco pagando título de outra empresa\n\nAs sugestões do painel **Casar** procuram títulos de **todas as empresas** do grupo. Quando o título é de outra empresa (ex.: saída no C6 da SF pagando conta da CD), aparece a etiqueta **\"outra empresa (CD) — gera intercompany\"**. Ao casar, o título fica pago e o registro \"CD deve à SF\" entra em **Financeiro → Intercompany**, onde se marca como liquidado quando as empresas acertarem entre si.\n\n",
    "mudancas": [
     {
      "hash": "35f62f3",
@@ -515,74 +530,74 @@
   {
    "slug": "faturamento",
    "titulo": "Faturamento",
-   "resumo": "Carteira de PV/OS, emissão de NF-e e recibo, NFS-e da prefeitura e contratos recorrentes.",
+   "resumo": "Carteira de PV/OS, emissão de NF-e (venda, devolução e remessa) e recibo, NFS-e da prefeitura e contratos recorrentes.",
    "icone": "🧾",
    "area": "erp",
    "rotas": [
     "/faturamento"
    ],
    "atualizado": "2026-10-05",
-   "corpo": "\n> **Atenção:** a **NF-e da SF está em PRODUÇÃO** — o que você emitir é documento fiscal real. A numeração é sequencial e automática (NF-e, recibo, PV e OS continuam de onde o Omie parou). **Não emita mais NF-e nem recibo pelo Omie.**\n\n## A carteira (Pedidos & Ordens de Serviço)\n\n- Escolha **Todos / PV · Produto / OS · Serviço** e o **Período** (Mês, Trimestre, Ano, 12 meses, Tudo). Os filtros ativos aparecem como etiquetas com **×** e **Limpar filtros**.\n- Ao **buscar** (cliente, nome fantasia, PV, OS, OC, NF), a busca procura em **todos os períodos**.\n- Colunas principais:\n  - **Cliente**: nome fantasia em destaque e a razão social embaixo.\n  - **Emissão**: data do PV/OS e, se ainda não faturado, **há N dias**.\n  - **Previsão fat.**: quando deve ser faturado — **clique para mudar**. Alerta **atrasado N dias** ou **vence em N dias**.\n  - **Recebimento**: **recebido**, **a receber**, **vencido** ou **parcial**, com a data.\n- Visões: **Lista, Kanban, Emissões, NFS-e registradas**. Filtro rápido **Previsão atrasada** e **OS sem NFS-e**.\n- Clique num documento para abrir a gaveta: itens, notas (DANFE, XML, recibo — inclusive os antigos do Omie), recebimento e histórico.\n\n## Como faço para emitir uma nota nova\n\n1. Clique em **+ Nova emissão**. Abre uma janela própria.\n2. Escolha **Novo documento** (ou **Faturar um PV/OS existente**, buscando pelo número/cliente).\n3. Escolha o **Tipo de documento**:\n   - **NF-e (venda de produtos)** — gera o PV e a NF-e;\n   - **Recibo de serviço (OS)** — gera a OS e o recibo;\n   - **NFS-e da prefeitura (registrar)** — gera a OS; a NFS-e você registra depois.\n4. O quadro **Será gerado** mostra os números (ex.: “OS nº 4885 · Recibo nº 4646”) — confirmados na emissão.\n5. Busque a **Proposta do CRM** (puxa cliente, itens e condição) e/ou o **cliente** pelo nome, fantasia ou CNPJ.\n6. Ao escolher o cliente, aparecem os **últimos faturamentos**. **Usar como modelo →** copia itens, prazos e forma de recebimento, recalculando as datas a partir de hoje.\n7. Em **Recebimento**, escolha condição, forma (boleto, Pix, transferência…), conta, categoria e projeto. Ajuste as **parcelas** (precisam somar o total). Com **Pix** ou transferência, os dados da conta saem no documento.\n8. Confira a **Prévia das contas a receber** e clique em **Validar**, depois **Emitir**.\n\n## Depois de emitir\n\nA janela acompanha: **1 · Enviando à Focus → 2 · Processando na SEFAZ → Autorizada** (ou Rejeitada).\n\n- **Autorizada**: número/série, **chave de acesso**, protocolo, **DANFE**, **Baixar XML**, **Consultar na SEFAZ** e as **contas a receber criadas**.\n- **Rejeitada**: o motivo em português e **Corrigir e reenviar** (o formulário continua preenchido).\n\n## NFS-e da prefeitura\n\nA NFS-e continua sendo emitida no portal da prefeitura. Depois:\n\n1. Na carteira, na OS, clique em **Registrar NFS-e**.\n2. Informe número, código de verificação, data, valores e retenções (ISS retido, IR, PIS, COFINS, CSLL, INSS) e anexe o PDF/XML.\n3. Salve. A OS fica faturada e as parcelas entram no contas a receber **pelo valor líquido**.\n\n## Contratos recorrentes\n\nNa aba **Contratos recorrentes**:\n\n- Indicadores: receita recorrente do mês, a faturar, atrasados, reajustes e vigências vencendo.\n- Para cada contrato: itens, valor do período, dia de faturamento, competências já faturadas.\n- **Faturar** uma competência (ou várias) gera a OS; depois emita o recibo ou registre a NFS-e. **A mesma competência não pode ser faturada duas vezes.**\n- **+ Novo contrato**, **Editar**, **Suspender**, **Encerrar**, **Registrar reajuste**.\n\n## Prontidão\n\nO botão **Prontidão** mostra se está tudo pronto para emitir (certificado, numeração, Omie desligado). A faixa amarela avisa quando o **certificado A1** está perto de vencer.\n\n## Perguntas frequentes\n\n**Não acho uma OS faturada.** Ela pode estar fora do período escolhido — busque pelo número ou mude o período para **Tudo**.\n\n**Errei a nota.** Rejeitada: corrija e reenvie. Autorizada: fale com o financeiro para cancelamento.\n",
+   "corpo": "\n> **Atenção:** a **NF-e da SF está em PRODUÇÃO** — o que você emitir é documento fiscal real. A numeração é sequencial e automática (NF-e, recibo, PV e OS continuam de onde o Omie parou). **Não emita mais NF-e nem recibo pelo Omie.**\n\n## A carteira (Pedidos & Ordens de Serviço)\n\n- Escolha **Todos / PV · Produto / OS · Serviço** e o **Período** (Mês, Trimestre, Ano, 12 meses, Tudo). Os filtros ativos aparecem como etiquetas com **×** e **Limpar filtros**.\n- Ao **buscar** (cliente, nome fantasia, PV, OS, OC, NF), a busca procura em **todos os períodos**. Se a consulta demorar, aparece \"A consulta demorou demais — tente de novo\".\n- Colunas principais:\n  - **Cliente**: nome fantasia em destaque e a razão social embaixo.\n  - **Emissão**: data do PV/OS e, se ainda não faturado, **há N dias**.\n  - **Previsão fat.**: quando deve ser faturado — **clique para mudar**. Alerta **atrasado N dias** ou **vence em N dias**.\n  - **Recebimento**: **recebido**, **a receber**, **vencido** ou **parcial**, com a data.\n- Visões: **Lista, Kanban, Emissões, NFS-e registradas**. Filtro rápido **Previsão atrasada** e **OS sem NFS-e**.\n- Clique num documento para abrir a gaveta. Ela mostra **o que vai sair na nota**: destinatário completo (CNPJ, IE, endereço, município/IBGE, e-mail, com **editar cadastro**), recebimento (condição, forma de pagamento, conta, parcelas com datas e valores, instrução de Pix/banco), operação (natureza, CFOP, frete/transportadora, OC, projeto, vendedor), itens com NCM e CFOP e as **informações complementares exatamente como saem**. Pendências (falta IE, CEP, IBGE, e-mail, NCM, forma de pagamento) aparecem no topo.\n- A gaveta também traz as notas (DANFE, XML, recibo — inclusive os antigos do Omie), recebimento e histórico.\n\n> **Importante:** não existe mais \"Emitir\" direto na lista ou na gaveta. O botão é **Revisar e emitir**: abre a folha completa já preenchida, onde você confere e edita tudo antes de emitir.\n\n## Como ver a nota antes de emitir (prévia do DANFE)\n\n- Na gaveta, clique em **Pré-visualizar DANFE** (PV) ou **Pré-visualizar recibo** (OS).\n- Na folha de emissão, o mesmo botão mostra o documento **com o que você editou**.\n- A prévia abre numa aba nova, no leiaute oficial do DANFE, com a marca **PRÉVIA — SEM VALOR FISCAL** e o número previsto (ex.: nº 2193). **Nada é enviado à SEFAZ e nenhum número é gasto.** Use **Imprimir / salvar PDF** se quiser guardar.\n\n## Como faço para emitir uma nota nova\n\n1. Clique em **+ Nova emissão**. Abre uma janela própria.\n2. Escolha **Novo documento** (ou **Faturar um PV/OS existente**, buscando pelo número/cliente).\n3. Escolha o **Tipo de documento**:\n   - **NF-e (venda de produtos)** — gera o PV e a NF-e;\n   - **Recibo de serviço (OS)** — gera a OS e o recibo;\n   - **NFS-e da prefeitura (registrar)** — gera a OS; a NFS-e você registra depois.\n4. O quadro **Será gerado** mostra os números (ex.: “OS nº 4885 · Recibo nº 4646”) — confirmados na emissão.\n5. Busque a **Proposta do CRM** (puxa cliente, itens e condição) e/ou o **cliente** pelo nome, fantasia ou CNPJ.\n6. Ao escolher o cliente, aparecem os **últimos faturamentos**. **Usar como modelo →** copia itens, prazos e forma de recebimento, recalculando as datas a partir de hoje.\n7. Em **Recebimento**, a **condição de pagamento** já vem do PV/OS (ex.: \"Para 28 dias\") e gera as parcelas. Depois escolha a **forma** (boleto, Pix, transferência…) e a **conta**. As parcelas herdam a forma; marque **formas diferentes por parcela** só se precisar. Com **Pix** ou transferência, os dados da conta saem no documento.\n8. **Projeto** e **categoria de receita** são **obrigatórios** — vêm do PV/OS (CRM); se faltarem, a emissão fica bloqueada até você escolher (ou criar o projeto em **+ Novo projeto**). Para boleto, Pix e transferência a **conta de recebimento** também é obrigatória. A **forma de recebimento** (boleto, Pix, transferência…) e a **conta** escolhidas no CRM ao criar o PV/OS já chegam preenchidas aqui.\n\n**Itens com busca no catálogo:** em cada linha de item, digite parte do **nome ou do código** (novo ou do Omie) e escolha da lista. A linha já vem com código, descrição, NCM, unidade e o valor: na **simples remessa, conserto e devolução** pelo **custo médio (CMC)** — ou a última compra; na **venda**, pelo último preço vendido a esse cliente. Abaixo aparecem o CMC, a última compra e o **disponível em estoque** (em vermelho se a quantidade passar dele). Tudo continua editável.\n8. Confira a **Prévia das contas a receber**, clique em **Pré-visualizar DANFE** (ou recibo) para ver o documento, depois **Validar** e, por fim, **Emitir**.\n\n## Como faço para emitir o recibo de uma OS (inclusive OS do Omie)\n\nA maioria das OS fatura por **recibo**, emitido **pelo painel** — também as OS que nasceram no Omie. Nada é gravado no Omie.\n\n1. Abra a OS na carteira (busque pelo cliente ou pelo número, ex.: **OS4729**).\n2. Clique em **Revisar e emitir recibo** (botão principal). Se a OS foi faturada por **NFS-e** da prefeitura, use **Registrar NFS-e** (botão secundário) em vez do recibo.\n3. A folha abre **já preenchida e editável**: cliente, itens, **condição e parcelas (vencimentos)**, **forma de pagamento**, **conta** (a dos \"DADOS BANCÁRIOS\" da OS, ex.: Bradesco ag. 0368 c/c 266910-2), **categoria**, **projeto** (obrigatório), retenções (ISS/INSS) e observações. Mude o que precisar.\n4. **Pré-visualizar recibo** mostra o documento com o que você editou; **Validar** confere tudo.\n5. **Emitir** gera o recibo com a numeração do painel (continua de onde o Omie parou, ex.: nº 4646), cria as **contas a receber** com as parcelas da folha e marca a OS como **faturada no painel**.\n6. A mesma OS **não pode ser faturada duas vezes**: se já tem recibo (do Omie ou do painel) ou NFS-e registrada, a emissão é bloqueada.\n\n**O que sai no recibo:** emissão, cliente (um e-mail por linha), objeto e totais, vencimentos e o bloco **Pagamento** — forma de pagamento e os dados da conta escolhida: **banco, agência e conta** sempre que a conta os tiver e, se a forma for PIX, também a **chave PIX** (cadastre-a em **Cadastros › Bancos e contas**). Recibos já emitidos abrem no layout atual, com o bloco Pagamento completado.\n\n> **Teste sem gastar número:** administradores podem marcar **Teste (forçar homologação)** na folha — sai um recibo de teste, sem usar a numeração real.\n\n## Como faço para mudar forma de pagamento, conta ou outro dado da nota\n\n1. Clique no PV/OS na carteira. A gaveta mostra **\"O que vai sair na nota\"**.\n2. Em cada bloco (Destinatário, Recebimento, Operação e transporte, Itens, Informações complementares) há o botão **editar ✎**.\n3. Ele abre a emissão (**Revisar e emitir**) já na seção certa, destacada.\n4. Em **Recebimento**, no topo, escolha a **Forma de recebimento** (boleto, PIX, transferência…) e a **Conta de recebimento**. A instrução de pagamento sai na nota e em cada parcela.\n\n> **Dica:** se o pedido não tem forma/conta, a emissão herda as do **último faturamento do cliente** — confira antes de emitir.\n\n## Como faço para salvar uma nota como rascunho e continuar depois\n\n1. Na folha de emissão, clique em **Salvar rascunho** (ao lado de Cancelar). Nada é emitido e nenhum número (PV, OS, NF-e, recibo) é reservado.\n2. A folha também **salva sozinha a cada ~20 segundos** quando algo mudou, e ao **fechar sem emitir** — o rodapé mostra \"rascunho salvo às hh:mm\".\n3. Para continuar: aba **✎ Rascunhos** (ao lado de NFS-e registradas) → **Continuar**. A folha reabre exatamente como estava.\n4. Ao reabrir, o sistema **revalida** a nota e avisa o que mudou desde o rascunho (ex.: \"o CMC mudou\", saldo do estoque menor que a quantidade).\n5. Um PV/OS da carteira com rascunho aparece com o selo **rascunho**; em **Revisar e emitir** você escolhe continuar o rascunho ou começar do zero.\n6. Na lista de rascunhos também dá para **Duplicar** (usar como base para outra nota) e **Descartar**. Depois de emitida, a nota sai da lista sozinha.\n\n> **Dica:** o número definitivo só é definido na hora de emitir — dois rascunhos nunca \"brigam\" pelo mesmo número.\n\n## Depois de emitir\n\nA janela acompanha: **1 · Enviando à Focus → 2 · Processando na SEFAZ → Autorizada** (ou Rejeitada).\n\n- **Autorizada**: número/série, **chave de acesso**, protocolo, **DANFE**, **Baixar XML**, **Consultar na SEFAZ** e as **contas a receber criadas**.\n- **Rejeitada**: o motivo em português e **Corrigir e reenviar** (o formulário continua preenchido).\n\n## Como faço uma NF-e de devolução ou de simples remessa\n\nEm **+ Nova emissão › Tipo de documento**, escolha:\n\n- **NF-e de devolução (de compra)** — devolve ao fornecedor itens de uma NF de entrada (CFOP 5.202/6.202).\n  1. Em **NF de origem**, busque pelo nº, fornecedor ou CNPJ e escolha a nota (ou cole a **chave de 44 dígitos**).\n  2. O destinatário (fornecedor) e os itens vêm da nota; ajuste a **quantidade devolvida** (não pode passar da nota) e confira a **alíquota de ICMS** de cada item.\n  3. Escolha ou escreva o **Motivo** e emita.\n- **NF-e de simples remessa** (CFOP 5.949/6.949) ou **remessa p/ conserto** (5.915/6.915) — envia material sem venda.\n  1. Escolha o **destinatário** no cadastro, o **Projeto** (obrigatório; **+ Novo projeto** cria na hora), **Para qual cliente** e o **Motivo**.\n  2. Informe os itens e emita.\n\n> **Atenção:** essas notas usam a **mesma numeração da NF-e de venda** (série 1) e **não criam contas a receber**. Se precisar, marque **Gerar cobrança** (remessa) ou **Gerar crédito a receber do fornecedor** (devolução) e preencha o Recebimento.\n\n> **Dica:** a nota sai no mesmo formato do Omie: devolução com a NF de origem referenciada e “Motivo da Devolucao” nas informações complementares; remessa com “Projeto · Cliente · Motivo”.\n\n### Só entram itens do nosso estoque\n\nNa NF-e (remessa, conserto, devolução, venda de produto) a busca de itens mostra **primeiro os itens do nosso estoque**. Quem digita o código do fornecedor ou o código antigo do Omie também cai no item nosso (aparece \"cód. compra 3019075\" ao lado).\n\nCódigos de compra sem item nosso aparecem separados, em **Códigos de compra sem item nosso**, e não vão direto para a nota:\n\n- **Vincular a existente**: escolha o item nosso (os mais parecidos vêm primeiro) — o código de compra fica ligado a ele de vez.\n- **Cadastrar no estoque**: cria o item com o próximo código da família e já coloca na nota.\n\n> **Atenção:** a nota não emite com item sem código do estoque (\"vincule ou cadastre\"). Saldo zerado **não** bloqueia: aparece só o aviso \"saldo do item ainda não conferido\".\n\n## NFS-e da prefeitura\n\nA NFS-e continua sendo emitida no portal da prefeitura. Depois:\n\n1. Na carteira, na OS, clique em **Registrar NFS-e**.\n2. Informe número, código de verificação, data, valores e retenções (ISS retido, IR, PIS, COFINS, CSLL, INSS) e anexe o PDF/XML.\n3. Salve. A OS fica faturada e as parcelas entram no contas a receber **pelo valor líquido**.\n\n## Contratos recorrentes\n\nNa aba **Contratos recorrentes**:\n\n- Indicadores: receita recorrente do mês, a faturar, atrasados, reajustes e vigências vencendo.\n- Para cada contrato: itens, valor do período, dia de faturamento, competências já faturadas.\n- **Faturar** uma competência (ou várias) gera a OS; depois emita o recibo ou registre a NFS-e. **A mesma competência não pode ser faturada duas vezes.**\n- **+ Novo contrato**, **Editar**, **Suspender**, **Encerrar**, **Registrar reajuste**.\n\n## Prontidão\n\nO botão **Prontidão** mostra se está tudo pronto para emitir (certificado, numeração, Omie desligado). A faixa amarela avisa quando o **certificado A1** está perto de vencer.\n\n## Como faço para achar o NCM de um item\n\nToda NF-e precisa de um NCM válido (8 dígitos, da tabela oficial da Receita) em cada item. Sem ele, o botão **Emitir** fica bloqueado.\n\n1. Na linha do item, clique em **Localizar NCM** (aparece em vermelho quando falta ou está errado).\n2. No topo vêm as **sugestões para este item**, com o motivo: itens parecidos do nosso catálogo, a NF do fornecedor que vendeu a peça ou NF-e que já emitimos.\n3. Se nenhuma servir, busque pelo **código** (ex.: `7609`) ou por **palavras** (ex.: `acessórios tubos alumínio`). Cada resultado mostra o caminho completo na tabela.\n4. Clique no NCM certo. Com **salvar no cadastro do item** marcado, ele fica gravado na peça e nas próximas notas já vem preenchido.\n\n> **Atenção:** o NCM é responsabilidade fiscal. Na dúvida entre dois códigos, confirme com a contabilidade antes de emitir.\n\n## Perguntas frequentes\n\n**Não acho uma OS faturada.** Ela pode estar fora do período escolhido — busque pelo número ou mude o período para **Tudo**.\n\n**Errei a nota.** Rejeitada: corrija e reenvie. Autorizada: fale com o financeiro para cancelamento.\n",
    "mudancas": [
     {
-     "hash": "7a5fbbc",
+     "hash": "4f8556e",
      "data": "2026-10-05",
-     "texto": "faturamento: cabeçalho da tabela mais visível; Recebimento como badge + dia (recebido/a receber/vencido/parcial)"
+     "texto": "faturamento: recibo com nova diagramação — margens de 16 mm, e-mails um por linha, textos sempre dentro da folha, totais e observações mais legíveis; recibos já emitidos abrem no layout novo"
     },
     {
-     "hash": "5728c62",
+     "hash": "1123e12",
      "data": "2026-10-05",
-     "texto": "faturamento: coluna Recebimento, seção Recebimento na gaveta, 2ª via de recibo/DANFE/XML do Omie e busca por palavras (sql/72)"
+     "texto": "faturamento: recibo/2ª via abrem como página (rota do painel com text/html utf-8 + Imprimir/salvar PDF) em vez de texto cru do Storage; botões da transmissão alinhados"
     },
     {
-     "hash": "82e5a66",
+     "hash": "013fa79",
      "data": "2026-10-05",
-     "texto": "faturamento: carteira com nome fantasia, Emissão + há N dias, previsão de faturamento editável com alertas, busca em todos os períodos, 12 meses/Tudo e filtros ativos visíveis (sql/72)"
+     "texto": "faturamento: chave PIX/dados bancários da conta direto na emissão (sem sair da folha); cadastro de contas não acusa duplicidade dela mesma nem de contas de tipo diferente no mesmo banco (sql/79)"
     },
     {
-     "hash": "f386a96",
+     "hash": "f8acd29",
      "data": "2026-10-05",
-     "texto": "Nova emissão: Novo documento × Faturar existente, próximos números automáticos (cria PV/OS na sequência), PIX/dados bancários no documento e nas parcelas, sem centro de custo"
+     "texto": "aparência: botão primário segue a cor do tema; texto fraco com contraste AA nos dois modos"
     },
     {
-     "hash": "1304730",
+     "hash": "4da760f",
      "data": "2026-10-05",
-     "texto": "+ Novo projeto rápido: criar e já usar o projeto no PV/OS, Nova emissão, PC/RC e separação; /api/crm/erp criar_projeto e sugestao_projeto para o CRM"
+     "texto": "aparência por usuário: modo claro/escuro/sistema, 8 temas de cor, transparência (vidro), fundos, densidade e tamanho da letra — gravada em platform.aparencia_usuario e partilhada com portal e Serviços; cores fixas trocadas por tokens nas telas novas; manual (Início › Aparência)"
     },
     {
-     "hash": "6d27942",
+     "hash": "5b523c0",
      "data": "2026-10-05",
-     "texto": "Faturamento: aba Contratos recorrentes (107 contratos do Omie, agenda de competências, faturar/lote, reajuste, novo contrato)"
+     "texto": "faturamento: revalidação do rascunho consulta os itens em paralelo; chip 'código fora do estoque' quando o código nem é de compra"
     },
     {
-     "hash": "1f4e41f",
+     "hash": "380b622",
      "data": "2026-10-05",
-     "texto": "faturamento: Nova emissão em folha dedicada — últimos faturamentos do cliente (usar como modelo), seção Recebimento completa (condição, parcelas, forma, conta, categoria, projeto, centro, vendedor, frete, retenções) e painel de transmissão"
+     "texto": "faturamento: rascunho reaberto revalida a folha restaurada (validava a folha vazia: 'Cliente sem nome · 0 itens'); destinatário escolhido aparece no campo; Localizar NCM abre com 'Das nossas compras' (NCM das NF-e recebidas e PCs do fornecedor deste item ou parecidos) antes do catálogo"
     },
     {
-     "hash": "5ad1680",
+     "hash": "de4f050",
      "data": "2026-10-05",
-     "texto": "PV/OS e emissão: proposta do CRM (busca + pré-preenchimento + vínculo obrigatório, admin pode 'sem proposta' com motivo) e busca de cliente no cadastro"
+     "texto": "faturamento: gaveta da OS mostra 'O que vai sair no recibo' (nº previsto, categoria/contrato, sem natureza/CFOP/NCM/inf. complementares) e o nome da conta de recebimento (v1.6.270)"
     },
     {
-     "hash": "822b082",
+     "hash": "4c138c3",
      "data": "2026-10-05",
-     "texto": "faturamento: controle de NFS-e emitida na prefeitura (registrar/cancelar, contas a receber pelo líquido, OS faturada, lista e filtro)"
+     "texto": "estoque: Criar item nosso não para sem família — sem parecido forte, sugere a família e candidatos pelos itens nossos da mesma palavra (CABO FLEX…); unidade do produto de compra no cadastro"
     },
     {
-     "hash": "5768678",
+     "hash": "7361dd9",
      "data": "2026-10-05",
-     "texto": "faturamento: quebra de texto longo (e-mails) na validação"
+     "texto": "faturamento: Localizar NCM abre na folha (estava só na tela de transmissão); folha mais larga (até 1680px) com painel lateral recolhível, itens numa linha só; acerto de item em janela por cima; validação mostra só pendências (✓ N verificações ok)"
     },
     {
-     "hash": "630a693",
+     "hash": "6981f03",
      "data": "2026-10-05",
-     "texto": "faturamento: tela no conceito PV & OS (mockup do Benny) — carteira Omie+painel, KPIs, PV×OS, aging, lista/kanban/emissões, gaveta com Validar/Ensaio/Emitir"
+     "texto": "faturamento: OS do Omie emite RECIBO pelo painel (Revisar e emitir recibo + Registrar NFS-e secundário; folha pré-preenchida e editável com conta dos DADOS BANCÁRIOS, condição, projeto/categoria, retenções; numeração recibo_proximo; trava de duplo faturamento; prévia/resumo de recibo sem NCM); carteira: resumo do receber 15x mais rápido, mensagem amigável no timeout (v1.6.268)"
     },
     {
-     "hash": "f1f5323",
+     "hash": "3f13ce3",
      "data": "2026-10-05",
-     "texto": "faturamento: nome do cliente sem entidades HTML na fila de PVs do Omie"
+     "texto": "faturamento: linha com código de compra ganha chip âmbar + Criar item nosso / Vincular na própria linha (substitui no lugar mantendo qtd e valor; vale para CRM e rascunho antigo); Validar/Emitir travados até substituir; aviso de unidade MM em cabo/eletroduto"
     }
    ]
   },
@@ -745,7 +760,7 @@
     "/configuracoes"
    ],
    "atualizado": "2026-10-05",
-   "corpo": "\n## Onde fica\n\n- No **portal**: engrenagem → **Sistema → Perfis e Permissões** (Geral, Painel, CRM Legado, Serviços, RH, Auditoria).\n- No **painel**: engrenagem → **Usuários e acessos**.\n\n## Como faço para liberar um módulo para alguém\n\n1. Abra **Perfis e Permissões → Geral**.\n2. Ache a pessoa e clique na célula do módulo (Portal, Operação, Compras, Estoque, Financeiro, BI, CRM, Serviços, RH).\n3. Escolha liberar ou bloquear. Para o detalhe de cada app (telas e ações), use a aba do app.\n\n> **Atenção:** só administradores mudam acessos. Toda mudança fica na **Auditoria**.\n\n## Permissões finas do painel\n\nExemplos: ver valores de compra, aprovar PC, ver contas a pagar/receber, **baixar/estornar título**, **conciliação bancária**, lançar título, separar material para projeto. Cada uma pode ser ligada por pessoa.\n\n## Perguntas frequentes\n\n**A pessoa não consegue entrar no portal.** Confira se ela está liberada em **Portal** na aba Geral.\n",
+   "corpo": "\n## Onde fica\n\n- No **portal**: engrenagem → **Sistema → Perfis e Permissões** (Geral, Painel, CRM Legado, Serviços, RH, Auditoria).\n- No **painel**: engrenagem → **Usuários e acessos**.\n\n## Como faço para dar acesso a uma pessoa nova\n\nO convite por e-mail pode não chegar (o envio de e-mail do sistema é limitado). O caminho recomendado é a **senha provisória**:\n\n1. No portal, abra **Sistema → Usuários**.\n2. Clique em **+ Criar acesso com senha provisória**.\n3. Preencha **e-mail**, **nome** e **papel** (normalmente *member*) e clique em **Gerar acesso**.\n4. Aparece o **Cartão de acesso ALLKA** com o endereço, o e-mail e a senha provisória.\n5. Clique em **Copiar texto** (para WhatsApp ou e-mail) ou em **Imprimir / salvar PDF** e envie à pessoa.\n6. Libere o que ela pode ver em **Sistema → Perfis e Permissões** (aba Geral e aba Painel).\n\n> **Atenção:** a senha provisória aparece **uma única vez**. Se fechar o cartão sem copiar, gere outra.\n\nNo primeiro acesso, a pessoa entra em **allka.ai** com o e-mail e a senha provisória e é levada à tela **Crie a sua senha**. Só depois disso entra no sistema.\n\nSe o e-mail já tiver acesso, o sistema avisa e oferece **Gerar nova senha provisória** (serve também para quem esqueceu a senha).\n\n## Como faço para liberar um módulo para alguém\n\n1. Abra **Perfis e Permissões → Geral**.\n2. Ache a pessoa e clique na célula do módulo (Portal, Operação, Compras, Estoque, Financeiro, BI, CRM, Serviços, RH).\n3. Escolha liberar ou bloquear. Para o detalhe de cada app (telas e ações), use a aba do app.\n\n> **Atenção:** só administradores mudam acessos. Toda mudança fica na **Auditoria**.\n\n## Permissões finas do painel\n\nExemplos: ver valores de compra, aprovar PC, ver contas a pagar/receber, **baixar/estornar título**, **conciliação bancária**, lançar título, separar material para projeto. Cada uma pode ser ligada por pessoa.\n\n## Perguntas frequentes\n\n**A pessoa não consegue entrar no portal.** Confira se ela está liberada em **Portal** na aba Geral.\n",
    "mudancas": [
     {
      "hash": "f584f8b",

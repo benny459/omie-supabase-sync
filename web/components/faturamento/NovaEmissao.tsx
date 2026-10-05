@@ -64,9 +64,11 @@ function instrucoes(formasUsadas: string[], c: ContaRec | undefined) {
     if (c.pix_chave) linhas.push(`Pagamento via PIX: chave ${c.pix_tipo ? `${c.pix_tipo.toUpperCase()} ` : ""}${c.pix_chave}${quem}`);
     else faltas.push(`a conta “${c.nome}” não tem chave PIX cadastrada`);
   }
-  if (formasUsadas.some((f) => FORMAS_BANCO.includes(f))) {
+  // Banco/agência/conta saem também com PIX (05/10/26): o recibo nunca fica
+  // sem os dados de pagamento, mesmo que a conta ainda não tenha chave PIX.
+  if (formasUsadas.some((f) => f === "PIX" || FORMAS_BANCO.includes(f))) {
     if (c.banco && c.agencia && c.conta) linhas.push(`Transferência/depósito: ${BANCOS[c.banco] ?? `Banco ${c.banco}`} (${c.banco}) Ag ${c.agencia} CC ${c.conta}${quem}`);
-    else faltas.push(`a conta “${c.nome}” está sem banco/agência/conta`);
+    else if (formasUsadas.some((f) => FORMAS_BANCO.includes(f))) faltas.push(`a conta “${c.nome}” está sem banco/agência/conta`);
   }
   return { linhas, faltas };
 }

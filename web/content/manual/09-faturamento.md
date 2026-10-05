@@ -59,6 +59,8 @@ A maioria das OS fatura por **recibo**, emitido **pelo painel** — também as O
 5. **Emitir** gera o recibo com a numeração do painel (continua de onde o Omie parou, ex.: nº 4646), cria as **contas a receber** com as parcelas da folha e marca a OS como **faturada no painel**.
 6. A mesma OS **não pode ser faturada duas vezes**: se já tem recibo (do Omie ou do painel) ou NFS-e registrada, a emissão é bloqueada.
 
+**O que sai no recibo:** emissão, cliente (um e-mail por linha), objeto e totais, vencimentos e o bloco **Pagamento** — forma de pagamento e os dados da conta escolhida: **banco, agência e conta** sempre que a conta os tiver e, se a forma for PIX, também a **chave PIX** (cadastre-a em **Cadastros › Bancos e contas**). Recibos já emitidos abrem no layout atual, com o bloco Pagamento completado.
+
 > **Teste sem gastar número:** administradores podem marcar **Teste (forçar homologação)** na folha — sai um recibo de teste, sem usar a numeração real.
 
 ## Como faço para mudar forma de pagamento, conta ou outro dado da nota
