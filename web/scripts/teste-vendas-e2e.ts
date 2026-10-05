@@ -8,7 +8,14 @@
  */
 import { supaAdmin } from "../lib/supabase-admin";
 import { atualizar, cancelar, configDe, emitir } from "../lib/faturamento/server";
-import { docFat, documento } from "../lib/vendas-server";
+import { docFat } from "../lib/vendas-fat";
+import type { VendaDoc } from "../lib/vendas";
+
+async function documento(id: number): Promise<VendaDoc> {
+  const { data, error } = await supaAdmin().schema("orders").rpc("vendas_documento", { p_id: id });
+  if (error || !data) throw new Error(error?.message ?? `documento ${id} não encontrado`);
+  return data as VendaDoc;
+}
 
 const falhas: string[] = [];
 const ok = (cond: unknown, msg: string) => { console.log(`${cond ? "✓" : "✗"} ${msg}`); if (!cond) falhas.push(msg); };
@@ -27,7 +34,7 @@ async function main() {
   if (cfg.ambiente !== "homologacao") throw new Error(`ABORTADO: ${d.empresa} não está em homologação`);
   ok(d.status === "aberto", `${d.label} aberto antes de faturar (${d.status})`);
 
-  const doc = await docFat(d);
+  const doc = docFat(d);
   console.log(`cliente ${doc.cliente.nome} · ${doc.itens.length} itens · ${doc.condicao?.parcelas?.length ?? 0} parcelas`);
   let e = await emitir(doc, { origem_tipo: d.tipo === "OS" ? "os" : "pv", origem_id: String(id), gerar_receber_homologacao: true, criado_por: "teste-e2e-p1@painel" });
   for (let i = 0; i < 20 && e.status === "processando"; i++) { await new Promise((r) => setTimeout(r, 4000)); e = await atualizar(e.id); }

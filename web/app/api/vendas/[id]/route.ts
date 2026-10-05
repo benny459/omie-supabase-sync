@@ -16,7 +16,7 @@ export async function GET(_req: Request, ctx: Ctx) {
   if (!id) return NextResponse.json({ error: "id inválido" }, { status: 400 });
   try {
     const d = await documento(id);
-    return NextResponse.json({ documento: d, docfat: await docFat(d) });
+    return NextResponse.json({ documento: d, docfat: docFat(d) });
   } catch (e) { return erro(e); }
 }
 
