@@ -597,6 +597,20 @@ export const FINANCEIRO: NavItem[] = [
     ),
   },
   {
+    // Corte financeiro (05/10/26): DRE e saldos do razão nativo × Omie, para validar a troca.
+    href: "/bi/conferencia-corte",
+    area: "bi",
+    grupo: "bi",
+    secao: "Financeiro",
+    label: "Conferência do corte",
+    tone: "text-emerald-700",
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className="w-5 h-5" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M4 6h7M4 12h7M4 18h7M14 6h6M14 12h6M14 18h6"/><path d="M12 3v18"/>
+      </svg>
+    ),
+  },
+  {
     href: "/bi/conciliacao",
     area: "bi",
     grupo: "bi",

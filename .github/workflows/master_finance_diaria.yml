@@ -141,6 +141,9 @@ jobs:
           SHEETS_MIRROR_URL: ${{ secrets.SHEETS_MIRROR_URL }}
           SHEETS_MIRROR_TOKEN: ${{ secrets.SHEETS_MIRROR_TOKEN }}
           PYTHONUNBUFFERED: "1"
+        # OMIE-LEITURA-PERMITIDA (05/10/26): o extrato do Omie alimenta o Omie Cash
+        # como banco nativo (cron omie-cash-banco → finance.omie_cash_sincronizar).
+        # Só leitura. P-LIMPEZA: manter enquanto a conta Omie Cash existir.
         run: python3 scripts/import_extratos_cc.py
         continue-on-error: true
 
