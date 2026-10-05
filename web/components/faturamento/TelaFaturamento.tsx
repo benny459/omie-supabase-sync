@@ -1197,7 +1197,7 @@ function NfseRegistradas({ empresa, q, onMudou, avisar }: { empresa: string; q: 
 type Resumo = {
   error?: string; tipo?: string;
   destinatario?: { nome: string; cnpj?: string | null; cpf?: string | null; ie?: string | null; email?: string | null; logradouro?: string; numero?: string; complemento?: string | null; bairro?: string; municipio?: string; codigo_municipio?: string | null; uf?: string; cep?: string; telefone?: string | null };
-  condicao?: { descricao?: string; forma_pagamento?: string; forma_recebimento?: string | null; conta_nome?: string | null; instrucao_pagamento?: string | null; projeto?: string | null; vendedor?: string | null } | null;
+  condicao?: { descricao?: string; forma_pagamento?: string; forma_recebimento?: string | null; conta_nome?: string | null; instrucao_pagamento?: string | null; projeto?: string | null; vendedor?: string | null; categoria?: string | null; contrato?: string | null } | null;
   transporte?: { modalidade: number; nome?: string | null; cnpj?: string | null } | null;
   itens?: { codigo: string; descricao: string; ncm: string; cfop: string; un: string; qtd: number; unit: number; total: number }[];
   natureza?: string; informacoes_complementares?: string; pedido_cliente?: string | null;
@@ -1219,9 +1219,12 @@ function ResumoNota({ res, tipo, editar }: { res: Resumo | null; tipo: string; e
   const pend = (res.checagens ?? []).filter((x) => !x.ok);
   const doc = c?.cnpj || c?.cpf;
   const linha = (rot: string, v: React.ReactNode) => <div className="rs-l"><span>{rot}</span><b>{v || "—"}</b></div>;
+  // Recibo (OS, 05/10/26): sem natureza/CFOP/NCM/frete — só o que sai no recibo.
+  const rec = res.tipo === "recibo";
   return (
     <div className="rs">
-      <h4>O que vai sair na nota {res.proximo && tipo === "PV" && <small style={{ fontWeight: 400, color: "var(--f-tx3)" }}>· NF-e nº {res.proximo.nfe ?? "—"} série {res.proximo.serie} (previsto)</small>}</h4>
+      <h4>{rec ? "O que vai sair no recibo" : "O que vai sair na nota"} {res.proximo && tipo === "PV" && <small style={{ fontWeight: 400, color: "var(--f-tx3)" }}>· NF-e nº {res.proximo.nfe ?? "—"} série {res.proximo.serie} (previsto)</small>}
+        {res.proximo && rec && <small style={{ fontWeight: 400, color: "var(--f-tx3)" }}>· Recibo nº {res.proximo.recibo ?? "—"} (previsto)</small>}</h4>
       {pend.length > 0 && <div className="rs-pend">{pend.map((p, i) => <div key={i} className={`alert ${p.nivel === "erro" ? "bad" : ""}`}>{p.nivel === "erro" ? "✕" : "⚠"} {p.item}: {p.detalhe}</div>)}</div>}
       <div className="rs-grid">
         <div className="rs-box">
@@ -1248,23 +1251,25 @@ function ResumoNota({ res, tipo, editar }: { res: Resumo | null; tipo: string; e
           {!!res.retencoes && linha("Líquido (−retenções)", fmt(res.liquido ?? 0))}
         </div>
         <div className="rs-box">
-          <div className="rs-t">Operação e transporte {ed("operacao")}</div>
-          {linha("Natureza", res.natureza)}
-          {linha("CFOP", [...new Set((res.itens ?? []).map((i) => i.cfop))].join(", "))}
-          {linha("Frete", t ? `${FRETE[t.modalidade] ?? t.modalidade}${t.nome ? ` · ${t.nome}` : ""}` : "sem frete")}
-          {linha("Pedido do cliente (OC)", res.pedido_cliente)}
+          <div className="rs-t">{rec ? "Classificação" : "Operação e transporte"} {ed("operacao")}</div>
+          {!rec && linha("Natureza", res.natureza)}
+          {!rec && linha("CFOP", [...new Set((res.itens ?? []).map((i) => i.cfop))].join(", "))}
+          {!rec && linha("Frete", t ? `${FRETE[t.modalidade] ?? t.modalidade}${t.nome ? ` · ${t.nome}` : ""}` : "sem frete")}
+          {!rec && linha("Pedido do cliente (OC)", res.pedido_cliente)}
+          {rec && linha("Categoria", cond?.categoria)}
+          {rec && linha("Contrato", cond?.contrato)}
           {linha("Projeto", cond?.projeto)}
           {linha("Vendedor", cond?.vendedor)}
-          {linha("Total da nota", fmt(res.total ?? 0))}
+          {linha(rec ? "Total do recibo" : "Total da nota", fmt(res.total ?? 0))}
         </div>
       </div>
       {!!res.itens?.length && <div className="rs-t" style={{ marginTop: 8 }}>Itens {ed("itens")}</div>}
       {!!res.itens?.length && <table className="it" style={{ marginTop: 4 }}>
-        <thead><tr><th>Código</th><th>Descrição</th><th>NCM</th><th>CFOP</th><th className="r">Qtd</th><th className="r">Unit.</th><th className="r">Total</th></tr></thead>
-        <tbody>{res.itens.map((i, k) => <tr key={k}><td className="mono">{i.codigo}</td><td>{i.descricao}</td><td className="mono" style={{ color: i.ncm === "00000000" ? "var(--f-bad)" : undefined }}>{i.ncm}</td><td className="mono">{i.cfop}</td><td className="r mono">{i.qtd} {i.un}</td><td className="r mono">{fmt(i.unit)}</td><td className="r mono">{fmt(i.total)}</td></tr>)}</tbody>
+        <thead><tr><th>Código</th><th>Descrição</th>{!rec && <><th>NCM</th><th>CFOP</th></>}<th className="r">Qtd</th><th className="r">Unit.</th><th className="r">Total</th></tr></thead>
+        <tbody>{res.itens.map((i, k) => <tr key={k}><td className="mono">{i.codigo}</td><td>{i.descricao}</td>{!rec && <><td className="mono" style={{ color: i.ncm === "00000000" ? "var(--f-bad)" : undefined }}>{i.ncm}</td><td className="mono">{i.cfop}</td></>}<td className="r mono">{i.qtd} {i.un}</td><td className="r mono">{fmt(i.unit)}</td><td className="r mono">{fmt(i.total)}</td></tr>)}</tbody>
       </table>}
-      <div className="rs-t" style={{ marginTop: 8 }}>Informações complementares (como saem na nota) {ed("infcpl")}</div>
-      <div className="rs-inf">{res.informacoes_complementares || "—"}</div>
+      {!rec && <div className="rs-t" style={{ marginTop: 8 }}>Informações complementares (como saem na nota) {ed("infcpl")}</div>}
+      {!rec && <div className="rs-inf">{res.informacoes_complementares || "—"}</div>}
     </div>
   );
 }

@@ -102,9 +102,16 @@ export async function resumoEmissao(doc: DocFat, extra: ExtraResumo, tipo: "nfe"
   const total = Number(payload.valor_total);
   const ret = totalRetencoes(doc.condicao?.retencoes);
   const liquido = r2(total - ret);
+  // Nome da conta de recebimento (o espelho do Omie só traz o código).
+  let condicao = doc.condicao ?? null;
+  if (condicao?.conta_corrente && !condicao.conta_nome) {
+    const { data: cc } = await supaAdmin().schema("finance").from("contas_correntes")
+      .select("descricao").eq("empresa", doc.empresa).eq("cod_cc", condicao.conta_corrente).maybeSingle();
+    if (cc?.descricao) condicao = { ...condicao, conta_nome: String(cc.descricao) };
+  }
   return {
     destinatario: c,
-    condicao: doc.condicao ?? null,
+    condicao,
     transporte: doc.transporte ?? null,
     itens: payload.items.map((i) => ({ codigo: i.codigo_produto, descricao: i.descricao, ncm: i.codigo_ncm, cfop: i.cfop, un: i.unidade_comercial, qtd: i.quantidade_comercial, unit: i.valor_unitario_comercial, total: i.valor_bruto })),
     natureza: cfg.natureza_operacao,
