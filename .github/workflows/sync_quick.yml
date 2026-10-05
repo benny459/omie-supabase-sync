@@ -50,7 +50,9 @@ jobs:
           PYTHONUNBUFFERED: "1"
         run: python3 scripts/import_pedidos_venda.py
 
+      # P-COMPRAS (05/10/2026): PCs nascem só no painel; não importar do Omie.
       - name: "2 Pedidos Compra (5 pgs recentes)"
+        if: false
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}

@@ -61,7 +61,10 @@ jobs:
       # 2. Pedidos Compra FULL (todas as paginas)
       # Sem MAX_PAGINAS_PEDCOMPRA = pega tudo (~4200 PCs / ~90s)
       # -----------------------------------------
+      # P-COMPRAS (05/10/2026): PCs do Omie não são mais importados na agenda —
+      # o histórico fica congelado. Só roda se disparado à mão.
       - name: "2 Pedidos de Compra (FULL semanal — todos PCs)"
+        if: github.event_name == 'workflow_dispatch'
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}

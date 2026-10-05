@@ -7,8 +7,10 @@ on:
         description: "Empresas (CSV)"
         required: false
         default: "SF"
-  schedule:
-    - cron: "23 12,15,18,21 * * 1-5"   # 09:23/12:23/15:23/18:23 BRT dias úteis
+  # P-COMPRAS (05/10/2026, autorizado pelo Benny): importação de compras do Omie
+  # DESLIGADA — RC/PC nascem só no painel e a NF de entrada vem da Focus. Agenda
+  # removida; só roda à mão (workflow_dispatch). Para religar, restaurar o bloco
+  # `schedule:` a partir do git log deste arquivo.
 
 jobs:
   import:

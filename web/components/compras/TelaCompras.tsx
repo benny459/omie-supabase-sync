@@ -375,7 +375,7 @@ export default function TelaCompras() {
         {avisos.pcsOmie.length > 0 && (
           <div className="alarme-omie">
             <button className="linkbtn" onClick={() => setVerPcsOmie((v) => !v)}>
-              ⚠️ {avisos.pcsOmie.length} pedido(s) de compra criado(s) no Omie depois de 01/10 — o pedido de compra nasce aqui no painel
+              ⚠️ {avisos.pcsOmie.length} pedido(s) de compra criado(s) no Omie depois de 01/10 — o pedido de compra nasce aqui no painel (importação do Omie desligada em 05/10)
               <small>{verPcsOmie ? "esconder" : "ver quais"} ›</small>
             </button>
             {verPcsOmie && <div className="lst">{avisos.pcsOmie.map((c) => (

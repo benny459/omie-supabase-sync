@@ -12,18 +12,10 @@ on:
         required: false
         default: "SF"
 
-  # Cron: 8h BRT (2x p/ mitigar skip do GitHub) + 9-18h BRT (1x cada). Seg-sex.
-  # BRT:  08:07, 08:22, 09:13, 10:13, 11:13, 12:13, 13:13, 14:13, 15:13, 16:13, 17:13, 18:13
-  # UTC:  11:07, 11:22, 12:13, 13:13, 14:13, 15:13, 16:13, 17:13, 18:13, 19:13, 20:13, 21:13
-  # Minutos NÃO-redondos pra evitar skip do scheduler em horas cheias.
-  # `concurrency` impede execução duplicada.
-  # (2026-07-16) + varredura noturna 23:13 BRT e final de semana sáb/dom
-  # (10:13 + 16:13 BRT) pra cobrir edits/novos fora do horário comercial.
-  schedule:
-    - cron: "7,22 11 * * 1-5"
-    - cron: "13 12,13,14,15,16,17,18,19,20,21 * * 1-5"
-    - cron: "13 2 * * 2-6"       # 23:13 BRT dom-qui (varredura noturna)
-    - cron: "13 13,19 * * 6,0"   # 10:13 + 16:13 BRT sáb+dom
+  # P-COMPRAS (05/10/2026, autorizado pelo Benny): importação de compras do Omie
+  # DESLIGADA — RC/PC nascem só no painel e a NF de entrada vem da Focus. Agenda
+  # removida; só roda à mão (workflow_dispatch). Para religar, restaurar o bloco
+  # `schedule:` a partir do git log deste arquivo.
 
 concurrency:
   group: master-orders-diaria

@@ -20,6 +20,16 @@ export async function POST(req: Request) {
   const { data: { user } } = await supa.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
+  // P-COMPRAS (05/10/2026, autorizado pelo Benny): a importação de PCs do Omie
+  // foi desligada — o PC nasce só no painel e o histórico do Omie fica congelado.
+  // Para religar, apagar este retorno (o resto da rota continua intacto).
+  if (process.env.COMPRAS_OMIE_IMPORT !== "on") {
+    return NextResponse.json(
+      { error: "Importação de PCs do Omie desligada desde 05/10/2026 — os pedidos de compra nascem no painel." },
+      { status: 410 },
+    );
+  }
+
   let body: { pc_numeros?: string[]; empresas?: string };
   try { body = await req.json(); }
   catch { return NextResponse.json({ error: "invalid json" }, { status: 400 }); }
