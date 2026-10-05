@@ -293,8 +293,16 @@ html.dark[data-vidro] {
   --ww-sidebar: rgb(var(--color-ww-sidebar) / var(--ap-a, 1));
   --ww-row-l1: rgb(var(--color-ww-rowL1) / var(--ap-a, 1));
 }
-html[data-vidro] :is(.viz-panel, .ab, .ne-folha, .ncm-caixa, .fpv-drawer, .cp3 .panel, .cp3 .kpi,
+/* Nada que contenha overlays position:fixed (barra, folha da Nova emissão,
+   gaveta do PV): o desfoque faria deles o bloco de referência dos modais. */
+html[data-vidro] :is(.viz-panel, .ncm-caixa, .cp3 .panel, .cp3 .kpi,
   [class*="bg-ww-panel"], [class*="bg-ww-drawer"], [class*="bg-ww-sidebar"], [data-vidro-alvo]) {
+  backdrop-filter: blur(var(--ap-blur, 12px)) saturate(1.35);
+  -webkit-backdrop-filter: blur(var(--ap-blur, 12px)) saturate(1.35);
+}
+/* Barra: o desfoque vai num pseudo-elemento, pelo mesmo motivo. */
+html[data-vidro] .ab::before {
+  content: ""; position: absolute; inset: 0; z-index: -1; pointer-events: none;
   backdrop-filter: blur(var(--ap-blur, 12px)) saturate(1.35);
   -webkit-backdrop-filter: blur(var(--ap-blur, 12px)) saturate(1.35);
 }
