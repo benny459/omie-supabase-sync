@@ -442,6 +442,9 @@ export async function cancelar(id: number, justificativa: string): Promise<Emiss
 /** URL assinada (1 h) de um arquivo do bucket. */
 export async function urlArquivo(path: string | null) {
   if (!path) return null;
+  // HTML (recibos, 2ª via) — o Storage serve .html como texto puro; passa pela
+  // rota do painel, que devolve text/html; charset=utf-8 com barra de impressão.
+  if (/\.html?$/i.test(path)) return `/api/faturamento/arquivo?p=${encodeURIComponent(path)}`;
   const { data } = await supaAdmin().storage.from(BUCKET).createSignedUrl(path, 3600);
   return data?.signedUrl ?? null;
 }
