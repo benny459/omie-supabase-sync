@@ -146,9 +146,13 @@ async function crmDaPessoa(p: J, irmaos: Irmao[]): Promise<J> {
       crmGet<J[]>(`propostas?select=numero,status,valor,data,data_fechamento,descricao,empresa_nome,fase_doc,motivo_perda,omie_codigo_pedido&empresa_id=eq.${CRM_EMPRESA}&deleted_at=is.null&or=(${encodeURIComponent(`cliente_id.in.(${ids.join(",")}),empresa_nome.in.(${inNomes})`)})&order=data.desc.nullslast&limit=100`),
       inNomes ? crmGet<J[]>(`oportunidades?select=numero,fase_atual,valor_estimado,created_at,descricao,proposta_num,empresa_nome&empresa_id=eq.${CRM_EMPRESA}&deleted_at=is.null&empresa_nome=in.(${encodeURIComponent(inNomes)})&order=created_at.desc&limit=100`) : Promise.resolve([]),
     ]);
+    // O CRM guarda datas como "dd/mm/aaaa": passa a ISO para ordenar e mostrar como o resto.
+    const iso = (v: unknown) => { const m = /^(\d{2})\/(\d{2})\/(\d{4})/.exec(String(v ?? "")); return m ? `${m[3]}-${m[2]}-${m[1]}` : (v ?? null); };
     return {
       clientes: clientes.map((c) => ({ nome: c.nome })),
-      propostas: propostas.map((x) => ({ ...x, link: `https://propostas-ww.vercel.app/?num=${encodeURIComponent(String(x.numero ?? ""))}` })),
+      propostas: propostas
+        .map((x) => ({ ...x, data: iso(x.data), data_fechamento: iso(x.data_fechamento), link: `https://propostas-ww.vercel.app/?num=${encodeURIComponent(String(x.numero ?? ""))}` }))
+        .sort((a, b) => String(b.data ?? "").localeCompare(String(a.data ?? ""))),
       oportunidades,
     };
   } catch (e) {

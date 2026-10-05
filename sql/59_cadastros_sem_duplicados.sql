@@ -804,3 +804,15 @@ begin
 end $$;
 revoke all on function orders.cadastros_ficha360(bigint, text) from public, anon, authenticated;
 grant execute on function orders.cadastros_ficha360(bigint, text) to service_role;
+
+-- Ficha 360 mais rápida (aplicado como p10_ficha360_arrays): os códigos e documentos da
+-- pessoa calculam-se uma vez em v_cods/v_docs (array) em vez de subconsultas correlacionadas
+-- (compras_extra passou de 23 s para 40 ms). Ver a definição viva com pg_get_functiondef.
+
+-- Índices para o resolver das apps (aplicado como p10_indices_nome_chave): o cron do CRM
+-- mandava 300 clientes de uma vez e caía por tempo (75 ms/cliente → 6 ms/cliente).
+create index if not exists pessoas_nk_razao_btree on cadastros.pessoas (empresa, cadastros.nome_chave(razao_social));
+create index if not exists pessoas_nk_fantasia_btree on cadastros.pessoas (empresa, cadastros.nome_chave(nome_fantasia));
+create index if not exists pessoas_doc_idx on cadastros.pessoas (doc) where doc is not null;
+create index if not exists pessoas_codigo_idx on cadastros.pessoas (codigo);
+create index if not exists pessoas_codigo_omie_any_idx on cadastros.pessoas (codigo_omie) where codigo_omie is not null;
