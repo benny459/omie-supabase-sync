@@ -9,19 +9,22 @@ import type { DocFat } from "@/lib/faturamento/montar";
  * empresa decide o ambiente (homologação por padrão) e, para OS, se sai
  * recibo ou NFS-e (fat_config.tipo_os).
  */
-export default function BotaoEmitirNf({ origemTipo, origemId, documento, onEmitido }: {
+export default function BotaoEmitirNf({ origemTipo, origemId, documento, onEmitido, rotulo, gerarReceberHomologacao }: {
   origemTipo: "pv" | "os" | "venda";
   origemId: string;
   documento: DocFat;
+  rotulo?: string;
+  /** Em homologação o receber só nasce quando pedido (documentos de TESTE). */
+  gerarReceberHomologacao?: boolean;
   onEmitido?: (r: { status: string; numero: string | null; mensagem: string | null; pdf_url: string | null }) => void;
 }) {
   const [ocupado, setOcupado] = useState(false);
   async function emitir() {
-    if (!window.confirm(`Emitir documento fiscal de ${origemTipo.toUpperCase()} ${origemId}?`)) return;
+    if (!window.confirm(`Emitir documento fiscal de ${rotulo ?? `${origemTipo.toUpperCase()} ${origemId}`}?`)) return;
     setOcupado(true);
     const r = await fetch("/api/faturamento/emitir", {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ documento, origem_tipo: origemTipo, origem_id: origemId }),
+      body: JSON.stringify({ documento, origem_tipo: origemTipo, origem_id: origemId, gerar_receber_homologacao: !!gerarReceberHomologacao }),
     }).then((x) => x.json()).catch((e) => ({ error: String(e) }));
     setOcupado(false);
     if (r.error) { window.alert(r.error); return; }

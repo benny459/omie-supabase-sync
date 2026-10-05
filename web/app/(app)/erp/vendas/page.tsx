@@ -1,5 +1,6 @@
 import { requireArea } from "@/lib/require-area";
 import ErpListaView from "@/components/ErpListaView";
+import FilaVendasNativas from "@/components/vendas/FilaVendasNativas";
 
 export const dynamic = "force-dynamic";
 
@@ -15,6 +16,7 @@ export default async function ErpVendasPage() {
           Clique num documento pra ver os itens.
         </p>
       </div>
+      <FilaVendasNativas />
       <ErpListaView modulo="vendas" />
     </div>
   );

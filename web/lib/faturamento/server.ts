@@ -263,18 +263,27 @@ async function posAutorizacao(row: Emissao): Promise<Emissao> {
 }
 
 /**
- * Marca o PV/OS de origem como faturado. O PV/OS nativo (P1) ainda não está
- * no main: quando entrar, a função orders.vendas_marcar_faturado(p_id, p_doc)
- * é chamada aqui. Até lá não faz nada (a ligação fica em fat_emissoes.origem_*).
+ * Marca o PV/OS nativo de origem (P1) como faturado: orders.vendas_marcar_faturado.
+ * Em homologação o banco só muda o status de documentos de TESTE; os reais
+ * ficam com a anotação no histórico (a NF de homologação não tem valor fiscal).
  */
 async function marcarOrigemFaturada(row: Emissao) {
-  if (!row.origem_id || !["pv", "os", "venda"].includes(row.origem_tipo) || row.ambiente !== "producao") return;
+  if (!row.origem_id || !["pv", "os", "venda"].includes(row.origem_tipo) || !/^\d+$/.test(row.origem_id)) return;
   const { error } = await supaAdmin().schema("orders").rpc("vendas_marcar_faturado", {
-    p_id: row.origem_id, p_doc: { emissao_id: row.id, tipo: row.tipo, numero: row.numero, chave: row.chave },
+    p_id: Number(row.origem_id),
+    p_doc: { emissao_id: row.id, tipo: row.tipo, numero: row.numero, chave: row.chave, ambiente: row.ambiente },
   });
-  if (error && !/function|does not exist|schema cache/i.test(error.message)) {
-    await patch(row.id, { mensagem: `Autorizada; falhou marcar a origem como faturada: ${error.message}` });
-  }
+  if (error) await patch(row.id, { mensagem: `Autorizada; falhou marcar a origem como faturada: ${error.message}` });
+  else await supaAdmin().schema("orders").rpc("vendas_refrescar").then(() => null, () => null);
+}
+
+/** Desfaz o "faturado" do PV/OS de origem quando a nota é cancelada. */
+async function desfazerOrigemFaturada(row: Emissao) {
+  if (!row.origem_id || !["pv", "os", "venda"].includes(row.origem_tipo) || !/^\d+$/.test(row.origem_id)) return;
+  await supaAdmin().schema("orders").rpc("vendas_desfazer_faturado", {
+    p_id: Number(row.origem_id), p_doc: { emissao_id: row.id, tipo: row.tipo, numero: row.numero, ambiente: row.ambiente },
+  }).then(() => null, () => null);
+  await supaAdmin().schema("orders").rpc("vendas_refrescar").then(() => null, () => null);
 }
 
 /** Cancela. Só em homologação (produção: fora do escopo até o Benny decidir). */
@@ -295,6 +304,7 @@ export async function cancelar(id: number, justificativa: string): Promise<Emiss
   if (row.receber_ids?.length) {
     await supaAdmin().schema("finance").from("receber").delete().in("id", row.receber_ids).eq("origem", "painel");
   }
+  await desfazerOrigemFaturada(row);
   return await patch(id, { status: "cancelada", cancelada_em: new Date().toISOString(), receber_ids: null, mensagem: `Cancelada: ${justificativa.trim()}` });
 }
 

@@ -58,6 +58,7 @@ export async function POST(req: Request) {
     });
     await posGravar(r.id, "RC");
     await avisarCompras().catch(() => null); // avisa o time de compras da RC nova (uma vez)
+    await rpc("vendas_refrescar").catch(() => null); // Avulsos mostra a RC na hora (P1)
     return NextResponse.json({ ok: true, id: r.id, numero_rc: r.num, label });
   } catch (e) { return NextResponse.json({ error: (e as Error).message }, { status: 400 }); }
 }

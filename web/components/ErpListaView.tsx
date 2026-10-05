@@ -6,6 +6,7 @@
 // escolha fica no localStorage, por módulo. Clique na linha abre os itens.
 
 import { useEffect, useMemo, useState } from "react";
+import { ehNativo, idDoCodigo } from "@/lib/vendas";
 
 type Row = Record<string, unknown>;
 type Item = {
@@ -384,6 +385,11 @@ export default function ErpListaView({ modulo }: { modulo: "vendas" | "compras" 
                   {texto(drawer.etapa_desc)} · emissão {dataBR(drawer.emissao)} · {money(drawer.valor_total)}
                   {drawer.projeto ? ` · ${drawer.projeto}` : ""}
                 </p>
+                {modulo === "vendas" && ehNativo(drawer.codigo) && (
+                  <a href={`/erp/vendas/${idDoCodigo(drawer.codigo)}`} className="text-[12px] font-semibold text-ww-accent underline underline-offset-2">
+                    Nascido no painel — abrir, editar ou emitir NF
+                  </a>
+                )}
               </div>
               <button onClick={() => setDrawer(null)} className="text-ww-textFaint hover:text-ww-text text-xl leading-none">×</button>
             </div>

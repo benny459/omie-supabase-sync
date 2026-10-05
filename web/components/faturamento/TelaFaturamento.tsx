@@ -5,6 +5,7 @@ import {
   Aviso, BotaoTela, CabecalhoTela, Carregando, ChipFiltro, FaixaFiltros, GradeKpis, PaginaNavy, brl, cartao,
 } from "@/components/navy/tela/KitTela";
 import type { ClienteFat, DocFat, ItemFat } from "@/lib/faturamento/montar";
+import FilaVendasNativas from "@/components/vendas/FilaVendasNativas";
 
 /* Faturamento — emissão de NF-e / NFS-e / recibo pela Focus (P5, 05/10/26).
    Lista as emissões, consulta o status na Focus, abre XML/PDF e, em
@@ -158,6 +159,7 @@ export default function TelaFaturamento() {
         setAberto(false);
         carregar();
       }} />}
+      <FilaVendasNativas soAbertos titulo="PV / OS do painel a faturar" />
       <GradeKpis kpis={kpis} />
       <FaixaFiltros busca={busca} onBusca={setBusca} placeholder="Cliente, nº, PV/OS…">
         {["todos", "autorizada", "processando", "rejeitada", "erro", "cancelada"].map((s) => (
