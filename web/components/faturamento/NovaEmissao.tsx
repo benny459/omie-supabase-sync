@@ -99,6 +99,11 @@ const DICA: Record<Tipo, string> = {
 
 const VAZIO: ClienteFat = { nome: "", cnpj: "", ie: "", email: "", logradouro: "", numero: "", bairro: "", municipio: "", uf: "SP", cep: "" };
 const ITEM0: ItemFat = { codigo: "", descricao: "", quantidade: 1, valor_unitario: 0, unidade: "UN", ncm: "" };
+/** Sugestão do catálogo nativo para uma linha de item (05/10/26). */
+type ItemCat = { codigo: string; codigo_omie: string | null; descricao: string; unidade: string; ncm: string | null; cest: string | null;
+  origem: number | null; cmc: number | null; saldo: number | null; ultimo_preco: number | null; ultima_compra: string | null;
+  ultima_venda: number | null; ultima_venda_em: string | null };
+type DicaItem = { cmc: number | null; ultimo_preco: number | null; ultima_venda: number | null; saldo: number | null };
 const r2 = (n: number) => Math.round(n * 100) / 100;
 const fmt = (n: number) => n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 const hoje = () => new Date(Date.now() - 3 * 3600_000).toISOString().slice(0, 10);
@@ -191,6 +196,10 @@ export default function NovaEmissao({ config, aberto, fechar, avisar, onEmitido,
   const condHint = useRef<{ codigo?: string | null; descricao?: string | null } | null>(null);
   /** formas diferentes por parcela (escondido por padrão: as parcelas herdam a forma geral) */
   const [formaPorParcela, setFormaPorParcela] = useState(false);
+  /** autocompletar de itens: linha ativa, termo e sugestões; dicas (CMC/compra/venda/saldo) por linha */
+  const [itBusca, setItBusca] = useState<{ n: number; q: string } | null>(null);
+  const [itSug, setItSug] = useState<ItemCat[] | null>(null);
+  const [dicas, setDicas] = useState<Record<number, DicaItem>>({});
   const [conta, setConta] = useState<number | "">("");
   const [categoria, setCategoria] = useState("");
   const [projeto, setProjeto] = useState("");
@@ -230,9 +239,20 @@ export default function NovaEmissao({ config, aberto, fechar, avisar, onEmitido,
   const precisaParcelas = !naoVenda || geraCob;
   const rotTipo = naoVenda ? OP_ROT[operacao as Exclude<OperacaoTipo, "venda">] : TIPO[tipo];
 
+  /** Limpa a folha (nada do documento anterior fica para trás: parcelas, condição, histórico…). */
+  function limparFolha() {
+    setCli(VAZIO); setItens([ITEM0]); setParcs([]); setCond(""); condHint.current = null; setForma("BOL"); setConta("");
+    setCategoria(""); setProjeto(""); setCentro(""); setVendedor(""); setContrato(""); setDesconto(0); setFrete(0); setOutras(0);
+    setTransp({ modalidade: 9 }); setRet({ iss_retido: false }); setPedidoCli(""); setObs(""); setInfoContrib("");
+    setHist(null); setPre(null); setAviso(null); setCliCodigo(""); setProposta(""); setBase(hoje());
+    setNfRef(null); setNfBusca(""); setNfLista(null); setMotivo(""); setCliProjeto(""); setGeraCob(false);
+    setFormaPorParcela(false); setItBusca(null); setItSug(null); setDicas({});
+  }
+
   /** Preenche a folha a partir de um PV/OS da carteira (gaveta ou "Faturar um existente"). */
   function aplicarInicial(ini: Inicial) {
     const d = ini.documento;
+    limparFolha();
     setModo("existente");
     setChave(ini.chave ?? null); setRotulo(ini.rotulo ?? d.rotulo ?? null);
     setTipo(ini.tipo ?? "nfe");
@@ -282,7 +302,7 @@ export default function NovaEmissao({ config, aberto, fechar, avisar, onEmitido,
     carregarProximos();
     formaDefinida.current = false;
     if (inicial) aplicarInicial(inicial);
-    else { setModo("novo"); setChave(null); setRotulo(null); }
+    else { limparFolha(); setOperacao("venda"); setTipo("nfe"); setModo("novo"); setChave(null); setRotulo(null); }
     if (inicial?.secao) {
       if (inicial.secao === "cliente") setVerCliente(true);
       const alvo = inicial.secao;
@@ -389,6 +409,30 @@ export default function NovaEmissao({ config, aberto, fechar, avisar, onEmitido,
     }, 250);
     return () => window.clearTimeout(t);
   }, [docCli, empresa, aberto]);
+
+  // Autocompletar de itens: catálogo nativo (código novo/Omie ou descrição).
+  useEffect(() => {
+    if (!aberto || !itBusca || itBusca.q.trim().length < 2) { setItSug(null); return; }
+    const t = window.setTimeout(() => {
+      fetch(`/api/faturamento/nova?op=itens&emp=${empresa}&q=${encodeURIComponent(itBusca.q.trim())}${cliCodigo ? `&cli=${encodeURIComponent(cliCodigo)}` : ""}`, { cache: "no-store" })
+        .then((x) => x.json()).then((j) => setItSug(j.itens ?? [])).catch(() => setItSug([]));
+    }, 280);
+    return () => window.clearTimeout(t);
+  }, [itBusca, empresa, cliCodigo, aberto]);
+
+  /** Escolheu um item do catálogo: preenche a linha. Remessa/conserto/devolução vão pelo custo médio
+   *  (CMC → última compra); venda pelo último preço vendido a este cliente. Sempre editável. */
+  function escolherItem(n: number, c: ItemCat) {
+    const custo = c.cmc ?? c.ultimo_preco ?? null;
+    const vu = naoVenda ? custo : tipo === "nfe" ? c.ultima_venda : null;
+    setItens((its) => its.map((x, i) => (i === n ? {
+      ...x, codigo: c.codigo, descricao: c.descricao, unidade: c.unidade || "UN", ncm: c.ncm ?? x.ncm ?? "",
+      cest: c.cest ?? x.cest ?? null, origem: c.origem ?? x.origem ?? 0,
+      valor_unitario: vu != null ? Math.round(vu * 100) / 100 : x.valor_unitario,
+    } : x)));
+    setDicas((d) => ({ ...d, [n]: { cmc: c.cmc, ultimo_preco: c.ultimo_preco, ultima_venda: c.ultima_venda, saldo: c.saldo } }));
+    setItBusca(null); setItSug(null);
+  }
 
   // relógio do painel de transmissão
   useEffect(() => {
@@ -758,7 +802,7 @@ export default function NovaEmissao({ config, aberto, fechar, avisar, onEmitido,
                 <select className="ne-in" value={naoVenda ? `nfe:${operacao}` : tipo} disabled={!!chave} onChange={(e) => {
                   const [t, op] = e.target.value.split(":");
                   setTipo(t as Tipo); setOperacao((op as OperacaoTipo) ?? "venda");
-                  if (op) { setModo("novo"); setPre(null); }
+                  if (op) { setModo("novo"); setPre(null); setChave(null); setRotulo(null); setGeraCob(false); setParcs([]); setCond(""); }
                 }}>
                   <option value="nfe">NF-e (venda de produtos)</option>
                   <option value="nfe:devolucao">{OP_ROT.devolucao}</option>
@@ -918,21 +962,42 @@ export default function NovaEmissao({ config, aberto, fechar, avisar, onEmitido,
                 <thead><tr><th>Código</th><th>Descrição</th>{tipo === "nfe" && <th>NCM</th>}<th>Un</th><th className="r">Qtd</th>{operacao === "devolucao" && naoVenda && <><th className="r">Item na NF</th><th className="r">ICMS %</th></>}<th className="r">Valor unit.</th><th className="r">Total</th><th /></tr></thead>
                 <tbody>{itens.map((it, n) => (
                   <tr key={n}>
-                    <td><input className="ne-in" style={{ width: 110 }} value={it.codigo ?? ""} onChange={(e) => setItens(itens.map((x, i) => (i === n ? { ...x, codigo: e.target.value } : x)))} /></td>
-                    <td><input className="ne-in" style={{ width: "100%", minWidth: 220 }} value={it.descricao ?? ""} onChange={(e) => setItens(itens.map((x, i) => (i === n ? { ...x, descricao: e.target.value } : x)))} /></td>
+                    <td><input className="ne-in" style={{ width: 110 }} value={it.codigo ?? ""} placeholder="código"
+                      onChange={(e) => { setItens(itens.map((x, i) => (i === n ? { ...x, codigo: e.target.value } : x))); setItBusca({ n, q: e.target.value }); }}
+                      onBlur={() => window.setTimeout(() => setItBusca((b) => (b?.n === n ? null : b)), 200)} /></td>
+                    <td style={{ position: "relative" }}><input className="ne-in" style={{ width: "100%", minWidth: 220 }} value={it.descricao ?? ""} placeholder="busque pelo nome ou código"
+                      onChange={(e) => { setItens(itens.map((x, i) => (i === n ? { ...x, descricao: e.target.value } : x))); setItBusca({ n, q: e.target.value }); }}
+                      onBlur={() => window.setTimeout(() => setItBusca((b) => (b?.n === n ? null : b)), 200)} />
+                      {itBusca?.n === n && itSug && (
+                        <div className="ne-exist-lista" style={{ position: "absolute", top: "100%", left: 0, minWidth: 460, zIndex: 6, maxHeight: 280 }}>
+                          {itSug.length ? itSug.map((c) => (
+                            <button key={`${c.codigo}-${c.codigo_omie}`} type="button" className="ne-exist-it" onMouseDown={(e) => { e.preventDefault(); escolherItem(n, c); }}>
+                              <b>{c.codigo}</b>{c.codigo_omie && c.codigo_omie !== c.codigo ? <small> · Omie {c.codigo_omie}</small> : null} — {c.descricao}
+                              <small style={{ display: "block", color: "var(--ww-text-muted)" }}>
+                                {[c.ncm && `NCM ${c.ncm}`, c.cmc != null && `CMC ${fmt(c.cmc)}`, c.ultimo_preco != null && `últ. compra ${fmt(c.ultimo_preco)}`,
+                                  c.ultima_venda != null && `vendido a este cliente ${fmt(c.ultima_venda)}`, c.saldo != null && `disp. ${c.saldo}`].filter(Boolean).join(" · ")}
+                              </small>
+                            </button>)) : <div style={{ padding: 8, fontSize: 12.5 }}>Nenhum item no catálogo — preencha à mão.</div>}
+                        </div>)}
+                    </td>
                     {tipo === "nfe" && <td><input className="ne-in" style={{ width: 96 }} value={it.ncm ?? ""} onChange={(e) => setItens(itens.map((x, i) => (i === n ? { ...x, ncm: e.target.value } : x)))} /></td>}
                     <td><input className="ne-in" style={{ width: 56 }} value={it.unidade ?? "UN"} onChange={(e) => setItens(itens.map((x, i) => (i === n ? { ...x, unidade: e.target.value } : x)))} /></td>
                     <td><input className="ne-in num" style={{ width: 80 }} type="number" step="0.01" value={it.quantidade}
                       max={it.quantidade_max ?? undefined} title={it.quantidade_max != null ? `máx. ${it.quantidade_max} (NF de origem)` : undefined}
                       onChange={(e) => setItens(itens.map((x, i) => (i === n ? { ...x, quantidade: Number(e.target.value) } : x)))} />
-                      {it.quantidade_max != null && <div className="ne-dica" style={it.quantidade > it.quantidade_max ? { color: "#fca5a5" } : undefined}>máx. {it.quantidade_max}</div>}</td>
+                      {it.quantidade_max != null && <div className="ne-dica" style={it.quantidade > it.quantidade_max ? { color: "#fca5a5" } : undefined}>máx. {it.quantidade_max}</div>}
+                      {operacao !== "devolucao" && dicas[n]?.saldo != null && <div className="ne-dica" style={it.quantidade > (dicas[n]?.saldo ?? 0) ? { color: "#fca5a5" } : undefined}>
+                        disp. {dicas[n]?.saldo}{it.quantidade > (dicas[n]?.saldo ?? 0) ? " — acima do estoque" : ""}</div>}</td>
                     {operacao === "devolucao" && naoVenda && <td><input className="ne-in num" style={{ width: 56 }} type="number" min={1} title="nº do item na NF de origem" value={it.ref_item ?? n + 1}
                       onChange={(e) => setItens(itens.map((x, i) => (i === n ? { ...x, ref_item: Number(e.target.value) || null } : x)))} /></td>}
                     {operacao === "devolucao" && naoVenda && <td><input className="ne-in num" style={{ width: 64 }} type="number" step="0.01" value={it.icms_aliquota ?? 0}
                       onChange={(e) => setItens(itens.map((x, i) => (i === n ? { ...x, icms_aliquota: Number(e.target.value) } : x)))} /></td>}
-                    <td><input className="ne-in num" style={{ width: 110 }} type="number" step="0.01" value={it.valor_unitario} onChange={(e) => setItens(itens.map((x, i) => (i === n ? { ...x, valor_unitario: Number(e.target.value) } : x)))} /></td>
+                    <td><input className="ne-in num" style={{ width: 110 }} type="number" step="0.01" value={it.valor_unitario} onChange={(e) => setItens(itens.map((x, i) => (i === n ? { ...x, valor_unitario: Number(e.target.value) } : x)))} />
+                      {dicas[n] && (dicas[n].cmc != null || dicas[n].ultimo_preco != null || dicas[n].ultima_venda != null) && <div className="ne-dica">
+                        {[dicas[n].cmc != null && `CMC ${fmt(dicas[n].cmc!)}`, dicas[n].ultimo_preco != null && `últ. compra ${fmt(dicas[n].ultimo_preco!)}`,
+                          tipo === "nfe" && !naoVenda && dicas[n].ultima_venda != null && `últ. venda ${fmt(dicas[n].ultima_venda!)}`].filter(Boolean).join(" · ")}</div>}</td>
                     <td className="r">{fmt(it.quantidade * it.valor_unitario)}</td>
-                    <td><button className="ne-lk" onClick={() => setItens(itens.length > 1 ? itens.filter((_, i) => i !== n) : [ITEM0])}>remover</button></td>
+                    <td><button className="ne-lk" onClick={() => { setItens(itens.length > 1 ? itens.filter((_, i) => i !== n) : [ITEM0]); setDicas({}); }}>remover</button></td>
                   </tr>))}
                 </tbody>
               </table>
@@ -1088,7 +1153,7 @@ export default function NovaEmissao({ config, aberto, fechar, avisar, onEmitido,
 
             <div>
               <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8 }}>Prévia das contas a receber</div>
-              {parcs.length ? (
+              {!precisaParcelas ? <div style={{ fontSize: 12.5, color: "var(--ww-text-muted)" }}>Sem cobrança — esta nota não gera contas a receber{naoVenda ? " (marque “Gerar cobrança” se precisar)" : ""}.</div> : parcs.length ? (
                 <table className="ne-tab"><tbody>{parcs.map((p, n) => (
                   <tr key={n}><td>{n + 1}/{parcs.length}</td><td>{dataBR(p.vencimento)}</td><td>{p.forma}</td><td className="r">{fmt(p.valor)}</td></tr>))}
                   <tr><td colSpan={3} style={{ fontWeight: 700 }}>Total a receber</td><td className="r" style={{ fontWeight: 700 }}>{fmt(somaParc)}</td></tr>

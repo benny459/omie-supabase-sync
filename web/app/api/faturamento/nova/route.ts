@@ -3,6 +3,7 @@ import { exigirFaturamento, falha } from "@/lib/faturamento/auth";
 import { prevoo } from "@/lib/faturamento/server";
 import { supaAdmin } from "@/lib/supabase-admin";
 import type { DocFat } from "@/lib/faturamento/montar";
+import { buscarItensCrm } from "@/lib/catalogo-crm";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
@@ -14,6 +15,7 @@ export const maxDuration = 30;
  *  GET ?op=historico&emp=SF&doc=CNPJ  → últimos faturamentos do cliente ("usar como modelo")
  *  GET ?op=nf_origem&emp=SF&q=…        → NF de entrada para a devolução (Focus + espelho Omie), com itens/tributos quando há
  *  GET ?op=pessoa_doc&emp=SF&doc=CNPJ  → id do cadastro (cadastros.pessoas) pelo CNPJ/CPF
+ *  GET ?op=itens&emp=SF&q=…&cli=COD    → itens do catálogo nativo (código novo/Omie/descrição) com NCM/CEST/origem, CMC, última compra, saldo e último preço de venda ao cliente
  *  POST { op: "previa", documento }   → pré-voo (payload + checagens + parcelas), sem enviar nada
  */
 
@@ -83,6 +85,31 @@ export async function GET(req: NextRequest) {
   const op = sp.get("op") ?? "opcoes";
   const a = supaAdmin();
   try {
+    if (op === "itens") {
+      // Autocompletar dos itens da folha (05/10/26): catálogo nativo + fiscal + CMC/última compra/saldo
+      // + último preço vendido a este cliente (espelho dos PVs).
+      const termo = (sp.get("q") ?? "").trim();
+      if (termo.length < 2) return NextResponse.json({ itens: [] });
+      const base = await buscarItensCrm(termo, 10, 0, emp);
+      const cods = [...new Set(base.flatMap((b) => [b.codigo, b.codigo_omie]).filter((c): c is string => !!c))];
+      const [fis, vend] = await Promise.all([
+        cods.length ? a.schema("orders").from("fat_produto_fiscal").select("codigo_produto,ncm,cest,origem,unidade").eq("empresa", emp).in("codigo_produto", cods) : Promise.resolve({ data: [] }),
+        cods.length && sp.get("cli") ? a.schema("sales").from("itens_vendidos").select("codigo_produto,valor_unitario,d_inc_d").eq("empresa", emp)
+          .eq("codigo_cliente", sp.get("cli")!).in("codigo_produto", cods).order("d_inc_d", { ascending: false }).limit(60) : Promise.resolve({ data: [] }),
+      ]);
+      type F = { codigo_produto: string; ncm: string | null; cest: string | null; origem: number | null; unidade: string | null };
+      type V = { codigo_produto: string; valor_unitario: number; d_inc_d: string | null };
+      const fMap = new Map(((fis.data ?? []) as F[]).map((f) => [f.codigo_produto, f]));
+      const vMap = new Map<string, V>();
+      for (const v of (vend.data ?? []) as V[]) if (!vMap.has(v.codigo_produto)) vMap.set(v.codigo_produto, v);
+      return NextResponse.json({ itens: base.map((b) => {
+        const f = (b.codigo && fMap.get(b.codigo)) || (b.codigo_omie && fMap.get(b.codigo_omie)) || null;
+        const v = (b.codigo && vMap.get(b.codigo)) || (b.codigo_omie && vMap.get(b.codigo_omie)) || null;
+        return { codigo: b.codigo ?? b.codigo_omie ?? "", codigo_omie: b.codigo_omie, descricao: b.descricao, unidade: f?.unidade || b.unidade || "UN",
+          ncm: f?.ncm ?? null, cest: f?.cest ?? null, origem: f?.origem ?? null, cmc: b.cmc, saldo: b.saldo,
+          ultimo_preco: b.ultimo_preco, ultima_compra: b.ultima_compra, ultima_venda: v ? Number(v.valor_unitario) : null, ultima_venda_em: v?.d_inc_d ?? null };
+      }) });
+    }
     if (op === "proximos") {
       // Próximos números (sem consumir): PV/OS (vendas.numeracao ⊕ Omie), NF-e e recibo (fat_config).
       const { data, error } = await a.schema("orders").rpc("fat_proximos", { p_empresa: emp });
