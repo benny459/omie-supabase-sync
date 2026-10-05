@@ -16,7 +16,7 @@ export default async function ManualPagina({ params }: { params: Promise<{ slug:
     <ManualLayout atual={p.slug}>
       <div className="mn-cab">
         <div className="mn-migalha">Manual › {p.titulo}</div>
-        <h1><span aria-hidden>{p.icone}</span> {p.titulo}</h1>
+        <h1><span aria-hidden style={{ marginRight: 10 }}>{p.icone}</span>{p.titulo}</h1>
         <p className="mn-resumo">{p.resumo}</p>
         <div className="mn-meta">Última atualização: {dataBR(ultima)}</div>
       </div>

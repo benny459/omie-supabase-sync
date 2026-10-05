@@ -7,6 +7,7 @@
     "prebuild": "node scripts/manual-gerar.mjs",
     "build": "next build",
     "manual": "node scripts/manual-gerar.mjs",
+    "manual:exportar": "node scripts/manual-exportar.mjs",
     "start": "next start",
     "lint": "next lint",
     "deploy": "../scripts/publicar-painel.sh"

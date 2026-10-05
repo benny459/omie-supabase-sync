@@ -41,7 +41,11 @@
 .mn-corpo h2:first-child { border-top: 0; margin-top: 4px; }
 .mn-corpo h3 { font-size: 16px; margin: 20px 0 8px; }
 .mn-corpo p { margin: 8px 0; }
-.mn-corpo ol, .mn-corpo ul { padding-left: 22px; margin: 8px 0; }
+.mn-corpo ol, .mn-corpo ul { padding-left: 24px; margin: 8px 0; }
+.mn-corpo ol { list-style: decimal; }
+.mn-corpo ul { list-style: disc; }
+.mn-corpo ol ol, .mn-corpo ul ul, .mn-corpo ol ul { list-style: circle; }
+.mn-corpo li::marker { color: var(--mn-tx3); font-weight: 600; }
 .mn-corpo li { margin: 4px 0; }
 .mn-corpo strong { color: var(--mn-tx); }
 .mn-corpo a { color: var(--mn-acc); }
@@ -59,6 +63,6 @@
 
 .mn-mudou { max-width: 820px; margin-top: 36px; padding: 14px 16px; border-radius: 14px; border: 1px dashed var(--mn-line); }
 .mn-mudou h2 { font-size: 15px; margin: 0 0 8px; }
-.mn-mudou ul { margin: 0; padding-left: 18px; font-size: 13.5px; color: var(--mn-tx2); }
+.mn-mudou ul { margin: 0; padding-left: 18px; list-style: disc; font-size: 13.5px; color: var(--mn-tx2); }
 .mn-mudou li { margin: 3px 0; }
 .mn-data { color: var(--mn-tx3); font-variant-numeric: tabular-nums; margin-right: 6px; }

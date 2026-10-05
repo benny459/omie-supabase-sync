@@ -25,7 +25,7 @@ export default function ManualIndice({ itens, atual }: { itens: ItemIndice[]; at
         {lista.map((p) => (
           <li key={p.slug}>
             <Link href={`/manual/${p.slug}${termo ? `?q=${encodeURIComponent(q.trim())}` : ""}`} data-on={atual === p.slug ? "1" : undefined}>
-              <span aria-hidden>{p.icone}</span> {p.titulo}
+              <span aria-hidden style={{ marginRight: 8 }}>{p.icone}</span>{p.titulo}
             </Link>
           </li>
         ))}
