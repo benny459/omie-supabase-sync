@@ -48,8 +48,11 @@ export async function GET(req: Request) {
     selectPaginado<{ data_vencimento?: string | null; valor_documento?: number | null;
                      status_titulo?: string | null; codigo_cliente_fornecedor?: number | null;
                      codigo_projeto?: string | null }>(
-      () => admin.schema("finance" as never).from("contas_receber")
-      .select("data_vencimento, valor_documento, status_titulo, codigo_cliente_fornecedor, codigo_projeto")
+      // 05/10/26: lê finance.v_titulos_bi — status único (Omie + baixas do painel
+      // + contas a receber nascidas no painel), em vez do espelho cru contas_receber.
+      () => admin.schema("finance" as never).from("v_titulos_bi")
+      .select("data_vencimento:dt_vencimento, valor_documento:valor_titulo, status_titulo:status, codigo_cliente_fornecedor:cod_cliente, codigo_projeto:cod_projeto")
+      .eq("natureza", "R")
       .gte("synced_at", fromIso)
       .order("data_vencimento", { ascending: true })),
     selectPaginado<Record<string, unknown>>(

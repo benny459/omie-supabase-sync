@@ -455,7 +455,7 @@ export function montarPagarV3(o: Opts) {
         ${blocked ? `<label class="ovr"><input type="checkbox" id="bOvr" class="ck"> <span>Pagar mesmo assim — registro a justificativa abaixo (fica no histórico de auditoria)</span></label>` : ""}
         <div class="tot"><span style="color:var(--tx2)">Total debitado no banco</span><b class="num" id="bTot" style="font-size:17px"></b></div>
         <div id="bPart" style="font-size:12px;color:#f59e0b;margin-top:6px"></div>
-        <div class="origem">${r.orig === "o" ? "Título do Omie: a baixa fica registada no painel (sai do “em aberto” aqui) e entra na lista “não enviado ao Omie” — o Omie não é alterado." : "Previsão de PC do painel: a baixa vai para o livro de baixas e para a conciliação."}</div>
+        <div class="origem">${r.orig === "o" ? "Título do Omie: a baixa fica registada no painel e vale em todo o painel (BI, fluxo de caixa, fichas) como PAGO. O Omie não é mais atualizado." : "Previsão de PC do painel: a baixa vai para o livro de baixas e para a conciliação."}</div>
       </div>` : '<div class="sub2">Sem permissão para baixar (financeiro.baixar).</div>'}
     </div>
     <div class="df">${PODE.baixar ? `<button class="btn" id="dSel">${S.sel.has(id) ? "Remover do lote" : "Adicionar ao lote"}</button><button class="btn ok" id="dOk">Confirmar baixa</button>` : ""}</div>`;
@@ -494,7 +494,7 @@ export function montarPagarV3(o: Opts) {
         return `<div class="grp"><div class="grph"><span class="emp ${e}">${e}</span><b>${EN[e]}</b><span class="sub2">${rs.length} títulos · <b class="num" style="color:var(--tx)">${brl(sum(rs))}</b></span><select data-e="${e}" class="lb">${bankOpts(e, common.length === 1 ? common[0] : null)}</select></div>
         <div class="gl">${rs.sort((a, b) => a.dias - b.dias).map((r) => `<div><span class="num ${r.dias < 0 ? "neg" : ""}">${dm(r.d)}</span><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(r.forn)} <span class="sub2">· ${esc(r.cat || "Sem categoria")}</span></span><span class="num" style="text-align:right">${brl(r.v)}</span></div>`).join("")}</div></div>`; }).join("")}
       ${groups.length > 1 ? '<div class="sub2">A seleção mistura empresas — cada CNPJ baixa pelo seu próprio banco.</div>' : ""}
-      <div class="origem">Títulos do Omie ficam pagos no painel e na lista “não enviado ao Omie” (Baixas de hoje → exportar). O Omie não é alterado.</div>
+      <div class="origem">Os títulos ficam PAGOS em todo o painel (BI, fluxo de caixa, fichas). O Omie não é mais atualizado.</div>
     </div>
     <div class="df"><button class="btn" id="mC">Cancelar</button><button class="btn ok" id="mOk">Confirmar ${sel.length} baixas</button></div>`;
     ov.classList.add("on"); md.classList.add("on");
@@ -560,14 +560,12 @@ export function montarPagarV3(o: Opts) {
   /* BAIXAS DE HOJE */
   function renderHist() {
     q("tcHist").textContent = BAIXAS.length;
-    const omie = BAIXAS.filter((b) => b.omie_status === "nao_enviado").length;
-    q("pHist").innerHTML = `<div class="tbar"><span class="sub2">Baixas registadas hoje no painel (manual, lote e extrato).${omie ? ` <b style="color:#f59e0b">${omie}</b> de títulos do Omie ainda não lançadas lá.` : ""}</span><span style="margin-left:auto"></span><button class="btn sm" id="hOmie">Exportar pendentes no Omie (CSV)</button></div>` +
-      (BAIXAS.length ? `<div class="tbl"><table class="num"><thead><tr><th>Hora</th><th>Emp.</th><th>Fornecedor</th><th>Documento</th><th>Banco</th><th>Origem</th><th>Omie</th><th class="r">Valor</th><th></th></tr></thead><tbody>${BAIXAS.map((b) => `<tr><td>${new Date(b.criado_em).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}</td><td><span class="emp ${b.empresa}">${b.empresa}</span></td><td>${esc(b.contraparte)}</td><td class="mono">${esc(b.documento)}</td><td>${esc(b.conta ?? b.cod_cc)}</td><td style="color:var(--tx2)">${esc(b.origem)}${b.lote_id ? " · lote " + b.lote_id : ""}${b.forcada ? ' · <span style="color:#f87171">forçada</span>' : ""}</td><td>${b.omie_status === "nao_enviado" ? '<span class="bdg omie-nao">não enviado</span>' : '<span class="sub2">— (painel)</span>'}</td><td class="r">${brl(Number(b.valor))}</td><td class="r">${PODE.baixar ? `<button class="btn sm danger" data-est="${b.id}">Estornar</button>` : ""}</td></tr>`).join("")}</tbody></table></div>`
-        : '<div style="padding:24px;color:var(--tx3)">Nenhuma baixa registada hoje. Baixas manuais, em lote e por extrato aparecem aqui com o estado no Omie.</div>');
-    q("hOmie").onclick = async () => {
-      const r = await fetch("/api/financeiro/pagar?baixas=omie", { cache: "no-store" }); const j = await r.json().catch(() => ({}));
-      const l = j.baixas ?? []; if (!l.length) { toast("Nenhuma baixa de título do Omie pendente"); return; }
-      csv("baixas-pendentes-omie.csv", [["empresa", "cod_titulo_omie", "fornecedor", "documento", "data_pagamento", "valor", "desconto", "juros", "multa", "banco", "origem", "observacao"], ...l.map((b) => [b.empresa, b.cod_titulo, b.contraparte, b.documento, b.data, b.valor, b.desconto, b.juros, b.multa, b.conta, b.origem, b.observacao])]);
+    q("pHist").innerHTML = `<div class="tbar"><span class="sub2">Baixas registadas hoje no painel (manual, lote e extrato) — já valem no BI, no fluxo de caixa e nas fichas.</span><span style="margin-left:auto"></span><button class="btn sm" id="hOmie">Exportar baixas de hoje (CSV)</button></div>` +
+      (BAIXAS.length ? `<div class="tbl"><table class="num"><thead><tr><th>Hora</th><th>Emp.</th><th>Fornecedor</th><th>Documento</th><th>Banco</th><th>Origem</th><th class="r">Valor</th><th></th></tr></thead><tbody>${BAIXAS.map((b) => `<tr><td>${new Date(b.criado_em).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}</td><td><span class="emp ${b.empresa}">${b.empresa}</span></td><td>${esc(b.contraparte)}</td><td class="mono">${esc(b.documento)}</td><td>${esc(b.conta ?? b.cod_cc)}</td><td style="color:var(--tx2)">${esc(b.origem)}${b.lote_id ? " · lote " + b.lote_id : ""}${b.forcada ? ' · <span style="color:#f87171">forçada</span>' : ""}</td><td class="r">${brl(Number(b.valor))}</td><td class="r">${PODE.baixar ? `<button class="btn sm danger" data-est="${b.id}">Estornar</button>` : ""}</td></tr>`).join("")}</tbody></table></div>`
+        : '<div style="padding:24px;color:var(--tx3)">Nenhuma baixa registada hoje. Baixas manuais, em lote e por extrato aparecem aqui.</div>');
+    q("hOmie").onclick = () => {
+      if (!BAIXAS.length) { toast("Nenhuma baixa registada hoje"); return; }
+      csv("baixas-pagar-hoje.csv", [["empresa", "cod_titulo", "fornecedor", "documento", "data_pagamento", "valor", "desconto", "juros", "multa", "banco", "origem", "observacao"], ...BAIXAS.map((b) => [b.empresa, b.cod_titulo, b.contraparte, b.documento, b.data, b.valor, b.desconto, b.juros, b.multa, b.conta, b.origem, b.observacao])]);
     };
     qa("#pHist [data-est]").forEach((bt) => (bt.onclick = () => estornar(+bt.dataset.est)));
   }
