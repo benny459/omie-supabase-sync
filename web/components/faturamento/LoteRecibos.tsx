@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { limpo } from "@/lib/faturamento/montar";
+import { baixarPdfs, baixarZip, pdfDoLink, type Baixado } from "@/lib/faturamento/baixar";
 
 /* Recibos em lote (05/10/26): o Benny busca "4729, 4735, 4738", seleciona as OS
    e emite todos de uma vez. Cada OS é montada no servidor exatamente como a folha
@@ -32,6 +33,11 @@ export default function LoteRecibos({ empresa, docs, prod, admin, fechar, abrirF
     : { d, estado: "carregando" }));
   const [teste, setTeste] = useState(false);
   const [rodando, setRodando] = useState(false);
+  // PDFs baixados ao fim da emissão (um arquivo por recibo); guardados para o .zip.
+  const [pdfs, setPdfs] = useState<Baixado[]>([]);
+  const [baixando, setBaixando] = useState<string | null>(null);
+  // Links dos recibos emitidos nesta rodada (o estado ainda não atualizou quando o laço acaba).
+  const urlsEmitidos = useRef<string[]>([]);
   const muda = (chave: string, p: Partial<Linha>) => setLinhas((ls) => ls.map((l) => (l.d.chave === chave ? { ...l, ...p } : l)));
 
   // Monta cada OS no servidor (sem enviar nada), 3 de cada vez.
@@ -66,6 +72,7 @@ export default function LoteRecibos({ empresa, docs, prod, admin, fechar, abrirF
     const amb = teste ? "TESTE (homologação, sem numeração real)" : prod ? "PRODUÇÃO — recibos reais, com numeração sequencial" : "homologação";
     if (!window.confirm(`Emitir ${n} recibo(s) — ${BRL.format(total)} — em ${amb}?\n\n${prontas.map((l) => `${l.d.rotulo} · ${limpo(l.d.fantasia || l.d.cliente || "")}`).join("\n")}`)) return;
     setRodando(true);
+    urlsEmitidos.current = [];
     for (const l of prontas) {
       muda(l.d.chave, { estado: "emitindo" });
       const r = await fetch("/api/faturamento/carteira", { method: "POST", headers: { "content-type": "application/json" },
@@ -74,14 +81,24 @@ export default function LoteRecibos({ empresa, docs, prod, admin, fechar, abrirF
       const e = r.emissao as { status?: string; numero?: string | null; mensagem?: string | null } | undefined;
       if (r.error || !e) muda(l.d.chave, { estado: "falhou", msg: r.error ?? "sem resposta" });
       else muda(l.d.chave, { estado: e.status === "autorizada" ? "emitido" : "falhou", numero: e.numero ?? null, url: r.pdf_url ?? null, msg: e.status === "autorizada" ? null : e.mensagem ?? e.status ?? null });
+      if (e?.status === "autorizada") { const u = pdfDoLink(r.pdf_url); if (u) urlsEmitidos.current.push(u); }
     }
     setRodando(false);
     onEmitido();
+    await baixarTodos(urlsEmitidos.current);
   }
 
-  function abrirTodos() {
-    const ps = emitidos.map((l) => new URL(l.url!, location.origin).searchParams.get("p")).filter(Boolean) as string[];
-    if (ps.length) window.open(`/api/faturamento/arquivo?${ps.map((p) => `p=${encodeURIComponent(p)}`).join("&")}`, "_blank", "noopener");
+  function pdfsDe(ls: Linha[]) { return ls.map((l) => pdfDoLink(l.url)).filter(Boolean) as string[]; }
+
+  /** Um PDF por recibo, baixado direto — sem tela de visualização. */
+  async function baixarTodos(urls: string[]) {
+    if (!urls.length) return;
+    setBaixando(`Baixando 0 de ${urls.length} PDF…`);
+    const r = await baixarPdfs(urls, (f, t) => setBaixando(`Baixando ${f} de ${t} PDF…`));
+    setPdfs(r.ok);
+    setBaixando(r.falhas.length
+      ? `${r.ok.length} PDF baixado(s); ${r.falhas.length} falhou(aram): ${r.falhas[0]}`
+      : `${r.ok.length} PDF baixado(s), um por recibo. Se o navegador barrou vários downloads, use “Baixar todos (.zip)”.`);
   }
 
   const selo = (l: Linha) => ({
@@ -118,7 +135,7 @@ export default function LoteRecibos({ empresa, docs, prod, admin, fechar, abrirF
                     {selo(l)}
                     {l.estado === "bloqueado" && <div className="sub2 bad">{[l.bloqueio, ...(l.erros ?? [])].filter(Boolean).join(" · ")}</div>}
                     {l.estado === "falhou" && <div className="sub2 bad">{l.msg}</div>}
-                    {l.estado === "emitido" && l.url && <a className="sub2" href={l.url} target="_blank" rel="noopener">abrir recibo ↗</a>}
+                    {l.estado === "emitido" && l.url && <a className="sub2" href={l.url} target="_blank" rel="noopener">ver recibo ↗</a>}
                     {(l.estado === "bloqueado" || l.estado === "pronto") && !rodando && l.d.tipo === "OS" && (
                       <button className="lk" onClick={() => abrirFolha(l.d.chave)}>abrir na folha</button>
                     )}
@@ -127,6 +144,7 @@ export default function LoteRecibos({ empresa, docs, prod, admin, fechar, abrirF
               ))}
             </tbody>
           </table>
+          {baixando && <div className="alert" style={{ marginTop: 12 }}>{baixando}</div>}
           {prontas.some((l) => !l.cond?.instrucao_pagamento) && (
             <div className="alert" style={{ marginTop: 12 }}>Algum recibo vai sem dados de pagamento (conta sem banco/PIX cadastrado) — complete em Cadastros › Bancos e contas ou abra na folha.</div>
           )}
@@ -136,7 +154,8 @@ export default function LoteRecibos({ empresa, docs, prod, admin, fechar, abrirF
             {carregando ? "Montando as OS…" : <>{prontas.length} pronto(s){linhas.length - prontas.length > 0 ? ` · ${linhas.filter((l) => l.estado === "bloqueado").length} não emite(m)` : ""}<b className="mono">{BRL.format(total)}</b></>}
           </div>
           {admin && <label className="fld chk" title="Sai um recibo de teste (homologação), sem usar a numeração real"><input type="checkbox" checked={teste} disabled={rodando} onChange={(e) => setTeste(e.target.checked)} /> Teste (forçar homologação)</label>}
-          {emitidos.length > 0 && <button className="btn" onClick={abrirTodos}>Abrir todos / imprimir ({emitidos.length})</button>}
+          {emitidos.length > 0 && <button className="btn" disabled={!!baixando?.startsWith("Baixando")} onClick={() => baixarTodos(pdfsDe(emitidos))}>Baixar PDFs de novo ({emitidos.length})</button>}
+          {pdfs.length > 1 && <button className="btn" onClick={() => baixarZip(pdfs, `recibos-${empresa}-${new Date().toISOString().slice(0, 10)}.zip`)}>Baixar todos (.zip)</button>}
           <button className="btn" onClick={fechar} disabled={rodando}>{emitidos.length ? "Fechar" : "Cancelar"}</button>
           <button className="btn pri" disabled={rodando || carregando || !prontas.length} onClick={emitirTodos}>
             {rodando ? "Emitindo…" : `Emitir ${prontas.length} recibo${prontas.length === 1 ? "" : "s"}`}

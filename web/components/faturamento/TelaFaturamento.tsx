@@ -8,6 +8,7 @@ import Rascunhos from "@/components/faturamento/Rascunhos";
 import RegistrarNfse from "@/components/faturamento/RegistrarNfse";
 import ContratosRecorrentes from "@/components/faturamento/ContratosRecorrentes";
 import LoteRecibos from "@/components/faturamento/LoteRecibos";
+import { baixarPdfs, baixarZip, pdfDoLink, type Baixado } from "@/lib/faturamento/baixar";
 import "./faturamento.css";
 
 /* Faturamento PV & OS (05/10/2026) — conceito do mockup do Benny
@@ -290,22 +291,29 @@ export default function TelaFaturamento() {
     setAberto(null); setNova(true);
   }
 
-  /** Recibos já emitidos das OS selecionadas: os do painel numa página só; os do Omie em abas. */
-  async function abrirRecibosLote(fats: Doc[]) {
+  /** Recibos já emitidos das OS selecionadas: um PDF por recibo, baixado direto
+   *  (painel: recibo-pdf; Omie: documento-omie fmt=pdf). Guarda os arquivos para o .zip. */
+  const [pdfsLote, setPdfsLote] = useState<Baixado[]>([]);
+  async function baixarRecibosLote(fats: Doc[]) {
     const os = fats.map((d) => d.rotulo).join(",");
-    const w = window.open("about:blank", "_blank");
+    setOcupado("recibos-pdf");
     try {
       const r = await fetch(`/api/faturamento/recibos-lote?empresa=${empresa}&os=${encodeURIComponent(os)}&fmt=json`);
       const j = await r.json() as { painel?: string[]; omie?: string[]; error?: string };
       if (!r.ok) throw new Error(j.error || `HTTP ${r.status}`);
-      if (j.painel?.length && w) w.location.href = `/api/faturamento/recibos-lote?empresa=${empresa}&os=${encodeURIComponent(os)}`;
-      else w?.close();
-      for (const rot of j.omie ?? []) {
-        const d = fats.find((x) => x.rotulo === rot);
-        if (d) window.open(`/api/faturamento/documento-omie?empresa=${empresa}&tipo=recibo&os=${d.codigo}`, "_blank");
-      }
-      if (j.omie?.length) avisar(`${j.omie.length} recibo(s) do Omie abertos em abas separadas (o navegador pode pedir para permitir pop-ups)`);
-    } catch (e) { w?.close(); avisar(`Não abriu os recibos: ${(e as Error).message}`); }
+      const urls = [
+        ...(j.painel ?? []).map((p) => `/api/faturamento/recibo-pdf?p=${encodeURIComponent(p)}`),
+        ...(j.omie ?? []).map((rot) => fats.find((x) => x.rotulo === rot)).filter(Boolean)
+          .map((d) => `/api/faturamento/documento-omie?empresa=${empresa}&tipo=recibo&os=${d!.codigo}&fmt=pdf`),
+      ];
+      if (!urls.length) { avisar("Nenhum recibo emitido nestas OS"); return; }
+      avisar(`Baixando ${urls.length} PDF…`);
+      const res = await baixarPdfs(urls, (f, t) => avisar(`Baixando ${f} de ${t} PDF…`));
+      setPdfsLote(res.ok);
+      avisar(res.falhas.length ? `${res.ok.length} PDF baixado(s); ${res.falhas.length} falhou(aram): ${res.falhas[0]}`
+        : `${res.ok.length} PDF baixado(s), um por recibo${res.ok.length > 1 ? " — se o navegador barrou, use “.zip”" : ""}`);
+    } catch (e) { avisar(`Não baixou os recibos: ${(e as Error).message}`); }
+    finally { setOcupado(null); }
   }
   async function validarLote() {
     const lista = ordenados.filter((d) => sel.has(d.chave) && d.emite);
@@ -469,8 +477,12 @@ export default function TelaFaturamento() {
             {(() => {
               const fats = (docs ?? []).filter((d) => sel.has(d.chave) && d.tipo === "OS" && d.nfs.some((n) => /recibo/i.test(n.num)));
               return fats.length > 0
-                ? <button className="btn sm" disabled={!!ocupado} title="Abre os recibos já emitidos destas OS numa página só, um por folha, pronta para imprimir/salvar PDF"
-                    onClick={() => abrirRecibosLote(fats)}>Abrir {fats.length} recibo{fats.length === 1 ? "" : "s"}</button> : null;
+                ? <>
+                    <button className="btn sm" disabled={!!ocupado} title="Baixa um PDF por recibo, já com o nome do recibo — sem tela de visualização"
+                      onClick={() => baixarRecibosLote(fats)}>{ocupado === "recibos-pdf" ? "Baixando…" : `Baixar ${fats.length} recibo${fats.length === 1 ? "" : "s"} (PDF)`}</button>
+                    {pdfsLote.length > 1 && <button className="btn sm" title="Os mesmos PDFs num arquivo .zip (se o navegador barrou vários downloads)"
+                      onClick={() => baixarZip(pdfsLote, `recibos-${empresa}-${new Date().toISOString().slice(0, 10)}.zip`)}>.zip</button>}
+                  </> : null;
             })()}
             {(() => {
               const oss = (docs ?? []).filter((d) => sel.has(d.chave) && semNfse(d));
@@ -883,6 +895,18 @@ function Gaveta({ d, r, empresa, prod, ocupado, agir, fechar, avisar, onMudou, r
     const url = l?.[qual];
     if (url) window.open(url, "_blank", "noopener"); else avisar("Arquivo ainda não disponível");
   }
+  async function reciboPdf(id: number) {
+    let l = links[id];
+    if (!l?.pdf) {
+      const r = await fetch(`/api/faturamento/emissoes/${id}`, { cache: "no-store" }).then((x) => x.json()).catch(() => ({}));
+      if (r.error) { avisar(r.error); return; }
+      l = { xml: r.xml_url, pdf: r.pdf_url }; setLinks((m) => ({ ...m, [id]: l }));
+    }
+    const u = pdfDoLink(l?.pdf);
+    if (!u) { avisar("Recibo ainda não disponível"); return; }
+    const r = await baixarPdfs([u]);
+    if (r.falhas[0]) avisar(r.falhas[0]);
+  }
   async function atualizar(id: number) {
     const r = await fetch(`/api/faturamento/emissoes/${id}`, { cache: "no-store" }).then((x) => x.json()).catch((e) => ({ error: String(e) }));
     if (r.error) avisar(r.error); else { avisar(`Emissão #${id}: ${r.emissao.status}${r.emissao.mensagem ? ` — ${r.emissao.mensagem}` : ""}`); onMudou(); }
@@ -978,9 +1002,13 @@ function Gaveta({ d, r, empresa, prod, ocupado, agir, fechar, avisar, onMudou, r
                 </> : <>
                 {n.id && n.status === "processando" && <button className="btn ghost sm" onClick={() => atualizar(n.id!)}>Atualizar</button>}
                 {n.id && n.xml && <button className="btn ghost sm" onClick={() => arquivo(n.id!, "xml")}>XML</button>}
-                {n.id && n.pdf && <button className="btn ghost sm" onClick={() => arquivo(n.id!, "pdf")}>{n.num.startsWith("Recibo") ? "Recibo" : "PDF"}</button>}
+                {n.id && n.pdf && (n.num.startsWith("Recibo")
+                  ? <><button className="btn ghost sm" title="Baixa o recibo em PDF" onClick={() => reciboPdf(n.id!)}>Recibo (PDF)</button>
+                      <button className="btn ghost sm" title="Abre o recibo no navegador" onClick={() => arquivo(n.id!, "pdf")}>ver</button></>
+                  : <button className="btn ghost sm" onClick={() => arquivo(n.id!, "pdf")}>PDF</button>)}
                 {n.fonte === "omie" && n.num.startsWith("Recibo") && d.tipo === "OS" &&
-                  <a className="btn ghost sm" target="_blank" rel="noreferrer" href={`/api/faturamento/documento-omie?empresa=${empresa}&tipo=recibo&os=${d.codigo}`}>Ver recibo</a>}
+                  <><button className="btn ghost sm" title="Baixa o recibo em PDF" onClick={() => baixarPdfs([`/api/faturamento/documento-omie?empresa=${empresa}&tipo=recibo&os=${d.codigo}&fmt=pdf`]).then((r) => r.falhas[0] && avisar(r.falhas[0]))}>Recibo (PDF)</button>
+                  <a className="btn ghost sm" target="_blank" rel="noreferrer" href={`/api/faturamento/documento-omie?empresa=${empresa}&tipo=recibo&os=${d.codigo}`}>ver</a></>}
                 {n.fonte === "omie" && n.nid && <>
                   <a className="btn ghost sm" target="_blank" rel="noreferrer" href={`/api/faturamento/documento-omie?empresa=${empresa}&tipo=nfe&nid=${n.nid}&fmt=pdf`} title="DANFE (pedido ao Omie na 1ª vez, depois fica guardado)">DANFE</a>
                   <a className="btn ghost sm" target="_blank" rel="noreferrer" href={`/api/faturamento/documento-omie?empresa=${empresa}&tipo=nfe&nid=${n.nid}&fmt=xml`}>XML</a>
@@ -1150,7 +1178,9 @@ function Emissoes({ lista, q, onMudou, avisar }: { lista: Emissao[] | null; q: s
                 </td>
                 <td><div className="rowact">
                   {e.xml_path && <button className="btn ghost sm" disabled={ocup === e.id} onClick={() => abrir(e, "xml")}>XML</button>}
-                  {e.pdf_path && <button className="btn ghost sm" disabled={ocup === e.id} onClick={() => abrir(e, "pdf")}>{e.tipo === "recibo" ? "Recibo" : "PDF"}</button>}
+                  {e.pdf_path && e.tipo === "recibo" && <button className="btn ghost sm" disabled={ocup === e.id} title="Baixa o recibo em PDF"
+                    onClick={async () => { setOcup(e.id); const r = await baixarPdfs([`/api/faturamento/recibo-pdf?p=${encodeURIComponent(e.pdf_path!)}`]); setOcup(null); if (r.falhas[0]) avisar(r.falhas[0]); }}>Recibo (PDF)</button>}
+                  {e.pdf_path && <button className="btn ghost sm" disabled={ocup === e.id} onClick={() => abrir(e, "pdf")}>{e.tipo === "recibo" ? "ver" : "PDF"}</button>}
                   {["processando", "autorizada"].includes(e.status) && e.tipo !== "recibo" && <button className="btn ghost sm" disabled={ocup === e.id} onClick={() => atualizar(e)}>{ocup === e.id ? "…" : "Atualizar"}</button>}
                   {e.status === "autorizada" && e.ambiente === "homologacao" && <button className="btn ghost sm danger" disabled={ocup === e.id} onClick={() => cancelar(e)}>Cancelar</button>}
                 </div></td>

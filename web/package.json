@@ -1,6 +1,6 @@
 {
   "name": "waterworks-approvals-web",
-  "version": "1.6.278",
+  "version": "1.6.279",
   "private": true,
   "scripts": {
     "dev": "next dev",
@@ -15,12 +15,14 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.124.0",
     "@react-pdf/renderer": "^4.5.1",
+    "@sparticuz/chromium": "^153.0.0",
     "@supabase/ssr": "^0.10.2",
     "@supabase/supabase-js": "^2.45.4",
     "exceljs": "^4.4.0",
     "jspdf": "^4.2.1",
     "jszip": "^3.10.1",
     "next": "^16.2.4",
+    "puppeteer-core": "^25.12.0",
     "react": "19.0.0",
     "react-dom": "19.0.0",
     "react-markdown": "^10.1.0",

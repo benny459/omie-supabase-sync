@@ -3,33 +3,12 @@
 // com uma barra "Imprimir / salvar PDF" que some na impressão.
 // Vários ?p=…&p=… (recibos em lote, 05/10/26): todos numa página só, um por folha.
 import { NextResponse } from "next/server";
-import { supaAdmin } from "@/lib/supabase-admin";
 import { loadPerms } from "@/lib/require-area";
 import { canViewArea } from "@/lib/permissions";
-import { RECIBO_CSS, reciboPagamentoHtml } from "@/lib/faturamento/montar";
-import { dadosConta, instrucaoPagamento } from "@/lib/faturamento/lote";
+import { caminhoValido as valido, documentoGuardado as documento } from "@/lib/faturamento/recibo-doc";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-const BUCKET = "fat-documentos";
-const valido = (p: string) => !!p && !p.includes("..") && /\.html?$/i.test(p);
-
-/** Lê um HTML guardado e aplica o layout atual (recibos). */
-async function documento(p: string): Promise<string | null> {
-  const { data, error } = await supaAdmin().storage.from(BUCKET).download(p);
-  if (error || !data) return null;
-  let html = new TextDecoder("utf-8").decode(await data.arrayBuffer());
-  // Recibos guardados antes do layout novo: troca o estilo pelo atual (o conteúdo fica igual).
-  if (/\/recibo\//.test(p) && html.includes('class="folha"')) html = html.replace(/<style>@page[\s\S]*?<\/style>/, RECIBO_CSS);
-  // Recibos emitidos antes de 05/10/26 ~20h saíram sem o bloco "Pagamento" quando
-  // a conta não tinha chave PIX: completa com a forma e o banco da conta escolhida.
-  const mRec = p.match(/\/recibo\/(\d+)-\d+\.html?$/i);
-  if (mRec && html.includes('class="folha"') && !html.includes('class="pag"')) {
-    const pag = await pagamentoDaEmissao(Number(mRec[1])).catch(() => "");
-    if (pag) html = html.replace(/(<div class="linha"><div class="rot">Observações:)/, `${pag}\n$1`);
-  }
-  return html;
-}
 
 export async function GET(req: Request) {
   const perms = await loadPerms();
@@ -51,14 +30,4 @@ export async function GET(req: Request) {
   html = /<body[^>]*>/i.test(html) ? html.replace(/<body([^>]*)>/i, `<body$1>${barra}`) : barra + html;
   if (!/<meta[^>]+charset/i.test(html)) html = html.replace(/<head>/i, '<head><meta charset="utf-8">');
   return new NextResponse(html, { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "private, no-store" } });
-}
-
-async function pagamentoDaEmissao(id: number) {
-  const { data: e } = await supaAdmin().schema("orders").from("fat_emissoes").select("empresa, condicao").eq("id", id).maybeSingle();
-  const cond = (e?.condicao ?? null) as { forma_recebimento?: string | null; instrucao_pagamento?: string | null; conta_corrente?: number | null } | null;
-  if (!e || !cond) return "";
-  let instr = cond.instrucao_pagamento ?? "";
-  // Banco/agência/conta sempre; chave PIX quando a forma é PIX.
-  if (!instr && cond.conta_corrente) instr = instrucaoPagamento(["TRA", cond.forma_recebimento ?? ""], await dadosConta(e.empresa, cond.conta_corrente));
-  return reciboPagamentoHtml(cond.forma_recebimento ?? null, instr);
 }

@@ -3,13 +3,15 @@ import { supaAdmin } from "@/lib/supabase-admin";
 import { exigirFaturamento, falha } from "@/lib/faturamento/auth";
 import { configDe, emitente, urlArquivo } from "@/lib/faturamento/server";
 import { reciboHtml, type DocFat } from "@/lib/faturamento/montar";
+import { disposicao, nomePdf, pdfComCache } from "@/lib/faturamento/recibo-doc";
 
+export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
 /* Documentos de notas emitidas no Omie, para abrir pela carteira (sql/72).
    - tipo=recibo&os=<codigo_os>: 2ª via do recibo no nosso modelo (réplica do
-     Omie), montada do espelho da OS — não chama o Omie.
+     Omie), montada do espelho da OS — não chama o Omie. &fmt=pdf baixa em PDF.
    - tipo=nfe&nid=<nIdNF>&fmt=xml|pdf: XML/DANFE pedidos ao Omie UMA vez (só
      leitura) e guardados em fat-documentos/omie/…; os cliques seguintes vêm do
      Storage. Se o Omie limitar, devolve um erro amigável. Nada é escrito no Omie. */
@@ -22,7 +24,7 @@ export async function GET(req: NextRequest) {
   const empresa = (sp.get("empresa") || "SF").toUpperCase();
   const tipo = sp.get("tipo");
   try {
-    if (tipo === "recibo") return await recibo(empresa, String(sp.get("os") ?? ""));
+    if (tipo === "recibo") return await recibo(empresa, String(sp.get("os") ?? ""), sp.get("fmt") === "pdf");
     if (tipo === "nfe") return await nfe(empresa, String(sp.get("nid") ?? ""), sp.get("fmt") === "pdf" ? "pdf" : "xml");
     return falha("tipo inválido");
   } catch (e) {
@@ -30,7 +32,7 @@ export async function GET(req: NextRequest) {
   }
 }
 
-async function recibo(empresa: string, codigoOs: string) {
+async function recibo(empresa: string, codigoOs: string, emPdf = false) {
   if (!/^\d+$/.test(codigoOs)) return falha("OS inválida");
   const db = supaAdmin();
   const { data: linhas, error } = await db.schema("sales").from("ordens_servico")
@@ -66,6 +68,10 @@ async function recibo(empresa: string, codigoOs: string) {
   const cfg = await configDe(empresa);
   const em = await emitente(cfg);
   const html = reciboHtml(doc, em, numRecibo, false, String(l0.dt_fat_d ?? "") || null);
+  if (emPdf) {
+    const pdf = await pdfComCache(html, `omie/${empresa}/recibo/${codigoOs}-${numRecibo}.html`);
+    return new NextResponse(pdf as BodyInit, { headers: { "content-type": "application/pdf", "content-disposition": disposicao(nomePdf(html)), "cache-control": "no-store" } });
+  }
   return new NextResponse(html, { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" } });
 }
 

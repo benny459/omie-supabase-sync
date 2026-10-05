@@ -71,11 +71,13 @@ A maioria das OS fatura por **recibo**, emitido **pelo painel** — também as O
 4. Abre a lista de conferência: para cada OS, o valor a receber, o vencimento, a **forma e a conta** (as mesmas que a folha "Revisar e emitir recibo" usaria — a conta dos dados bancários da OS ou a do último faturamento do cliente), o **projeto** e a **categoria**.
    - OS que **não podem** sair (já têm recibo ou NFS-e, falta projeto/categoria, PV que fatura por NF-e) ficam em vermelho, com o motivo, e **não entram no lote**. Use **abrir na folha** para corrigir uma a uma.
 5. Clique em **Emitir N recibos** e confirme. Os recibos saem **um de cada vez, na ordem da lista**, com a numeração sequencial do painel, as contas a receber e o bloco Pagamento — exatamente como na emissão avulsa.
-6. No fim, cada linha mostra o **nº do recibo** e o link **abrir recibo**; **Abrir todos / imprimir** junta todos numa página só (um por folha) para salvar em PDF ou imprimir de uma vez.
+6. No fim, os recibos **já baixam sozinhos em PDF — um arquivo por recibo**, com o nome do recibo (ex.: *Recibo de Prestação de Serviço nº 0000004646.pdf*). Não abre tela de visualização. Se o navegador perguntar, **permita vários downloads**; se ele barrar, use **Baixar todos (.zip)**. Cada linha mostra o **nº do recibo** e o link **ver recibo**; **Baixar PDFs de novo** repete o download.
 
 > Para mudar forma, conta, vencimento ou observação de uma OS antes de emitir, use **abrir na folha** — o lote usa os dados como estão.
 
-**Reimprimir recibos já emitidos em lote:** OS **já faturadas** também podem ser marcadas (o botão de emitir ignora-as). Com elas selecionadas aparece **Abrir N recibos**: os recibos do painel abrem numa página só, um por folha; os que foram emitidos no Omie abrem em abas separadas (permita pop-ups se o navegador pedir).
+**Baixar recibos já emitidos em lote:** OS **já faturadas** também podem ser marcadas (o botão de emitir ignora-as). Com elas selecionadas aparece **Baixar N recibos (PDF)**: sai **um PDF por recibo**, já com o nome do recibo — do painel ou do Omie. Se o navegador barrar vários downloads, clique em **.zip** ao lado.
+
+**Um recibo só:** na gaveta da OS, **Recibo (PDF)** baixa o arquivo; **ver** abre no navegador.
 
 ## Como faço para mudar forma de pagamento, conta ou outro dado da nota
 
