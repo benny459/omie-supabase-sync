@@ -1,5 +1,5 @@
 {
- "geradoEm": "2026-10-05T15:56:30.615Z",
+ "geradoEm": "2026-10-05T15:57:47.875Z",
  "paginas": [
   {
    "slug": "inicio",
@@ -14,6 +14,11 @@
    "atualizado": "2026-10-05",
    "corpo": "\n## Como entrar\n\n1. Abra **https://allka.ai** no navegador do computador.\n2. Clique em **Entrar com Google** e escolha a sua conta **@waterworks.com.br** — ou use o mesmo **e-mail e senha** que você já usava no painel.\n3. Abre o **Início da WaterWorks**, com os cartões de cada área.\n\n> **Dica:** é um login só. Depois de entrar no portal, ao clicar em Operação, Compras, Faturamento, Financeiro, Cadastros, CRM, Serviços ou RH, o sistema já abre logado — não pede senha de novo.\n\n> **Atenção:** os **técnicos de campo** continuam entrando como sempre, pelo celular, em **app.waterworks.com.br**. Nada mudou para eles.\n\n## A barra de cima\n\nA barra é igual no portal, no painel e nos Serviços:\n\n| Grupo | Abas |\n|---|---|\n| Comercial | **CRM** |\n| Operação | **Operação**, **Serviços**, **Compras**, **Estoque** |\n| Gestão | **Financeiro**, **Faturamento**, **Cadastros**, **BI**, **RH** |\n\n- Passe o mouse numa aba para ver o menu dela (por exemplo, **Estoque ▾** → Itens, Catálogo, Movimentação, Inventário, Duplicidades).\n- O número vermelho em **Compras** mostra NF-e que chegaram sem pedido e requisições novas.\n- O **logo Allka** (à esquerda) leva de volta ao **Início**, de qualquer tela.\n- A **engrenagem** (à direita) é o **Sistema**: usuários, perfis e permissões.\n- O botão **?** abre este manual na página da tela em que você está.\n\n## Pesquisar (⌘K)\n\nClique em **Pesquisar…** (ou aperte **⌘K** no Mac / **Ctrl+K** no Windows) e digite um cliente, PV, OS, PC, NF ou item. Escolha o resultado para abrir direto.\n\n## Assistentes\n\n- **Pergunte ao Cesar** (no painel) e **Pergunte à Aria** (no portal e nos Serviços) respondem perguntas sobre os seus dados em português — por exemplo, “quanto falta faturar da Diaverum?”.\n\n## Aparência\n\nNo ícone de ajustes (☰ com barrinhas), escolha **Claro**, **Escuro** ou **Sistema** e a paleta dos gráficos. Ali também aparecem a versão do sistema e o horário da última sincronização.\n\n> **Dica:** quando aparecer a faixa **“Nova versão disponível”**, clique em **Atualizar agora** para pegar as últimas melhorias.\n\n## Perguntas frequentes\n\n**Não vejo uma aba que meu colega vê.** Cada pessoa vê só o que o perfil dela permite. Peça ao administrador para liberar em **Sistema → Perfis e Permissões**.\n\n**Esqueci a senha.** Use **Entrar com Google** com a conta da empresa, ou “Esqueci a senha” na tela de login.\n\n**O link antigo (painel.waterworks.com.br) ainda funciona?** Funciona, mas o caminho oficial é **allka.ai**.\n",
    "mudancas": [
+    {
+     "hash": "ecf13ed",
+     "data": "2026-10-05",
+     "texto": "Manual do usuário: /manual com uma página por aba, busca, botão ? na barra e 'o que mudou' automático (git)"
+    },
     {
      "hash": "09d994b",
      "data": "2026-10-05",
@@ -68,11 +73,6 @@
      "hash": "46e4287",
      "data": "2026-10-05",
      "texto": "barra: Faturamento vira aba própria (depois de Financeiro); CRM ALLKA sai da barra (fica no Início do portal)"
-    },
-    {
-     "hash": "0bdb565",
-     "data": "2026-10-05",
-     "texto": "P6 — Rentabilidade sobre as fontes nativas: cadeia PV/OS × PC × pago × recebido (sales.mv_rentab_pvos), tela /bi/rentabilidade, selos Pago/Receb. na Avulsos, margem da ficha do cliente pela cadeia, rótulo PV/OS no faturamento"
     }
    ]
   },
