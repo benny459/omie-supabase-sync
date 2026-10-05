@@ -290,6 +290,23 @@ export default function TelaFaturamento() {
     setAberto(null); setNova(true);
   }
 
+  /** Recibos já emitidos das OS selecionadas: os do painel numa página só; os do Omie em abas. */
+  async function abrirRecibosLote(fats: Doc[]) {
+    const os = fats.map((d) => d.rotulo).join(",");
+    const w = window.open("about:blank", "_blank");
+    try {
+      const r = await fetch(`/api/faturamento/recibos-lote?empresa=${empresa}&os=${encodeURIComponent(os)}&fmt=json`);
+      const j = await r.json() as { painel?: string[]; omie?: string[]; error?: string };
+      if (!r.ok) throw new Error(j.error || `HTTP ${r.status}`);
+      if (j.painel?.length && w) w.location.href = `/api/faturamento/recibos-lote?empresa=${empresa}&os=${encodeURIComponent(os)}`;
+      else w?.close();
+      for (const rot of j.omie ?? []) {
+        const d = fats.find((x) => x.rotulo === rot);
+        if (d) window.open(`/api/faturamento/documento-omie?empresa=${empresa}&tipo=recibo&os=${d.codigo}`, "_blank");
+      }
+      if (j.omie?.length) avisar(`${j.omie.length} recibo(s) do Omie abertos em abas separadas (o navegador pode pedir para permitir pop-ups)`);
+    } catch (e) { w?.close(); avisar(`Não abriu os recibos: ${(e as Error).message}`); }
+  }
   async function validarLote() {
     const lista = ordenados.filter((d) => sel.has(d.chave) && d.emite);
     let ok = 0, ruim = 0;
@@ -448,6 +465,12 @@ export default function TelaFaturamento() {
               const os = (docs ?? []).filter((d) => sel.has(d.chave) && d.tipo === "OS" && status(d) !== "fat");
               return os.length > 0
                 ? <button className="btn sm pri" onClick={() => setLote(ordenados.filter((d) => sel.has(d.chave)))}>Emitir {os.length} recibo{os.length === 1 ? "" : "s"}</button> : null;
+            })()}
+            {(() => {
+              const fats = (docs ?? []).filter((d) => sel.has(d.chave) && d.tipo === "OS" && d.nfs.some((n) => /recibo/i.test(n.num)));
+              return fats.length > 0
+                ? <button className="btn sm" disabled={!!ocupado} title="Abre os recibos já emitidos destas OS numa página só, um por folha, pronta para imprimir/salvar PDF"
+                    onClick={() => abrirRecibosLote(fats)}>Abrir {fats.length} recibo{fats.length === 1 ? "" : "s"}</button> : null;
             })()}
             {(() => {
               const oss = (docs ?? []).filter((d) => sel.has(d.chave) && semNfse(d));
@@ -700,7 +723,9 @@ function Lista({ rows, sel, setSel, sort, setSort, abrir, ocupado, agir, prod, r
     <th className={cls} onClick={() => setSort({ k, d: sort.k === k ? (sort.d === 1 ? -1 : 1) : -1 })}>{l}{sort.k === k ? (sort.d > 0 ? " ↑" : " ↓") : ""}</th>
   );
   const tot = rows.reduce((a, d) => a + Number(d.valor), 0), fat = rows.reduce((a, d) => a + Number(d.faturado), 0);
-  const selecionaveis = rows.filter((d) => status(d) !== "fat");
+  // Faturados também se selecionam (05/10/26): servem para abrir/imprimir os recibos em lote;
+  // a emissão em lote só considera os que ainda têm saldo.
+  const selecionaveis = rows;
   const todos = selecionaveis.length > 0 && selecionaveis.every((d) => sel.has(d.chave));
   return (
     <div className="tablebox">
@@ -721,7 +746,7 @@ function Lista({ rows, sel, setSel, sort, setSort, abrir, ocupado, agir, prod, r
             return (
               <tr key={d.chave} className={`row ${sel.has(d.chave) ? "sel" : ""}`} onClick={() => abrir(d.chave)}>
                 <td onClick={(e) => e.stopPropagation()}>
-                  <input type="checkbox" className="cb" checked={sel.has(d.chave)} disabled={st === "fat"}
+                  <input type="checkbox" className="cb" checked={sel.has(d.chave)}
                     onChange={() => { const n = new Set(sel); if (n.has(d.chave)) n.delete(d.chave); else n.add(d.chave); setSel(n); }} />
                 </td>
                 <td>

@@ -75,6 +75,8 @@ A maioria das OS fatura por **recibo**, emitido **pelo painel** — também as O
 
 > Para mudar forma, conta, vencimento ou observação de uma OS antes de emitir, use **abrir na folha** — o lote usa os dados como estão.
 
+**Reimprimir recibos já emitidos em lote:** OS **já faturadas** também podem ser marcadas (o botão de emitir ignora-as). Com elas selecionadas aparece **Abrir N recibos**: os recibos do painel abrem numa página só, um por folha; os que foram emitidos no Omie abrem em abas separadas (permita pop-ups se o navegador pedir).
+
 ## Como faço para mudar forma de pagamento, conta ou outro dado da nota
 
 1. Clique no PV/OS na carteira. A gaveta mostra **"O que vai sair na nota"**.
