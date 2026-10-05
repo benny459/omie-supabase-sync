@@ -1,0 +1,34 @@
+name: NF-e SF — referência Omie + prontidão Focus (só leitura)
+
+on:
+  workflow_dispatch:
+    inputs:
+      n:
+        description: "Quantas NF-e recentes detalhar"
+        required: false
+        default: "8"
+
+jobs:
+  ref:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Run
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          OMIE_APP_KEY_SF: ${{ secrets.OMIE_APP_KEY_SF }}
+          OMIE_APP_SECRET_SF: ${{ secrets.OMIE_APP_SECRET_SF }}
+          FOCUS_TOKEN_MASTER: ${{ secrets.FOCUS_TOKEN_MASTER }}
+          NFE_REF_N: ${{ github.event.inputs.n || '8' }}
+          PYTHONUNBUFFERED: "1"
+        run: python3 scripts/nfe_sf_referencia.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nfe-sf-referencia
+          path: saida/
+          retention-days: 3
