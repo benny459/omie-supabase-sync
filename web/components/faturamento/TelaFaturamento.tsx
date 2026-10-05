@@ -42,8 +42,8 @@ const VAZIO: ClienteFat = { nome: "", cnpj: "", ie: "", email: "", logradouro: "
 /* Destinatário de teste: a própria SF (a SEFAZ de homologação só aceita CNPJ do seu cadastro; CNPJs de terceiros vêm "não cadastrado"). */
 const TESTE: { cliente: ClienteFat; itens: ItemFat[]; parcelas: string } = {
   cliente: {
-    nome: "TESTE E2E CLIENTE LTDA", cnpj: "07578898000129", ie: "", email: "",
-    logradouro: "Rua Teste", numero: "100", bairro: "Centro", municipio: "São Paulo", codigo_municipio: "3550308", uf: "SP", cep: "01310100",
+    nome: "TESTE E2E CLIENTE LTDA", cnpj: "15766003000108", ie: "206878808115", email: "",
+    logradouro: "Avenida Tucunare", numero: "550", bairro: "Tambore", municipio: "Barueri", codigo_municipio: "3505708", uf: "SP", cep: "06460020",
   },
   itens: [{ codigo: "TESTE-E2E-01", descricao: "TESTE E2E - ELEMENTO FILTRANTE", quantidade: 2, valor_unitario: 150, unidade: "UN", ncm: "84212100" }],
   parcelas: "30/60",
