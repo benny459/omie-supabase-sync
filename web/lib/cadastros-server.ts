@@ -49,7 +49,13 @@ type J = Record<string, unknown>;
 export function filtrarFicha(papel: "cliente" | "fornecedor", f: J, q: QuemCad): J {
   const out: J = { ...f };
   if (papel === "cliente") {
-    if (!q.pode["financeiro.ver_receber"]) { out.receber = null; out.margem = null; }
+    if (!q.pode["financeiro.ver_receber"]) {
+      out.receber = null; out.margem = null;
+      // Custo, margem e pago/recebido de cada PV/OS vêm da mesma cadeia: somem juntos.
+      out.vendas = Array.isArray(f.vendas)
+        ? (f.vendas as J[]).map((v) => ({ ...v, custo: null, margemPct: null, pagoOk: null, recebidoOk: null }))
+        : f.vendas;
+    }
   } else {
     if (!q.pode["financeiro.ver_pagar"]) {
       out.pagar = null;

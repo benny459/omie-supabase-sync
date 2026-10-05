@@ -13,6 +13,7 @@
 
 import { STATUS_META } from "@/lib/columns";
 import { computeBucketAlarms, type AlarmKind } from "@/lib/alarmes";
+import type { RentabResumo } from "@/lib/rentabilidade";
 
 type AnyRow = Record<string, unknown>;
 const s = (v: unknown) => String(v ?? "").trim();
@@ -320,7 +321,7 @@ export function estrutura(p: Pedido) {
 }
 
 /** Fases nomeadas + a etapa travada (a primeira não concluída). */
-export function fases(p: Pedido, modulo: string): { lista: Fase[]; atual: Fase | null } {
+export function fases(p: Pedido, modulo: string, cadeia?: RentabResumo | null): { lista: Fase[]; atual: Fase | null } {
   const it = p.compras;
   const atrasado = (diasAte(p.lim) ?? 1) < 0;
   const E = estrutura(p);
@@ -382,6 +383,20 @@ export function fases(p: Pedido, modulo: string): { lista: Fase[]; atual: Fase |
       : { k: "NF saída", s: L.find((x) => x.k === "Mat")?.s === "d" || (nPcs && nRcb === nPcs) ? (atrasado ? "l" : "p") : "o", t: "NF de saída não emitida", next: "emitir NF de saída" });
   }
   const atual = L.find((x) => x.s !== "d" && x.s !== "na") ?? null;
+  /* Pago / Receb. (05/10/2026): o fim da cadeia — compras pagas e venda
+     recebida, de sales.mv_rentab_pvos (baixas do painel + títulos do Omie).
+     Entram DEPOIS de escolher a etapa atual: são informação de financeiro e
+     não mudam "em que etapa o pedido está", nem os filtros e o kanban. */
+  if (cadeia && modulo !== "pcs") {
+    L.push(cadeia.n_pc === 0
+      ? { k: "Pago", s: "na", t: "sem compra a pagar" }
+      : { k: "Pago", s: cadeia.pago_ok ? "d" : cadeia.n_pago > 0 ? "p" : "o", t: `${cadeia.n_pago}/${cadeia.n_pc} PCs pagos` });
+    const pr = cadeia.pct_recebido;
+    L.push(!p.faturado && !cadeia.faturado
+      ? { k: "Receb.", s: "o", t: "aguardando faturamento" }
+      : { k: "Receb.", s: cadeia.recebido_ok ? "d" : pr && pr > 0 ? "p" : "o",
+          t: cadeia.recebido_ok ? "venda recebida" : pr != null ? `${Math.round(pr * 100)}% recebido` : "sem título a receber lançado" });
+  }
   return { lista: L, atual };
 }
 

@@ -13,7 +13,9 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Origem, Papeis, Pill, brl, kbrl, ddmmaa, linkCrm, pedir, type Pessoa } from "./comum";
 
 type J = Record<string, unknown>;
-type Venda = { tipo: string; numero: string; label: string | null; emissao: string | null; valor: number | null; etapa: string | null; faturado: boolean; cancelado: boolean; dtFat: string | null; nf: string | null; projeto: string | null };
+type Venda = { tipo: string; numero: string; label: string | null; emissao: string | null; valor: number | null; etapa: string | null; faturado: boolean; cancelado: boolean; dtFat: string | null; nf: string | null; projeto: string | null;
+  /* Da cadeia (sales.mv_rentab_pvos) — mesma margem da Avulsos e da Rentabilidade. */
+  custo?: number | null; margemPct?: number | null; pagoOk?: boolean | null; recebidoOk?: boolean | null; etapaCadeia?: string | null };
 type NfSaida = { tipo: string; numero: string; serie?: string; emissao: string | null; valor: number | null; cancelada: boolean | string | null; pedido: string | null };
 type Titulo = { doc: string | null; parcela: string | null; vencimento: string | null; valor: number | null; pago: number | null; aberto?: number | null; status: string | null; origem: string | null; nf?: string | null; pedido?: string | null; pagamento?: string | null };
 type Pc = { id: number; numero: number | string; emissao: string | null; etapa: string | null; valor: number | null; aprov: string | null; pvos: string | null; cliente: string | null; nf: string | null; origem: string; cancelado: boolean };
@@ -62,7 +64,7 @@ export default function FichaPessoa({ id }: { id: number }) {
   const emAberto = vendasValidas.filter((v) => !v.faturado).reduce((a, v) => a + (v.valor ?? 0), 0);
   const gasto12 = f?.gasto.reduce((a, g) => ({ comprado: a.comprado + (g.comprado ?? 0), pago: a.pago + (g.pago ?? 0) }), { comprado: 0, pago: 0 });
   const maxGasto = Math.max(1, ...(f?.gasto ?? []).map((g) => Math.max(g.comprado ?? 0, g.pago ?? 0)));
-  const m = c?.margem as { faturamento?: number; rentabilidade?: number; margem?: number | null } | null | undefined;
+  const m = c?.margem as { faturamento?: number; rentabilidade?: number; margem?: number | null; pvos?: number; pvosMedidos?: number } | null | undefined;
 
   return (
     <div className="est">
@@ -96,8 +98,9 @@ export default function FichaPessoa({ id }: { id: number }) {
           <div className="kpi"><div className="r">Pedidos em aberto</div><div className="v">{kbrl(emAberto)}</div><div className="s">{vendasValidas.filter((v) => !v.faturado).length} PV/OS a faturar</div></div>
           {c.receber && <div className="kpi"><div className="r">A receber</div><div className="v">{kbrl(c.receber.aberto)}</div>
             <div className={`s${c.receber.vencido > 0 ? " crit" : ""}`}>{c.receber.vencido > 0 ? `${kbrl(c.receber.vencido)} vencido` : "nada vencido"}</div></div>}
-          {m && <div className="kpi"><div className="r">Margem (histórico)</div><div className="v">{m.margem != null ? `${String(m.margem).replace(".", ",")}%` : "—"}</div>
-            <div className="s">{kbrl(m.rentabilidade ?? 0)} sobre {kbrl(m.faturamento ?? 0)}</div></div>}
+          {m && <div className="kpi" title="(PV − PCs ligados) / PV, só nos PV/OS com custo lançado — a mesma conta da Avulsos e da Rentabilidade">
+            <div className="r">Margem bruta</div><div className="v">{m.margem != null ? `${String(m.margem).replace(".", ",")}%` : "—"}</div>
+            <div className="s">{kbrl(m.rentabilidade ?? 0)} sobre {kbrl(m.faturamento ?? 0)}{m.pvos != null ? ` · ${m.pvosMedidos ?? 0} de ${m.pvos} PV/OS com custo` : ""}</div></div>}
         </>}
         {f && <>
           <div className="kpi hero"><div className="r">Comprado (total)</div><div className="v">{kbrl(f.totais.comprado)}</div>
@@ -118,12 +121,18 @@ export default function FichaPessoa({ id }: { id: number }) {
       {aba === "resumo" && <Resumo p={p} c={c} f={f} />}
 
       {aba === "vendas" && c && (
-        <Tabela cab={["Pedido", "Emissão", "Projeto", "Etapa", "NF", "Valor"]} vazio="Nenhum PV/OS deste cliente."
+        <Tabela cab={["Pedido", "Emissão", "Projeto", "Etapa", "NF", "Valor", "M.B.", "Pago / recebido"]} vazio="Nenhum PV/OS deste cliente."
           linhas={c.vendas.map((v) => [
-            <b key="n">{v.label ?? `${v.tipo} ${v.numero}`}</b>, ddmmaa(v.emissao), v.projeto ?? "—",
+            <a key="n" className="link" href={`/bi/rentabilidade?pedido=${encodeURIComponent(v.label ?? "")}&empresa=${encodeURIComponent(p.empresa)}`} title="Ver a cadeia deste pedido"><b>{v.label ?? `${v.tipo} ${v.numero}`}</b></a>,
+            ddmmaa(v.emissao), v.projeto ?? "—",
             v.cancelado ? <Pill t="Cancelado" tom="off" /> : v.faturado ? <Pill t={`Faturado ${ddmmaa(v.dtFat)}`} tom="ok" /> : <Pill t={v.etapa ?? "Em aberto"} tom="info" />,
-            v.nf ?? "—", <span key="v" className="num">{brl(v.valor)}</span>])}
-          dir={[5]} />
+            v.nf ?? "—", <span key="v" className="num">{brl(v.valor)}</span>,
+            <span key="m" className="num">{v.margemPct != null ? `${(v.margemPct * 100).toFixed(1).replace(".", ",")}%` : "—"}</span>,
+            <span key="pr" style={{ display: "inline-flex", gap: 4 }}>
+              {v.custo ? <Pill t={v.pagoOk ? "Pago" : "A pagar"} tom={v.pagoOk ? "ok" : "info"} /> : null}
+              {v.faturado ? <Pill t={v.recebidoOk ? "Recebido" : "A receber"} tom={v.recebidoOk ? "ok" : "info"} /> : null}
+            </span>])}
+          dir={[5, 6]} />
       )}
       {aba === "nfs" && c && (
         <Tabela cab={["Nota", "Emissão", "Pedido / OS", "Situação", "Valor"]} vazio="Nenhuma nota fiscal emitida para este CNPJ/CPF."

@@ -20,7 +20,7 @@
  */
 
 import "./operacao.css";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { STATUS_META } from "@/lib/columns";
 import { useUserPerms } from "../UserPermsProvider";
@@ -32,6 +32,7 @@ import {
   servicoDoPedido, servicoAtrasado, tipoVenda, STATUS_SERVICO, type Servico,
   materialDoItem, MAT_MANUAL, type MatManual,
 } from "@/lib/operacao-modelo";
+import { chaveRentab, type RentabResumo } from "@/lib/rentabilidade";
 import { mudarStatus, mudarStatusEmMassa, salvarCampo, CAMPOS, type Modulo } from "@/lib/approvals-write";
 import { buildBuckets, BucketTotals, projetoDoBucket, LinkAbrirProjeto, type Bucket, type BudgetSummary } from "../BoldAvulsosView";
 import KpisNavy from "../navy/KpisNavy";
@@ -240,6 +241,20 @@ export default function TelaOperacao({ modulo, title, rows: rowsIniciais, parcia
       .then((j) => setEscondidos(j.linhas ?? j.rows ?? [])).catch(() => {});
   }, []);
   useEffect(() => { carregarEscondidos(); }, [carregarEscondidos]);
+
+  /* Pago / Receb. no fim da barra de etapas (05/10/2026): o painel já sabe se
+     as compras foram pagas e a venda recebida (sales.mv_rentab_pvos). Uma
+     busca por carga, só os selos — sem R$. */
+  const [cadeia, setCadeia] = useState<Record<string, RentabResumo>>({});
+  useEffect(() => {
+    if (modulo === "pcs") return;
+    const chaves = [...new Set(rowsIniciais
+      .filter((r) => r.pv_os_label)
+      .map((r) => chaveRentab(s(r.empresa), s(r.pv_os_label))))];
+    if (!chaves.length) return;
+    fetch("/api/rentabilidade", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ chaves }) })
+      .then((r) => (r.ok ? r.json() : null)).then((j) => { if (j?.resumo) setCadeia(j.resumo); }).catch(() => {});
+  }, [modulo, rowsIniciais]);
 
   // ── filtros ───────────────────────────────────────────────────────────
   const noScope = useMemo(() => pedidos.filter((p) => noEscopo(p, escopo)), [pedidos, escopo]);
@@ -492,6 +507,7 @@ export default function TelaOperacao({ modulo, title, rows: rowsIniciais, parcia
   const drawerCompra = drawer ? compraPorKey.get(drawer) ?? null : null;
 
   return (
+    <CadeiaCtx.Provider value={cadeia}>
     <div className={`op op-wrap op-${modulo}`} onClick={() => { setMenu(null); }}>
       {/* ── cabeçalho ── */}
       <div className="top">
@@ -781,6 +797,7 @@ export default function TelaOperacao({ modulo, title, rows: rowsIniciais, parcia
         <button onClick={() => setToast(null)} style={{ color: "inherit", opacity: 0.6 }}>✕</button>
       </div>
     </div>
+    </CadeiaCtx.Provider>
   );
 }
 
@@ -857,8 +874,30 @@ function PainelFiltros({ aberto, filtros, opcoes, modulo, onAplicar, onMudar, on
 }
 
 // ─────────────────────────────────────────────────────────────────────────
+/** Selos Pago / Receb. por pedido — o mapa vem de /api/rentabilidade. */
+const CadeiaCtx = createContext<Record<string, RentabResumo>>({});
+
+/** Resumo da cadeia do pedido. Projeto junta vários PV/OS: pago e recebido
+ *  só quando TODOS estão. */
+function cadeiaDoPedido(p: Pedido, mapa: Record<string, RentabResumo>): RentabResumo | null {
+  const doPedido = [...new Set(p.bucket.rows.filter((r) => r.pv_os_label).map((r) => chaveRentab(s(r.empresa), s(r.pv_os_label))))]
+    .map((k) => mapa[k]).filter(Boolean);
+  if (!doPedido.length) return null;
+  if (doPedido.length === 1) return doPedido[0];
+  const prs = doPedido.map((x) => x.pct_recebido).filter((x): x is number => x != null);
+  return {
+    n_pc: doPedido.reduce((a, x) => a + x.n_pc, 0),
+    n_pago: doPedido.reduce((a, x) => a + x.n_pago, 0),
+    pago_ok: doPedido.every((x) => x.pago_ok || x.n_pc === 0) && doPedido.some((x) => x.n_pc > 0),
+    faturado: doPedido.every((x) => x.faturado),
+    recebido_ok: doPedido.every((x) => x.recebido_ok),
+    pct_recebido: prs.length ? prs.reduce((a, x) => a + x, 0) / prs.length : null,
+  };
+}
+
 export function FasesBar({ p, modulo }: { p: Pedido; modulo: string }) {
-  const { lista, atual } = fases(p, modulo);
+  const mapa = useContext(CadeiaCtx);
+  const { lista, atual } = fases(p, modulo, cadeiaDoPedido(p, mapa));
   const nx = atual ? (atual.next || atual.t) : "";
   return (
     <div className="stg-wrap">

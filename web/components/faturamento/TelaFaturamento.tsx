@@ -14,7 +14,7 @@ import FilaVendasNativas from "@/components/vendas/FilaVendasNativas";
 
 type Emissao = {
   id: number; empresa: string; ambiente: "homologacao" | "producao"; tipo: "nfe" | "nfse" | "recibo";
-  origem_tipo: string; origem_id: string | null; cliente: ClienteFat; status: string; focus_status: string | null;
+  origem_tipo: string; origem_id: string | null; origem_rotulo?: string | null; cliente: ClienteFat; status: string; focus_status: string | null;
   mensagem: string | null; numero: string | null; serie: string | null; chave: string | null; valor_total: number;
   xml_path: string | null; pdf_path: string | null; receber_ids: string[] | null; autorizada_em: string | null;
   criado_por: string | null; created_at: string;
@@ -118,7 +118,7 @@ export default function TelaFaturamento() {
     if (filtro !== "todos" && e.status !== filtro) return false;
     if (!busca) return true;
     const b = busca.toLowerCase();
-    return [e.cliente?.nome, e.numero, e.origem_id, String(e.id)].some((v) => (v ?? "").toLowerCase().includes(b));
+    return [e.cliente?.nome, e.numero, e.origem_id, e.origem_rotulo, String(e.id)].some((v) => (v ?? "").toLowerCase().includes(b));
   }), [lista, filtro, busca]);
 
   const kpis = useMemo(() => {
@@ -192,7 +192,7 @@ export default function TelaFaturamento() {
                         {e.empresa} · {e.ambiente === "producao" ? "PRODUÇÃO" : "HOMOLOGAÇÃO"}
                       </div>
                     </td>
-                    <td style={td}>{e.origem_id ? `${e.origem_tipo.toUpperCase()} ${e.origem_id}` : e.origem_tipo}</td>
+                    <td style={td}>{e.origem_rotulo ?? (e.origem_id ? `${e.origem_tipo.toUpperCase()} ${e.origem_id}` : e.origem_tipo)}</td>
                     <td style={{ ...td, maxWidth: 240 }}>{e.cliente?.nome}</td>
                     <td style={{ ...td, textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{brl(Number(e.valor_total))}</td>
                     <td style={{ ...td, maxWidth: 280 }}>

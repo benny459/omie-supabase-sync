@@ -10,7 +10,7 @@ export async function GET(req: NextRequest) {
   if (q instanceof NextResponse) return q;
   const p = req.nextUrl.searchParams;
   let s = supaAdmin().schema("orders").from("fat_emissoes")
-    .select("id,empresa,ambiente,tipo,ref,origem_tipo,origem_id,cliente,status,focus_status,mensagem,numero,serie,chave,valor_total,xml_path,pdf_path,receber_ids,autorizada_em,cancelada_em,criado_por,created_at")
+    .select("id,empresa,ambiente,tipo,ref,origem_tipo,origem_id,origem_rotulo,cliente,status,focus_status,mensagem,numero,serie,chave,valor_total,xml_path,pdf_path,receber_ids,autorizada_em,cancelada_em,criado_por,created_at")
     .order("id", { ascending: false }).limit(Math.min(Number(p.get("limite") || 100), 500));
   if (p.get("origem_tipo")) s = s.eq("origem_tipo", p.get("origem_tipo")!);
   if (p.get("origem_id")) s = s.eq("origem_id", p.get("origem_id")!);

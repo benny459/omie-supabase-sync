@@ -30,6 +30,8 @@ export type Config = {
 export type Emissao = {
   id: number; empresa: string; ambiente: Ambiente; tipo: TipoDoc; ref: string;
   origem_tipo: OrigemTipo; origem_id: string | null;
+  /** PV1962 / OS4885 — preenchido pelo banco (trigger) a partir do documento nativo. */
+  origem_rotulo?: string | null;
   cliente: DocFat["cliente"]; itens: DocFat["itens"]; condicao: DocFat["condicao"];
   payload: unknown; status: string; focus_status: string | null; mensagem: string | null; erros: unknown;
   numero: string | null; serie: string | null; chave: string | null; valor_total: number;
@@ -240,7 +242,7 @@ async function posAutorizacao(row: Emissao): Promise<Emissao> {
       cliente_razao: c.nome,
       numero_documento: doc,
       numero_parcela: `${i + 1}/${ps.length}`,
-      numero_pedido: row.origem_id,
+      numero_pedido: row.origem_rotulo ?? row.origem_id,
       numero_documento_fiscal: row.numero,
       chave_nfe: row.tipo === "nfe" ? row.chave : null,
       emissao: hoje,

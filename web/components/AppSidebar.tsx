@@ -460,6 +460,20 @@ export const FINANCEIRO: NavItem[] = [
     ),
   },
   {
+    href: "/bi/rentabilidade",
+    area: "bi",
+    grupo: "bi",
+    secao: "Vendas",
+    label: "Rentabilidade",
+    tone: "text-emerald-700",
+    icon: (
+      // A cadeia: pedido → compra → dinheiro.
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className="w-5 h-5" strokeLinecap="round" strokeLinejoin="round">
+        <circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/><path d="M7 12h3M14 12h3M4 19l5-4 4 2 7-6"/>
+      </svg>
+    ),
+  },
+  {
     href: "/bi/custo-cliente",
     area: "bi",
     grupo: "bi",
