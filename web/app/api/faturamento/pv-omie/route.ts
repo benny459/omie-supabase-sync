@@ -35,7 +35,7 @@ export async function POST(req: NextRequest) {
   try {
     if (b.acao === "prevoo") {
       const { bruto, doc } = await documentoPvOmie(empresa, codigo);
-      const pre = await prevoo(doc, { nf_omie: bruto.nf_omie, emissao_painel: bruto.emissao_painel, etapa: String(bruto.pv.etapa ?? "") });
+      const pre = await prevoo(doc, { nf_omie: bruto.nf_omie, emissao_painel: bruto.emissao_painel, etapa: String(bruto.pv.etapa ?? ""), total_pv: Number(bruto.pv.valor_total) });
       return NextResponse.json({ documento: doc, ...pre });
     }
     if (b.acao === "ensaio" || b.acao === "emitir") {

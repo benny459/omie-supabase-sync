@@ -1,7 +1,7 @@
 import "server-only";
 import { supaAdmin } from "@/lib/supabase-admin";
 import { HOST, baixar, chamar, empresaFocus, tokenDe, type Ambiente } from "./focus";
-import { montarNfe, montarNfse, parcelas, reciboHtml, totalItens, validar, type DocFat, type Emitente } from "./montar";
+import { montarNfe, montarNfse, parcelas, reciboHtml, totalDoc, totalItens, validar, type DocFat, type Emitente } from "./montar";
 import { checarDoc, docFatPvOmie, type Checagem, type PvOmieDoc } from "./pv-omie";
 
 /**
@@ -142,7 +142,7 @@ export async function emitir(doc: DocFat, o: EmitirOpts): Promise<Emissao> {
     empresa: doc.empresa, ambiente: amb, tipo, ref, origem_tipo: origemTipo, origem_id: o.origem_id ?? null,
     origem_rotulo: o.origem_rotulo ?? doc.rotulo ?? null, ensaio: !!o.ensaio,
     cliente: doc.cliente, itens: doc.itens, condicao: doc.condicao ?? null,
-    valor_total: totalItens(doc.itens), status: "rascunho", criado_por: o.criado_por,
+    valor_total: totalDoc(doc.itens), status: "rascunho", criado_por: o.criado_por,
     gerar_receber: o.ensaio ? false : amb === "producao" ? true : !!o.gerar_receber_homologacao,
   }).select("*").single();
   if (error) throw new Error(error.message);
@@ -244,7 +244,7 @@ export async function prevoo(doc: DocFat, extra: Parameters<typeof checarDoc>[1]
   const payload = em ? montarNfe(doc, em, {
     natureza: cfg.natureza_operacao, serie: cfg.nfe_serie_producao, numero: cfg.nfe_proximo_producao, infoPadrao: cfg.info_complementar_padrao,
   }) : null;
-  const total = payload ? Number((payload as { valor_total: number }).valor_total) : totalItens(doc.itens);
+  const total = payload ? Number((payload as { valor_total: number }).valor_total) : totalDoc(doc.itens);
   const ps = parcelas(total, doc.condicao);
   add("Parcelas somam o total", Math.abs(ps.reduce((a, p) => a + p.valor, 0) - total) < 0.005, ps.map((p) => `${p.vencimento} R$ ${p.valor.toFixed(2)}`).join(" · "));
   const bloqueia = checagens.some((c) => !c.ok && c.nivel === "erro");
@@ -412,7 +412,7 @@ export async function urlArquivo(path: string | null) {
 export async function emitirPvOmie(empresa: string, codigo: number, o: { ensaio?: boolean; criado_por: string }) {
   const { bruto, doc } = await documentoPvOmie(empresa, codigo);
   if (!o.ensaio) {
-    const pre = await prevoo(doc, { nf_omie: bruto.nf_omie, emissao_painel: bruto.emissao_painel, etapa: String(bruto.pv.etapa ?? "") });
+    const pre = await prevoo(doc, { nf_omie: bruto.nf_omie, emissao_painel: bruto.emissao_painel, etapa: String(bruto.pv.etapa ?? ""), total_pv: Number(bruto.pv.valor_total) });
     const erros = pre.checagens.filter((c) => !c.ok && c.nivel === "erro");
     if (erros.length) throw new Error("Pré-voo com pendências: " + erros.map((c) => `${c.item} (${c.detalhe})`).join("; "));
   }

@@ -1,7 +1,7 @@
 // Documento de faturamento a partir de um PV do Omie (espelho sales.*), para a
 // SF faturar pela Focus os PVs que nasceram no Omie (05/10/2026). Puro: recebe
 // o JSON de orders.fat_pv_omie_doc e devolve o DocFat do motor (montar.ts).
-import { limpo, type DocFat } from "./montar";
+import { limpo, totalDoc, type DocFat } from "./montar";
 
 type J = Record<string, unknown>;
 const s = (v: unknown) => (v == null ? "" : String(v));
@@ -57,6 +57,8 @@ export function docFatPvOmie(empresa: string, d: PvOmieDoc): DocFat {
       quantidade: n(i.quantidade),
       valor_unitario: n(i.valor_unitario),
       valor_desconto: n(i.valor_desconto) || null,
+      // O total do item no Omie inclui o frete rateado: total − qtd×unit + desconto.
+      valor_frete: (() => { const f = Math.round((n(i.valor_total) - n(i.quantidade) * n(i.valor_unitario) + n(i.valor_desconto)) * 100) / 100; return f > 0.004 ? f : null; })(),
       unidade: s(i.unidade) || "UN",
       ncm: s(i.ncm) || null,
       cest: s(i.cest) || null,
@@ -85,7 +87,7 @@ export function docFatPvOmie(empresa: string, d: PvOmieDoc): DocFat {
 /** Checagens do pré-voo (sem enviar nada). */
 export type Checagem = { item: string; ok: boolean; nivel: "erro" | "aviso"; detalhe: string };
 
-export function checarDoc(doc: DocFat, extra: { nf_omie?: PvOmieDoc["nf_omie"]; emissao_painel?: PvOmieDoc["emissao_painel"]; etapa?: string | null }): Checagem[] {
+export function checarDoc(doc: DocFat, extra: { nf_omie?: PvOmieDoc["nf_omie"]; emissao_painel?: PvOmieDoc["emissao_painel"]; etapa?: string | null; total_pv?: number | null }): Checagem[] {
   const c = doc.cliente;
   const out: Checagem[] = [];
   const add = (item: string, ok: boolean, detalhe: string, nivel: "erro" | "aviso" = "erro") => out.push({ item, ok, nivel, detalhe });
@@ -100,6 +102,10 @@ export function checarDoc(doc: DocFat, extra: { nf_omie?: PvOmieDoc["nf_omie"]; 
   add("Cliente: IE coerente", c.indicador_ie !== "1" || so(c.ie).length >= 8, c.indicador_ie === "1" ? `contribuinte, IE ${c.ie}` : c.indicador_ie === "2" ? "isento" : "não contribuinte", "aviso");
   add("Cliente: e-mail para a NF", !!c.email, c.email || "sem e-mail (a NF não vai por e-mail)", "aviso");
   add("Itens", doc.itens.length > 0, `${doc.itens.length} item(ns)`);
+  if (extra.total_pv != null) {
+    const t = totalDoc(doc.itens);
+    add("Total da nota = total do PV", Math.abs(t - Number(extra.total_pv)) < 0.02, `nota ${t.toFixed(2)} · PV ${Number(extra.total_pv).toFixed(2)}`);
+  }
   for (const i of doc.itens) {
     add(`NCM — ${i.codigo}`, (i.ncm ?? "").replace(/\D/g, "").length === 8, i.ncm || "sem NCM");
     if (!(i.quantidade > 0 && i.valor_unitario > 0)) add(`Qtd/valor — ${i.codigo}`, false, `${i.quantidade} × ${i.valor_unitario}`);

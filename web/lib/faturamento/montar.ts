@@ -48,6 +48,7 @@ export type ItemFat = {
   cfop?: string | null;
   origem?: number | null;       // origem da mercadoria (0 nacional, 1 importação direta...)
   valor_desconto?: number | null;
+  valor_frete?: number | null;   // frete rateado no item (o Omie rateia o frete do PV pelos itens)
   servico_lc116?: string | null;               // NFS-e: item da LC116 (ex.: 0703)
   codigo_tributario_municipio?: string | null; // NFS-e: código municipal do serviço
 };
@@ -106,6 +107,11 @@ export function totalItens(itens: ItemFat[]) {
   return r2(itens.reduce((s, i) => s + r2(i.quantidade * i.valor_unitario), 0));
 }
 
+/** Valor da nota: produtos − descontos + frete rateado. */
+export function totalDoc(itens: ItemFat[]) {
+  return r2(totalItens(itens) - itens.reduce((s, i) => s + (i.valor_desconto ?? 0), 0) + itens.reduce((s, i) => s + (i.valor_frete ?? 0), 0));
+}
+
 /** Parcelas com vencimento e valor; a última absorve o arredondamento. */
 export function parcelas(total: number, cond?: CondicaoFat | null, base = hojeISO()) {
   const ps = cond?.parcelas?.length ? cond.parcelas : [{ dias: 0 }];
@@ -151,7 +157,9 @@ export function montarNfe(doc: DocFat, em: Emitente, opts: { natureza: string; s
   const mesmaUF = (em.uf || "SP").toUpperCase() === c.uf.toUpperCase();
   const ieDig = so(c.ie);
   const indIE = c.indicador_ie ?? (ieDig ? "1" : /isent/i.test(c.ie ?? "") ? "2" : "9");
-  const total = r2(totalItens(doc.itens) - r2(doc.itens.reduce((s, i) => s + (i.valor_desconto ?? 0), 0)));
+  const desconto = r2(doc.itens.reduce((s, i) => s + (i.valor_desconto ?? 0), 0));
+  const frete = r2(doc.itens.reduce((s, i) => s + (i.valor_frete ?? 0), 0));
+  const total = r2(totalItens(doc.itens) - desconto + frete);
   const ps = parcelas(total, doc.condicao);
   const aPrazo = ps.length > 1 || ps.some((p) => p.vencimento > hojeISO());
   const consumidorFinal = doc.consumidor_final ?? indIE !== "1";
@@ -177,6 +185,7 @@ export function montarNfe(doc: DocFat, em: Emitente, opts: { natureza: string; s
       valor_unitario_comercial: i.valor_unitario,
       valor_bruto: bruto,
       ...(i.valor_desconto ? { valor_desconto: r2(i.valor_desconto) } : {}),
+      ...(i.valor_frete ? { valor_frete: r2(i.valor_frete) } : {}),
       unidade_tributavel: un,
       quantidade_tributavel: i.quantidade,
       valor_unitario_tributavel: i.valor_unitario,
@@ -245,7 +254,8 @@ export function montarNfe(doc: DocFat, em: Emitente, opts: { natureza: string; s
       })),
     } : {}),
     valor_produtos: totalItens(doc.itens),
-    ...(total !== totalItens(doc.itens) ? { valor_desconto: r2(totalItens(doc.itens) - total) } : {}),
+    ...(desconto ? { valor_desconto: desconto } : {}),
+    ...(frete ? { valor_frete: frete } : {}),
     valor_total: total,
     // Cobrança sempre, como o Omie: fatura = nº da NF, duplicatas 001, 002…
     numero_fatura: String(opts.numero ?? "1"),
