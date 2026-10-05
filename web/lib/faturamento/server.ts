@@ -1,7 +1,7 @@
 import "server-only";
 import { supaAdmin } from "@/lib/supabase-admin";
 import { HOST, baixar, chamar, empresaFocus, tokenDe, type Ambiente } from "./focus";
-import { montarNfe, montarNfse, parcelas, reciboHtml, totalDoc, totalItens, totalRetencoes, validar, type DocFat, type Emitente } from "./montar";
+import { NATUREZA_OP, montarNfe, montarNfse, operacaoDe, parcelas, reciboHtml, semCobranca, totalDoc, totalItens, totalRetencoes, validar, type DocFat, type Emitente } from "./montar";
 import { checarDoc, docFatPvOmie, type Checagem, type PvOmieDoc } from "./pv-omie";
 
 /**
@@ -37,6 +37,7 @@ export type Emissao = {
   payload: unknown; status: string; focus_status: string | null; mensagem: string | null; erros: unknown;
   numero: string | null; serie: string | null; chave: string | null; valor_total: number; protocolo?: string | null;
   xml_path: string | null; pdf_path: string | null; receber_ids: string[] | null; gerar_receber: boolean;
+  operacao?: DocFat["operacao"];
   autorizada_em: string | null; cancelada_em: string | null; criado_por: string | null; created_at: string;
 };
 
@@ -130,6 +131,10 @@ export async function emitir(doc: DocFat, o: EmitirOpts): Promise<Emissao> {
   const inval = validar(doc);
   if (inval) throw new Error(inval);
   if (tipo === "nfse" && !doc.cliente.email) throw new Error("NFS-e (Barueri) exige e-mail do tomador");
+  const op = operacaoDe(doc);
+  if (op !== "venda" && tipo !== "nfe") throw new Error("Devolução/remessa só existem como NF-e");
+  // Devolução/remessa sem a opção de cobrança não criam contas a receber.
+  const semCob = op !== "venda" && semCobranca(doc);
 
   if (amb === "producao" && tipo === "nfe") await travaProducaoNfe(cfg);
   if (o.origem_id && !o.ensaio) {
@@ -145,8 +150,9 @@ export async function emitir(doc: DocFat, o: EmitirOpts): Promise<Emissao> {
     empresa: doc.empresa, ambiente: amb, tipo, ref, origem_tipo: origemTipo, origem_id: o.origem_id ?? null,
     origem_rotulo: o.origem_rotulo ?? doc.rotulo ?? null, ensaio: !!o.ensaio,
     cliente: doc.cliente, itens: doc.itens, condicao: doc.condicao ?? null,
+    operacao: op === "venda" ? null : doc.operacao ?? null,
     valor_total: totalDoc(doc.itens), status: "rascunho", criado_por: o.criado_por,
-    gerar_receber: o.ensaio ? false : amb === "producao" ? true : !!o.gerar_receber_homologacao,
+    gerar_receber: o.ensaio || semCob ? false : amb === "producao" ? true : !!o.gerar_receber_homologacao,
   }).select("*").single();
   if (error) throw new Error(error.message);
   const row = ins as Emissao;
@@ -238,6 +244,16 @@ export async function prevoo(doc: DocFat, extra: Parameters<typeof checarDoc>[1]
   const add = (item: string, ok: boolean, detalhe: string, nivel: "erro" | "aviso" = "erro") => checagens.push({ item, ok, nivel, detalhe });
   const inval = validar(doc);
   add("Documento válido", !inval, inval ?? "ok");
+  const op = operacaoDe(doc);
+  if (op !== "venda") {
+    const o = doc.operacao;
+    add("Operação", true, `${{ devolucao: "Devolução de compra", remessa: "Simples remessa", conserto: "Remessa para conserto" }[op]} — natureza "${o?.natureza || NATUREZA_OP[op]}"`, "aviso");
+    if (op === "devolucao") add("NF de origem referenciada", (o?.nf_ref?.chave ?? "").replace(/\D/g, "").length === 44,
+      o?.nf_ref?.chave ? `nº ${o.nf_ref.numero ?? "?"} · ${o.nf_ref.chave}` : "informe a chave de 44 dígitos");
+    if (op !== "devolucao") add("Projeto da remessa", !!o?.projeto_codigo, o?.projeto_codigo ? `${o.projeto_nome ?? ""} (${o.projeto_codigo})` : "escolha o projeto");
+    add("Motivo", (o?.motivo ?? "").trim().length >= 3, o?.motivo || "informe o motivo");
+    add("Cobrança", true, semCobranca(doc) ? "sem cobrança (pagamento 90) — não cria contas a receber" : "gera contas a receber pelas parcelas", "aviso");
+  }
   const prod = cfg.ambiente === "producao" && cfg.producao_liberada;
   add("Ambiente", true, prod ? "PRODUÇÃO" : "homologação (a chave de produção está desligada)", "aviso");
   add("Omie desligado para NF-e", !!cfg.omie_nfe_desligado_em, cfg.omie_nfe_desligado_em ? `desde ${cfg.omie_nfe_desligado_em}` : "ainda não confirmado — produção bloqueada", prod ? "erro" : "aviso");
@@ -254,7 +270,7 @@ export async function prevoo(doc: DocFat, extra: Parameters<typeof checarDoc>[1]
   const explicitas = doc.condicao?.parcelas ?? [];
   const somaInformada = explicitas.every((p) => p.valor != null) && explicitas.length
     ? Math.round(explicitas.reduce((a, p) => a + Number(p.valor ?? 0), 0) * 100) / 100 : liquido;
-  add(ret ? "Parcelas somam o líquido (total − retenções)" : "Parcelas somam o total", Math.abs(somaInformada - liquido) < 0.005,
+  if (!semCobranca(doc)) add(ret ? "Parcelas somam o líquido (total − retenções)" : "Parcelas somam o total", Math.abs(somaInformada - liquido) < 0.005,
     `${ps.map((p) => `${p.vencimento} R$ ${p.valor.toFixed(2)}${p.forma ? ` ${p.forma}` : ""}`).join(" · ")}${Math.abs(somaInformada - liquido) >= 0.005 ? ` — informado R$ ${somaInformada.toFixed(2)}, esperado R$ ${liquido.toFixed(2)}` : ""}`);
   const bloqueia = checagens.some((c) => !c.ok && c.nivel === "erro");
   return { checagens, payload, total, liquido, retencoes: ret, parcelas: ps, pode_emitir: !bloqueia, ambiente: prod ? "producao" : "homologacao" };

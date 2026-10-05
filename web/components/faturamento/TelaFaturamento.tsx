@@ -52,7 +52,7 @@ type Pront = {
 type Emissao = {
   id: number; empresa: string; ambiente: string; tipo: string; origem_tipo: string; origem_id: string | null; origem_rotulo?: string | null;
   cliente: { nome?: string } | null; status: string; mensagem: string | null; numero: string | null; serie: string | null;
-  valor_total: number; xml_path: string | null; pdf_path: string | null; receber_ids: string[] | null; created_at: string; ensaio?: boolean;
+  valor_total: number; xml_path: string | null; pdf_path: string | null; receber_ids: string[] | null; created_at: string; ensaio?: boolean; operacao?: { tipo?: string } | null;
 };
 
 // ── formatação ───────────────────────────────────────────────────────────────
@@ -1071,7 +1071,7 @@ function Emissoes({ lista, q, onMudou, avisar }: { lista: Emissao[] | null; q: s
               <tr key={e.id}>
                 <td className="mono">{e.id}</td>
                 <td>{new Date(e.created_at).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}</td>
-                <td><b>{TIPO_DOC[e.tipo] ?? e.tipo}</b> {e.numero ? `nº ${e.numero}` : ""}{e.serie && e.tipo !== "recibo" ? ` · série ${e.serie}` : ""}
+                <td><b>{TIPO_DOC[e.tipo] ?? e.tipo}</b>{e.operacao?.tipo ? <span className="orig" style={{ marginLeft: 4 }}>{({ devolucao: "devolução", remessa: "simples remessa", conserto: "remessa p/ conserto" } as Record<string, string>)[e.operacao.tipo] ?? e.operacao.tipo}</span> : null} {e.numero ? `nº ${e.numero}` : ""}{e.serie && e.tipo !== "recibo" ? ` · série ${e.serie}` : ""}
                   <div className="orig" style={{ color: e.ambiente === "producao" ? "var(--f-ok)" : "var(--f-warn)", fontWeight: 600 }}>{e.empresa} · {e.ambiente === "producao" ? "PRODUÇÃO" : "HOMOLOGAÇÃO"}{e.ensaio ? " · ENSAIO" : ""}</div></td>
                 <td>{e.origem_rotulo ?? (e.origem_id ? `${e.origem_tipo.toUpperCase()} ${e.origem_id}` : e.origem_tipo)}</td>
                 <td><div className="cli">{limpo(e.cliente?.nome ?? "")}</div></td>

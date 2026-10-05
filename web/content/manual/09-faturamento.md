@@ -1,6 +1,6 @@
 ---
 titulo: Faturamento
-resumo: Carteira de PV/OS, emissão de NF-e e recibo, NFS-e da prefeitura e contratos recorrentes.
+resumo: Carteira de PV/OS, emissão de NF-e (venda, devolução e remessa) e recibo, NFS-e da prefeitura e contratos recorrentes.
 icone: 🧾
 area: erp
 rotas: /faturamento
@@ -51,6 +51,22 @@ A janela acompanha: **1 · Enviando à Focus → 2 · Processando na SEFAZ → A
 
 - **Autorizada**: número/série, **chave de acesso**, protocolo, **DANFE**, **Baixar XML**, **Consultar na SEFAZ** e as **contas a receber criadas**.
 - **Rejeitada**: o motivo em português e **Corrigir e reenviar** (o formulário continua preenchido).
+
+## Como faço uma NF-e de devolução ou de simples remessa
+
+Em **+ Nova emissão › Tipo de documento**, escolha:
+
+- **NF-e de devolução (de compra)** — devolve ao fornecedor itens de uma NF de entrada (CFOP 5.202/6.202).
+  1. Em **NF de origem**, busque pelo nº, fornecedor ou CNPJ e escolha a nota (ou cole a **chave de 44 dígitos**).
+  2. O destinatário (fornecedor) e os itens vêm da nota; ajuste a **quantidade devolvida** (não pode passar da nota) e confira a **alíquota de ICMS** de cada item.
+  3. Escolha ou escreva o **Motivo** e emita.
+- **NF-e de simples remessa** (CFOP 5.949/6.949) ou **remessa p/ conserto** (5.915/6.915) — envia material sem venda.
+  1. Escolha o **destinatário** no cadastro, o **Projeto** (obrigatório; **+ Novo projeto** cria na hora), **Para qual cliente** e o **Motivo**.
+  2. Informe os itens e emita.
+
+> **Atenção:** essas notas usam a **mesma numeração da NF-e de venda** (série 1) e **não criam contas a receber**. Se precisar, marque **Gerar cobrança** (remessa) ou **Gerar crédito a receber do fornecedor** (devolução) e preencha o Recebimento.
+
+> **Dica:** a nota sai no mesmo formato do Omie: devolução com a NF de origem referenciada e “Motivo da Devolucao” nas informações complementares; remessa com “Projeto · Cliente · Motivo”.
 
 ## NFS-e da prefeitura
 

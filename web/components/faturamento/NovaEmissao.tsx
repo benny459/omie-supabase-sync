@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { ClienteFat, CondicaoFat, DocFat, ItemFat, RetencoesFat, TransporteFat } from "@/lib/faturamento/montar";
+import type { ClienteFat, CondicaoFat, DocFat, ItemFat, OperacaoNfe, OperacaoTipo, RetencoesFat, TransporteFat } from "@/lib/faturamento/montar";
 import { BuscaPessoa, BuscaProposta, clienteDaPessoa, pessoaCompleta } from "@/components/vendas/BuscasCrmCadastro";
 import { BotaoNovoProjeto } from "@/components/cadastros/NovoProjetoRapido";
 import "./nova-emissao.css";
@@ -71,6 +71,24 @@ type Checagem = { item: string; ok: boolean; nivel: "erro" | "aviso"; detalhe: s
 type Prox = { pv?: number; os?: number; nfe?: number | null; nfe_serie?: string; recibo?: number | null; ambiente?: string };
 /** Linha da carteira para "Faturar um PV/OS existente". */
 type CartDoc = { chave: string; tipo: "PV" | "OS"; rotulo: string; cliente: string | null; valor: number; faturado: number; emite: boolean; emite_motivo?: string; aguarda_nfse?: boolean };
+/** NF-e que não é venda (05/10/26) — devolução de compra, simples remessa e
+ *  remessa p/ conserto, como a SF emitia no Omie (CFOP 5.202/6.202, 5.949/6.949,
+ *  5.915/6.915). Numeração: a mesma série da NF-e de venda. */
+const OP_ROT: Record<Exclude<OperacaoTipo, "venda">, string> = {
+  devolucao: "NF-e de devolução (de compra)", remessa: "NF-e de simples remessa", conserto: "NF-e de remessa p/ conserto",
+};
+const OP_DICA: Record<Exclude<OperacaoTipo, "venda">, string> = {
+  devolucao: "Devolve ao fornecedor itens de uma NF de entrada (CFOP 5.202/6.202). Referencia a NF de origem; sem cobrança.",
+  remessa: "Envia material sem venda (CFOP 5.949/6.949) — para o projeto/cliente, com motivo. Sem cobrança.",
+  conserto: "Envia um bem para conserto ou reparo (CFOP 5.915/6.915). Sem cobrança.",
+};
+const MOTIVOS: Record<Exclude<OperacaoTipo, "venda">, string[]> = {
+  devolucao: ["Mercadoria em desacordo com o pedido", "Mercadoria com defeito / avaria", "Quantidade enviada a maior", "Item cancelado pelo comprador"],
+  remessa: ["Remessa de material para instalação/obra do projeto", "Remessa de material para manutenção/reposição", "Remessa em demonstração", "Remessa para teste"],
+  conserto: ["Remessa para conserto/reparo", "Remessa para manutenção em garantia"],
+};
+type NfOrigem = { fonte: "focus" | "omie"; chave: string; numero: string; serie: string | null; emissao: string | null; emitente: string | null;
+  emitente_doc: string; valor: number; natureza: string | null; itens: (ItemFat & { cest?: string | null })[] };
 const DICA: Record<Tipo, string> = {
   nfe: "Cria o PV na sequência e emite a NF-e na SEFAZ (Focus).",
   recibo: "Cria a OS na sequência e gera o recibo de prestação de serviço.",
@@ -180,6 +198,14 @@ export default function NovaEmissao({ config, aberto, fechar, avisar, onEmitido,
   const [obs, setObs] = useState("");
   const [infoContrib, setInfoContrib] = useState("");
   const [teste, setTeste] = useState(false);   // admin: força homologação
+  // NF-e não-venda (devolução / simples remessa / conserto)
+  const [operacao, setOperacao] = useState<OperacaoTipo>("venda");
+  const [nfRef, setNfRef] = useState<NonNullable<OperacaoNfe["nf_ref"]> | null>(null);
+  const [nfBusca, setNfBusca] = useState("");
+  const [nfLista, setNfLista] = useState<NfOrigem[] | null>(null);
+  const [motivo, setMotivo] = useState("");
+  const [cliProjeto, setCliProjeto] = useState("");
+  const [geraCob, setGeraCob] = useState(false);
   // histórico
   const [hist, setHist] = useState<Hist[] | null>(null);
   // pré-voo e transmissão
@@ -192,6 +218,9 @@ export default function NovaEmissao({ config, aberto, fechar, avisar, onEmitido,
   const cfg = config.find((c) => c.empresa === empresa);
   const prod = cfg?.ambiente === "producao" && cfg?.producao_liberada && !teste;
   const ehOs = tipo !== "nfe";
+  const naoVenda = tipo === "nfe" && operacao !== "venda";
+  const precisaParcelas = !naoVenda || geraCob;
+  const rotTipo = naoVenda ? OP_ROT[operacao as Exclude<OperacaoTipo, "venda">] : TIPO[tipo];
 
   /** Preenche a folha a partir de um PV/OS da carteira (gaveta ou "Faturar um existente"). */
   function aplicarInicial(ini: Inicial) {
@@ -268,6 +297,36 @@ export default function NovaEmissao({ config, aberto, fechar, avisar, onEmitido,
   function voltarNovo() {
     setModo("novo"); setChave(null); setRotulo(null); setBuscaExist("");
     setCli(VAZIO); setItens([ITEM0]); setParcs([]); setCliCodigo(""); setProposta("");
+    setNfRef(null); setNfBusca(""); setNfLista(null); setMotivo(""); setCliProjeto(""); setGeraCob(false);
+  }
+
+  // Devolução: busca a NF de entrada (Focus + espelho do Omie)
+  useEffect(() => {
+    if (!aberto || operacao !== "devolucao" || nfBusca.trim().length < 2) { setNfLista(null); return; }
+    const t = window.setTimeout(() => {
+      fetch(`/api/faturamento/nova?op=nf_origem&emp=${empresa}&q=${encodeURIComponent(nfBusca.trim())}`, { cache: "no-store" })
+        .then((x) => x.json()).then((j) => setNfLista(j.notas ?? [])).catch(() => setNfLista([]));
+    }, 300);
+    return () => window.clearTimeout(t);
+  }, [nfBusca, operacao, empresa, aberto]);
+
+  /** Escolheu a NF de origem: destinatário = fornecedor (cadastro) e itens da nota. */
+  async function escolherNfOrigem(n: NfOrigem) {
+    setNfRef({ chave: n.chave, numero: n.numero, serie: n.serie, emitente_doc: n.emitente_doc, emissao: n.emissao });
+    setNfLista(null); setNfBusca(`${n.numero} · ${n.emitente ?? ""}`);
+    if (n.itens.length) {
+      setItens(n.itens.map((i) => ({ codigo: i.codigo, descricao: i.descricao, unidade: i.unidade || "UN", ncm: i.ncm ?? "", cest: i.cest ?? null,
+        quantidade: i.quantidade, quantidade_max: i.quantidade, valor_unitario: i.valor_unitario, origem: i.origem ?? 0,
+        icms_aliquota: i.icms_aliquota, pis_cst: i.pis_cst, pis_aliquota: i.pis_aliquota, cofins_cst: i.cofins_cst, cofins_aliquota: i.cofins_aliquota,
+        info_item: i.codigo ? `-${i.codigo}-` : null })));
+    } else setAviso("Esta NF não tem os itens no sistema (só o resumo). Informe os itens devolvidos e a alíquota de ICMS da nota de origem.");
+    if (n.emitente_doc) {
+      const r = await fetch(`/api/faturamento/nova?op=pessoa_doc&emp=${empresa}&doc=${n.emitente_doc}`, { cache: "no-store" }).then((x) => x.json()).catch(() => null);
+      const p = r?.id ? await pessoaCompleta(r.id) : null;
+      if (p) { setCli(clienteDaPessoa(p)); setCliCodigo(String(r.codigo ?? "")); setVerCliente(false); }
+      else { setCli({ ...VAZIO, nome: n.emitente ?? "", cnpj: n.emitente_doc }); setVerCliente(true);
+        setAviso("Fornecedor sem cadastro completo — preencha o endereço do destinatário (ou cadastre-o em Cadastros › Fornecedores)."); }
+    }
   }
 
   // histórico do cliente quando o CNPJ/CPF muda
@@ -371,8 +430,8 @@ export default function NovaEmissao({ config, aberto, fechar, avisar, onEmitido,
     const condNome = opc?.condicoes.find((c) => c.codigo === cond)?.nome;
     const condicao: CondicaoFat = {
       codigo: cond || null, descricao: condNome ?? undefined,
-      parcelas: parcs.map((p) => ({ vencimento: p.vencimento, valor: p.valor, forma: p.forma, dias: diasEntre(base, p.vencimento) })),
-      forma_pagamento: tpag && tpag !== "99" ? tpag : undefined,
+      parcelas: precisaParcelas ? parcs.map((p) => ({ vencimento: p.vencimento, valor: p.valor, forma: p.forma, dias: diasEntre(base, p.vencimento) })) : [],
+      forma_pagamento: precisaParcelas && tpag && tpag !== "99" ? tpag : undefined,
       forma_recebimento: forma, conta_corrente: conta === "" ? null : Number(conta), conta_nome: contaNome,
       categoria: categoria || null, projeto: projeto || null, centro_custo: centro || null, vendedor: vendedor || null,
       contrato: contrato || null, retencoes: ehOs ? ret : null,
@@ -385,7 +444,27 @@ export default function NovaEmissao({ config, aberto, fechar, avisar, onEmitido,
       transporte: tipo === "nfe" ? transp : null,
       info_contribuinte: infoContrib || null,
       rotulo: rotulo ?? null,
+      operacao: naoVenda ? {
+        tipo: operacao, nf_ref: operacao === "devolucao" ? nfRef : null, motivo: motivo.trim() || null,
+        projeto_codigo: operacao !== "devolucao" ? projeto || null : null,
+        projeto_nome: operacao !== "devolucao" ? opc?.projetos.find((x) => x.codigo === projeto)?.nome ?? null : null,
+        cliente_projeto: operacao !== "devolucao" ? cliProjeto.trim() || null : null,
+        gera_cobranca: geraCob,
+      } : null,
     };
+  }
+
+  /** NF-e não-venda: o que falta antes de emitir. */
+  function faltaOperacao(): string | null {
+    if (!naoVenda) return null;
+    if (!cli.nome || !(cli.cnpj || cli.cpf)) return "Escolha o destinatário.";
+    if (operacao === "devolucao") {
+      if ((nfRef?.chave ?? "").replace(/\D/g, "").length !== 44) return "Escolha a NF de origem (ou cole a chave de 44 dígitos).";
+      const passou = itens.find((i) => i.quantidade_max != null && i.quantidade > i.quantidade_max);
+      if (passou) return `${passou.descricao}: a quantidade passa da NF de origem (${passou.quantidade_max}).`;
+    } else if (!projeto) return "Escolha o projeto da remessa.";
+    if (motivo.trim().length < 3) return "Informe o motivo.";
+    return null;
   }
 
   async function validar() {
@@ -398,7 +477,7 @@ export default function NovaEmissao({ config, aberto, fechar, avisar, onEmitido,
 
   /** Documento novo: o que falta para criar o PV/OS na sequência. */
   function faltaNovo(): string | null {
-    if (modo !== "novo" || teste) return null;
+    if (modo !== "novo" || teste || naoVenda) return null;
     if (!cliCodigo) return "Escolha o cliente pela busca do cadastro (nome, fantasia ou CNPJ/CPF) — o PV/OS novo precisa do código do cadastro.";
     if (!proposta.trim()) {
       if (!admin) return "Escolha a proposta do CRM deste documento.";
@@ -409,17 +488,17 @@ export default function NovaEmissao({ config, aberto, fechar, avisar, onEmitido,
   }
 
   async function emitirAgora() {
-    const falta = faltaNovo();
+    const falta = faltaNovo() ?? faltaOperacao();
     if (falta) { setAviso(falta); return; }
     const soCriaOs = modo === "novo" && !chave && tipo === "nfse" && !teste;
-    if (!soCriaOs && !parcOk) { setAviso(`As parcelas (${fmt(somaParc)}) não somam o valor a receber (${fmt(liquido)}).`); return; }
+    if (!soCriaOs && precisaParcelas && !parcOk) { setAviso(`As parcelas (${fmt(somaParc)}) não somam o valor a receber (${fmt(liquido)}).`); return; }
     const numTxt = modo === "novo" && !teste
-      ? (tipo === "nfe" ? ` (PV ${prox?.pv ?? "?"} · NF-e ${prox?.nfe ?? "?"})` : tipo === "recibo" ? ` (OS ${prox?.os ?? "?"} · Recibo ${prox?.recibo ?? "?"})` : ` (OS ${prox?.os ?? "?"})`) : "";
+      ? (naoVenda ? ` (NF-e ${prox?.nfe ?? "?"})` : tipo === "nfe" ? ` (PV ${prox?.pv ?? "?"} · NF-e ${prox?.nfe ?? "?"})` : tipo === "recibo" ? ` (OS ${prox?.os ?? "?"} · Recibo ${prox?.recibo ?? "?"})` : ` (OS ${prox?.os ?? "?"})`) : "";
     const msg = soCriaOs
       ? `Criar a OS${numTxt} para ${cli.nome}? A NFS-e será emitida na prefeitura e registrada depois.`
       : prod
-        ? `EMITIR ${TIPO[tipo]} DE PRODUÇÃO (documento fiscal real)${numTxt} para ${cli.nome} — ${fmt(total)}?`
-        : `Emitir ${TIPO[tipo]} em HOMOLOGAÇÃO (sem valor fiscal)?${modo === "novo" ? " Nenhum PV/OS será criado (teste)." : ""}`;
+        ? `EMITIR ${rotTipo} DE PRODUÇÃO (documento fiscal real)${numTxt} para ${cli.nome} — ${fmt(total)}?`
+        : `Emitir ${rotTipo} em HOMOLOGAÇÃO (sem valor fiscal)?${modo === "novo" && !naoVenda ? " Nenhum PV/OS será criado (teste)." : ""}`;
     if (!window.confirm(msg)) return;
     const documento = montarDocumento();
     setTx({ fase: "enviando", inicio: Date.now() });
@@ -428,7 +507,7 @@ export default function NovaEmissao({ config, aberto, fechar, avisar, onEmitido,
           body: JSON.stringify({ empresa, chave, acao: "emitir", documento }) }).then((x) => x.json()).catch((e) => ({ error: String(e) }))
       : await fetch("/api/faturamento/emitir", { method: "POST", headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ documento, tipo,
-            novo: teste ? null : { cliente_codigo: cliCodigo, proposta: proposta.trim() || null, sem_proposta_motivo: proposta.trim() ? null : semPropMotivo.trim() },
+            novo: teste || naoVenda ? null : { cliente_codigo: cliCodigo, proposta: proposta.trim() || null, sem_proposta_motivo: proposta.trim() ? null : semPropMotivo.trim() },
             origem_tipo: teste ? "teste" : "manual",
             gerar_receber_homologacao: teste, forcar_homologacao: teste }) }).then((x) => x.json()).catch((e) => ({ error: String(e) }));
     if (r.criado) { setCriado(r.criado); carregarProximos(); }
@@ -516,7 +595,7 @@ export default function NovaEmissao({ config, aberto, fechar, avisar, onEmitido,
       <div className="ne-fundo" onClick={(ev) => { if (ev.target === ev.currentTarget) sair(); }}>
         <div className="ne-folha" role="dialog" aria-label="Transmissão">
           <div className="ne-topo">
-            <h2>{recibo ? "Recibo" : TIPO[tipo]} — transmissão</h2>
+            <h2>{recibo ? "Recibo" : rotTipo} — transmissão</h2>
             <span className={`amb ${e.ambiente === "producao" || (!e.ambiente && prod) ? "prod" : "hom"}`}>{e.ambiente === "producao" || (!e.ambiente && prod) ? "PRODUÇÃO" : "HOMOLOGAÇÃO"}</span>
             {tx.fase !== "final" && <span style={{ fontSize: 12.5, color: "var(--ww-text-muted)" }}>{seg}s</span>}
             <button className="ne-x" onClick={sair} aria-label="Fechar">✕</button>
@@ -542,7 +621,7 @@ export default function NovaEmissao({ config, aberto, fechar, avisar, onEmitido,
               )}
               {okFinal && (
                 <div className="ne-resultado ok">
-                  <h3>✓ {recibo ? "Recibo gerado" : `${TIPO[tipo]} autorizada`}</h3>
+                  <h3>✓ {recibo ? "Recibo gerado" : `${rotTipo} autorizada`}</h3>
                   <div className="ne-kv">
                     {(criado || e.origem_rotulo) && <><span>{tipo === "nfe" ? "Pedido (PV)" : "Ordem de serviço"}</span><span><b>{criado?.label ?? String(e.origem_rotulo)}</b>{criado ? " — criado agora, na sequência" : ""}</span></>}
                     <span>Número / série</span><span><b>{String(e.numero ?? "—")}</b> / {String(e.serie ?? "—")}</span>
@@ -595,13 +674,13 @@ export default function NovaEmissao({ config, aberto, fechar, avisar, onEmitido,
     <div className="ne-fundo" onClick={(ev) => { if (ev.target === ev.currentTarget) sair(); }}>
       <div className="ne-folha" role="dialog" aria-label="Nova emissão">
         <div className="ne-topo">
-          <h2>{rotulo ? `Emitir ${TIPO[tipo]} — ${rotulo}` : "Nova emissão"}</h2>
+          <h2>{rotulo ? `Emitir ${rotTipo} — ${rotulo}` : "Nova emissão"}</h2>
           <span className={`amb ${prod ? "prod" : "hom"}`}>{prod ? "PRODUÇÃO — documento fiscal real" : "HOMOLOGAÇÃO — sem valor fiscal"}</span>
           <button className="ne-x" onClick={sair} aria-label="Fechar">✕</button>
         </div>
         <div className="ne-corpo">
           <div className="ne-main">
-            {!chave && (
+            {!chave && !naoVenda && (
               <div className="ne-modo" role="tablist">
                 <button role="tab" className={modo === "novo" ? "on" : ""} onClick={() => modo !== "novo" && voltarNovo()}>Novo documento</button>
                 <button role="tab" className={modo === "existente" ? "on" : ""} onClick={() => { setModo("existente"); setCarteira(null); }}>Faturar um PV/OS existente</button>
@@ -614,18 +693,26 @@ export default function NovaEmissao({ config, aberto, fechar, avisar, onEmitido,
                 </select>
               </label>
               <label className="ne-rot" style={{ width: 280 }}>Tipo de documento
-                <select className="ne-in" value={tipo} disabled={!!chave} onChange={(e) => setTipo(e.target.value as Tipo)}>
+                <select className="ne-in" value={naoVenda ? `nfe:${operacao}` : tipo} disabled={!!chave} onChange={(e) => {
+                  const [t, op] = e.target.value.split(":");
+                  setTipo(t as Tipo); setOperacao((op as OperacaoTipo) ?? "venda");
+                  if (op) { setModo("novo"); setPre(null); }
+                }}>
                   <option value="nfe">NF-e (venda de produtos)</option>
+                  <option value="nfe:devolucao">{OP_ROT.devolucao}</option>
+                  <option value="nfe:remessa">{OP_ROT.remessa}</option>
+                  <option value="nfe:conserto">{OP_ROT.conserto}</option>
                   <option value="recibo">Recibo de serviço (OS)</option>
                   <option value="nfse">NFS-e da prefeitura (registrar)</option>
                 </select>
-                <span className="ne-dica">{DICA[tipo]}</span>
+                <span className="ne-dica">{naoVenda ? OP_DICA[operacao as Exclude<OperacaoTipo, "venda">] : DICA[tipo]}</span>
               </label>
               {modo === "novo" && !chave && (
                 <div className="ne-nums" title="O número final é confirmado na emissão (outra emissão pode usar este antes)">
                   {teste ? <span>Teste: nenhum PV/OS é criado e a numeração real não é usada</span> : <>
                     <span className="k">Será gerado</span>
-                    {tipo === "nfe" && <b>PV nº {prox?.pv ?? "…"} · NF-e nº {prox?.nfe ?? "…"}{prox?.nfe_serie ? ` (série ${prox.nfe_serie})` : ""}</b>}
+                    {tipo === "nfe" && !naoVenda && <b>PV nº {prox?.pv ?? "…"} · NF-e nº {prox?.nfe ?? "…"}{prox?.nfe_serie ? ` (série ${prox.nfe_serie})` : ""}</b>}
+                    {naoVenda && <b>NF-e nº {prox?.nfe ?? "…"}{prox?.nfe_serie ? ` (série ${prox.nfe_serie})` : ""} <small>(sem PV — mesma série da venda)</small></b>}
                     {tipo === "recibo" && <b>OS nº {prox?.os ?? "…"} · Recibo nº {prox?.recibo ?? "…"}</b>}
                     {tipo === "nfse" && <b>OS nº {prox?.os ?? "…"} <small>(NFS-e registrada depois)</small></b>}
                     <span className="s">número automático — confirmado na emissão</span>
@@ -660,7 +747,75 @@ export default function NovaEmissao({ config, aberto, fechar, avisar, onEmitido,
               </div>
             )}
 
-            {modo === "novo" && !chave && (
+            {naoVenda && (
+              <section className="ne-sec ne-op">
+                <h3>{OP_ROT[operacao as Exclude<OperacaoTipo, "venda">]} <small>{operacao === "devolucao" ? "finalidade 4 · referencia a NF de origem" : "sem venda · ligada ao projeto"}</small></h3>
+                {operacao === "devolucao" ? (
+                  <div className="ne-linha" style={{ alignItems: "flex-start" }}>
+                    <label className="ne-rot" style={{ width: 420, position: "relative" }}>NF de origem (nº, fornecedor, CNPJ ou chave)
+                      <input className="ne-in" placeholder="ex.: 757793 ou COMERCIAL ELETRICA" value={nfBusca} onChange={(e) => { setNfBusca(e.target.value); setNfRef(null); }} />
+                      {nfLista && (
+                        <div className="ne-exist-lista" style={{ position: "absolute", top: "100%", left: 0, right: 0, zIndex: 5, maxHeight: 260 }}>
+                          {nfLista.length ? nfLista.map((n) => (
+                            <button key={n.chave} className="ne-exist-item" onClick={() => escolherNfOrigem(n)}>
+                              <span className="tag pv">{n.fonte === "focus" ? "Focus" : "Omie"}</span>
+                              <b>NF {n.numero}</b><span className="c">{n.emitente ?? "—"} · {dataBR(n.emissao)} · {n.itens.length ? `${n.itens.length} item(ns)` : "sem itens"}</span>
+                              <span className="v">{fmt(Number(n.valor))}</span>
+                            </button>
+                          )) : <div className="s">Nenhuma NF de entrada com “{nfBusca}”. Cole a chave de 44 dígitos ao lado.</div>}
+                        </div>
+                      )}
+                    </label>
+                    <label className="ne-rot" style={{ width: 380 }}>Chave da NF de origem (44 dígitos)
+                      <input className="ne-in ne-mono" value={nfRef?.chave ?? ""} onChange={(e) => {
+                        const ch = e.target.value.replace(/\D/g, "").slice(0, 44);
+                        setNfRef(ch ? { ...(nfRef ?? {}), chave: ch, numero: nfRef?.numero ?? (ch.length === 44 ? String(Number(ch.slice(25, 34))) : null),
+                          serie: nfRef?.serie ?? (ch.length === 44 ? String(Number(ch.slice(22, 25))) : null),
+                          emitente_doc: nfRef?.emitente_doc ?? (ch.length === 44 ? ch.slice(6, 20) : null), emissao: nfRef?.emissao ?? null } : null);
+                      }} />
+                      {nfRef?.chave && <span className="ne-dica">NF {nfRef.numero ?? "?"} série {nfRef.serie ?? "?"}{nfRef.emitente_doc ? ` · emitente ${nfRef.emitente_doc}` : ""}</span>}
+                    </label>
+                  </div>
+                ) : (
+                  <div className="ne-linha">
+                    <label className="ne-rot" style={{ width: 380 }}>Destinatário (cliente ou fornecedor do cadastro)
+                      <BuscaPessoa valor="" empresa={empresa} onEscolher={async (c) => {
+                        const p = await pessoaCompleta(c.id);
+                        setCliCodigo(String(c.codigo));
+                        if (p) { const cl = clienteDaPessoa(p); setCli(cl); setVerCliente(false); if (!cliProjeto) setCliProjeto(cl.nome); }
+                        else setAviso("Não consegui abrir o cadastro escolhido");
+                      }} />
+                    </label>
+                    {sel("Projeto *", projeto, setProjeto, opc?.projetos ?? [], 280)}
+                    <div style={{ alignSelf: "flex-end", paddingBottom: 2 }}>
+                      <BotaoNovoProjeto compacto rotulo="+ Novo projeto" empresa={empresa}
+                        sugestao={{ nome: cliProjeto || cli.nome || null, clienteNome: cliProjeto || cli.nome || null, orcamento: total || null }}
+                        onCriado={(p) => {
+                          setOpc((o) => (o && !o.projetos.some((x) => String(x.codigo) === String(p.codigo))
+                            ? { ...o, projetos: [{ codigo: String(p.codigo), nome: p.nome }, ...o.projetos] } : o));
+                          setProjeto(String(p.codigo));
+                        }} />
+                    </div>
+                    <label className="ne-rot" style={{ width: 260 }}>Para qual cliente<input className="ne-in" placeholder="cliente do projeto" value={cliProjeto} onChange={(e) => setCliProjeto(e.target.value)} /></label>
+                  </div>
+                )}
+                <div className="ne-linha">
+                  <label className="ne-rot" style={{ flex: 1, minWidth: 320 }}>Motivo *
+                    <input className="ne-in" list={`motivos-${operacao}`} placeholder="escolha ou escreva" value={motivo} onChange={(e) => setMotivo(e.target.value)} />
+                    <datalist id={`motivos-${operacao}`}>{MOTIVOS[operacao as Exclude<OperacaoTipo, "venda">].map((m) => <option key={m} value={m} />)}</datalist>
+                  </label>
+                  <label style={{ fontSize: 12.5, display: "flex", gap: 6, alignItems: "center", alignSelf: "flex-end", paddingBottom: 6 }}>
+                    <input type="checkbox" checked={geraCob} onChange={(e) => setGeraCob(e.target.checked)} />
+                    {operacao === "devolucao" ? "Gerar crédito a receber do fornecedor (abater/reembolso)" : "Gerar cobrança (contas a receber)"}
+                  </label>
+                </div>
+                <div className="ne-dica">{operacao === "devolucao"
+                  ? "Sai com finalidade 4 (devolução), a NF de origem referenciada, CSOSN 900 com o ICMS pela alíquota da nota de origem e “Motivo da Devolucao” nas informações complementares — como o Omie."
+                  : "Sai sem cobrança (pagamento 90) e com “Projeto · Cliente · Motivo” nas informações complementares, como o Omie emitia (CSOSN 102)."}</div>
+              </section>
+            )}
+
+            {modo === "novo" && !chave && !naoVenda && (
               <div className="ne-linha">
                 <label className="ne-rot" style={{ width: 300 }}>{puxando ? "Proposta do CRM — carregando…" : "Proposta do CRM (puxa cliente, itens e condição)"}
                   <BuscaProposta valor={proposta} onTexto={setProposta} onEscolher={(p) => { setProposta(p.numero); setSemProp(false); puxarProposta(p.numero); }} />
@@ -698,14 +853,19 @@ export default function NovaEmissao({ config, aberto, fechar, avisar, onEmitido,
             <section className="ne-sec">
               <h3>Itens <small>{itens.length} item(ns) · bruto {fmt(bruto)}</small></h3>
               <table className="ne-tab">
-                <thead><tr><th>Código</th><th>Descrição</th>{tipo === "nfe" && <th>NCM</th>}<th>Un</th><th className="r">Qtd</th><th className="r">Valor unit.</th><th className="r">Total</th><th /></tr></thead>
+                <thead><tr><th>Código</th><th>Descrição</th>{tipo === "nfe" && <th>NCM</th>}<th>Un</th><th className="r">Qtd</th>{operacao === "devolucao" && naoVenda && <th className="r">ICMS %</th>}<th className="r">Valor unit.</th><th className="r">Total</th><th /></tr></thead>
                 <tbody>{itens.map((it, n) => (
                   <tr key={n}>
                     <td><input className="ne-in" style={{ width: 110 }} value={it.codigo ?? ""} onChange={(e) => setItens(itens.map((x, i) => (i === n ? { ...x, codigo: e.target.value } : x)))} /></td>
                     <td><input className="ne-in" style={{ width: "100%", minWidth: 220 }} value={it.descricao ?? ""} onChange={(e) => setItens(itens.map((x, i) => (i === n ? { ...x, descricao: e.target.value } : x)))} /></td>
                     {tipo === "nfe" && <td><input className="ne-in" style={{ width: 96 }} value={it.ncm ?? ""} onChange={(e) => setItens(itens.map((x, i) => (i === n ? { ...x, ncm: e.target.value } : x)))} /></td>}
                     <td><input className="ne-in" style={{ width: 56 }} value={it.unidade ?? "UN"} onChange={(e) => setItens(itens.map((x, i) => (i === n ? { ...x, unidade: e.target.value } : x)))} /></td>
-                    <td><input className="ne-in num" style={{ width: 80 }} type="number" step="0.01" value={it.quantidade} onChange={(e) => setItens(itens.map((x, i) => (i === n ? { ...x, quantidade: Number(e.target.value) } : x)))} /></td>
+                    <td><input className="ne-in num" style={{ width: 80 }} type="number" step="0.01" value={it.quantidade}
+                      max={it.quantidade_max ?? undefined} title={it.quantidade_max != null ? `máx. ${it.quantidade_max} (NF de origem)` : undefined}
+                      onChange={(e) => setItens(itens.map((x, i) => (i === n ? { ...x, quantidade: Number(e.target.value) } : x)))} />
+                      {it.quantidade_max != null && <div className="ne-dica" style={it.quantidade > it.quantidade_max ? { color: "#fca5a5" } : undefined}>máx. {it.quantidade_max}</div>}</td>
+                    {operacao === "devolucao" && naoVenda && <td><input className="ne-in num" style={{ width: 64 }} type="number" step="0.01" value={it.icms_aliquota ?? 0}
+                      onChange={(e) => setItens(itens.map((x, i) => (i === n ? { ...x, icms_aliquota: Number(e.target.value) } : x)))} /></td>}
                     <td><input className="ne-in num" style={{ width: 110 }} type="number" step="0.01" value={it.valor_unitario} onChange={(e) => setItens(itens.map((x, i) => (i === n ? { ...x, valor_unitario: Number(e.target.value) } : x)))} /></td>
                     <td className="r">{fmt(it.quantidade * it.valor_unitario)}</td>
                     <td><button className="ne-lk" onClick={() => setItens(itens.length > 1 ? itens.filter((_, i) => i !== n) : [ITEM0])}>remover</button></td>
@@ -721,8 +881,8 @@ export default function NovaEmissao({ config, aberto, fechar, avisar, onEmitido,
               </div>
             </section>
 
-            <section className="ne-sec">
-              <h3>Recebimento <small>as parcelas a receber são criadas exatamente assim</small></h3>
+            {precisaParcelas && <section className="ne-sec">
+              <h3>Recebimento <small>{naoVenda ? (operacao === "devolucao" ? "crédito a receber do fornecedor" : "cobrança desta remessa") : "as parcelas a receber são criadas exatamente assim"}</small></h3>
               <div className="ne-linha">
                 {sel("Condição de pagamento", cond, (v) => aplicarCondicao(v), (opc?.condicoes ?? []).map((c) => ({ codigo: c.codigo, nome: c.nome })), 230, "— escolha —")}
                 <label className="ne-rot" style={{ width: 150 }}>Data base dos prazos
@@ -781,7 +941,7 @@ export default function NovaEmissao({ config, aberto, fechar, avisar, onEmitido,
                   ))}
                 </div>
               )}
-            </section>
+            </section>}
 
             {ehOs && (
               <section className="ne-sec">
@@ -883,14 +1043,14 @@ export default function NovaEmissao({ config, aberto, fechar, avisar, onEmitido,
         <div className="ne-rod">
           <span className="tot">Total <b>{fmt(total)}</b></span>
           {ehOs && totRet > 0 && <span className="tot">A receber <b>{fmt(liquido)}</b></span>}
-          <span className="tot">{parcs.length} parcela(s)</span>
+          <span className="tot">{precisaParcelas ? `${parcs.length} parcela(s)` : "sem cobrança"}</span>
           <span style={{ flex: 1 }} />
           <button className="ne-btn" onClick={sair}>Cancelar</button>
           <button className="ne-btn" disabled={validando} onClick={validar}>{validando ? "Validando…" : "Validar"}</button>
           {tipo !== "nfse" && <button className="ne-btn" disabled={!cli.nome || !itens.some((i) => i.descricao)} onClick={() => previaDocumento(montarDocumento(), tipo === "recibo" ? "recibo" : "nfe", avisar)}
             title="Ver como o documento vai sair — sem enviar nada à SEFAZ e sem gastar numeração">{tipo === "recibo" ? "Pré-visualizar recibo" : "Pré-visualizar DANFE"}</button>}
-          <button className={`ne-btn ${prod ? "perigo" : "pri"}`} disabled={!cli.nome || !itens.some((i) => i.descricao) || !parcOk} onClick={emitirAgora}>
-            {`Emitir ${TIPO[tipo]}${prod ? " (PRODUÇÃO)" : " (homologação)"}`}
+          <button className={`ne-btn ${prod ? "perigo" : "pri"}`} disabled={!cli.nome || !itens.some((i) => i.descricao) || (precisaParcelas && !parcOk)} onClick={emitirAgora}>
+            {`Emitir ${naoVenda ? OP_ROT[operacao as Exclude<OperacaoTipo, "venda">] : TIPO[tipo]}${prod ? " (PRODUÇÃO)" : " (homologação)"}`}
           </button>
         </div>
       </div>

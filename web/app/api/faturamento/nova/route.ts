@@ -12,8 +12,32 @@ export const maxDuration = 30;
  *  GET ?op=opcoes&emp=SF              → condições, formas, contas, categorias, projetos, centros, vendedores
  *  GET ?op=proximos&emp=SF             → próximos nº de PV, OS, NF-e e recibo (sem consumir)
  *  GET ?op=historico&emp=SF&doc=CNPJ  → últimos faturamentos do cliente ("usar como modelo")
+ *  GET ?op=nf_origem&emp=SF&q=…        → NF de entrada para a devolução (Focus + espelho Omie), com itens/tributos quando há
+ *  GET ?op=pessoa_doc&emp=SF&doc=CNPJ  → id do cadastro (cadastros.pessoas) pelo CNPJ/CPF
  *  POST { op: "previa", documento }   → pré-voo (payload + checagens + parcelas), sem enviar nada
  */
+
+type NfOrigemItem = {
+  codigo: string; descricao: string; ncm: string | null; cest: string | null; cfop: string | null; unidade: string;
+  quantidade: number; valor_unitario: number; origem: number | null;
+  icms_aliquota: number | null; pis_cst: string | null; pis_aliquota: number | null; cofins_cst: string | null; cofins_aliquota: number | null;
+};
+const nOuNull = (v: unknown) => (v == null || v === "" ? null : Number(v));
+/** Itens da NF de entrada a partir do JSON completo da Focus (requisicao_nota_fiscal.itens). */
+function itensFocus(det: Record<string, unknown> | null): NfOrigemItem[] {
+  const req = (det?.requisicao_nota_fiscal ?? null) as Record<string, unknown> | null;
+  const its = (req?.itens ?? []) as Record<string, unknown>[];
+  return its.map((i) => ({
+    codigo: String(i.codigo_produto ?? ""), descricao: String(i.descricao ?? ""),
+    ncm: i.codigo_ncm ? String(i.codigo_ncm) : null, cest: i.cest ? String(i.cest) : null, cfop: i.cfop ? String(i.cfop) : null,
+    unidade: String(i.unidade_comercial ?? "UN"),
+    quantidade: Number(i.quantidade_comercial ?? 0), valor_unitario: Number(i.valor_unitario_comercial ?? 0),
+    origem: nOuNull(i.icms_origem),
+    icms_aliquota: nOuNull(i.icms_aliquota),
+    pis_cst: i.pis_situacao_tributaria ? String(i.pis_situacao_tributaria) : null, pis_aliquota: nOuNull(i.pis_aliquota_porcentual),
+    cofins_cst: i.cofins_situacao_tributaria ? String(i.cofins_situacao_tributaria) : null, cofins_aliquota: nOuNull(i.cofins_aliquota_porcentual),
+  }));
+}
 
 /** Formas de recebimento: tipo de documento do título (cadastros › tipos de documento)
  *  + o tPag da NF-e correspondente. */
@@ -62,6 +86,59 @@ export async function GET(req: NextRequest) {
       const { data, error } = await a.schema("orders").rpc("fat_proximos", { p_empresa: emp });
       if (error) throw new Error(error.message);
       return NextResponse.json(data ?? {});
+    }
+    if (op === "nf_origem") {
+      // Devolução de compra: escolhe a NF de entrada (fornecedor) a referenciar.
+      const q = (sp.get("q") ?? "").replace(/[^\p{L}\p{N} ./-]/gu, " ").trim();
+      const dig = q.replace(/\D/g, "");
+      if (q.length < 2) return NextResponse.json({ notas: [] });
+      const filtrosF = [`emitente_nome.ilike.%${q}%`];
+      if (dig) filtrosF.push(`numero.eq.${dig.replace(/^0+/, "") || dig}`, `numero.eq.${dig}`);
+      if (dig.length >= 8) filtrosF.push(`emitente_doc.ilike.%${dig}%`);
+      if (dig.length === 44) filtrosF.push(`chave.eq.${dig}`);
+      const filtrosO = [`fornecedor.ilike.%${q}%`];
+      if (dig) filtrosO.push(`numero.eq.${dig.replace(/^0+/, "") || dig}`);
+      if (dig.length >= 8) filtrosO.push(`cnpj_cpf.ilike.%${dig}%`);
+      if (dig.length === 44) filtrosO.push(`chave_nfe.eq.${dig}`);
+      const [f, o] = await Promise.all([
+        a.schema("orders").from("focus_recebidos").select("chave,numero,emissao,emitente_nome,emitente_doc,valor,completa,detalhe")
+          .eq("empresa", emp).or(filtrosF.join(",")).order("emissao", { ascending: false }).limit(12),
+        a.schema("orders").from("v_erp_nf_entrada").select("numero,serie,fornecedor,cnpj_cpf,emissao,valor_total,chave_nfe,natureza_operacao")
+          .eq("empresa", emp).or(filtrosO.join(",")).order("emissao", { ascending: false }).limit(10),
+      ]);
+      if (f.error) throw new Error(f.error.message);
+      const notas: Record<string, unknown>[] = [];
+      const vistas = new Set<string>();
+      for (const r of (f.data ?? []) as Record<string, unknown>[]) {
+        const det = (r.detalhe ?? null) as Record<string, unknown> | null;
+        const req = (det?.requisicao_nota_fiscal ?? null) as Record<string, unknown> | null;
+        const ch = String(r.chave ?? "");
+        vistas.add(ch);
+        notas.push({
+          fonte: "focus", chave: ch, numero: String(r.numero ?? ""), serie: req?.serie ? String(req.serie) : ch.length === 44 ? String(Number(ch.slice(22, 25))) : null,
+          emissao: r.emissao ? String(r.emissao).slice(0, 10) : null, emitente: r.emitente_nome, emitente_doc: String(r.emitente_doc ?? ""),
+          valor: Number(r.valor ?? 0), natureza: req?.natureza_operacao ?? null, itens: r.completa ? itensFocus(det) : [],
+        });
+      }
+      for (const r of (o.data ?? []) as Record<string, unknown>[]) {
+        const ch = String(r.chave_nfe ?? "");
+        if (!ch || vistas.has(ch)) continue;
+        vistas.add(ch);
+        notas.push({
+          fonte: "omie", chave: ch, numero: String(r.numero ?? ""), serie: r.serie ? String(Number(r.serie)) : null,
+          emissao: r.emissao ? String(r.emissao).slice(0, 10) : null, emitente: r.fornecedor, emitente_doc: String(r.cnpj_cpf ?? "").replace(/\D/g, ""),
+          valor: Number(r.valor_total ?? 0), natureza: r.natureza_operacao ?? null, itens: [],
+        });
+      }
+      return NextResponse.json({ notas });
+    }
+    if (op === "pessoa_doc") {
+      const doc = (sp.get("doc") ?? "").replace(/\D/g, "");
+      if (doc.length < 11) return NextResponse.json({ id: null });
+      const { data, error } = await a.schema("orders").rpc("cadastros_listar", { p_papel: null, p_empresa: emp, p_q: doc, p_ativos: true, p_lim: 1, p_off: 0 });
+      if (error) throw new Error(error.message);
+      const l = ((data as { linhas?: { id: number; codigo: number; razao: string }[] } | null)?.linhas ?? [])[0];
+      return NextResponse.json({ id: l?.id ?? null, codigo: l?.codigo ?? null, razao: l?.razao ?? null });
     }
     if (op === "historico") {
       const doc = (sp.get("doc") ?? "").replace(/\D/g, "");
