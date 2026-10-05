@@ -11,7 +11,6 @@ import ReportsSalvos from "@/components/cesar/ReportsSalvos";
 import SupportWidget from "@/components/SupportWidget";
 import { supaServer } from "@/lib/supabase-server";
 import { supaAdmin } from "@/lib/supabase-admin";
-import { telasRhDoPortal, type TelaRh } from "@/lib/rh-menu";
 import type { AreaAccess, ModuleRole, PermsOverride, Role, UserPerms } from "@/lib/permissions";
 
 /* Botão "Suporte" do canto inferior direito.
@@ -34,13 +33,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   // Administrador da plataforma ALLKA (Benny, David): vê o "CRM ALLKA" na barra,
   // como no portal. Mesma origem que o portal usa (profiles.is_platform_admin).
   let isPlatformAdmin = false;
-  // RH (módulo próprio, mora na app de Serviços): só para quem já o abre lá.
-  let telasRh: TelaRh[] = [];
+  // RH (módulo próprio, mora na app de Serviços): a barra pede /api/menu/rh
+  // depois de montar (05/10/26) — a página não espera pelo portal.
   if (user && NAV_HORIZONTAL) {
-    try {
-      const { data: { session } } = await supa.auth.getSession();
-      telasRh = await telasRhDoPortal(user.id, session?.access_token);
-    } catch { /* sem RH na barra */ }
     try {
       const { data: p } = await supaAdmin().from("profiles").select("is_platform_admin").eq("user_id", user.id).maybeSingle();
       isPlatformAdmin = !!(p as { is_platform_admin?: boolean } | null)?.is_platform_admin;
@@ -81,7 +76,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   return (
     <UserPermsProvider user={perms}>
-      {NAV_HORIZONTAL ? <TopNav userEmail={user?.email} isPlatformAdmin={isPlatformAdmin} telasRh={telasRh} /> : <AppSidebar userEmail={user?.email} />}
+      {NAV_HORIZONTAL ? <TopNav userEmail={user?.email} isPlatformAdmin={isPlatformAdmin} /> : <AppSidebar userEmail={user?.email} />}
       {/* A margem de 54px existe para o trilho da sidebar; sem sidebar nao ha
           trilho, e mante-la deixava uma faixa morta a esquerda. */}
       <main className={`${NAV_HORIZONTAL ? "" : "ml-[54px]"} min-h-screen bg-ww-bg text-ww-text overflow-x-hidden`}>

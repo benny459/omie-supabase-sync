@@ -4,7 +4,8 @@
  * Conciliação bancária (05/10/26, sql/52) — extrato OFX × títulos do painel.
  *
  * Fluxo: importar o OFX da conta (dedupe por FITID) → cada movimento mostra
- * sugestões (valor igual ao saldo do título, vencimento a ±3 dias, CNPJ ou nº
+ * sugestões (valor igual ao saldo do título — ou à soma de várias parcelas do
+ * mesmo documento/contraparte, em grupo —, vencimento a ±3 dias, CNPJ ou nº
  * do documento no histórico) → "aceitar" casa com um clique; "casar à mão"
  * permite escolher 1..n títulos e repartir o valor (split) → casar = baixa do
  * título (pagar/receber). "Desfazer" estorna as baixas; "ignorar" é para
@@ -22,7 +23,11 @@ import {
 import { StatusPill, type Tom } from "../primitivos";
 
 type Conta = { empresa: string; cod_cc: number; descricao: string; codigo_banco: string | null; numero_conta_corrente: string | null; tipo_conta_corrente: string | null };
-type Sug = { natureza: "P" | "R"; titulo: string; contraparte: string | null; documento: string | null; vencimento: string | null; saldo: number; fase: string | null; score: number };
+type Sug = {
+  natureza: "P" | "R"; titulo: string; contraparte: string | null; documento: string | null; vencimento: string | null; saldo: number; fase: string | null; score: number;
+  /* Sugestão em grupo (sql/57): várias parcelas do mesmo documento/contraparte cuja soma bate com o movimento. */
+  grupo?: boolean; itens?: { titulo: string; saldo: number; documento: string | null; vencimento: string | null; fase: string | null }[];
+};
 type BaixaMov = { id: number; natureza: string; titulo: string; documento: string | null; contraparte: string | null; valor: number };
 type Mov = {
   id: number; data: string; valor: number; tipo: string | null; memo: string | null; nome: string | null; fitid: string;
@@ -277,18 +282,28 @@ function LinhaMov({ m, titulos, aberto, podeBaixar, ocupado, onToggle, acao }: {
                 {m.sugestoes.map((s) => {
                   const valor = Math.min(s.saldo, restante);
                   const naoLib = s.natureza === "P" && s.fase !== "liberado";
+                  // Grupo: um movimento paga várias parcelas — aceitar já divide pelos saldos.
+                  const itens = s.grupo && s.itens?.length
+                    ? s.itens.map((i) => ({ titulo: i.titulo, valor: i.saldo }))
+                    : [{ titulo: s.titulo, valor }];
                   return (
                     <div key={s.titulo} style={{ display: "flex", gap: 10, alignItems: "center", padding: "4px 0", fontSize: 12.5 }}>
                       <span style={{ color: "var(--ww-text)", flex: 1, minWidth: 0 }}>
-                        {s.contraparte ?? "—"} · {s.documento ?? ""} · venc. {ddmmaa(s.vencimento)} · saldo {brl(s.saldo)}
+                        {s.grupo && <span style={{ fontSize: 10.5, fontWeight: 700, color: "var(--ww-accent-text)" }}>GRUPO · </span>}
+                        {s.contraparte ?? "—"} · {s.documento ?? ""} · venc. {ddmmaa(s.vencimento)} · {s.grupo ? "soma" : "saldo"} {brl(s.saldo)}
+                        {s.grupo && s.itens && (
+                          <span style={{ display: "block", fontSize: 11.5, color: "var(--ww-text-faint)" }}>
+                            {s.itens.map((i) => `${i.documento ?? i.titulo} ${brl(i.saldo)}`).join(" + ")}
+                          </span>
+                        )}
                         {naoLib && <span style={{ color: "var(--ww-warn-text)" }}> · ainda não liberado ({s.fase})</span>}
                       </span>
                       <span style={{ fontSize: 11, color: "var(--ww-text-faint)" }}>{s.score} pts</span>
                       <button type="button" disabled={ocupado || naoLib} title={naoLib ? "Use \"casar à mão\" com forçar + motivo" : undefined}
                         style={pilula("var(--ww-ok-text)")}
-                        onClick={() => acao({ acao: "conciliar", movimento_id: m.id, itens: [{ titulo: s.titulo, valor }] },
-                                            `Conciliado: ${s.contraparte ?? ""} ${brl(valor)}`)}>
-                        aceitar {brl(valor)}
+                        onClick={() => acao({ acao: "conciliar", movimento_id: m.id, itens },
+                                            `Conciliado: ${s.contraparte ?? ""} ${brl(s.grupo ? s.saldo : valor)}${s.grupo ? ` em ${itens.length} títulos` : ""}`)}>
+                        aceitar {brl(s.grupo ? s.saldo : valor)}
                       </button>
                     </div>
                   );

@@ -1,7 +1,8 @@
 // Rentabilidade da cadeia de venda (P6, 05/10/2026) — lê sales.mv_rentab_pvos
 // (sql/54): PV/OS × RC × PC × NF de entrada × pago × faturado × recebido.
 //
-//   GET  ?modo=lista&de=&ate=&empresa=&projeto=   → PV/OS do período (BI/Financeiro)
+//   GET  ?modo=lista&de=&ate=&abertos=1&empresa=&projeto=&busca=&comCusto=1&visao=pedidos|clientes&limite=&offset=
+//        → { totais, total, projetos, linhas | clientes } paginado (BI/Financeiro)
 //   GET  ?modo=cadeia&empresa=SF&pedido=PV1827     → a cadeia de um pedido (BI/Financeiro)
 //   POST { chaves: ["SF|PV1827", …] }              → selos Pago/Receb. da Avulsos (Operação),
 //                                                    sem valores em R$
@@ -10,7 +11,6 @@ import { createClient } from "@supabase/supabase-js";
 import { supaServer } from "@/lib/supabase-server";
 import { canViewArea } from "@/lib/permissions";
 import { loadPerms } from "@/lib/require-area";
-import { selectPaginado } from "@/lib/supabase-paginado";
 import type { RentabPvos, RentabResumo } from "@/lib/rentabilidade";
 
 export const runtime = "nodejs";
@@ -50,19 +50,29 @@ export async function GET(req: Request) {
     return NextResponse.json(data);
   }
 
+  // Lista paginada no servidor (05/10/26): filtros, totais e página vêm de
+  // sales.rentab_lista — a lista inteira (~800 KB) travava a tela 20–30 s.
   const de = url.searchParams.get("de");
   const ate = url.searchParams.get("ate");
   const projeto = (url.searchParams.get("projeto") ?? "").trim();
-  const { data, error } = await selectPaginado<RentabPvos>(() => {
-    let q = adm().from("mv_rentab_pvos").select("*").order("emissao", { ascending: false }).order("label");
-    if (de && DATA.test(de)) q = q.gte("emissao", de);
-    if (ate && DATA.test(ate)) q = q.lte("emissao", ate);
-    if (empresa && /^[A-Z]{2,4}$/.test(empresa)) q = q.eq("empresa", empresa);
-    if (projeto) q = q.eq("projeto", projeto);
-    return q;
+  const busca = (url.searchParams.get("busca") ?? "").trim().slice(0, 80);
+  const visao = url.searchParams.get("visao") === "clientes" ? "clientes" : "pedidos";
+  const limite = Math.min(500, Math.max(1, Number(url.searchParams.get("limite")) || 100));
+  const offset = Math.max(0, Number(url.searchParams.get("offset")) || 0);
+  const { data, error } = await adm().rpc("rentab_lista", {
+    p_de: de && DATA.test(de) ? de : null,
+    p_ate: ate && DATA.test(ate) ? ate : null,
+    p_abertos: url.searchParams.get("abertos") === "1",
+    p_empresa: empresa && /^[A-Z]{2,4}$/.test(empresa) ? empresa : null,
+    p_projeto: projeto || null,
+    p_busca: busca || null,
+    p_com_custo: url.searchParams.get("comCusto") === "1",
+    p_visao: visao,
+    p_limite: limite,
+    p_offset: offset,
   });
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json({ linhas: data ?? [] });
+  return NextResponse.json(data);
 }
 
 export async function POST(req: Request) {

@@ -49,10 +49,40 @@ const grupoNaBarra = (m: NavItem): Grupo | undefined => {
   return g === "vendas" ? "operacao" : g;
 };
 
-export default function TopNav({ userEmail, isPlatformAdmin, telasRh = [] }: { userEmail?: string | null; isPlatformAdmin?: boolean; telasRh?: { label: string; next: string }[] }) {
+type TelaRh = { label: string; next: string };
+const RH_CHAVE = "ww-telas-rh";
+const RH_TTL_MS = 5 * 60 * 1000;
+
+/* RH na barra (05/10/26): pedido depois de a barra montar e guardado 5 min na
+   sessão do navegador — antes vinha do layout com 2,5 s de limite e, com o
+   portal frio, o RH simplesmente não aparecia. */
+function useTelasRh(): TelaRh[] {
+  const [telas, setTelas] = useState<TelaRh[]>([]);
+  useEffect(() => {
+    let vivo = true;
+    try {
+      const c = JSON.parse(sessionStorage.getItem(RH_CHAVE) ?? "null") as { em: number; telas: TelaRh[] } | null;
+      if (c && Array.isArray(c.telas)) {
+        setTelas(c.telas);
+        if (Date.now() - c.em < RH_TTL_MS) return;
+      }
+    } catch { /* sem cache */ }
+    fetch("/api/menu/rh", { cache: "no-store" }).then((r) => (r.ok ? r.json() : null)).then((j) => {
+      if (!vivo || !j || !Array.isArray(j.telas)) return;
+      setTelas(j.telas);
+      // vazio não fica guardado: pode ter sido o portal a falhar
+      try { if (j.telas.length) sessionStorage.setItem(RH_CHAVE, JSON.stringify({ em: Date.now(), telas: j.telas })); } catch { /* ok */ }
+    }).catch(() => null);
+    return () => { vivo = false; };
+  }, []);
+  return telas;
+}
+
+export default function TopNav({ userEmail, isPlatformAdmin }: { userEmail?: string | null; isPlatformAdmin?: boolean }) {
   const pathname = usePathname();
   const router = useRouter();
   const perms = useUserPerms();
+  const telasRh = useTelasRh();
   const [pendingHref, setPendingHref] = useState<string | null>(null);
   const [, startTransition] = useTransition();
 

@@ -16,8 +16,21 @@ import {
 import { tom, type Tom } from "../primitivos";
 import { ETAPA_CADEIA, type CadeiaPedido, type EtapaCadeia, type RentabPvos } from "@/lib/rentabilidade";
 
-type Periodo = "mes" | "90" | "12m" | "ano" | "tudo" | "livre";
+type Periodo = "90a" | "mes" | "90" | "12m" | "ano" | "tudo" | "livre";
 type Visao = "pedidos" | "clientes";
+
+/* Lista paginada no servidor (05/10/26): a API devolve só a página pedida,
+   os totais do filtro inteiro e a lista de projetos. */
+type Totais = {
+  n: number; receita: number; custo: number; rec_med: number; custo_med: number; n_med: number;
+  pago: number; a_pagar: number; recebido: number; a_receber: number; faturado: number;
+};
+type LinhaCliente = {
+  chave: string; cliente: string | null; n: number; receita: number; custo: number;
+  rec_med: number | null; custo_med: number | null; a_pagar: number; recebido: number; a_receber: number;
+};
+type Resposta = { totais: Totais; total: number; projetos: string[]; linhas: RentabPvos[]; clientes: LinhaCliente[] };
+const PAGINA = 100;
 
 const ETAPA_TOM: Record<EtapaCadeia, Tom> = {
   pedido: "off", rc: "info", pc: "info", nf_entrada: "info", recebido_material: "violet",
@@ -37,14 +50,15 @@ function Selo({ t, tone, title }: { t: string; tone: Tom; title?: string }) {
 const mbTom = (m: number | null): Tom => (m == null ? "off" : m < 0 ? "crit" : m < 0.15 ? "warn" : "ok");
 const fmtMb = (m: number | null) => (m == null ? "—" : pct(m * 100));
 
-function intervalo(p: Periodo, de: string, ate: string): { de: string | null; ate: string | null } {
+function intervalo(p: Periodo, de: string, ate: string): { de: string | null; ate: string | null; abertos: boolean } {
   const hoje = hojeISO();
-  if (p === "mes") return { de: hoje.slice(0, 8) + "01", ate: hoje };
-  if (p === "90") return { de: somaDias(hoje, -90), ate: hoje };
-  if (p === "12m") return { de: somaDias(hoje, -365), ate: hoje };
-  if (p === "ano") return { de: hoje.slice(0, 4) + "-01-01", ate: hoje };
-  if (p === "livre") return { de: de || null, ate: ate || null };
-  return { de: null, ate: null };
+  if (p === "90a") return { de: somaDias(hoje, -90), ate: hoje, abertos: true };
+  if (p === "mes") return { de: hoje.slice(0, 8) + "01", ate: hoje, abertos: false };
+  if (p === "90") return { de: somaDias(hoje, -90), ate: hoje, abertos: false };
+  if (p === "12m") return { de: somaDias(hoje, -365), ate: hoje, abertos: false };
+  if (p === "ano") return { de: hoje.slice(0, 4) + "-01-01", ate: hoje, abertos: false };
+  if (p === "livre") return { de: de || null, ate: ate || null, abertos: false };
+  return { de: null, ate: null, abertos: false };
 }
 
 export default function TelaRentabilidade() {
@@ -52,76 +66,73 @@ export default function TelaRentabilidade() {
   const pedidoUrl = (sp.get("pedido") ?? "").toUpperCase();
   const empresaUrl = (sp.get("empresa") ?? "").toUpperCase();
 
-  const [periodo, setPeriodo] = useState<Periodo>(pedidoUrl ? "tudo" : "12m");
+  const [periodo, setPeriodo] = useState<Periodo>(pedidoUrl ? "tudo" : "90a");
   const [de, setDe] = useState(""); const [ate, setAte] = useState("");
   const [empresa, setEmpresa] = useState(empresaUrl || "");
   const [projeto, setProjeto] = useState("");
   const [visao, setVisao] = useState<Visao>("pedidos");
   const [busca, setBusca] = useState(pedidoUrl);
+  const [buscaQ, setBuscaQ] = useState(pedidoUrl);
   const [soComCusto, setSoComCusto] = useState(false);
-  const [linhas, setLinhas] = useState<RentabPvos[] | null>(null);
+  const [dados, setDados] = useState<Resposta | null>(null);
+  const [carregandoMais, setCarregandoMais] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const [aberto, setAberto] = useState<string | null>(pedidoUrl && empresaUrl ? `${empresaUrl}|${pedidoUrl}` : null);
-  const [limite, setLimite] = useState(200);
 
-  const { de: d0, ate: d1 } = intervalo(periodo, de, ate);
-  useEffect(() => {
-    setLinhas(null); setErro(null);
-    const qs = new URLSearchParams({ modo: "lista" });
+  // A busca vai ao servidor depois de uma pausa na digitação.
+  useEffect(() => { const t = setTimeout(() => setBuscaQ(busca.trim()), 350); return () => clearTimeout(t); }, [busca]);
+
+  const { de: d0, ate: d1, abertos } = intervalo(periodo, de, ate);
+  const consulta = useMemo(() => {
+    const qs = new URLSearchParams({ modo: "lista", visao, limite: String(PAGINA) });
     if (d0) qs.set("de", d0);
     if (d1) qs.set("ate", d1);
+    if (abertos) qs.set("abertos", "1");
     if (empresa) qs.set("empresa", empresa);
-    fetch(`/api/rentabilidade?${qs}`, { cache: "no-store" })
-      .then(async (r) => { const j = await r.json(); if (!r.ok) throw new Error(j.error ?? r.statusText); return j; })
-      .then((j) => setLinhas(j.linhas ?? []))
-      .catch((e) => setErro(e instanceof Error ? e.message : String(e)));
-  }, [d0, d1, empresa]);
+    if (projeto) qs.set("projeto", projeto);
+    if (buscaQ) qs.set("busca", buscaQ);
+    if (soComCusto) qs.set("comCusto", "1");
+    return qs;
+  }, [d0, d1, abertos, empresa, projeto, buscaQ, soComCusto, visao]);
 
-  const projetos = useMemo(() => [...new Set((linhas ?? []).map((l) => l.projeto).filter(Boolean) as string[])].sort(), [linhas]);
+  const buscar = (qs: URLSearchParams) => fetch(`/api/rentabilidade?${qs}`, { cache: "no-store" })
+    .then(async (r) => { const j = await r.json(); if (!r.ok) throw new Error(j.error ?? r.statusText); return j as Resposta; });
 
-  const filtradas = useMemo(() => {
-    const q = busca.trim().toLowerCase();
-    return (linhas ?? []).filter((l) =>
-      (!projeto || l.projeto === projeto)
-      && (!soComCusto || l.custo > 0)
-      && (!q || [l.label, l.cliente, l.cnpj_cpf, l.projeto, l.nf].some((v) => (v ?? "").toLowerCase().includes(q))));
-  }, [linhas, projeto, soComCusto, busca]);
+  useEffect(() => {
+    let vivo = true;
+    setErro(null);
+    setDados(null);
+    buscar(consulta).then((j) => { if (vivo) setDados(j); })
+      .catch((e) => { if (vivo) setErro(e instanceof Error ? e.message : String(e)); });
+    return () => { vivo = false; };
+  }, [consulta]);
 
-  const tot = useMemo(() => {
-    const t = { receita: 0, custo: 0, recMed: 0, custoMed: 0, nMed: 0, pago: 0, aPagar: 0, recebido: 0, aReceber: 0, faturado: 0 };
-    for (const l of filtradas) {
-      t.receita += Number(l.receita_pv); t.custo += Number(l.custo);
-      if (Number(l.custo) > 0) { t.recMed += Number(l.receita_pv); t.custoMed += Number(l.custo); t.nMed++; }
-      t.pago += Number(l.pago); t.aPagar += Number(l.a_pagar);
-      t.recebido += Number(l.recebido); t.aReceber += Number(l.a_receber);
-      t.faturado += Number(l.receita_nf ?? 0);
-    }
-    return t;
-  }, [filtradas]);
-  const mbTotal = tot.recMed > 0 ? (tot.recMed - tot.custoMed) / tot.recMed : null;
+  function maisPagina() {
+    if (!dados) return;
+    const qs = new URLSearchParams(consulta);
+    qs.set("offset", String(visao === "clientes" ? dados.clientes.length : dados.linhas.length));
+    setCarregandoMais(true);
+    buscar(qs).then((j) => setDados((d) => d && {
+      ...d, linhas: [...d.linhas, ...j.linhas], clientes: [...d.clientes, ...j.clientes],
+    })).catch((e) => setErro(e instanceof Error ? e.message : String(e))).finally(() => setCarregandoMais(false));
+  }
 
-  const clientes = useMemo(() => {
-    const m = new Map<string, { chave: string; cliente: string; n: number; receita: number; custo: number; recMed: number; custoMed: number; aPagar: number; recebido: number; aReceber: number }>();
-    for (const l of filtradas) {
-      const k = `${l.empresa}|${l.codigo_cliente ?? l.cliente}`;
-      const c = m.get(k) ?? { chave: k, cliente: l.cliente ?? "—", n: 0, receita: 0, custo: 0, recMed: 0, custoMed: 0, aPagar: 0, recebido: 0, aReceber: 0 };
-      c.n++; c.receita += Number(l.receita_pv); c.custo += Number(l.custo);
-      if (Number(l.custo) > 0) { c.recMed += Number(l.receita_pv); c.custoMed += Number(l.custo); }
-      c.aPagar += Number(l.a_pagar); c.recebido += Number(l.recebido); c.aReceber += Number(l.a_receber);
-      m.set(k, c);
-    }
-    return [...m.values()].sort((a, b) => b.receita - a.receita);
-  }, [filtradas]);
+  const tot = dados?.totais;
+  const mbTotal = tot && tot.rec_med > 0 ? (tot.rec_med - tot.custo_med) / tot.rec_med : null;
+  const linhas = dados?.linhas ?? [];
+  const clientes = dados?.clientes ?? [];
+  const mostrados = visao === "clientes" ? clientes.length : linhas.length;
+  const resta = dados ? Math.max(0, dados.total - mostrados) : 0;
 
-  const kpis: Kpi[] = [
-    { rotulo: "Vendido (PV/OS)", valor: kbrl(tot.receita), sub: `${filtradas.length} pedidos · ${kbrl(tot.faturado)} faturado`, hero: true },
+  const kpis: Kpi[] = tot ? [
+    { rotulo: "Vendido (PV/OS)", valor: kbrl(tot.receita), sub: `${tot.n} pedidos · ${kbrl(tot.faturado)} faturado`, hero: true },
     { rotulo: "Margem bruta", valor: mbTotal == null ? "—" : pct(mbTotal * 100),
-      sub: `${kbrl(tot.recMed - tot.custoMed)} sobre ${tot.nMed} pedidos com custo`,
+      sub: `${kbrl(tot.rec_med - tot.custo_med)} sobre ${tot.n_med} pedidos com custo`,
       title: "(PV − PCs ligados) / PV, só nos PV/OS com compra lançada — a mesma conta da Avulsos" },
     { rotulo: "Compras (PCs)", valor: kbrl(tot.custo), sub: `${kbrl(tot.pago)} pagos` },
-    { rotulo: "A pagar", valor: kbrl(tot.aPagar), sub: "PCs ligados ainda não pagos" },
-    { rotulo: "A receber", valor: kbrl(tot.aReceber), sub: `${kbrl(tot.recebido)} já recebidos` },
-  ];
+    { rotulo: "A pagar", valor: kbrl(tot.a_pagar), sub: "PCs ligados ainda não pagos" },
+    { rotulo: "A receber", valor: kbrl(tot.a_receber), sub: `${kbrl(tot.recebido)} já recebidos` },
+  ] : [];
 
   return (
     <PaginaNavy>
@@ -133,20 +144,21 @@ export default function TelaRentabilidade() {
         </>} />
 
       <FaixaFiltros busca={busca} onBusca={setBusca} placeholder="PV/OS, cliente, CNPJ, projeto, NF…">
-        {([["mes", "Mês"], ["90", "90 dias"], ["12m", "12 meses"], ["ano", "Ano"], ["tudo", "Tudo"], ["livre", "Período"]] as [Periodo, string][]).map(([k, t]) => (
-          <ChipFiltro key={k} ativo={periodo === k} onClick={() => setPeriodo(k)}>{t}</ChipFiltro>
+        {([["90a", "90 dias + em aberto"], ["mes", "Mês"], ["90", "90 dias"], ["12m", "12 meses"], ["ano", "Ano"], ["tudo", "Tudo"], ["livre", "Período"]] as [Periodo, string][]).map(([k, t]) => (
+          <ChipFiltro key={k} ativo={periodo === k} onClick={() => setPeriodo(k)}
+            title={k === "90a" ? "Emitidos nos últimos 90 dias, mais tudo o que ainda não fechou o ciclo (sem faturar, a receber ou com PC a pagar)" : undefined}>{t}</ChipFiltro>
         ))}
         {periodo === "livre" && <><CampoData valor={de} onChange={setDe} title="Emissão a partir de" /><CampoData valor={ate} onChange={setAte} title="Emissão até" /></>}
         {(["", "SF", "CD", "WW"]).map((e) => <ChipFiltro key={e || "todas"} ativo={empresa === e} onClick={() => setEmpresa(e)}>{e || "Todas"}</ChipFiltro>)}
         <select value={projeto} onChange={(e) => setProjeto(e.target.value)} style={sel} title="Projeto">
           <option value="">Todos os projetos</option>
-          {projetos.map((p) => <option key={p} value={p}>{p}</option>)}
+          {(dados?.projetos ?? (projeto ? [projeto] : [])).map((p) => <option key={p} value={p}>{p}</option>)}
         </select>
         <ChipFiltro ativo={soComCusto} onClick={() => setSoComCusto((v) => !v)} title="Só os pedidos que têm compra lançada (os que entram na margem)">Com custo</ChipFiltro>
       </FaixaFiltros>
 
       {erro && <Aviso>{erro}</Aviso>}
-      {!linhas && !erro ? <Carregando /> : <>
+      {!dados && !erro ? <Carregando /> : dados && <>
         <GradeKpis kpis={kpis} />
 
         {visao === "clientes" ? (
@@ -155,24 +167,25 @@ export default function TelaRentabilidade() {
               <thead><tr>{["Cliente", "Pedidos", "Vendido", "Compras", "M.B.", "A pagar", "Recebido", "A receber"].map((h, i) => <th key={h} style={{ ...th, textAlign: i > 0 ? "right" : "left" }}>{h}</th>)}</tr></thead>
               <tbody>
                 {clientes.length === 0 && <tr><td colSpan={8} style={vazio}>Nenhum pedido no filtro.</td></tr>}
-                {clientes.slice(0, limite).map((c) => {
-                  const mb = c.recMed > 0 ? (c.recMed - c.custoMed) / c.recMed : null;
+                {clientes.map((c) => {
+                  const rm = Number(c.rec_med ?? 0), cm = Number(c.custo_med ?? 0);
+                  const mb = rm > 0 ? (rm - cm) / rm : null;
                   return (
-                    <tr key={c.chave} style={linha} onClick={() => { setBusca(c.cliente); setVisao("pedidos"); }} title="Ver os pedidos deste cliente">
-                      <td style={td}><b>{c.cliente}</b></td>
+                    <tr key={c.chave} style={linha} onClick={() => { setBusca(c.cliente ?? ""); setVisao("pedidos"); }} title="Ver os pedidos deste cliente">
+                      <td style={td}><b>{c.cliente ?? "—"}</b></td>
                       <td style={num}>{c.n}</td>
                       <td style={num}>{brl(c.receita)}</td>
                       <td style={num}>{brl(c.custo)}</td>
                       <td style={num}><Selo t={fmtMb(mb)} tone={mbTom(mb)} /></td>
-                      <td style={num}>{brl(c.aPagar)}</td>
+                      <td style={num}>{brl(c.a_pagar)}</td>
                       <td style={num}>{brl(c.recebido)}</td>
-                      <td style={num}>{brl(c.aReceber)}</td>
+                      <td style={num}>{brl(c.a_receber)}</td>
                     </tr>
                   );
                 })}
               </tbody>
             </table>
-            {clientes.length > limite && <Mais onClick={() => setLimite((l) => l + 200)} resta={clientes.length - limite} />}
+            {resta > 0 && <Mais onClick={maisPagina} resta={resta} carregando={carregandoMais} />}
           </div>
         ) : (
           <div style={{ ...cartao, overflowX: "auto" }}>
@@ -180,8 +193,8 @@ export default function TelaRentabilidade() {
               <thead><tr>{["Pedido", "Cliente", "Emissão", "Projeto", "Vendido", "Compras", "M.B.", "Etapa", "Pago", "Recebido"].map((h, i) => (
                 <th key={h} style={{ ...th, textAlign: i >= 4 && i <= 6 ? "right" : "left" }}>{h}</th>))}</tr></thead>
               <tbody>
-                {filtradas.length === 0 && <tr><td colSpan={10} style={vazio}>Nenhum pedido no filtro.</td></tr>}
-                {filtradas.slice(0, limite).map((l) => {
+                {linhas.length === 0 && <tr><td colSpan={10} style={vazio}>Nenhum pedido no filtro.</td></tr>}
+                {linhas.map((l) => {
                   const k = `${l.empresa}|${l.label}`;
                   const ab = aberto === k;
                   return (
@@ -208,7 +221,7 @@ export default function TelaRentabilidade() {
                 })}
               </tbody>
             </table>
-            {filtradas.length > limite && <Mais onClick={() => setLimite((x) => x + 200)} resta={filtradas.length - limite} />}
+            {resta > 0 && <Mais onClick={maisPagina} resta={resta} carregando={carregandoMais} />}
           </div>
         )}
       </>}
@@ -216,10 +229,10 @@ export default function TelaRentabilidade() {
   );
 }
 
-function Mais({ onClick, resta }: { onClick: () => void; resta: number }) {
+function Mais({ onClick, resta, carregando }: { onClick: () => void; resta: number; carregando?: boolean }) {
   return (
     <div style={{ padding: 12, textAlign: "center" }}>
-      <BotaoTela onClick={onClick}>Mostrar mais ({resta} restantes)</BotaoTela>
+      <BotaoTela onClick={onClick} disabled={carregando}>{carregando ? "Carregando…" : `Mostrar mais (${resta} restantes)`}</BotaoTela>
     </div>
   );
 }
