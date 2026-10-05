@@ -78,7 +78,7 @@ $$;
 -- Recalcula todos os grupos (cron + a pedido).
 create or replace function orders.cadastros_dup_refresh() returns jsonb
 language plpgsql volatile security definer set search_path to 'cadastros', 'public' as $$
-declare n int;
+declare v_qtd int;
 begin
   perform set_config('pg_trgm.similarity_threshold', '0.85', true);
   create temp table if not exists _dup_g (tipo text, chave text, ids bigint[]) on commit drop;
@@ -213,8 +213,8 @@ begin
     now()
   from _dup_g g join cl c on c.chave = g.chave and c.tipo = g.tipo;
 
-  get diagnostics n = row_count;
-  return jsonb_build_object('grupos', n, 'em', now());
+  get diagnostics v_qtd = row_count;
+  return jsonb_build_object('grupos', v_qtd, 'em', now());
 end $$;
 
 -- Lista rápida (lê a tabela pré-calculada).
@@ -256,7 +256,7 @@ $$;
 -- Tira da lista os grupos que contêm estes cadastros (depois de mesclar/ignorar).
 create or replace function orders.cadastros_dup_tirar(p_ids bigint[]) returns int
 language plpgsql security definer set search_path to 'cadastros', 'public' as $$
-declare n int;
+declare v_qtd int;
 begin
   delete from cadastros.dup_grupos where ids && p_ids;
   get diagnostics n = row_count;
