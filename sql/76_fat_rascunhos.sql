@@ -1,0 +1,2 @@
+-- p76 (05/10/26): rascunhos da folha Nova emissão — aplicado via MCP como p76_fat_rascunhos
+-- ver migração no Supabase (orders.fat_rascunhos, RLS, só service_role)

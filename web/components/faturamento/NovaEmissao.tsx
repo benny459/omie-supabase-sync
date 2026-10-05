@@ -161,9 +161,11 @@ function acompanharEmFundo(id: number, avisar: (m: string) => void, onFim: () =>
   }, 5000);
 }
 
-export default function NovaEmissao({ config, aberto, fechar, avisar, onEmitido, inicial, admin }: {
+export default function NovaEmissao({ config, aberto, fechar, avisar, onEmitido, inicial, admin, rascunhoId }: {
   config: ConfigFat[]; aberto: boolean; fechar: () => void; avisar: (m: string) => void; onEmitido: () => void;
   inicial?: Inicial | null; admin?: boolean;
+  /** Rascunho a continuar (05/10/26): restaura o estado salvo em orders.fat_rascunhos. */
+  rascunhoId?: number | null;
 }) {
   const ativas = config.filter((c) => c.ativo);
   const [empresa, setEmpresa] = useState(ativas[0]?.empresa ?? "SF");
@@ -230,6 +232,14 @@ export default function NovaEmissao({ config, aberto, fechar, avisar, onEmitido,
   const [validando, setValidando] = useState(false);
   const [tx, setTx] = useState<null | { fase: "enviando" | "processando" | "final"; id?: number; inicio: number; e?: Record<string, unknown>; xml?: string | null; pdf?: string | null; receber?: Record<string, unknown>[]; erro?: string }>(null);
   const [agora, setAgora] = useState(Date.now());
+  // ── Rascunho (05/10/26): salva o estado completo da folha para continuar depois.
+  //    Quem acrescentar estado novo à folha: inclua-o em estadoRascunho() e aplicarRascunho().
+  const [rascId, setRascId] = useState<number | null>(null);
+  const [rascSalvoEm, setRascSalvoEm] = useState<string | null>(null);
+  const [rascSalvando, setRascSalvando] = useState(false);
+  const [rascDifs, setRascDifs] = useState<string[] | null>(null);
+  const rascUltimo = useRef<string>("");
+  const rascCarregando = useRef(false);
   const vivo = useRef(true);
 
   const cfg = config.find((c) => c.empresa === empresa);
@@ -301,7 +311,20 @@ export default function NovaEmissao({ config, aberto, fechar, avisar, onEmitido,
     fetch(`/api/faturamento/nova?op=opcoes&emp=${empresa}`, { cache: "no-store" }).then((x) => x.json()).then((j) => { if (!j.error) setOpc(j); }).catch(() => null);
     carregarProximos();
     formaDefinida.current = false;
-    if (inicial) aplicarInicial(inicial);
+    setRascId(null); setRascSalvoEm(null); setRascDifs(null); rascUltimo.current = "";
+    if (rascunhoId) {
+      rascCarregando.current = true;
+      limparFolha();
+      fetch(`/api/faturamento/rascunhos?id=${rascunhoId}`, { cache: "no-store" }).then((x) => x.json()).then((j) => {
+        const rr = j?.rascunho;
+        if (!rr) { setAviso(j?.error ?? "Rascunho não encontrado"); return; }
+        const p = rr.payload as Partial<EstadoRasc>;
+        aplicarRascunho(p);
+        setRascId(rr.id);
+        setRascSalvoEm(new Date(rr.atualizado_em).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }));
+        window.setTimeout(() => { rascUltimo.current = JSON.stringify(estadoRef.current()); rascCarregando.current = false; conferirRascunho(p, rr.atualizado_em); }, 600);
+      }).catch(() => { rascCarregando.current = false; });
+    } else if (inicial) aplicarInicial(inicial);
     else { limparFolha(); setOperacao("venda"); setTipo("nfe"); setModo("novo"); setChave(null); setRotulo(null); }
     if (inicial?.secao) {
       if (inicial.secao === "cliente") setVerCliente(true);
@@ -619,6 +642,7 @@ export default function NovaEmissao({ config, aberto, fechar, avisar, onEmitido,
     if (r.criado) { setCriado(r.criado); carregarProximos(); }
     if (r.criado && !r.emissao && !r.error) {
       setTx({ fase: "final", inicio: Date.now(), e: { status: "os_criada", tipo: "os" } });
+      marcarRascunho("emitido", null);
       onEmitido();
       return;
     }
@@ -634,6 +658,8 @@ export default function NovaEmissao({ config, aberto, fechar, avisar, onEmitido,
     const r = await fetch(`/api/faturamento/emissoes/${id}`, { cache: "no-store" }).then((x) => x.json()).catch(() => null);
     if (!vivo.current) return;
     setTx((t) => ({ fase: "final", id, inicio: t?.inicio ?? Date.now(), e: r?.emissao, xml: r?.xml_url, pdf: r?.pdf_url, receber: r?.receber ?? [] }));
+    const st = String(r?.emissao?.status ?? "");
+    if (["autorizada", "autorizado", "emitida", "emitido"].includes(st)) marcarRascunho("emitido", id);
     onEmitido();
   }
 
@@ -653,9 +679,81 @@ export default function NovaEmissao({ config, aberto, fechar, avisar, onEmitido,
     window.setTimeout(passo, 2500);
   }
 
+  function estadoRascunho() {
+    return {
+      v: 1, empresa, tipo, modo, cliCodigo, semProp, semPropMotivo, chave, rotulo, cli, itens, proposta, base, cond, forma,
+      parcs, formaPorParcela, conta, categoria, projeto, centro, vendedor, contrato, desconto, frete, outras, transp, ret,
+      pedidoCli, obs, infoContrib, operacao, nfRef, motivo, cliProjeto, geraCob, criado,
+    };
+  }
+  type EstadoRasc = ReturnType<typeof estadoRascunho>;
+  function aplicarRascunho(p: Partial<EstadoRasc>) {
+    limparFolha();
+    if (p.empresa) setEmpresa(p.empresa);
+    if (p.tipo) setTipo(p.tipo); if (p.modo) setModo(p.modo); if (p.operacao) setOperacao(p.operacao);
+    setCliCodigo(p.cliCodigo ?? ""); setSemProp(!!p.semProp); setSemPropMotivo(p.semPropMotivo ?? "");
+    setChave(p.chave ?? null); setRotulo(p.rotulo ?? null); setCriado(p.criado ?? null);
+    if (p.cli) setCli(p.cli); if (p.itens?.length) setItens(p.itens); setProposta(p.proposta ?? "");
+    if (p.base) setBase(p.base); setCond(p.cond ?? ""); condHint.current = null; formaDefinida.current = true;
+    if (p.forma) setForma(p.forma); setParcs(p.parcs ?? []); setFormaPorParcela(!!p.formaPorParcela);
+    setConta(p.conta ?? ""); setCategoria(p.categoria ?? ""); setProjeto(p.projeto ?? ""); setCentro(p.centro ?? "");
+    setVendedor(p.vendedor ?? ""); setContrato(p.contrato ?? ""); setDesconto(p.desconto ?? 0); setFrete(p.frete ?? 0); setOutras(p.outras ?? 0);
+    if (p.transp) setTransp(p.transp); if (p.ret) setRet(p.ret); setPedidoCli(p.pedidoCli ?? ""); setObs(p.obs ?? ""); setInfoContrib(p.infoContrib ?? "");
+    setNfRef(p.nfRef ?? null); setMotivo(p.motivo ?? ""); setCliProjeto(p.cliProjeto ?? ""); setGeraCob(!!p.geraCob);
+  }
+  const temConteudo = () => !!(cli.nome || itens.some((i) => i.descricao));
+  async function salvarRascunho(silencioso = false): Promise<boolean> {
+    if (rascCarregando.current || !temConteudo()) return false;
+    const est = estadoRascunho();
+    const json = JSON.stringify(est);
+    if (silencioso && json === rascUltimo.current) return true;
+    setRascSalvando(true);
+    const destinatario = cli.nome || null;
+    const r = await fetch("/api/faturamento/rascunhos", { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: rascId, empresa, tipo, operacao: tipo === "nfe" ? operacao : null, origem: chave ? "existente" : "novo",
+        chave, rotulo, cliente_codigo: cliCodigo || null, cliente_nome: cli.nome || null, destinatario,
+        projeto: projeto || null, valor_total: total, titulo: [rotulo, rotTipo, cli.nome].filter(Boolean).join(" · "), payload: est }) })
+      .then((x) => x.json()).catch((e) => ({ error: String(e) }));
+    setRascSalvando(false);
+    if (r.error) { if (!silencioso) avisar(`Rascunho: ${r.error}`); return false; }
+    setRascId(r.id); rascUltimo.current = json;
+    setRascSalvoEm(new Date(r.salvo_em ?? Date.now()).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }));
+    if (!silencioso) avisar(`Rascunho salvo — continue em Faturamento › Rascunhos`);
+    return true;
+  }
+  function marcarRascunho(status: "emitido" | "descartado", emissaoId?: number | null) {
+    if (!rascId) return;
+    fetch("/api/faturamento/rascunhos", { method: "PATCH", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: rascId, status, emissao_id: emissaoId ?? null }) }).catch(() => null);
+    rascUltimo.current = JSON.stringify(estadoRascunho());
+  }
+  /** Ao reabrir: o rascunho pode estar velho — compara CMC/saldo de hoje com o salvo e re-valida. */
+  async function conferirRascunho(p: Partial<EstadoRasc>, salvoEm: string) {
+    const difs: string[] = [];
+    const naoV = p.tipo === "nfe" && p.operacao && p.operacao !== "venda";
+    for (const it of (p.itens ?? []).filter((i) => i.codigo).slice(0, 15)) {
+      const r = await fetch(`/api/faturamento/nova?op=itens&emp=${p.empresa ?? empresa}&q=${encodeURIComponent(it.codigo)}`, { cache: "no-store" })
+        .then((x) => x.json()).catch(() => null);
+      const a = ((r?.itens ?? []) as { codigo: string; codigo_omie?: string | null; cmc: number | null; saldo: number | null }[])
+        .find((x) => x.codigo === it.codigo || x.codigo_omie === it.codigo);
+      if (!a) continue;
+      if (naoV && a.cmc != null && Math.abs(Number(a.cmc) - Number(it.valor_unitario)) > 0.009)
+        difs.push(`${it.codigo}: o CMC mudou — hoje ${fmt(Number(a.cmc))} (no rascunho ${fmt(Number(it.valor_unitario))})`);
+      if (a.saldo != null && Number(a.saldo) < Number(it.quantidade))
+        difs.push(`${it.codigo}: disponível hoje ${a.saldo} (rascunho pede ${it.quantidade})`);
+    }
+    if (!vivo.current) return;
+    setRascDifs([`Rascunho salvo em ${new Date(salvoEm).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })} — revalidado agora.`, ...difs]);
+    validar();
+  }
+
   function sair() {
     vivo.current = false;
     if (tx && tx.fase !== "final" && tx.id) { avisar(`Emissão #${tx.id} continua processando — avisaremos aqui.`); acompanharEmFundo(tx.id, avisar, onEmitido); }
+    // Fechar sem emitir: o rascunho fica salvo (só se há algo preenchido e mudou).
+    if (!tx && temConteudo() && JSON.stringify(estadoRascunho()) !== rascUltimo.current) {
+      salvarRascunho(true).then((ok) => { if (ok) avisar("Fechou sem emitir — o rascunho ficou salvo (Faturamento › Rascunhos)."); });
+    }
     fechar();
   }
 
@@ -664,6 +762,20 @@ export default function NovaEmissao({ config, aberto, fechar, avisar, onEmitido,
     // O PV/OS novo já existe: reenviar emite sobre ele (não cria outro).
     if (criado) { setChave(`venda:${criado.id}`); setRotulo(criado.label); setModo("existente"); }
   }
+
+  // Referência sempre atual do estado (o setTimeout do carregamento lê o estado já aplicado).
+  const estadoRef = useRef(estadoRascunho);
+  estadoRef.current = estadoRascunho;
+  const salvarRef = useRef(salvarRascunho);
+  salvarRef.current = salvarRascunho;
+  // Salva sozinho a cada ~20 s quando há mudanças (nunca durante/depois da transmissão).
+  useEffect(() => {
+    if (!aberto) return;
+    const t = window.setInterval(() => { if (!txRef.current) salvarRef.current(true); }, 20_000);
+    return () => window.clearInterval(t);
+  }, [aberto]);
+  const txRef = useRef(tx);
+  txRef.current = tx;
 
   if (!aberto) return null;
 
@@ -943,6 +1055,11 @@ export default function NovaEmissao({ config, aberto, fechar, avisar, onEmitido,
               </div>
             )}
             {aviso && <div className="ne-aviso" onClick={() => setAviso(null)}>{aviso}</div>}
+            {rascDifs && rascDifs.length > 0 && (
+              <div className="ne-aviso" style={{ borderColor: "var(--f-warn, #f59e0b)" }} onClick={() => setRascDifs(null)} title="Clique para fechar">
+                {rascDifs.map((d, k) => <div key={k} style={k === 0 ? { fontWeight: 600 } : undefined}>{k === 0 ? d : `• ${d}`}</div>)}
+              </div>
+            )}
 
             <section className="ne-sec" id="ne-sec-cliente">
               <h3>Cliente {cli.nome ? <small>{cli.nome} · {cli.cnpj || cli.cpf} · {cli.municipio}/{cli.uf}</small> : <small>escolha no cadastro acima</small>}
@@ -1181,7 +1298,10 @@ export default function NovaEmissao({ config, aberto, fechar, avisar, onEmitido,
           {ehOs && totRet > 0 && <span className="tot">A receber <b>{fmt(liquido)}</b></span>}
           <span className="tot">{precisaParcelas ? `${parcs.length} parcela(s)` : "sem cobrança"}</span>
           <span style={{ flex: 1 }} />
+          {rascSalvoEm && <span className="ne-dica" title="O rascunho salva sozinho a cada ~20 s">{rascSalvando ? "salvando…" : `rascunho salvo às ${rascSalvoEm}`}</span>}
           <button className="ne-btn" onClick={sair}>Cancelar</button>
+          <button className="ne-btn" disabled={rascSalvando || !temConteudo() || !!tx} onClick={() => salvarRascunho(false)}
+            title="Salva tudo o que foi preenchido para continuar depois — não emite e não reserva numeração">Salvar rascunho</button>
           <button className="ne-btn" disabled={validando} onClick={validar}>{validando ? "Validando…" : "Validar"}</button>
           {tipo !== "nfse" && <button className="ne-btn" disabled={!cli.nome || !itens.some((i) => i.descricao)} onClick={() => previaDocumento(montarDocumento(), tipo === "recibo" ? "recibo" : "nfe", avisar)}
             title="Ver como o documento vai sair — sem enviar nada à SEFAZ e sem gastar numeração">{tipo === "recibo" ? "Pré-visualizar recibo" : "Pré-visualizar DANFE"}</button>}

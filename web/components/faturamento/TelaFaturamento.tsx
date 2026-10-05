@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState, type MouseEvent, type ReactN
 import { PaginaNavy } from "@/components/navy/tela/KitTela";
 import { limpo } from "@/lib/faturamento/montar";
 import NovaEmissao, { type ConfigFat, type Inicial } from "@/components/faturamento/NovaEmissao";
+import Rascunhos from "@/components/faturamento/Rascunhos";
 import RegistrarNfse from "@/components/faturamento/RegistrarNfse";
 import ContratosRecorrentes from "@/components/faturamento/ContratosRecorrentes";
 import "./faturamento.css";
@@ -123,7 +124,7 @@ export default function TelaFaturamento() {
   const [empresa, setEmpresa] = useState("SF");
   const [periodo, setPeriodo] = useState("mes");
   const [tipo, setTipo] = useState<"all" | "PV" | "OS">("all");
-  const [view, setView] = useState<"list" | "kanban" | "emissoes" | "nfse">("list");
+  const [view, setView] = useState<"list" | "kanban" | "emissoes" | "nfse" | "rascunhos">("list");
   const [regNfse, setRegNfse] = useState<string[] | null>(null);
   const [q, setQ] = useState("");
   // Busca no servidor (todos os períodos) a partir de 3 letras, com pausa.
@@ -141,6 +142,14 @@ export default function TelaFaturamento() {
   const [aberto, setAberto] = useState<string | null>(null);
   const [nova, setNova] = useState(false);
   const [inicialNova, setInicialNova] = useState<Inicial | null>(null);
+  // Rascunhos (05/10/26): qual continuar na folha e quais PV/OS têm rascunho aberto (selo na lista).
+  const [rascNova, setRascNova] = useState<number | null>(null);
+  const [rascChaves, setRascChaves] = useState<Map<string, number>>(new Map());
+  const carregarRasc = useCallback(() => {
+    fetch("/api/faturamento/rascunhos?chaves=1", { cache: "no-store" }).then((x) => x.json())
+      .then((j) => setRascChaves(new Map(((j.chaves ?? []) as { id: number; chave: string }[]).map((c) => [c.chave, c.id])))).catch(() => null);
+  }, []);
+  useEffect(() => { carregarRasc(); }, [carregarRasc]);
   const [ocupado, setOcupado] = useState<string | null>(null);
   const [verPront, setVerPront] = useState(false);
   const [secao, setSecao] = useState<"carteira" | "contratos">("carteira");
@@ -254,6 +263,11 @@ export default function TelaFaturamento() {
   /** Revisar e emitir (05/10/26): toda emissão passa pela folha completa,
    *  pré-preenchida e editável — nunca direto da lista ou da gaveta. */
   async function abrirFolhaDe(d: Doc, secao?: Inicial["secao"]) {
+    const rid = rascChaves.get(d.chave);
+    if (rid && window.confirm(`${d.rotulo} tem um rascunho salvo (#${rid}). Continuar o rascunho?\n\nOK = continuar · Cancelar = começar do zero`)) {
+      setInicialNova(null); setRascNova(rid); setAberto(null); setNova(true); return;
+    }
+    setRascNova(null);
     const r = await agir(d, "doc");
     if (!r?.documento) return;
     setInicialNova({ chave: d.chave, documento: r.documento as Inicial["documento"], tipo: d.tipo === "PV" ? "nfe" : undefined,
@@ -314,14 +328,15 @@ export default function TelaFaturamento() {
             <button className="btn" onClick={exportar}>Exportar</button>
             <button className="btn" onClick={() => { setDocs(null); carregar(); }}>Recarregar</button>
             <button className="btn" onClick={() => setVerPront((v) => !v)}>Prontidão</button>
-            <button className="btn pri" onClick={() => { setInicialNova(null); setNova(true); }}>+ Nova emissão</button>
+            <button className="btn pri" onClick={() => { setInicialNova(null); setRascNova(null); setNova(true); }}>+ Nova emissão</button>
           </div>
         </div>
 
         {erro && <div className="alert bad" onClick={() => setErro(null)}>{erro}</div>}
         <Prontidao p={pront} empresa={empresa} aberto={verPront} onMudou={carregar} />
-        <NovaEmissao config={config} aberto={nova} inicial={inicialNova} admin={!!pront?.pode_mudar}
-          fechar={() => { setNova(false); setInicialNova(null); }} avisar={avisar} onEmitido={carregar} />
+        <NovaEmissao config={config} aberto={nova} inicial={inicialNova} admin={!!pront?.pode_mudar} rascunhoId={rascNova}
+          fechar={() => { setNova(false); setInicialNova(null); setRascNova(null); window.setTimeout(carregarRasc, 1500); }} avisar={avisar}
+          onEmitido={() => { carregar(); carregarRasc(); }} />
 
         <div className="tabsec">
           <button className={secao === "carteira" ? "on" : ""} onClick={() => setSecao("carteira")}>PV &amp; OS<span className="ct">{(docs ?? []).length}</span></button>
@@ -369,6 +384,7 @@ export default function TelaFaturamento() {
             <button className={view === "kanban" ? "on" : ""} onClick={() => setView("kanban")}>▦ Kanban</button>
             <button className={view === "emissoes" ? "on" : ""} onClick={() => setView("emissoes")}>⎙ Emissões</button>
             <button className={view === "nfse" ? "on" : ""} onClick={() => setView("nfse")}>🏛 NFS-e registradas</button>
+            <button className={view === "rascunhos" ? "on" : ""} onClick={() => setView("rascunhos")}>✎ Rascunhos{rascChaves.size ? ` · ${rascChaves.size} de PV/OS` : ""}</button>
           </div>
           <label className="per" title="Período do faturado — a carteira em aberto aparece sempre; com busca, procura em todos os períodos">
             <span>Período</span>
@@ -381,7 +397,7 @@ export default function TelaFaturamento() {
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></svg>
             <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar PV, OS, cliente (nome fantasia), OC, NF… — procura em todos os períodos" />
           </div>
-          {view !== "emissoes" && view !== "nfse" && <>
+          {view !== "emissoes" && view !== "nfse" && view !== "rascunhos" && <>
             <select className="sel" value={orig} onChange={(e) => setOrig(e.target.value)}>
               <option value="">Origem: todas</option><option>Omie</option><option>Painel</option><option>CRM</option>
             </select>
@@ -395,7 +411,7 @@ export default function TelaFaturamento() {
             ))}
           </>}
         </div>
-        {view !== "emissoes" && view !== "nfse" && (
+        {view !== "emissoes" && view !== "nfse" && view !== "rascunhos" && (
           <div className="ativos">
             {ativos.map((a) => <span key={a.k} className="fchip">{a.l}<button onClick={a.limpar} title="Tirar este filtro">×</button></span>)}
             {ativos.length > 1 && <button className="btn ghost sm" onClick={limparFiltros}>Limpar filtros</button>}
@@ -418,10 +434,12 @@ export default function TelaFaturamento() {
           </div>
         )}
 
-        {view === "list" && (docs ? <Lista rows={ordenados} sel={sel} setSel={setSel} sort={sort} setSort={setSort} abrir={setAberto} ocupado={ocupado} agir={agir} prod={prod} registrar={(d) => setRegNfse([d.chave])} salvarPrevisao={salvarPrevisao} rec={rec} revisar={abrirFolhaDe} /> : null)}
+        {view === "list" && (docs ? <Lista rows={ordenados} sel={sel} setSel={setSel} sort={sort} setSort={setSort} abrir={setAberto} ocupado={ocupado} agir={agir} prod={prod} registrar={(d) => setRegNfse([d.chave])} salvarPrevisao={salvarPrevisao} rec={rec} revisar={abrirFolhaDe} rasc={rascChaves} /> : null)}
         {view === "kanban" && (docs ? <Kanban rows={filtrados} abrir={setAberto} /> : null)}
         {view === "emissoes" && <Emissoes lista={emissoes} q={q} onMudou={carregar} avisar={avisar} />}
         {view === "nfse" && <NfseRegistradas empresa={empresa} q={q} onMudou={carregar} avisar={avisar} />}
+        {view === "rascunhos" && <Rascunhos q={q} avisar={avisar} onMudou={carregarRasc}
+          continuar={(id) => { setInicialNova(null); setRascNova(id); setNova(true); }} />}
 
         <p style={{ color: "var(--f-tx3)", fontSize: 12, marginTop: 12 }}>
           Carteira: PV/OS em aberto (todas as datas) + faturados no período. PV do Omie fatura pelo painel (NF-e, Focus). NFS-e: emita no portal da prefeitura e registre-a aqui (Registrar NFS-e) — cria o contas a receber pelo líquido e marca a OS como faturada no painel.
@@ -648,10 +666,10 @@ function Acoes({ d, ocupado, abrir, prod, registrar, revisar }: { d: Doc; ocupad
   </>;
 }
 
-function Lista({ rows, sel, setSel, sort, setSort, abrir, ocupado, agir, prod, registrar, salvarPrevisao, rec, revisar }: {
+function Lista({ rows, sel, setSel, sort, setSort, abrir, ocupado, agir, prod, registrar, salvarPrevisao, rec, revisar, rasc }: {
   rows: Doc[]; sel: Set<string>; setSel: (s: Set<string>) => void; sort: { k: string; d: 1 | -1 }; setSort: (s: { k: string; d: 1 | -1 }) => void;
   abrir: (k: string) => void; ocupado: string | null; agir: (d: Doc, a: "prevoo" | "ensaio" | "emitir") => unknown; prod: boolean; registrar: (d: Doc) => void;
-  salvarPrevisao: (d: Doc, data: string | null) => void; rec: Record<string, RecRes>; revisar: (d: Doc) => void;
+  salvarPrevisao: (d: Doc, data: string | null) => void; rec: Record<string, RecRes>; revisar: (d: Doc) => void; rasc?: Map<string, number>;
 }) {
   const [limite, setLimite] = useState(200);
   if (!rows.length) return <div className="tablebox"><div className="empty">Nenhum documento com esses filtros.</div></div>;
@@ -684,7 +702,8 @@ function Lista({ rows, sel, setSel, sort, setSort, abrir, ocupado, agir, prod, r
                     onChange={() => { const n = new Set(sel); if (n.has(d.chave)) n.delete(d.chave); else n.add(d.chave); setSel(n); }} />
                 </td>
                 <td>
-                  <div className="doc"><span className={`tag ${d.tipo.toLowerCase()}`}>{d.tipo}</span><b>{d.rotulo}</b></div>
+                  <div className="doc"><span className={`tag ${d.tipo.toLowerCase()}`}>{d.tipo}</span><b>{d.rotulo}</b>
+                    {rasc?.has(d.chave) && <span className="chipf on" style={{ marginLeft: 6, padding: "1px 7px", fontSize: 10.5 }} title={`Tem rascunho salvo (#${rasc.get(d.chave)}) — Revisar e emitir oferece continuar`}>rascunho</span>}</div>
                   <div className="orig">{d.origem} · {etapaRot(d)}</div>
                   {d.proposta && <div className="orig" title="Proposta do CRM">↳ {d.proposta}</div>}
                   {!d.proposta && d.sem_proposta && <div className="orig" style={{ color: "var(--f-warn)" }} title={d.sem_proposta}>sem proposta</div>}

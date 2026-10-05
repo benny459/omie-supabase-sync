@@ -57,6 +57,17 @@ atualizado: 2026-10-05
 
 > **Dica:** se o pedido não tem forma/conta, a emissão herda as do **último faturamento do cliente** — confira antes de emitir.
 
+## Como faço para salvar uma nota como rascunho e continuar depois
+
+1. Na folha de emissão, clique em **Salvar rascunho** (ao lado de Cancelar). Nada é emitido e nenhum número (PV, OS, NF-e, recibo) é reservado.
+2. A folha também **salva sozinha a cada ~20 segundos** quando algo mudou, e ao **fechar sem emitir** — o rodapé mostra "rascunho salvo às hh:mm".
+3. Para continuar: aba **✎ Rascunhos** (ao lado de NFS-e registradas) → **Continuar**. A folha reabre exatamente como estava.
+4. Ao reabrir, o sistema **revalida** a nota e avisa o que mudou desde o rascunho (ex.: "o CMC mudou", saldo do estoque menor que a quantidade).
+5. Um PV/OS da carteira com rascunho aparece com o selo **rascunho**; em **Revisar e emitir** você escolhe continuar o rascunho ou começar do zero.
+6. Na lista de rascunhos também dá para **Duplicar** (usar como base para outra nota) e **Descartar**. Depois de emitida, a nota sai da lista sozinha.
+
+> **Dica:** o número definitivo só é definido na hora de emitir — dois rascunhos nunca "brigam" pelo mesmo número.
+
 ## Depois de emitir
 
 A janela acompanha: **1 · Enviando à Focus → 2 · Processando na SEFAZ → Autorizada** (ou Rejeitada).
