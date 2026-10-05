@@ -78,7 +78,7 @@ export async function GET(req: Request) {
   const u = new URL(req.url);
   if (u.searchParams.get("op") !== "proximo") return NextResponse.json({ error: "op inválida" }, { status: 400 });
   const empresa = (u.searchParams.get("empresa") ?? "SF").toUpperCase();
-  const { data, error } = await supaAdmin().schema("compras").rpc("proximo_numero_previa", { p_empresa: empresa });
+  const { data, error } = await supaAdmin().schema("orders").rpc("proximo_numero_previa", { p_empresa: empresa });
   if (error) return NextResponse.json({ error: error.message }, { status: 400 });
   return NextResponse.json({ empresa, proximo: data, aviso: "prévia — confirmado ao gravar" });
 }
