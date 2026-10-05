@@ -217,6 +217,9 @@ export function validar(doc: DocFat): string | null {
   if (op === "devolucao") {
     if (so(doc.operacao?.nf_ref?.chave).length !== 44) return "Devolução: informe a chave (44 dígitos) da NF de origem";
     if ((doc.operacao?.motivo ?? "").trim().length < 5) return "Devolução: informe o motivo";
+    const emi = so(doc.operacao?.nf_ref?.emitente_doc);
+    if (emi && so(doc.cliente.cnpj || doc.cliente.cpf) && emi !== so(doc.cliente.cnpj || doc.cliente.cpf))
+      return "Devolução: o destinatário tem de ser o emitente da NF de origem (a SEFAZ rejeita)";
     for (const i of doc.itens) if (i.quantidade_max != null && i.quantidade > i.quantidade_max + 1e-9) return `Devolução: ${i.descricao} passa da quantidade da NF de origem (${i.quantidade_max})`;
   }
   if (op === "remessa" || op === "conserto") {
