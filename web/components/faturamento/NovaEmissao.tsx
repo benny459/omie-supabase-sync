@@ -501,7 +501,7 @@ export default function NovaEmissao({ config, aberto, fechar, avisar, onEmitido,
     const c = semEst[(it.codigo ?? "").trim().toUpperCase()];
     setAcerto({ n, c: {
       n_cod_prod: c?.n_cod_prod ?? 0, codigo: c?.codigo ?? it.codigo ?? null, descricao: c?.descricao ?? it.descricao ?? "",
-      unidade: it.unidade || c?.unidade || null, ultimo_preco: c?.ultimo_preco ?? (it.valor_unitario || null), ultima_compra: c?.ultima_compra ?? null,
+      unidade: c?.unidade || it.unidade || null, ultimo_preco: c?.ultimo_preco ?? (it.valor_unitario || null), ultima_compra: c?.ultima_compra ?? null,
       fornecedor: c?.fornecedor ?? null, fornecedor_cod: c?.fornecedor_cod ?? null, ncm: (it.ncm || c?.ncm) ?? null } });
   }
 

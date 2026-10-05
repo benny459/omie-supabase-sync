@@ -12,7 +12,7 @@ import { useEffect, useState } from "react";
 
 type Compra = { n_cod_prod: number; codigo: string | null; descricao: string; unidade: string | null; ultimo_preco: number | null;
   fornecedor: string | null; ncm: string | null };
-type Parecido = { n_cod_prod: number; codigo_novo: string | null; descricao: string; saldo: number | null; sim: number; igual?: boolean };
+type Parecido = { n_cod_prod: number; codigo_novo: string | null; descricao: string; saldo: number | null; sim: number; igual?: boolean; fraco?: boolean };
 type Familia = { id: number; nome: string; prefixo: string | null };
 type Nativo = { n_cod_prod?: number; codigo: string; descricao: string; saldo: number | null };
 type Info = { em_estoque: boolean; saldo: number | null; cmc: number | null; comprado: number; pcs: number; saldo_estimado: number;
@@ -88,9 +88,10 @@ export default function AcertoItemEstoque({ empresa, compra, onFechar, onPronto 
 
       <div className="ne-acerto-sec">
         <div className="ne-acerto-tit">1. Já existe no estoque? <small>(mais parecidos primeiro — evite duplicar)</small></div>
+        {pr.length > 0 && pr.every((p) => p.fraco) && <div className="ne-dica">Nada parecido o bastante — itens nossos com a mesma palavra:</div>}
         {parecidos == null ? <div className="ne-dica">procurando…</div> : pr.length === 0 ? <div className="ne-dica">Nenhum item parecido no estoque.</div> : pr.map((p) => (
           <div key={p.n_cod_prod} className="ne-comp-it">
-            <div style={{ flex: 1 }}><b>{p.codigo_novo}</b> — {p.descricao}<small style={{ display: "block" }}>semelhança {Math.round(Number(p.sim) * 100)}%{p.igual ? " · descrição igual" : ""}{p.saldo != null ? ` · disp. ${p.saldo}` : ""}</small></div>
+            <div style={{ flex: 1 }}><b>{p.codigo_novo}</b> — {p.descricao}<small style={{ display: "block" }}>{p.fraco ? "mesma família/palavra" : `semelhança ${Math.round(Number(p.sim) * 100)}%`}{p.igual ? " · descrição igual" : ""}{p.saldo != null ? ` · disp. ${p.saldo}` : ""}</small></div>
             <button className="ne-btn" disabled={ocupado} onClick={() => vincular(p.n_cod_prod, p.codigo_novo!)}>Usar este</button>
           </div>))}
         <input className="ne-in" style={{ width: "100%", marginTop: 6 }} placeholder="ou procure outro item do estoque (nome ou código)…" value={q} onChange={(e) => setQ(e.target.value)} />

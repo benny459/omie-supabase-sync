@@ -49,13 +49,30 @@ export async function GET(req: Request) {
       origem ? orders().rpc("estoque_vinculo_info", { p_empresa: emp, p_origem: origem }) : Promise.resolve({ data: null, error: null }),
     ]);
     if (par.error || fam.error) return erro((par.error ?? fam.error)!.message, 500);
-    const parecidos = ((par.data ?? []) as { n_cod_prod: number; codigo_novo: string | null; descricao: string; saldo: number | null; sim: number; igual: boolean }[])
+    let parecidos = ((par.data ?? []) as { n_cod_prod: number; codigo_novo: string | null; descricao: string; saldo: number | null; sim: number; igual: boolean; fraco?: boolean }[])
       .filter((p) => p.codigo_novo);
     // família sugerida: a do item mais parecido que já tem código novo
     let familia_sugerida: number | null = null;
     if (parecidos[0]) {
       const f = await orders().from("v_estoque_item").select("familia_id").eq("empresa", emp).eq("n_cod_prod", parecidos[0].n_cod_prod).maybeSingle();
       familia_sugerida = (f.data?.familia_id as number | null) ?? null;
+    } else {
+      // nada parecido o bastante: itens nossos com a mesma 1ª palavra (CABO, LUVA…) — dão a família e
+      // ficam como candidatos fracos para vincular (05/10/26: "Criar item nosso" não pode parar sem família)
+      const ws = descricao.trim().split(/\s+/).filter((x) => x.length >= 2);
+      type N = { n_cod_prod: number; codigo: string; descricao: string; saldo: number | null; familia_id: number | null };
+      let nat: N[] = [];
+      for (const w of [ws.slice(0, 2).join(" "), ws[0] ?? ""]) {
+        if (w.length < 3 || nat.length) continue;
+        const r = await orders().rpc("fat_itens_buscar", { p_empresa: emp, p_q: w, p_lim: 20 });
+        nat = ((r.data as { nativos?: N[] } | null)?.nativos ?? []);
+      }
+      if (nat.length) {
+        const cont = new Map<number, number>();
+        for (const n of nat) if (n.familia_id) cont.set(n.familia_id, (cont.get(n.familia_id) ?? 0) + 1);
+        familia_sugerida = [...cont.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? null;
+        parecidos = nat.slice(0, 5).map((n) => ({ n_cod_prod: n.n_cod_prod, codigo_novo: n.codigo, descricao: n.descricao, saldo: n.saldo, sim: 0, igual: false, fraco: true }));
+      }
     }
     return NextResponse.json({ parecidos, familias: fam.data ?? [], familia_sugerida, info: inf.data ?? null });
   }
