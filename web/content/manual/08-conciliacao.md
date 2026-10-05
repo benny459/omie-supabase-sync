@@ -53,3 +53,8 @@ O **Omie Cash** funciona como uma conta bancária: os movimentos entram sozinhos
 **Concilei errado.** Use **desfazer** no lançamento (ou desfazer transferência).
 
 **Os botões não aparecem para mim.** Baixar e conciliar dependem das permissões “Baixar / estornar título” e “Conciliação bancária”.
+
+## Movimento de um banco pagando título de outra empresa
+
+As sugestões do painel **Casar** procuram títulos de **todas as empresas** do grupo. Quando o título é de outra empresa (ex.: saída no C6 da SF pagando conta da CD), aparece a etiqueta **"outra empresa (CD) — gera intercompany"**. Ao casar, o título fica pago e o registro "CD deve à SF" entra em **Financeiro → Intercompany**, onde se marca como liquidado quando as empresas acertarem entre si.
+

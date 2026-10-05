@@ -1,0 +1,5 @@
+-- p74 (05/10/26): intercompany — banco de outra empresa do grupo paga/recebe título
+-- Aplicado por migrações p74_intercompany_1..4 (finance.intercompany, trg_baixa_intercompany,
+-- intercompany_painel/liquidar/reabrir; pagar_v3_programar e pagar_v3_baixar aceitam conta de qualquer
+-- empresa do grupo; conciliacao_candidatos procura em todas as empresas com -10 e motivo 'gera intercompany';
+-- conciliar_casar aprende alias em todas as empresas).

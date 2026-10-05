@@ -572,6 +572,19 @@ export const FINANCEIRO: NavItem[] = [
     ),
   },
   {
+    // Contas de uma empresa pagas/recebidas por banco de outra do grupo (05/10/26).
+    href: "/financeiro/intercompany",
+    area: "erp",
+    grupo: "financeiro",
+    label: "Intercompany",
+    tone: "text-violet-500",
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className="w-5 h-5" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M7 7h11l-3-3M17 17H6l3 3"/>
+      </svg>
+    ),
+  },
+  {
     href: "/bi/simples",
     area: "bi",
     grupo: "bi",

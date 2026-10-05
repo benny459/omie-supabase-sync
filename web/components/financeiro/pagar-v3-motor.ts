@@ -61,7 +61,11 @@ export function montarPagarV3(o: Opts) {
   const badge = (s) => `<span class="bdg ${PST[s].c}">${PST[s].l}</span>`;
   const bankOf = (cod) => BANKS.find((b) => b.cod === cod);
   const bankDesc = (cod) => bankOf(cod)?.desc ?? "";
-  const payBanks = (e) => BANKS.filter((b) => b.emp === e && b.tipo !== "CX" && b.tipo !== "AD");
+  // Contas do grupo (SF/CD/WW) — a da própria empresa primeiro (05/10/26: pagar conta da CD/WW por banco da SF gera intercompany).
+  const payBanks = (e) => { const ok = BANKS.filter((b) => b.tipo !== "CX" && b.tipo !== "AD"); return [...ok.filter((b) => b.emp === e), ...ok.filter((b) => b.emp !== e)]; };
+  const bankGroupsHtml = (e, cur) => { const bs = payBanks(e); const emps = [...new Set(bs.map((b) => b.emp))];
+    return emps.map((x) => `<optgroup label="${x === e ? EN[x] || x : (EN[x] || x) + " — gera intercompany"}">${bs.filter((b) => b.emp === x).map((b) => `<option value="${b.cod}" ${b.cod === cur ? "selected" : ""}>${x} · ${esc(b.desc)}</option>`).join("")}</optgroup>`).join(""); };
+  const interco = (r, cod) => { const bk = cod ? bankOf(cod) : null; return bk && bk.emp !== r.emp ? bk.emp : null; };
   const iso = (d) => d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
   const tip = q("tip");
   function showTip(e, h) { tip.innerHTML = h; tip.style.display = "block"; tip.style.left = Math.min(e.clientX + 14, innerWidth - 240) + "px"; tip.style.top = e.clientY + 14 + "px"; }
@@ -271,13 +275,13 @@ export function montarPagarV3(o: Opts) {
 
   /* PROGRAMAÇÃO POR BANCO */
   function renderBStrip(pre) {
-    const g = {}; pre.forEach((r) => { const key = r.bank ? r.emp + "|" + r.bank : "none"; (g[key] = g[key] || []).push(r); });
+    const g = {}; pre.forEach((r) => { const key = r.bank ? (bankOf(r.bank)?.emp ?? r.emp) + "|" + r.bank : "none"; (g[key] = g[key] || []).push(r); });
     const cur = S.cf.bank;
     const cards = Object.entries(g).sort((a, b) => (a[0] === "none" ? -1 : b[0] === "none" ? 1 : sum(b[1]) - sum(a[1]))).map(([key, rs]) => {
       if (key === "none") return `<div class="bcard none" data-b="(sem banco)"><div class="t">⚠ Sem banco definido</div><div class="v num">${brl(sum(rs))}</div><div class="s">${rs.length} títulos — escolha o banco</div></div>`;
       const [e, cod] = key.split("|"); const bk = bankOf(+cod); const saldo = bk ? bk.saldo : 0; const lib = sum(rs.filter((r) => ["ok", "dir"].includes(r.st))); const over = lib > saldo; const nm = bk?.desc ?? cod;
       const c6 = /\bc6\b/i.test(nm) ? `<button class="btn sm" data-c6="${key}" style="margin-top:6px" title="Gerar o arquivo de pagamentos do C6 com estes títulos">Arquivo C6 ↓</button>` : "";
-      return `<div class="bcard ${over ? "over" : ""} ${cur && cur.size === 1 && cur.has(nm) ? "on" : ""}" data-b="${esc(nm)}"><div class="t"><span class="emp ${e}">${e}</span>${esc(nm)}</div><div class="v num">${brl(sum(rs))}</div><div class="s">${rs.length} títulos · saldo ${kk(saldo)}${over ? " · falta " + kk(lib - saldo) : " ✓"}</div>${c6}</div>`;
+      return `<div class="bcard ${over ? "over" : ""} ${cur && cur.size === 1 && cur.has(nm) ? "on" : ""}" data-b="${esc(nm)}"><div class="t"><span class="emp ${e}">${e}</span>${esc(nm)}</div><div class="v num">${brl(sum(rs))}</div><div class="s">${rs.length} títulos · saldo ${kk(saldo)}${over ? " · falta " + kk(lib - saldo) : " ✓"}</div>${(() => { const ou = rs.filter((r) => r.emp !== e); if (!ou.length) return ""; const es2 = [...new Set(ou.map((r) => r.emp))].join("/"); return `<div class="s" style="color:#a78bfa">inclui ${ou.length} título${ou.length > 1 ? "s" : ""} de ${es2} · intercompany</div>`; })()}${c6}</div>`;
     }).join("");
     const el = q("bstrip"); el.innerHTML = cards ? `<span class="sub2" style="align-self:center;margin-right:2px">Programação<br>por banco</span>` + cards : "";
     el.querySelectorAll("[data-c6]").forEach((b) => (b.onclick = (ev) => { ev.stopPropagation(); const lst = g[b.dataset.c6] || []; if (lst.length) o.onRemessa(lst.map((r) => r.ref)); }));
@@ -389,7 +393,7 @@ export function montarPagarV3(o: Opts) {
       return `<tr data-id="${r.id}" class="${S.sel.has(r.id) ? "sel" : ""}"><td>${PODE.baixar ? `<input type="checkbox" class="ck" data-id="${r.id}" ${S.sel.has(r.id) ? "checked" : ""}>` : ""}</td>
       <td class="${r.dias < 0 ? "od" : r.dias === 0 ? "td" : ""}">${dm(r.d)} <span class="sub2">${r.dias < 0 ? r.dias + "d" : r.dias === 0 ? "hoje" : "+" + r.dias + "d"}</span>${+r.d !== +r.vd || r.repr ? `<div class="sub2" title="Vencimento do documento${r.repr ? " · previsão reprogramada" : ""}">venc ${dm(r.vd)}${r.repr ? ' · <span style="color:#a78bfa">reprog.</span>' : ""}</div>` : ""}</td>
       <td><span class="emp ${r.emp}">${r.emp}</span></td><td title="${esc(r.forn)}" style="font-weight:500">${esc(r.forn)}</td><td class="${r.cat ? "" : "nocat"}" style="color:var(--tx2)">${esc(r.cat || "Sem categoria")}</td>
-      <td>${compra}</td><td>${nf}</td><td>${badge(r.st)}</td><td><select class="bsel ${r.bank ? (r.bank !== r.cod_cc ? "chg" : "") : "need"}" data-bk="${r.id}" title="Conta prevista no Omie: ${esc(r.conta)}" ${PODE.baixar ? "" : "disabled"}><option value="">Escolher banco…</option>${payBanks(r.emp).map((b) => `<option value="${b.cod}" ${b.cod === r.bank ? "selected" : ""}>${esc(b.desc)}</option>`).join("")}</select>${r.env ? `<div class="sub2" style="color:#38bdf8" title="Arquivo de remessa #${r.env.id} gerado em ${new Date(r.env.em).toLocaleString("pt-BR")}">↗ enviado ${esc(r.env.banco)} · pagto ${dm(new Date(r.env.data + "T00:00:00"))}</div>` : ""}</td><td class="r" style="font-weight:650">${brl(r.v)}</td>
+      <td>${compra}</td><td>${nf}</td><td>${badge(r.st)}</td><td><select class="bsel ${r.bank ? (r.bank !== r.cod_cc ? "chg" : "") : "need"}" data-bk="${r.id}" title="Conta prevista no Omie: ${esc(r.conta)}" ${PODE.baixar ? "" : "disabled"}><option value="">Escolher banco…</option>${bankGroupsHtml(r.emp, r.bank)}</select>${interco(r, r.bank) ? `<div class="sub2" style="color:#a78bfa" title="Título da ${r.emp} pago por conta da ${interco(r, r.bank)} — fica registado como intercompany">pago pela ${interco(r, r.bank)}</div>` : ""}${r.env ? `<div class="sub2" style="color:#38bdf8" title="Arquivo de remessa #${r.env.id} gerado em ${new Date(r.env.em).toLocaleString("pt-BR")}">↗ enviado ${esc(r.env.banco)} · pagto ${dm(new Date(r.env.data + "T00:00:00"))}</div>` : ""}</td><td class="r" style="font-weight:650">${brl(r.v)}</td>
       <td class="r">${PODE.baixar ? `<button class="btn sm" data-bx="${r.id}">Baixar</button>` : ""}</td></tr>`;
     }).join("")}</tbody>`;
     qa("#tbl tbody tr").forEach((tr) => (tr.onclick = (e) => { if (e.target.classList.contains("ck") || e.target.tagName === "SELECT" || e.target.tagName === "OPTION") return; openDrawer(+tr.dataset.id); }));
@@ -417,8 +421,8 @@ export function montarPagarV3(o: Opts) {
   function renderAbar() {
     const sel = rows.filter((r) => S.sel.has(r.id) && !r.paid); const b = q("abar"); b.classList.toggle("on", sel.length > 0); if (!sel.length) return;
     const es = EMPS.filter((e) => sel.some((r) => r.emp === e)); const ab = q("abarBank");
-    ab.innerHTML = '<option value="">Definir banco p/ selecionados…</option>' + es.map((e) => `<optgroup label="${EN[e]}">${payBanks(e).map((x) => `<option value="${e}|${x.cod}">${e} · ${esc(x.desc)}</option>`).join("")}</optgroup>`).join("");
-    ab.onchange = () => { if (!ab.value) return; const [e, cod] = ab.value.split("|"); programar(sel.filter((r) => r.emp === e), +cod); };
+    ab.innerHTML = '<option value="">Definir banco p/ selecionados…</option>' + bankGroupsHtml(es.length === 1 ? es[0] : "SF", null);
+    ab.onchange = () => { if (!ab.value) return; programar(sel, +ab.value); };
     const bl = sel.filter((r) => !["ok", "dir"].includes(r.st));
     q("abarN").textContent = `${sel.length} selecionado${sel.length > 1 ? "s" : ""}`;
     q("abarV").textContent = brl(sum(sel));
@@ -434,7 +438,7 @@ export function montarPagarV3(o: Opts) {
   document.addEventListener("keydown", onKey);
   const num = (v) => +String(v).replace(/\./g, "").replace(",", ".") || 0;
   const fmt = (v) => v.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  function bankOpts(e, cur) { const bs = payBanks(e); return `<option value="">Selecione o banco…</option>` + bs.map((b) => `<option value="${b.cod}" ${b.cod === cur ? "selected" : ""}>${esc(b.desc)}</option>`).join(""); }
+  function bankOpts(e, cur) { return `<option value="">Selecione o banco…</option>` + bankGroupsHtml(e, cur); }
   function flowHtml(r) {
     if (!r.pc) return "";
     const apOk = r.apr && r.apr !== "PENDENTE"; const nfOk = ["60", "80"].includes(r.etapa) || r.fase === "liberado"; const nfE = r.etapa === "40";
@@ -543,7 +547,7 @@ export function montarPagarV3(o: Opts) {
       ${groups.map((e) => { const rs = sel.filter((r) => r.emp === e); const common = [...new Set(rs.map((r) => r.bank).filter(Boolean))].filter((c) => payBanks(e).some((b) => b.cod === c));
         return `<div class="grp"><div class="grph"><span class="emp ${e}">${e}</span><b>${EN[e]}</b><span class="sub2">${rs.length} títulos · <b class="num" style="color:var(--tx)">${brl(sum(rs))}</b></span><select data-e="${e}" class="lb">${bankOpts(e, common.length === 1 ? common[0] : null)}</select></div>
         <div class="gl">${rs.sort((a, b) => a.dias - b.dias).map((r) => `<div><span class="num ${r.dias < 0 ? "neg" : ""}">${dm(r.d)}</span><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(r.forn)} <span class="sub2">· ${esc(r.cat || "Sem categoria")}</span></span><span class="num" style="text-align:right">${brl(r.v)}</span></div>`).join("")}</div></div>`; }).join("")}
-      ${groups.length > 1 ? '<div class="sub2">A seleção mistura empresas — cada CNPJ baixa pelo seu próprio banco.</div>' : ""}
+      ${groups.length > 1 ? '<div class="sub2">A seleção mistura empresas — escolha o banco de cada uma. Um banco de outra empresa do grupo gera intercompany.</div>' : '<div class="sub2">Banco de outra empresa do grupo gera intercompany (ex.: título da CD pago pela SF).</div>'}
       <div class="origem">Os títulos ficam PAGOS em todo o painel (BI, fluxo de caixa, fichas). O Omie não é mais atualizado.</div>
     </div>
     <div class="df"><button class="btn" id="mC">Cancelar</button><button class="btn ok" id="mOk">Confirmar ${sel.length} baixas</button></div>`;

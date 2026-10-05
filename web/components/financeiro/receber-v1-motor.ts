@@ -54,7 +54,11 @@ export function montarReceberV1(o: Opts) {
   const fmt = (v) => v.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const bankOf = (cod) => BANKS.find((b) => b.cod === cod);
   const bankDesc = (cod) => bankOf(cod)?.desc ?? "";
-  const payBanks = (e) => BANKS.filter((b) => b.emp === e && !["CX", "AD"].includes(b.tipo));
+  // Contas do grupo (SF/CD/WW) — a da própria empresa primeiro; receber numa conta de outra empresa gera intercompany (05/10/26).
+  const payBanks = (e) => { const ok = BANKS.filter((b) => !["CX", "AD"].includes(b.tipo)); return [...ok.filter((b) => b.emp === e), ...ok.filter((b) => b.emp !== e)]; };
+  const bankGroupsHtml = (e, cur) => { const bs = payBanks(e); const emps = [...new Set(bs.map((b) => b.emp))];
+    return emps.map((x) => `<optgroup label="${x === e ? EN[x] || x : (EN[x] || x) + " — gera intercompany"}">${bs.filter((b) => b.emp === x).map((b) => `<option value="${b.cod}" ${b.cod === cur ? "selected" : ""}>${x} · ${esc(b.desc)}</option>`).join("")}</optgroup>`).join(""); };
+  const interco = (r, cod) => { const bk = cod ? bankOf(cod) : null; return bk && bk.emp !== r.emp ? bk.emp : null; };
   function histTag(r) { if (r.nh == null) return '<span class="hist n">sem histórico</span>'; const c = r.pont >= 80 && r.atr <= 3 ? "g" : r.atr > 10 || r.pont < 40 ? "b" : "m"; return `<span class="hist ${c}">${r.pont}% pontual · ${r.atr > 0 ? "+" + r.atr + "d" : r.atr + "d"}</span>`; }
   function sit(o) { o.st = o.reneg ? "reneg" : o.diasV < 0 ? (o.prom ? "prom" : "cobrar") : o.bol ? "bol" : o.tipo === "NFS" ? "nfs" : "semb"; }
   const tip = q("tip");
@@ -311,7 +315,7 @@ export function montarReceberV1(o: Opts) {
       <td class="${r.diasV < 0 ? "od" : r.diasV === 0 ? "td" : ""}">${dmy(r.d)} <span class="sub2">${r.diasV < 0 ? r.diasV + "d" : r.diasV === 0 ? "hoje" : ""}</span></td><td>${prevCell}</td>
       <td><span class="emp ${r.emp}">${r.emp}</span></td><td title="${esc(r.forn)} · ${esc(r.cnpj)}" style="font-weight:500">${esc(r.forn)}</td><td style="color:var(--tx2)">${esc(r.cat || "Sem categoria")}</td>
       <td>${cob}</td><td>${badge(r.st)}${r.ncob ? `<div class="sub2">cobrado ${r.ncob}x</div>` : ""}</td><td>${histTag(r)}</td>
-      <td><select class="bsel ${r.bank ? (r.bank !== r.cod_cc ? "chg" : "") : "need"}" data-bk="${r.id}" title="Conta no Omie: ${esc(r.conta)}" ${PODE.baixar ? "" : "disabled"}><option value="">Escolher banco…</option>${payBanks(r.emp).map((b) => `<option value="${b.cod}" ${b.cod === r.bank ? "selected" : ""}>${esc(b.desc)}</option>`).join("")}</select></td>
+      <td><select class="bsel ${r.bank ? (r.bank !== r.cod_cc ? "chg" : "") : "need"}" data-bk="${r.id}" title="Conta no Omie: ${esc(r.conta)}" ${PODE.baixar ? "" : "disabled"}><option value="">Escolher banco…</option>${bankGroupsHtml(r.emp, r.bank)}</select>${interco(r, r.bank) ? `<div class="sub2" style="color:#a78bfa" title="Título da ${r.emp} recebido em conta da ${interco(r, r.bank)} — intercompany">recebe na ${interco(r, r.bank)}</div>` : ""}</td>
       <td class="r" style="font-weight:650">${brl(r.v)}</td><td class="r">${PODE.baixar ? `<button class="btn sm">Receber</button>` : ""}</td></tr>`; }).join("")}</tbody>`;
     qa("#tbl tbody tr").forEach((tr) => (tr.onclick = (e) => { if (e.target.classList.contains("ck") || e.target.tagName === "SELECT" || e.target.tagName === "OPTION") return; openDrawer(+tr.dataset.id); }));
     qa("#tbl tbody .ck").forEach((cx) => (cx.onchange = () => { const id = +cx.dataset.id; cx.checked ? S.sel.add(id) : S.sel.delete(id); cx.closest("tr").classList.toggle("sel", cx.checked); renderAbar(); }));
@@ -330,11 +334,11 @@ export function montarReceberV1(o: Opts) {
     renderTable(); renderBanks();
   }
   function renderBStrip(pre) {
-    const g = {}; pre.forEach((r) => { const key = r.bank ? r.emp + "|" + r.bank : "none"; (g[key] = g[key] || []).push(r); }); const cur = S.cf.bank;
+    const g = {}; pre.forEach((r) => { const key = r.bank ? (bankOf(r.bank)?.emp ?? r.emp) + "|" + r.bank : "none"; (g[key] = g[key] || []).push(r); }); const cur = S.cf.bank;
     const cards = Object.entries(g).sort((a, b) => (a[0] === "none" ? -1 : b[0] === "none" ? 1 : sum(b[1]) - sum(a[1]))).map(([key, rs]) => {
       if (key === "none") return `<div class="bcard none" data-b="(sem banco)"><div class="t">⚠ Sem banco definido</div><div class="v num">${brl(sum(rs))}</div><div class="s">${rs.length} títulos — escolha o banco</div></div>`;
       const [e, cod] = key.split("|"); const bk = bankOf(+cod); const nm = bk?.desc ?? cod;
-      return `<div class="bcard ${cur && cur.size === 1 && cur.has(nm) ? "on" : ""}" data-b="${esc(nm)}"><div class="t"><span class="emp ${e}">${e}</span>${esc(nm)}</div><div class="v num ent">+ ${brl(sum(rs))}</div><div class="s">${rs.length} títulos · saldo hoje ${kk(bk ? bk.saldo : 0)}</div></div>`; }).join("");
+      return `<div class="bcard ${cur && cur.size === 1 && cur.has(nm) ? "on" : ""}" data-b="${esc(nm)}"><div class="t"><span class="emp ${e}">${e}</span>${esc(nm)}</div><div class="v num ent">+ ${brl(sum(rs))}</div><div class="s">${rs.length} títulos · saldo hoje ${kk(bk ? bk.saldo : 0)}</div>${(() => { const ou = rs.filter((r) => r.emp !== e); return ou.length ? `<div class="s" style="color:#a78bfa">inclui ${ou.length} de ${[...new Set(ou.map((r) => r.emp))].join("/")} · intercompany</div>` : ""; })()}</div>`; }).join("");
     const el = q("bstrip"); el.innerHTML = cards ? `<span class="sub2" style="align-self:center;margin-right:2px">Entradas<br>por banco</span>` + cards : "";
     el.querySelectorAll(".bcard").forEach((c) => (c.onclick = () => { const b = c.dataset.b; if (S.cf.bank && S.cf.bank.size === 1 && S.cf.bank.has(b)) delete S.cf.bank; else S.cf.bank = new Set([b]); renderTable(); }));
   }
@@ -343,9 +347,9 @@ export function montarReceberV1(o: Opts) {
     q("abarN").textContent = `${sel.length} selecionado${sel.length > 1 ? "s" : ""}`; q("abarV").textContent = brl(sum(sel));
     const es = EMPS.filter((e) => sel.some((r) => r.emp === e)); q("abarE").textContent = es.map((e) => `${e}: ${sel.filter((r) => r.emp === e).length}`).join(" · ");
     const ab = q("abarBank");
-    ab.innerHTML = '<option value="">Definir banco p/ selecionados…</option>' + es.map((e) => `<optgroup label="${EN[e]}">${payBanks(e).map((x) => `<option value="${e}|${x.cod}">${e} · ${esc(x.desc)}</option>`).join("")}</optgroup>`).join("");
+    ab.innerHTML = '<option value="">Definir banco p/ selecionados…</option>' + bankGroupsHtml(es.length === 1 ? es[0] : "SF", null);
     ab.disabled = !PODE.baixar; q("abarGo").disabled = !PODE.baixar; q("abarCob").disabled = !PODE.cobrar; q("abarPrev").disabled = !PODE.cobrar;
-    ab.onchange = () => { if (!ab.value) return; const [e, cod] = ab.value.split("|"); programar(sel.filter((r) => r.emp === e), +cod); };
+    ab.onchange = () => { if (!ab.value) return; programar(sel, +ab.value); };
   }
 
   /* DRAWER / AÇÕES */
@@ -355,7 +359,7 @@ export function montarReceberV1(o: Opts) {
   const pop = q("cfPop");
   const onKey = (e) => { if (e.key === "Escape") { closeAll(); pop.classList.remove("on"); } };
   document.addEventListener("keydown", onKey);
-  function bankOpts(e, cur) { const bs = payBanks(e); return `<option value="">Selecione o banco…</option>` + bs.map((b) => `<option value="${b.cod}" ${b.cod === cur ? "selected" : ""}>${esc(b.desc)}</option>`).join(""); }
+  function bankOpts(e, cur) { return `<option value="">Selecione o banco…</option>` + bankGroupsHtml(e, cur); }
   function openDrawer(id) {
     const r = rows[id]; if (!r) return; hideTip();
     const st = r.diasV < 0 ? `<span class="neg">Vencido há ${-r.diasV} dias</span>` : r.diasV === 0 ? '<span style="color:#f59e0b">Vence hoje</span>' : `Vence em ${r.diasV} dias`;
@@ -480,7 +484,7 @@ export function montarReceberV1(o: Opts) {
   function candidates(m) {
     const resto = m.v - m.casado; const memo = norm(m.memo);
     if (resto < 50 && /REND/.test(memo)) return [];
-    const bank = bankOf(S.ofxBank); const op = open_().filter((r) => !bank || r.emp === bank.emp);
+    const bank = bankOf(S.ofxBank); const op = open_(); // todas as empresas do grupo; outra empresa = intercompany
     const dig = memo.replace(/\D/g, " ");
     const bm = op.find((r) => r.nbol && r.nbol.length >= 8 && dig.includes(r.nbol.replace(/^0+/, "").slice(-10)));
     if (bm) return [{ ids: [bm.id], sc: 100, why: "nosso número no extrato", dif: +(resto - bm.v).toFixed(2) }].filter((c) => c.dif > -0.02);

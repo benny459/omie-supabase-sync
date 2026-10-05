@@ -41,6 +41,18 @@ O título mostra o caminho **PC → aprovação → NF → pagamento**. Título 
 3. Confira cada linha. Se faltar chave Pix ou conta do fornecedor, use **completar no cadastro ↗**.
 4. Baixe o arquivo e suba no portal do C6. A baixa no sistema vem depois, pela conciliação.
 
+## Pagar conta de outra empresa do grupo (intercompany)
+
+Uma conta da **CD** ou da **WW** pode ser paga por um banco da **SF** (C6, Bradesco, Omie.CASH).
+
+1. Na coluna **Banco p/ pagar**, abra a lista: aparecem as contas de todas as empresas do grupo — as da própria empresa primeiro, as outras marcadas "gera intercompany".
+2. Escolha, por exemplo, **SF · C6 Bank** para um título da CD. Embaixo aparece "pago pela SF".
+3. Dê a baixa normalmente (individual, em lote ou pelo arquivo do C6 + conciliação).
+
+O título da CD fica **PAGO** e o sistema registra sozinho "**CD deve à SF**" em **Financeiro → Intercompany**. Estornar a baixa anula esse registro.
+
+> **Atenção:** a despesa continua na DRE da empresa dona do título (CD); o caixa sai da conta que pagou (SF).
+
 ## Nova conta e contas recorrentes
 
 1. Clique em **+ Nova conta**, escolha fornecedor, categoria, conta, projeto, vencimento e valor.

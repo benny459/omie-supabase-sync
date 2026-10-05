@@ -110,10 +110,12 @@ export default function RemessaC6({ refs, onClose, onDone }: { refs: string[]; o
     setGerando(true); setErro(""); setErrosSrv({});
     try {
       const r = await fetch("/api/financeiro/remessa", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({
-        acao: "gerar", modelo, salvar_cadastro: salvarCad, empresa: ativos[0]?.empresa ?? null,
+        // C6 é conta da SF: títulos da CD/WW pagos por ela viram intercompany na baixa (05/10/26).
+        acao: "gerar", modelo, salvar_cadastro: salvarCad, empresa: "SF",
         linhas: ativos.map((l) => ({ ref: l.ref, pessoa_id: l.pessoa_id, modalidade: l.modalidade, nome: l.nome, doc: dig(l.doc), chave: l.chave.trim(),
           barras: dig(l.barras), ispb: l.ispb, compe: l.compe, contaTipo: l.contaTipo, agencia: dig(l.agencia), conta: l.conta.replace(/[^\dXx-]/g, ""),
-          finalidade: l.finalidade, valor: l.valor, data: l.data, descricao: l.descricao })),
+          finalidade: l.finalidade, valor: l.valor, data: l.data,
+          descricao: l.empresa !== "SF" && !l.descricao.startsWith(l.empresa + " ") ? `${l.empresa} · ${l.descricao}`.slice(0, 140) : l.descricao })),
       }) });
       const j = await r.json();
       if (!r.ok) {
@@ -181,7 +183,7 @@ export default function RemessaC6({ refs, onClose, onDone }: { refs: string[]; o
                           <td><input type="checkbox" checked={l.incluir} onChange={(e) => set(l.ref, { incluir: e.target.checked })} /></td>
                           <td>
                             <input style={inp} value={l.nome} onChange={(e) => set(l.ref, { nome: e.target.value })} />
-                            <div className="sub2">{l.empresa} · venc {dbr(l.venc)}{l.enviado ? <span style={{ color: "#f59e0b" }}> · já foi na remessa #{l.enviado}</span> : null}</div>
+                            <div className="sub2">{l.empresa}{l.empresa !== "SF" ? <span style={{ color: "#a78bfa" }}> (pago pela SF · intercompany)</span> : null} · venc {dbr(l.venc)}{l.enviado ? <span style={{ color: "#f59e0b" }}> · já foi na remessa #{l.enviado}</span> : null}</div>
                             {l.incluir && f.length ? <div style={{ color: "#f87171", fontSize: 11.5, marginTop: 3 }}>falta: {f.join(", ")}
                               {l.pessoa_id && !f.every((x) => ["valor", "data", "data no passado"].includes(x))
                                 ? <> · <a className="link" href={`/cadastros/${l.pessoa_id}/editar#pagamento`} target="_blank" rel="noreferrer">completar no cadastro ↗</a></> : null}</div> : null}
