@@ -5,6 +5,7 @@ import { PaginaNavy } from "@/components/navy/tela/KitTela";
 import { limpo } from "@/lib/faturamento/montar";
 import NovaEmissao, { type ConfigFat, type Inicial } from "@/components/faturamento/NovaEmissao";
 import RegistrarNfse from "@/components/faturamento/RegistrarNfse";
+import ContratosRecorrentes from "@/components/faturamento/ContratosRecorrentes";
 import "./faturamento.css";
 
 /* Faturamento PV & OS (05/10/2026) — conceito do mockup do Benny
@@ -129,6 +130,7 @@ export default function TelaFaturamento() {
   const [inicialNova, setInicialNova] = useState<Inicial | null>(null);
   const [ocupado, setOcupado] = useState<string | null>(null);
   const [verPront, setVerPront] = useState(false);
+  const [secao, setSecao] = useState<"carteira" | "contratos">("carteira");
 
   const avisar = useCallback((m: string) => { setToast(m); window.setTimeout(() => setToast((t) => (t === m ? null : t)), 4200); }, []);
 
@@ -259,6 +261,17 @@ export default function TelaFaturamento() {
         <NovaEmissao config={config} aberto={nova} inicial={inicialNova} admin={!!pront?.pode_mudar}
           fechar={() => { setNova(false); setInicialNova(null); }} avisar={avisar} onEmitido={carregar} />
 
+        <div className="tabsec">
+          <button className={secao === "carteira" ? "on" : ""} onClick={() => setSecao("carteira")}>PV &amp; OS<span className="ct">{(docs ?? []).length}</span></button>
+          <button className={secao === "contratos" ? "on" : ""} onClick={() => setSecao("contratos")}>Contratos recorrentes</button>
+        </div>
+
+        {secao === "contratos" && (
+          <ContratosRecorrentes empresa={empresa} admin tipoOs={(cfg?.tipo_os as "recibo" | "nfse") ?? "recibo"} prod={prod}
+            avisar={avisar} registrarNfse={(ch) => setRegNfse(ch)} />
+        )}
+
+        {secao === "carteira" && <>
         <div className="toolbar">
           <div className="seg">
             {(["all", "PV", "OS"] as const).map((t) => (
@@ -336,6 +349,7 @@ export default function TelaFaturamento() {
           Carteira: PV/OS em aberto (todas as datas) + faturados no período. PV do Omie fatura pelo painel (NF-e, Focus). NFS-e: emita no portal da prefeitura e registre-a aqui (Registrar NFS-e) — cria o contas a receber pelo líquido e marca a OS como faturada no painel.
           Envio ao cliente por e-mail depende do Resend (RESEND_API_KEY) — até lá, abra o PDF/XML e envie o link.
         </p>
+        </>}
 
         {docAberto && <Gaveta d={docAberto} empresa={empresa} prod={prod} ocupado={ocupado} agir={agir} fechar={() => setAberto(null)} avisar={avisar} onMudou={carregar}
           abrirFolha={async () => {
