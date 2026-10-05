@@ -144,6 +144,8 @@ export default function TelaVendaDoc({ id }: { id: number | null }) {
 
   async function salvar() {
     if (!form) return;
+    if (!form.projeto_codigo) { setErro("Escolha o projeto (obrigatório) — ou crie com “+ Novo”."); return; }
+    if (!form.categoria_codigo) { setErro("Escolha a categoria de receita (obrigatória)."); return; }
     setOcupado(true); setErro(null); setOk(null);
     const r = await fetch("/api/vendas", { method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ ...form, itens: form.itens.filter((i) => i.descricao.trim()),
@@ -248,7 +250,7 @@ export default function TelaVendaDoc({ id }: { id: number | null }) {
         </Campo>
         <Campo rot="Nº de parcelas"><input style={input} disabled={!editavel} inputMode="numeric" value={form.qtd_parcelas ?? ""}
           onChange={(e) => setF("qtd_parcelas", Number(e.target.value) || null)} placeholder="pela condição" /></Campo>
-        <Campo rot="Projeto" largura={2}>
+        <Campo rot="Projeto *" largura={2}>
           <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
             <select style={{ ...input, flex: 1, minWidth: 0 }} disabled={!editavel} value={form.projeto_codigo ?? ""} onChange={(e) => setF("projeto_codigo", e.target.value || null)}>
               <option value="">—</option>
@@ -269,7 +271,7 @@ export default function TelaVendaDoc({ id }: { id: number | null }) {
             )}
           </div>
         </Campo>
-        <Campo rot="Categoria" largura={2}>
+        <Campo rot="Categoria de receita *" largura={2}>
           <select style={input} disabled={!editavel} value={form.categoria_codigo ?? ""} onChange={(e) => setF("categoria_codigo", e.target.value || null)}>
             <option value="">—</option>
             {op.categorias.map((c) => <option key={c.codigo} value={c.codigo}>{c.codigo} · {c.descricao}</option>)}

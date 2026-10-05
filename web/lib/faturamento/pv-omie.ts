@@ -66,6 +66,13 @@ export function docFatPvOmie(empresa: string, d: PvOmieDoc): DocFat {
     })),
     condicao: {
       descricao: d.condicao ?? undefined,
+      // Códigos do PV do Omie (05/10/26): a folha de emissão já abre com a
+      // condição, categoria, projeto, vendedor e conta do pedido.
+      codigo: s(pv.codigo_parcela) || null,
+      categoria: s(pv.codigo_categoria) || null,
+      projeto: s(pv.codigo_projeto) || null,
+      vendedor: s(pv.codigo_vendedor) || null,
+      conta_corrente: /^\d+$/.test(s(pv.codigo_conta)) ? Number(s(pv.codigo_conta)) : null,
       parcelas: (d.parcelas_dias?.length ? d.parcelas_dias : [0]).map((dias) => ({ dias })),
     },
     consumidor_final: s(pv.consumidor_final).toUpperCase() === "S" ? true : indicador_ie !== "1",

@@ -30,6 +30,9 @@ export async function POST(req: Request) {
     const { sem_proposta, ...resto } = body;
     // Vínculo com a proposta do CRM é obrigatório (05/10/26). Exceção: admin
     // marca "sem proposta" com motivo (auditado), como o "PC sem RC".
+    // Projeto e categoria de receita obrigatórios no PV/OS do painel (05/10/26).
+    if (!String(resto.projeto_codigo ?? "").trim()) return NextResponse.json({ error: "Escolha o projeto do PV/OS (obrigatório)" }, { status: 400 });
+    if (!String(resto.categoria_codigo ?? "").trim()) return NextResponse.json({ error: "Escolha a categoria de receita do PV/OS (obrigatória)" }, { status: 400 });
     const temProposta = !!String(resto.proposta ?? "").trim();
     const motivo = String(sem_proposta?.motivo ?? "").trim();
     if (!temProposta) {

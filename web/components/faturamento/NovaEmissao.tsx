@@ -187,6 +187,10 @@ export default function NovaEmissao({ config, aberto, fechar, avisar, onEmitido,
   /** forma/conta já definidas (pelo documento, modelo ou à mão) — o histórico do cliente não sobrescreve */
   const formaDefinida = useRef(false);
   const [parcs, setParcs] = useState<Parc[]>([]);
+  /** condição vinda do PV/OS, resolvida contra o cadastro de condições quando as opções chegam */
+  const condHint = useRef<{ codigo?: string | null; descricao?: string | null } | null>(null);
+  /** formas diferentes por parcela (escondido por padrão: as parcelas herdam a forma geral) */
+  const [formaPorParcela, setFormaPorParcela] = useState(false);
   const [conta, setConta] = useState<number | "">("");
   const [categoria, setCategoria] = useState("");
   const [projeto, setProjeto] = useState("");
@@ -238,11 +242,15 @@ export default function NovaEmissao({ config, aberto, fechar, avisar, onEmitido,
     setOutras(r2(d.itens.reduce((a, i) => a + (i.valor_outras ?? 0), 0)));
     setTransp(d.transporte ?? { modalidade: 9 }); setPedidoCli(d.pedido_cliente ?? ""); setObs(d.observacoes ?? ""); setInfoContrib(d.info_contribuinte ?? "");
     const c = d.condicao;
-    formaDefinida.current = !!(c?.forma_recebimento || c?.conta_corrente);
+    formaDefinida.current = !!c?.forma_recebimento;
     if (c?.forma_recebimento) setForma(c.forma_recebimento);
     if (c?.conta_corrente) setConta(c.conta_corrente);
-    if (c?.categoria) setCategoria(c.categoria);
-    if (c?.projeto) setProjeto(c.projeto);
+    setCategoria(c?.categoria ?? "");
+    setProjeto(c?.projeto ?? "");
+    if (c?.vendedor) setVendedor(c.vendedor);
+    // condição do pedido (ex.: A28 · "Para 28 dias") — vira a condição escolhida, sem pedir de novo
+    setCond(c?.codigo ?? "");
+    condHint.current = c?.codigo || c?.descricao ? { codigo: c?.codigo ?? null, descricao: c?.descricao ?? null } : null;
     const dias = (c?.parcelas ?? []).map((p) => p.dias ?? 0);
     const tot = r2(d.itens.reduce((a, i) => a + i.quantidade * i.valor_unitario - (i.valor_desconto ?? 0) + (i.valor_frete ?? 0) + (i.valor_outras ?? 0), 0));
     setParcs(gerarParcelas(tot, dias.length ? dias : [0], hoje(), c?.forma_recebimento ?? "BOL"));
@@ -293,6 +301,17 @@ export default function NovaEmissao({ config, aberto, fechar, avisar, onEmitido,
   }, [aberto]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => { if (aberto) carregarProximos(empresa); }, [empresa]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Condição do PV/OS → condição do cadastro (por código ou pelo nome, ex.: "Para 28 dias").
+  useEffect(() => {
+    const h = condHint.current;
+    if (!opc || !h) return;
+    const norm = (v: string | null | undefined) => (v ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/\s+/g, " ").trim();
+    const achou = opc.condicoes.find((c) => h.codigo && c.codigo === h.codigo)
+      ?? opc.condicoes.find((c) => h.descricao && norm(c.nome) === norm(h.descricao));
+    if (achou) setCond(achou.codigo);
+    condHint.current = null;
+  }, [opc, cond]);
 
   // "Faturar um PV/OS existente": carteira a faturar (nativos e Omie)
   useEffect(() => {
@@ -502,7 +521,20 @@ export default function NovaEmissao({ config, aberto, fechar, avisar, onEmitido,
     const r = await fetch("/api/faturamento/nova", { method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ op: "previa", documento: montarDocumento() }) }).then((x) => x.json()).catch((e) => ({ error: String(e) }));
     setValidando(false);
-    setPre(r.error ? { checagens: [], pode_emitir: false, error: r.error } : r);
+    const fv = faltaVenda();
+    const locais: Checagem[] = fv ? [{ item: "Projeto / categoria / conta", ok: false, nivel: "erro", detalhe: fv }] : [];
+    setPre(r.error ? { checagens: locais, pode_emitir: false, error: r.error }
+      : { ...r, checagens: [...locais, ...(r.checagens ?? [])], pode_emitir: !!r.pode_emitir && !fv });
+  }
+
+  /** Venda/recibo/NFS-e: projeto e categoria de receita são obrigatórios (05/10/26);
+   *  conta de recebimento obrigatória quando a forma deposita na conta. */
+  function faltaVenda(): string | null {
+    if (naoVenda) return null;
+    if (!projeto) return "Escolha o projeto — obrigatório para emitir (venha do CRM ou use “+ Novo projeto”).";
+    if (!categoria) return "Escolha a categoria de receita — obrigatória para emitir.";
+    if (precisaParcelas && ["BOL", "PIX", "TRA", "TED", "DEP"].includes(forma) && conta === "") return "Escolha a conta de recebimento (onde o dinheiro vai cair).";
+    return null;
   }
 
   /** Documento novo: o que falta para criar o PV/OS na sequência. */
@@ -518,7 +550,7 @@ export default function NovaEmissao({ config, aberto, fechar, avisar, onEmitido,
   }
 
   async function emitirAgora() {
-    const falta = faltaNovo() ?? faltaOperacao();
+    const falta = faltaNovo() ?? faltaOperacao() ?? faltaVenda();
     if (falta) { setAviso(falta); return; }
     const soCriaOs = modo === "novo" && !chave && tipo === "nfse" && !teste;
     if (!soCriaOs && precisaParcelas && !parcOk) { setAviso(`As parcelas (${fmt(somaParc)}) não somam o valor a receber (${fmt(liquido)}).`); return; }
@@ -915,20 +947,47 @@ export default function NovaEmissao({ config, aberto, fechar, avisar, onEmitido,
 
             {precisaParcelas && <section className="ne-sec" id="ne-sec-recebimento">
               <h3>Recebimento <small>{naoVenda ? (operacao === "devolucao" ? "crédito a receber do fornecedor" : "cobrança desta remessa") : "as parcelas a receber são criadas exatamente assim"}</small></h3>
+              <div className="ne-linha">
+                {sel("Condição de pagamento", cond, (v) => aplicarCondicao(v), (opc?.condicoes ?? []).map((c) => ({ codigo: c.codigo, nome: c.nome })), 230, condHint.current ? "…" : "— escolha —")}
+                <label className="ne-rot" style={{ width: 150 }}>Data base dos prazos
+                  <input className="ne-in" type="date" value={base} onChange={(e) => setBase(e.target.value)} />
+                </label>
+              </div>
+              <table className="ne-tab">
+                <thead><tr><th>Nº</th><th>Vencimento</th><th>Prazo</th>{formaPorParcela && <th>Forma</th>}<th className="r">Valor</th><th className="r">%</th><th /></tr></thead>
+                <tbody>{parcs.map((p, n) => (
+                  <tr key={n}>
+                    <td>{String(n + 1).padStart(2, "0")}/{String(parcs.length).padStart(2, "0")}</td>
+                    <td><input className="ne-in" type="date" value={p.vencimento} onChange={(e) => setParcs(parcs.map((x, i) => (i === n ? { ...x, vencimento: e.target.value } : x)))} /></td>
+                    <td style={{ color: "var(--ww-text-muted)" }}>{diasEntre(base, p.vencimento)} dias</td>
+                    {formaPorParcela && <td><select className="ne-in" value={p.forma} onChange={(e) => setParcs(parcs.map((x, i) => (i === n ? { ...x, forma: e.target.value } : x)))}>
+                      {(opc?.formas ?? [{ codigo: p.forma, nome: p.forma }]).map((f) => <option key={f.codigo} value={f.codigo}>{f.nome}</option>)}
+                    </select></td>}
+                    <td className="r"><input className="ne-in num" style={{ width: 120 }} type="number" step="0.01" value={p.valor} onChange={(e) => setParcs(parcs.map((x, i) => (i === n ? { ...x, valor: Number(e.target.value) } : x)))} /></td>
+                    <td className="r">{liquido ? ((p.valor / liquido) * 100).toFixed(1) : "0"}%</td>
+                    <td><button className="ne-lk" onClick={() => setParcs(parcs.filter((_, i) => i !== n))}>remover</button></td>
+                  </tr>))}
+                </tbody>
+              </table>
+              <div className="ne-linha">
+                <button className="ne-lk" onClick={() => setParcs([...parcs, { vencimento: somaDias(parcs.at(-1)?.vencimento ?? base, 30), valor: 0, forma }])}>+ parcela</button>
+                <button className="ne-lk" onClick={redistribuir}>redistribuir valores</button>
+                <label style={{ fontSize: 12, display: "inline-flex", gap: 6, alignItems: "center" }}>
+                  <input type="checkbox" checked={formaPorParcela} onChange={(e) => { setFormaPorParcela(e.target.checked); if (!e.target.checked) setParcs(parcs.map((x) => ({ ...x, forma }))); }} />
+                  formas diferentes por parcela
+                </label>
+                <span style={{ marginLeft: "auto", fontSize: 12.5, color: parcOk ? "var(--ww-text-muted)" : "#fca5a5", fontWeight: parcOk ? 400 : 700 }}>
+                  Soma das parcelas {fmt(somaParc)} {parcOk ? "✓" : `≠ a receber ${fmt(liquido)}`}
+                </span>
+              </div>
               <div className="ne-linha ne-forma">
                 {sel("Forma de recebimento", forma, (v) => { formaDefinida.current = true; setForma(v); setParcs(parcs.map((p) => ({ ...p, forma: v }))); }, opc?.formas ?? [{ codigo: "BOL", nome: "Boleto" }], 220, "—")}
                 {sel("Conta de recebimento", conta, (v) => { formaDefinida.current = true; setConta(v === "" ? "" : Number(v)); }, opc?.contas ?? [], 260)}
                 <span className="ne-dica" style={{ alignSelf: "end", maxWidth: 320 }}>Boleto, PIX, transferência… e a conta onde vai cair o dinheiro. A instrução de pagamento sai na nota e em cada parcela.</span>
               </div>
               <div className="ne-linha">
-                {sel("Condição de pagamento", cond, (v) => aplicarCondicao(v), (opc?.condicoes ?? []).map((c) => ({ codigo: c.codigo, nome: c.nome })), 230, "— escolha —")}
-                <label className="ne-rot" style={{ width: 150 }}>Data base dos prazos
-                  <input className="ne-in" type="date" value={base} onChange={(e) => setBase(e.target.value)} />
-                </label>
-              </div>
-              <div className="ne-linha">
-                {sel("Categoria de receita", categoria, setCategoria, (opc?.categorias ?? []).map((c) => ({ codigo: c.codigo, nome: `${c.codigo} ${c.nome}` })), 260)}
-                {sel("Projeto", projeto, setProjeto, opc?.projetos ?? [], 260)}
+                {sel("Categoria de receita *", categoria, setCategoria, (opc?.categorias ?? []).map((c) => ({ codigo: c.codigo, nome: `${c.codigo} ${c.nome}` })), 260)}
+                {sel("Projeto *", projeto, setProjeto, opc?.projetos ?? [], 260)}
                 <div style={{ alignSelf: "flex-end", paddingBottom: 2 }}>
                   <BotaoNovoProjeto compacto rotulo="+ Novo projeto" empresa={empresa}
                     sugestao={{ nome: cli.nome || null, clienteNome: cli.nome || null, orcamento: total || null }}
@@ -940,29 +999,6 @@ export default function NovaEmissao({ config, aberto, fechar, avisar, onEmitido,
                 </div>
                 {sel("Vendedor", vendedor, setVendedor, opc?.vendedores ?? [], 170)}
                 <label className="ne-rot" style={{ width: 160 }}>Contrato (CT)<input className="ne-in" value={contrato} onChange={(e) => setContrato(e.target.value)} /></label>
-              </div>
-              <table className="ne-tab">
-                <thead><tr><th>Nº</th><th>Vencimento</th><th>Prazo</th><th>Forma</th><th className="r">Valor</th><th className="r">%</th><th /></tr></thead>
-                <tbody>{parcs.map((p, n) => (
-                  <tr key={n}>
-                    <td>{String(n + 1).padStart(2, "0")}/{String(parcs.length).padStart(2, "0")}</td>
-                    <td><input className="ne-in" type="date" value={p.vencimento} onChange={(e) => setParcs(parcs.map((x, i) => (i === n ? { ...x, vencimento: e.target.value } : x)))} /></td>
-                    <td style={{ color: "var(--ww-text-muted)" }}>{diasEntre(base, p.vencimento)} dias</td>
-                    <td><select className="ne-in" value={p.forma} onChange={(e) => setParcs(parcs.map((x, i) => (i === n ? { ...x, forma: e.target.value } : x)))}>
-                      {(opc?.formas ?? [{ codigo: p.forma, nome: p.forma }]).map((f) => <option key={f.codigo} value={f.codigo}>{f.nome}</option>)}
-                    </select></td>
-                    <td className="r"><input className="ne-in num" style={{ width: 120 }} type="number" step="0.01" value={p.valor} onChange={(e) => setParcs(parcs.map((x, i) => (i === n ? { ...x, valor: Number(e.target.value) } : x)))} /></td>
-                    <td className="r">{liquido ? ((p.valor / liquido) * 100).toFixed(1) : "0"}%</td>
-                    <td><button className="ne-lk" onClick={() => setParcs(parcs.filter((_, i) => i !== n))}>remover</button></td>
-                  </tr>))}
-                </tbody>
-              </table>
-              <div className="ne-linha">
-                <button className="ne-lk" onClick={() => setParcs([...parcs, { vencimento: somaDias(parcs.at(-1)?.vencimento ?? base, 30), valor: 0, forma }])}>+ parcela</button>
-                <button className="ne-lk" onClick={redistribuir}>redistribuir valores</button>
-                <span style={{ marginLeft: "auto", fontSize: 12.5, color: parcOk ? "var(--ww-text-muted)" : "#fca5a5", fontWeight: parcOk ? 400 : 700 }}>
-                  Soma das parcelas {fmt(somaParc)} {parcOk ? "✓" : `≠ a receber ${fmt(liquido)}`}
-                </span>
               </div>
               {(instr.linhas.length > 0 || instr.faltas.length > 0) && (
                 <div className="ne-pag">
@@ -1084,7 +1120,9 @@ export default function NovaEmissao({ config, aberto, fechar, avisar, onEmitido,
           <button className="ne-btn" disabled={validando} onClick={validar}>{validando ? "Validando…" : "Validar"}</button>
           {tipo !== "nfse" && <button className="ne-btn" disabled={!cli.nome || !itens.some((i) => i.descricao)} onClick={() => previaDocumento(montarDocumento(), tipo === "recibo" ? "recibo" : "nfe", avisar)}
             title="Ver como o documento vai sair — sem enviar nada à SEFAZ e sem gastar numeração">{tipo === "recibo" ? "Pré-visualizar recibo" : "Pré-visualizar DANFE"}</button>}
-          <button className={`ne-btn ${prod ? "perigo" : "pri"}`} disabled={!cli.nome || !itens.some((i) => i.descricao) || (precisaParcelas && !parcOk)} onClick={emitirAgora}>
+          {!naoVenda && faltaVenda() && <span className="ne-dica" style={{ color: "#fca5a5", maxWidth: 360 }}>{faltaVenda()}</span>}
+          <button className={`ne-btn ${prod ? "perigo" : "pri"}`} disabled={!cli.nome || !itens.some((i) => i.descricao) || (precisaParcelas && !parcOk) || !!faltaVenda()}
+            title={faltaVenda() ?? undefined} onClick={emitirAgora}>
             {`Emitir ${naoVenda ? OP_ROT[operacao as Exclude<OperacaoTipo, "venda">] : TIPO[tipo]}${prod ? " (PRODUÇÃO)" : " (homologação)"}`}
           </button>
         </div>
