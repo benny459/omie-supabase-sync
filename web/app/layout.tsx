@@ -25,7 +25,7 @@ const outfit = Outfit({ subsets: ["latin"], display: "swap", weight: ["400", "50
 
 export const metadata: Metadata = {
   title: "Waterworks · Aprovações PC",
-  description: "Painel de aprovações de Pedidos de Compra (migração SmartSuite → Supabase)",
+  description: "Painel WaterWorks · ALLKA",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

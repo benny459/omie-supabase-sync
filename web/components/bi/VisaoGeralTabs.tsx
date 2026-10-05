@@ -121,7 +121,7 @@ export default function VisaoGeralTabs() {
           <p className="text-[13px] font-semibold text-ww-text">Aba ainda não portada</p>
           <p className="text-[11.5px] text-ww-textMuted mt-1">
             {aba.key === "crm"
-              ? "O único card desta aba lê o banco waterworks-crm, que é outro projeto Supabase — o painel ainda não tem conexão com ele. Não é volume de trabalho, é infraestrutura: precisa de credencial e de decisão sobre expor o CRM aqui."
+              ? "O único card desta aba lê o banco waterworks-crm, que é outra base de dados — o painel ainda não tem conexão com ele. Não é volume de trabalho, é infraestrutura: precisa de credencial e de decisão sobre expor o CRM aqui."
               : `“${aba.label}” tem ${aba.cards} cards no Metabase. Enquanto não estiver aqui, use o dashboard equivalente no Metabase — ele segue no ar.`}
           </p>
         </div>

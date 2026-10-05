@@ -3,6 +3,16 @@
 import { useState } from "react";
 import { supaBrowser } from "@/lib/supabase";
 
+
+// Mensagens do login sem nomes de fornecedor; o detalhe técnico fica no console.
+function msgLogin(raw: string): string {
+  console.error("[login]", raw);
+  if (/invalid login credentials|user not found/i.test(raw)) return "E-mail ou senha incorretos. Tente de novo.";
+  if (/email not confirmed/i.test(raw)) return "Este e-mail ainda não foi confirmado. Veja a sua caixa de entrada.";
+  if (/rate|too many|seconds/i.test(raw)) return "Muitas tentativas seguidas. Aguarde alguns minutos e tente de novo.";
+  return "Não foi possível entrar agora. Tente de novo em instantes.";
+}
+
 export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -27,7 +37,7 @@ export default function LoginPage() {
         queryParams: { hd: "waterworks.com.br", prompt: "select_account" },
       },
     });
-    if (error) setMsg({ kind: "err", text: error.message });
+    if (error) setMsg({ kind: "err", text: msgLogin(error.message) });
   }
 
   async function onSubmit(e: React.FormEvent) {
@@ -40,7 +50,7 @@ export default function LoginPage() {
     });
     setLoading(false);
     if (error) {
-      setMsg({ kind: "err", text: error.message });
+      setMsg({ kind: "err", text: msgLogin(error.message) });
     } else {
       // middleware vai redirecionar automaticamente
       window.location.href = "/avulsos";
