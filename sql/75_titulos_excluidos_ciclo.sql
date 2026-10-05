@@ -1,0 +1,8 @@
+-- 75 (05/10/26) — PC 6504: títulos refeitos/excluídos no Omie continuavam no espelho como abertos
+-- (duplicavam o contas a pagar). Aplicado no omie-data pelas migrações:
+--   p75_titulos_excluidos_omie   tabela finance.titulos_excluidos_omie (relatório do sync FULL de 02/10, 2.701 títulos)
+--   p75b_titulos_excluidos_funcoes finance.titulos_excluidos_marcar / _desfazer / _pendentes (reversível, auditado)
+--   p75c_pagar_ciclo             finance.pagar_ciclo(ref) — PC → NFs → parcelas → pagamentos + veredito
+-- Marcados em 05/10: 16 títulos com substituto da mesma NF (inclui 4 do PC 6504). Os demais
+-- ficam pendentes e aparecem com o selo "Excluído no Omie" + botão para retirar todos.
+-- Desfazer um título: select finance.titulos_excluidos_desfazer(array['o:<cod>'], 'quem');

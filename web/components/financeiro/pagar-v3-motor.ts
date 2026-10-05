@@ -37,7 +37,10 @@ export function montarPagarV3(o: Opts) {
   const q = (id) => root.querySelector("#" + id);
   const qa = (sel) => root.querySelectorAll(sel);
   let TODAY = new Date(new Date().toLocaleDateString("sv-SE", { timeZone: "America/Sao_Paulo" }) + "T00:00:00");
-  let rows = [], BANKS = [], AGG = {}, PODE = { baixar: false, conciliar: false, incluir: false };
+  let rows = [], BANKS = [], AGG = {}, PODE = { baixar: false, conciliar: false, incluir: false }, EXCL = [];
+  // Nome curto: fantasia; sem fantasia, a razão sem os termos genéricos (05/10/26 — "nomeação").
+  const GEN = /^(COMERCIO|COMERCIAL|IMPORTACAO|IMPORTADORA|EXPORTACAO|E|DE|DO|DA|DOS|DAS|PRODUTOS|LTDA\.?|EIRELI|S\.?A\.?|ME|EPP|SOCIEDADE|INDUSTRIA|SERVICOS)$/i;
+  function curto(razao) { const w = String(razao || "").split(/\s+/).filter(Boolean); const out = []; for (const x of w) { if (out.length >= 2 && GEN.test(x)) break; out.push(x); if (out.length >= 3) break; } return out.join(" ") || String(razao || ""); }
   let MOV = [], MOVLOAD = false, BAIXAS = [], vivo = true, carregando = true, erro = "";
   let FERIADOS = new Set();
   // Previsão (sql/73): o vencimento é do documento; a previsão é nossa e manda na agenda,
@@ -90,7 +93,8 @@ export function montarPagarV3(o: Opts) {
       BANKS = (j.banks ?? []).map((b) => ({ emp: b[0], cod: Number(b[1]), desc: b[2], tipo: b[3], saldo: Number(b[4]) || 0, dt: b[5], ofx: b[6], pend: Number(b[7]) || 0 }));
       AGG = j.agg ?? {};
       const prog = j.prog ?? {};
-      const PREV = j.prev ?? {}, ENV = j.env ?? {}, SERIE = j.serie ?? {};
+      const PREV = j.prev ?? {}, ENV = j.env ?? {}, SERIE = j.serie ?? {}, NOMES = j.nomes ?? {}, CATPC = j.catpc ?? {};
+      EXCL = j.excl ?? []; const EX = new Set(EXCL);
       FERIADOS = new Set(j.feriados ?? []);
       const sel = new Set([...S.sel].map((i) => rows[i]?.ref).filter(Boolean));
       rows = (j.rows ?? []).map((x, i) => {
@@ -101,7 +105,9 @@ export function montarPagarV3(o: Opts) {
         return { id: i, ref: x[0], emp: x[1], venc: x[2], d, dias: Math.round((d - TODAY) / DAY), v: Number(x[3]), forn: x[4], cat: x[5] ?? "", proj: x[6] ?? "",
           doc: x[7] ?? "", parc: x[8] ?? "", conta: x[9] ?? "", cod_cc, cod: x[11], apr: x[12], pc: x[13], etapa: x[14], nf: x[15], aprov: x[16], tipo: x[17],
           div: !!x[18], st: x[19], cnpj: x[20], orig: x[21], vdoc: Number(x[22]) || 0, cod_forn: x[23], fase: x[25], paid: null,
-          vd, repr: !!(pv && pv[1]), env: ENV[x[0]] ?? null, serie: SERIE[x[0]] ?? null,
+          vd, repr: !!(pv && pv[1]), env: ENV[x[0]] ?? null, serie: SERIE[x[0]] ?? null, nfdoc: x[24] ? String(x[24]).replace(/^0+/, "") : "",
+          excl: EX.has(x[0]), ...(() => { const n = NOMES[x[1] + "|" + x[23]]; const raz = (n && n[1]) || x[4] || ""; const fan = n && n[0]; const catH = !x[5] && x[13] ? CATPC[x[1] + "|" + String(x[13]).split(",")[0].trim()] : null;
+            return { forn: fan || curto(raz), razao: raz, cat: x[5] || catH || "", catHer: !!catH }; })(),
           bank: prog[x[0]] != null ? Number(prog[x[0]]) : def };
       });
       S.sel = new Set(rows.filter((r) => sel.has(r.ref)).map((r) => r.id));
@@ -371,12 +377,31 @@ export function montarPagarV3(o: Opts) {
   const nActive = () => Object.keys(S.cf).length + (S.cfv.min != null || S.cfv.max != null ? 1 : 0);
   function tblRows() { return tblBase().filter((r) => cfOk(r)); }
   let tblAtual = [];
+  // Aviso: títulos que já não existem no Omie (refeitos/excluídos lá) e ainda aparecem como abertos (sql/75).
+  function renderExcl() {
+    const el = q("exclBox"); if (!el) return;
+    const ex = rows.filter((r) => r.excl && !r.paid);
+    if (!ex.length) { el.innerHTML = ""; return; }
+    const tot = ex.reduce((s, r) => s + r.v, 0);
+    el.innerHTML = `<div style="margin:8px 0;padding:10px 12px;border:1px solid rgba(239,68,68,.45);border-radius:10px;background:rgba(239,68,68,.08);display:flex;gap:10px;align-items:center;flex-wrap:wrap;font-size:12.5px">
+      <b style="color:#f87171">${ex.length} título(s) · ${brl(tot)}</b><span>já não existem no Omie (foram refeitos ou excluídos lá) e ainda aparecem aqui — <b>não pagar</b>. Estão marcados "Excluído no Omie" na coluna Pagamento.</span>
+      <span style="margin-left:auto"></span><button class="btn sm" id="exFil">Mostrar só esses</button>${PODE.incluir ? '<button class="btn sm" id="exMar" title="Tira-os do contas a pagar (reversível)">Tirar todos do contas a pagar</button>' : ""}</div>`;
+    q("exFil").textContent = S.exOnly ? "Mostrar todos" : "Mostrar só esses";
+    q("exFil").onclick = () => { S.exOnly = !S.exOnly; renderTable(); };
+    if (q("exMar")) q("exMar").onclick = async () => {
+      if (!confirm(`Tirar ${ex.length} título(s) (${brl(tot)}) do contas a pagar? Eles já não existem no Omie. Dá para desfazer.`)) return;
+      try { const j = await api({ acao: "excluidos_marcar", refs: ex.map((r) => r.ref) }); toast(`${j.n} título(s) retirados (excluídos no Omie)`); await recarregarTudo(); } catch (e) { toast(e.message, true); }
+    };
+  }
+
   function renderTable() {
+    renderExcl();
     const pre = tblRows();
     const cnt = (x) => pre.filter((r) => r.st === x).length;
     q("tSt").innerHTML = `<button data-v="all" class="${S.st === "all" ? "on" : ""}">Todos<span class="c">${pre.length}</span></button>` + ["ok", "dir", "nf", "sempc", "bloq"].map((x) => (cnt(x) ? `<button data-v="${x}" class="${S.st === x ? "on" : ""}"><span class="dot" style="background:${{ ok: "#4ade80", dir: "#cbd5e1", nf: "#fbbf24", sempc: "#fdba74", bloq: "#f87171" }[x]}"></span>${PST[x].l}<span class="c">${cnt(x)}</span></button>` : "")).join("");
     qa("#tSt button").forEach((b) => (b.onclick = () => { S.st = b.dataset.v; renderTable(); }));
-    const a = S.st === "all" ? pre : pre.filter((r) => r.st === S.st);
+    const a0 = S.st === "all" ? pre : pre.filter((r) => r.st === S.st);
+    const a = S.exOnly ? a0.filter((r) => r.excl) : a0;
     const { k: sk, dir } = S.sort;
     a.sort((x, y) => { let p, qq; if (sk === "pst") { p = PORD.indexOf(x.st); qq = PORD.indexOf(y.st); if (p === qq) return y.v - x.v; } else if (sk === "bank") { p = bankDesc(x.bank); qq = bankDesc(y.bank); } else { p = x[sk]; qq = y[sk]; } return (typeof p === "number" ? p - qq : String(p ?? "").localeCompare(String(qq ?? ""))) * dir; });
     tblAtual = a;
@@ -389,11 +414,11 @@ export function montarPagarV3(o: Opts) {
     const H = [["", "", 0], ["dias", "Previsão", 0], ["emp", "Emp.", 0], ["forn", "Fornecedor", 0], ["cat", "Categoria", 0], ["pc", "Compra", 0], ["etapa", "NF", 0], ["pst", "Pagamento", 0], ["bank", "Banco p/ pagar", 0], ["v", "Valor", 1], ["", "", 0]];
     q("tbl").innerHTML = `<thead><tr>${H.map(([key, l, r], i) => (i === 0 ? `<th style="width:30px;cursor:default">${PODE.baixar ? `<input type="checkbox" class="ck" id="ckAll" ${allSel ? "checked" : ""}>` : ""}</th>` : `<th class="${r ? "r" : ""}" ${key ? `data-k="${key}"` : ""}>${l}${sk === key && key ? (dir > 0 ? " ↑" : " ↓") : ""}${key ? `<button class="fbtn ${(key === "v" ? S.cfv.min != null || S.cfv.max != null : !!S.cf[key]) ? "on" : ""}" data-f="${key}" title="Filtrar">▾</button>` : ""}</th>`)).join("")}</tr></thead><tbody>${show.map((r) => {
       const compra = r.pc ? `<span class="mono">PC ${esc(r.pc)}</span><div class="sub2">${r.fase ? esc(FASE[r.fase] ?? r.fase) : r.apr === "PENDENTE" || !r.apr ? '<span style="color:#f87171">aprovação pendente</span>' : r.apr === "APROVADO_FAT_DIRETO" ? "aprovado · fat. direto" : "aprovado" + (r.aprov ? " · " + esc(String(r.aprov).split("@")[0]) : "")}</div>` : '<span class="sub2">—</span>';
-      const nf = r.etapa ? `<span style="color:${["60", "80"].includes(r.etapa) ? "#22c55e" : "#f59e0b"}">${["60", "80"].includes(r.etapa) ? "Recebida" : r.etapa === "40" ? "Emitida" : "Sem NF"}</span>${r.nf ? `<div class="sub2 mono">${esc(String(r.nf).split(",")[0])}${String(r.nf).includes(",") ? " +" + (String(r.nf).split(",").length - 1) : ""}</div>` : ""}` : r.tipo === "NFE" ? '<span class="sub2">NF-e (sem PC)</span>' : '<span class="sub2">—</span>';
+      const nf = r.etapa ? `<span style="color:${["60", "80"].includes(r.etapa) ? "#22c55e" : "#f59e0b"}">${["60", "80"].includes(r.etapa) ? "Recebida" : r.etapa === "40" ? "Emitida" : "Sem NF"}</span>${r.nfdoc || r.nf ? `<div class="sub2 mono" title="${esc(r.nf ? "NFs do PC: " + r.nf : "")}">NF ${esc(r.nfdoc || String(r.nf).split(",")[0].replace(/^0+/, ""))}${r.parc ? " · parc " + esc(r.parc) : ""}</div>` : ""}` : r.tipo === "NFE" ? '<span class="sub2">NF-e (sem PC)</span>' : '<span class="sub2">—</span>';
       return `<tr data-id="${r.id}" class="${S.sel.has(r.id) ? "sel" : ""}"><td>${PODE.baixar ? `<input type="checkbox" class="ck" data-id="${r.id}" ${S.sel.has(r.id) ? "checked" : ""}>` : ""}</td>
       <td class="${r.dias < 0 ? "od" : r.dias === 0 ? "td" : ""}">${dm(r.d)} <span class="sub2">${r.dias < 0 ? r.dias + "d" : r.dias === 0 ? "hoje" : "+" + r.dias + "d"}</span>${+r.d !== +r.vd || r.repr ? `<div class="sub2" title="Vencimento do documento${r.repr ? " · previsão reprogramada" : ""}">venc ${dm(r.vd)}${r.repr ? ' · <span style="color:#a78bfa">reprog.</span>' : ""}</div>` : ""}</td>
-      <td><span class="emp ${r.emp}">${r.emp}</span></td><td title="${esc(r.forn)}" style="font-weight:500">${esc(r.forn)}</td><td class="${r.cat ? "" : "nocat"}" style="color:var(--tx2)">${esc(r.cat || "Sem categoria")}</td>
-      <td>${compra}</td><td>${nf}</td><td>${badge(r.st)}</td><td><select class="bsel ${r.bank ? (r.bank !== r.cod_cc ? "chg" : "") : "need"}" data-bk="${r.id}" title="Conta prevista no Omie: ${esc(r.conta)}" ${PODE.baixar ? "" : "disabled"}><option value="">Escolher banco…</option>${bankGroupsHtml(r.emp, r.bank)}</select>${interco(r, r.bank) ? `<div class="sub2" style="color:#a78bfa" title="Título da ${r.emp} pago por conta da ${interco(r, r.bank)} — fica registado como intercompany">pago pela ${interco(r, r.bank)}</div>` : ""}${r.env ? `<div class="sub2" style="color:#38bdf8" title="Arquivo de remessa #${r.env.id} gerado em ${new Date(r.env.em).toLocaleString("pt-BR")}">↗ enviado ${esc(r.env.banco)} · pagto ${dm(new Date(r.env.data + "T00:00:00"))}</div>` : ""}</td><td class="r" style="font-weight:650">${brl(r.v)}</td>
+      <td><span class="emp ${r.emp}">${r.emp}</span></td><td title="${esc(r.razao || r.forn)}" style="font-weight:500">${esc(r.forn)}${r.razao && r.razao !== r.forn ? `<div class="sub2" style="max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(r.razao)}</div>` : ""}</td><td class="${r.cat ? "" : "nocat"}" style="color:var(--tx2)" title="${r.catHer ? "Categoria herdada do pedido de compra" : ""}">${esc(r.cat || "Sem categoria")}${r.catHer ? '<div class="sub2">do PC</div>' : ""}</td>
+      <td>${compra}</td><td>${nf}</td><td>${r.excl ? '<span class="bdg b-bloq" title="Este título já não existe no Omie (foi refeito/excluído lá) — não pagar">Excluído no Omie</span>' : badge(r.st)}</td><td><select class="bsel ${r.bank ? (r.bank !== r.cod_cc ? "chg" : "") : "need"}" data-bk="${r.id}" title="Conta prevista no Omie: ${esc(r.conta)}" ${PODE.baixar ? "" : "disabled"}><option value="">Escolher banco…</option>${bankGroupsHtml(r.emp, r.bank)}</select>${interco(r, r.bank) ? `<div class="sub2" style="color:#a78bfa" title="Título da ${r.emp} pago por conta da ${interco(r, r.bank)} — fica registado como intercompany">pago pela ${interco(r, r.bank)}</div>` : ""}${r.env ? `<div class="sub2" style="color:#38bdf8" title="Arquivo de remessa #${r.env.id} gerado em ${new Date(r.env.em).toLocaleString("pt-BR")}">↗ enviado ${esc(r.env.banco)} · pagto ${dm(new Date(r.env.data + "T00:00:00"))}</div>` : ""}</td><td class="r" style="font-weight:650">${brl(r.v)}</td>
       <td class="r">${PODE.baixar ? `<button class="btn sm" data-bx="${r.id}">Baixar</button>` : ""}</td></tr>`;
     }).join("")}</tbody>`;
     qa("#tbl tbody tr").forEach((tr) => (tr.onclick = (e) => { if (e.target.classList.contains("ck") || e.target.tagName === "SELECT" || e.target.tagName === "OPTION") return; openDrawer(+tr.dataset.id); }));
@@ -445,6 +470,26 @@ export function montarPagarV3(o: Opts) {
     const s = (cls, t, d) => `<div class="step ${cls}"><i></i><b>${t}</b>${d}</div>`;
     return `<div class="flow">${s("ok", "Pedido", "PC " + esc(r.pc))}${s(apOk ? "ok" : "bad", "Aprovação", apOk ? (r.apr === "APROVADO_FAT_DIRETO" ? "fat. direto" : "aprovado") + (r.aprov ? "<br>" + esc(String(r.aprov).split("@")[0]) : "") : "pendente")}${s(nfOk ? "ok" : "warn", "NF", nfOk ? "recebida" + (r.nf ? "<br>" + esc(String(r.nf).split(",")[0]) : "") : nfE ? "emitida, não recebida" : r.fase ? esc(FASE[r.fase] ?? r.fase) : ETAPA[r.etapa] || "—")}${s(r.paid ? "ok" : "", "Pagamento", r.paid ? "baixado" : "em aberto")}</div>`;
   }
+  // Ciclo do pagamento (sql/75 finance.pagar_ciclo): PC → NFs → parcelas → pagamentos, com veredito.
+  function cicloHtml(c) {
+    if (!c) return '<h4>Ciclo do pagamento</h4><div class="sub2">sem dados de pedido/NF para este título</div>';
+    const dt = (s) => (s ? new Date(String(s).slice(0, 10) + "T00:00:00").toLocaleDateString("pt-BR") : "—");
+    const v = c.veredito || ""; const cor = /não pagar|duplic/i.test(v) ? "#f87171" : /pago/i.test(v) ? "#22c55e" : "#38bdf8";
+    const stLbl = (t) => t.status === "EXCLUIDO" ? '<span class="bdg b-bloq">excluído no Omie</span>' : t.status === "PAGO" ? `<span class="bdg b-pago">pago ${dt(t.pago_em)}</span>`
+      : t.status === "CANCELADO" ? '<span class="bdg">cancelado</span>' : (t.remessas && t.remessas.length) ? `<span class="bdg" style="color:#38bdf8">enviado ${esc(t.remessas[t.remessas.length - 1].banco)} #${t.remessas[t.remessas.length - 1].remessa}</span>`
+      : t.prog_cc ? '<span class="bdg">programado</span>' : (t.pago > 0 ? '<span class="bdg">parcial</span>' : '<span class="bdg">em aberto</span>');
+    const pc = c.pc;
+    const T = c.totais || {};
+    return `<h4>Ciclo do pagamento</h4>
+      <div style="padding:8px 10px;border-radius:9px;border:1px solid ${cor};color:${cor};font-weight:650;margin:6px 0 10px">${esc(v)}</div>
+      ${pc ? `<div class="sub2" style="margin-bottom:8px"><b class="mono">PC ${esc(pc.numero)}</b>${pc.total != null ? ` · total ${brl(Number(pc.total))}` : ""}${pc.aprovacao ? ` · ${esc(pc.aprovacao)}${pc.aprovado_por ? " por " + esc(String(pc.aprovado_por).split("@")[0]) : ""}` : ""}${pc.recebido_em ? ` · recebido ${dt(pc.recebido_em)}` : ""}</div>` : ""}
+      ${(c.nfs || []).length ? `<div class="sub2" style="margin-bottom:6px">NFs: ${c.nfs.map((n) => `<span class="mono">NF ${esc(n.nf)}</span> ${brl(Number(n.valor))}`).join(" · ")}${T.pc_sem_nf > 0.01 ? ` · <span style="color:#f59e0b">sem NF ainda ${brl(Number(T.pc_sem_nf))}</span>` : ""}</div>` : ""}
+      <table class="num" style="width:100%;font-size:12px;border-collapse:collapse;margin-top:4px"><thead><tr style="color:var(--tx3);text-align:left"><th>NF</th><th>Parc.</th><th>Venc.</th><th class="r">Valor</th><th>Situação</th></tr></thead><tbody>
+      ${(c.titulos || []).map((t) => `<tr style="${t.atual ? "background:rgba(56,189,248,.08);" : ""}${t.status === "EXCLUIDO" ? "opacity:.55;text-decoration:line-through;" : ""}"><td class="mono">${esc(t.nf || "—")}</td><td>${esc(t.parcela || "—")}${t.atual ? ' <b style="color:#38bdf8">← este</b>' : ""}</td><td>${dt(t.vencimento)}</td><td class="r">${brl(Number(t.valor))}</td><td>${stLbl(t)}</td></tr>`).join("")}
+      </tbody></table>
+      <div style="display:flex;gap:16px;flex-wrap:wrap;margin-top:8px;font-size:12px"><span>Total das NFs <b>${brl(Number(T.valor || 0))}</b></span><span>Pago <b style="color:#22c55e">${brl(Number(T.pago || 0))}</b></span><span>Em aberto <b>${brl(Number(T.aberto || 0))}</b></span>${T.excluidos ? `<span class="sub2">${T.excluidos} título(s) antigo(s) excluído(s) no Omie, fora da conta</span>` : ""}</div>`;
+  }
+
   function openDrawer(id) {
     const r = rows[id]; if (!r) return; hideTip();
     const st = r.dias < 0 ? `<span class="neg">Vencido há ${-r.dias} dias</span>` : r.dias === 0 ? '<span style="color:#f59e0b">Vence hoje</span>' : `Vence em ${r.dias} dias`;
@@ -452,6 +497,7 @@ export function montarPagarV3(o: Opts) {
     dr.innerHTML = `<div class="dh"><div><span class="emp ${r.emp}">${r.emp}</span> <span class="sub2" style="margin-left:6px">${EN[r.emp]}</span><h3>${esc(r.forn)}</h3><div style="font-size:12px">${st} · ${badge(r.st)}</div></div><button class="btn" id="dX" style="height:34px">✕</button></div>
     <div class="dbody">
       <div class="verdict ${r.st}"><b>${r.st === "ok" || r.st === "dir" ? "Pode pagar" : "Não pagar ainda"}</b><span>${PST[r.st].d}${r.div ? ' <br><span style="color:#f59e0b">⚠ Este PC tem registros de aprovação divergentes na base — conferir.</span>' : ""}</span></div>
+      <div class="box" id="dCiclo" style="margin-bottom:12px"><h4>Ciclo do pagamento</h4><div class="sub2">carregando…</div></div>
       ${flowHtml(r)}
       <div class="dgrid">
         <div><span>Vencimento (documento)</span>${r.vd.toLocaleDateString("pt-BR")}</div>
@@ -484,6 +530,7 @@ export function montarPagarV3(o: Opts) {
     ov.classList.add("on"); dr.classList.add("on");
     q("dX").onclick = closeAll;
     if (q("dForn")) q("dForn").onclick = () => o.onFornecedor(Number(r.cod_forn), r.emp);
+    fetch(`/api/financeiro/pagar?ciclo=${encodeURIComponent(r.ref)}`, { cache: "no-store" }).then((x) => x.json()).then((j) => { const el = q("dCiclo"); if (el) el.innerHTML = cicloHtml(j.ciclo); }).catch(() => { const el = q("dCiclo"); if (el) el.innerHTML = '<h4>Ciclo do pagamento</h4><div class="sub2">não foi possível carregar</div>'; });
     if (q("dSerie")) q("dSerie").onclick = () => { closeAll(); o.onSerie(r.serie.id, r.ref); };
     const pvAviso = () => { const v = q("pvData").value; q("pvAv").textContent = v && naoUtil(v) ? "⚠ dia não útil — o banco só processa no próximo dia útil" : ""; };
     q("pvData").oninput = pvAviso; pvAviso();

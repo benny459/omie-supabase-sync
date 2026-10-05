@@ -140,6 +140,7 @@ export default function TelaPagarV3() {
                   <button className="btn sm" id="tCsv">CSV</button>
                 </div>
                 <div className="bstrip" id="bstrip" />
+                <div id="exclBox" />
                 <div className="tbl"><table className="num" id="tbl" /></div>
                 <div className="abar" id="abar"><b id="abarN" /><span id="abarV" className="num" /><span id="abarE" style={{ fontSize: 12 }} /><span className="w" id="abarW" /><span style={{ marginLeft: "auto" }} /><select id="abarBank" /><button className="btn sm" id="abarRep" title="Mudar a previsão de pagamento (o vencimento do documento não muda)">Reprogramar previsão</button><button className="btn sm" id="abarC6" title="Gerar o arquivo de pagamentos em lote do C6 Bank">Arquivo C6</button><button className="btn sm" id="abarClr">Limpar</button><button className="btn ok sm" id="abarGo">Baixar em lote</button></div>
                 <div className="foot"><span id="tblFoot" /><span>Status de pagamento = aprovação do pedido de compra + NF recebida · clique numa linha para abrir</span></div>

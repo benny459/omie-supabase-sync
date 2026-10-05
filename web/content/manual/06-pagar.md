@@ -28,6 +28,20 @@ atualizado: 2026-10-05
 
 O título mostra o caminho **PC → aprovação → NF → pagamento**. Título sem NF ou sem aprovação fica **bloqueado**. Para pagar mesmo assim é preciso escrever uma **justificativa**.
 
+## Ciclo do pagamento — tenho certeza de que está em aberto?
+
+Ao abrir um título, o quadro **Ciclo do pagamento** mostra o caminho inteiro do pedido de compra até o pagamento:
+
+1. No topo, o **veredito**: "Em aberto — pode pagar", "Já pago em dd/mm", "Pago parcialmente", "Possível duplicidade — conferir" ou "Excluído no Omie — não pagar".
+2. O **PC**: número, total, quem aprovou e quando foi recebido.
+3. As **NFs** do PC com o valor de cada uma, e quanto do PC ainda está sem NF.
+4. Todas as **parcelas** dessas NFs: vencimento, valor e situação (em aberto, programado, enviado ao banco, pago com data, excluído no Omie). A linha do título que você abriu aparece marcada "← este".
+5. Os totais: valor das NFs, quanto já foi pago e quanto ainda está em aberto.
+
+Na tabela, a coluna NF mostra **NF e parcela** (ex.: "NF 11924 · parc 002/002"), para distinguir títulos parecidos do mesmo pedido.
+
+> **Atenção:** quando o financeiro refazia as parcelas no Omie, os títulos antigos sumiam de lá mas continuavam na nossa base. Esses títulos aparecem com o selo vermelho **"Excluído no Omie"** e um aviso no topo da lista — **não pague**. O botão "Tirar todos do contas a pagar" retira-os da lista (dá para desfazer).
+
 ## Como faço para pagar (dar baixa)
 
 1. Abra o título e informe valor, data, conta e, se houver, **juros, multa ou desconto** (pode ser parcial).

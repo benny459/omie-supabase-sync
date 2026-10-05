@@ -16,6 +16,11 @@
 //  POST { acao: "desfazer", movimento_id, motivo? }
 //  POST { acao: "reprogramar", refs, data: "YYYY-MM-DD" | null, obs? }   (sql/73 — previsão; null = voltar à regra)
 //  GET  ?hist=<ref>          → histórico de reprogramação da previsão
+//  GET  ?ciclo=<ref>         → ciclo do pagamento (PC → NFs → parcelas → pagamentos), sql/75 finance.pagar_ciclo
+//  GET  ?excluidos=1         → títulos que sumiram do Omie e seguem abertos aqui (sql/75)
+//  POST { acao: "excluidos_marcar" | "excluidos_desfazer", refs }  (admin / financeiro.editar_titulo)
+//  GET também devolve nomes (cod_forn → [fantasia, razão]), catpc (pc → categoria do PC)
+//  e excl (refs de títulos já excluídos no Omie ainda por marcar).
 //  GET também devolve prev (ref → [previsão efetiva, reprogramada?]), env (ref → remessa ao banco),
 //  serie (ref → {id, seq}) e feriados (datas, p/ avisar previsão em dia não útil).
 //
@@ -92,6 +97,28 @@ async function extras() {
   };
 }
 
+/** Nome curto do fornecedor (fantasia) + razão social, categoria herdada do PC
+ *  quando o título não tem, e títulos que já sumiram do Omie (sql/75). */
+async function nomesECategorias(rows: Linha[]) {
+  const cods = [...new Set(rows.map((r) => r[23]).filter((c): c is number => typeof c === "number" && c > 0))];
+  const pcs = [...new Set(rows.filter((r) => !r[5] && r[13]).map((r) => String(r[13]).split(",")[0].trim()).filter(Boolean))];
+  const [cl, pd, ex] = await Promise.all([
+    cods.length ? fin().from("clientes").select("empresa, codigo_cliente_omie, nome_fantasia, razao_social").in("codigo_cliente_omie", cods) : Promise.resolve({ data: [] }),
+    pcs.length ? supaAdmin().schema("compras").from("pedidos").select("empresa, numero, categoria_desc").in("numero", pcs) : Promise.resolve({ data: [] }),
+    fin().rpc("titulos_excluidos_pendentes", {}),
+  ]);
+  const nomes: Record<string, [string, string]> = {};
+  for (const c of (cl.data ?? []) as { empresa: string; codigo_cliente_omie: number; nome_fantasia: string | null; razao_social: string | null }[]) {
+    nomes[`${c.empresa}|${c.codigo_cliente_omie}`] = [(c.nome_fantasia ?? "").trim(), (c.razao_social ?? "").trim()];
+  }
+  const catpc: Record<string, string> = {};
+  for (const p of (pd.data ?? []) as { empresa: string; numero: string; categoria_desc: string | null }[]) {
+    if (p.categoria_desc) catpc[`${p.empresa}|${p.numero}`] = p.categoria_desc;
+  }
+  const excl = ((ex.data ?? []) as { ref: string; natureza: string }[]).filter((x) => x.natureza === "P").map((x) => x.ref);
+  return { nomes, catpc, excl };
+}
+
 export async function GET(req: Request) {
   const a = await exigir("financeiro.ver_pagar");
   if (a instanceof NextResponse) return a;
@@ -112,6 +139,20 @@ export async function GET(req: Request) {
     return NextResponse.json({ historico: data });
   }
 
+  const ciclo = u.searchParams.get("ciclo");
+  if (ciclo) {
+    if (!/^[op]:\d+$/.test(ciclo)) return NextResponse.json({ error: "ref inválida" }, { status: 400 });
+    const { data, error } = await fin().rpc("pagar_ciclo", { p_ref: ciclo });
+    if (error) return erroDb(error);
+    return NextResponse.json({ ciclo: data }, { headers: { "Cache-Control": "no-store" } });
+  }
+
+  if (u.searchParams.get("excluidos")) {
+    const { data, error } = await fin().rpc("titulos_excluidos_pendentes", {});
+    if (error) return erroDb(error);
+    return NextResponse.json({ excluidos: (data ?? []).filter((x: { natureza: string }) => x.natureza === "P") });
+  }
+
   const mov = Number(u.searchParams.get("mov") ?? 0);
   if (mov) {
     if (!a.pode["financeiro.conciliar"]) return NextResponse.json({ error: "Sem permissão (financeiro.conciliar)" }, { status: 403 });
@@ -123,9 +164,11 @@ export async function GET(req: Request) {
 
   try {
     const [dados, extra] = await Promise.all([carregar(), extras()]);
+    const nomes = await nomesECategorias(dados.rows);
     return NextResponse.json({
       ...dados,
       ...extra,
+      ...nomes,
       pode: { baixar: !!a.pode["financeiro.baixar"], conciliar: !!a.pode["financeiro.conciliar"], incluir: !!a.pode["financeiro.editar_titulo"] },
     }, { headers: { "Cache-Control": "no-store" } });
   } catch (e) {
@@ -139,6 +182,18 @@ export async function POST(req: Request) {
   let b: { acao?: string; itens?: Item[]; data?: string | null; obs?: string; lote?: boolean; baixa_id?: number; motivo?: string;
            refs?: string[]; empresa?: string; cod_cc?: number | null; movimento_id?: number; ignorar?: boolean };
   try { b = await req.json(); } catch { return NextResponse.json({ error: "JSON inválido" }, { status: 400 }); }
+
+  if (b.acao === "excluidos_marcar" || b.acao === "excluidos_desfazer") {
+    const r = await exigir("financeiro.ver_pagar");
+    if (r instanceof NextResponse) return r;
+    if (!r.pode["financeiro.editar_titulo"]) return NextResponse.json({ error: "Sem permissão (financeiro.editar_titulo)" }, { status: 403 });
+    const refs = (b.refs ?? []).filter((x) => /^o:\d+$/.test(x));
+    if (!refs.length) return NextResponse.json({ error: "Nenhum título" }, { status: 400 });
+    const fn = b.acao === "excluidos_marcar" ? "titulos_excluidos_marcar" : "titulos_excluidos_desfazer";
+    const args = b.acao === "excluidos_marcar" ? { p_refs: refs, p_por: r.email, p_motivo: b.motivo ?? "sumiu do Omie (relatório 02/10/2026)" } : { p_refs: refs, p_por: r.email };
+    const { data, error } = await fin().rpc(fn, args);
+    return error ? erroDb(error) : NextResponse.json({ ok: true, n: data });
+  }
 
   const conc = b.acao === "conciliar" || b.acao === "ignorar" || b.acao === "desfazer";
   // Reprogramar a previsão: quem lança/edita títulos ou quem paga.
