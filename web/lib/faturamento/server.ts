@@ -213,9 +213,9 @@ async function comoEnsaio(doc: DocFat, cfg: Config): Promise<DocFat> {
       bairro: em.bairro || doc.cliente.bairro, municipio: em.municipio || doc.cliente.municipio,
       codigo_municipio: em.codigo_municipio || null, uf: em.uf || "SP", cep: em.cep || doc.cliente.cep,
     },
-    // Mantém o tratamento fiscal do cliente real (UF/consumidor final) para o
-    // ensaio exercitar o mesmo caminho; o CFOP segue a UF do cliente real.
-    itens: doc.itens.map((i) => ({ ...i, cfop: i.cfop || ((em.uf || "SP").toUpperCase() === doc.cliente.uf.toUpperCase() ? "5102" : "6102") })),
+    // Destinatário passa a ser a própria empresa (mesma UF): o CFOP é recalculado
+    // (5102). O caminho interestadual (6102/idDest 2) não dá para ensaiar.
+    itens: doc.itens.map((i) => ({ ...i, cfop: null })),
   };
 }
 
