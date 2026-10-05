@@ -21,6 +21,20 @@ export type ClienteFat = {
   uf: string;
   cep: string;
   telefone?: string | null;
+  /** "1" contribuinte, "2" isento, "9" não contribuinte. Sem isto: pela IE. */
+  indicador_ie?: "1" | "2" | "9" | null;
+};
+
+export type TransporteFat = {
+  /** 0 emitente (CIF), 1 destinatário (FOB), 2 terceiros, 3/4 próprio, 9 sem frete */
+  modalidade: number;
+  nome?: string | null;
+  cnpj?: string | null;
+  ie?: string | null;
+  endereco?: string | null;
+  municipio?: string | null;
+  uf?: string | null;
+  volumes?: { quantidade?: number | null; especie?: string | null; peso_bruto?: number | null; peso_liquido?: number | null }[];
 };
 
 export type ItemFat = {
@@ -33,6 +47,7 @@ export type ItemFat = {
   cest?: string | null;
   cfop?: string | null;
   origem?: number | null;       // origem da mercadoria (0 nacional, 1 importação direta...)
+  valor_desconto?: number | null;
   servico_lc116?: string | null;               // NFS-e: item da LC116 (ex.: 0703)
   codigo_tributario_municipio?: string | null; // NFS-e: código municipal do serviço
 };
@@ -47,6 +62,13 @@ export type DocFat = {
   condicao?: CondicaoFat | null;
   observacoes?: string | null;
   pedido_cliente?: string | null;   // nº do pedido/OC do cliente
+  /** PV marcado "consumidor final" (Omie: consumidor_final = S). */
+  consumidor_final?: boolean | null;
+  transporte?: TransporteFat | null;
+  /** Texto do PV que o Omie põe em "Inf. Contribuinte" (ex.: "CONFORME OC N …"). */
+  info_contribuinte?: string | null;
+  /** Rótulo da origem para o receber/infCpl (PV1890). */
+  rotulo?: string | null;
 };
 
 export type Emitente = {
@@ -65,6 +87,18 @@ export type Emitente = {
 };
 
 const so = (s?: string | null) => (s ?? "").replace(/\D/g, "");
+
+/** O Omie grava entidades HTML (&quot; &apos; &amp;) e espaços duplos nos textos. */
+export function limpo(s?: string | null) {
+  return (s ?? "")
+    .replace(/&quot;/g, '"').replace(/&apos;|&#39;/g, "'").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&")
+    .replace(/\s+/g, " ").trim();
+}
+
+/** E-mail do destinatário na NF-e: até 60 caracteres (como o Omie). */
+export function emailNfe(s?: string | null) {
+  return (s ?? "").split(/[,;\s]+/).filter(Boolean).join(", ").slice(0, 60).replace(/[,\s]+$/, "");
+}
 const r2 = (n: number) => Math.round(n * 100) / 100;
 const hojeISO = () => new Date(Date.now() - 3 * 3600_000).toISOString().slice(0, 10); // America/Sao_Paulo
 
@@ -106,41 +140,67 @@ export function validar(doc: DocFat): string | null {
   return null;
 }
 
-/** JSON de emissão de NF-e da Focus (v2). */
-export function montarNfe(doc: DocFat, em: Emitente, opts: { natureza: string; serie?: string; numero?: number | null }) {
+/** JSON de emissão de NF-e da Focus (v2) — espelha a NF-e mercantil que o Omie
+ *  emitia para a SF (comparada campo a campo com os XMLs 2185–2192, 05/10/26):
+ *  CRT 1, CSOSN 102, PIS/COFINS 49 zerados, CFOP 5102/6102, cEAN "SEM GTIN",
+ *  CEST + "CEST: xx.xxx.xx" no item, transporte do PV, cobrança com fatura =
+ *  nº da NF e duplicata 001, pagamento boleto (15) a prazo, e o mesmo texto de
+ *  informações complementares. */
+export function montarNfe(doc: DocFat, em: Emitente, opts: { natureza: string; serie?: string; numero?: number | null; infoPadrao?: string | null }) {
   const c = doc.cliente;
   const mesmaUF = (em.uf || "SP").toUpperCase() === c.uf.toUpperCase();
-  const contribuinte = !!so(c.ie);
-  const total = totalItens(doc.itens);
+  const ieDig = so(c.ie);
+  const indIE = c.indicador_ie ?? (ieDig ? "1" : /isent/i.test(c.ie ?? "") ? "2" : "9");
+  const total = r2(totalItens(doc.itens) - r2(doc.itens.reduce((s, i) => s + (i.valor_desconto ?? 0), 0)));
   const ps = parcelas(total, doc.condicao);
   const aPrazo = ps.length > 1 || ps.some((p) => p.vencimento > hojeISO());
+  const consumidorFinal = doc.consumidor_final ?? indIE !== "1";
   const agora = new Date().toISOString();
+  const email = emailNfe(c.email);
 
   const items = doc.itens.map((i, n) => {
     const bruto = r2(i.quantidade * i.valor_unitario);
     const un = (i.unidade || "UN").toUpperCase();
+    const cest = so(i.cest);
     return {
       numero_item: n + 1,
       codigo_produto: i.codigo,
-      descricao: i.descricao,
+      descricao: limpo(i.descricao).slice(0, 120),
+      codigo_barras_comercial: "SEM GTIN",
+      codigo_barras_tributavel: "SEM GTIN",
       cfop: i.cfop || (mesmaUF ? "5102" : "6102"),
       codigo_ncm: so(i.ncm) || "00000000",
-      ...(i.cest ? { cest: so(i.cest) } : {}),
+      ...(cest ? { cest } : {}),
       unidade_comercial: un,
       quantidade_comercial: i.quantidade,
       valor_unitario_comercial: i.valor_unitario,
       valor_bruto: bruto,
+      ...(i.valor_desconto ? { valor_desconto: r2(i.valor_desconto) } : {}),
       unidade_tributavel: un,
       quantidade_tributavel: i.quantidade,
       valor_unitario_tributavel: i.valor_unitario,
       inclui_no_total: 1,
-      ...(doc.pedido_cliente ? { pedido_compra: doc.pedido_cliente.slice(0, 15) } : {}),
       icms_origem: i.origem ?? 0,
       icms_situacao_tributaria: "102",
       pis_situacao_tributaria: "49",
+      pis_base_calculo: 0, pis_aliquota_porcentual: 0, pis_valor: 0,
       cofins_situacao_tributaria: "49",
+      cofins_base_calculo: 0, cofins_aliquota_porcentual: 0, cofins_valor: 0,
+      ...(cest ? { informacoes_adicionais_item: `CEST: ${cest.replace(/^(\d{2})(\d{3})(\d{2})$/, "$1.$2.$3")}` } : {}),
     };
   });
+
+  // Informações complementares no formato do Omie.
+  const inf = [
+    email ? `Email do Destinatario: ${email.split(", ")[0]}` : null,
+    doc.info_contribuinte ? `Inf. Contribuinte: ${limpo(doc.info_contribuinte)}` : null,
+    opts.infoPadrao || null,
+    consumidorFinal ? "Produto destinado a Consumidor Final." : null,
+    doc.observacoes ? limpo(doc.observacoes) : null,
+  ].filter(Boolean).map((t) => `${t};`).join(" ");
+
+  const t = doc.transporte;
+  const modFrete = t?.modalidade ?? 9;
 
   return {
     natureza_operacao: opts.natureza,
@@ -151,37 +211,53 @@ export function montarNfe(doc: DocFat, em: Emitente, opts: { natureza: string; s
     tipo_documento: 1,
     local_destino: mesmaUF ? 1 : 2,
     finalidade_emissao: 1,
-    consumidor_final: contribuinte ? 0 : 1,
+    consumidor_final: consumidorFinal ? 1 : 0,
     presenca_comprador: 9,
     cnpj_emitente: so(em.cnpj),
-    nome_destinatario: c.nome,
+    nome_destinatario: limpo(c.nome).slice(0, 60),
     ...(so(c.cnpj) ? { cnpj_destinatario: so(c.cnpj) } : { cpf_destinatario: so(c.cpf) }),
-    indicador_inscricao_estadual_destinatario: contribuinte ? 1 : 9,
-    ...(contribuinte ? { inscricao_estadual_destinatario: so(c.ie) } : {}),
-    ...(c.email ? { email_destinatario: c.email } : {}),
-    logradouro_destinatario: c.logradouro,
-    numero_destinatario: c.numero,
-    ...(c.complemento ? { complemento_destinatario: c.complemento } : {}),
-    bairro_destinatario: c.bairro,
+    indicador_inscricao_estadual_destinatario: Number(indIE),
+    ...(indIE === "1" ? { inscricao_estadual_destinatario: ieDig } : {}),
+    ...(email ? { email_destinatario: email } : {}),
+    logradouro_destinatario: limpo(c.logradouro),
+    numero_destinatario: limpo(c.numero) || "S/N",
+    ...(c.complemento ? { complemento_destinatario: limpo(c.complemento).slice(0, 60) } : {}),
+    bairro_destinatario: limpo(c.bairro),
     ...(c.codigo_municipio ? { codigo_municipio_destinatario: c.codigo_municipio } : {}),
-    municipio_destinatario: c.municipio,
+    municipio_destinatario: limpo(c.municipio),
     uf_destinatario: c.uf.toUpperCase(),
     cep_destinatario: so(c.cep),
-    ...(c.telefone ? { telefone_destinatario: so(c.telefone) } : {}),
-    modalidade_frete: 9,
-    valor_produtos: total,
+    ...(c.telefone ? { telefone_destinatario: so(c.telefone).slice(-11) } : {}),
+    modalidade_frete: modFrete,
+    ...(t && modFrete !== 9 && t.nome ? {
+      nome_transportador: limpo(t.nome).slice(0, 60),
+      ...(so(t.cnpj).length === 14 ? { cnpj_transportador: so(t.cnpj) } : so(t.cnpj).length === 11 ? { cpf_transportador: so(t.cnpj) } : {}),
+      ...(so(t.ie) ? { inscricao_estadual_transportador: so(t.ie) } : {}),
+      ...(t.endereco ? { endereco_transportador: limpo(t.endereco).slice(0, 60) } : {}),
+      ...(t.municipio ? { municipio_transportador: limpo(t.municipio) } : {}),
+      ...(t.uf ? { uf_transportador: t.uf.toUpperCase() } : {}),
+    } : {}),
+    ...(t?.volumes?.length ? {
+      volumes: t.volumes.map((v) => ({
+        ...(v.quantidade ? { quantidade: v.quantidade } : {}), ...(v.especie ? { especie: v.especie } : {}),
+        ...(v.peso_bruto ? { peso_bruto: v.peso_bruto } : {}), ...(v.peso_liquido ? { peso_liquido: v.peso_liquido } : {}),
+      })),
+    } : {}),
+    valor_produtos: totalItens(doc.itens),
+    ...(total !== totalItens(doc.itens) ? { valor_desconto: r2(totalItens(doc.itens) - total) } : {}),
     valor_total: total,
-    ...(aPrazo
-      ? {
-          numero_fatura: "1",
-          valor_original_fatura: total,
-          valor_desconto_fatura: 0,
-          valor_liquido_fatura: total,
-          duplicatas: ps.map((p) => ({ numero: p.numero, data_vencimento: p.vencimento, valor: p.valor })),
-        }
-      : {}),
-    formas_pagamento: [{ forma_pagamento: doc.condicao?.forma_pagamento || (aPrazo ? "15" : "01"), valor_pagamento: total }],
-    ...(doc.observacoes ? { informacoes_adicionais_contribuinte: doc.observacoes.slice(0, 2000) } : {}),
+    // Cobrança sempre, como o Omie: fatura = nº da NF, duplicatas 001, 002…
+    numero_fatura: String(opts.numero ?? "1"),
+    valor_original_fatura: total,
+    valor_desconto_fatura: 0,
+    valor_liquido_fatura: total,
+    duplicatas: ps.map((p) => ({ numero: p.numero, data_vencimento: p.vencimento, valor: p.valor })),
+    formas_pagamento: [{
+      indicador_pagamento: aPrazo ? 1 : 0,
+      forma_pagamento: doc.condicao?.forma_pagamento || (aPrazo ? "15" : "01"),
+      valor_pagamento: total,
+    }],
+    ...(inf ? { informacoes_adicionais_contribuinte: inf.slice(0, 2000) } : {}),
     items,
   };
 }

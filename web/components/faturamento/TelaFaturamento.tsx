@@ -6,6 +6,7 @@ import {
 } from "@/components/navy/tela/KitTela";
 import type { ClienteFat, DocFat, ItemFat } from "@/lib/faturamento/montar";
 import FilaVendasNativas from "@/components/vendas/FilaVendasNativas";
+import NfeProducaoSf from "@/components/faturamento/NfeProducaoSf";
 
 /* Faturamento — emissão de NF-e / NFS-e / recibo pela Focus (P5, 05/10/26).
    Lista as emissões, consulta o status na Focus, abre XML/PDF e, em
@@ -159,6 +160,7 @@ export default function TelaFaturamento() {
         setAberto(false);
         carregar();
       }} />}
+      <NfeProducaoSf empresa="SF" onEmitido={carregar} />
       <FilaVendasNativas soAbertos titulo="PV / OS do painel a faturar" />
       <GradeKpis kpis={kpis} />
       <FaixaFiltros busca={busca} onBusca={setBusca} placeholder="Cliente, nº, PV/OS…">
@@ -192,7 +194,7 @@ export default function TelaFaturamento() {
                         {e.empresa} · {e.ambiente === "producao" ? "PRODUÇÃO" : "HOMOLOGAÇÃO"}
                       </div>
                     </td>
-                    <td style={td}>{e.origem_rotulo ?? (e.origem_id ? `${e.origem_tipo.toUpperCase()} ${e.origem_id}` : e.origem_tipo)}</td>
+                    <td style={td}>{(e as Emissao & { ensaio?: boolean }).ensaio ? "ENSAIO · " : ""}{e.origem_rotulo ?? (e.origem_id ? `${e.origem_tipo.toUpperCase()} ${e.origem_id}` : e.origem_tipo)}</td>
                     <td style={{ ...td, maxWidth: 240 }}>{e.cliente?.nome}</td>
                     <td style={{ ...td, textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{brl(Number(e.valor_total))}</td>
                     <td style={{ ...td, maxWidth: 280 }}>

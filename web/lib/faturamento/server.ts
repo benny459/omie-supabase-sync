@@ -2,6 +2,7 @@ import "server-only";
 import { supaAdmin } from "@/lib/supabase-admin";
 import { HOST, baixar, chamar, empresaFocus, tokenDe, type Ambiente } from "./focus";
 import { montarNfe, montarNfse, parcelas, reciboHtml, totalItens, validar, type DocFat, type Emitente } from "./montar";
+import { checarDoc, docFatPvOmie, type Checagem, type PvOmieDoc } from "./pv-omie";
 
 /**
  * Motor de faturamento do painel (P5, 05/10/2026).
@@ -15,7 +16,7 @@ import { montarNfe, montarNfse, parcelas, reciboHtml, totalItens, validar, type 
  */
 
 export type TipoDoc = "nfe" | "nfse" | "recibo";
-export type OrigemTipo = "pv" | "os" | "venda" | "manual" | "teste";
+export type OrigemTipo = "pv" | "os" | "venda" | "manual" | "teste" | "pv_omie";
 
 export type Config = {
   empresa: string; cnpj: string | null; ativo: boolean; ambiente: Ambiente; producao_liberada: boolean;
@@ -25,13 +26,13 @@ export type Config = {
   rps_serie_homologacao: string; rps_serie_producao: string;
   recibo_proximo: number | null; natureza_operacao: string; item_lista_servico: string | null;
   codigo_tributario_municipio: string | null; aliquota_iss: number | null;
+  omie_nfe_desligado_em: string | null; nfe_serie_omie: string | null; info_complementar_padrao: string | null;
 };
 
 export type Emissao = {
   id: number; empresa: string; ambiente: Ambiente; tipo: TipoDoc; ref: string;
-  origem_tipo: OrigemTipo; origem_id: string | null;
-  /** PV1962 / OS4885 — preenchido pelo banco (trigger) a partir do documento nativo. */
-  origem_rotulo?: string | null;
+  /** PV1962 / OS4885 / PV1890 — nativo: trigger do banco; PV do Omie: o motor. */
+  origem_tipo: OrigemTipo; origem_id: string | null; origem_rotulo: string | null; ensaio: boolean;
   cliente: DocFat["cliente"]; itens: DocFat["itens"]; condicao: DocFat["condicao"];
   payload: unknown; status: string; focus_status: string | null; mensagem: string | null; erros: unknown;
   numero: string | null; serie: string | null; chave: string | null; valor_total: number;
@@ -88,19 +89,47 @@ export type EmitirOpts = {
   /** Em homologação, cria as parcelas a receber mesmo assim (testes). */
   gerar_receber_homologacao?: boolean;
   criado_por: string;
+  /** Rótulo legível da origem (PV1890) — vai para o receber e para a lista. */
+  origem_rotulo?: string | null;
+  /** Ensaio: mesmo payload, enviado à HOMOLOGAÇÃO com a própria empresa como
+   *  destinatária (a SEFAZ de homologação recusa CNPJ de terceiros). Não gera
+   *  receber nem marca a origem. */
+  ensaio?: boolean;
 };
 
+/** Devolve a numeração reservada quando o documento não chegou a existir
+ *  (rejeitado/erro): só se ninguém reservou outro número depois. */
+async function devolverNumero(empresa: string, campo: string, numero: number | null) {
+  if (numero == null) return;
+  await db().from("fat_config").update({ [campo]: numero }).eq("empresa", empresa).eq(campo, numero + 1);
+}
+
+/** Trava da produção de NF-e: Omie desligado + numeração sem conflito. */
+async function travaProducaoNfe(cfg: Config) {
+  if (!cfg.omie_nfe_desligado_em) {
+    throw new Error("Produção bloqueada: confirme antes que a emissão de NF-e da " + cfg.empresa +
+      " foi desligada no Omie (Faturamento › Prontidão › \"Omie desligado\"). Duas fontes emitindo a mesma série geram duplicidade na SEFAZ.");
+  }
+  if (cfg.nfe_proximo_producao == null) throw new Error("Configure o próximo nº de NF-e de produção");
+  const { data: msg, error } = await supaAdmin().schema("orders").rpc("fat_guarda_numeracao", { p_empresa: cfg.empresa, p_numero: cfg.nfe_proximo_producao });
+  if (error) throw new Error(`Guarda da numeração: ${error.message}`);
+  if (msg) throw new Error(String(msg));
+}
+
 export async function emitir(doc: DocFat, o: EmitirOpts): Promise<Emissao> {
+  let reservado: { campo: string; numero: number | null } | null = null;
   const cfg = await configDe(doc.empresa);
   if (!cfg.ativo) throw new Error(`Faturamento pelo painel não habilitado para ${doc.empresa}`);
-  const amb = ambienteDe(cfg);
-  const origemTipo = o.origem_tipo ?? "manual";
+  const amb: Ambiente = o.ensaio ? "homologacao" : ambienteDe(cfg);
+  if (o.ensaio) doc = await comoEnsaio(doc, cfg);
+  const origemTipo: OrigemTipo = o.ensaio ? "teste" : (o.origem_tipo ?? "manual");
   const tipo: TipoDoc = o.tipo ?? (origemTipo === "os" ? cfg.tipo_os : "nfe");
   const inval = validar(doc);
   if (inval) throw new Error(inval);
   if (tipo === "nfse" && !doc.cliente.email) throw new Error("NFS-e (Barueri) exige e-mail do tomador");
 
-  if (o.origem_id) {
+  if (amb === "producao" && tipo === "nfe") await travaProducaoNfe(cfg);
+  if (o.origem_id && !o.ensaio) {
     const { data: ja } = await db().from("fat_emissoes").select("id,status")
       .eq("origem_tipo", origemTipo).eq("origem_id", o.origem_id).eq("ambiente", amb)
       .in("status", ["processando", "autorizada"]).limit(1);
@@ -111,9 +140,10 @@ export async function emitir(doc: DocFat, o: EmitirOpts): Promise<Emissao> {
   const ref = `${doc.empresa}-${tipo}-${amb === "producao" ? "p" : "h"}-${Date.now()}`;
   const { data: ins, error } = await db().from("fat_emissoes").insert({
     empresa: doc.empresa, ambiente: amb, tipo, ref, origem_tipo: origemTipo, origem_id: o.origem_id ?? null,
+    origem_rotulo: o.origem_rotulo ?? doc.rotulo ?? null, ensaio: !!o.ensaio,
     cliente: doc.cliente, itens: doc.itens, condicao: doc.condicao ?? null,
     valor_total: totalItens(doc.itens), status: "rascunho", criado_por: o.criado_por,
-    gerar_receber: amb === "producao" ? true : !!o.gerar_receber_homologacao,
+    gerar_receber: o.ensaio ? false : amb === "producao" ? true : !!o.gerar_receber_homologacao,
   }).select("*").single();
   if (error) throw new Error(error.message);
   const row = ins as Emissao;
@@ -127,10 +157,12 @@ export async function emitir(doc: DocFat, o: EmitirOpts): Promise<Emissao> {
     if (tipo === "nfe") {
       const campo = amb === "producao" ? "nfe_proximo_producao" : "nfe_proximo_homologacao";
       const { data: numero } = await supaAdmin().schema("orders").rpc("fat_reservar_numero", { p_empresa: doc.empresa, p_campo: campo });
+      reservado = { campo, numero: (numero as number | null) ?? null };
       payload = montarNfe(doc, em, {
         natureza: cfg.natureza_operacao,
         serie: amb === "producao" ? cfg.nfe_serie_producao : cfg.nfe_serie_homologacao,
         numero: (numero as number | null) ?? null,
+        infoPadrao: cfg.info_complementar_padrao,
       });
       caminho = `/v2/nfe?ref=${encodeURIComponent(ref)}`;
     } else {
@@ -145,6 +177,7 @@ export async function emitir(doc: DocFat, o: EmitirOpts): Promise<Emissao> {
     const r = await chamar(HOST[amb], token, "POST", caminho, payload);
     const j = (r.json ?? {}) as Record<string, unknown>;
     if (r.status >= 400) {
+      if (reservado) await devolverNumero(doc.empresa, reservado.campo, reservado.numero);
       return await patch(row.id, {
         payload, status: "rejeitada", focus_status: String(j.codigo ?? r.status),
         mensagem: String(j.mensagem ?? r.texto.slice(0, 500)), erros: j.erros ?? null,
@@ -159,8 +192,63 @@ export async function emitir(doc: DocFat, o: EmitirOpts): Promise<Emissao> {
     }
     return atual;
   } catch (e) {
+    const atual = await buscar(row.id).catch(() => null);
+    if (reservado && (!atual || !["processando", "autorizada"].includes(atual.status))) await devolverNumero(doc.empresa, reservado.campo, reservado.numero);
     return await patch(row.id, { status: "erro", mensagem: e instanceof Error ? e.message : String(e) });
   }
+}
+
+/** Ensaio: troca o destinatário pela própria empresa (homologação só aceita o
+ *  CNPJ do emitente) e o e-mail por um interno — nada chega ao cliente. */
+async function comoEnsaio(doc: DocFat, cfg: Config): Promise<DocFat> {
+  const em = await emitente(cfg);
+  return {
+    ...doc,
+    cliente: {
+      ...doc.cliente,
+      nome: `ENSAIO ${doc.rotulo ?? ""} — ${doc.cliente.nome}`.slice(0, 60),
+      cnpj: em.cnpj, cpf: null, ie: em.inscricao_estadual ?? null, indicador_ie: em.inscricao_estadual ? "1" : "9",
+      email: "contasareceber@waterworks.com.br",
+      logradouro: em.logradouro || doc.cliente.logradouro, numero: em.numero || "S/N", complemento: null,
+      bairro: em.bairro || doc.cliente.bairro, municipio: em.municipio || doc.cliente.municipio,
+      codigo_municipio: em.codigo_municipio || null, uf: em.uf || "SP", cep: em.cep || doc.cliente.cep,
+    },
+    // Mantém o tratamento fiscal do cliente real (UF/consumidor final) para o
+    // ensaio exercitar o mesmo caminho; o CFOP segue a UF do cliente real.
+    itens: doc.itens.map((i) => ({ ...i, cfop: i.cfop || ((em.uf || "SP").toUpperCase() === doc.cliente.uf.toUpperCase() ? "5102" : "6102") })),
+  };
+}
+
+/** PV do Omie → documento (espelho), sem enviar nada. */
+export async function documentoPvOmie(empresa: string, codigo: number) {
+  const { data, error } = await supaAdmin().schema("orders").rpc("fat_pv_omie_doc", { p_empresa: empresa, p_codigo: codigo });
+  if (error) throw new Error(error.message);
+  if (!data) throw new Error(`PV ${codigo} não encontrado no espelho do Omie`);
+  const bruto = data as PvOmieDoc;
+  return { bruto, doc: docFatPvOmie(empresa, bruto) };
+}
+
+/** Pré-voo: monta o payload exato e roda todas as checagens, sem chamar a Focus. */
+export async function prevoo(doc: DocFat, extra: Parameters<typeof checarDoc>[1]) {
+  const cfg = await configDe(doc.empresa);
+  const checagens: Checagem[] = checarDoc(doc, extra);
+  const add = (item: string, ok: boolean, detalhe: string, nivel: "erro" | "aviso" = "erro") => checagens.push({ item, ok, nivel, detalhe });
+  const inval = validar(doc);
+  add("Documento válido", !inval, inval ?? "ok");
+  const prod = cfg.ambiente === "producao" && cfg.producao_liberada;
+  add("Ambiente", true, prod ? "PRODUÇÃO" : "homologação (a chave de produção está desligada)", "aviso");
+  add("Omie desligado para NF-e", !!cfg.omie_nfe_desligado_em, cfg.omie_nfe_desligado_em ? `desde ${cfg.omie_nfe_desligado_em}` : "ainda não confirmado — produção bloqueada", prod ? "erro" : "aviso");
+  const { data: guarda } = await supaAdmin().schema("orders").rpc("fat_guarda_numeracao", { p_empresa: doc.empresa, p_numero: cfg.nfe_proximo_producao ?? 0 });
+  add("Numeração sem conflito com o Omie", !guarda, guarda ? String(guarda) : `próxima NF-e de produção: série ${cfg.nfe_serie_producao} nº ${cfg.nfe_proximo_producao}`);
+  const em = await emitente(cfg).catch((e) => { add("Emitente na Focus", false, e instanceof Error ? e.message : String(e)); return null; });
+  const payload = em ? montarNfe(doc, em, {
+    natureza: cfg.natureza_operacao, serie: cfg.nfe_serie_producao, numero: cfg.nfe_proximo_producao, infoPadrao: cfg.info_complementar_padrao,
+  }) : null;
+  const total = payload ? Number((payload as { valor_total: number }).valor_total) : totalItens(doc.itens);
+  const ps = parcelas(total, doc.condicao);
+  add("Parcelas somam o total", Math.abs(ps.reduce((a, p) => a + p.valor, 0) - total) < 0.005, ps.map((p) => `${p.vencimento} R$ ${p.valor.toFixed(2)}`).join(" · "));
+  const bloqueia = checagens.some((c) => !c.ok && c.nivel === "erro");
+  return { checagens, payload, total, parcelas: ps, pode_emitir: !bloqueia, ambiente: prod ? "producao" : "homologacao" };
 }
 
 async function emitirRecibo(row: Emissao, doc: DocFat, em: Emitente, cfg: Config, amb: Ambiente) {
@@ -315,4 +403,21 @@ export async function urlArquivo(path: string | null) {
   if (!path) return null;
   const { data } = await supaAdmin().storage.from(BUCKET).createSignedUrl(path, 3600);
   return data?.signedUrl ?? null;
+}
+
+
+/** Emite a NF-e de um PV do Omie (espelho). Em produção bloqueia se o Omie já
+ *  faturou o PV, se o painel já emitiu, ou se alguma checagem do pré-voo falhar.
+ *  Não escreve no Omie: o PV fica faturado só no painel (fat_emissoes). */
+export async function emitirPvOmie(empresa: string, codigo: number, o: { ensaio?: boolean; criado_por: string }) {
+  const { bruto, doc } = await documentoPvOmie(empresa, codigo);
+  if (!o.ensaio) {
+    const pre = await prevoo(doc, { nf_omie: bruto.nf_omie, emissao_painel: bruto.emissao_painel, etapa: String(bruto.pv.etapa ?? "") });
+    const erros = pre.checagens.filter((c) => !c.ok && c.nivel === "erro");
+    if (erros.length) throw new Error("Pré-voo com pendências: " + erros.map((c) => `${c.item} (${c.detalhe})`).join("; "));
+  }
+  return emitir(doc, {
+    tipo: "nfe", origem_tipo: "pv_omie", origem_id: String(codigo), origem_rotulo: doc.rotulo ?? null,
+    ensaio: !!o.ensaio, criado_por: o.criado_por,
+  });
 }
