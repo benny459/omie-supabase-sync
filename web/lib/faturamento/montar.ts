@@ -33,6 +33,8 @@ export type ItemFat = {
   cest?: string | null;
   cfop?: string | null;
   origem?: number | null;       // origem da mercadoria (0 nacional, 1 importação direta...)
+  servico_lc116?: string | null;               // NFS-e: item da LC116 (ex.: 0703)
+  codigo_tributario_municipio?: string | null; // NFS-e: código municipal do serviço
 };
 
 export type ParcelaCond = { dias?: number; vencimento?: string; percentual?: number; valor?: number };
@@ -186,7 +188,9 @@ export function montarNfe(doc: DocFat, em: Emitente, opts: { natureza: string; s
 
 /** JSON de NFS-e da Focus (layout nacional/genérico — Barueri usa o provedor
  *  BarueriWs; os campos específicos ficam a validar na 1ª emissão em homologação). */
-export function montarNfse(doc: DocFat, em: Emitente, opts: { itemListaServico?: string | null; serie?: string }) {
+export function montarNfse(doc: DocFat, em: Emitente, opts: {
+  itemListaServico?: string | null; codigoTributario?: string | null; aliquota?: number | null; serie?: string;
+}) {
   const c = doc.cliente;
   const total = totalItens(doc.itens);
   const discriminacao = doc.itens.map((i) => i.descricao).join(" | ") + (doc.observacoes ? ` — ${doc.observacoes}` : "");
@@ -207,7 +211,9 @@ export function montarNfse(doc: DocFat, em: Emitente, opts: { itemListaServico?:
       valor_servicos: total,
       discriminacao: discriminacao.slice(0, 2000),
       iss_retido: false,
-      ...(opts.itemListaServico ? { item_lista_servico: opts.itemListaServico } : {}),
+      ...((doc.itens[0]?.servico_lc116 || opts.itemListaServico) ? { item_lista_servico: doc.itens[0]?.servico_lc116 || opts.itemListaServico } : {}),
+      ...((doc.itens[0]?.codigo_tributario_municipio || opts.codigoTributario) ? { codigo_tributario_municipio: doc.itens[0]?.codigo_tributario_municipio || opts.codigoTributario } : {}),
+      ...(opts.aliquota != null ? { aliquota: opts.aliquota } : {}),
     },
   };
 }

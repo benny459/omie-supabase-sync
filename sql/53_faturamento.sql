@@ -104,3 +104,9 @@ grant execute on function orders.fat_reservar_numero(text, text) to service_role
 -- Em homologação a emissão só gera contas a receber se pedido (testes);
 -- em produção sempre gera.
 alter table orders.fat_emissoes add column if not exists gerar_receber boolean not null default true;
+
+-- NFS-e: item LC116 e código municipal padrão por empresa (podem vir por item).
+alter table orders.fat_config add column if not exists codigo_tributario_municipio text,
+                              add column if not exists aliquota_iss numeric(6,4);
+update orders.fat_config set item_lista_servico = coalesce(item_lista_servico, '0703'),
+       codigo_tributario_municipio = coalesce(codigo_tributario_municipio, '070301220') where empresa = 'SF';

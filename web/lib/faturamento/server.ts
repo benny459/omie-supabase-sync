@@ -24,6 +24,7 @@ export type Config = {
   nfe_serie_producao: string; nfe_proximo_producao: number | null;
   rps_serie_homologacao: string; rps_serie_producao: string;
   recibo_proximo: number | null; natureza_operacao: string; item_lista_servico: string | null;
+  codigo_tributario_municipio: string | null; aliquota_iss: number | null;
 };
 
 export type Emissao = {
@@ -132,6 +133,8 @@ export async function emitir(doc: DocFat, o: EmitirOpts): Promise<Emissao> {
     } else {
       payload = montarNfse(doc, em, {
         itemListaServico: cfg.item_lista_servico,
+        codigoTributario: cfg.codigo_tributario_municipio,
+        aliquota: cfg.aliquota_iss,
         serie: amb === "producao" ? cfg.rps_serie_producao : cfg.rps_serie_homologacao,
       });
       caminho = `/v2/nfse?ref=${encodeURIComponent(ref)}`;
