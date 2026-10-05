@@ -168,6 +168,7 @@ export function montarNfe(doc: DocFat, em: Emitente, opts: { natureza: string; s
       descricao: limpo(i.descricao).slice(0, 120),
       codigo_barras_comercial: "SEM GTIN",
       codigo_barras_tributavel: "SEM GTIN",
+      codigo_barras_proprio_comercial: String(i.codigo).slice(0, 30), // cBarra = cProd, como o Omie
       cfop: i.cfop || (mesmaUF ? "5102" : "6102"),
       codigo_ncm: so(i.ncm) || "00000000",
       ...(cest ? { cest } : {}),
