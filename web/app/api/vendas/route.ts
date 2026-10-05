@@ -2,7 +2,7 @@
 // POST /api/vendas  { ...VendaSalvar }       → cria/edita (orders.vendas_salvar)
 import { NextResponse } from "next/server";
 import { rpc } from "@/lib/compras-server";
-import { erro, exigirVendas, salvarVenda } from "@/lib/vendas-server";
+import { documento, erro, exigirVendas, salvarVenda } from "@/lib/vendas-server";
 import type { VendaSalvar } from "@/lib/vendas";
 
 export const runtime = "nodejs";
@@ -26,8 +26,27 @@ export async function POST(req: Request) {
   const q = await exigirVendas();
   if (q instanceof NextResponse) return q;
   try {
-    const body = (await req.json()) as VendaSalvar;
-    const p = { ...body, origem: body.id ? undefined : "painel" };
-    return NextResponse.json(await salvarVenda(p as VendaSalvar, q.nome));
+    const body = (await req.json()) as VendaSalvar & { sem_proposta?: { motivo?: string } | null };
+    const { sem_proposta, ...resto } = body;
+    // Vínculo com a proposta do CRM é obrigatório (05/10/26). Exceção: admin
+    // marca "sem proposta" com motivo (auditado), como o "PC sem RC".
+    const temProposta = !!String(resto.proposta ?? "").trim();
+    const motivo = String(sem_proposta?.motivo ?? "").trim();
+    if (!temProposta) {
+      let dispensado = false;
+      if (resto.id) {
+        const atual = await documento(Number(resto.id)).catch(() => null) as (Record<string, unknown> | null);
+        dispensado = !!atual?.proposta_dispensa_motivo;
+      }
+      if (!dispensado) {
+        if (!motivo) return NextResponse.json({ error: "Informe a proposta do CRM deste PV/OS (ou, se admin, marque “sem proposta” com o motivo)" }, { status: 400 });
+        if (!q.admin) return NextResponse.json({ error: "Só um administrador pode lançar PV/OS sem proposta do CRM" }, { status: 403 });
+        if (motivo.length < 5) return NextResponse.json({ error: "Motivo de “sem proposta” muito curto" }, { status: 400 });
+      }
+    }
+    const p = { ...resto, origem: resto.id ? undefined : "painel" };
+    const r = await salvarVenda(p as VendaSalvar, q.nome);
+    if (!temProposta && motivo) await rpc("vendas_dispensa_proposta", { p_id: r.id, p_motivo: motivo, p_por: q.email });
+    return NextResponse.json(r);
   } catch (e) { return erro(e); }
 }

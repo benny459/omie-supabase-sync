@@ -3,6 +3,7 @@
 import { useState, type CSSProperties } from "react";
 import { BotaoTela, cartao } from "@/components/navy/tela/KitTela";
 import type { ClienteFat, DocFat, ItemFat } from "@/lib/faturamento/montar";
+import { BuscaPessoa, BuscaProposta, clienteDaPessoa, pessoaCompleta } from "@/components/vendas/BuscasCrmCadastro";
 
 /* Emissão avulsa (manual ou de teste) — o formulário que vivia na tela de
    Faturamento antes do conceito PV & OS (05/10/26). Homologação por padrão. */
@@ -44,6 +45,30 @@ export default function NovaEmissao({ config, ocupado, onEmitir }: {
   const [obs, setObs] = useState("");
   const [pedidoCli, setPedidoCli] = useState("");
   const [gerarRec, setGerarRec] = useState(false);
+  const [proposta, setProposta] = useState("");
+  const [aviso, setAviso] = useState<string | null>(null);
+  const [puxando, setPuxando] = useState(false);
+
+  /** Proposta do CRM → cliente (cadastro do painel), itens com código nativo, parcelas. */
+  async function puxar(numero: string) {
+    setPuxando(true); setAviso(null);
+    const r = await fetch(`/api/vendas/proposta?numero=${encodeURIComponent(numero)}&emp=${empresa}`, { cache: "no-store" })
+      .then((x) => x.json()).catch((e) => ({ error: String(e) }));
+    setPuxando(false);
+    if (r.error) { setAviso(r.error); return; }
+    if (r.disponivel === false) { setAviso(`${r.motivo} — preencha à mão.`); return; }
+    if (r.pessoa) setCli(clienteDaPessoa(r.pessoa));
+    const lado = tipo === "nfe" ? "PV" : "OS";
+    type Ip = { lado: string; codigo: string | null; descricao: string; unidade: string; ncm: string | null; quantidade: number; valor_unitario: number };
+    const doLado = (r.itens as Ip[]).filter((i) => i.lado === lado);
+    const lista = (doLado.length ? doLado : (r.itens as Ip[])).map((i) => ({ codigo: i.codigo ?? "", descricao: i.descricao, quantidade: Number(i.quantidade) || 1,
+      valor_unitario: Number(i.valor_unitario) || 0, unidade: i.unidade || "UN", ncm: i.ncm ?? "" }));
+    if (lista.length) setItens(lista);
+    if (r.condicao?.dias?.length) setParc((r.condicao.dias as number[]).join("/"));
+    if (!obs) setObs(`Proposta ${numero}${r.proposta?.titulo ? ` — ${r.proposta.titulo}` : ""}`);
+    setAviso([`Proposta ${numero} carregada`, !r.pessoa && "cliente não achado no cadastro — busque ou cadastre",
+      r.misto && `proposta mista: carreguei só os itens de ${lado === "PV" ? "produto (NF-e)" : "serviço"}`].filter(Boolean).join(" · "));
+  }
   const cfg = config.find((c) => c.empresa === empresa);
   const homolog = cfg?.ambiente !== "producao";
 
@@ -56,7 +81,9 @@ export default function NovaEmissao({ config, ocupado, onEmitir }: {
   function enviar() {
     const documento: DocFat = {
       empresa, cliente: cli, itens: itens.filter((i) => i.descricao),
-      condicao: parcelasDe(parc), observacoes: obs || null, pedido_cliente: pedidoCli || null,
+      condicao: parcelasDe(parc),
+      observacoes: (proposta.trim() && !obs.includes(proposta.trim()) ? `Proposta ${proposta.trim()}. ` : "") + obs || null,
+      pedido_cliente: pedidoCli || null,
     };
     onEmitir({ documento, tipo, origem_tipo: origemTipo, origem_id: origemId || null, gerar_receber_homologacao: gerarRec });
   }
@@ -87,6 +114,18 @@ export default function NovaEmissao({ config, ocupado, onEmitir }: {
           Preencher teste
         </BotaoTela>
       </div>
+      <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "flex-end" }}>
+        <label style={{ ...rotulo, width: 300 }}>{puxando ? "Proposta do CRM — carregando…" : "Proposta do CRM (puxa cliente, itens e condição)"}
+          <BuscaProposta valor={proposta} onTexto={setProposta} onEscolher={(p) => { setProposta(p.numero); puxar(p.numero); }} />
+        </label>
+        <label style={{ ...rotulo, width: 360 }}>Cliente do cadastro (nome, fantasia ou CNPJ/CPF)
+          <BuscaPessoa valor="" empresa={empresa} onEscolher={async (c) => {
+            const p = await pessoaCompleta(c.id);
+            if (p) setCli(clienteDaPessoa(p)); else setAviso("Não consegui abrir o cadastro escolhido");
+          }} />
+        </label>
+      </div>
+      {aviso && <div style={{ fontSize: 12.5, color: "var(--ww-text-muted)" }} onClick={() => setAviso(null)}>{aviso}</div>}
       <div style={{ fontSize: 12.5, fontWeight: 600, color: "var(--ww-text-2)" }}>Cliente</div>
       <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
         {campo("nome", "Razão social", 280)}{campo("cnpj", "CNPJ", 150)}{campo("cpf", "CPF", 130)}{campo("ie", "Inscrição estadual", 140)}{campo("email", "E-mail", 220)}

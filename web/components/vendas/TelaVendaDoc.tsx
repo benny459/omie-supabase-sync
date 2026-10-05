@@ -1,11 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { Aviso, BotaoTela, CabecalhoTela, Carregando, PaginaNavy, brl, cartao } from "@/components/navy/tela/KitTela";
 import BotaoEmitirNf from "@/components/faturamento/BotaoEmitirNf";
 import type { DocFat } from "@/lib/faturamento/montar";
 import { STATUS_VENDA, type VendaDoc, type VendaItem, type VendaSalvar } from "@/lib/vendas";
+import { BuscaPessoa, BuscaProposta } from "@/components/vendas/BuscasCrmCadastro";
 
 /* PV / OS nativo do painel (P1, 05/10/26): cria, edita, cancela e emite a NF
    (motor da Focus, P5). Os documentos que o CRM cria pelo caminho nativo
@@ -17,7 +18,6 @@ type Opcoes = {
   projetos: { codigo: number; nome: string }[];
   categorias: { codigo: string; descricao: string }[];
 };
-type ClienteOp = { codigo: number; razao: string; fantasia: string | null; doc: string | null; cidade: string | null; uf: string | null };
 
 const input: CSSProperties = {
   height: 32, padding: "0 10px", borderRadius: 8, fontSize: 12.5, fontFamily: "inherit", minWidth: 0, width: "100%",
@@ -47,6 +47,10 @@ export default function TelaVendaDoc({ id }: { id: number | null }) {
   const [ok, setOk] = useState<string | null>(null);
   const [ocupado, setOcupado] = useState(false);
   const [motivo, setMotivo] = useState<string | null>(null);
+  // Vínculo com a proposta do CRM (obrigatório; admin pode lançar "sem proposta" com motivo)
+  const [semProposta, setSemProposta] = useState<string | null>(null);
+  const [avisoProp, setAvisoProp] = useState<string | null>(null);
+  const [puxando, setPuxando] = useState(false);
 
   const carregar = useCallback(async () => {
     setErro(null);
@@ -95,11 +99,50 @@ export default function TelaVendaDoc({ id }: { id: number | null }) {
     });
   }
 
+  /** Puxa a proposta do CRM: cliente (cadastro do painel), itens com código nativo, condição. */
+  async function puxarProposta(numero: string) {
+    setPuxando(true); setAvisoProp(null);
+    const r = await fetch(`/api/vendas/proposta?numero=${encodeURIComponent(numero)}&emp=${form?.empresa ?? "SF"}`, { cache: "no-store" })
+      .then((x) => x.json()).catch((e) => ({ error: String(e) }));
+    setPuxando(false);
+    if (r.error) { setAvisoProp(r.error); return; }
+    if (r.disponivel === false) { setAvisoProp(`${r.motivo} — o nº fica registado; preencha o resto à mão.`); return; }
+    setForm((f) => {
+      if (!f) return f;
+      const tipo = (id == null ? r.tipo_sugerido : f.tipo) as "PV" | "OS";
+      type Ip = { lado: string; codigo: string | null; ncod_prod: number | null; descricao: string; unidade: string; ncm: string | null; quantidade: number; valor_unitario: number };
+      const doLado = (r.itens as Ip[]).filter((i) => i.lado === tipo);
+      const itens = (doLado.length ? doLado : (r.itens as Ip[])).map((i) => ({ codigo: i.codigo ?? "", ncod_prod: i.ncod_prod, descricao: i.descricao,
+        unidade: i.unidade || "UN", ncm: i.ncm ?? "", quantidade: Number(i.quantidade) || 1, valor_unitario: Number(i.valor_unitario) || 0 }));
+      const p = r.proposta as { numero: string; titulo: string | null; contato: string | null };
+      return {
+        ...f, tipo, proposta: p.numero,
+        cliente_codigo: r.pessoa?.codigo ?? f.cliente_codigo,
+        condicao_codigo: r.condicao?.codigo ?? f.condicao_codigo,
+        contato: f.contato || p.contato || null,
+        observacoes: f.observacoes || `Proposta ${p.numero}${p.titulo ? ` — ${p.titulo}` : ""}`,
+        itens: itens.length ? itens : f.itens,
+      };
+    });
+    if (r.pessoa) setClienteNome(String(r.pessoa.fantasia || r.pessoa.razao || ""));
+    setSemProposta(null);
+    const semCod = (r.itens as { codigo: string | null; lado: string }[]).filter((i) => !i.codigo && i.lado === "PV").length;
+    const msgs = [
+      !r.pessoa && `cliente “${r.proposta?.cliente_crm?.nome ?? "?"}” não achado no cadastro — escolha ou cadastre`,
+      r.misto && "a proposta tem produto e serviço: este documento leva só a parte dele — lance o outro (PV/OS) com a mesma proposta",
+      semCod > 0 && `${semCod} item(ns) de produto sem código do catálogo — confira`,
+      !r.condicao?.codigo && r.condicao?.texto && `condição “${r.condicao.texto}” sem correspondente — escolha à mão`,
+      r.proposta?.ja_lancado && `atenção: a proposta já tem ${r.proposta.ja_lancado}`,
+    ].filter(Boolean);
+    setAvisoProp(msgs.length ? `Proposta ${numero} carregada · ${msgs.join(" · ")}` : `Proposta ${numero} carregada.`);
+  }
+
   async function salvar() {
     if (!form) return;
     setOcupado(true); setErro(null); setOk(null);
     const r = await fetch("/api/vendas", { method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ...form, itens: form.itens.filter((i) => i.descricao.trim()) }) })
+      body: JSON.stringify({ ...form, itens: form.itens.filter((i) => i.descricao.trim()),
+        sem_proposta: !String(form.proposta ?? "").trim() && semProposta != null ? { motivo: semProposta } : null }) })
       .then((x) => x.json()).catch((e) => ({ error: String(e) }));
     setOcupado(false);
     if (r.error) { setErro(r.error); return; }
@@ -149,6 +192,24 @@ export default function TelaVendaDoc({ id }: { id: number | null }) {
       {erro && <div onClick={() => setErro(null)}><Aviso>{erro}</Aviso></div>}
       {ok && <div onClick={() => setOk(null)}><Aviso tone="info">{ok}</Aviso></div>}
       {doc?.status === "cancelado" && <Aviso tone="warn">Cancelado: {doc.cancelado_motivo}</Aviso>}
+      {avisoProp && <div onClick={() => setAvisoProp(null)}><Aviso tone="info">{avisoProp}</Aviso></div>}
+      {doc && !doc.proposta && (doc as unknown as { proposta_dispensa_motivo?: string }).proposta_dispensa_motivo && (
+        <Aviso tone="warn">Lançado sem proposta do CRM: {(doc as unknown as { proposta_dispensa_motivo: string }).proposta_dispensa_motivo}</Aviso>
+      )}
+      {editavel && !String(form.proposta ?? "").trim() && !(doc as unknown as { proposta_dispensa_motivo?: string } | null)?.proposta_dispensa_motivo && (
+        <div style={{ ...cartao, display: "flex", gap: 10, alignItems: "end", flexWrap: "wrap" }}>
+          <div style={{ fontSize: 12.5, color: "var(--ww-text-muted)", flex: "1 1 260px" }}>
+            Todo PV/OS precisa da <b>proposta do CRM</b> — procure-a no campo acima (puxa cliente, itens e condição).
+            Só um administrador pode lançar sem proposta, com o motivo registado.
+          </div>
+          <label style={{ fontSize: 12.5, display: "flex", gap: 6, alignItems: "center" }}>
+            <input type="checkbox" checked={semProposta != null} onChange={(e) => setSemProposta(e.target.checked ? "" : null)} /> Lançar sem proposta (admin)
+          </label>
+          {semProposta != null && (
+            <Campo rot="Motivo"><input style={{ ...input, minWidth: 280 }} value={semProposta} onChange={(e) => setSemProposta(e.target.value)} placeholder="ex.: venda de balcão sem proposta" /></Campo>
+          )}
+        </div>
+      )}
       {motivo != null && (
         <div style={{ ...cartao, display: "flex", gap: 8, alignItems: "end" }}>
           <Campo rot="Motivo do cancelamento"><input style={input} value={motivo} onChange={(e) => setMotivo(e.target.value)} autoFocus /></Campo>
@@ -165,12 +226,15 @@ export default function TelaVendaDoc({ id }: { id: number | null }) {
           </Campo>
         )}
         <Campo rot="Cliente" largura={id == null ? 3 : 4}>
-          <BuscaCliente valor={clienteNome} desativado={!editavel} onEscolher={(c) => {
+          <BuscaPessoa valor={clienteNome} desativado={!editavel} empresa={form.empresa ?? "SF"} onEscolher={(c) => {
             setF("cliente_codigo", c.codigo); setClienteNome(c.fantasia || c.razao);
           }} />
         </Campo>
         <Campo rot="Previsão"><input type="date" style={input} disabled={!editavel} value={form.previsao ?? ""} onChange={(e) => setF("previsao", e.target.value)} /></Campo>
-        <Campo rot="Proposta (CRM)"><input style={input} disabled={!editavel} value={form.proposta ?? ""} onChange={(e) => setF("proposta", e.target.value)} /></Campo>
+        <Campo rot={puxando ? "Proposta (CRM) — carregando…" : "Proposta (CRM) *"} largura={2}>
+          <BuscaProposta valor={form.proposta ?? ""} desativado={!editavel} onTexto={(v) => setF("proposta", v)}
+            onEscolher={(p) => { setF("proposta", p.numero); puxarProposta(p.numero); }} />
+        </Campo>
         <Campo rot="Condição de pagamento" largura={2}>
           <select style={input} disabled={!editavel} value={form.condicao_codigo ?? ""} onChange={(e) => setF("condicao_codigo", e.target.value)}>
             <option value="">—</option>
@@ -271,39 +335,3 @@ const Linha = ({ esq, dir }: { esq: ReactNode; dir: ReactNode }) => (
   </div>
 );
 const Mudo = ({ children }: { children: ReactNode }) => <div style={{ fontSize: 12, color: "var(--ww-text-faint)" }}>{children}</div>;
-
-function BuscaCliente({ valor, desativado, onEscolher }: { valor: string; desativado?: boolean; onEscolher: (c: ClienteOp) => void }) {
-  const [q, setQ] = useState(valor);
-  const [lista, setLista] = useState<ClienteOp[]>([]);
-  const [aberta, setAberta] = useState(false);
-  const t = useRef<ReturnType<typeof setTimeout> | null>(null);
-  useEffect(() => { setQ(valor); }, [valor]);
-  function buscar(v: string) {
-    setQ(v); setAberta(true);
-    if (t.current) clearTimeout(t.current);
-    t.current = setTimeout(async () => {
-      if (v.trim().length < 2) { setLista([]); return; }
-      const r = await fetch(`/api/vendas/opcoes?emp=SF&cliente=${encodeURIComponent(v)}`).then((x) => x.json()).catch(() => ({}));
-      setLista(r.clientes ?? []);
-    }, 250);
-  }
-  return (
-    <div style={{ position: "relative" }}>
-      <input style={input} disabled={desativado} value={q} placeholder="Nome, CNPJ ou código do cadastro"
-        onChange={(e) => buscar(e.target.value)} onBlur={() => setTimeout(() => setAberta(false), 200)} />
-      {aberta && lista.length > 0 && (
-        <div style={{ position: "absolute", zIndex: 20, top: 36, left: 0, right: 0, maxHeight: 280, overflowY: "auto",
-          background: "var(--ww-panel)", border: "1px solid var(--ww-border-strong)", borderRadius: 10, boxShadow: "0 8px 24px rgba(0,0,0,.25)" }}>
-          {lista.map((c) => (
-            <button key={c.codigo} type="button" onMouseDown={() => { onEscolher(c); setAberta(false); }}
-              style={{ display: "block", width: "100%", textAlign: "left", padding: "8px 10px", background: "none", border: 0,
-                borderBottom: "1px solid var(--ww-border)", color: "var(--ww-text)", cursor: "pointer", fontSize: 12.5 }}>
-              <b>{c.fantasia || c.razao}</b>
-              <div style={{ fontSize: 11, color: "var(--ww-text-faint)" }}>{c.razao} · {c.doc ?? "sem doc"} · {c.cidade ?? ""} · cód. {c.codigo}</div>
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}

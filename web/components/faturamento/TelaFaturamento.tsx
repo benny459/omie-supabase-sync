@@ -28,6 +28,8 @@ type Doc = {
   itens?: { desc: string | null; qtd: number | null; vt: number | null }[];
   /** OS: aceita NFS-e da prefeitura registrada no painel (sql/59). */
   nfse?: boolean; nfse_registrada?: boolean; aguarda_nfse?: boolean;
+  /** PV/OS nativo: proposta do CRM ligada (ou o motivo de lançar sem ela). */
+  proposta?: string | null; sem_proposta?: string | null;
 };
 type St = "pend" | "pronto" | "emis" | "rej" | "parc" | "fat";
 type Checagem = { item: string; ok: boolean; nivel: "erro" | "aviso"; detalhe: string };
@@ -170,7 +172,7 @@ export default function TelaFaturamento() {
     if (chips.has("saldo") && st === "fat") return false;
     if (chips.has("semnfse") && !semNfse(d)) return false;
     if (q) {
-      const h = `${d.rotulo} ${d.cliente ?? ""} ${d.oc ?? ""} ${d.descricao ?? ""} ${d.nfs.map((n) => n.num).join(" ")}`.toLowerCase();
+      const h = `${d.rotulo} ${d.cliente ?? ""} ${d.oc ?? ""} ${d.descricao ?? ""} ${d.proposta ?? ""} ${d.nfs.map((n) => n.num).join(" ")}`.toLowerCase();
       if (!h.includes(q.toLowerCase())) return false;
     }
     return true;
@@ -544,6 +546,8 @@ function Lista({ rows, sel, setSel, sort, setSort, abrir, ocupado, agir, prod, r
                 <td>
                   <div className="doc"><span className={`tag ${d.tipo.toLowerCase()}`}>{d.tipo}</span><b>{d.rotulo}</b></div>
                   <div className="orig">{d.origem} · {etapaRot(d)}</div>
+                  {d.proposta && <div className="orig" title="Proposta do CRM">↳ {d.proposta}</div>}
+                  {!d.proposta && d.sem_proposta && <div className="orig" style={{ color: "var(--f-warn)" }} title={d.sem_proposta}>sem proposta</div>}
                 </td>
                 <td>
                   <div className="cli" title={limpo(d.cliente ?? "")}>{limpo(d.cliente ?? "—")}
@@ -679,7 +683,7 @@ function Gaveta({ d, empresa, prod, ocupado, agir, fechar, avisar, onMudou, regi
           <button className="x" onClick={fechar}>✕</button>
           <div style={{ fontSize: 12, color: "var(--f-tx3)" }}>{d.origem} · {EMPRESAS[empresa] ?? empresa} · {d.tipo === "PV" ? `Pedido de venda → ${nf} mercantil` : `Ordem de serviço → ${nf}`} · {etapaRot(d)}</div>
           <h2><span className={`tag ${d.tipo.toLowerCase()}`}>{d.tipo}</span>{d.rotulo} <span className={`pill ${ST[st].c}`} style={{ fontSize: 11.5 }}><i />{ST[st].l}</span></h2>
-          <div className="c">{limpo(d.cliente ?? "—")}{d.oc ? ` · OC ${d.oc}` : ""}{d.descricao ? <><br /><span style={{ color: "var(--f-tx3)" }}>{d.descricao}</span></> : null}</div>
+          <div className="c">{limpo(d.cliente ?? "—")}{d.oc ? ` · OC ${d.oc}` : ""}{d.proposta ? ` · proposta ${d.proposta}` : d.sem_proposta ? ` · sem proposta (${d.sem_proposta})` : ""}{d.descricao ? <><br /><span style={{ color: "var(--f-tx3)" }}>{d.descricao}</span></> : null}</div>
           <div className="dgrid">
             <div><span>Valor total</span><b className="mono">{fmt(Number(d.valor))}</b></div>
             <div><span>Faturado</span><b className="mono" style={{ color: "var(--f-ok)" }}>{fmt(Number(d.faturado))}</b></div>
