@@ -256,7 +256,7 @@ $$;
 -- Tira da lista os grupos que contêm estes cadastros (depois de mesclar/ignorar).
 create or replace function orders.cadastros_dup_tirar(p_ids bigint[]) returns int
 language plpgsql security definer set search_path to 'cadastros', 'public' as $$
-declare v_qtd int;
+declare n int;
 begin
   delete from cadastros.dup_grupos where ids && p_ids;
   get diagnostics n = row_count;
