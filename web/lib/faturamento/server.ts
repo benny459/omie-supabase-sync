@@ -203,7 +203,7 @@ export async function atualizar(id: number): Promise<Emissao> {
   if (novo === "autorizada") {
     campos.numero = j.numero ?? row.numero;
     campos.serie = j.serie ?? row.serie;
-    campos.chave = j.chave_nfe ?? j.codigo_verificacao ?? row.chave;
+    campos.chave = j.chave_nfe ? j.chave_nfe.replace(/\D/g, "") : (j.codigo_verificacao ?? row.chave); // chave só com os 44 dígitos
     campos.autorizada_em = row.autorizada_em ?? new Date().toISOString();
     const base = `${row.empresa}/${row.ambiente}/${row.tipo}/${row.id}-${j.numero ?? "sn"}`;
     const xml = j.caminho_xml_nota_fiscal;
