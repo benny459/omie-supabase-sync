@@ -316,3 +316,10 @@
 .fpv-drawer .rs-l b { font-weight: 500; overflow-wrap: anywhere; }
 .fpv-drawer .rs-inf { font-size: 12px; white-space: pre-wrap; border: 1px dashed var(--f-line); border-radius: 8px; padding: 8px; color: var(--f-tx2, var(--f-tx)); }
 .fpv-drawer .rs-pend .alert { margin-bottom: 4px; }
+/* resumo da gaveta: links "editar" e chamada para definir forma/conta (05/10/26) */
+.fpv .rs-t{display:flex;align-items:center;gap:8px}
+.fpv .rs-acoes{margin-left:auto;display:inline-flex;gap:10px;align-items:center}
+.fpv .rs-ed{margin-left:auto;background:none;border:1px solid var(--f-line);color:var(--f-tx);border-radius:7px;padding:2px 8px;font-size:11.5px;cursor:pointer}
+.fpv .rs-acoes .rs-ed{margin-left:0}
+.fpv .rs-ed:hover{border-color:#3b82f6;color:#93c5fd}
+.fpv .rs-cta{display:block;width:100%;text-align:left;margin:4px 0 6px;padding:7px 10px;border-radius:8px;border:1px dashed #f59e0b;background:color-mix(in srgb,#f59e0b 10%,transparent);color:#fbbf24;font-size:12.5px;font-weight:600;cursor:pointer}

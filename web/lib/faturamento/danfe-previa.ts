@@ -86,7 +86,7 @@ export async function resumoEmissao(doc: DocFat, extra: Parameters<typeof checar
   aviso("Código IBGE do município", !!so(c.codigo_municipio), "sem código IBGE — confira o cadastro");
   aviso("CEP", so(c.cep).length === 8, "CEP incompleto");
   aviso("NCM dos itens", doc.itens.every((i) => so(i.ncm).length === 8), "há item sem NCM de 8 dígitos");
-  aviso("Forma de pagamento", !!(doc.condicao?.forma_pagamento || doc.condicao?.forma_recebimento), "sem forma definida — sai como boleto/à vista pelo prazo");
+  aviso("Forma de pagamento", !!(doc.condicao?.forma_pagamento || doc.condicao?.forma_recebimento), "defina a forma de pagamento — clique em editar (Recebimento)");
   const payload: Payload = montarNfe(doc, em, {
     natureza: cfg.natureza_operacao, serie: cfg.nfe_serie_producao, numero: cfg.nfe_proximo_producao, infoPadrao: cfg.info_complementar_padrao,
   });

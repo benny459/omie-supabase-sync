@@ -27,6 +27,8 @@ export type Inicial = {
   origem_tipo?: string;
   origem_id?: string | null;
   rotulo?: string | null;
+  /** seção a destacar ao abrir (link "editar" da gaveta, 05/10/26) */
+  secao?: "cliente" | "recebimento" | "operacao" | "itens" | "infcpl" | null;
 };
 
 type Opc = { codigo: string; nome: string };
@@ -182,6 +184,8 @@ export default function NovaEmissao({ config, aberto, fechar, avisar, onEmitido,
   const [base, setBase] = useState(hoje());
   const [cond, setCond] = useState("");
   const [forma, setForma] = useState("BOL");
+  /** forma/conta já definidas (pelo documento, modelo ou à mão) — o histórico do cliente não sobrescreve */
+  const formaDefinida = useRef(false);
   const [parcs, setParcs] = useState<Parc[]>([]);
   const [conta, setConta] = useState<number | "">("");
   const [categoria, setCategoria] = useState("");
@@ -234,6 +238,7 @@ export default function NovaEmissao({ config, aberto, fechar, avisar, onEmitido,
     setOutras(r2(d.itens.reduce((a, i) => a + (i.valor_outras ?? 0), 0)));
     setTransp(d.transporte ?? { modalidade: 9 }); setPedidoCli(d.pedido_cliente ?? ""); setObs(d.observacoes ?? ""); setInfoContrib(d.info_contribuinte ?? "");
     const c = d.condicao;
+    formaDefinida.current = !!(c?.forma_recebimento || c?.conta_corrente);
     if (c?.forma_recebimento) setForma(c.forma_recebimento);
     if (c?.conta_corrente) setConta(c.conta_corrente);
     if (c?.categoria) setCategoria(c.categoria);
@@ -267,8 +272,21 @@ export default function NovaEmissao({ config, aberto, fechar, avisar, onEmitido,
     setTx(null); setPre(null); setCriado(null);
     fetch(`/api/faturamento/nova?op=opcoes&emp=${empresa}`, { cache: "no-store" }).then((x) => x.json()).then((j) => { if (!j.error) setOpc(j); }).catch(() => null);
     carregarProximos();
+    formaDefinida.current = false;
     if (inicial) aplicarInicial(inicial);
     else { setModo("novo"); setChave(null); setRotulo(null); }
+    if (inicial?.secao) {
+      if (inicial.secao === "cliente") setVerCliente(true);
+      const alvo = inicial.secao;
+      window.setTimeout(() => {
+        const el = document.getElementById(`ne-sec-${alvo}`);
+        if (!el) return;
+        el.scrollIntoView({ behavior: "smooth", block: "start" });
+        el.classList.add("ne-destaque");
+        window.setTimeout(() => el.classList.remove("ne-destaque"), 2400);
+        (el.querySelector("select, input") as HTMLElement | null)?.focus({ preventScroll: true });
+      }, 350);
+    }
     const esc = (e: KeyboardEvent) => { if (e.key === "Escape") sair(); };
     document.addEventListener("keydown", esc);
     return () => { document.removeEventListener("keydown", esc); };
@@ -336,7 +354,19 @@ export default function NovaEmissao({ config, aberto, fechar, avisar, onEmitido,
     setHist(null);
     const t = window.setTimeout(() => {
       fetch(`/api/faturamento/nova?op=historico&emp=${empresa}&doc=${docCli}`, { cache: "no-store" })
-        .then((x) => x.json()).then((j) => setHist(j.historico ?? [])).catch(() => setHist([]));
+        .then((x) => x.json()).then((j) => {
+          const hs: Hist[] = j.historico ?? [];
+          setHist(hs);
+          // sem forma/conta definidas: herda do último faturamento do cliente (editável)
+          const h = hs[0];
+          if (h && !formaDefinida.current) {
+            const f = h.condicao?.forma_recebimento ?? h.forma ?? h.parcelas?.[0]?.forma ?? null;
+            const ct = h.condicao?.conta_corrente ?? h.conta_codigo ?? null;
+            if (f) { setForma(f); setParcs((ps) => ps.map((p) => ({ ...p, forma: f }))); }
+            if (ct) setConta(ct);
+            if (f || ct) { formaDefinida.current = true; setAviso(`Forma e conta herdadas do último faturamento (${h.tipo} ${h.documento}) — confira em Recebimento.`); }
+          }
+        }).catch(() => setHist([]));
     }, 250);
     return () => window.clearTimeout(t);
   }, [docCli, empresa, aberto]);
@@ -399,7 +429,7 @@ export default function NovaEmissao({ config, aberto, fechar, avisar, onEmitido,
     if (h.tipo === "PV") setTipo("nfe"); else if (h.tipo === "OS") setTipo(cfg?.tipo_os === "nfse" ? "nfse" : "recibo");
     const c = h.condicao;
     const f = c?.forma_recebimento ?? h.forma ?? h.parcelas?.[0]?.forma ?? "BOL";
-    setForma(f);
+    setForma(f); formaDefinida.current = true;
     setConta(c?.conta_corrente ?? h.conta_codigo ?? "");
     setCategoria(c?.categoria ?? h.categoria_codigo ?? "");
     setProjeto(c?.projeto ?? h.projeto_codigo ?? "");
@@ -838,7 +868,7 @@ export default function NovaEmissao({ config, aberto, fechar, avisar, onEmitido,
             )}
             {aviso && <div className="ne-aviso" onClick={() => setAviso(null)}>{aviso}</div>}
 
-            <section className="ne-sec">
+            <section className="ne-sec" id="ne-sec-cliente">
               <h3>Cliente {cli.nome ? <small>{cli.nome} · {cli.cnpj || cli.cpf} · {cli.municipio}/{cli.uf}</small> : <small>escolha no cadastro acima</small>}
                 <button className="ne-lk" style={{ marginLeft: "auto" }} onClick={() => setVerCliente((v) => !v)}>{verCliente ? "recolher" : "ver/editar dados"}</button></h3>
               {(verCliente || !cli.nome) && (
@@ -850,7 +880,7 @@ export default function NovaEmissao({ config, aberto, fechar, avisar, onEmitido,
               )}
             </section>
 
-            <section className="ne-sec">
+            <section className="ne-sec" id="ne-sec-itens">
               <h3>Itens <small>{itens.length} item(ns) · bruto {fmt(bruto)}</small></h3>
               <table className="ne-tab">
                 <thead><tr><th>Código</th><th>Descrição</th>{tipo === "nfe" && <th>NCM</th>}<th>Un</th><th className="r">Qtd</th>{operacao === "devolucao" && naoVenda && <><th className="r">Item na NF</th><th className="r">ICMS %</th></>}<th className="r">Valor unit.</th><th className="r">Total</th><th /></tr></thead>
@@ -883,15 +913,18 @@ export default function NovaEmissao({ config, aberto, fechar, avisar, onEmitido,
               </div>
             </section>
 
-            {precisaParcelas && <section className="ne-sec">
+            {precisaParcelas && <section className="ne-sec" id="ne-sec-recebimento">
               <h3>Recebimento <small>{naoVenda ? (operacao === "devolucao" ? "crédito a receber do fornecedor" : "cobrança desta remessa") : "as parcelas a receber são criadas exatamente assim"}</small></h3>
+              <div className="ne-linha ne-forma">
+                {sel("Forma de recebimento", forma, (v) => { formaDefinida.current = true; setForma(v); setParcs(parcs.map((p) => ({ ...p, forma: v }))); }, opc?.formas ?? [{ codigo: "BOL", nome: "Boleto" }], 220, "—")}
+                {sel("Conta de recebimento", conta, (v) => { formaDefinida.current = true; setConta(v === "" ? "" : Number(v)); }, opc?.contas ?? [], 260)}
+                <span className="ne-dica" style={{ alignSelf: "end", maxWidth: 320 }}>Boleto, PIX, transferência… e a conta onde vai cair o dinheiro. A instrução de pagamento sai na nota e em cada parcela.</span>
+              </div>
               <div className="ne-linha">
                 {sel("Condição de pagamento", cond, (v) => aplicarCondicao(v), (opc?.condicoes ?? []).map((c) => ({ codigo: c.codigo, nome: c.nome })), 230, "— escolha —")}
                 <label className="ne-rot" style={{ width: 150 }}>Data base dos prazos
                   <input className="ne-in" type="date" value={base} onChange={(e) => setBase(e.target.value)} />
                 </label>
-                {sel("Forma de recebimento", forma, (v) => { setForma(v); setParcs(parcs.map((p) => ({ ...p, forma: v }))); }, opc?.formas ?? [{ codigo: "BOL", nome: "Boleto" }], 190, "—")}
-                {sel("Conta de recebimento", conta, (v) => setConta(v === "" ? "" : Number(v)), opc?.contas ?? [], 230)}
               </div>
               <div className="ne-linha">
                 {sel("Categoria de receita", categoria, setCategoria, (opc?.categorias ?? []).map((c) => ({ codigo: c.codigo, nome: `${c.codigo} ${c.nome}` })), 260)}
@@ -961,7 +994,7 @@ export default function NovaEmissao({ config, aberto, fechar, avisar, onEmitido,
             )}
 
             {tipo === "nfe" && (
-              <section className="ne-sec">
+              <section className="ne-sec" id="ne-sec-operacao">
                 <h3>Transporte</h3>
                 <div className="ne-linha">
                   <label className="ne-rot" style={{ width: 230 }}>Modalidade do frete
@@ -983,7 +1016,7 @@ export default function NovaEmissao({ config, aberto, fechar, avisar, onEmitido,
               </section>
             )}
 
-            <section className="ne-sec">
+            <section className="ne-sec" id="ne-sec-infcpl">
               <h3>Informações complementares</h3>
               <div className="ne-linha">
                 <label className="ne-rot" style={{ width: 180 }}>Pedido do cliente (OC)<input className="ne-in" value={pedidoCli} onChange={(e) => setPedidoCli(e.target.value)} /></label>

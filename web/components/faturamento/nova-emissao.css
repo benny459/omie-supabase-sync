@@ -81,3 +81,6 @@
 .ne-pag{display:flex;flex-direction:column;gap:5px;font-size:12.5px;padding:8px 10px;border-radius:9px;background:rgba(34,197,94,.07);border:1px solid rgba(34,197,94,.25)}
 .ne-pag small{color:var(--ww-text-faint,#6b7d9c)}
 .ne-pag .falta{color:#fcd34d}
+/* link "editar" da gaveta (05/10/26): seção destacada e forma/conta em evidência */
+.ne-sec.ne-destaque{box-shadow:0 0 0 2px #3b82f6, 0 0 24px rgba(59,130,246,.35);transition:box-shadow .3s}
+.ne-forma{background:rgba(59,130,246,.08);border:1px solid rgba(59,130,246,.35);border-radius:10px;padding:10px 12px}

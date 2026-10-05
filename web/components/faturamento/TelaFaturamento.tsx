@@ -253,11 +253,11 @@ export default function TelaFaturamento() {
 
   /** Revisar e emitir (05/10/26): toda emissão passa pela folha completa,
    *  pré-preenchida e editável — nunca direto da lista ou da gaveta. */
-  async function abrirFolhaDe(d: Doc) {
+  async function abrirFolhaDe(d: Doc, secao?: Inicial["secao"]) {
     const r = await agir(d, "doc");
     if (!r?.documento) return;
     setInicialNova({ chave: d.chave, documento: r.documento as Inicial["documento"], tipo: d.tipo === "PV" ? "nfe" : undefined,
-      origem_tipo: d.tipo === "PV" ? "pv" : "os", rotulo: d.rotulo });
+      origem_tipo: d.tipo === "PV" ? "pv" : "os", rotulo: d.rotulo, secao: secao ?? null });
     setAberto(null); setNova(true);
   }
 
@@ -430,7 +430,7 @@ export default function TelaFaturamento() {
         </>}
 
         {docAberto && <Gaveta d={docAberto} r={rec[docAberto.rotulo.toUpperCase()]} empresa={empresa} prod={prod} ocupado={ocupado} agir={agir} fechar={() => setAberto(null)} avisar={avisar} onMudou={carregar}
-          abrirFolha={() => abrirFolhaDe(docAberto)}
+          abrirFolha={(sec?: Inicial["secao"]) => abrirFolhaDe(docAberto, sec)}
           registrar={() => { setRegNfse([docAberto.chave]); setAberto(null); }} />}
         {regNfse && <RegistrarNfse empresa={empresa} chaves={regNfse} avisar={avisar} fechar={() => setRegNfse(null)}
           feito={() => { setRegNfse(null); setSel(new Set()); carregar(); }} />}
@@ -774,7 +774,7 @@ function Kanban({ rows, abrir }: { rows: Doc[]; abrir: (k: string) => void }) {
 function Gaveta({ d, r, empresa, prod, ocupado, agir, fechar, avisar, onMudou, registrar, abrirFolha }: {
   d: Doc; r?: RecRes; empresa: string; prod: boolean; ocupado: string | null;
   agir: (d: Doc, a: "prevoo" | "ensaio" | "emitir" | "doc") => Promise<Record<string, unknown> | null>;
-  fechar: () => void; avisar: (m: string) => void; onMudou: () => void; registrar: () => void; abrirFolha: () => void;
+  fechar: () => void; avisar: (m: string) => void; onMudou: () => void; registrar: () => void; abrirFolha: (secao?: Inicial["secao"]) => void;
 }) {
   const st = status(d); const sd = saldo(d);
   const nf = d.tipo === "PV" ? "NF-e" : "NFS-e";
@@ -869,7 +869,7 @@ function Gaveta({ d, r, empresa, prod, ocupado, agir, fechar, avisar, onMudou, r
             </>
           )}
 
-          {d.emite && st !== "fat" && <ResumoNota res={res} tipo={d.tipo} />}
+          {d.emite && st !== "fat" && <ResumoNota res={res} tipo={d.tipo} editar={(sec) => abrirFolha(sec)} />}
 
           <h4>Itens</h4>
           {d.emite ? (itens === null ? <div className="orig">Carregando itens…</div> : (
@@ -959,7 +959,7 @@ function Gaveta({ d, r, empresa, prod, ocupado, agir, fechar, avisar, onMudou, r
               {d.origem === "Omie" && d.tipo === "PV" && <button className="btn" disabled={!!ocupado} onClick={() => agir(d, "ensaio")}>{ocupado === `ensaio:${d.chave}` ? "Enviando…" : "Ensaio"}</button>}
               {!semNfse(d) && <button className="btn" title="Ver como vai sair — nada é enviado à SEFAZ"
                 onClick={() => window.open(`/api/faturamento/previa?empresa=${empresa}&chave=${encodeURIComponent(d.chave)}`, "_blank")}>{d.tipo === "PV" ? "Pré-visualizar DANFE" : "Pré-visualizar recibo"}</button>}
-              <button className="btn pri" disabled={!!ocupado || st === "pend" || st === "emis"} onClick={abrirFolha}
+              <button className="btn pri" disabled={!!ocupado || st === "pend" || st === "emis"} onClick={() => abrirFolha()}
                 title="Abre a folha completa (cliente, itens, recebimento, prévia) — a emissão acontece lá, depois de revisar">
                 {`Revisar e emitir ${nf}${Number(d.faturado) > 0 ? " do saldo" : ""}${prod ? "" : " (homolog.)"}`}
               </button>
@@ -1188,7 +1188,9 @@ const FRETE: Record<number, string> = { 0: "por conta do emitente (CIF)", 1: "po
 const TPAG: Record<string, string> = { "01": "dinheiro", "02": "cheque", "03": "cartão de crédito", "04": "cartão de débito", "15": "boleto", "17": "PIX", "18": "transferência", "90": "sem pagamento", "99": "outros" };
 const docFmt = (c?: string | null) => { const x = (c ?? "").replace(/\D/g, ""); return x.length === 14 ? x.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, "$1.$2.$3/$4-$5") : x.length === 11 ? x.replace(/^(\d{3})(\d{3})(\d{3})(\d{2})$/, "$1.$2.$3-$4") : (c ?? ""); };
 
-function ResumoNota({ res, tipo }: { res: Resumo | null; tipo: string }) {
+function ResumoNota({ res, tipo, editar }: { res: Resumo | null; tipo: string; editar?: (secao: NonNullable<Inicial["secao"]>) => void }) {
+  const ed = (sec: NonNullable<Inicial["secao"]>) => editar
+    ? <button className="rs-ed" onClick={() => editar(sec)} title="abre a emissão nesta seção para editar">editar ✎</button> : null;
   if (!res) return <><h4>O que vai sair na nota</h4><div className="orig">Montando o resumo…</div></>;
   if (res.error) return <><h4>O que vai sair na nota</h4><div className="alert bad">{res.error}</div></>;
   const c = res.destinatario; const cond = res.condicao; const t = res.transporte;
@@ -1201,7 +1203,7 @@ function ResumoNota({ res, tipo }: { res: Resumo | null; tipo: string }) {
       {pend.length > 0 && <div className="rs-pend">{pend.map((p, i) => <div key={i} className={`alert ${p.nivel === "erro" ? "bad" : ""}`}>{p.nivel === "erro" ? "✕" : "⚠"} {p.item}: {p.detalhe}</div>)}</div>}
       <div className="rs-grid">
         <div className="rs-box">
-          <div className="rs-t">Destinatário {c && <a href={`/cadastros/clientes?busca=${encodeURIComponent(doc || c.nome)}`} target="_blank" rel="noreferrer">editar cadastro ↗</a>}</div>
+          <div className="rs-t">Destinatário <span className="rs-acoes">{ed("cliente")}{c && <a href={`/cadastros/clientes?busca=${encodeURIComponent(doc || c.nome)}`} target="_blank" rel="noreferrer">editar cadastro ↗</a>}</span></div>
           {c ? <>
             {linha("Razão social", c.nome)}
             {linha(c.cnpj ? "CNPJ" : "CPF", docFmt(doc))}
@@ -1212,7 +1214,9 @@ function ResumoNota({ res, tipo }: { res: Resumo | null; tipo: string }) {
           </> : <div className="orig">—</div>}
         </div>
         <div className="rs-box">
-          <div className="rs-t">Recebimento</div>
+          <div className="rs-t">Recebimento {ed("recebimento")}</div>
+          {!(cond?.forma_pagamento || cond?.forma_recebimento) || !cond?.conta_nome
+            ? <button className="rs-cta" onClick={() => editar?.("recebimento")}>Definir forma de pagamento e conta → abre a emissão</button> : null}
           {linha("Condição", cond?.descricao)}
           {linha("Forma de pagamento", cond?.forma_pagamento ? `${TPAG[cond.forma_pagamento] ?? cond.forma_pagamento}` : cond?.forma_recebimento)}
           {linha("Conta", cond?.conta_nome)}
@@ -1222,7 +1226,7 @@ function ResumoNota({ res, tipo }: { res: Resumo | null; tipo: string }) {
           {!!res.retencoes && linha("Líquido (−retenções)", fmt(res.liquido ?? 0))}
         </div>
         <div className="rs-box">
-          <div className="rs-t">Operação e transporte</div>
+          <div className="rs-t">Operação e transporte {ed("operacao")}</div>
           {linha("Natureza", res.natureza)}
           {linha("CFOP", [...new Set((res.itens ?? []).map((i) => i.cfop))].join(", "))}
           {linha("Frete", t ? `${FRETE[t.modalidade] ?? t.modalidade}${t.nome ? ` · ${t.nome}` : ""}` : "sem frete")}
@@ -1232,11 +1236,12 @@ function ResumoNota({ res, tipo }: { res: Resumo | null; tipo: string }) {
           {linha("Total da nota", fmt(res.total ?? 0))}
         </div>
       </div>
-      {!!res.itens?.length && <table className="it" style={{ marginTop: 8 }}>
+      {!!res.itens?.length && <div className="rs-t" style={{ marginTop: 8 }}>Itens {ed("itens")}</div>}
+      {!!res.itens?.length && <table className="it" style={{ marginTop: 4 }}>
         <thead><tr><th>Código</th><th>Descrição</th><th>NCM</th><th>CFOP</th><th className="r">Qtd</th><th className="r">Unit.</th><th className="r">Total</th></tr></thead>
         <tbody>{res.itens.map((i, k) => <tr key={k}><td className="mono">{i.codigo}</td><td>{i.descricao}</td><td className="mono" style={{ color: i.ncm === "00000000" ? "var(--f-bad)" : undefined }}>{i.ncm}</td><td className="mono">{i.cfop}</td><td className="r mono">{i.qtd} {i.un}</td><td className="r mono">{fmt(i.unit)}</td><td className="r mono">{fmt(i.total)}</td></tr>)}</tbody>
       </table>}
-      <div className="rs-t" style={{ marginTop: 8 }}>Informações complementares (como saem na nota)</div>
+      <div className="rs-t" style={{ marginTop: 8 }}>Informações complementares (como saem na nota) {ed("infcpl")}</div>
       <div className="rs-inf">{res.informacoes_complementares || "—"}</div>
     </div>
   );

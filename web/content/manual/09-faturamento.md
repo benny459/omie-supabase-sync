@@ -45,6 +45,15 @@ atualizado: 2026-10-05
 7. Em **Recebimento**, escolha condição, forma (boleto, Pix, transferência…), conta, categoria e projeto. Ajuste as **parcelas** (precisam somar o total). Com **Pix** ou transferência, os dados da conta saem no documento.
 8. Confira a **Prévia das contas a receber**, clique em **Pré-visualizar DANFE** (ou recibo) para ver o documento, depois **Validar** e, por fim, **Emitir**.
 
+## Como faço para mudar forma de pagamento, conta ou outro dado da nota
+
+1. Clique no PV/OS na carteira. A gaveta mostra **"O que vai sair na nota"**.
+2. Em cada bloco (Destinatário, Recebimento, Operação e transporte, Itens, Informações complementares) há o botão **editar ✎**.
+3. Ele abre a emissão (**Revisar e emitir**) já na seção certa, destacada.
+4. Em **Recebimento**, no topo, escolha a **Forma de recebimento** (boleto, PIX, transferência…) e a **Conta de recebimento**. A instrução de pagamento sai na nota e em cada parcela.
+
+> **Dica:** se o pedido não tem forma/conta, a emissão herda as do **último faturamento do cliente** — confira antes de emitir.
+
 ## Depois de emitir
 
 A janela acompanha: **1 · Enviando à Focus → 2 · Processando na SEFAZ → Autorizada** (ou Rejeitada).
