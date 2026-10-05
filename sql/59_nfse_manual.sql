@@ -373,6 +373,8 @@ os as (
          jsonb_agg(jsonb_build_object('desc', o.descricao_servico, 'qtd', o.quantidade, 'vt', o.valor_total) order by o.seq_item) itens
   from sales.ordens_servico o
   where o.empresa = p_empresa and coalesce(o.cancelada, 'N') <> 'S'
+    -- p59b: o espelho das OS nativas (codigo ≥ 9e12) já entra como nativo; não duplicar
+    and not (o.codigo_os ~ '^\d+$' and o.codigo_os::numeric >= 9000000000000)
     and ((coalesce(o.faturada, 'N') <> 'S' and o.etapa < '60') or o.dt_fat_d >= (select desde from par))
   group by o.codigo_os
 ),
