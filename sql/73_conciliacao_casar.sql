@@ -428,3 +428,16 @@ begin
   n := replace(n, '''origem'', m.origem, ''auto'', m.auto,', '''origem'', m.origem, ''auto'', m.auto, ''transferencia_par'', m.transferencia_par,');
   if n <> d then execute n; end if;
 end $$;
+
+-- (p73_conc_casar_9/10) movimento já baixado no Omie ou ignorado: restante 0, sem sugestões, e o painel avisa.
+do $$
+declare d text; n text;
+begin
+  d := pg_get_functiondef('finance.conciliacao_candidatos(bigint,text,numeric,numeric,date,date,boolean,integer)'::regprocedure);
+  n := replace(d, '  v_rest := finance.conc_restante(m.id);',
+                  '  v_rest := finance.conc_restante(m.id);
+  if m.conciliado_omie or m.ignorado then v_rest := 0; end if;');
+  n := replace(n, '''memo'', m.memo, ''nome'', m.nome, ''natureza'', v_nat, ''restante'', v_rest,',
+                  '''memo'', m.memo, ''nome'', m.nome, ''natureza'', v_nat, ''restante'', v_rest, ''omie'', m.conciliado_omie, ''ignorado'', m.ignorado, ''ignorado_motivo'', m.ignorado_motivo,');
+  if n <> d then execute n; end if;
+end $$;

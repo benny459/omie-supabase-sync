@@ -33,7 +33,7 @@ type Cand = {
 type Grupo = { grupo: true; chave: string; contraparte: string | null; cnpj: string | null; n: number; soma: number; vencimento: string | null;
   rotulo: string; motivos: string[]; itens: { ref: string; saldo: number; documento: string | null; vencimento: string | null; contraparte: string | null }[] };
 type MovInfo = { id: number; empresa: string; cod_cc: number; data: string; valor: number; memo: string | null; nome: string | null;
-  natureza: "P" | "R"; restante: number; chave: string | null };
+  natureza: "P" | "R"; restante: number; chave: string | null; omie?: boolean; ignorado?: boolean; ignorado_motivo?: string | null };
 type Resp = { movimento: MovInfo; aliases: { contraparte: string; cnpj: string | null; usos: number }[]; candidatos: Cand[]; grupos: Grupo[]; pode_baixar?: boolean };
 type Transf = { id: number; empresa: string; cod_cc: number; data: string; valor: number; memo: string | null; conta: string | null };
 type Pessoa = { codigo: number; razao: string; fantasia: string | null; doc: string | null };
@@ -216,6 +216,8 @@ export default function CasarPainel({ movimentoId, onFechar }: { movimentoId: nu
         ))}
       </div>
 
+      {m?.omie && <div style={{ margin: "10px 18px 0", padding: "8px 12px", borderRadius: 9, border: `1px solid ${C.ok}`, color: C.ok, fontSize: 12.5 }}>Este movimento já foi baixado no Omie (Omie.CASH) — está ligado ao título de lá e não recebe nova baixa.</div>}
+      {m?.ignorado && <div style={{ margin: "10px 18px 0", padding: "8px 12px", borderRadius: 9, border: `1px solid ${C.line2}`, color: C.tx2, fontSize: 12.5 }}>Movimento ignorado{m.ignorado_motivo ? `: ${m.ignorado_motivo}` : ""}. Reative na lista para casar.</div>}
       {erro && <div style={{ margin: "10px 18px 0", padding: "8px 12px", borderRadius: 9, border: `1px solid ${C.bad}`, color: C.bad, fontSize: 12.5 }}>{erro}</div>}
       {aviso && <div style={{ margin: "10px 18px 0", padding: "8px 12px", borderRadius: 9, border: `1px solid ${C.ok}`, color: C.ok, fontSize: 12.5 }}>{aviso}</div>}
 
