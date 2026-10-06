@@ -13,3 +13,5 @@
 -- replace() no corpo existente, com verificação do padrão (falha se não encontrado).
 alter table vendas.parcelas add column if not exists faturada_em timestamptz, add column if not exists emissao_ref text;
 alter table orders.fat_emissoes add column if not exists venda_parcelas int[];
+-- p91d: vendas_desfazer_faturado mantém o nº das notas quando ainda há parcela faturada.
+-- p91e: fat_nfse_registrar — subconsulta usa p->'os' (a variável "os" colidia com a coluna fat_nfse_manual.os).
