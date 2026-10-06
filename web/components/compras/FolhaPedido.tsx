@@ -382,7 +382,7 @@ export default function FolhaPedido({
             {D.origem === "omie" ? <span className="tag orig-omie" title="Importado do Omie — histórico, só leitura">Omie · histórico</span>
               : <span className="tag orig-painel">Emitido pela plataforma</span>}
             {!isRC && (() => { const e = rotuloEnvio(D); return e
-              ? <span className="pill" title={e.dica} style={{ background: e.teste ? "color-mix(in srgb,#F59E0B 22%,transparent)" : "color-mix(in srgb,#06B6D4 22%,transparent)", color: e.teste ? "#B45309" : "#0E7490", fontWeight: 600 }}>{e.texto}</span>
+              ? <span className="pill" title={e.dica} style={{ background: e.teste ? "color-mix(in srgb,#F59E0B 22%,transparent)" : "color-mix(in srgb,#06B6D4 22%,transparent)", color: e.teste ? "#F59E0B" : "#22B8D6", border: `1px solid ${e.teste ? "color-mix(in srgb,#F59E0B 50%,transparent)" : "color-mix(in srgb,#06B6D4 50%,transparent)"}`, fontWeight: 600 }}>{e.texto}</span>
               : D.id && D.aprov === "aprovado" && D.origem === "painel" ? <span className="pill" title="Aprovado e ainda não enviado ao fornecedor" style={{ opacity: .8 }}>não enviado</span> : null; })()}
             <span className="sp" />
             <div className="stepper" aria-label="Etapas">

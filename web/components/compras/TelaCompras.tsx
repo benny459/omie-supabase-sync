@@ -315,7 +315,7 @@ export default function TelaCompras() {
             {naColPc && (p.aprov === "aprovado"
               ? <span className="badge-ap ok">✓ Aprovado</span> : <span className="badge-ap pend">Pendente</span>)}
             {p.tipo === "PC" && (() => { const e = rotuloEnvio(p); return e
-              ? <span className="badge-ap env" title={e.dica} style={{ background: e.teste ? "color-mix(in srgb,#F59E0B 18%,transparent)" : "color-mix(in srgb,#06B6D4 18%,transparent)", color: e.teste ? "#B45309" : "#0E7490" }}>{e.texto}</span>
+              ? <span className="badge-ap env" title={e.dica} style={{ background: e.teste ? "color-mix(in srgb,#F59E0B 18%,transparent)" : "color-mix(in srgb,#06B6D4 18%,transparent)", color: e.teste ? "#F59E0B" : "#22B8D6", border: `1px solid ${e.teste ? "color-mix(in srgb,#F59E0B 50%,transparent)" : "color-mix(in srgb,#06B6D4 50%,transparent)"}` }}>{e.texto}</span>
               : naoEnviado(p) ? <span className="badge-ap" title="Aprovado e ainda não enviado ao fornecedor" style={{ background: "color-mix(in srgb,#64748B 16%,transparent)", color: "var(--tx-2)" }}>não enviado</span> : null; })()}</span>
           <button className="kebab" aria-label="Ações" onClick={(e) => { e.stopPropagation(); const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
             setCtx({ p, x: Math.min(r.left, window.innerWidth - 250), y: Math.min(r.bottom + 4, window.innerHeight - 380) }); }}>⋮</button>
