@@ -465,8 +465,13 @@ html { --ap-fonte: 1; font-size: calc(100% * var(--ap-fonte)); }
    base (05/10/26, Benny: "tela em cima da outra não pode ter transparência"). */
 html[data-vidro] :is([role="dialog"], [role="alertdialog"], [role="menu"], [role="listbox"], [aria-modal="true"],
   .ne-folha, .ne-acerto, .ne-pag-inline, [class*="modal"], [class*="Modal"], [class*="drawer"], [class*="Drawer"],
-  [class*="gaveta"], [class*="popover"], [data-radix-popper-content-wrapper]) {
+  [class*="gaveta"], [class*="popover"], [data-radix-popper-content-wrapper],
+  .dropdown, [class*="dropdown"], [class*="menu-ctx"], [class*="ctxmenu"]) {
   --ap-a: 1;
+  /* apelidos locais das telas (ex.: Compras usa --panel/--sunken resolvidos no
+     contêiner; sem redeclarar aqui o menu herdava o valor translúcido) */
+  --panel: rgb(var(--color-ww-panel));
+  --sunken: rgb(var(--color-ww-panelSunken));
   --ww-panel: rgb(var(--color-ww-panel));
   --ww-panel-grad: rgb(var(--color-ww-panel));
   --ww-panel-sunken: rgb(var(--color-ww-panelSunken));
@@ -479,3 +484,6 @@ html[data-vidro] :is([role="dialog"], [aria-modal="true"], .ne-folha, [class*="m
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
 }
+
+/* Menus de contexto (⋮ dos cartões) sempre sólidos. */
+html[data-vidro] .dropdown { background-color: rgb(var(--color-ww-panel)) !important; backdrop-filter: none !important; -webkit-backdrop-filter: none !important; }
