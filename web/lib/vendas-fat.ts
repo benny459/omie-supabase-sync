@@ -1,7 +1,7 @@
 // Monta o documento do faturamento (P5) a partir de um PV/OS nativo (P1).
 // Puro (sem dependências de servidor) — usado pela rota e pelo teste E2E.
 import type { DocFat } from "./faturamento/montar";
-import type { VendaDoc } from "./vendas";
+import type { VendaDoc, VendaParcela } from "./vendas";
 
 /**
  * Monta o documento do faturamento (P5) a partir do PV/OS: cliente do cadastro
@@ -48,4 +48,49 @@ export function docFat(d: VendaDoc): DocFat {
     observacoes: [d.obs_nf, d.proposta ? `Proposta ${d.proposta}` : null, d.label].filter(Boolean).join(" · "),
     pedido_cliente: d.num_pedido_cliente,
   };
+}
+
+const r2 = (n: number) => Math.round(n * 100) / 100;
+const dias = (de: string, ate: string) => Math.round((Date.parse(`${ate}T12:00:00Z`) - Date.parse(`${de}T12:00:00Z`)) / 86_400_000);
+
+/** Parcelas do fechamento de projeto (têm nome do evento), em ordem. */
+export function parcelasProjeto(d: VendaDoc): VendaParcela[] {
+  return (d.parcelas ?? []).filter((p) => (p.descricao ?? "").trim()).sort((a, b) => a.numero - b.numero);
+}
+
+/**
+ * PV/OS de projeto: a nota fatura UMA ou mais parcelas do fechamento (06/10/26).
+ * Itens proporcionais ao valor das parcelas (mantém NCM/CFOP/serviço do escopo),
+ * nome da parcela na descrição e nas observações, e o recebimento conta a partir
+ * da data da nota com o mesmo prazo do fechamento (vencimento − faturamento previsto).
+ * Sem `numeros`, pega a próxima parcela por faturar.
+ */
+export function docFatParcelas(d: VendaDoc, numeros?: number[] | null): DocFat | null {
+  const ps = parcelasProjeto(d);
+  if (!ps.length) return null;
+  const abertas = ps.filter((p) => !p.faturada_em);
+  const escolhidas = (numeros?.length ? ps.filter((p) => numeros.includes(p.numero)) : abertas.slice(0, 1));
+  if (!escolhidas.length) return null;
+  const base = docFat(d);
+  const total = r2(escolhidas.reduce((a, p) => a + Number(p.valor), 0));
+  const somaItens = base.itens.reduce((a, i) => a + i.quantidade * i.valor_unitario, 0);
+  const fator = somaItens > 0 ? total / somaItens : 1;
+  const nomes = escolhidas.map((p) => `Parcela ${p.numero}/${ps.length} — ${(p.descricao ?? "").trim()}`);
+  const sufixo = ` · ${nomes.join(" + ")}`;
+  let acum = 0;
+  const itens = base.itens.map((i, k, arr) => {
+    const ultimo = k === arr.length - 1;
+    const vt = ultimo ? r2(total - acum) : r2(i.quantidade * i.valor_unitario * fator);
+    acum = r2(acum + vt);
+    const vu = i.quantidade ? Math.round((vt / i.quantidade) * 1e6) / 1e6 : vt;
+    return { ...i, valor_unitario: vu, descricao: `${i.descricao}${sufixo}`.slice(0, 120) };
+  });
+  // Prazo do fechamento: vencimento − faturamento previsto (ex.: fatura 30/11, vence 07/12 = 7 dias).
+  const prazos = escolhidas.map((p) => (p.faturamento_previsto ? Math.max(0, dias(p.faturamento_previsto, p.vencimento)) : null));
+  const prazo = prazos.find((x) => x != null);
+  const condicao = { ...base.condicao, parcelas: prazo != null ? [{ dias: prazo }] : escolhidas.map((p) => ({ vencimento: p.vencimento, valor: Number(p.valor) })) };
+  const obs = [`${nomes.join(" + ")} (R$ ${total.toLocaleString("pt-BR", { minimumFractionDigits: 2 })} de R$ ${Number(d.valor_total).toLocaleString("pt-BR", { minimumFractionDigits: 2 })})`,
+    d.projeto ? `Projeto ${d.projeto}` : null, base.observacoes].filter(Boolean).join(" · ");
+  return { ...base, itens, condicao, observacoes: obs,
+    parcela_doc: { numeros: escolhidas.map((p) => p.numero), total, total_doc: Number(d.valor_total), rotulo: nomes.join(" + ") } };
 }

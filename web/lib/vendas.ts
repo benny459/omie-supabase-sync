@@ -26,7 +26,8 @@ export type VendaItem = {
 };
 
 export type VendaParcela = { numero: number; vencimento: string; valor: number; percentual?: number | null; dias?: number | null;
-  /** nome do evento do fechamento e data prevista de faturamento (projetos, 06/10/26) */ descricao?: string | null; faturamento_previsto?: string | null };
+  /** nome do evento do fechamento e data prevista de faturamento (projetos, 06/10/26) */ descricao?: string | null; faturamento_previsto?: string | null;
+  /** parcela já faturada (NF-e/recibo/NFS-e) e a referência da nota (fat:<id> | nfse:<id>) */ faturada_em?: string | null; emissao_ref?: string | null };
 
 export type VendaStatus = "aberto" | "faturado" | "cancelado";
 

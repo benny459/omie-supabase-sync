@@ -5,7 +5,7 @@ icone: 🧾
 area: erp
 rotas: /faturamento
 caminhos: web/components/faturamento, web/app/(app)/faturamento, web/app/api/faturamento, web/lib/faturamento
-atualizado: 2026-10-05
+atualizado: 2026-10-06
 ---
 
 > **Atenção:** a **NF-e da SF está em PRODUÇÃO** — o que você emitir é documento fiscal real. A numeração é sequencial e automática (NF-e, recibo, PV e OS continuam de onde o Omie parou). **Não emita mais NF-e nem recibo pelo Omie.**
@@ -78,6 +78,22 @@ A maioria das OS fatura por **recibo**, emitido **pelo painel** — também as O
 **Baixar recibos já emitidos em lote:** OS **já faturadas** também podem ser marcadas (o botão de emitir ignora-as). Com elas selecionadas aparece **Baixar N recibos (PDF)**: sai **um PDF por recibo**, já com o nome do recibo — do painel ou do Omie. Se o navegador barrar vários downloads, clique em **.zip** ao lado.
 
 **Um recibo só:** na gaveta da OS, **Recibo (PDF)** baixa o arquivo; **ver** abre no navegador.
+
+## Faturar projeto por parcela do fechamento
+
+PV e OS de **projeto** criados pelo CRM a partir do **Fechamento** trazem as parcelas combinadas com o cliente — cada uma com **nome** (ex.: "Contra Entrega do Material"), **valor**, **data prevista de faturamento** e **vencimento**. O PV leva as parcelas mercantis e a OS as de serviço.
+
+1. Na carteira, a coluna **Previsão fat.** mostra a data da **próxima parcela por faturar** (e o filtro **Previsão atrasada** usa essa data).
+2. Abra o PV/OS: a gaveta mostra **Parcelas do fechamento** — nome, valor, %, "fatura em", "vence em" e se já foi **faturada**.
+3. Clique em **Revisar e emitir**. A folha abre já com a **próxima parcela** marcada em **Parcela do fechamento**:
+   - o **valor da nota = valor da parcela** (os itens do escopo são ajustados proporcionalmente, mantendo NCM/CFOP/serviço);
+   - o nome da parcela vai na descrição do item e nas observações ("Parcela 1/3 — Contra Entrega do Material…");
+   - o **recebimento** usa o mesmo prazo do fechamento (vencimento − data de faturamento), contado a partir da data da nota.
+   Para faturar outra parcela (ou duas juntas), marque/desmarque na lista — a folha se remonta sozinha.
+4. **Emitir** (NF-e no PV; recibo na OS). A parcela fica **faturada**, o saldo do documento cai e ele continua na carteira até a última parcela. Se a nota for cancelada, a parcela volta a "a faturar".
+5. **OS faturada por NFS-e da prefeitura:** em **Registrar NFS-e**, escolha a parcela que a nota fatura — o valor e o prazo vêm dela. Dá para registrar uma NFS-e por parcela.
+
+> Proteções: a mesma parcela não pode ser faturada duas vezes, e a nota precisa valer exatamente a soma das parcelas escolhidas.
 
 ## Como faço para mudar forma de pagamento, conta ou outro dado da nota
 

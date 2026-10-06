@@ -144,7 +144,11 @@ export type DocFat = {
   rotulo?: string | null;
   /** NF-e de devolução / simples remessa / conserto (padrão: venda). */
   operacao?: OperacaoNfe | null;
+  /** PV/OS de projeto faturado por parcela do fechamento (06/10/26): quais parcelas
+   *  do documento esta nota fatura. O servidor confere com o banco antes de emitir. */
+  parcela_doc?: ParcelaDoc | null;
 };
+export type ParcelaDoc = { numeros: number[]; total: number; total_doc: number; rotulo: string };
 
 export type Emitente = {
   cnpj: string;

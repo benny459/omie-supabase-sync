@@ -17,6 +17,7 @@ import {
 import { checarDoc, type Checagem } from "@/lib/faturamento/pv-omie";
 import { bloqueioOsOmie, configDe, documentoOsOmie, documentoPvOmie, prevooRecibo } from "@/lib/faturamento/server";
 import { docFat, documento } from "@/lib/vendas-server";
+import { docFatParcelas } from "@/lib/vendas-fat";
 
 const so = (s?: string | null) => (s ?? "").replace(/\D/g, "");
 const r2 = (v: number) => Math.round(v * 100) / 100;
@@ -66,7 +67,10 @@ export async function docDaChave(chave: string, empresa: string) {
   if (tipo === "venda") {
     const d = await documento(id);
     const cfg = await configDe(empresa);
-    return { doc: docFat(d), tipo: d.tipo === "PV" ? "nfe" as const : (cfg.tipo_os === "nfse" ? "nfse" as const : "recibo" as const), extra: { total_pv: Number(d.valor_total) } };
+    // Projeto: a prévia mostra a próxima parcela do fechamento por faturar.
+    const doc = docFatParcelas(d) ?? docFat(d);
+    return { doc, tipo: d.tipo === "PV" ? "nfe" as const : (cfg.tipo_os === "nfse" ? "nfse" as const : "recibo" as const),
+      extra: { total_pv: doc.parcela_doc ? doc.parcela_doc.total : Number(d.valor_total) } };
   }
   if (tipo === "os_omie") {
     // OS do Omie (05/10/26): sai como RECIBO do painel.

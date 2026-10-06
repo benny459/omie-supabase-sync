@@ -14,6 +14,9 @@ type OsPre = {
   cliente_doc?: string | null; categoria?: string | null; projeto?: string | null; condicao?: string | null;
   parcelas_dias?: number[]; parcelas_pct?: (number | null)[] | null; iss_retido?: boolean; valor_iss?: number; ret_inss?: number;
   aberta?: boolean; descricao?: string | null; ja_registrada?: { id: number; numero: string; municipio: string }[] | null;
+  /** OS de projeto: parcelas do fechamento — uma NFS-e por parcela (06/10/26). */
+  parcelas_projeto?: { numero: number; descricao: string | null; valor: number; vencimento: string; faturamento_previsto: string | null;
+    faturada: boolean; prazo: number | null }[] | null;
 };
 type Pessoa = { codigo: number; razao: string; doc: string | null; cidade?: string | null };
 type Parc = { vencimento: string; valor: string };
@@ -47,6 +50,8 @@ export default function RegistrarNfse({ empresa, chaves, fechar, feito, avisar }
   const [pdf, setPdf] = useState<File | null>(null);
   const [xml, setXml] = useState<File | null>(null);
   const [enviando, setEnviando] = useState(false);
+  /** OS de projeto: parcela do fechamento que esta NFS-e fatura (por chave da OS). */
+  const [parcSel, setParcSel] = useState<Record<string, number>>({});
 
   useEffect(() => {
     fetch(`/api/faturamento/nfse?empresa=${empresa}&prefill=${encodeURIComponent(chaves.join(","))}`, { cache: "no-store" })
@@ -56,6 +61,13 @@ export default function RegistrarNfse({ empresa, chaves, fechar, feito, avisar }
         setOs(lista);
         setMun(j.municipio_padrao ?? "");
         const ok = lista.filter((o) => !o.erro);
+        // Projeto: valor = próxima parcela do fechamento por faturar; prazo = o do fechamento.
+        const sel: Record<string, number> = {};
+        for (const o of ok) {
+          const prox = (o.parcelas_projeto ?? []).find((p) => !p.faturada);
+          if (prox) { sel[o.chave] = prox.numero; o.valor = Number(prox.valor); o.parcelas_dias = [prox.prazo ?? 0]; o.parcelas_pct = null; }
+        }
+        setParcSel(sel);
         const total = ok.reduce((a, o) => a + Number(o.valor ?? 0), 0);
         setValor(txt(total));
         if (ok.some((o) => o.iss_retido)) setIssRet(true);
@@ -98,7 +110,15 @@ export default function RegistrarNfse({ empresa, chaves, fechar, feito, avisar }
   }, [busca, empresa]);
 
   const somaParc = parcs.reduce((a, p) => a + n2(p.valor), 0);
-  const jaReg = okOs.flatMap((o) => (o.ja_registrada ?? []).map((r) => `${o.rotulo}: NFS-e ${r.numero} (${r.municipio})`));
+  const jaReg = okOs.filter((o) => !(o.parcelas_projeto?.length)).flatMap((o) => (o.ja_registrada ?? []).map((r) => `${o.rotulo}: NFS-e ${r.numero} (${r.municipio})`));
+  function escolherParcela(o: OsPre, numero: number) {
+    const p = o.parcelas_projeto?.find((x) => x.numero === numero);
+    if (!p) return;
+    setParcSel((m) => ({ ...m, [o.chave]: numero }));
+    setOs((l) => (l ?? []).map((x) => (x.chave === o.chave ? { ...x, valor: Number(p.valor), parcelas_dias: [p.prazo ?? 0], parcelas_pct: null } : x)));
+    const outras = okOs.filter((x) => x.chave !== o.chave).reduce((a, x) => a + Number(x.valor ?? 0), 0);
+    setValor(txt(outras + Number(p.valor))); setParcEditada(false);
+  }
   const problemas = [
     !numero.trim() && "número da NFS-e",
     !mun.trim() && "município",
@@ -122,7 +142,8 @@ export default function RegistrarNfse({ empresa, chaves, fechar, feito, avisar }
       valor_servicos: n2(valor), iss_retido: issRet, valor_iss: n2(iss),
       ret_ir: n2(ret.ir), ret_pis: n2(ret.pis), ret_cofins: n2(ret.cofins), ret_csll: n2(ret.csll), ret_inss: n2(ret.inss),
       tomador: tom ? { codigo: tom.codigo, nome: tom.razao, doc: tom.doc } : null,
-      os: okOs.map((o) => ({ chave: o.chave, rotulo: o.rotulo, valor: Number(o.valor ?? 0), categoria: o.categoria ?? null, projeto: o.projeto ?? null })),
+      os: okOs.map((o) => ({ chave: o.chave, rotulo: o.rotulo, valor: Number(o.valor ?? 0), categoria: o.categoria ?? null, projeto: o.projeto ?? null,
+        ...(parcSel[o.chave] ? { parcelas: [parcSel[o.chave]] } : {}) })),
       parcelas: parcs.map((p) => ({ vencimento: p.vencimento, valor: n2(p.valor) })),
       observacao: obs.trim() || null,
     };
@@ -186,6 +207,19 @@ export default function RegistrarNfse({ empresa, chaves, fechar, feito, avisar }
                   )}
                 </div>
               )}
+
+              {okOs.filter((o) => o.parcelas_projeto?.length).map((o) => (
+                <div key={o.chave} style={{ marginBottom: 10 }}>
+                  <h4>{o.rotulo}: parcela do fechamento que esta NFS-e fatura</h4>
+                  {o.parcelas_projeto!.map((p) => (
+                    <label key={p.numero} className="fld chk" style={{ display: "flex", gap: 8, opacity: p.faturada ? 0.55 : 1 }}>
+                      <input type="radio" name={`parc-${o.chave}`} disabled={p.faturada} checked={parcSel[o.chave] === p.numero} onChange={() => escolherParcela(o, p.numero)} />
+                      <b>{p.numero}/{o.parcelas_projeto!.length}</b> {p.descricao} · {BRL.format(Number(p.valor))}
+                      {p.faturamento_previsto ? ` · fatura ${p.faturamento_previsto.split("-").reverse().join("/")}` : ""}{p.faturada ? " · faturada" : ""}
+                    </label>
+                  ))}
+                </div>
+              ))}
 
               <h4>Valores e retenções</h4>
               <div className="row">

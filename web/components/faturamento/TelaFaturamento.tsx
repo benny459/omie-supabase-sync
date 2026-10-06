@@ -40,6 +40,9 @@ type Doc = {
   /** Nome fantasia (linha principal) e razão social; previsão de faturamento (sql/72). */
   fantasia?: string | null; razao?: string | null;
   previsao?: string | null; previsao_origem?: "omie" | "painel" | "documento" | null; previsao_original?: string | null;
+  /** PV/OS de projeto: parcelas do fechamento (nome, valor, faturamento previsto, vencimento) — sql/91. */
+  parcelas?: { numero: number; descricao: string | null; valor: number; percentual: number | null; vencimento: string;
+    faturamento_previsto: string | null; faturada: boolean }[] | null;
 };
 type St = "pend" | "pronto" | "emis" | "rej" | "parc" | "fat";
 type Checagem = { item: string; ok: boolean; nivel: "erro" | "aviso"; detalhe: string };
@@ -286,7 +289,8 @@ export default function TelaFaturamento() {
     setRascNova(null);
     const r = await agir(d, "doc");
     if (!r?.documento) return;
-    setInicialNova({ chave: d.chave, documento: r.documento as Inicial["documento"], tipo: d.tipo === "PV" ? "nfe" : d.origem === "Omie" ? "recibo" : undefined,
+    setInicialNova({ chave: d.chave, documento: r.documento as Inicial["documento"],
+      parcelas_projeto: (r.parcelas_projeto as Inicial["parcelas_projeto"]) ?? null, tipo: d.tipo === "PV" ? "nfe" : d.origem === "Omie" ? "recibo" : undefined,
       origem_tipo: d.tipo === "PV" ? "pv" : d.origem === "Omie" ? "os_omie" : "os", rotulo: d.rotulo, secao: secao ?? null });
     setAberto(null); setNova(true);
   }
@@ -986,6 +990,22 @@ function Gaveta({ d, r, empresa, prod, ocupado, agir, fechar, avisar, onMudou, r
               <tbody>{itensOs.map((it, i) => <tr key={i}><td>{limpo(it.desc ?? "")}</td><td className="r mono">{it.qtd ?? ""}</td><td className="r mono">{fmt(Number(it.vt ?? 0))}</td></tr>)}</tbody>
             </table>
           )}
+
+          {d.parcelas?.length ? (<>
+            <h4>Parcelas do fechamento ({d.parcelas.filter((p) => p.faturada).length}/{d.parcelas.length} faturadas)</h4>
+            <table className="it">
+              <thead><tr><th>#</th><th>Parcela</th><th className="r">Valor</th><th>Fatura em</th><th>Vence em</th><th>Situação</th></tr></thead>
+              <tbody>{d.parcelas.map((p) => {
+                const dd = (x: string | null) => (x ? x.slice(0, 10).split("-").reverse().join("/") : "—");
+                const atras = !p.faturada && p.faturamento_previsto && p.faturamento_previsto < new Date(Date.now() - 3 * 3600_000).toISOString().slice(0, 10);
+                return (<tr key={p.numero}><td className="mono">{p.numero}/{d.parcelas!.length}</td><td>{p.descricao}</td>
+                  <td className="r mono">{fmt(Number(p.valor))}{p.percentual != null ? <small> · {Number(p.percentual).toLocaleString("pt-BR")}%</small> : null}</td>
+                  <td className={atras ? "bad" : ""}>{dd(p.faturamento_previsto)}{atras ? " · atrasada" : ""}</td><td>{dd(p.vencimento)}</td>
+                  <td>{p.faturada ? <span className="pill ok">faturada</span> : <span className="pill">a faturar</span>}</td></tr>);
+              })}</tbody>
+            </table>
+            <div className="orig">Revisar e emitir fatura a próxima parcela por faturar (dá para escolher outra na folha). A previsão de faturamento da linha é a dessa parcela.</div>
+          </>) : null}
 
           <h4>Notas vinculadas ({d.nfs.length})</h4>
           {d.nfs.length ? d.nfs.map((n, k) => {

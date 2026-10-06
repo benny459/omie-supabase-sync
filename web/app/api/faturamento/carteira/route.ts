@@ -5,6 +5,7 @@ import { bloqueioOsOmie, configDe, documentoOsOmie, documentoPvOmie, emitir, emi
 import { completarRecebimento } from "@/lib/faturamento/lote";
 import { totalDoc } from "@/lib/faturamento/montar";
 import { docFat, documento } from "@/lib/vendas-server";
+import { docFatParcelas, parcelasProjeto } from "@/lib/vendas-fat";
 import type { DocFat } from "@/lib/faturamento/montar";
 
 export const dynamic = "force-dynamic";
@@ -52,7 +53,8 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const q = await exigirFaturamento();
   if (q instanceof NextResponse) return q;
-  const b = (await req.json().catch(() => ({}))) as { chave?: string; acao?: string; empresa?: string; documento?: DocFat | null; forcar_homologacao?: boolean };
+  const b = (await req.json().catch(() => ({}))) as { chave?: string; acao?: string; empresa?: string; documento?: DocFat | null; forcar_homologacao?: boolean;
+    /** PV/OS de projeto: parcelas do fechamento a faturar nesta nota (06/10/26). */ parcelas?: number[] | null };
   if (b.forcar_homologacao && !q.admin) return falha("Só administradores podem forçar homologação", 403);
   const [tipo, idTxt] = String(b.chave ?? "").split(":");
   const id = Number(idTxt);
@@ -77,10 +79,14 @@ export async function POST(req: NextRequest) {
     }
     if (tipo === "venda") {
       const d = await documento(id);
-      const doc = docFat(d);
-      if (b.acao === "doc") return NextResponse.json({ documento: doc });
+      // Projeto com parcelas do fechamento: a nota fatura parcela(s), não o documento inteiro.
+      const projeto = parcelasProjeto(d);
+      const docProj = projeto.length ? docFatParcelas(d, b.parcelas ?? null) : null;
+      const doc = docProj ?? docFat(d);
+      if (b.acao === "doc") return NextResponse.json({ documento: doc, parcelas_projeto: projeto.length ? projeto : null });
       if (b.acao === "lote") {
         if (d.tipo !== "OS") return NextResponse.json({ bloqueio: "PV fatura por NF-e — use a folha" });
+        if (projeto.length) return NextResponse.json({ bloqueio: "OS de projeto: fature por parcela do fechamento na folha (Revisar e emitir)" });
         const cfg = await configDe(empresa);
         if (cfg.tipo_os !== "recibo") return NextResponse.json({ bloqueio: "OS desta empresa fatura por NFS-e, não por recibo" });
         const comp = await completarRecebimento(doc);
@@ -89,15 +95,31 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ documento: comp, bloqueio, ...pre });
       }
       if (b.acao === "prevoo") {
-        const pre = await prevoo(doc, { total_pv: Number(d.valor_total) });
+        const alvo = b.documento ? { ...b.documento, empresa: doc.empresa } : doc;
+        const pre = await prevoo(alvo, { total_pv: alvo.parcela_doc ? alvo.parcela_doc.total : Number(d.valor_total) });
         return NextResponse.json({ documento: doc, ...pre });
       }
       if (b.acao === "emitir") {
         if (d.status !== "aberto") return falha(`${d.label} não está em aberto (${d.status})`);
         const final = b.documento ? { ...b.documento, empresa: doc.empresa, rotulo: doc.rotulo } : doc;
+        let vendaParcelas: number[] | null = null;
+        if (projeto.length) {
+          // Confere as parcelas com o banco: existem, estão por faturar e a nota vale a soma delas.
+          const nums = [...new Set((final.parcela_doc?.numeros ?? []).map(Number))];
+          if (!nums.length) return falha("Projeto: escolha a(s) parcela(s) do fechamento que esta nota fatura");
+          const sel = projeto.filter((p) => nums.includes(p.numero));
+          if (sel.length !== nums.length) return falha("Parcela inexistente neste documento");
+          const ja = sel.find((p) => p.faturada_em);
+          if (ja) return falha(`A parcela ${ja.numero} (${ja.descricao}) já foi faturada`);
+          const alvo = Math.round(sel.reduce((a, p) => a + Number(p.valor), 0) * 100) / 100;
+          const tot = totalDoc(final.itens);
+          if (Math.abs(tot - alvo) > 0.05) return falha(`A nota vale R$ ${tot.toFixed(2)} mas a(s) parcela(s) somam R$ ${alvo.toFixed(2)}`);
+          vendaParcelas = nums;
+        }
         const e = await emitir(final, {
           tipo: d.tipo === "PV" ? "nfe" : undefined, origem_tipo: d.tipo === "OS" ? "os" : "pv",
           origem_id: String(id), origem_rotulo: d.label, criado_por: q.email,
+          venda_parcelas: vendaParcelas, forcar_homologacao: !!b.forcar_homologacao, manter_origem: !!b.forcar_homologacao,
         });
         return NextResponse.json({ emissao: e, xml_url: await urlArquivo(e.xml_path), pdf_url: await urlArquivo(e.pdf_path) });
       }

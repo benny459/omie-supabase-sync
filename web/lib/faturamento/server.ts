@@ -41,6 +41,7 @@ export type Emissao = {
   xml_path: string | null; pdf_path: string | null; receber_ids: string[] | null; gerar_receber: boolean;
   operacao?: DocFat["operacao"];
   autorizada_em: string | null; cancelada_em: string | null; criado_por: string | null; created_at: string;
+  venda_parcelas?: number[] | null;
 };
 
 const BUCKET = "fat-documentos";
@@ -101,6 +102,12 @@ export type EmitirOpts = {
   /** Teste (só admin): força HOMOLOGAÇÃO mantendo o destinatário e a seção de
    *  recebimento — usado para validar a Nova emissão sem emitir em produção. */
   forcar_homologacao?: boolean;
+  /** PV/OS de projeto: parcelas do fechamento que esta nota fatura (06/10/26).
+   *  Permite várias notas para a mesma origem (uma por parcela). */
+  venda_parcelas?: number[] | null;
+  /** Com forcar_homologacao, mantém a origem (pv/os) para testar a marcação da
+   *  parcela — o banco só altera documentos TESTE E2E em homologação. */
+  manter_origem?: boolean;
 };
 
 /** Devolve a numeração reservada quando o documento não chegou a existir
@@ -128,7 +135,7 @@ export async function emitir(doc: DocFat, o: EmitirOpts): Promise<Emissao> {
   if (!cfg.ativo) throw new Error(`Faturamento pelo painel não habilitado para ${doc.empresa}`);
   const amb: Ambiente = o.ensaio || o.forcar_homologacao ? "homologacao" : ambienteDe(cfg);
   if (o.ensaio) doc = await comoEnsaio(doc, cfg);
-  const origemTipo: OrigemTipo = o.ensaio || o.forcar_homologacao ? "teste" : (o.origem_tipo ?? "manual");
+  const origemTipo: OrigemTipo = o.ensaio || (o.forcar_homologacao && !o.manter_origem) ? "teste" : (o.origem_tipo ?? "manual");
   const tipo: TipoDoc = o.tipo ?? (origemTipo === "os" ? cfg.tipo_os : "nfe");
   const inval = validar(doc);
   if (inval) throw new Error(inval);
@@ -140,10 +147,15 @@ export async function emitir(doc: DocFat, o: EmitirOpts): Promise<Emissao> {
 
   if (amb === "producao" && tipo === "nfe") await travaProducaoNfe(cfg);
   if (o.origem_id && !o.ensaio) {
-    const { data: ja } = await db().from("fat_emissoes").select("id,status")
+    const { data: ja } = await db().from("fat_emissoes").select("id,status,venda_parcelas")
       .eq("origem_tipo", origemTipo).eq("origem_id", o.origem_id).eq("ambiente", amb)
-      .in("status", ["processando", "autorizada"]).limit(1);
-    if (ja?.length) throw new Error(`Já existe documento ${ja[0].status} para esta origem (emissão #${ja[0].id})`);
+      .in("status", ["processando", "autorizada"]);
+    // Projeto por parcela: só bloqueia se a MESMA parcela já tem nota.
+    const conflito = (ja ?? []).find((e) => !o.venda_parcelas?.length || !(e.venda_parcelas as number[] | null)?.length
+      || (e.venda_parcelas as number[]).some((n) => o.venda_parcelas!.includes(n)));
+    if (conflito) throw new Error(o.venda_parcelas?.length
+      ? `A parcela já tem documento ${conflito.status} (emissão #${conflito.id})`
+      : `Já existe documento ${conflito.status} para esta origem (emissão #${conflito.id})`);
   }
 
   const em = await emitente(cfg);
@@ -155,6 +167,7 @@ export async function emitir(doc: DocFat, o: EmitirOpts): Promise<Emissao> {
     operacao: op === "venda" ? null : doc.operacao ?? null,
     valor_total: totalDoc(doc.itens), status: "rascunho", criado_por: o.criado_por,
     gerar_receber: o.ensaio || semCob ? false : amb === "producao" ? true : !!o.gerar_receber_homologacao,
+    venda_parcelas: o.venda_parcelas?.length ? o.venda_parcelas : null,
   }).select("*").single();
   if (error) throw new Error(error.message);
   const row = ins as Emissao;
@@ -402,7 +415,8 @@ async function marcarOrigemFaturada(row: Emissao) {
   if (!row.origem_id || !["pv", "os", "venda"].includes(row.origem_tipo) || !/^\d+$/.test(row.origem_id)) return;
   const { error } = await supaAdmin().schema("orders").rpc("vendas_marcar_faturado", {
     p_id: Number(row.origem_id),
-    p_doc: { emissao_id: row.id, tipo: row.tipo, numero: row.numero, chave: row.chave, ambiente: row.ambiente },
+    p_doc: { emissao_id: row.id, tipo: row.tipo, numero: row.numero, chave: row.chave, ambiente: row.ambiente,
+             ...(row.venda_parcelas?.length ? { parcelas: row.venda_parcelas } : {}) },
   });
   if (error) await patch(row.id, { mensagem: `Autorizada; falhou marcar a origem como faturada: ${error.message}` });
   else await supaAdmin().schema("orders").rpc("vendas_refrescar").then(() => null, () => null);

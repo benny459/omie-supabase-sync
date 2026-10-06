@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import AcertoItemEstoque from "./AcertoItemEstoque";
-import type { ClienteFat, CondicaoFat, DocFat, ItemFat, OperacaoNfe, OperacaoTipo, RetencoesFat, TransporteFat } from "@/lib/faturamento/montar";
+import type { ClienteFat, CondicaoFat, DocFat, ItemFat, OperacaoNfe, OperacaoTipo, ParcelaDoc, RetencoesFat, TransporteFat } from "@/lib/faturamento/montar";
 import { BuscaPessoa, BuscaProposta, clienteDaPessoa, pessoaCompleta } from "@/components/vendas/BuscasCrmCadastro";
 import { BotaoNovoProjeto } from "@/components/cadastros/NovoProjetoRapido";
 import LocalizarNcm, { ncmFmt } from "@/components/fiscal/LocalizarNcm";
@@ -21,10 +21,15 @@ export type ConfigFat = { empresa: string; ativo: boolean; ambiente: string; pro
 type Tipo = "nfe" | "nfse" | "recibo";
 const TIPO: Record<Tipo, string> = { nfe: "NF-e", nfse: "NFS-e", recibo: "Recibo" };
 
+/** Parcela do fechamento de projeto (vendas.parcelas com nome do evento). */
+export type ParcelaProj = { numero: number; descricao?: string | null; valor: number; percentual?: number | null; vencimento: string;
+  faturamento_previsto?: string | null; faturada_em?: string | null };
 export type Inicial = {
   /** chave da carteira (pv_omie:123 / venda:45) — emite pelo caminho da linha, com as travas do PV */
   chave?: string | null;
   documento: DocFat;
+  /** PV/OS de projeto: parcelas do fechamento (a nota fatura uma ou mais) */
+  parcelas_projeto?: ParcelaProj[] | null;
   tipo?: Tipo;
   origem_tipo?: string;
   origem_id?: string | null;
@@ -113,6 +118,7 @@ type CodCompra = { n_cod_prod: number; codigo: string | null; descricao: string;
 type DicaItem = { cmc: number | null; ultimo_preco: number | null; ultima_venda: number | null; saldo: number | null };
 const r2 = (n: number) => Math.round(n * 100) / 100;
 const fmt = (n: number) => n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+const dBRne = (iso?: string | null) => (iso ? iso.slice(0, 10).split("-").reverse().join("/") : "—");
 const hoje = () => new Date(Date.now() - 3 * 3600_000).toISOString().slice(0, 10);
 const somaDias = (base: string, d: number) => { const x = new Date(`${base}T12:00:00Z`); x.setUTCDate(x.getUTCDate() + d); return x.toISOString().slice(0, 10); };
 const diasEntre = (a: string, b: string) => Math.round((new Date(`${b}T12:00:00Z`).getTime() - new Date(`${a}T12:00:00Z`).getTime()) / 86400000);
@@ -246,6 +252,10 @@ export default function NovaEmissao({ config, aberto, fechar, avisar, onEmitido,
   const [hist, setHist] = useState<Hist[] | null>(null);
   // pré-voo e transmissão
   const [pre, setPre] = useState<{ checagens: Checagem[]; pode_emitir: boolean; error?: string } | null>(null);
+  /** Projeto: parcelas do fechamento e as que esta nota fatura (06/10/26). */
+  const [parcsProj, setParcsProj] = useState<ParcelaProj[] | null>(null);
+  const [parcelaDoc, setParcelaDoc] = useState<ParcelaDoc | null>(null);
+  const iniRef = useRef<Inicial | null>(null);
   const [validando, setValidando] = useState(false);
   const [tx, setTx] = useState<null | { fase: "enviando" | "processando" | "final"; id?: number; inicio: number; e?: Record<string, unknown>; xml?: string | null; pdf?: string | null; receber?: Record<string, unknown>[]; erro?: string }>(null);
   const [agora, setAgora] = useState(Date.now());
@@ -267,6 +277,17 @@ export default function NovaEmissao({ config, aberto, fechar, avisar, onEmitido,
   const rotTipo = naoVenda ? OP_ROT[operacao as Exclude<OperacaoTipo, "venda">] : TIPO[tipo];
 
   /** Limpa a folha (nada do documento anterior fica para trás: parcelas, condição, histórico…). */
+  /** Projeto por parcela do fechamento (06/10/26): troca as parcelas faturadas nesta nota
+   *  — o servidor remonta itens, valor, observações e prazo de recebimento. */
+  async function trocarParcelas(nums: number[]) {
+    const ini = iniRef.current;
+    if (!ini?.chave || !nums.length) return;
+    const r = await fetch("/api/faturamento/carteira", { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ empresa, chave: ini.chave, acao: "doc", parcelas: nums }) }).then((x) => x.json()).catch((e) => ({ error: String(e) }));
+    if (r.error || !r.documento) { setAviso(r.error ?? "Não consegui remontar a nota para essas parcelas"); return; }
+    aplicarInicial({ ...ini, documento: r.documento, parcelas_projeto: r.parcelas_projeto ?? ini.parcelas_projeto ?? null });
+  }
+
   function limparFolha() {
     setCli(VAZIO); setItens([ITEM0]); setParcs([]); setCond(""); condHint.current = null; setForma("BOL"); setConta("");
     setCategoria(""); setProjeto(""); setCentro(""); setVendedor(""); setContrato(""); setDesconto(0); setFrete(0); setOutras(0);
@@ -280,6 +301,8 @@ export default function NovaEmissao({ config, aberto, fechar, avisar, onEmitido,
   function aplicarInicial(ini: Inicial) {
     const d = ini.documento;
     limparFolha();
+    iniRef.current = ini;
+    setParcelaDoc(d.parcela_doc ?? null); setParcsProj(ini.parcelas_projeto ?? null);
     setModo("existente");
     setChave(ini.chave ?? null); setRotulo(ini.rotulo ?? d.rotulo ?? null);
     // OS do Omie (05/10/26): sempre recibo emitido pelo painel
@@ -388,12 +411,12 @@ export default function NovaEmissao({ config, aberto, fechar, avisar, onEmitido,
     const r = await fetch("/api/faturamento/carteira", { method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ empresa, chave: d.chave, acao: "doc" }) }).then((x) => x.json()).catch((e) => ({ error: String(e) }));
     if (r.error || !r.documento) { setAviso(r.error ?? "Não consegui abrir o documento"); return; }
-    aplicarInicial({ chave: d.chave, documento: r.documento, rotulo: d.rotulo,
+    aplicarInicial({ chave: d.chave, documento: r.documento, rotulo: d.rotulo, parcelas_projeto: r.parcelas_projeto ?? null,
       tipo: d.tipo === "PV" ? "nfe" : d.chave.startsWith("os_omie:") || cfg?.tipo_os !== "nfse" ? "recibo" : "nfse" });
   }
 
   function voltarNovo() {
-    setModo("novo"); setChave(null); setRotulo(null); setBuscaExist("");
+    setModo("novo"); setChave(null); setRotulo(null); setBuscaExist(""); setParcsProj(null); setParcelaDoc(null); iniRef.current = null;
     setCli(VAZIO); setItens([ITEM0]); setParcs([]); setCliCodigo(""); setProposta("");
     setNfRef(null); setNfBusca(""); setNfLista(null); setMotivo(""); setCliProjeto(""); setGeraCob(false);
   }
@@ -611,6 +634,7 @@ export default function NovaEmissao({ config, aberto, fechar, avisar, onEmitido,
       transporte: tipo === "nfe" ? transp : null,
       info_contribuinte: infoContrib || null,
       rotulo: rotulo ?? null,
+      parcela_doc: parcelaDoc ?? null,
       operacao: naoVenda ? {
         tipo: operacao, nf_ref: operacao === "devolucao" ? nfRef : null, motivo: motivo.trim() || null,
         projeto_codigo: operacao !== "devolucao" ? projeto || null : null,
@@ -1165,6 +1189,34 @@ export default function NovaEmissao({ config, aberto, fechar, avisar, onEmitido,
                 </div>
               )}
             </section>
+
+            {parcsProj?.length ? (
+              <section className="ne-sec" id="ne-sec-parcelas-projeto">
+                <h3>Parcela do fechamento <small>projeto · a nota fatura a(s) parcela(s) marcada(s)</small></h3>
+                <div className="ne-parc-proj">
+                  {parcsProj.map((p) => {
+                    const marcada = !!parcelaDoc?.numeros.includes(p.numero);
+                    const feita = !!p.faturada_em;
+                    return (
+                      <label key={p.numero} className={`ne-pp${marcada ? " on" : ""}${feita ? " feita" : ""}`}>
+                        <input type="checkbox" disabled={feita} checked={marcada || feita}
+                          onChange={() => {
+                            const atual = parcelaDoc?.numeros ?? [];
+                            const nova = marcada ? atual.filter((n) => n !== p.numero) : [...atual, p.numero].sort((a, b) => a - b);
+                            if (nova.length) void trocarParcelas(nova);
+                          }} />
+                        <b>{p.numero}/{parcsProj.length}</b>
+                        <span className="ne-pp-nome">{p.descricao}</span>
+                        <span>{fmt(Number(p.valor))}{p.percentual != null ? ` · ${Number(p.percentual).toLocaleString("pt-BR")}%` : ""}</span>
+                        <span className="faint">{p.faturamento_previsto ? `fatura ${dBRne(p.faturamento_previsto)}` : "sem data de faturamento"} · vence {dBRne(p.vencimento)}</span>
+                        <span className={feita ? "ne-pp-st ok" : "ne-pp-st"}>{feita ? "faturada" : marcada ? "nesta nota" : "a faturar"}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+                {parcelaDoc && <div className="faint" style={{ marginTop: 6 }}>Esta nota: {parcelaDoc.rotulo} — {fmt(parcelaDoc.total)} de {fmt(parcelaDoc.total_doc)}. Itens, observações e prazo de recebimento já seguem a parcela.</div>}
+              </section>
+            ) : null}
 
             <section className="ne-sec" id="ne-sec-itens">
               <h3>Itens <small>{itens.length} item(ns) · bruto {fmt(bruto)}</small></h3>
