@@ -258,7 +258,7 @@ export default function TelaCompras() {
     { k: "valor", l: "Valor (RC = saldo)", v: (p) => valorDe(p), r: true, sum: true, h: (p) => <span className="num">{money(valorDe(p))}</span> },
     { k: "etapaNome", l: "Etapa", v: (p) => ETAPA[p.etapa]?.nome ?? p.etapa },
     { k: "emissao", l: "Inclusão", v: (p) => p.emissao ?? "", h: (p) => dBR(p.emissao) },
-    { k: "previsao", l: "Previsão de Entrega", v: (p) => p.previsao ?? "", h: (p) => <span className={atrasado(p) ? "pill p-crit" : ""}>{dBR(p.previsao, true)}</span> },
+    { k: "previsao", l: "Previsão / limite de entrega", v: (p) => p.previsao ?? "", h: (p) => <span className={atrasado(p) ? "pill p-crit" : ""}>{dBR(p.previsao, true)}</span> },
     { k: "numForn", l: "Nº do Pedido do Fornecedor", v: (p) => p.numForn ?? "" },
     { k: "contato", l: "Contato", v: (p) => p.contato ?? "" },
     { k: "contrato", l: "Contrato", v: (p) => p.contrato ?? "" },
@@ -312,7 +312,7 @@ export default function TelaCompras() {
         <div className={`forn${p.forn ? "" : " none"}`}>{p.forn || "Sem fornecedor definido"}</div>
         {p.etapa === "60" || p.etapa === "80" ? <div className="ent">Recebido em: {rel(p.dtRec)}</div>
           : p.etapa === "40" ? <div className="ent">Faturado pelo fornecedor · entrega {rel(p.previsao)}</div>
-          : <div className={`ent${late ? " late" : ""}`}>Entrega prevista para: {rel(p.previsao)}{late ? " · atrasada" : ""}</div>}
+          : <div className={`ent${late ? " late" : ""}`}>{p.tipo === "RC" ? "Data limite de entrega" : "Entrega prevista para"}: {rel(p.previsao)}{late ? " · atrasada" : ""}</div>}
         <div className="val"><b className="num">{money(valorDe(p))}</b>
           {p.tipo === "RC" && p.saldo != null && Math.abs((p.saldo ?? 0) - p.valor) > 0.005 && <span className="faint" title="Saldo a comprar / valor original">saldo de {money(p.valor)}</span>}
           <span className="muted">{cond}</span>
@@ -630,6 +630,7 @@ export default function TelaCompras() {
             if (abrirPcDaRc) setFolha({ id: null, tipo: "PC", fromRC: abrirPcDaRc }); else setFolha(null);
             void id;
           }}
+          onAbrir={(id) => { carregar(); setFolha({ id }); }}
           onReceber={(id) => { setFolha(null); setReceb({ id }); }}
           onDuplicar={(id) => { setFolha(null); duplicar(id); }}
           onImprimir={(id) => { setFolha(null); setEnviar(id); }} />

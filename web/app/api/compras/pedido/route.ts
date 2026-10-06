@@ -23,13 +23,16 @@ export async function GET(req: Request) {
     const p = await rpc("compras_pedido", { p_id: id });
     if (!p) return NextResponse.json({ error: "Pedido não encontrado" }, { status: 404 });
     // contas a pagar do pedido no financeiro (fase do ciclo: previsto → … → liberado)
-    const [pagar, vinculo, estoque] = await Promise.all([
+    const ehRc = (p as { tipo?: string }).tipo === "RC";
+    const [pagar, vinculo, estoque, pcsPorItem] = await Promise.all([
       rpc("compras_pagar_do_pedido", { p_id: id }).catch(() => []),
       // marcações "sem RC"/"compra avulsa" e a entrada de estoque ao conferir (sql/51)
       rpc<Record<string, unknown> | null>("compras_vinculo", { p_id: id }).catch(() => null),
       rpc("compras_estoque_do_pedido", { p_id: id }).catch(() => []),
+      // RC: que PCs já atendem cada item (06/10/26) — nº + link na folha.
+      ehRc ? rpc<Record<string, { id: number; num: string }[]>>("compras_rc_itens_pcs", { p_rc_id: id }).catch(() => ({})) : Promise.resolve({}),
     ]);
-    return NextResponse.json({ ...valoresSePuder(q, { ...(p as object), ...(vinculo ?? {}), pagar, estoque }), pode: q.pode });
+    return NextResponse.json({ ...valoresSePuder(q, { ...(p as object), ...(vinculo ?? {}), pagar, estoque, pcsPorItem }), pode: q.pode });
   } catch (e) { return erro(e); }
 }
 

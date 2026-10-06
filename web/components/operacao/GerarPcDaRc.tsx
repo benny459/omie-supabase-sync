@@ -132,6 +132,9 @@ export default function GerarPcDaRc({ rc, empresa, itensRc, onFechar, onFeito }:
     finally { setSalvando(false); }
   };
 
+  const bt = (pri = false): React.CSSProperties => ({ height: 34, padding: "0 14px", borderRadius: 9, cursor: "pointer", fontSize: 13, fontWeight: 600,
+    border: `1px solid ${pri ? "var(--ww-accent, #4f7cff)" : "var(--ww-border-strong)"}`, background: pri ? "var(--ww-accent, #4f7cff)" : "transparent",
+    color: pri ? "#fff" : "var(--ww-text)" });
   const lab: React.CSSProperties = { display: "grid", gap: 4, fontSize: 12, color: "var(--ww-text-muted)" };
   const inp: React.CSSProperties = { height: 34, borderRadius: 8, border: "1px solid var(--ww-border-strong)", background: "var(--ww-panel-sunken, var(--ww-panel))", color: "var(--ww-text)", padding: "0 10px", fontSize: 13 };
 
@@ -145,7 +148,7 @@ export default function GerarPcDaRc({ rc, empresa, itensRc, onFechar, onFeito }:
           <span style={{ color: "var(--ww-text-muted)", fontSize: 13 }}>
             atende a RC {rc}{rcFull?.pv ? ` · ${rcFull.pv}` : ""}{rcFull?.proj ? ` · ${rcFull.proj}` : ""}
           </span>
-          <button className="btn ghost sm" style={{ marginLeft: "auto" }} onClick={onFechar} aria-label="Fechar">✕</button>
+          <button style={{ ...bt(), marginLeft: "auto", height: 28, padding: "0 10px" }} onClick={onFechar} aria-label="Fechar">✕</button>
         </div>
 
         {!rcFull && !erro && <div style={{ color: "var(--ww-text-muted)" }}>Carregando a RC…</div>}
@@ -180,7 +183,8 @@ export default function GerarPcDaRc({ rc, empresa, itensRc, onFechar, onFeito }:
               </label>
               <label style={lab}>Previsão de entrega
                 <input type="date" style={inp} value={previsao} onChange={(e) => setPrevisao(e.target.value)} />
-                {rcFull.previsao && <small style={{ color: "var(--ww-text-faint)" }}>prazo da venda: {rcFull.previsao.split("-").reverse().join("/")}</small>}
+                {rcFull.previsao && <small style={{ color: previsao > rcFull.previsao ? "var(--ww-danger, #ef4444)" : "var(--ww-text-faint)" }}>
+                  data limite de entrega (RC): {rcFull.previsao.split("-").reverse().join("/")}{previsao > rcFull.previsao ? " — previsão passa do limite" : ""}</small>}
               </label>
             </div>
 
@@ -220,8 +224,8 @@ export default function GerarPcDaRc({ rc, empresa, itensRc, onFechar, onFeito }:
                 {" · "}{dias.length} parcela{dias.length === 1 ? "" : "s"} a partir da previsão
               </span>
               <span style={{ marginLeft: "auto" }} />
-              <button className="btn" onClick={onFechar} disabled={salvando}>Cancelar</button>
-              <button className="btn primary" onClick={() => void criar()} disabled={salvando || !ativos.length}>
+              <button style={bt()} onClick={onFechar} disabled={salvando}>Cancelar</button>
+              <button style={{ ...bt(true), opacity: salvando || !ativos.length ? 0.6 : 1 }} onClick={() => void criar()} disabled={salvando || !ativos.length}>
                 {salvando ? "Criando…" : "Criar pedido de compra"}
               </button>
             </div>

@@ -5,18 +5,21 @@ icone: 🛒
 area: erp
 rotas: /erp/compras
 caminhos: web/components/compras, web/app/api/compras, web/lib/compras.ts, web/lib/compras-avisos.ts
-atualizado: 2026-10-05
+atualizado: 2026-10-06
 ---
 
 A tela **Compras** mostra o caminho de cada compra em **Kanban** (ou **Tabela**): **Requisição → Pedido de compra (pendente / aprovado) → Faturado → Recebido → Conferido**.
 
 ## Como faço para gerar um pedido de compra (PC) a partir da requisição (RC)
 
-1. Na coluna **Requisição**, abra a RC (as novas aparecem marcadas como **nova**).
-2. Clique em **→ Gerar Pedido de Compra** (ou, num PC, em **⇠ Puxar itens de requisição**).
-3. Escolha o **fornecedor** e confira quantidades, valores, frete e parcelas.
-4. Clique em **⏳ Salvar e solicitar aprovação**.
-5. Depois de aprovado, use **🖨 Imprimir / PDF / enviar ao fornecedor**.
+1. Na coluna **Requisição**, abra a RC (as novas aparecem marcadas como **nova**). Também dá para abrir direto clicando no nº da RC em **Operação**.
+2. Marque os **itens** que vão neste pedido (a caixa do cabeçalho marca todos os que ainda faltam). Sem marcar nada, entram todos os que faltam.
+3. Clique em **→ Gerar pedido de compra (N itens)**. Abre uma folha curta já preenchida: confira o **fornecedor** (vem o sugerido na RC), a **categoria**, a **condição**, a **previsão de entrega** e, se quiser, ajuste quantidade (parcial) e valor.
+4. **Criar pedido de compra**: o PC é criado ligado à RC e ao PV/OS e **abre na hora** para você revisar frete, parcelas e mandar para aprovação (**⏳ Salvar e solicitar aprovação**).
+5. Os itens que ficaram de fora continuam na RC para **outro pedido** (ex.: outro fornecedor). Cada item da RC mostra em que **PC** já está (clique no nº para abrir).
+6. Depois de aprovado, use **🖨 Imprimir / PDF / enviar ao fornecedor**.
+
+> Na RC, **Data limite de entrega** é até quando o material precisa chegar (vem do prazo da venda). No PC, **Previsão de entrega** é a data combinada com o fornecedor — a folha avisa se ela passa da data limite.
 
 > **Atenção:** todo PC precisa estar ligado a uma **requisição** e a um **PV/OS**. Sem RC, só marcando “Pedido sem RC” com motivo (vai para aprovação). Compra para estoque ou uso interno: marque **Compra avulsa (sem venda)** com motivo.
 

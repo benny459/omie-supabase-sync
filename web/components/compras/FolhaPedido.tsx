@@ -11,6 +11,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import CodigoHoje from "./CodigoHoje";
+import GerarPcDaRc from "@/components/operacao/GerarPcDaRc";
 import Autocompletar, { type Opcao } from "./Autocompletar";
 import { BotaoNovoProjeto } from "@/components/cadastros/NovoProjetoRapido";
 import {
@@ -70,14 +71,19 @@ function doServidor(p: Pedido): Pedido {
 }
 
 export default function FolhaPedido({
-  id, tipoNovo, fromRC, refs, emp, onClose, onSalvo, onReceber, onDuplicar, onImprimir, toast,
+  id, tipoNovo, fromRC, refs, emp, onClose, onSalvo, onReceber, onDuplicar, onImprimir, toast, onAbrir,
 }: {
   id: number | null; tipoNovo?: "RC" | "PC"; fromRC?: number | null; refs: Refs | null; emp: string;
   onClose: () => void; onSalvo: (id: number, msg: string, abrirPcDaRc?: number) => void;
   onReceber: (id: number) => void; onDuplicar: (id: number) => void; onImprimir: (id: number) => void;
   toast: (m: string, erro?: boolean) => void;
+  /** Abre outro pedido na folha (ex.: o PC recém-gerado a partir desta RC). */
+  onAbrir?: (id: number) => void;
 }) {
   const [D, setD] = useState<Pedido | null>(null);
+  // RC (06/10/26): itens marcados para gerar o pedido de compra, e a folha compacta.
+  const [selRc, setSelRc] = useState<Set<number>>(new Set());
+  const [gerarPc, setGerarPc] = useState(false);
   const [pagar, setPagar] = useState<PagarLinha[]>([]);
   const [tab, setTab] = useState<Tab>("itens");
   const [errs, setErrs] = useState<Record<string, string>>({});
@@ -343,7 +349,7 @@ export default function FolhaPedido({
                       : D.cnpj ? <span className="hint">CNPJ {D.cnpj}</span>
                       : !ro && !D.fornCod ? <span className="hint">Não achou? <a href={`/cadastros/novo?papel=fornecedor&emp=${D.emp}${D.forn ? `&razao=${encodeURIComponent(D.forn)}` : ""}`} target="_blank" rel="noreferrer" style={{ textDecoration: "underline" }}>Cadastrar fornecedor</a> (abre em outra aba; depois é só buscar de novo)</span> : null}
                   </div>
-                  <div className="f s3"><label htmlFor="dPrev">{isRC ? "Data sugerida" : "Previsão de Entrega"}</label>
+                  <div className="f s3"><label htmlFor="dPrev">{isRC ? "Data limite de entrega" : "Previsão de Entrega"}</label>
                     <input className="in" type="date" id="dPrev" value={D.previsao || ""} disabled={ro} onChange={(e) => set({ previsao: e.target.value })} /></div>
                   <div className="f s3"><label htmlFor="dEmis">Inclusão</label>
                     <input className="in" type="date" id="dEmis" value={D.emissao || ""} disabled /></div>
@@ -532,7 +538,12 @@ export default function FolhaPedido({
                     <div className="items-wrap">
                       <table className="items fix">
                         <thead><tr>
-                          <th style={{ width: 34 }}>#</th><th>Produto</th><th style={{ width: 62 }}>Un</th>
+                          <th style={{ width: 34 }}>{isRC && D.id ? (() => {
+                            const livres = D.itens.filter((x) => x.id && Math.max(0, (Number(x.qtd) || 0) - (Number((x as Item & { cov?: number }).cov) || 0)) > 0).map((x) => Number(x.id));
+                            const todos = livres.length > 0 && livres.every((x) => selRc.has(x));
+                            return <input type="checkbox" title="Marcar todos os itens que ainda faltam comprar" checked={todos} disabled={!livres.length}
+                              onChange={() => setSelRc(todos ? new Set() : new Set(livres))} />;
+                          })() : "#"}</th><th>Produto</th><th style={{ width: 62 }}>Un</th>
                           <th className="r" style={{ width: 82 }}>Qtde</th><th className="r" style={{ width: 104 }}>Valor unit.</th>
                           <th className="r" style={{ width: 92 }}>Desconto R$</th><th className="r" style={{ width: 84 }}>IPI R$</th>
                           <th className="r" style={{ width: 92 }}>ICMS ST R$</th><th className="r" style={{ width: 112 }}>Total</th><th style={{ width: 64 }} />
@@ -543,7 +554,14 @@ export default function FolhaPedido({
                             const cls = pi ? (Math.abs(pi.dif) < 1 ? "p-off" : pi.dif > 0 ? (pi.dif > 10 ? "p-crit" : "p-warn") : "p-ok") : "";
                             return [
                               <tr key={it.key}>
-                                <td className="faint num" style={{ paddingTop: 11 }}>{i + 1}</td>
+                                <td className="faint num" style={{ paddingTop: 11 }}>
+                                  {isRC && D.id && it.id ? (() => {
+                                    const falta = Math.max(0, (Number(it.qtd) || 0) - (Number((it as Item & { cov?: number }).cov) || 0));
+                                    return <input type="checkbox" title={falta > 0 ? "Marcar para gerar o pedido de compra" : "Item já todo em pedido de compra"}
+                                      disabled={falta <= 0} checked={selRc.has(Number(it.id))}
+                                      onChange={() => setSelRc((x) => { const n = new Set(x); if (n.has(Number(it.id))) n.delete(Number(it.id)); else n.add(Number(it.id)); return n; })} />;
+                                  })() : i + 1}
+                                </td>
                                 <td style={{ position: "relative" }}>
                                   <Autocompletar<ItemCat> value={it.desc} disabled={ro} minimo={2} placeholder="Busque o produto (código ou descrição)"
                                     onChange={(v) => setItem(i, { desc: v })}
@@ -553,6 +571,13 @@ export default function FolhaPedido({
                                       un: o.v.unidade ?? "UN", vu: Number(o.v.ultimo_preco) || it.vu })} />
                                   <div className="hint mono">{it.cod || "novo"}{it.ncm ? ` · NCM ${it.ncm}` : ""}</div>
                                   {it.cod ? <CodigoHoje cod={it.cod} /> : null}
+                                  {isRC && it.id ? (() => {
+                                    const pcs = ((D as Pedido & { pcsPorItem?: Record<string, { id: number; num: string }[]> }).pcsPorItem ?? {})[String(it.id)] ?? [];
+                                    return pcs.length
+                                      ? <div className="hint" style={{ color: "var(--accent-strong)" }}>em pedido de compra {pcs.map((x, k) => (
+                                          <span key={x.id}>{k ? ", " : ""}<button className="linkbtn" title={`Abrir o PC ${x.num}`} onClick={() => (onAbrir ? onAbrir(x.id) : null)}>PC {x.num}</button></span>))}</div>
+                                      : <div className="hint faint">sem pedido de compra ainda</div>;
+                                  })() : null}
                                   {it.rc && (
                                     <div className="hint" style={{ color: "var(--accent-strong)" }}>
                                       ⇠ RC {it.rc.num} · item {it.rc.idx}{it.desc !== it.rc.desc ? ` · na requisição: “${it.rc.desc}”` : ""}
@@ -859,8 +884,15 @@ export default function FolhaPedido({
             <aside className="side">
               <section className="card2"><h4>Ações</h4><div className="actions">
                 {!ro && <button className="btn pri" disabled={salvando} onClick={() => salvar()}>☁ {salvando ? "Salvando…" : "Salvar"}</button>}
-                {isRC && !ro && <button className="btn" disabled={salvando} onClick={() => salvar({ msg: "Requisição salva", gerarPc: true })}>→ Salvar e gerar Pedido de Compra</button>}
-                {isRC && ro && D.id && <button className="btn" onClick={() => onSalvo(D.id!, "", D.id!)}>→ Gerar Pedido de Compra</button>}
+                {isRC && !D.id && !ro && <button className="btn" disabled={salvando} onClick={() => salvar({ msg: "Requisição salva", gerarPc: true })}>→ Salvar e gerar Pedido de Compra</button>}
+                {isRC && D.id && (() => {
+                  const n = selRc.size;
+                  return (
+                    <button className="btn pri" disabled={salvando}
+                      title={n ? "Gera um pedido de compra só com os itens marcados e abre o pedido" : "Gera um pedido de compra com todos os itens que ainda faltam (marque itens para escolher) e abre o pedido"}
+                      onClick={() => setGerarPc(true)}>→ Gerar pedido de compra{n ? ` (${n} ite${n === 1 ? "m" : "ns"})` : ""}</button>
+                  );
+                })()}
                 {!isRC && !ro && <button className="btn" onClick={() => setPicker(true)}>⇠ Puxar itens de requisição</button>}
                 {!isRC && D.aprov !== "aprovado" && !ro && (
                   <>
@@ -945,6 +977,15 @@ export default function FolhaPedido({
               setRcCache((c) => ({ ...c, ...Object.fromEntries(Object.values(sel).map(({ rc }) => [rc.num, rc])) }));
               setPicker(false);
               toast(`Itens vinculados: ${Object.values(sel).map(({ rc }) => "RC " + rc.num).join(", ")}`);
+            }} />
+        )}
+        {gerarPc && isRC && D.id && (
+          <GerarPcDaRc rc={D.num} empresa={D.emp} itensRc={[...selRc]}
+            onFechar={() => setGerarPc(false)}
+            onFeito={(num, novoId) => {
+              setGerarPc(false); setSelRc(new Set());
+              if (onAbrir) { toast(`Pedido de compra ${num} criado a partir da RC ${D.num} — confira e mande para aprovação`); onAbrir(novoId); }
+              else onSalvo(novoId, `Pedido de compra ${num} criado a partir da RC ${D.num}`);
             }} />
         )}
       </div>

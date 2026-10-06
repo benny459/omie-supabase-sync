@@ -1,5 +1,5 @@
 {
- "geradoEm": "2026-10-06T08:21:15.812Z",
+ "geradoEm": "2026-10-06T08:26:25.915Z",
  "paginas": [
   {
    "slug": "inicio",
@@ -156,6 +156,11 @@
    "corpo": "\n## Avulsos\n\nA lista de **pedidos de venda (PV/OS)** com as compras ligadas a cada um.\n\n- Cada pedido mostra a **barra da cadeia**: Requisição → Pedido de compra → Aprovação → Recebido → Conferido → **Pago** → Faturado → **Recebido**.\n- A coluna **M.B.** é a margem bruta (venda menos compras ligadas).\n- Use as abas **Em aberto / Faturados / Todos**, a busca e os filtros rápidos (Pode faturar, Venda em atraso, Compra em atraso, Minha aprovação, Sem PC, etc.).\n- Alterne a visão entre **Lista, Tabela, Kanban e Linha do tempo**.\n\n### Como faço para gerar o pedido de compra direto da linha (atalho)\n\n1. Abra o PV/OS (clique na linha) para ver a **RC** e os itens.\n2. Na coluna PC, clique em **+ Gerar pedido de compra**. Sem nada marcado, entram todos os itens da RC que ainda não têm PC; para escolher só alguns, marque as linhas antes (o botão mostra quantos).\n3. A folha abre já preenchida da RC: itens, quantidade que ainda falta atender, valor, **fornecedor sugerido** (o da RC, com a última categoria e condição usadas com ele), projeto e PV/OS. Confira o fornecedor, a **categoria**, a **condição** e a **previsão de entrega**; dá para desmarcar itens e mudar quantidade (parcial) e valor.\n4. **Criar pedido de compra** grava o PC em Compras, ligado à RC e ao PV/OS — mesma numeração e mesma aprovação de sempre. O nº do PC aparece na linha logo em seguida.\n5. Precisa de **mais de um pedido** (outro fornecedor, entrega separada)? Os itens que ficaram de fora — ou a quantidade que faltou — continuam disponíveis: clique de novo em **+ Gerar pedido de compra**.\n\n- Os números **RC 7346** e o nº do **PC** na linha são links: clique para abrir a requisição ou o pedido direto em **Compras** (Cmd/clique do meio abre em outra aba).\n\n> Departamentos, frete e conta corrente podem ser completados depois, abrindo o pedido em **Compras**. Para ligar um PC que já existe, digite o nº no campo **nº PC**.\n\n### Serviço (vendas Mix e de serviço)\n\n- O cartão **Serviço** vem do app de serviços. **Aguardando OS** quer dizer que a venda tem serviço previsto (vendedor Mix ou Serviços) e já está no **Painel de Vendas** do app de serviços, mas a OS ainda não foi gerada — o atalho **gerar OS ↗** abre esse painel.\n- Quando a OS é criada a partir da venda no app de serviços, o nº da OS, o status e a previsão aparecem aqui sozinhos.\n\n## Projetos\n\n1. Abra **Operação → Projetos** e clique no projeto.\n2. A página do projeto tem o plano (CP/MC), a lista de materiais e a aba **Materiais separados**.\n3. Na lista de projetos, um selo mostra **“N itens separados · R$ · x% da lista”** quando já há material separado — clique para ir direto à aba.\n\n## Pedidos · PV/OS\n\n- **PV** = venda de produtos (sai NF-e). **OS** = serviço (sai recibo ou NFS-e).\n- Em **ERP → Vendas** você vê os PV/OS do painel e do Omie. Admins veem a chave **“CRM cria PV/OS: no Omie / no painel”**.\n- **Novo PV/OS** pelo painel: precisa estar ligado a uma **proposta do CRM** (busca pelo número, cliente ou título). Só admin pode marcar “sem proposta”, com motivo.\n\n> **Atenção:** a numeração é única e sequencial (próximo PV e próxima OS). Não crie PV/OS no Omie — o número pode repetir.\n\n## Perguntas frequentes\n\n**Não acho um pedido em Avulsos.** Confira a aba (Em aberto/Faturados/Todos) e limpe os filtros rápidos.\n\n**A margem não aparece.** A M.B. só é calculada quando o pedido tem compras (PCs) ligadas.\n",
    "mudancas": [
     {
+     "hash": "0d99734",
+     "data": "2026-10-06",
+     "texto": "operação: gerar pedido de compra direto da RC na linha do PV/OS (itens marcados ou todos os que faltam, parcial, vários PCs por RC) pelo mesmo caminho de Compras; RC e PC viram links para Compras; cartão Serviço mostra 'Aguardando OS' com atalho para o Painel de Vendas; texto do PC sem 'Omie'"
+    },
+    {
      "hash": "4da760f",
      "data": "2026-10-05",
      "texto": "aparência por usuário: modo claro/escuro/sistema, 8 temas de cor, transparência (vidro), fundos, densidade e tamanho da letra — gravada em platform.aparencia_usuario e partilhada com portal e Serviços; cores fixas trocadas por tokens nas telas novas; manual (Início › Aparência)"
@@ -209,11 +214,6 @@
      "hash": "514cb14",
      "data": "2026-10-03",
      "texto": "design: cabeçalho de tabela 13/600 em Compras, Estoque e Operação (como o CRM novo)"
-    },
-    {
-     "hash": "f1d0ba4",
-     "data": "2026-10-03",
-     "texto": "design: títulos 26/600 e indicadores 24/700 também em Operação e Estoque; nome do assistente só ≥1500px"
     }
    ]
   },
@@ -226,9 +226,14 @@
    "rotas": [
     "/erp/compras"
    ],
-   "atualizado": "2026-10-05",
-   "corpo": "\nA tela **Compras** mostra o caminho de cada compra em **Kanban** (ou **Tabela**): **Requisição → Pedido de compra (pendente / aprovado) → Faturado → Recebido → Conferido**.\n\n## Como faço para gerar um pedido de compra (PC) a partir da requisição (RC)\n\n1. Na coluna **Requisição**, abra a RC (as novas aparecem marcadas como **nova**).\n2. Clique em **→ Gerar Pedido de Compra** (ou, num PC, em **⇠ Puxar itens de requisição**).\n3. Escolha o **fornecedor** e confira quantidades, valores, frete e parcelas.\n4. Clique em **⏳ Salvar e solicitar aprovação**.\n5. Depois de aprovado, use **🖨 Imprimir / PDF / enviar ao fornecedor**.\n\n> **Atenção:** todo PC precisa estar ligado a uma **requisição** e a um **PV/OS**. Sem RC, só marcando “Pedido sem RC” com motivo (vai para aprovação). Compra para estoque ou uso interno: marque **Compra avulsa (sem venda)** com motivo.\n\n> **Dica:** se o fornecedor não existe, clique em **Cadastrar fornecedor** ali mesmo — o cadastro já vem com o CNPJ.\n\n## NF de entrada (pela Focus)\n\n- As NF-e emitidas contra a empresa chegam sozinhas (**📄 NF chegou pela Focus**) e **casam com o PC** automaticamente.\n- NF sem pedido aparece no alerta **⛔ Sem pedido** — **não pague** até resolver: **Casar** com um PC existente, **Gerar pedido** a partir da NF (vai para aprovação) ou **Dispensar** com motivo.\n\n## Recebimento e conferência\n\n1. Quando o material chega, use **📦 Registrar recebimento** (etapa Recebido).\n2. Depois de conferir, mova para **Conferido**. A conta a pagar fica **liberada para pagar**.\n\n## Alertas\n\n- O número em **Compras** na barra soma NF sem pedido + requisições novas.\n- Uma faixa avisa **PCs criados no Omie depois de 01/10** — os pedidos devem nascer só no painel.\n\n## Perguntas frequentes\n\n**O PC não salva.** Veja se todos os itens têm RC (ou “sem RC” com motivo) e se o pedido tem PV/OS ou está marcado como compra avulsa.\n\n**Posso mandar o PC por e-mail direto daqui?** Ainda não: o envio por e-mail depende da configuração do e-mail compras@. Por enquanto, gere o PDF e envie.\n",
+   "atualizado": "2026-10-06",
+   "corpo": "\nA tela **Compras** mostra o caminho de cada compra em **Kanban** (ou **Tabela**): **Requisição → Pedido de compra (pendente / aprovado) → Faturado → Recebido → Conferido**.\n\n## Como faço para gerar um pedido de compra (PC) a partir da requisição (RC)\n\n1. Na coluna **Requisição**, abra a RC (as novas aparecem marcadas como **nova**). Também dá para abrir direto clicando no nº da RC em **Operação**.\n2. Marque os **itens** que vão neste pedido (a caixa do cabeçalho marca todos os que ainda faltam). Sem marcar nada, entram todos os que faltam.\n3. Clique em **→ Gerar pedido de compra (N itens)**. Abre uma folha curta já preenchida: confira o **fornecedor** (vem o sugerido na RC), a **categoria**, a **condição**, a **previsão de entrega** e, se quiser, ajuste quantidade (parcial) e valor.\n4. **Criar pedido de compra**: o PC é criado ligado à RC e ao PV/OS e **abre na hora** para você revisar frete, parcelas e mandar para aprovação (**⏳ Salvar e solicitar aprovação**).\n5. Os itens que ficaram de fora continuam na RC para **outro pedido** (ex.: outro fornecedor). Cada item da RC mostra em que **PC** já está (clique no nº para abrir).\n6. Depois de aprovado, use **🖨 Imprimir / PDF / enviar ao fornecedor**.\n\n> Na RC, **Data limite de entrega** é até quando o material precisa chegar (vem do prazo da venda). No PC, **Previsão de entrega** é a data combinada com o fornecedor — a folha avisa se ela passa da data limite.\n\n> **Atenção:** todo PC precisa estar ligado a uma **requisição** e a um **PV/OS**. Sem RC, só marcando “Pedido sem RC” com motivo (vai para aprovação). Compra para estoque ou uso interno: marque **Compra avulsa (sem venda)** com motivo.\n\n> **Dica:** se o fornecedor não existe, clique em **Cadastrar fornecedor** ali mesmo — o cadastro já vem com o CNPJ.\n\n## NF de entrada (pela Focus)\n\n- As NF-e emitidas contra a empresa chegam sozinhas (**📄 NF chegou pela Focus**) e **casam com o PC** automaticamente.\n- NF sem pedido aparece no alerta **⛔ Sem pedido** — **não pague** até resolver: **Casar** com um PC existente, **Gerar pedido** a partir da NF (vai para aprovação) ou **Dispensar** com motivo.\n\n## Recebimento e conferência\n\n1. Quando o material chega, use **📦 Registrar recebimento** (etapa Recebido).\n2. Depois de conferir, mova para **Conferido**. A conta a pagar fica **liberada para pagar**.\n\n## Alertas\n\n- O número em **Compras** na barra soma NF sem pedido + requisições novas.\n- Uma faixa avisa **PCs criados no Omie depois de 01/10** — os pedidos devem nascer só no painel.\n\n## Perguntas frequentes\n\n**O PC não salva.** Veja se todos os itens têm RC (ou “sem RC” com motivo) e se o pedido tem PV/OS ou está marcado como compra avulsa.\n\n**Posso mandar o PC por e-mail direto daqui?** Ainda não: o envio por e-mail depende da configuração do e-mail compras@. Por enquanto, gere o PDF e envie.\n",
    "mudancas": [
+    {
+     "hash": "0d99734",
+     "data": "2026-10-06",
+     "texto": "operação: gerar pedido de compra direto da RC na linha do PV/OS (itens marcados ou todos os que faltam, parcial, vários PCs por RC) pelo mesmo caminho de Compras; RC e PC viram links para Compras; cartão Serviço mostra 'Aguardando OS' com atalho para o Painel de Vendas; texto do PC sem 'Omie'"
+    },
     {
      "hash": "5529a56",
      "data": "2026-10-05",
@@ -283,11 +288,6 @@
      "hash": "25e66de",
      "data": "2026-10-02",
      "texto": "compras: busca por código acha os PCs que têm o item por qualquer código equivalente (não depende do texto de busca cortado)"
-    },
-    {
-     "hash": "273c52d",
-     "data": "2026-10-02",
-     "texto": "compras: PDF com linha 'código anterior' para itens já recodificados (padrão até 31/12/2026, opção no envio); PC antigo continua cópia do original"
     }
    ]
   },
