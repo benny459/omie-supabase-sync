@@ -45,6 +45,10 @@ type Body = {
   valor_iss?: number | null;    retem_iss?: boolean;
   valor_inss?: number | null;   retem_inss?: boolean;
   // Recorrência (sql/73): gera uma série a partir do 1º vencimento.
+  /** boleto: código de barras ou linha digitável (só dígitos; 44/47/48) — vai em extras.codigo_barras (o C6 lê dali) */
+  codigo_barras?: string | null;
+  /** só gera um nº de documento único (PG-SF-AAMM-000001), sem incluir nada */
+  acao?: "gerar_documento";
   recorrencia?: { freq: string; n?: number | null; ate?: string | null; sem_fim?: boolean; dia_fixo?: number | null; valor_modo?: "por_ocorrencia" | "dividir" } | null;
 };
 
@@ -63,6 +67,20 @@ export async function POST(req: Request) {
 
   const tipo = body.tipo === "receber" ? "receber" : "pagar";
   const empresa = (body.empresa ?? "SF").toUpperCase();
+  if (body.acao === "gerar_documento") {
+    const { data, error } = await supaAdmin().schema("finance").rpc("pagar_gerar_documento", { p_empresa: empresa });
+    if (error) return NextResponse.json({ error: error.message }, { status: 422 });
+    return NextResponse.json({ ok: true, documento: data });
+  }
+  // Conta a pagar sempre com nº do documento OU da nota fiscal (06/10/26, Benny).
+  if (tipo === "pagar" && !vazio(body.numero_documento) && !vazio(body.numero_documento_fiscal)) {
+    return NextResponse.json({ error: "Informe o nº do documento ou da nota fiscal (ou gere um)" }, { status: 400 });
+  }
+  const barras = (body.codigo_barras ?? "").replace(/\D/g, "");
+  if (barras && ![44, 47, 48].includes(barras.length)) {
+    return NextResponse.json({ error: "Código de barras deve ter 44, 47 ou 48 dígitos" }, { status: 400 });
+  }
+  body.codigo_barras = barras || null;
   if (!body.codigo_cliente_fornecedor || !body.valor_documento || !body.data_vencimento ||
       !body.codigo_categoria || !body.id_conta_corrente) {
     return NextResponse.json({ error: "Campos obrigatórios: contraparte, valor, vencimento, categoria e conta corrente" }, { status: 400 });
@@ -111,6 +129,7 @@ async function incluirPagarNativo(body: Body, empresa: string, previsaoISO: stri
       chave_nfe: body.chave_nfe ?? null,
       numero_parcela: body.numero_parcela ?? null,
       tipo_doc: body.codigo_tipo_documento ?? null,
+      codigo_barras: body.codigo_barras ?? null,
       extras: Object.keys(extras).length ? extras : null,
     },
     p_usuario: user?.email ?? "?",
@@ -177,6 +196,7 @@ async function incluirSerie(body: Body, tipo: "pagar" | "receber", empresa: stri
     const v = Number(body[`valor_${k}`] ?? 0);
     if (v > 0) { extras[`valor_${k}`] = v; extras[`retem_${k}`] = !!body[`retem_${k}`]; }
   }
+  if (tipo === "pagar" && body.codigo_barras) extras.codigo_barras = body.codigo_barras;
   const modelo = tipo === "pagar" ? {
     empresa, fornecedor_cod: body.codigo_cliente_fornecedor, categoria_cod: body.codigo_categoria, conta_cod: body.id_conta_corrente,
     projeto_cod: body.codigo_projeto ?? null, documento: body.numero_documento ?? null, obs: body.observacao ?? null,

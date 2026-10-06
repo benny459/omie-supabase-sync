@@ -6,6 +6,7 @@
 // O Omie não recebe nada.
 
 import { useEffect, useRef, useState } from "react";
+import { lerBoleto } from "@/lib/boleto";
 
 type Cliente = { codigo_cliente_omie: number; nome_fantasia: string | null; razao_social: string | null; cnpj_cpf: string | null };
 type Categoria = { codigo: string; descricao: string };
@@ -116,6 +117,9 @@ export default function NovoTituloModal({
   const [conta, setConta] = useState("");
   const [projeto, setProjeto] = useState("");
   const [numeroDoc, setNumeroDoc] = useState("");
+  const [barras, setBarras] = useState("");
+  const [barrasAviso, setBarrasAviso] = useState<string | null>(null);
+  const [gerandoDoc, setGerandoDoc] = useState(false);
   const [obs, setObs] = useState("");
   // Recorrência (sql/73): gera uma série de contas a partir do 1º vencimento.
   const [recFreq, setRecFreq] = useState("");
@@ -187,6 +191,9 @@ export default function NovoTituloModal({
     if (!vencimento) { setErr("Informe o vencimento"); return; }
     if (!categoria) { setErr("Escolha a categoria"); return; }
     if (!conta) { setErr("Escolha a conta corrente"); return; }
+    if (tipo === "pagar" && !numeroDoc.trim() && !numeroDocFiscal.trim()) { setErr("Informe o nº do documento ou da nota fiscal (ou gere um)"); return; }
+    const bd = barras.replace(/\D/g, "");
+    if (bd && ![44, 47, 48].includes(bd.length)) { setErr("Código de barras deve ter 44, 47 ou 48 dígitos"); return; }
     setSalvando(true);
     try {
       const r = await fetch("/api/financeiro/titulos/incluir", {
@@ -206,6 +213,7 @@ export default function NovoTituloModal({
           id_conta_corrente: Number(conta),
           codigo_projeto: projeto ? Number(projeto) : undefined,
           numero_documento: numeroDoc || undefined,
+          codigo_barras: barras.replace(/\D/g, "") || undefined,
           observacao: obs || undefined,
 
           codigo_tipo_documento: tipoDoc || undefined,
@@ -232,6 +240,28 @@ export default function NovoTituloModal({
     } catch (e) {
       setErr((e as Error).message);
     } finally { setSalvando(false); }
+  }
+
+  async function gerarDocumento() {
+    setGerandoDoc(true); setErr(null);
+    try {
+      const r = await fetch("/api/financeiro/titulos/incluir", { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ acao: "gerar_documento", tipo, empresa }) });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.error ?? `HTTP ${r.status}`);
+      setNumeroDoc(j.documento);
+    } catch (e) { setErr((e as Error).message); } finally { setGerandoDoc(false); }
+  }
+  function mudarBarras(v: string) {
+    setBarras(v);
+    const l = lerBoleto(v);
+    if (!v.replace(/\D/g, "")) { setBarrasAviso(null); return; }
+    if (!l) { setBarrasAviso("44, 47 ou 48 dígitos"); return; }
+    const lidos: string[] = [];
+    if (l.valor && !valor.trim()) { setValor(l.valor.toFixed(2).replace(".", ",")); lidos.push("valor"); }
+    if (l.vencimento && vencimento === hojeISO()) { setVencimento(l.vencimento); lidos.push("vencimento"); }
+    setBarrasAviso([l.aviso, lidos.length ? `${lidos.join(" e ")} lidos do código de barras` : null,
+      l.tipo === "concessionaria" ? "concessionária/tributo" : null].filter(Boolean).join(" · ") || "código válido");
   }
 
   const inputCls = "w-full px-3 py-2 border border-ww-border rounded-md bg-ww-bg text-[13px] text-ww-text focus:outline-none focus:ring-2 focus:ring-ww-accent/40";
@@ -382,10 +412,32 @@ export default function NovoTituloModal({
             </select>
           </div>
           <div>
-            <label className={labelCls}>Nº documento</label>
-            <input value={numeroDoc} onChange={(e) => setNumeroDoc(e.target.value)} className={inputCls} />
+            <label className={labelCls}>Nº documento{tipo === "pagar" ? " * (ou nº da NF)" : ""}</label>
+            <div className="flex gap-2">
+              <input value={numeroDoc} onChange={(e) => setNumeroDoc(e.target.value)} className={inputCls} />
+              {tipo === "pagar" && (
+                <button type="button" onClick={gerarDocumento} disabled={gerandoDoc}
+                        title="Sem documento? Gera um nº único (PG-empresa-AAMM-sequência) para ficar registrado"
+                        className="shrink-0 px-2 text-[11.5px] border border-ww-border rounded-md text-ww-text hover:bg-ww-bg">
+                  {gerandoDoc ? "…" : "Gerar nº"}</button>
+              )}
+            </div>
           </div>
         </div>
+
+        {tipo === "pagar" && (
+          <div>
+            <label className={labelCls}>Código de barras / linha digitável do boleto</label>
+            <input value={barras} onChange={(e) => mudarBarras(e.target.value)} inputMode="numeric"
+                   placeholder="cole aqui — 44, 47 ou 48 dígitos" className={`${inputCls} font-mono text-[12px]`} />
+            {barrasAviso && <p className="text-[10.5px] text-ww-textFaint mt-1">{barrasAviso}</p>}
+          </div>
+        )}
+
+        <p className="text-[11px] text-ww-textFaint">
+          Emissão: {emissao ? new Date(emissao + "T12:00:00").toLocaleDateString("pt-BR")
+            : <>hoje, {new Date().toLocaleDateString("pt-BR")} — data do lançamento (mude em Datas, se o documento for de outro dia)</>}
+        </p>
 
         {/* ── Documento ────────────────────────────────────────────────── */}
         <Secao titulo="Documento" aberta={secDoc} onToggle={() => setSecDoc((v) => !v)}
@@ -431,7 +483,7 @@ export default function NovoTituloModal({
                resumo={[emissao && `emissão ${emissao}`, entrada && `entrada ${entrada}`].filter(Boolean).join(" · ")}>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className={labelCls}>Emissão</label>
+              <label className={labelCls}>Emissão <span className="text-ww-textFaint">(vazia = hoje, data do lançamento)</span></label>
               <input type="date" value={emissao} onChange={(e) => setEmissao(e.target.value)} className={inputCls} />
             </div>
             <div>

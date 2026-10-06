@@ -34,7 +34,7 @@ export default function EditarTituloModal({ tipo, refTit, onClose, onDone }: { t
   const [aux, setAux] = useState<Aux>({ categorias: [], contas_correntes: [], projetos: [] });
   const [erro, setErro] = useState("");
   const [indo, setIndo] = useState(false);
-  const [f, setF] = useState({ valor: "", vencimento: "", previsao: "", categoria_cod: "", conta_cod: "", projeto_cod: "", documento: "", obs: "", motivo: "" });
+  const [f, setF] = useState({ valor: "", vencimento: "", previsao: "", categoria_cod: "", conta_cod: "", projeto_cod: "", documento: "", obs: "", motivo: "", barras: "" });
   const [escopo, setEscopo] = useState<"esta" | "proximas" | "todas">("esta");
   const [cli, setCli] = useState<{ cod: number; nome: string } | null>(null);
   const [busca, setBusca] = useState("");
@@ -49,7 +49,7 @@ export default function EditarTituloModal({ tipo, refTit, onClose, onDone }: { t
     const x = j.titulo as Titulo;
     setT(x);
     setF({ valor: fmt(x.valor), vencimento: s(x.vencimento).slice(0, 10), previsao: s(x.previsao).slice(0, 10), categoria_cod: s(x.categoria_cod),
-      conta_cod: s(x.conta_cod), projeto_cod: s(x.projeto_cod), documento: s(x.documento), obs: s(x.obs), motivo: "" });
+      conta_cod: s(x.conta_cod), projeto_cod: s(x.projeto_cod), documento: s(x.documento), obs: s(x.obs), motivo: "", barras: s((x as { codigo_barras?: string | null }).codigo_barras) });
     setCli(x.contraparte_cod ? { cod: x.contraparte_cod, nome: x.contraparte_nome ?? "" } : null);
     const a = await fetch(`/api/financeiro/aux?empresa=${x.empresa}&tipo=${tipo}`).then((y) => y.json()).catch(() => null);
     if (a) setAux({ categorias: a.categorias ?? [], contas_correntes: a.contas_correntes ?? [], projetos: a.projetos ?? [] });
@@ -94,6 +94,7 @@ export default function EditarTituloModal({ tipo, refTit, onClose, onDone }: { t
     if (f.projeto_cod !== s(t.projeto_cod)) c.projeto_cod = f.projeto_cod || null;
     if (!omie && f.documento !== s(t.documento)) c.documento = f.documento;
     if (f.obs !== s(t.obs)) c.obs = f.obs;
+    if (tipo === "pagar" && refTit.startsWith("p:") && f.barras.replace(/\D/g, "") !== s((t as { codigo_barras?: string | null }).codigo_barras)) c.codigo_barras = f.barras.replace(/\D/g, "");
     if (t.origem === "manual" && cli && cli.cod !== t.contraparte_cod) c.contraparte_cod = cli.cod;
     if (!Object.keys(c).length) { setErro("Nada mudou"); return; }
     if (abaixo) { setErro(`O valor não pode ficar abaixo do que já foi pago (${brl(t.pago)})`); return; }
@@ -145,6 +146,7 @@ export default function EditarTituloModal({ tipo, refTit, onClose, onDone }: { t
                 {f.projeto_cod && !aux.projetos.some((p) => String(p.codigo) === f.projeto_cod) && <option value={f.projeto_cod}>{f.projeto_cod}</option>}
                 {aux.projetos.map((p) => <option key={p.codigo} value={String(p.codigo)}>{p.nome}</option>)}</select></label>
               {!omie && <label>Documento<input value={f.documento} onChange={set("documento")} /></label>}
+              {tipo === "pagar" && refTit.startsWith("p:") && <label className="full">Código de barras / linha digitável<input value={f.barras} onChange={set("barras")} inputMode="numeric" placeholder="44, 47 ou 48 dígitos" style={{ fontFamily: "ui-monospace,monospace" }} /></label>}
               {t.origem === "manual" && <label className="full">{rotCp}
                 <input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder={cli ? `${cli.nome} — digite para trocar` : "buscar por nome ou CNPJ"} />
                 {achados.length > 0 && <div className="gl" style={{ maxHeight: 160, overflow: "auto", marginTop: 4 }}>

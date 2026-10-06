@@ -5,7 +5,7 @@ icone: 💸
 area: erp
 rotas: /financeiro/pagar
 caminhos: web/components/financeiro/TelaPagarV3.tsx, web/components/financeiro/pagar-v3-motor.ts, web/components/financeiro/RemessaC6.tsx, web/components/financeiro/SerieDialog.tsx, web/components/financeiro/EditarTituloModal.tsx, web/lib/financeiro-editar.ts, web/components/NovoTituloModal.tsx, web/app/api/financeiro/pagar
-atualizado: 2026-10-05
+atualizado: 2026-10-06
 ---
 
 **Financeiro → Títulos a Pagar** junta os títulos do Omie (até o corte) e as contas nascidas no painel (previsões de PC e contas lançadas aqui).
@@ -55,6 +55,8 @@ Na tabela, a coluna NF mostra **NF e parcela** (ex.: "NF 11924 · parc 002/002")
 3. Confira cada linha. Se faltar chave Pix ou conta do fornecedor, use **completar no cadastro ↗**.
 4. Baixe o arquivo e suba no portal do C6. A baixa no sistema vem depois, pela conciliação.
 
+> No arquivo, **chave Pix de telefone** sai no formato que o C6 exige (**+55 11 98772-6252**); e-mail, CPF/CNPJ e chave aleatória vão como estão. **Favorecido e descrição** saem **sem acento, cedilha ou símbolos** (o campo mostra "vai como: …" quando muda algo).
+
 ## Pagar conta de outra empresa do grupo (intercompany)
 
 Uma conta da **CD** ou da **WW** pode ser paga por um banco da **SF** (C6, Bradesco, Omie.CASH).
@@ -82,6 +84,9 @@ O título da CD fica **PAGO** e o sistema registra sozinho "**CD deve à SF**" e
 ## Nova conta e contas recorrentes
 
 1. Clique em **+ Nova conta**, escolha fornecedor, categoria, conta, projeto, vencimento e valor.
+   - **Nº documento ou nº da nota fiscal é obrigatório.** Sem documento? Clique em **Gerar nº** — sai um número único (ex.: PG-SF-2610-000001) que fica registrado.
+   - **Emissão**: se não preencher, fica a data do lançamento (hoje) — ela aparece no formulário e na gaveta do título.
+   - **Código de barras / linha digitável** (boleto, 44/47/48 dígitos): cole no campo. Se o valor estiver vazio e o vencimento for o de hoje, o sistema lê **valor e vencimento do próprio código**. O código aparece na gaveta com **copiar** e vai sozinho para o **Arquivo C6** como pagamento de boleto. Dá para corrigir depois em **Editar título**.
 2. Em **Recorrência**, escolha a frequência (mensal, trimestral, anual…) e quantas vezes, até quando ou sem fim.
 3. Para mudar uma conta recorrente: **Só esta ocorrência**, **Esta e as próximas** ou **Todas (as não pagas)**. Também dá para **Encerrar série** ou **Excluir série** (só sem pagamentos).
 

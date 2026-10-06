@@ -1,6 +1,7 @@
 import "server-only";
 import JSZip from "jszip";
 import { C6_CONTAS_B64, C6_SALARIOS_B64 } from "./templates";
+import { limparTextoC6, chavePixC6 } from "./texto";
 
 // Preenche os modelos de pagamento em lote do C6 Bank (05/10/26) sem mexer no
 // layout: só as células das linhas 3–102 de cada aba são escritas (com o estilo
@@ -16,6 +17,7 @@ export type LinhaC6 = {
   nome: string;
   doc?: string | null;        // CPF/CNPJ (só dígitos)
   chave?: string | null;      // chave ou código Pix
+  chaveTipo?: string | null;  // pix_tipo do cadastro (telefone/cpf/email…) — desempata CPF × celular
   barras?: string | null;     // código de barras / linha digitável (só dígitos)
   ispb?: string | null;       // banco (ISPB) — Pix por agência e conta
   compe?: string | null;      // banco (cód. COMPE) — TED
@@ -31,14 +33,13 @@ export type LinhaC6 = {
 type Col = { col: string; campo: (l: LinhaC6) => string | number | null | undefined; num?: boolean };
 
 const BR = (iso: string) => { const [y, m, d] = iso.split("-"); return `${d}/${m}/${y}`; };
-const limpa = (s: string | null | undefined, max = 140) =>
-  String(s ?? "").normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^A-Za-z0-9 .,/\-]/g, " ").replace(/\s+/g, " ").trim().slice(0, max);
+const limpa = (s: string | null | undefined, max = 140) => limparTextoC6(s, max);
 
 /** Colunas de cada aba, exatamente na ordem do modelo do C6. */
 const LAYOUT: Record<Modalidade, { cols: Col[]; soma: string }> = {
   PIX_CHAVE: { soma: "C", cols: [
     { col: "A", campo: (l) => limpa(l.nome, 80) },
-    { col: "B", campo: (l) => (l.chave ?? "").trim() },
+    { col: "B", campo: (l) => chavePixC6(l.chave, l.chaveTipo) },
     { col: "C", campo: (l) => l.valor, num: true },
     { col: "D", campo: (l) => BR(l.data) },
     { col: "E", campo: (l) => limpa(l.descricao, 140) },

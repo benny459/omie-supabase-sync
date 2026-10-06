@@ -12,6 +12,7 @@ import { fin, erroDb } from "@/lib/financeiro-baixas";
 export type CamposEditar = {
   valor?: number; vencimento?: string; previsao?: string; categoria_cod?: string | null; conta_cod?: number | null;
   projeto_cod?: string | number | null; contraparte_cod?: number | null; documento?: string | null; obs?: string | null;
+  /** boleto (só contas a pagar do painel, 'p:<id>') — vazio remove */ codigo_barras?: string | null;
 };
 
 const ISO = /^\d{4}-\d{2}-\d{2}$/;
@@ -25,7 +26,8 @@ export async function dadosParaEditar(ref: string) {
   const { data, error } = await fin().rpc("titulo_para_editar", { p_ref: ref });
   if (error) return erroDb(error);
   if (!data) return NextResponse.json({ error: "Título não encontrado (ou já não está em aberto)" }, { status: 404 });
-  return NextResponse.json({ titulo: data }, { headers: { "Cache-Control": "no-store" } });
+  const det = ref.startsWith("p:") || ref.startsWith("o:") ? (await fin().rpc("pagar_detalhe_doc", { p_ref: ref })).data as { barras?: string | null; emissao?: string | null } | null : null;
+  return NextResponse.json({ titulo: { ...(data as object), codigo_barras: det?.barras ?? null, emissao: det?.emissao ?? null } }, { headers: { "Cache-Control": "no-store" } });
 }
 
 export async function editarTitulo(natureza: "P" | "R", ref: string, campos: CamposEditar, escopo: string, motivo: string | null, email: string) {
@@ -73,6 +75,11 @@ export async function editarTitulo(natureza: "P" | "R", ref: string, campos: Cam
       if (error) return erroDb(error);
       res = data;
     }
+  }
+  if (campos.codigo_barras !== undefined) {
+    if (!ref.startsWith("p:")) return NextResponse.json({ error: "Código de barras só em conta a pagar do painel" }, { status: 400 });
+    const { error } = await fin().rpc("pagar_codigo_barras_salvar", { p_id: Number(ref.slice(2)), p_barras: campos.codigo_barras ?? "", p_usuario: email });
+    if (error) return erroDb(error);
   }
   if (campos.previsao) {
     const { error } = natureza === "P"

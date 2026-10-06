@@ -9,6 +9,7 @@
  * chave Pix / conta no cadastro do fornecedor. Nada vai ao banco: o arquivo é
  * baixado e enviado no portal do C6; a baixa vem depois pela conciliação.
  */
+import { chavePixC6, limparTextoC6 } from "@/lib/c6/texto";
 import { useEffect, useMemo, useState } from "react";
 
 type Modalidade = "PIX_CHAVE" | "PIX_CONTA" | "BOLETO" | "TED";
@@ -21,7 +22,7 @@ type Titulo = {
   enviado_remessa: number | null; enviado_em: string | null;
 };
 type Linha = {
-  ref: string; pessoa_id: number | null; modalidade: Modalidade; nome: string; doc: string; chave: string; barras: string;
+  ref: string; pessoa_id: number | null; modalidade: Modalidade; nome: string; doc: string; chave: string; chaveTipo: string; barras: string;
   compe: string; ispb: string; contaTipo: string; agencia: string; conta: string; finalidade: string;
   valor: number; data: string; descricao: string; incluir: boolean; empresa: string; venc: string; enviado: number | null;
 };
@@ -84,7 +85,7 @@ export default function RemessaC6({ refs, onClose, onDone }: { refs: string[]; o
           const modalidade: Modalidade = t.barras ? "BOLETO" : t.pix_chave ? "PIX_CHAVE" : temConta ? "PIX_CONTA" : "PIX_CHAVE";
           return {
             ref: t.ref, pessoa_id: t.pessoa_id, modalidade, nome: t.titular_nome || t.favorecido || "", doc: t.titular_doc || t.doc || "",
-            chave: t.pix_chave ?? "", barras: t.barras ?? "", compe: t.banco_compe ?? "", ispb: t.banco_ispb ?? "",
+            chave: chavePixC6(t.pix_chave ?? "", t.pix_tipo), chaveTipo: t.pix_tipo ?? "", barras: t.barras ?? "", compe: t.banco_compe ?? "", ispb: t.banco_ispb ?? "",
             contaTipo: t.conta_tipo || "Conta Corrente", agencia: t.agencia ?? "", conta: t.conta ?? "",
             finalidade: "07 - Pagamento de fornecedores", valor: Number(t.valor) || 0,
             data: (t.previsao && t.previsao > h ? t.previsao : h),
@@ -112,7 +113,7 @@ export default function RemessaC6({ refs, onClose, onDone }: { refs: string[]; o
       const r = await fetch("/api/financeiro/remessa", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({
         // C6 é conta da SF: títulos da CD/WW pagos por ela viram intercompany na baixa (05/10/26).
         acao: "gerar", modelo, salvar_cadastro: salvarCad, empresa: "SF",
-        linhas: ativos.map((l) => ({ ref: l.ref, pessoa_id: l.pessoa_id, modalidade: l.modalidade, nome: l.nome, doc: dig(l.doc), chave: l.chave.trim(),
+        linhas: ativos.map((l) => ({ ref: l.ref, pessoa_id: l.pessoa_id, modalidade: l.modalidade, nome: l.nome, doc: dig(l.doc), chave: chavePixC6(l.chave, l.chaveTipo), chaveTipo: l.chaveTipo || null,
           barras: dig(l.barras), ispb: l.ispb, compe: l.compe, contaTipo: l.contaTipo, agencia: dig(l.agencia), conta: l.conta.replace(/[^\dXx-]/g, ""),
           finalidade: l.finalidade, valor: l.valor, data: l.data,
           descricao: l.empresa !== "SF" && !l.descricao.startsWith(l.empresa + " ") ? `${l.empresa} · ${l.descricao}`.slice(0, 140) : l.descricao })),
@@ -194,7 +195,7 @@ export default function RemessaC6({ refs, onClose, onDone }: { refs: string[]; o
                             </select>
                           </td>
                           <td>
-                            {l.modalidade === "PIX_CHAVE" && <input style={inp} placeholder="Chave Pix (CPF/CNPJ, e-mail, +5511912345678 ou aleatória)" value={l.chave} onChange={(e) => set(l.ref, { chave: e.target.value })} />}
+                            {l.modalidade === "PIX_CHAVE" && <input style={inp} placeholder="Chave Pix (CPF/CNPJ, e-mail, +5511912345678 ou aleatória)" value={l.chave} onChange={(e) => set(l.ref, { chave: e.target.value })} onBlur={(e) => set(l.ref, { chave: chavePixC6(e.target.value, l.chaveTipo) })} />}
                             {l.modalidade === "BOLETO" && <input style={inp} placeholder="Código de barras / linha digitável" value={l.barras} onChange={(e) => set(l.ref, { barras: e.target.value })} />}
                             {(l.modalidade === "PIX_CONTA" || l.modalidade === "TED") && (
                               <div style={{ display: "grid", gridTemplateColumns: "1.4fr 1fr", gap: 4 }}>
@@ -211,7 +212,7 @@ export default function RemessaC6({ refs, onClose, onDone }: { refs: string[]; o
                           </td>
                           <td><input type="date" style={inp} min={hoje} value={l.data} onChange={(e) => set(l.ref, { data: e.target.value })} /></td>
                           <td className="r"><input style={{ ...inp, textAlign: "right" }} value={l.valor.toFixed(2).replace(".", ",")} onChange={(e) => set(l.ref, { valor: Number(e.target.value.replace(/\./g, "").replace(",", ".")) || 0 })} /></td>
-                          <td><input style={inp} value={l.descricao} onChange={(e) => set(l.ref, { descricao: e.target.value })} /></td>
+                          <td><input style={inp} value={l.descricao} onChange={(e) => set(l.ref, { descricao: e.target.value })} onBlur={(e) => set(l.ref, { descricao: limparTextoC6(e.target.value, 140) })} title="No arquivo: sem acento, cedilha nem símbolos" />{limparTextoC6(l.descricao, 140) !== l.descricao.trim() && <div style={{ fontSize: 10.5, opacity: .7 }}>vai como: {limparTextoC6(l.descricao, 140)}</div>}</td>
                         </tr>
                       );
                     })}

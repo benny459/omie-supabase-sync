@@ -159,6 +159,13 @@ export async function GET(req: Request) {
     return NextResponse.json({ historico: data });
   }
 
+  const docRef = u.searchParams.get("doc");
+  if (docRef) {
+    if (!/^[op]:\d+$/.test(docRef)) return NextResponse.json({ error: "ref inválida" }, { status: 400 });
+    const { data, error } = await fin().rpc("pagar_detalhe_doc", { p_ref: docRef });
+    if (error) return erroDb(error);
+    return NextResponse.json({ doc: data ?? null }, { headers: { "Cache-Control": "no-store" } });
+  }
   const editar = u.searchParams.get("editar");
   if (editar) {
     if (!a.pode["financeiro.editar_titulo"]) return NextResponse.json({ error: "Sem permissão (financeiro.editar_titulo)" }, { status: 403 });
