@@ -78,7 +78,16 @@ Pedidos de compra de **Vendas avulsas** que cumprem a regra abaixo são aprovado
 1. Quando o material chega, use **📦 Registrar recebimento** (etapa Recebido).
 2. Depois de conferir, mova para **Conferido**. A conta a pagar fica **liberada para pagar**.
 
-## Alertas
+## Corrigir um pedido que veio do Omie
+
+Os pedidos e requisições que vieram do Omie (selo **Veio do Omie**) se editam aqui como qualquer outro: fornecedor, condição, previsão, itens, parcelas, departamentos e vínculos com RC e PV/OS.
+
+1. Abra o pedido e altere o que precisar.
+2. Clique em **Salvar**. O pedido ganha o selo **editado no painel** e o histórico registra o **antes** e o **depois** (fornecedor, valor, previsão e número de itens).
+3. Nada é gravado no Omie. A partir dessa edição, a importação do Omie **não sobrescreve mais** este pedido.
+
+O novo valor passa a valer em Operação (Vendas avulsas / Projetos), na fila de aprovação, no BI e no Contas a Pagar previsto. Se o Omie já tiver um título com a mesma NF, a previsão do painel fica como "substituída" e não duplica. A aprovação segue a mesma regra dos pedidos do painel: editar não muda o status de aprovação.
+
 
 - O número em **Compras** na barra soma NF sem pedido + requisições novas.
 - Uma faixa avisa **PCs criados no Omie depois de 01/10** — os pedidos devem nascer só no painel.

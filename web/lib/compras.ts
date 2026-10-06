@@ -78,7 +78,9 @@ export type Pedido = {
   emissao: string; previsao: string; contato: string; numForn: string; contrato: string; obs: string; obsInt: string;
   pv: string; pvCliente: string; nf: string; chave: string; dtFat?: string | null; dtRec?: string | null;
   aprov: Aprov; aprovPor?: string | null; aprovEm?: string | null; frete: Frete; valor: number;
-  origem: "painel" | "omie"; ncodPed?: number | null; itens: Item[]; parcelas: Parcela[]; deptos: Depto[];
+  origem: "painel" | "omie"; ncodPed?: number | null;
+  /** pedido do Omie corrigido no painel (06/10/26) — a importação não mexe mais nele */ editadoPainel?: boolean; editadoEm?: string | null; editadoPor?: string | null;
+  itens: Item[]; parcelas: Parcela[]; deptos: Depto[];
   criadoEm?: string | null; enviadoEm?: string | null; enviadoPor?: string | null; enviadoPara?: string | null;
   enviadoMeio?: string | null; pcsDaRc?: string[];
   hist: { t: string; em: string; por?: string }[];

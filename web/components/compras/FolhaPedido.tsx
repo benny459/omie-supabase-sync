@@ -112,7 +112,9 @@ export default function FolhaPedido({
   const salvosRc = useRef<Record<number, number>>({}); // rcItemId → qtd já gravada por ESTE pedido
   const [pmax, setPmax] = useState<Record<number, number | null>>({}); // n_cod_prod → preço máximo de compra (Estoque)
 
-  const ro = D?.origem === "omie";
+  // Pedidos vindos do Omie também se editam aqui (06/10/26): nada volta ao Omie;
+  // o pedido fica marcado "editado no painel" e a importação deixa de mexer nele.
+  const ro = false;
   const isRC = D?.tipo === "RC";
 
   // ── carregar ──────────────────────────────────────────────────────────────
@@ -379,8 +381,9 @@ export default function FolhaPedido({
           <div className="sh-head">
             <h2>{titulo}</h2>
             {D.id && <span className="pill" style={{ background: ETAPA[D.etapa]?.cor, color: "#fff" }}>{ETAPA[D.etapa]?.nome}</span>}
-            {D.origem === "omie" ? <span className="tag orig-omie" title="Importado do Omie — histórico, só leitura">Omie · histórico</span>
+            {D.origem === "omie" ? <span className="tag orig-omie" title="Veio do Omie — pode ser editado aqui; nada é gravado no Omie">Veio do Omie</span>
               : <span className="tag orig-painel">Emitido pela plataforma</span>}
+            {D.editadoPainel && <span className="tag orig-painel" title={`Editado no painel${D.editadoPor ? ` por ${D.editadoPor}` : ""}${D.editadoEm ? ` em ${new Date(D.editadoEm).toLocaleString("pt-BR")}` : ""} — a importação do Omie não sobrescreve mais este pedido`}>editado no painel</span>}
             {!isRC && (() => { const e = rotuloEnvio(D); return e
               ? <span className={`pill selo-env${e.teste ? " teste" : ""}`} title={e.dica}>{e.texto}</span>
               : D.id && D.aprov === "aprovado" && D.origem === "painel" ? <span className="pill" title="Aprovado e ainda não enviado ao fornecedor" style={{ opacity: .8 }}>não enviado</span> : null; })()}
@@ -593,7 +596,7 @@ export default function FolhaPedido({
                         {!ro && <button className="btn sm pri" onClick={() => setPicker(true)}>⇠ Vincular requisição</button>}
                       </div>
                     )}
-                    {!isRC && D.origem === "painel" && (
+                    {!isRC && (D.origem === "painel" || D.origem === "omie") && (
                       <div className="cp-vinculo" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 10, padding: "9px 10px",
                         border: `1px solid ${errs.vinculo ? "var(--danger, #EF4444)" : "var(--line)"}`, borderRadius: 10 }}>
                         <div>
@@ -971,7 +974,7 @@ export default function FolhaPedido({
                 )}
 
                 {tabAtual === "emails" && D.id && (
-                  <ConversaEmail id={D.id} podeEscrever={D.origem !== "omie"} aoLer={() => setNaoLidos(0)} />
+                  <ConversaEmail id={D.id} podeEscrever aoLer={() => setNaoLidos(0)} />
                 )}
 
                 {tabAtual === "obs" && (
