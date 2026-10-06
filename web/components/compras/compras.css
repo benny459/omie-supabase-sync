@@ -246,7 +246,9 @@
 .cmp .card.late { box-shadow: none; border-left-color: var(--ww-crit); background: color-mix(in srgb, var(--ww-crit) 4%, var(--panel)); }
 .cmp .summary button { border-top: 3px solid var(--c, transparent); }
 .cmp .summary .v { color: color-mix(in srgb, var(--c, var(--tx)) 70%, var(--tx)); }
-.cmp .p-env { background: color-mix(in srgb, #3B82F6 16%, transparent); color: color-mix(in srgb, #3B82F6 80%, var(--tx)); }
+/* Enviado ao fornecedor: preenchimento sólido, contraste AA em qualquer tema (06/10/26). */
+.cmp .p-env, .cmp .selo-env { background: #0E7490; color: #fff; border: 1px solid #0E7490; font-weight: 600; }
+.cmp .selo-env.teste { background: #B45309; border-color: #B45309; color: #fff; }
 .cmp .p-fat { background: color-mix(in srgb, #F59E0B 18%, transparent); color: color-mix(in srgb, #B45309 85%, var(--tx)); }
 .cmp .p-rec { background: color-mix(in srgb, #0EA5E9 16%, transparent); color: color-mix(in srgb, #0369A1 85%, var(--tx)); }
 .cmp .p-conf { background: color-mix(in srgb, #22C55E 18%, transparent); color: color-mix(in srgb, #15803D 85%, var(--tx)); }
