@@ -87,11 +87,12 @@ export default function GerarPcDaRc({ rc, empresa, itensRc, onFechar, onFeito }:
   // Busca de fornecedor (digitando).
   useEffect(() => {
     if (!fornQ.trim() || (forn && fornQ === (forn.fantasia || forn.nome))) { setFornOps([]); return; }
+    let vivo = true;
     const t = window.setTimeout(async () => {
       const ops = await json<Forn[]>(await fetch(`/api/compras/buscar?tipo=fornecedor&emp=${encodeURIComponent(empresa)}&q=${encodeURIComponent(fornQ.trim())}`)).catch(() => []);
-      setFornOps(ops);
+      if (vivo) setFornOps(ops); // resposta atrasada não reabre a lista depois de escolher
     }, 250);
-    return () => window.clearTimeout(t);
+    return () => { vivo = false; window.clearTimeout(t); };
   }, [fornQ, forn, empresa]);
 
   const ativos = linhas.filter((l) => l.on && l.qtd > 0);
@@ -135,8 +136,8 @@ export default function GerarPcDaRc({ rc, empresa, itensRc, onFechar, onFeito }:
   const bt = (pri = false): React.CSSProperties => ({ height: 34, padding: "0 14px", borderRadius: 9, cursor: "pointer", fontSize: 13, fontWeight: 600,
     border: `1px solid ${pri ? "var(--ww-accent, #4f7cff)" : "var(--ww-border-strong)"}`, background: pri ? "var(--ww-accent, #4f7cff)" : "transparent",
     color: pri ? "#fff" : "var(--ww-text)" });
-  const lab: React.CSSProperties = { display: "grid", gap: 4, fontSize: 12, color: "var(--ww-text-muted)" };
-  const inp: React.CSSProperties = { height: 34, borderRadius: 8, border: "1px solid var(--ww-border-strong)", background: "var(--ww-panel-sunken, var(--ww-panel))", color: "var(--ww-text)", padding: "0 10px", fontSize: 13 };
+  const lab: React.CSSProperties = { display: "grid", gap: 4, minWidth: 0, fontSize: 12, color: "var(--ww-text-muted)" };
+  const inp: React.CSSProperties = { width: "100%", minWidth: 0, boxSizing: "border-box", height: 34, borderRadius: 8, border: "1px solid var(--ww-border-strong)", background: "var(--ww-panel-sunken, var(--ww-panel))", color: "var(--ww-text)", padding: "0 10px", fontSize: 13 };
 
   return (
     <div onClick={onFechar} style={{ position: "fixed", inset: 0, zIndex: 80, background: "rgba(5,10,20,.55)", display: "grid", placeItems: "center", padding: 16 }}>
@@ -154,7 +155,7 @@ export default function GerarPcDaRc({ rc, empresa, itensRc, onFechar, onFeito }:
         {!rcFull && !erro && <div style={{ color: "var(--ww-text-muted)" }}>Carregando a RC…</div>}
         {rcFull && (
           <>
-            <div style={{ display: "grid", gridTemplateColumns: "2fr 1.4fr 1fr 1fr", gap: 10 }}>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: 10 }}>
               <label style={{ ...lab, position: "relative" }}>Fornecedor
                 <input style={inp} value={fornQ} placeholder="nome, fantasia ou CNPJ"
                   onChange={(e) => { setFornQ(e.target.value); setForn(null); }} />
@@ -189,14 +190,14 @@ export default function GerarPcDaRc({ rc, empresa, itensRc, onFechar, onFeito }:
             </div>
 
             <div style={{ border: "1px solid var(--ww-border)", borderRadius: 10, overflow: "hidden" }}>
-              <div style={{ display: "grid", gridTemplateColumns: "28px 1fr 90px 110px 110px", gap: 8, padding: "8px 10px", fontSize: 11.5, color: "var(--ww-text-muted)", background: "var(--ww-panel-sunken, transparent)" }}>
+              <div style={{ display: "grid", gridTemplateColumns: "28px minmax(0,1fr) 80px 100px 100px", gap: 8, padding: "8px 10px", fontSize: 11.5, color: "var(--ww-text-muted)", background: "var(--ww-panel-sunken, transparent)" }}>
                 <span /><span>Item da RC</span><span style={{ textAlign: "right" }}>Qtd</span><span style={{ textAlign: "right" }}>Valor unit.</span><span style={{ textAlign: "right" }}>Total</span>
               </div>
               {linhas.map((l, i) => {
                 const falta = Math.max(0, (Number(l.it.qtd) || 0) - (Number(l.it.cov) || 0));
                 const atendido = falta <= 0;
                 return (
-                  <div key={l.it.id} style={{ display: "grid", gridTemplateColumns: "28px 1fr 90px 110px 110px", gap: 8, padding: "8px 10px", alignItems: "center", borderTop: "1px solid var(--ww-border)", opacity: atendido ? 0.5 : 1 }}>
+                  <div key={l.it.id} style={{ display: "grid", gridTemplateColumns: "28px minmax(0,1fr) 80px 100px 100px", gap: 8, padding: "8px 10px", alignItems: "center", borderTop: "1px solid var(--ww-border)", opacity: atendido ? 0.5 : 1 }}>
                     <input type="checkbox" checked={l.on && !atendido} disabled={atendido}
                       onChange={() => setLinhas((x) => x.map((y, k) => (k === i ? { ...y, on: !y.on } : y)))} />
                     <div style={{ fontSize: 13 }}>{l.it.desc}
