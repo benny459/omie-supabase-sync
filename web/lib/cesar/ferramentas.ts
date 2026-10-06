@@ -25,6 +25,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { modoReportDoUsuario } from "./report-config";
 import { validarSqlLeitura, limparSql } from "./sql-guard";
 import { validarFontesDoReport, executarFontes } from "./report-fontes";
+import { rodarAprovacaoIA } from "@/lib/aprovacao-ia";
 
 /** Escopo padrão do painel, o mesmo das telas. Deixar explícito evita a
  *  pergunta "esses números são de qual empresa?" a cada resposta. */
@@ -383,6 +384,22 @@ async function testarFontes(ctx: CtxAcao, report: never): Promise<string | null>
 }
 
 export const ACOES: Record<string, DefAcao> = {
+  aprovar_pcs_elegiveis: {
+    descricao:
+      "Aprovação automática de PCs de Vendas avulsas pelo Agente IA: PC dos últimos 30 dias, ainda pendente, com valor ≤ RC e condição de pagamento faturada (prazo depois da NF, nunca à vista). Com aplicar=false (padrão) só SIMULA e devolve a lista com a decisão e o motivo de cada PC. Com aplicar=true APROVA os elegíveis (só administrador) — chame com aplicar=true SÓ depois de mostrar a simulação e a pessoa CONFIRMAR. A mesma regra já roda sozinha às 08h, 12h e 17h.",
+    entrada: { aplicar: { type: "boolean", description: "false = simular (padrão); true = aprovar os elegíveis." } },
+    required: [],
+    exec: async (ctx, i) => {
+      const aplicar = i.aplicar === true;
+      if (aplicar && !ctx.isAdmin) return { erro: "só administrador aprova; posso mostrar a simulação" };
+      const r = await rodarAprovacaoIA({ aplicar, disparo: `cesar:${ctx.email}` });
+      return {
+        modo: r.modo, aprovados: r.aprovados, elegiveis: r.elegiveis, pulados: r.pulados, falhas: r.falhas,
+        pcs: r.linhas.map((l) => ({ pc: l.pc, fornecedor: l.fornecedor, venda: l.pv_os, valor_pc: l.cmp_pc, valor_rc: l.cmp_rc,
+          condicao: l.condicao, decisao: l.decisao, motivo: l.motivo })),
+      };
+    },
+  },
   criar_ticket: {
     descricao:
       "Abre um chamado na central de suporte do painel: problema (algo quebrado/errado — entra na fila de correção automática) ou sugestao (pedido de melhoria/função nova — fica aguardando o Benny avaliar; NADA é aprovado automaticamente). Chame SÓ depois que a pessoa CONFIRMAR que quer abrir. A descrição deve conter tudo que ela relatou: tela, o que fez, o que aconteceu, o que esperava.",

@@ -37,6 +37,24 @@ Logo abaixo dos totais aparece **vs RC**: o máximo dos itens ligados, o valor d
 
 Se algum item estiver acima do máximo, o painel **Pronto para salvar?** avisa e pede um **motivo** — sem ele o pedido não salva. O motivo vai para a observação interna e o cartão do pedido em Compras ganha o selo **▲ acima do máximo da RC**, para quem aprova ver.
 
+## Aprovação automática pelo Agente IA
+
+Pedidos de compra de **Vendas avulsas** que cumprem a regra abaixo são aprovados sozinhos, sem passar pelo aprovador. Quem aprova fica registrado como **Agente IA**.
+
+**A regra (todas ao mesmo tempo):**
+- PC de **Vendas avulsas** incluído nos **últimos 30 dias** e ainda **pendente** de aprovação;
+- valor do PC **menor ou igual ao da RC** que ele atende — PC feito no painel compara item a item com a RC ligada; PC antigo do Omie compara o total da venda (o mesmo selo "Compra abaixo do RC" da tela);
+- condição de pagamento **faturada**: prazo depois da NF — "Para N dias" (N ≥ 1) ou parcelas como "28/56/84", "30/60/90". Nunca "A Vista", "A Vista/30", "N Parcelas" sem prazo;
+- se o projeto tem fluxo de caixa, o fluxo precisa estar aprovado.
+
+**Quando roda:** sozinho às **08h, 12h e 17h** (horário de Brasília). Cada rodada só mexe no que continua pendente — nunca reaprova nem desfaz decisão de ninguém.
+
+**Onde ver:**
+1. Em **Compras**, botão **🤖 Aprovação automática**: lista dos PCs pendentes com a decisão de cada um (elegível ou o motivo de não ser) e as últimas aprovações do agente. Administrador pode clicar em **Aprovar agora**.
+2. No PC aprovado: "Aprovado · por Agente IA" e, no histórico, "Aprovado automaticamente pelo Agente IA — PC R$ X ≤ RC R$ Y · condição faturada …".
+3. No Webex, canal **Pedidos Aprovados!**: o cartão de sempre, com "Aprovado por: Agente IA (aprovação automática)".
+4. No **Cesar** (assistente do painel): peça "simule a aprovação automática" ou "aprove os PCs elegíveis".
+
 ## Como faço para enviar o pedido ao fornecedor por e-mail e conversar com ele
 
 1. Abra o pedido (aprovado) e clique em **Imprimir / PDF / enviar ao fornecedor** → enviar por e-mail.

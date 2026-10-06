@@ -391,3 +391,8 @@
   color: var(--ww-warn-text); background: none; border: 0; cursor: pointer; padding: 0; }
 .cmp .alarme-omie > .linkbtn small { margin-left: auto; font-weight: 500; opacity: .85; }
 .cmp .alarme-omie .lst { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+/* Aprovação automática (Agente IA) — tabela da simulação */
+.cmp .tb { border-collapse: collapse; }
+.cmp .tb th, .cmp .tb td { padding: 6px 8px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+.cmp .tb th { font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: var(--tx-3); }
+.cmp .tb .r { text-align: right; white-space: nowrap; }

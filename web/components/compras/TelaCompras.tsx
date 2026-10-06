@@ -18,6 +18,7 @@ import FolhaRecebimento from "./FolhaRecebimento";
 import ModalEnviar from "./ModalEnviar";
 import ModalPcDaNf from "./ModalPcDaNf";
 import FolhaConferencia from "./FolhaConferencia";
+import AprovacaoIA from "./AprovacaoIA";
 import CaixaNfSemPedido, { type NfSemPedido, type NfDoPedido } from "./CaixaNfSemPedido";
 import {
   ETAPAS, ETAPA, ETAPA_AJUDA, APROV_LABEL, money, dBR, rel, hoje, diffDias, situacao, atrasado, rcAtendida,
@@ -386,6 +387,7 @@ export default function TelaCompras() {
               <button className={view === "kanban" ? "on" : ""} onClick={() => { setView("kanban"); lsSet("cmp-view", "kanban"); }}>▦ Kanban</button>
               <button className={view === "tabela" ? "on" : ""} onClick={() => { setView("tabela"); lsSet("cmp-view", "tabela"); }}>☰ Tabela</button>
             </div>
+            <AprovacaoIA aoAprovar={() => { void carregar(); }} />
             <div style={{ position: "relative" }}>
               <button className="btn pri" data-menu onClick={(e) => { e.stopPropagation(); setMenuNovo((v) => !v); }}>＋ Incluir ▾</button>
               {menuNovo && (

@@ -14,6 +14,9 @@
     },
     "app/api/cron/estoque-fotos/route.ts": {
       "maxDuration": 300
+    },
+    "app/api/cron/aprovacao-ia/route.ts": {
+      "maxDuration": 120
     }
   },
   "crons": [
@@ -36,6 +39,10 @@
     {
       "path": "/api/cron/estoque-fotos",
       "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/cron/aprovacao-ia",
+      "schedule": "0 11,15,20 * * *"
     }
   ]
 }
