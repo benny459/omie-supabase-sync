@@ -306,7 +306,9 @@ export default function NovaEmissao({ config, aberto, fechar, avisar, onEmitido,
     setModo("existente");
     setChave(ini.chave ?? null); setRotulo(ini.rotulo ?? d.rotulo ?? null);
     // OS do Omie (05/10/26): sempre recibo emitido pelo painel
-    setTipo(ini.chave?.startsWith("os_omie:") ? "recibo" : ini.tipo ?? "nfe");
+    // OS (do Omie ou nativa) nunca abre como NF-e de produto: recibo, ou NFS-e quando a empresa usa NFS-e (06/10/26)
+    setTipo(ini.chave?.startsWith("os_omie:") ? "recibo"
+      : ini.tipo ?? (ini.origem_tipo === "os" || ini.origem_tipo === "os_omie" ? (cfg?.tipo_os === "nfse" ? "nfse" : "recibo") : "nfe"));
     setCli(d.cliente); setItens(d.itens.map((i) => ({ ...i, valor_desconto: undefined, valor_frete: undefined, valor_outras: undefined })));
     setDesconto(r2(d.itens.reduce((a, i) => a + (i.valor_desconto ?? 0), 0)));
     setFrete(r2(d.itens.reduce((a, i) => a + (i.valor_frete ?? 0), 0)));

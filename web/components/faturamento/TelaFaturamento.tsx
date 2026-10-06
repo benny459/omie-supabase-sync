@@ -290,7 +290,7 @@ export default function TelaFaturamento() {
     const r = await agir(d, "doc");
     if (!r?.documento) return;
     setInicialNova({ chave: d.chave, documento: r.documento as Inicial["documento"],
-      parcelas_projeto: (r.parcelas_projeto as Inicial["parcelas_projeto"]) ?? null, tipo: d.tipo === "PV" ? "nfe" : d.origem === "Omie" ? "recibo" : undefined,
+      parcelas_projeto: (r.parcelas_projeto as Inicial["parcelas_projeto"]) ?? null, tipo: d.tipo === "PV" ? "nfe" : d.origem === "Omie" || cfg?.tipo_os !== "nfse" ? "recibo" : "nfse",
       origem_tipo: d.tipo === "PV" ? "pv" : d.origem === "Omie" ? "os_omie" : "os", rotulo: d.rotulo, secao: secao ?? null });
     setAberto(null); setNova(true);
   }
