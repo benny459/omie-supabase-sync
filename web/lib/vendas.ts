@@ -57,6 +57,7 @@ export type VendaLinha = Pick<VendaDoc, "id" | "empresa" | "tipo" | "numero" | "
 
 /** Corpo aceito por orders.vendas_salvar. */
 export type VendaSalvar = {
+  /** evento do fechamento (projeto): a trava de duplicado passa a ser por proposta+tipo+evento */ evento?: string;
   id?: number; empresa?: string; tipo?: "PV" | "OS"; cliente_codigo: number | string;
   proposta?: string | null; previsao?: string | null; condicao_codigo?: string | null; qtd_parcelas?: number | null;
   projeto_codigo?: string | null; categoria_codigo?: string | null; vendedor_codigo?: string | null;

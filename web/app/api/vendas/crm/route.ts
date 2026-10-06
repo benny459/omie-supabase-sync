@@ -58,6 +58,7 @@ export async function POST(req: Request) {
   if (!crmAutorizado(req)) return naoAutorizado();
   const b = (await req.json().catch(() => null)) as {
     empresa?: string; proposta?: string; tipo?: string; cab?: CabCrm; itens?: ItemCrm[]; parcelas?: ParcelaCrm[]; por?: string;
+    /** projeto por evento (CRM 2.6.647): vários PV/OS por proposta, um por evento */ serie?: boolean; evento?: string | number;
   } | null;
   const empresa = (b?.empresa ?? "SF").toUpperCase();
   const tipo = b?.tipo === "OS" ? "OS" : "PV";
@@ -98,6 +99,7 @@ export async function POST(req: Request) {
       consumidor_final: txt(cab.cf), observacoes: txt(cab.obs), obs_nf: txt(cab.obs_nf),
       num_pedido_cliente: txt(cab.num_pedido_cliente), contato: txt(cab.contato), etapa: txt(cab.etapa),
       itens, parcelas,
+      ...(() => { const ev = b.evento ?? (cab as { evento?: string | number }).evento; return ev != null && String(ev).trim() ? { evento: String(ev).trim() } : {}; })(),
     };
     const r = await salvarVenda(p, `CRM · ${String(b.por).trim()}`);
     return NextResponse.json({ ok: true, ...r });
