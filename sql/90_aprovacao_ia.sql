@@ -149,7 +149,7 @@ returns int language plpgsql security definer set search_path = '' as $$
 declare n int;
 begin
   update approval.approvals set status = 'APROVADO', aprovador_email = p_por, aprovado_em = now(),
-         valor_aprovado = p_valor, aprovador_id = null, updated_at = now(), updated_by = p_por
+         valor_aprovado = p_valor, aprovador_id = null, updated_at = now()
    where empresa = p_empresa and ncod_ped = any (p_ncods)
      and coalesce(status, 'PENDENTE') not in ('APROVADO', 'APROVADO_FAT_DIRETO', 'NAO_APROVADO', 'CANCELAR_PEDIDO');
   get diagnostics n = row_count;
