@@ -7,7 +7,7 @@
    são as de sempre. Itens que ficarem de fora continuam disponíveis para outro
    PC (ex.: outro fornecedor). */
 import { useEffect, useMemo, useState } from "react";
-import { money, gerarParcelas, hoje, addDias, TIPOS_FRETE, type Refs } from "@/lib/compras";
+import { money, gerarParcelas, hoje, addDias, TIPOS_FRETE, type Refs, type HistPreco } from "@/lib/compras";
 
 type ItemRc = { id: number; seq: number; cod?: string | null; ncodProd?: number | null; desc: string; un?: string | null;
   qtd: number; vu?: number | null; ncm?: string | null; obs?: string | null; cov: number };
@@ -15,7 +15,23 @@ type RcFull = { id: number; num: string; emp: string; pv?: string | null; pvClie
   projCod?: number | null; forn?: string | null; fornCod?: number | null; previsao?: string | null; comprador?: string | null;
   compradorCod?: number | null; itens: ItemRc[] };
 type Forn = { cod: number; nome: string; fantasia?: string; cnpj?: string; ultCatCod?: string; ultCat?: string; ultContato?: string; ultParc?: string };
-type Linha = { it: ItemRc; on: boolean; qtd: number; vu: number };
+type Linha = { it: ItemRc; on: boolean; qtd: number; vu: number; verHist?: boolean };
+
+const dBR = (d: string) => (/^\d{4}-\d{2}-\d{2}/.test(d) ? d.slice(0, 10).split("-").reverse().join("/") : d);
+const normForn = (x: string | null | undefined) => (x ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+/** "… · Fornecedor sugerido: OKI COMERCIO" na obs do item da RC (o CRM grava assim). */
+const sugeridoNaObs = (obs?: string | null) => /Fornecedor sugerido:\s*([^·|]+)/i.exec(obs ?? "")?.[1]?.trim() || null;
+
+/** Fornecedor mais frequente nas compras destes itens (desempate: o mais recente). */
+function maisComprado(hist: Record<string, HistPreco[]>): string | null {
+  const conta = new Map<string, { n: number; ult: string; nome: string }>();
+  for (const h of Object.values(hist)) for (const x of h) {
+    if (!x.f) continue;
+    const k = normForn(x.f); const c = conta.get(k) ?? { n: 0, ult: "", nome: x.f };
+    c.n += 1; if (x.d > c.ult) c.ult = x.d; conta.set(k, c);
+  }
+  return [...conta.values()].sort((a, b) => b.n - a.n || b.ult.localeCompare(a.ult))[0]?.nome ?? null;
+}
 
 async function json<T>(r: Response): Promise<T> {
   const j = await r.json().catch(() => ({}));
@@ -41,6 +57,8 @@ export default function GerarPcDaRc({ rc, empresa, itensRc, onFechar, onFeito }:
   const [previsao, setPrevisao] = useState(addDias(hoje(), 7));
   const [obs, setObs] = useState("");
   const [erro, setErro] = useState<string | null>(null);
+  const [fornOrigem, setFornOrigem] = useState<string | null>(null);
+  const [hist, setHist] = useState<Record<string, HistPreco[]>>({});
   const [salvando, setSalvando] = useState(false);
 
   // Carrega a RC (com o que já está coberto por outros PCs) e as listas de Compras.
@@ -63,14 +81,28 @@ export default function GerarPcDaRc({ rc, empresa, itensRc, onFechar, onFeito }:
           const falta = Math.max(0, (Number(it.qtd) || 0) - (Number(it.cov) || 0));
           return { it, on: falta > 0 && (!escolhidos.size || escolhidos.has(it.id)), qtd: falta, vu: Number(it.vu) || 0 };
         }));
-        // Fornecedor sugerido pela RC (nome) → procura o cadastro.
-        const sug = (full.forn ?? "").trim();
+        // Histórico de preço de cada item (por código) — base da sugestão e dos preços por fornecedor.
+        const cods = [...new Set(full.itens.map((it) => (it.cod ?? "").trim()).filter(Boolean))];
+        const hs: Record<string, HistPreco[]> = {};
+        await Promise.all(cods.map(async (c) => {
+          const h = await json<HistPreco[]>(await fetch(`/api/compras/buscar?tipo=preco&q=${encodeURIComponent(c)}`)).catch(() => []);
+          hs[c] = (h ?? []).filter((x) => x.n !== full.num);
+        }));
+        if (!vivo) return;
+        setHist(hs);
+        // Fornecedor sugerido (06/10/26, Benny): o da RC → o sugerido nos itens da RC → o que mais vendeu estes itens.
+        const obsSug = full.itens.map((it) => sugeridoNaObs(it.obs)).find(Boolean) ?? null;
+        const histSug = maisComprado(hs);
+        const [sug, origem] = (full.forn ?? "").trim() ? [full.forn!.trim(), "fornecedor da RC"]
+          : obsSug ? [obsSug, "sugerido nos itens da RC"]
+          : histSug ? [histSug, "quem mais vendeu estes itens (histórico de compras)"] : [null, null];
         if (sug) {
           setFornQ(sug);
           const ops = await json<Forn[]>(await fetch(`/api/compras/buscar?tipo=fornecedor&emp=${encodeURIComponent(empresa)}&q=${encodeURIComponent(sug.slice(0, 30))}`)).catch(() => []);
           if (!vivo) return;
-          const f = ops.find((o) => o.cod === full.fornCod) ?? ops[0];
-          if (f) escolherForn(f, rf);
+          const f = (full.fornCod ? ops.find((o) => o.cod === full.fornCod) : null)
+            ?? ops.find((o) => normForn(o.nome) === normForn(sug) || normForn(o.fantasia) === normForn(sug)) ?? ops[0];
+          if (f) { escolherForn(f, rf); setFornOrigem(origem); }
         }
       } catch (e) { if (vivo) setErro((e as Error).message); }
     })();
@@ -158,7 +190,7 @@ export default function GerarPcDaRc({ rc, empresa, itensRc, onFechar, onFeito }:
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: 10 }}>
               <label style={{ ...lab, position: "relative" }}>Fornecedor
                 <input style={inp} value={fornQ} placeholder="nome, fantasia ou CNPJ"
-                  onChange={(e) => { setFornQ(e.target.value); setForn(null); }} />
+                  onChange={(e) => { setFornQ(e.target.value); setForn(null); setFornOrigem(null); }} />
                 {fornOps.length > 0 && (
                   <div style={{ position: "absolute", top: 58, left: 0, right: 0, zIndex: 2, background: "var(--ww-panel)", border: "1px solid var(--ww-border-strong)", borderRadius: 8, maxHeight: 220, overflow: "auto" }}>
                     {fornOps.map((f) => (
@@ -169,7 +201,9 @@ export default function GerarPcDaRc({ rc, empresa, itensRc, onFechar, onFeito }:
                     ))}
                   </div>
                 )}
-                {rcFull.forn && <small style={{ color: "var(--ww-text-faint)" }}>sugerido na RC: {rcFull.forn}</small>}
+                {forn && fornOrigem
+                  ? <small style={{ color: "var(--ww-text-faint)" }}>sugestão: {fornOrigem}</small>
+                  : rcFull.forn ? <small style={{ color: "var(--ww-text-faint)" }}>sugerido na RC: {rcFull.forn}</small> : null}
               </label>
               <label style={lab}>Categoria da compra
                 <select style={inp} value={catCod} onChange={(e) => setCatCod(e.target.value)}>
@@ -204,6 +238,8 @@ export default function GerarPcDaRc({ rc, empresa, itensRc, onFechar, onFeito }:
                       <small style={{ display: "block", color: "var(--ww-text-faint)" }}>
                         {l.it.cod ? `${l.it.cod} · ` : ""}RC {l.it.qtd} {l.it.un ?? "UN"}{Number(l.it.cov) > 0 ? ` · ${l.it.cov} já em PC` : ""}{atendido ? " · já atendido" : ""}
                       </small>
+                      {!atendido && <PrecoDoItem linha={l} hist={hist[(l.it.cod ?? "").trim()] ?? []} forn={forn}
+                        alternar={() => setLinhas((x) => x.map((y, k) => (k === i ? { ...y, verHist: !y.verHist } : y)))} />}
                     </div>
                     <input type="number" min={0} max={falta} step="any" style={{ ...inp, textAlign: "right", height: 30 }} disabled={atendido || !l.on} value={l.qtd}
                       onChange={(e) => { const v = Number(e.target.value); setLinhas((x) => x.map((y, k) => (k === i ? { ...y, qtd: v } : y))); }} />
@@ -237,6 +273,53 @@ export default function GerarPcDaRc({ rc, empresa, itensRc, onFechar, onFeito }:
         )}
         {erro && <div style={{ color: "var(--ww-danger, #ef4444)", fontSize: 13 }}>{erro}</div>}
       </div>
+    </div>
+  );
+}
+
+/** Debaixo de cada item: o máximo da RC (▲/▼) e o que ESTE fornecedor já cobrou pelo item. */
+function PrecoDoItem({ linha, hist, forn, alternar }: { linha: Linha; hist: HistPreco[]; forn: Forn | null; alternar: () => void }) {
+  const max = Number(linha.it.vu) || 0;
+  const vu = Number(linha.vu) || 0;
+  const chip = (cor: string, txt: string) => (
+    <span style={{ fontSize: 11, padding: "1px 7px", borderRadius: 999, border: `1px solid ${cor}`, color: cor, whiteSpace: "nowrap" }}>{txt}</span>);
+  let vsMax: React.ReactNode = null;
+  if (max > 0 && vu > 0) {
+    const pct = ((vu - max) / max) * 100;
+    vsMax = Math.abs(vu - max) < 0.005 ? chip("var(--ww-text-muted)", "= máximo da RC")
+      : vu > max ? chip("var(--ww-danger, #ef4444)", `▲ ${pct.toFixed(2).replace(".", ",")}% acima do máximo da RC (máx ${money(max)})`)
+      : chip("var(--ww-success, #22c55e)", `▼ redução de ${money((max - vu) * (linha.qtd || 1))} (${Math.abs(pct).toFixed(2).replace(".", ",")}%) vs máximo da RC`);
+  }
+  const doForn = forn ? hist.filter((x) => x.f && normForn(x.f) === normForn(forn.nome)) : [];
+  const ult = doForn[0];
+  const geral = hist[0];
+  const min = doForn.length ? Math.min(...doForn.map((x) => x.vu)) : null;
+  const avg = doForn.length ? doForn.reduce((a, x) => a + x.vu, 0) / doForn.length : null;
+  return (
+    <div style={{ display: "grid", gap: 4, marginTop: 4, fontSize: 11.5, color: "var(--ww-text-muted)" }}>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+        {vsMax}
+        {forn && (ult
+          ? <span>{forn.fantasia || forn.nome}: último <b style={{ color: "var(--ww-text)" }}>{money(ult.vu)}</b> em {dBR(ult.d)} (PC {ult.n}) · mín {money(min)} · média {money(avg)} · {doForn.length} compra{doForn.length === 1 ? "" : "s"}</span>
+          : <span>{forn.fantasia || forn.nome}: sem compras deste item{geral ? <> · último geral {money(geral.vu)} em {dBR(geral.d)}{geral.f ? ` (${geral.f})` : ""}</> : ""}</span>)}
+        {!forn && geral && <span>último {money(geral.vu)} em {dBR(geral.d)}{geral.f ? ` · ${geral.f}` : ""}</span>}
+        {hist.length > 0 && <button type="button" onClick={alternar}
+          style={{ background: "none", border: 0, padding: 0, color: "var(--ww-accent, #4f7cff)", cursor: "pointer", fontSize: 11.5, textDecoration: "underline" }}>
+          {linha.verHist ? "fechar histórico" : `histórico (${hist.length})`}</button>}
+      </div>
+      {linha.verHist && (
+        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11.5 }}>
+          <thead><tr style={{ color: "var(--ww-text-faint)", textAlign: "left" }}><th>Data</th><th>PC</th><th>Fornecedor</th><th style={{ textAlign: "right" }}>Qtd</th><th style={{ textAlign: "right" }}>Valor unit.</th></tr></thead>
+          <tbody>{hist.map((x, j) => {
+            const deste = !!forn && !!x.f && normForn(x.f) === normForn(forn.nome);
+            return (
+              <tr key={j} style={{ color: deste ? "var(--ww-text)" : undefined, fontWeight: deste ? 600 : 400 }}>
+                <td>{dBR(x.d)}</td><td>{x.n}</td><td>{x.f ?? "—"}</td>
+                <td style={{ textAlign: "right" }}>{x.q}</td><td style={{ textAlign: "right" }}>{money(x.vu)}</td>
+              </tr>);
+          })}</tbody>
+        </table>
+      )}
     </div>
   );
 }

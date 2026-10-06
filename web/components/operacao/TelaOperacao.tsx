@@ -208,6 +208,18 @@ export default function TelaOperacao({ modulo, title, rows: rowsIniciais, parcia
   const groupBy = modulo === "projetos" ? "project" : modulo === "pcs" ? "pc" : "pvos";
   const buckets = useMemo(() => buildBuckets(rows, groupBy), [rows, groupBy]);
   const pedidos = useMemo(() => buckets.map((b) => montarPedido(b as never, modulo)), [buckets, modulo]);
+  /* De que proposta do CRM veio cada PV/OS (06/10/26, Benny) — chip na linha que
+     abre a proposta no CRM do portal. Mapa por empresa: { PV1967: "OPS0610261008" }. */
+  const [propostas, setPropostas] = useState<Record<string, string>>({});
+  const empresasVistas = useMemo(() => [...new Set(pedidos.map((p) => s(p.bucket.rows[0]?.empresa) || "SF"))].sort().join(","), [pedidos]);
+  useEffect(() => {
+    if (!empresasVistas || modulo === "pcs") return;
+    let vivo = true;
+    void Promise.all(empresasVistas.split(",").map((e) => fetch(`/api/operacao/propostas?empresa=${encodeURIComponent(e)}`)
+      .then((r) => (r.ok ? r.json() : {})).catch(() => ({}))))
+      .then((ls: Record<string, string>[]) => { if (vivo) setPropostas(Object.assign({}, ...ls)); });
+    return () => { vivo = false; };
+  }, [empresasVistas, modulo]);
   const porId = useMemo(() => new Map(pedidos.map((p) => [p.id, p])), [pedidos]);
   const bucketPorId = useMemo(() => new Map(buckets.map((b) => [b.pv_os_label, b])), [buckets]);
 
@@ -745,6 +757,7 @@ export default function TelaOperacao({ modulo, title, rows: rowsIniciais, parcia
           )}
           {visiveis.slice(0, limite).map(({ p, compras }) => (
             <CartaoPedido key={p.id} p={p} compras={compras} modulo={modulo} aberto={abertos.has(p.id)}
+              propostas={[...new Set([p.id, ...p.bucket.rows.map((r) => s(r.pv_os_label))].map((l) => propostas[String(l).toUpperCase()]).filter(Boolean))]}
               onToggle={() => toggleAberto(p.id)} nomeId={nomeId(p)} $={$}
               sel={sel} toggleSel={toggleSel} podeAprovar={podeAprovar} podeEditar={podeEditar} ehAdmin={ehAdmin}
               setStatus={setStatus} gravar={gravar} abrirDrawer={setDrawer} abrirAtrib={abrirAtrib} atrib={atrib}
@@ -1230,6 +1243,8 @@ function CartaoPedido(props: {
   marcarMaterialLote: MarcarMaterialLote;
   notas: Nota[];
   abrirNotas: () => void;
+  /** Propostas do CRM que geraram o(s) PV/OS deste cartão. */
+  propostas?: string[];
 }) {
   const { p, compras, modulo, aberto, $ } = props;
   const d = diasAte(p.lim);
@@ -1266,6 +1281,11 @@ function CartaoPedido(props: {
             {modulo === "pcs" ? <span className="tipo">PC avulso</span> : <TipoVenda t={p.tipo} />}
             {p.projeto && <span className="meta" title="Projeto">{p.projeto}</span>}
             {p.etapaVenda && <span className="meta" title="Etapa da venda no Omie">Etapa: <b>{p.etapaVenda}</b></span>}
+            {(props.propostas ?? []).map((n) => (
+              <a key={n} className="meta" href={`https://allka.ai/w/waterworks/crm/legado/${encodeURIComponent(n)}`}
+                title={`Gerado da proposta ${n} do CRM — abrir no CRM`} onClick={(e) => e.stopPropagation()}
+                style={{ textDecoration: "none", cursor: "pointer", color: "var(--ww-accent, #4f7cff)" }}>↗ {n}</a>
+            ))}
           </div>
         </div>
         <FasesBar p={p} modulo={modulo} />
