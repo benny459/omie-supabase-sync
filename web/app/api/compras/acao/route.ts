@@ -9,6 +9,7 @@
 // (histórico): só leitura nos campos; aprovação continua pela rota de sempre
 // (/api/approvals/set-status, com alçada e teto semanal) e etapa avança pela
 // etapa_manual. Nada aqui chama o Omie.
+import { postWebexMessage, buildApprovalMarkdown } from "@/lib/webex";
 import { NextResponse } from "next/server";
 import { exigirCompras, rpc, erro, podeAprovar, posGravar, type Quem } from "@/lib/compras-server";
 import { supaAdmin } from "@/lib/supabase-admin";
@@ -122,6 +123,18 @@ async function aprovar(q: Quem, req: Request, ids: number[], status: string) {
     const r = await rpc<{ bloqueados?: { num: string; erro: string }[] }>("compras_aprovar", { p_ids: okPainel, p_status: status, p_por: q.email });
     for (const b of r?.bloqueados ?? []) falhas.push({ num: b.num, erro: b.erro });
     bloqueados = (r?.bloqueados ?? []).length;
+    // Webex "Pedidos Aprovados!" — o mesmo cartão que os PCs do Omie já mandavam (06/10/26).
+    const travados = new Set((r?.bloqueados ?? []).map((b) => b.num));
+    if (status === "aprovado" || status === "nao_aprovado") {
+      for (const p of pedidos.filter((x) => okPainel.includes(x.id!) && !travados.has(x.num))) {
+        const { data: pa } = p.parc ? await supaAdmin().schema("finance").from("parcelas").select("descricao").eq("codigo", p.parc).maybeSingle() : { data: null };
+        await postWebexMessage(buildApprovalMarkdown({
+          pc_numero: p.num, nome_fornecedor: p.forn ?? null, pc_forma_pagamento: (pa as { descricao?: string } | null)?.descricao ?? p.parc ?? null,
+          valor: Number(p.valor) || null, projeto_nome: p.proj ?? null, pv_os_label: p.pv ?? null,
+          aprovador_email: q.email, status_label: status === "aprovado" ? "Aprovado" : "Não aprovado",
+        })).catch(() => null);
+      }
+    }
   }
   const okOmie = await gravarAprovacaoOmie(q, req, doOmie, status, falhas);
   return { alterados: okPainel.length - bloqueados + okOmie, falhas };
