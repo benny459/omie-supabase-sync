@@ -95,6 +95,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: true, pedido: pedidoId });
   } catch (e) {
     // 500 faz o Resend tentar de novo mais tarde.
+    console.error("[compras/email/entrada]", pedidoId, (e as Error).message);
     return NextResponse.json({ error: (e as Error).message }, { status: 500 });
   }
 }
