@@ -25,6 +25,18 @@ A tela **Compras** mostra o caminho de cada compra em **Kanban** (ou **Tabela**)
 
 > **Dica:** se o fornecedor não existe, clique em **Cadastrar fornecedor** ali mesmo — o cadastro já vem com o CNPJ.
 
+## Como o pedido de compra se compara ao máximo da RC
+
+A RC que vem do CRM traz o **custo máximo** de cada item (o orçado na CP). No pedido de compra, cada item ligado a uma RC mostra:
+
+- **▲ X% acima do máximo da RC (máx R$ …)** em vermelho, se o valor (unitário menos o desconto) passou do máximo;
+- **▼ redução de R$ … (X%) vs máximo da RC** em verde, se ficou abaixo;
+- **= máximo da RC** se ficou igual.
+
+Logo abaixo dos totais aparece **vs RC**: o máximo dos itens ligados, o valor deste pedido e a **redução** (ou quanto ficou **acima**). Quando a RC fica **atendida integralmente** (todos os itens e quantidades, somando este pedido e os anteriores), aparece também o total da RC comparado ao total comprado.
+
+Se algum item estiver acima do máximo, o painel **Pronto para salvar?** avisa e pede um **motivo** — sem ele o pedido não salva. O motivo vai para a observação interna e o cartão do pedido em Compras ganha o selo **▲ acima do máximo da RC**, para quem aprova ver.
+
 ## NF de entrada (pela Focus)
 
 - As NF-e emitidas contra a empresa chegam sozinhas (**📄 NF chegou pela Focus**) e **casam com o PC** automaticamente.

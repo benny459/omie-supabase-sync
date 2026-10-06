@@ -29,6 +29,9 @@ type Forn = { cod: number; nome: string; fantasia?: string; cnpj?: string; trans
 type ItemCat = { ncod_prod: number; codigo: string | null; descricao: string; unidade: string | null; ultimo_preco: number | null;
   fornecedor: string | null; ultima_compra: string | null; codigo_omie?: string | null; via?: string };
 
+/** PC × máximo da RC (06/10/26): itens da RC com o que os OUTROS pedidos já compraram. */
+type RcResumo = { num: string; itens: { id: number; qtd: number; vuMax?: number; covOutros: number; valOutros?: number }[] };
+const MARCA_ACIMA = "[acima do máximo da RC]";
 type Tab = "itens" | "deptos" | "frete" | "parcelas" | "info" | "obs";
 type PagarLinha = { n: number; total: number; venc: string | null; valor: number; fase: string; parcial: boolean;
   liberado: number | null; nf: string | null; status: string; omie: string | null; origem: string };
@@ -143,6 +146,53 @@ export default function FolhaPedido({
   }, [id, tipoNovo, fromRC]);
 
   const t = useMemo(() => (D ? totais(D) : { merc: 0, desc: 0, ipi: 0, st: 0, extra: 0, total: 0 }), [D]);
+
+  // ── PC × máximo da RC (06/10/26, Benny): a RC traz o custo máximo da CP; cada
+  // item do pedido compara o valor líquido (unitário − desconto) com ele, e o
+  // pedido soma a redução — e, se a RC fica atendida por inteiro, o total também.
+  const rcNums = useMemo(() => (D && D.tipo !== "RC" ? [...new Set(D.itens.filter((i) => i.rc).map((i) => i.rc!.num))].sort().join(",") : ""), [D]);
+  const [rcRes, setRcRes] = useState<RcResumo[]>([]);
+  const [motivoAcima, setMotivoAcima] = useState("");
+  useEffect(() => {
+    if (!rcNums || !D) { setRcRes([]); return; }
+    let vivo = true;
+    (async () => {
+      try {
+        const r = await json<RcResumo[]>(await fetch(`/api/compras/buscar?tipo=rcresumo&emp=${D.emp}&q=${encodeURIComponent(rcNums)}${D.id ? `&excluir=${D.id}` : ""}`));
+        if (vivo) setRcRes(Array.isArray(r) ? r : []);
+      } catch { if (vivo) setRcRes([]); }
+    })();
+    return () => { vivo = false; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rcNums, D?.id, D?.emp]);
+  const vuLiq = (i: { qtd: number; vu: number; desc0: number }) =>
+    (Number(i.vu) || 0) - ((Number(i.qtd) || 0) > 0 ? (Number(i.desc0) || 0) / Number(i.qtd) : 0);
+  const maxDe = (i: Item): number | undefined => {
+    if (!i.rc) return undefined;
+    if (i.rc.vuMax != null && i.rc.vuMax > 0) return i.rc.vuMax;
+    const v = rcRes.flatMap((r) => r.itens).find((x) => x.id === i.rc!.itemId)?.vuMax;
+    return v != null && v > 0 ? v : undefined;
+  };
+  const cmpRc = useMemo(() => {
+    if (!D || D.tipo === "RC") return null;
+    const lig = D.itens.filter((i) => maxDe(i) != null && Number(i.qtd) > 0);
+    if (!lig.length) return null;
+    const maxT = lig.reduce((a, i) => a + Number(i.qtd) * maxDe(i)!, 0);
+    const este = lig.reduce((a, i) => a + Number(i.qtd) * vuLiq(i), 0);
+    const acima = lig.filter((i) => vuLiq(i) > maxDe(i)! + 0.005);
+    const excesso = acima.reduce((a, i) => a + Number(i.qtd) * (vuLiq(i) - maxDe(i)!), 0);
+    const integral = rcRes.map((r) => {
+      const deste = (id: number) => D.itens.filter((i) => i.rc?.itemId === id);
+      if (!r.itens.length || r.itens.some((x) => x.vuMax == null)) return null;
+      const cheia = r.itens.every((x) => x.covOutros + deste(x.id).reduce((a, i) => a + (Number(i.qtd) || 0), 0) >= x.qtd - 0.0001);
+      if (!cheia) return null;
+      const maxR = r.itens.reduce((a, x) => a + x.qtd * (x.vuMax ?? 0), 0);
+      const pcs = r.itens.reduce((a, x) => a + (x.valOutros ?? 0) + deste(x.id).reduce((s2, i) => s2 + Number(i.qtd) * vuLiq(i), 0), 0);
+      return { num: r.num, maxR, pcs };
+    }).filter((x): x is { num: string; maxR: number; pcs: number } => !!x);
+    return { maxT, este, acima, excesso, integral };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [D, rcRes]);
   const diasDe = useCallback((cod: string) => refs?.parcelas.find((p) => p.cod === cod)?.dias ?? [0], [refs]);
 
   // Parcelas acompanham total, condição e previsão até alguém mexer nelas à mão.
@@ -241,6 +291,8 @@ export default function FolhaPedido({
     if (!isRC && D.itens.length && Math.abs(t.total - sv) > 0.05) e.parcelas = `Parcelas somam ${money(sv)}, pedido ${money(t.total)}. Use "Refazer parcelas".`;
     const ev = !e.itens ? erroVinculo(D) : null;
     if (ev) e.vinculo = ev;
+    const jaTemMotivo = (D.obsInt ?? "").includes(MARCA_ACIMA);
+    if (!isRC && cmpRc?.acima.length && !motivoAcima.trim() && !jaTemMotivo) e.itens = `${cmpRc.acima.length} item(ns) acima do máximo da RC — escreva o motivo em "Pronto para salvar?".`;
     setErrs(e);
     if (Object.keys(e).length) {
       setTab(e.forn || e.cat || e.itens || e.vinculo ? "itens" : e.deptos ? "deptos" : "parcelas");
@@ -248,6 +300,17 @@ export default function FolhaPedido({
       return false;
     }
     return true;
+  };
+
+  /** Obs. interna com a marca "[acima do máximo da RC]" (a fila de aprovação mostra) —
+   *  refeita a cada gravação: sai quando os itens voltam ao máximo. */
+  const obsComMarca = () => {
+    const base = (D?.obsInt ?? "").split("\n").filter((l) => !l.startsWith(MARCA_ACIMA)).join("\n").trim();
+    if (isRC || !cmpRc?.acima.length) return base;
+    const antigo = (D?.obsInt ?? "").split("\n").find((l) => l.startsWith(MARCA_ACIMA));
+    const motivo = motivoAcima.trim() || (antigo ? antigo.replace(/^.*?—\s*/, "") : "");
+    const linha = `${MARCA_ACIMA} ${cmpRc.acima.length} item(ns), +${money(cmpRc.excesso)} sobre o máximo — ${motivo}`;
+    return [linha, base].filter(Boolean).join("\n");
   };
 
   const salvar = async (o: { novaEtapa?: Etapa; novaAprov?: "aguardando"; aprovar?: boolean; gerarPc?: boolean; msg?: string } = {}) => {
@@ -258,7 +321,7 @@ export default function FolhaPedido({
         id: D.id, tipo: D.tipo, emp: D.emp, fornCod: D.fornCod, forn: D.forn, cnpj: D.cnpj, catCod: D.catCod, cat: D.cat,
         comprador: D.comprador, compradorCod: D.compradorCod, projCod: D.projCod, proj: D.proj, contaCod: D.contaCod,
         conta: D.conta, parc: D.parc, previsao: D.previsao, contato: D.contato, numForn: D.numForn, contrato: D.contrato,
-        obs: D.obs, obsInt: D.obsInt, pv: D.pv, pvCliente: D.pvCliente, frete: D.frete,
+        obs: D.obs, obsInt: obsComMarca(), pv: D.pv, pvCliente: D.pvCliente, frete: D.frete,
         ...(isRC ? {} : { semRc: !!D.semRc, semRcMotivo: D.semRc ? D.semRcMotivo ?? "" : null,
                           avulsa: !!D.avulsa, avulsaMotivo: D.avulsa ? D.avulsaMotivo ?? "" : null }),
         itens: D.itens.map((i) => ({ id: i.id ?? null, cod: i.cod, ncodProd: i.ncodProd, desc: i.desc, un: i.un, qtd: i.qtd,
@@ -479,6 +542,20 @@ export default function FolhaPedido({
                   {t.extra > 0 && <div><div className="k">Frete e despesas</div><div className="v num">{money(t.extra)}</div></div>}
                   <div className="grand"><div className="k">Valor Total da Compra</div><div className="v num">{money(t.total)}</div></div>
                 </div>
+                {cmpRc && (
+                  <div className="hint" style={{ margin: "-4px 0 10px", display: "flex", gap: 14, flexWrap: "wrap", alignItems: "center" }}>
+                    <span><b>vs RC</b> · máximo {money(cmpRc.maxT)} · este pedido {money(cmpRc.este)} ·{" "}
+                      {cmpRc.este <= cmpRc.maxT + 0.005
+                        ? <b style={{ color: "var(--ww-ok-text, #16a34a)" }}>redução {money(cmpRc.maxT - cmpRc.este)} ({num2(cmpRc.maxT ? ((cmpRc.maxT - cmpRc.este) / cmpRc.maxT) * 100 : 0)}%)</b>
+                        : <b style={{ color: "var(--ww-crit-text)" }}>acima {money(cmpRc.este - cmpRc.maxT)} ({num2(cmpRc.maxT ? ((cmpRc.este - cmpRc.maxT) / cmpRc.maxT) * 100 : 0)}%)</b>}
+                      {cmpRc.acima.length > 0 && <span style={{ color: "var(--ww-crit-text)" }}> · {cmpRc.acima.length} item(ns) acima do máximo</span>}</span>
+                    {cmpRc.integral.map((r) => (
+                      <span key={r.num} className="pill p-acc" title="Todos os itens e quantidades da RC estão cobertos por pedidos de compra (este e os anteriores)">
+                        RC {r.num} atendida integralmente · máximo {money(r.maxR)} · comprado {money(r.pcs)} ·{" "}
+                        {r.pcs <= r.maxR + 0.005 ? `redução ${money(r.maxR - r.pcs)}` : `acima ${money(r.pcs - r.maxR)}`}
+                      </span>))}
+                  </div>
+                )}
 
                 <nav className="tabs" role="tablist">
                   {tabs.map(([k, l, b, e]) => (
@@ -587,12 +664,19 @@ export default function FolhaPedido({
                                   {(() => {
                                     const lim = it.ncodProd ? pmax[Number(it.ncodProd)] : null;
                                     const acimaLim = lim != null && it.vu > lim + 0.005;
-                                    const acimaRc = !isRC && it.rc?.vuMax != null && it.vu > it.rc.vuMax + 0.005;
-                                    if (!acimaLim && !acimaRc) return null;
+                                    const mx = !isRC ? maxDe(it) : undefined;
+                                    const liq = vuLiq(it);
+                                    const difRc = mx != null ? liq - mx : 0;
+                                    const pctRc = mx ? (difRc / mx) * 100 : 0;
+                                    if (!acimaLim && mx == null) return null;
                                     return (
-                                      <div className="hint" style={{ color: "var(--ww-crit-text)" }}>
-                                        {acimaLim && <>▲ acima do preço máximo do item ({money(lim!)}) </>}
-                                        {acimaRc && <>▲ acima do valor da RC {it.rc!.num} ({money(it.rc!.vuMax!)} — custo máximo orçado)</>}
+                                      <div className="pricecmp">
+                                        {mx != null && (Math.abs(difRc) < 0.005
+                                          ? <span className="pill p-off" title={`Valor da RC ${it.rc!.num} (custo máximo orçado na CP)`}>= máximo da RC</span>
+                                          : difRc > 0
+                                            ? <span className="pill p-crit" title={`Valor da RC ${it.rc!.num} (custo máximo orçado na CP)`}>▲ {num2(pctRc)}% acima do máximo da RC (máx {money(mx)})</span>
+                                            : <span className="pill p-ok" title={`Valor da RC ${it.rc!.num} (custo máximo orçado na CP)`}>▼ redução de {money(-difRc * (Number(it.qtd) || 0))} ({num2(-pctRc)}%) vs máximo da RC</span>)}
+                                        {acimaLim && <span className="pill p-crit">▲ acima do preço máximo do item ({money(lim!)})</span>}
                                       </div>
                                     );
                                   })()}
@@ -920,6 +1004,11 @@ export default function FolhaPedido({
                      [!D.deptos.length || Math.abs(D.deptos.reduce((a, d) => a + (Number(d.perc) || 0), 0) - 100) <= 0.01, "Departamentos fecham 100%"],
                      [isRC || Math.abs(t.total - D.parcelas.reduce((a, x) => a + (Number(x.valor) || 0), 0)) <= 0.05, "Parcelas batem com o total"]] as [boolean, string][])
                     .map(([ok, l]) => <div key={l}><span className={`dot ${ok ? "ok" : "no"}`} />{l}</div>)}
+                  {!isRC && cmpRc && (cmpRc.acima.length > 0
+                    ? <div><span className="dot" style={{ background: "#f59e0b" }} />{cmpRc.acima.length} item(ns) acima do máximo da RC
+                        {!ro && <input className="in" style={{ marginTop: 6 }} value={motivoAcima} placeholder="Motivo (obrigatório para salvar acima do máximo)"
+                          onChange={(e) => setMotivoAcima(e.target.value)} />}</div>
+                    : <div><span className="dot ok" />Itens dentro do máximo da RC</div>)}
                 </div></section>
               )}
               {!isRC && (

@@ -340,6 +340,9 @@ export default function TelaCompras() {
         {p.tipo === "RC"
           ? <div className="ent">{p.cobPcs?.length ? <><span className="pill p-sky">{p.cobDone}/{p.cobTotal} itens atendidos{p.parciais ? ` · ${p.parciais} parcial` : ""}</span> {p.cobPcs.map((n) => "PC " + n).join(", ")}</> : <span className="faint">Nenhum item comprado ainda</span>}</div>
           : p.rcs?.length ? <div className="ent">⇠ atende {p.rcs.map((n) => "RC " + n).join(", ")}</div> : null}
+        {p.tipo === "PC" && (p.obsInt ?? "").includes("[acima do máximo da RC]") && (
+          <div className="ent"><span className="pill p-crit" title={(p.obsInt ?? "").split("\n").find((l) => l.startsWith("[acima do máximo da RC]")) ?? ""}>
+            ▲ acima do máximo da RC</span> <span className="faint">{((p.obsInt ?? "").split("\n").find((l) => l.startsWith("[acima do máximo da RC]")) ?? "").replace(/^.*?—\s*/, "")}</span></div>)}
         <div className="meta">
           {p.proj && <span className="tag" title="Projeto">{p.proj}</span>}
           {p.comprador && <span className="tag" title="Comprador">👤 {p.comprador}</span>}

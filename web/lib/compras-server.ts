@@ -70,7 +70,7 @@ export function semPermissao(q: Quem, chave: Chave, msg: string): NextResponse |
 }
 
 /** Campos de valor (R$) dos pedidos — zerados para quem não pode ver valores. */
-const CAMPOS_VALOR = /^(valor|vu|vlrUnit|nval|preco|total|merc|desc0|desconto|ipi|st|frete|seguro|outras|liberado|valorAberto|valor_.*|ultimo_preco|min|max|media|avg)$/i;
+const CAMPOS_VALOR = /^(valor|vu|vlrUnit|nval|preco|total|merc|desc0|desconto|ipi|st|frete|seguro|outras|liberado|valorAberto|valor_.*|ultimo_preco|min|max|media|avg|vuMax|valOutros)$/i;
 export function valoresSePuder<T>(q: Quem, dado: T): T {
   return q.pode["compras.ver_valores"] ? dado : semValores(dado, CAMPOS_VALOR);
 }
