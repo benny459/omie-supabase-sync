@@ -343,8 +343,12 @@ export default function TelaCompras() {
         <div className="meta">
           {p.proj && <span className="tag" title="Projeto">{p.proj}</span>}
           {p.comprador && <span className="tag" title="Comprador">👤 {p.comprador}</span>}
-          {p.pv && <span className="tag" title="Venda de origem">↔ {p.pv}{p.pvCliente ? " · " + p.pvCliente : ""}</span>}
-          <span className={`tag ${p.origem === "omie" ? "orig-omie" : "orig-painel"}`}>{p.origem === "omie" ? "Omie (histórico)" : "Painel"}</span>
+          {p.pv && <a className="tag" style={{ color: "inherit", textDecoration: "none", cursor: "pointer" }} title="Abrir esta venda em Operação › Vendas avulsas" href={`/avulsos?q=${encodeURIComponent(p.pv)}`}
+            onClick={(ev) => ev.stopPropagation()}>↔ {p.pv}{p.pvCliente ? " · " + p.pvCliente : ""}</a>}
+          {p.origem !== "omie" && p.pv
+            ? <a className="tag orig-painel" style={{ textDecoration: "none", cursor: "pointer" }} title="Abrir o processo desta venda no painel (Operação › Vendas avulsas)" href={`/avulsos?q=${encodeURIComponent(p.pv)}`}
+                onClick={(ev) => ev.stopPropagation()}>Painel ↗</a>
+            : <span className={`tag ${p.origem === "omie" ? "orig-omie" : "orig-painel"}`}>{p.origem === "omie" ? "Omie (histórico)" : "Painel"}</span>}
         </div>
       </article>
     );

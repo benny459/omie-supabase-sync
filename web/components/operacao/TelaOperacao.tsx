@@ -104,6 +104,8 @@ export default function TelaOperacao({ modulo, title, rows: rowsIniciais, parcia
   // ── estado da tela ────────────────────────────────────────────────────
   const [escopo, setEscopo] = useState<Escopo>("aberto");
   const [q, setQ] = useState("");
+  // ?q=PV1966 (vindo do cartão da RC/PC em Compras) já abre a tela filtrada.
+  useEffect(() => { const v = new URLSearchParams(window.location.search).get("q"); if (v) setQ(v); }, []);
   const [periodo, setPeriodo] = useState<Periodo>("tudo");
   const [filtros, setFiltros] = useState<Filtros>({});
   /* Filtros rápidos marcados — vários ao mesmo tempo; cada um estreita a
