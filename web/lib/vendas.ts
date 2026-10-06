@@ -25,7 +25,8 @@ export type VendaItem = {
   fiscal?: Record<string, unknown> | null;
 };
 
-export type VendaParcela = { numero: number; vencimento: string; valor: number; percentual?: number | null; dias?: number | null };
+export type VendaParcela = { numero: number; vencimento: string; valor: number; percentual?: number | null; dias?: number | null;
+  /** nome do evento do fechamento e data prevista de faturamento (projetos, 06/10/26) */ descricao?: string | null; faturamento_previsto?: string | null };
 
 export type VendaStatus = "aberto" | "faturado" | "cancelado";
 

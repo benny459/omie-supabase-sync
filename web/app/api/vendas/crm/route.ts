@@ -26,7 +26,8 @@ type ItemCrm = {
   id?: number | string; cod?: string; desc: string; un?: string; ncm?: string; qty: number | string; unit: number | string;
   cfop?: string; fiscal?: Record<string, unknown> | null;
 };
-type ParcelaCrm = { numero_parcela?: number; data_vencimento?: string; valor?: number; percentual?: number; quantidade_dias?: number };
+type ParcelaCrm = { numero_parcela?: number; data_vencimento?: string; valor?: number; percentual?: number; quantidade_dias?: number;
+  /** fechamento de projeto (CRM 2.6.641): nome do evento e data prevista de faturamento */ descricao?: string; data_faturamento?: string };
 
 const isoDe = (s?: string) => {
   if (!s) return null;
@@ -73,6 +74,7 @@ export async function POST(req: Request) {
     const parcelas: VendaParcela[] = (b.parcelas ?? []).filter((x) => x.data_vencimento).map((x, k) => ({
       numero: Number(x.numero_parcela) || k + 1, vencimento: isoDe(x.data_vencimento)!, valor: Number(x.valor) || 0,
       percentual: x.percentual ?? null, dias: x.quantidade_dias ?? null,
+      descricao: txt(x.descricao), faturamento_previsto: isoDe(x.data_faturamento) ?? null,
     }));
     // CRM 2.6.622+: projeto e categoria de receita são obrigatórios (05/10/26).
     if (!Number(cab.projeto)) return NextResponse.json({ error: "Projeto obrigatório: escolha o projeto do PV/OS no CRM" }, { status: 400 });
