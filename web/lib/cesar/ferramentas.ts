@@ -25,7 +25,6 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { modoReportDoUsuario } from "./report-config";
 import { validarSqlLeitura, limparSql } from "./sql-guard";
 import { validarFontesDoReport, executarFontes } from "./report-fontes";
-import { rodarAprovacaoIA } from "@/lib/aprovacao-ia";
 
 /** Escopo padrão do painel, o mesmo das telas. Deixar explícito evita a
  *  pergunta "esses números são de qual empresa?" a cada resposta. */
@@ -346,6 +345,12 @@ export type CtxAcao = {
   email: string;
   nome: string;
   isAdmin: boolean;
+  /** Injetado pela rota (servidor): aprovação automática de PCs — lib/aprovacao-ia. */
+  aprovacaoIA?: (o: { aplicar: boolean; disparo: string }) => Promise<{
+    modo: string; aprovados: number; elegiveis: number; pulados: number; falhas: number;
+    linhas: { pc: string; fornecedor: string | null; pv_os: string | null; cmp_pc: number | null; cmp_rc: number | null;
+      condicao: string | null; decisao: string; motivo: string }[];
+  }>;
 };
 
 type DefAcao = {
@@ -392,7 +397,10 @@ export const ACOES: Record<string, DefAcao> = {
     exec: async (ctx, i) => {
       const aplicar = i.aplicar === true;
       if (aplicar && !ctx.isAdmin) return { erro: "só administrador aprova; posso mostrar a simulação" };
-      const r = await rodarAprovacaoIA({ aplicar, disparo: `cesar:${ctx.email}` });
+      // Este arquivo também é lido por componente de cliente (ReportsSalvos), então a
+      // aprovação (módulos só de servidor) é injetada pela rota do Cesar em ctx.aprovacaoIA.
+      if (!ctx.aprovacaoIA) return { erro: "aprovação automática indisponível neste contexto" };
+      const r = await ctx.aprovacaoIA({ aplicar, disparo: `cesar:${ctx.email}` });
       return {
         modo: r.modo, aprovados: r.aprovados, elegiveis: r.elegiveis, pulados: r.pulados, falhas: r.falhas,
         pcs: r.linhas.map((l) => ({ pc: l.pc, fornecedor: l.fornecedor, venda: l.pv_os, valor_pc: l.cmp_pc, valor_rc: l.cmp_rc,

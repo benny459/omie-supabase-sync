@@ -19,6 +19,7 @@ import { canViewArea } from "@/lib/permissions";
 import { loadPerms } from "@/lib/require-area";
 import { createClient } from "@supabase/supabase-js";
 import { executar, tools, type CtxAcao } from "@/lib/cesar/ferramentas";
+import { rodarAprovacaoIA } from "@/lib/aprovacao-ia";
 import { sistema } from "@/lib/cesar/prompt";
 
 export const runtime = "nodejs";
@@ -108,6 +109,7 @@ export async function POST(req: Request) {
     email: user.email ?? "",
     nome: (user.user_metadata as { full_name?: string } | null)?.full_name || user.email || "",
     isAdmin: !!perms?.is_admin,
+    aprovacaoIA: rodarAprovacaoIA,
   };
 
   // Data local (America/Sao_Paulo). toISOString() é UTC e depois das 21h daria
