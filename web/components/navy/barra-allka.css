@@ -7,13 +7,14 @@
  * --c é a cor do módulo: na barra, a do módulo aberto; em cada aba, a sua.
  */
 .ab {
-  --ab-bg: #ffffff;
+  /* 06/10/26: barra no tom da paleta (app/aparencia.css — barras 8%/10%) */
+  --ab-bg: rgb(var(--color-ww-sidebar, 255 255 255));
   --ab-fg: #0b1220;
   --ab-muted: #5b6475;
   --ab-muted2: #7a8294;
-  --ab-line: rgba(11, 18, 32, 0.09);
+  --ab-line: rgb(var(--color-ww-border, 230 232 238));
   --ab-hover: rgba(11, 18, 32, 0.05);
-  --ab-popover: #ffffff;
+  --ab-popover: rgb(var(--color-ww-panel, 255 255 255));
   --ab-av: #e7edf8;
   --ab-av-ink: #1f4fbf;
   --ab-pill: #0b1220;
@@ -34,13 +35,13 @@
   -webkit-font-smoothing: antialiased;
 }
 .dark .ab {
-  --ab-bg: #0a0d14;
+  --ab-bg: rgb(var(--color-ww-sidebar, 10 13 20));
   --ab-fg: #f2f4f8;
   --ab-muted: #9aa3b5;
   --ab-muted2: #6b7386;
-  --ab-line: rgba(255, 255, 255, 0.08);
+  --ab-line: rgb(var(--color-ww-border, 31 42 64));
   --ab-hover: rgba(255, 255, 255, 0.05);
-  --ab-popover: #10141e;
+  --ab-popover: rgb(var(--color-ww-panel, 16 20 30));
   --ab-av: #1c2333;
   --ab-av-ink: #9fc3ff;
   --ab-pill: #ffffff;
