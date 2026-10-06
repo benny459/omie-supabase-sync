@@ -278,6 +278,71 @@ html.dark[data-paleta="ambar"] {
   --ww-active-nav: #51370f; --ww-active-ring: inset 0 0 0 1px color-mix(in srgb, #f59e0b 35%, transparent);
 }
 
+/* ── Tom da paleta em toda a tela (06/10/26, Benny: "o sólido deveria deixar a
+   tela com a cor escolhida de forma mais marcante — em todo o fundo, casando").
+   Mesma fórmula do portal (app/aparencia.css de lá), mistura em oklab com a cor
+   principal da paleta (--color-ww-accent):
+                     claro  escuro
+     fundo da tela    10%    12%
+     barras/menus      8%    10%
+     cartões/gavetas   4%     7%
+     afundados/trilho  8%    10%
+     bordas           18%    22%
+   Os tokens deste painel são tripletos rgb (Tailwind usa rgb(var() / alfa)),
+   por isso os valores já vêm calculados — gerados por um script a partir das
+   paletas acima e de globals.css; ao mudar uma paleta, regenerar este bloco (scripts/tom_paleta_painel.py).
+   Fica ANTES do vidro, com a mesma especificidade, para o vidro continuar a
+   mandar na opacidade. */
+html:not([data-paleta]) {
+  --color-ww-bg: 222 233 249; --ww-bg: #dee9f9; --ww-bg-grad: #dee9f9; --color-ww-sidebar: 239 246 255; --ww-sidebar: #eff6ff; --color-ww-drawerHead: 230 239 252; --color-ww-panel: 247 250 255; --ww-panel: #f7faff; --ww-panel-grad: #f7faff; --color-ww-drawer: 247 250 255; --color-ww-rowL1: 247 250 255; --ww-row-l1: #f7faff; --color-ww-rowL2: 240 245 252; --ww-row-l2: #f0f5fc; --color-ww-panelSunken: 230 239 252; --ww-panel-sunken: #e6effc; --color-ww-rowL0: 230 239 252; --ww-row-l0: #e6effc; --color-ww-track: 215 226 242; --color-ww-rowHover: 219 232 250; --color-ww-border: 188 208 238; --ww-border: #bcd0ee; --color-ww-borderStrong: 171 194 227; --ww-border-strong: #abc2e3; --color-ww-borderSubtle: 198 216 244;
+}
+html.dark:not([data-paleta]) {
+  --color-ww-bg: 15 33 61; --ww-bg: #0f213d; --ww-bg-grad: #0f213d; --color-ww-sidebar: 21 38 67; --ww-sidebar: #152643; --color-ww-drawerHead: 18 35 63; --color-ww-panel: 20 35 62; --ww-panel: #14233e; --ww-panel-grad: #14233e; --color-ww-drawer: 20 35 62; --color-ww-rowL1: 20 35 62; --ww-row-l1: #14233e; --color-ww-rowL2: 17 32 58; --ww-row-l2: #11203a; --color-ww-panelSunken: 18 35 63; --ww-panel-sunken: #12233f; --color-ww-rowL0: 25 44 76; --ww-row-l0: #192c4c; --color-ww-track: 27 46 80; --color-ww-rowHover: 29 53 92; --color-ww-border: 37 65 114; --ww-border: #254172; --color-ww-borderStrong: 46 78 133; --ww-border-strong: #2e4e85; --color-ww-borderSubtle: 31 57 100;
+}
+html[data-paleta="teal"] {
+  --color-ww-bg: 219 236 234; --ww-bg: #dbecea; --ww-bg-grad: #dbecea; --color-ww-sidebar: 239 246 245; --ww-sidebar: #eff6f5; --color-ww-drawerHead: 230 240 241; --color-ww-panel: 247 251 250; --ww-panel: #f7fbfa; --ww-panel-grad: #f7fbfa; --color-ww-drawer: 247 251 250; --color-ww-rowL1: 247 251 250; --ww-row-l1: #f7fbfa; --color-ww-rowL2: 240 246 247; --ww-row-l2: #f0f6f7; --color-ww-panelSunken: 230 240 241; --ww-panel-sunken: #e6f0f1; --color-ww-rowL0: 230 240 241; --ww-row-l0: #e6f0f1; --color-ww-track: 214 227 232; --color-ww-rowHover: 218 233 235; --color-ww-border: 187 210 216; --ww-border: #bbd2d8; --color-ww-borderStrong: 170 197 205; --ww-border-strong: #aac5cd; --color-ww-borderSubtle: 196 219 221;
+}
+html.dark[data-paleta="teal"] {
+  --color-ww-bg: 10 38 41; --ww-bg: #0a2629; --ww-bg-grad: #0a2629; --color-ww-sidebar: 15 48 50; --ww-sidebar: #0f3032; --color-ww-drawerHead: 12 41 44; --color-ww-panel: 14 44 47; --ww-panel: #0e2c2f; --ww-panel-grad: #0e2c2f; --color-ww-drawer: 14 44 47; --color-ww-rowL1: 14 44 47; --ww-row-l1: #0e2c2f; --color-ww-rowL2: 11 37 40; --ww-row-l2: #0b2528; --color-ww-panelSunken: 12 41 44; --ww-panel-sunken: #0c292c; --color-ww-rowL0: 25 56 59; --ww-row-l0: #19383b; --color-ww-track: 21 64 66; --color-ww-rowHover: 33 67 68; --color-ww-border: 27 88 87; --ww-border: #1b5857; --color-ww-borderStrong: 44 100 100; --ww-border-strong: #2c6464; --color-ww-borderSubtle: 24 79 78;
+}
+html[data-paleta="violet"] {
+  --color-ww-bg: 230 225 252; --ww-bg: #e6e1fc; --ww-bg-grad: #e6e1fc; --color-ww-sidebar: 243 241 255; --ww-sidebar: #f3f1ff; --color-ww-drawerHead: 234 234 252; --color-ww-panel: 249 248 255; --ww-panel: #f9f8ff; --ww-panel-grad: #f9f8ff; --color-ww-drawer: 249 248 255; --color-ww-rowL1: 249 248 255; --ww-row-l1: #f9f8ff; --color-ww-rowL2: 242 243 252; --ww-row-l2: #f2f3fc; --color-ww-panelSunken: 234 234 252; --ww-panel-sunken: #eaeafc; --color-ww-rowL0: 234 234 252; --ww-row-l0: #eaeafc; --color-ww-track: 218 222 242; --color-ww-rowHover: 225 225 250; --color-ww-border: 197 198 238; --ww-border: #c5c6ee; --color-ww-borderStrong: 180 184 227; --ww-border-strong: #b4b8e3; --color-ww-borderSubtle: 207 206 244;
+}
+html.dark[data-paleta="violet"] {
+  --color-ww-bg: 29 20 55; --ww-bg: #1d1437; --ww-bg-grad: #1d1437; --color-ww-sidebar: 37 26 70; --ww-sidebar: #251a46; --color-ww-drawerHead: 32 22 61; --color-ww-panel: 34 24 65; --ww-panel: #221841; --ww-panel-grad: #221841; --color-ww-drawer: 34 24 65; --color-ww-rowL1: 34 24 65; --ww-row-l1: #221841; --color-ww-rowL2: 29 20 56; --ww-row-l2: #1d1438; --color-ww-panelSunken: 32 22 61; --ww-panel-sunken: #20163d; --color-ww-rowL0: 45 34 77; --ww-row-l0: #2d224d; --color-ww-track: 47 34 86; --color-ww-rowHover: 55 44 90; --color-ww-border: 65 46 115; --ww-border: #412e73; --color-ww-borderStrong: 79 61 127; --ww-border-strong: #4f3d7f; --color-ww-borderSubtle: 58 41 105;
+}
+html[data-paleta="indigo"] {
+  --color-ww-bg: 221 225 251; --ww-bg: #dde1fb; --ww-bg-grad: #dde1fb; --color-ww-sidebar: 239 241 255; --ww-sidebar: #eff1ff; --color-ww-drawerHead: 229 235 251; --color-ww-panel: 247 248 255; --ww-panel: #f7f8ff; --ww-panel-grad: #f7f8ff; --color-ww-drawer: 247 248 255; --color-ww-rowL1: 247 248 255; --ww-row-l1: #f7f8ff; --color-ww-rowL2: 240 243 252; --ww-row-l2: #f0f3fc; --color-ww-panelSunken: 229 235 251; --ww-panel-sunken: #e5ebfb; --color-ww-rowL0: 229 235 251; --ww-row-l0: #e5ebfb; --color-ww-track: 214 222 242; --color-ww-rowHover: 218 226 249; --color-ww-border: 187 199 236; --ww-border: #bbc7ec; --color-ww-borderStrong: 170 185 225; --ww-border-strong: #aab9e1; --color-ww-borderSubtle: 197 207 242;
+}
+html.dark[data-paleta="indigo"] {
+  --color-ww-bg: 20 24 57; --ww-bg: #141839; --ww-bg-grad: #141839; --color-ww-sidebar: 27 33 74; --ww-sidebar: #1b214a; --color-ww-drawerHead: 23 27 64; --color-ww-panel: 25 31 69; --ww-panel: #191f45; --ww-panel-grad: #191f45; --color-ww-drawer: 25 31 69; --color-ww-rowL1: 25 31 69; --ww-row-l1: #191f45; --color-ww-rowL2: 21 25 59; --ww-row-l2: #15193b; --color-ww-panelSunken: 23 27 64; --ww-panel-sunken: #171b40; --color-ww-rowL0: 35 41 82; --ww-row-l0: #232952; --color-ww-track: 36 43 95; --color-ww-rowHover: 44 50 93; --color-ww-border: 49 57 124; --ww-border: #31397c; --color-ww-borderStrong: 63 71 135; --ww-border-strong: #3f4787; --color-ww-borderSubtle: 44 51 113;
+}
+html[data-paleta="esmeralda"] {
+  --color-ww-bg: 219 237 228; --ww-bg: #dbede4; --ww-bg-grad: #dbede4; --color-ww-sidebar: 239 247 242; --ww-sidebar: #eff7f2; --color-ww-drawerHead: 229 240 239; --color-ww-panel: 247 251 249; --ww-panel: #f7fbf9; --ww-panel-grad: #f7fbf9; --color-ww-drawer: 247 251 249; --color-ww-rowL1: 247 251 249; --ww-row-l1: #f7fbf9; --color-ww-rowL2: 240 246 246; --ww-row-l2: #f0f6f6; --color-ww-panelSunken: 229 240 239; --ww-panel-sunken: #e5f0ef; --color-ww-rowL0: 229 240 239; --ww-row-l0: #e5f0ef; --color-ww-track: 214 227 230; --color-ww-rowHover: 218 234 231; --color-ww-border: 186 211 210; --ww-border: #bad3d2; --color-ww-borderStrong: 169 197 200; --ww-border-strong: #a9c5c8; --color-ww-borderSubtle: 196 219 215;
+}
+html.dark[data-paleta="esmeralda"] {
+  --color-ww-bg: 7 37 27; --ww-bg: #07251b; --ww-bg-grad: #07251b; --color-ww-sidebar: 13 47 35; --ww-sidebar: #0d2f23; --color-ww-drawerHead: 10 40 29; --color-ww-panel: 12 43 32; --ww-panel: #0c2b20; --ww-panel-grad: #0c2b20; --color-ww-drawer: 12 43 32; --color-ww-rowL1: 12 43 32; --ww-row-l1: #0c2b20; --color-ww-rowL2: 9 36 27; --ww-row-l2: #09241b; --color-ww-panelSunken: 10 40 29; --ww-panel-sunken: #0a281d; --color-ww-rowL0: 23 56 44; --ww-row-l0: #17382c; --color-ww-track: 19 65 50; --color-ww-rowHover: 31 66 53; --color-ww-border: 24 90 68; --ww-border: #185a44; --color-ww-borderStrong: 42 103 81; --ww-border-strong: #2a6751; --color-ww-borderSubtle: 21 80 60;
+}
+html[data-paleta="ametista"] {
+  --color-ww-bg: 241 221 242; --ww-bg: #f1ddf2; --ww-bg-grad: #f1ddf2; --color-ww-sidebar: 249 238 249; --ww-sidebar: #f9eef9; --color-ww-drawerHead: 240 232 246; --color-ww-panel: 252 247 252; --ww-panel: #fcf7fc; --ww-panel-grad: #fcf7fc; --color-ww-drawer: 252 247 252; --color-ww-rowL1: 252 247 252; --ww-row-l1: #fcf7fc; --color-ww-rowL2: 245 242 249; --ww-row-l2: #f5f2f9; --color-ww-panelSunken: 240 232 246; --ww-panel-sunken: #f0e8f6; --color-ww-rowL0: 240 232 246; --ww-row-l0: #f0e8f6; --color-ww-track: 224 219 236; --color-ww-rowHover: 233 221 241; --color-ww-border: 209 193 225; --ww-border: #d1c1e1; --color-ww-borderStrong: 192 179 214; --ww-border-strong: #c0b3d6; --color-ww-borderSubtle: 219 201 230;
+}
+html.dark[data-paleta="ametista"] {
+  --color-ww-bg: 39 15 49; --ww-bg: #270f31; --ww-bg-grad: #270f31; --color-ww-sidebar: 48 20 62; --ww-sidebar: #30143e; --color-ww-drawerHead: 42 17 55; --color-ww-panel: 44 19 58; --ww-panel: #2c133a; --ww-panel-grad: #2c133a; --color-ww-drawer: 44 19 58; --color-ww-rowL1: 44 19 58; --ww-row-l1: #2c133a; --color-ww-rowL2: 38 16 50; --ww-row-l2: #261032; --color-ww-panelSunken: 42 17 55; --ww-panel-sunken: #2a1137; --color-ww-rowL0: 56 29 70; --ww-row-l0: #381d46; --color-ww-track: 61 27 80; --color-ww-rowHover: 68 37 81; --color-ww-border: 85 34 106; --ww-border: #55226a; --color-ww-borderStrong: 99 50 118; --ww-border-strong: #633276; --color-ww-borderSubtle: 77 30 96;
+}
+html[data-paleta="grafite"] {
+  --color-ww-bg: 223 225 229; --ww-bg: #dfe1e5; --ww-bg-grad: #dfe1e5; --color-ww-sidebar: 239 240 242; --ww-sidebar: #eff0f2; --color-ww-drawerHead: 230 234 239; --color-ww-panel: 247 248 249; --ww-panel: #f7f8f9; --ww-panel-grad: #f7f8f9; --color-ww-drawer: 247 248 249; --color-ww-rowL1: 247 248 249; --ww-row-l1: #f7f8f9; --color-ww-rowL2: 240 243 246; --ww-row-l2: #f0f3f6; --color-ww-panelSunken: 230 234 239; --ww-panel-sunken: #e6eaef; --color-ww-rowL0: 230 234 239; --ww-row-l0: #e6eaef; --color-ww-track: 214 221 229; --color-ww-rowHover: 219 224 231; --color-ww-border: 188 197 210; --ww-border: #bcc5d2; --color-ww-borderStrong: 171 184 199; --ww-border-strong: #abb8c7; --color-ww-borderSubtle: 198 205 215;
+}
+html.dark[data-paleta="grafite"] {
+  --color-ww-bg: 27 31 36; --ww-bg: #1b1f24; --ww-bg-grad: #1b1f24; --color-ww-sidebar: 34 38 44; --ww-sidebar: #22262c; --color-ww-drawerHead: 29 33 38; --color-ww-panel: 30 34 40; --ww-panel: #1e2228; --ww-panel-grad: #1e2228; --color-ww-drawer: 30 34 40; --color-ww-rowL1: 30 34 40; --ww-row-l1: #1e2228; --color-ww-rowL2: 26 29 34; --ww-row-l2: #1a1d22; --color-ww-panelSunken: 29 33 38; --ww-panel-sunken: #1d2126; --color-ww-rowL0: 42 46 53; --ww-row-l0: #2a2e35; --color-ww-track: 44 50 57; --color-ww-rowHover: 53 57 64; --color-ww-border: 63 70 81; --ww-border: #3f4651; --color-ww-borderStrong: 77 84 94; --ww-border-strong: #4d545e; --color-ww-borderSubtle: 57 64 73;
+}
+html[data-paleta="ambar"] {
+  --color-ww-bg: 248 234 219; --ww-bg: #f8eadb; --ww-bg-grad: #f8eadb; --color-ww-sidebar: 253 244 238; --ww-sidebar: #fdf4ee; --color-ww-drawerHead: 244 238 235; --color-ww-panel: 254 250 247; --ww-panel: #fefaf7; --ww-panel-grad: #fefaf7; --color-ww-drawer: 254 250 247; --color-ww-rowL1: 254 250 247; --ww-row-l1: #fefaf7; --color-ww-rowL2: 247 245 244; --ww-row-l2: #f7f5f4; --color-ww-panelSunken: 244 238 235; --ww-panel-sunken: #f4eeeb; --color-ww-rowL0: 244 238 235; --ww-row-l0: #f4eeeb; --color-ww-track: 228 225 226; --color-ww-rowHover: 240 230 225; --color-ww-border: 219 206 201; --ww-border: #dbcec9; --color-ww-borderStrong: 202 193 191; --ww-border-strong: #cac1bf; --color-ww-borderSubtle: 229 214 206;
+}
+html.dark[data-paleta="ambar"] {
+  --color-ww-bg: 45 31 15; --ww-bg: #2d1f0f; --ww-bg-grad: #2d1f0f; --color-ww-sidebar: 53 37 20; --ww-sidebar: #352514; --color-ww-drawerHead: 47 34 17; --color-ww-panel: 47 34 19; --ww-panel: #2f2213; --ww-panel-grad: #2f2213; --color-ww-drawer: 47 34 19; --color-ww-rowL1: 47 34 19; --ww-row-l1: #2f2213; --color-ww-rowL2: 41 30 16; --ww-row-l2: #291e10; --color-ww-panelSunken: 47 34 17; --ww-panel-sunken: #2f2211; --color-ww-rowL0: 61 46 29; --ww-row-l0: #3d2e1d; --color-ww-track: 68 49 25; --color-ww-rowHover: 74 57 37; --color-ww-border: 98 69 31; --ww-border: #62451f; --color-ww-borderStrong: 111 83 47; --ww-border-strong: #6f532f; --color-ww-borderSubtle: 89 62 28;
+}
+
+
 /* ── Vidro: superfícies translúcidas + desfoque ── */
 html[data-vidro] {
   --ww-panel: rgb(var(--color-ww-panel) / var(--ap-a, 1));
