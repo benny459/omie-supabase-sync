@@ -52,6 +52,25 @@ A lista de **pedidos de venda (PV/OS)** com as compras ligadas a cada um.
 2. A página do projeto tem o plano (CP/MC), a lista de materiais e a aba **Materiais separados**.
 3. Na lista de projetos, um selo mostra **“N itens separados · R$ · x% da lista”** quando já há material separado — clique para ir direto à aba.
 
+### Lista de materiais, compras e budget do projeto
+
+Na linha do projeto, **🧾 Materiais × compras** abre direto a aba **Compras × lista**.
+
+**Montar a lista** (aba **Lista de materiais**):
+1. Digite o item: o sistema busca no catálogo e já traz **último preço pago, fornecedor e prazos**. Preencha **Qtd**, **Un** e **Necessário em** (a data entra no fluxo de caixa).
+2. A lista **salva sozinha** alguns segundos depois de cada mudança. Só remover itens pede o botão **Salvar lista** (com confirmação).
+3. Para importar do Excel: **Lista RC (Projeto) → 📄 Baixar modelo (.xlsx)**, preencha (uma aba por equipamento; colunas Código, Descrição, Un, Qtd, Custo estimado, Fornecedor sugerido, Data necessária, Modelo, Observação) e suba o arquivo. A prévia mostra o que entra, muda e sai antes de confirmar. Depois, **Casar com o catálogo** acha os itens que vieram sem código.
+
+**Comprar** (aba **Compras × lista**):
+1. Marque as linhas e clique **Gerar RC (N)** — a RC entra em Compras com a venda (PV) do projeto e **cada linha fica ligada à lista**. O pedido de compra feito a partir dessa RC aparece na linha sozinho.
+2. PC feito direto para o projeto (sem RC da lista) é **casado automaticamente** ao salvar: pelo **código** do item ou pela **descrição com as mesmas medidas** (ex.: "abraçadeira 1.1/2" não casa com "2.1/2"). O que ficou parecido mas sem certeza aparece em **Ver sugestões de vínculo** para você **Confirmar**; vínculo errado se **desfaz** na própria linha.
+3. **Comprado fora da lista**: itens de PCs do projeto que nenhuma linha cobre (escopo extra ou nome diferente).
+
+**Acompanhar**:
+- No topo: **Estimado da lista**, **Budget de materiais** (do CP/MC do CRM ou editável), **Comprometido** (PCs), **Pago**, **Projetado × budget** e o efeito na **Margem** do fechamento.
+- Cada linha mostra RC, PC (fornecedor), valor comprado com ▲/▼ contra o estimado e a situação (aprovado, faturado, recebido, NF).
+- **Fluxo de compras do projeto**, mês a mês: planejado (linhas sem PC, pela data necessária) × comprometido (parcelas dos PCs) × pago, com o acumulado contra o budget.
+
 ## Pedidos · PV/OS
 
 - **PV** = venda de produtos (sai NF-e). **OS** = serviço (sai recibo ou NFS-e).

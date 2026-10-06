@@ -29,6 +29,7 @@ import { useCallback, useEffect, useState } from "react";
 import RcProjetoUploadButton from "@/components/RcProjetoUploadButton";
 import FluxoProjetoView, { type AbaProjeto } from "./FluxoProjetoView";
 import MateriaisGrade from "./MateriaisGrade";
+import ComprasDaLista from "./ComprasDaLista";
 import { SecaoSeparadosProjeto } from "../navy/estoque/Separacao";
 import FechamentoCrmBloco from "./FechamentoCrmBloco";
 import FluxoSimples from "./FluxoSimples";
@@ -36,7 +37,7 @@ import ProjetoEscopoButton from "../ProjetoEscopoButton";
 import { KpisProjeto } from "./ResumoProjeto";
 import type { PlanoCompleto } from "./PlanoFechamento";
 
-type Aba = "resumo" | "fluxo" | "materiais" | "separados";
+type Aba = "resumo" | "fluxo" | "materiais" | "compras" | "separados";
 
 /* Três abas, não seis. As antigas "Condições comerciais", "Faturamento &
    recebimento" e "Compras / Omie" não eram assuntos separados: eram partes
@@ -52,7 +53,11 @@ const ABAS: Array<{ k: Aba; label: string; dica: string; partes: AbaProjeto[] }>
     partes: [] },
   { k: "materiais", label: "Lista de materiais",
     dica: "itens do projeto, vínculo com PC e status de recebimento",
-    partes: [] },  { k: "separados", label: "Materiais separados",
+    partes: [] },
+  { k: "compras",   label: "Compras × lista",
+    dica: "estimado da lista × budget × pedidos de compra × pago, vínculo automático lista↔PC, gerar RC e o fluxo mês a mês",
+    partes: [] },
+  { k: "separados", label: "Materiais separados",
     dica: "material do estoque já reservado para este projeto — separar em lote, devolver ou consumir",
     partes: [] },
 ];
@@ -196,6 +201,8 @@ export default function ProjetoWorkspace({
           status) virou coluna na própria linha do item, junto com o budget, a
           exportação e o vínculo em lote que só existiam no bloco antigo.
           RcProjetoItensBlock continua no repositório, sem uso, caso falte algo. */}
+      {aba === "compras" && <ComprasDaLista key={`cdl-${chave}`} empresa={empresa} codigoProjeto={codigoProjeto} />}
+
       {aba === "separados" && <SecaoSeparadosProjeto codigoProjeto={codigoProjeto} nomeProjeto={nomeProjeto} />}
 
       {aba === "materiais" && (

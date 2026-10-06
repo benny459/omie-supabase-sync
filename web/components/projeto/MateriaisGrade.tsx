@@ -38,6 +38,7 @@ type ItemRow = {
   pc_etapa_texto: string | null;
   cat_ncod_prod: number | null; cat_codigo: string | null; cat_valor_unit: number | null;
   cat_fornecedor: string | null; cat_entrega_dias: number | null; cat_fat_dias: number | null;
+  un: string | null; data_necessaria: string | null;
 };
 
 /** Item do catálogo de compras do Omie (orders.mv_catalogo_compra). */
@@ -127,6 +128,10 @@ export default function MateriaisGrade({
   /** Rascunho não salvo encontrado neste navegador ao abrir (ms de quando foi feito). */
   const [rascunhoDe, setRascunhoDe] = useState<number | null>(null);
   const chaveRascunho = `painel.materiais.rascunho.${empresa}.${codigoProjeto}`;
+  /** Conta as mudanças da grade: o salvamento automático só limpa o "não salvo"
+   *  se ninguém mexeu enquanto ele gravava. */
+  const versaoRef = useRef(0);
+  useEffect(() => { versaoRef.current += 1; }, [linhas]);
 
   // ── Colunas ───────────────────────────────────────────────────────────────
   // As quatro primeiras se editam; as três últimas vêm do PC e são de leitura.
@@ -154,6 +159,8 @@ export default function MateriaisGrade({
         },
       } },
     { key: "qtd",         label: "Qtd",         w: 62, tipo: "num", alinhaDireita: true },
+    { key: "un",          label: "Un",          w: 48 },
+    { key: "data_necessaria", label: "Necessário em", w: 118, tipo: "data" },
     { key: "modelo",      label: "Modelo",      w: 140 },
     { key: "pc_numero",   label: "PC",          w: 84 },
     { key: "observacao",  label: "Observação",  w: 150 },
@@ -211,7 +218,7 @@ export default function MateriaisGrade({
       const approval = supa.schema("approval" as never);
       const [itens, res] = await Promise.all([
         approval.from("v_rc_projetos_itens")
-          .select("id, equipamento, item, qtd, modelo, observacao, pc_numero, nome_fornecedor, dt_previsao, nova_prev_materiais, mt_data_recebimento_nf, pc_etapa_texto, cat_ncod_prod, cat_codigo, cat_valor_unit, cat_fornecedor, cat_entrega_dias, cat_fat_dias")
+          .select("id, equipamento, item, qtd, modelo, observacao, pc_numero, nome_fornecedor, dt_previsao, nova_prev_materiais, mt_data_recebimento_nf, pc_etapa_texto, cat_ncod_prod, cat_codigo, cat_valor_unit, cat_fornecedor, cat_entrega_dias, cat_fat_dias, un, data_necessaria")
           .eq("empresa", empresa).eq("codigo_projeto", codigoProjeto)
           .order("equipamento", { ascending: true }).order("item", { ascending: true }),
         approval.from("v_rc_projetos_resumo")
@@ -230,6 +237,8 @@ export default function MateriaisGrade({
           equipamento: r.equipamento ?? "",
           item: r.item ?? "",
           qtd: r.qtd == null ? "" : String(r.qtd),
+          un: r.un ?? "",
+          data_necessaria: r.data_necessaria ? String(r.data_necessaria).slice(0, 10) : "",
           modelo: r.modelo ?? "",
           pc_numero: r.pc_numero ?? "",
           observacao: r.observacao ?? "",
@@ -303,19 +312,21 @@ export default function MateriaisGrade({
     () => (equipFiltro ? linhas.filter((l) => !l.item?.trim() || String(l.equipamento || "Geral") === equipFiltro) : linhas),
     [linhas, equipFiltro]);
 
-  const salvar = useCallback(async (confirmarRemocao = false) => {
+  const salvar = useCallback(async (confirmarRemocao = false, silencioso = false) => {
+    const versaoInicio = versaoRef.current;
     if (!carregouOk) {
       setErro("A lista não chegou a carregar. Recarregue a página antes de salvar — "
             + "gravar agora apagaria o que está no projeto.");
       return;
     }
     if (validas.length < original) {
+      if (silencioso) return; // remoção nunca é automática: pede o botão Salvar
       const ok = window.confirm(
         `A lista tem ${original} item(ns) gravado(s) e você está salvando ${validas.length}.\n\n` +
         `${original - validas.length} item(ns) serão REMOVIDOS do projeto. Confirma?`);
       if (!ok) return;
     }
-    setSalvando(true); setErro(null); setAviso(null);
+    setSalvando(true); setErro(null); if (!silencioso) setAviso(null);
     try {
       const r = await fetch("/api/rc-projetos/upload", {
         method: "POST", headers: { "Content-Type": "application/json" },
@@ -326,6 +337,8 @@ export default function MateriaisGrade({
             equipamento: String(l.equipamento ?? "").trim() || "Geral",
             item: String(l.item ?? "").trim(),
             qtd: l.qtd?.trim() ? num(l.qtd) : null,
+            un: String(l.un ?? "").trim() || null,
+            data_necessaria: /^\d{4}-\d{2}-\d{2}$/.test(String(l.data_necessaria ?? "")) ? l.data_necessaria : null,
             modelo: String(l.modelo ?? "").trim() || null,
             observacao: String(l.observacao ?? "").trim() || null,
             pc_numero: String(l.pc_numero ?? "").trim() || null,
@@ -349,6 +362,15 @@ export default function MateriaisGrade({
         return;
       }
       if (!r.ok) { setErro(j.error ?? r.statusText); return; }
+      if (silencioso) {
+        // Gravado sem recarregar a grade (quem está digitando não perde o foco).
+        try { window.localStorage.removeItem(`painel.materiais.rascunho.${empresa}.${codigoProjeto}`); } catch { /* */ }
+        setRascunhoDe(null);
+        setOriginal(validas.length);
+        if (versaoRef.current === versaoInicio) setSujo(false);
+        setAviso(`Salvo automaticamente às ${new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}.`);
+        return;
+      }
       const removidos = Number(j.total_deletados ?? 0);
       setAviso(`${validas.length} item(ns) gravado(s)${comPc ? `, ${comPc} com PC vinculado` : ""}`
         + (removidos > 0 ? ` · ${removidos} removido(s), recuperável em "Itens removidos"` : "") + ".");
@@ -363,8 +385,18 @@ export default function MateriaisGrade({
 
   /** Ref para o salvar poder rechamar a si mesmo depois da confirmação, sem
    *  entrar na lista de dependências do próprio useCallback. */
-  const salvarRef = useRef<((c?: boolean) => Promise<void>) | null>(null);
+  const salvarRef = useRef<((c?: boolean, silencioso?: boolean) => Promise<void>) | null>(null);
   salvarRef.current = salvar;
+
+  /* Salvamento automático (06/10/26): 2,5 s depois da última mudança a lista
+     vai para o banco sozinha — lista nunca mais se perde. Só não salva sozinho
+     quando há item a REMOVER (isso pede o botão Salvar, com a confirmação). */
+  useEffect(() => {
+    if (!sujo || !carregouOk || salvando || rascunhoDe) return;
+    if (validas.length < original || !validas.length) return;
+    const t = window.setTimeout(() => { void salvarRef.current?.(false, true); }, 2500);
+    return () => window.clearTimeout(t);
+  }, [linhas, sujo, carregouOk, salvando, validas.length, original, rascunhoDe]);
 
   // ── Catálogo do Omie ────────────────────────────────────────────────────
   const [casando, setCasando] = useState(false);
@@ -392,7 +424,7 @@ export default function MateriaisGrade({
     });
     setAviso(`Catálogo do Omie: ${ok} item(ns) casado(s)`
       + (conf ? ` · ${conf} para CONFERIR (amarelo — clique no Item e escolha)` : "")
-      + (sem ? ` · ${sem} sem correspondência` : "") + ". Nada foi gravado ainda: confira e clique em Salvar lista.");
+      + (sem ? ` · ${sem} sem correspondência` : "") + ". Confira as linhas — a lista é salva sozinha em instantes.");
     return novas;
   }, []);
 
@@ -472,7 +504,7 @@ export default function MateriaisGrade({
     setSubAba("lista");
     const conf = novas.filter((l) => l._match === "conferir").length;
     setAviso(`${novas.length} item(ns) da CP adicionados à lista`
-      + (conf ? ` · ${conf} para CONFERIR (amarelo)` : "") + ". Nada foi gravado ainda: clique em Salvar lista.");
+      + (conf ? ` · ${conf} para CONFERIR (amarelo)` : "") + ". A lista é salva sozinha em instantes.");
   }, [cp, cpMarcados, naLista, linhas, COLS]);
 
   const totalLista = useMemo(
@@ -491,17 +523,23 @@ export default function MateriaisGrade({
   const vincularAuto = useCallback(async () => {
     setSalvando(true); setErro(null); setAutoLink(null);
     try {
-      const r = await fetch("/api/rc-projetos/itens/auto-link", {
+      // 06/10/26: casa contra os PCs do painel E os do Omie (compras.*), por
+      // código e por descrição com as mesmas medidas; dúvidas ficam para conferir.
+      const r = await fetch("/api/rc-projetos/compras", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ empresa, codigo_projeto: codigoProjeto, aplicar: true }),
+        body: JSON.stringify({ acao: "autolink", empresa, codigo: codigoProjeto, aplicar: true }),
       });
-      const j = await r.json();
+      const j = await r.json() as { aplicados?: number; casamentos?: Array<{ lista_id: string; item: string; pc: string; desc_pc: string; via: string; score: number; auto: boolean }>; error?: string };
       if (!r.ok) { setErro(j.error ?? "falha ao vincular"); return; }
-      setAutoLink(j);
-      setAviso(j.gravados
-        ? `${j.gravados} item(ns) vinculados — ${j.exatos} por descrição idêntica, ${j.similares} por semelhança` +
-          (j.semPc ? `; ${j.semPc} sem pedido correspondente, para vincular à mão` : "")
-        : (j.aviso ?? "Nenhum item novo para vincular."));
+      const cas = j.casamentos ?? [];
+      const duvidas = cas.filter((c) => !c.auto);
+      const porCodigo = cas.filter((c) => c.auto && c.via === "codigo").length;
+      setAutoLink({ total: cas.length, exatos: porCodigo, similares: (j.aplicados ?? 0) - porCodigo, semPc: 0,
+        palpites: duvidas.map((c) => ({ id: c.lista_id, item: c.item, pc: c.pc, score: Number(c.score), descPc: c.desc_pc })) });
+      setAviso(j.aplicados
+        ? `${j.aplicados} item(ns) vinculados aos pedidos de compra do projeto (${porCodigo} pelo código)` +
+          (duvidas.length ? `; ${duvidas.length} parecido(s) para conferir na aba "Compras × lista"` : "")
+        : (duvidas.length ? `Nada vinculado com certeza; ${duvidas.length} parecido(s) para conferir na aba "Compras × lista".` : "Nenhum item novo para vincular."));
       await carregar();
       onGravado?.();
     } catch (e) { setErro(e instanceof Error ? e.message : String(e)); }
@@ -577,11 +615,11 @@ export default function MateriaisGrade({
             </span>
           )}
           <button type="button" onClick={() => void casarAgora()} disabled={salvando || casando}
-            title="Liga cada linha ao item do catálogo do Omie: último preço pago, fornecedor e prazos médios"
+            title="Liga cada linha ao item do catálogo de compras: último preço pago, fornecedor e prazos médios"
             className="px-2 py-1 text-[11px] rounded-lg border border-emerald-400 dark:border-emerald-700
                        bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-200
                        hover:bg-emerald-100 dark:hover:bg-emerald-900/50 transition disabled:opacity-40">
-            {casando ? "…" : "⚡ Casar com o Omie"}
+            {casando ? "…" : "⚡ Casar com o catálogo"}
           </button>
           <button type="button" onClick={() => void vincularAuto()} disabled={salvando}
             title="Procura, nos pedidos de compra deste projeto, o item que corresponde a cada linha — e grava o número do PC"

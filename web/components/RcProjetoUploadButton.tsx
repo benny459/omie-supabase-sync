@@ -25,7 +25,29 @@ type ParsedItem = {
   qtd: number | null;
   modelo: string | null;
   pc_numero: string | null;
+  /** 06/10/26 — colunas opcionais do modelo novo. Ausentes = o import não mexe
+   *  no que já estava gravado nessas colunas. */
+  cat_codigo?: string | null;
+  un?: string | null;
+  cat_valor_unit?: number | null;
+  cat_fornecedor?: string | null;
+  data_necessaria?: string | null;
 };
+
+/** Data da planilha → AAAA-MM-DD: número de série do Excel, dd/mm/aaaa ou ISO. */
+function dataPlanilha(v: unknown): string | null {
+  if (v == null || v === "") return null;
+  if (typeof v === "number" && Number.isFinite(v)) {
+    const d = new Date(Math.round((v - 25569) * 86400000));
+    return Number.isNaN(d.getTime()) ? null : d.toISOString().slice(0, 10);
+  }
+  const t = String(v).trim();
+  let m = t.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (m) return `${m[1]}-${m[2]}-${m[3]}`;
+  m = t.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/);
+  if (m) { const a = m[3].length === 2 ? `20${m[3]}` : m[3]; return `${a}-${m[2].padStart(2, "0")}-${m[1].padStart(2, "0")}`; }
+  return null;
+}
 
 export default function RcProjetoUploadButton({
   empresa,
@@ -99,15 +121,16 @@ export default function RcProjetoUploadButton({
           // "Modelo / Referência" não casavam e a aba inteira era pulada em
           // silêncio — o erro final dizia "nenhum item válido" sem dizer qual aba
           // nem qual coluna faltou.
-          const cols: { item: number; qtd: number; modelo: number; pc: number } =
-            { item: -1, qtd: -1, modelo: -1, pc: -1 };
+          const cols: { item: number; qtd: number; modelo: number; pc: number;
+                        cod: number; un: number; custo: number; forn: number; data: number } =
+            { item: -1, qtd: -1, modelo: -1, pc: -1, cod: -1, un: -1, custo: -1, forn: -1, data: -1 };
           let headerIdx = -1;
           for (let i = 0; i < Math.min(aoa.length, 12); i++) {
             const row = aoa[i];
             if (!row) continue;
             const cels = row.map((v) => norm(v));
 
-            cols.item = cols.qtd = cols.modelo = cols.pc = -1;
+            cols.item = cols.qtd = cols.modelo = cols.pc = cols.cod = cols.un = cols.custo = cols.forn = cols.data = -1;
             cels.forEach((s, idx) => {
               if (!s) return;
               // Nome do material. "itens" (plural) tem prioridade sobre "item",
@@ -118,6 +141,12 @@ export default function RcProjetoUploadButton({
               // "modelo", "modelo / referencia", "modelo/ref"
               if (cols.modelo === -1 && s.startsWith("modelo")) cols.modelo = idx;
               if (cols.pc === -1 && (s === "pc" || s.startsWith("pc associado") || s.startsWith("pedido de compra"))) cols.pc = idx;
+              // Colunas do modelo novo (06/10/26) — todas opcionais.
+              if (cols.cod === -1 && (s === "codigo" || s === "cod" || s === "cod." || s.startsWith("codigo do item"))) cols.cod = idx;
+              if (cols.un === -1 && (s === "un" || s === "unid" || s === "unid." || s === "unidade")) cols.un = idx;
+              if (cols.custo === -1 && (s.startsWith("custo") || s.startsWith("valor unit") || s.startsWith("preco"))) cols.custo = idx;
+              if (cols.forn === -1 && s.startsWith("fornecedor")) cols.forn = idx;
+              if (cols.data === -1 && (s.startsWith("data necessaria") || s.startsWith("necessario") || s.startsWith("data de necessidade"))) cols.data = idx;
             });
             // Só então "item" singular, pra não roubar a coluna de "itens".
             if (cols.item === -1) {
@@ -145,7 +174,13 @@ export default function RcProjetoUploadButton({
             const pc_numero = pcRaw ? pcRaw : null;
             // Filtra linhas sem qtd E sem modelo E sem PC — provável total/subtotal
             if (qtd == null && !modelo && !pc_numero) continue;
-            all.push({ equipamento: sheetName.trim(), item, qtd, modelo, pc_numero });
+            const extra: Partial<ParsedItem> = {};
+            if (cols.cod >= 0) extra.cat_codigo = row[cols.cod] != null ? String(row[cols.cod]).trim() || null : null;
+            if (cols.un >= 0) extra.un = row[cols.un] != null ? String(row[cols.un]).trim() || null : null;
+            if (cols.custo >= 0) extra.cat_valor_unit = parseNum(row[cols.custo]);
+            if (cols.forn >= 0) extra.cat_fornecedor = row[cols.forn] != null ? String(row[cols.forn]).trim() || null : null;
+            if (cols.data >= 0) extra.data_necessaria = dataPlanilha(row[cols.data]);
+            all.push({ equipamento: sheetName.trim(), item, qtd, modelo, pc_numero, ...extra });
           }
         }
 
@@ -183,11 +218,16 @@ export default function RcProjetoUploadButton({
       ["Como preencher:"],
       ["• Cada aba deste arquivo é um EQUIPAMENTO do projeto (renomeie livremente)."],
       ["• A linha do cabeçalho deve conter as colunas abaixo (ordem livre):"],
-      ["    - Qtd            (número de itens)"],
-      ["    - Itens          (descrição/nome do material)"],
-      ["    - Marca          (opcional)"],
-      ["    - Modelo         (opcional)"],
-      ["    - PC Associado   (opcional — se já sabe o # do PC, coloca aqui)"],
+      ["    - Código              (opcional — código do item no nosso cadastro)"],
+      ["    - Descrição           (OBRIGATÓRIA — nome do material)"],
+      ["    - Un                  (opcional — UN, M, KG…)"],
+      ["    - Qtd                 (OBRIGATÓRIA)"],
+      ["    - Custo estimado      (opcional — valor unitário; vazio = último preço pago)"],
+      ["    - Fornecedor sugerido (opcional)"],
+      ["    - Data necessária     (opcional — dd/mm/aaaa; entra no fluxo de caixa do projeto)"],
+      ["    - Modelo              (opcional)"],
+      ["    - Observação          (opcional)"],
+      ["    - PC Associado        (opcional — se já sabe o nº do PC)"],
       [],
       ["Ao subir a mesma lista de novo, o sistema faz sync:"],
       ["    novos → entram · existentes → atualizam · sumidos → REMOVIDOS"],
@@ -199,33 +239,26 @@ export default function RcProjetoUploadButton({
     wsInstr["!cols"] = [{ wch: 90 }];
     XLSX.utils.book_append_sheet(wb, wsInstr, "Como usar");
 
-    // Aba de exemplo 1 — modelo simples (equipamento genérico)
+    // Abas de exemplo — uma por equipamento, com as colunas do modelo.
+    const cab = ["Código", "Descrição", "Un", "Qtd", "Custo estimado", "Fornecedor sugerido", "Data necessária", "Modelo", "Observação", "PC Associado"];
+    const larg = [{ wch: 12 }, { wch: 44 }, { wch: 6 }, { wch: 7 }, { wch: 14 }, { wch: 28 }, { wch: 15 }, { wch: 14 }, { wch: 24 }, { wch: 12 }];
     const painel = [
-      [null, null, null, "PAINEL ELÉTRICO", null, null, null, null, null],
-      [],
-      ["Qtd", "UNID", "ITEM", "Itens", "Marca", "Modelo", "Prazo Estimado", "Informações adicionais", "PC Associado"],
-      [3, "UN", 1, "CHAVE NÍVEL BOIA AZ 5M", null, null, null, null, null],
-      [14, "UN", 2, "BLOCO CONTATO AUXILIAR 1NA+1NF", "Schneider", "LA1", null, null, "PC 5567"],
-      [4, "UN", 3, "CONTATOR TRIPOLAR 18A 220V", null, null, null, "aprovado", null],
-      [1, "UN", 4, "BOTÃO EMERGÊNCIA D40MM 1NF", null, null, null, null, null],
-      [2, "UN", 5, "SONALARME BUZZER 22MM 220V", null, null, null, null, null],
+      cab,
+      [null, "CHAVE NÍVEL BOIA AZ 5M", "UN", 3, 45.9, null, "20/11/2026", null, null, null],
+      [null, "BLOCO CONTATO AUXILIAR 1NA+1NF", "UN", 14, null, "Schneider", "20/11/2026", "LA1", null, null],
+      [null, "CONTATOR TRIPOLAR 18A 220V", "UN", 4, 189, null, "05/12/2026", null, "confirmar tensão", null],
     ];
     const wsPainel = XLSX.utils.aoa_to_sheet(painel);
-    wsPainel["!cols"] = [{ wch: 6 }, { wch: 6 }, { wch: 6 }, { wch: 42 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 20 }, { wch: 12 }];
+    wsPainel["!cols"] = larg;
     XLSX.utils.book_append_sheet(wb, wsPainel, "Painel Elétrico");
-
-    // Aba de exemplo 2 — modelo com layout novo (ITEM primeiro, TIPO/CATEGORIA)
     const tubos = [
-      [null, null, null, "TUBULAÇÕES", null, null, null, null, null],
-      [],
-      ["ITEM", "Qtd", "UNID", "Itens", "Marca", "Modelo", "TIPO", "CATEGORIA", "PC Associado"],
-      [1, 4, "UN", "TUBO MANIFOLD 1\"", null, null, "Looping", "Elétrica", null],
-      [2, 2, "UN", "TUBO MANIFOLD 3/4\"", null, null, "Elétrica", "Principal", null],
-      [3, 10, "M", "TUBO PVC 100mm", "Tigre", "Série R", "Interligação", "Hidráulica", "PC 5570"],
+      cab,
+      [null, "TUBO PVC SOLDÁVEL 32MM", "M", 30, 12.5, null, "15/11/2026", null, null, null],
+      [null, "CURVA 90 SOLDÁVEL 32MM", "UN", 12, 3.2, null, "15/11/2026", null, null, null],
     ];
     const wsTubos = XLSX.utils.aoa_to_sheet(tubos);
-    wsTubos["!cols"] = [{ wch: 6 }, { wch: 6 }, { wch: 6 }, { wch: 40 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 12 }];
-    XLSX.utils.book_append_sheet(wb, wsTubos, "Tubulações");
+    wsTubos["!cols"] = larg;
+    XLSX.utils.book_append_sheet(wb, wsTubos, "Hidráulica");
 
     XLSX.writeFile(wb, "lista-materiais-modelo.xlsx");
   }

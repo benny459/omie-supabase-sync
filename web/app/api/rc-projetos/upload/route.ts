@@ -35,6 +35,10 @@ type Item = {
   cat_fornecedor?: string | null;
   cat_entrega_dias?: number | null;
   cat_fat_dias?: number | null;
+  /** 06/10/26: unidade e data em que o item é necessário (lista → compras/fluxo).
+   *  Ausentes = preserva o que estava gravado. */
+  un?: string | null;
+  data_necessaria?: string | null;
 };
 
 const CAT_KEYS = ["cat_ncod_prod", "cat_codigo", "cat_valor_unit", "cat_fornecedor",
@@ -83,8 +87,9 @@ export async function POST(req: Request) {
   const codigoProjeto = Number(body.codigo_projeto);
 
   // Dedup local pelo natural key antes do upsert
-  const dedup = new Map<string, Required<Omit<Item, "pc_numero" | (typeof CAT_KEYS)[number]>> & { pc_numero: string | null }>();
+  const dedup = new Map<string, Required<Omit<Item, "pc_numero" | "un" | "data_necessaria" | (typeof CAT_KEYS)[number]>> & { pc_numero: string | null }>();
   const catPorChave = new Map<string, Cat>();
+  const extraPorChave = new Map<string, { un?: string | null; data_necessaria?: string | null }>();
   for (const raw of body.items) {
     const equipamento = String(raw.equipamento ?? "").trim();
     const item = String(raw.item ?? "").trim();
@@ -99,16 +104,26 @@ export async function POST(req: Request) {
       observacao: raw.observacao ?? null,
       pc_numero: pcRaw || null,
     });
+    const ex: { un?: string | null; data_necessaria?: string | null } = {};
+    if ("un" in raw) ex.un = raw.un ? String(raw.un).trim().slice(0, 10).toUpperCase() : null;
+    if ("data_necessaria" in raw) {
+      const d = raw.data_necessaria ? String(raw.data_necessaria).slice(0, 10) : "";
+      ex.data_necessaria = /^\d{4}-\d{2}-\d{2}$/.test(d) ? d : null;
+    }
+    if (Object.keys(ex).length) extraPorChave.set(key, ex);
     if (CAT_KEYS.some((k) => k in raw)) {
       const numOuNull = (v: unknown) => (v == null || v === "" || !Number.isFinite(Number(v)) ? null : Number(v));
-      catPorChave.set(key, {
+      // Só as colunas que a origem trouxe: a planilha com "Código" e "Custo"
+      // não apaga o casamento com o catálogo (cat_ncod_prod) feito na grade.
+      const tudo: Cat = {
         cat_ncod_prod: numOuNull(raw.cat_ncod_prod),
         cat_codigo: raw.cat_codigo ? String(raw.cat_codigo).slice(0, 60) : null,
         cat_valor_unit: numOuNull(raw.cat_valor_unit),
         cat_fornecedor: raw.cat_fornecedor ? String(raw.cat_fornecedor).slice(0, 200) : null,
         cat_entrega_dias: numOuNull(raw.cat_entrega_dias),
         cat_fat_dias: numOuNull(raw.cat_fat_dias),
-      });
+      };
+      catPorChave.set(key, Object.fromEntries(CAT_KEYS.filter((k) => k in raw).map((k) => [k, tudo[k]])) as Cat);
     }
   }
   const deduped = [...dedup.values()];
@@ -126,7 +141,7 @@ export async function POST(req: Request) {
   // segunda ida ao banco para ler o que já esteve na mão.
   const { data: existing, error: fetchErr } = await approval
     .from("rc_projetos_itens")
-    .select("id, equipamento, item, item_norm, qtd, modelo, observacao, pc_numero, criado_em, criado_por, cat_ncod_prod, cat_codigo, cat_valor_unit, cat_fornecedor, cat_entrega_dias, cat_fat_dias")
+    .select("id, equipamento, item, item_norm, qtd, modelo, observacao, pc_numero, criado_em, criado_por, cat_ncod_prod, cat_codigo, cat_valor_unit, cat_fornecedor, cat_entrega_dias, cat_fat_dias, un, data_necessaria")
     .eq("empresa", empresa)
     .eq("codigo_projeto", codigoProjeto);
   if (fetchErr) return NextResponse.json({ error: fetchErr.message }, { status: 500 });
@@ -135,6 +150,7 @@ export async function POST(req: Request) {
     id: string; equipamento: string; item: string | null; item_norm: string;
     qtd: number | null; modelo: string | null; observacao: string | null;
     pc_numero: string | null; criado_em: string | null; criado_por: string | null;
+    un: string | null; data_necessaria: string | null;
   } & Cat;
   const existingByKey = new Map<string, ExistingRow>();
   for (const r of (existing ?? []) as ExistingRow[]) {
@@ -157,7 +173,12 @@ export async function POST(req: Request) {
       modelo: d.modelo,
       observacao: d.observacao,
       pc_numero: pcFinal,
-      ...(catPorChave.get(key) ?? Object.fromEntries(CAT_KEYS.map((k) => [k, prior?.[k] ?? null])) as Cat),
+      ...(Object.fromEntries(CAT_KEYS.map((k) => {
+        const veio = catPorChave.get(key);
+        return [k, veio && k in veio ? veio[k] : (prior?.[k] ?? null)];
+      })) as Cat),
+      un: extraPorChave.get(key)?.un !== undefined ? extraPorChave.get(key)!.un : (prior?.un ?? null),
+      data_necessaria: extraPorChave.get(key)?.data_necessaria !== undefined ? extraPorChave.get(key)!.data_necessaria : (prior?.data_necessaria ?? null),
       criado_por: userEmail,
       atualizado_por: userEmail,
     };

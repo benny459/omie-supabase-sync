@@ -2439,6 +2439,12 @@ export function LinkAbrirProjeto({ codProj, empresaProj }: { codProj: number; em
       className="inline-flex items-center gap-1 px-3 py-1 rounded-md text-[11.5px] font-semibold border border-sky-400 dark:border-sky-700 bg-sky-50 dark:bg-sky-950/40 text-sky-800 dark:text-sky-200 hover:bg-sky-100 dark:hover:bg-sky-900/50 transition whitespace-nowrap">
       📂 <span>Abrir projeto</span> <span className="opacity-60">→</span>
     </a>
+    <a href={`/projetos/${codProj}/materiais?empresa=${encodeURIComponent(empresaProj)}&aba=compras`}
+      onClick={(e) => e.stopPropagation()}
+      title="Lista de materiais × pedidos de compra × budget e o fluxo das compras deste projeto"
+      className="inline-flex items-center gap-1 px-3 py-1 rounded-md text-[11.5px] font-semibold border border-emerald-400 dark:border-emerald-700 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-200 hover:bg-emerald-100 dark:hover:bg-emerald-900/50 transition whitespace-nowrap">
+      🧾 <span>Materiais × compras</span>
+    </a>
   </>
   );
 }

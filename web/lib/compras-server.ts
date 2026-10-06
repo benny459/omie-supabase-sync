@@ -61,7 +61,15 @@ export async function posGravar(id: number, tipo?: string) {
     // PC também republica as RCs (06/10/26): o nº do PC aparece na hora nas
     // linhas da RC em Operação (Vendas avulsas / Projetos).
     rpc("compras_publicar_rcs").catch(() => null),
+    tipo !== "RC" ? vincularListaDoProjeto(id).catch(() => null) : null,
   ]);
+}
+
+/** PC de projeto (06/10/26): casa os itens dele com a lista de materiais do
+ *  projeto — código igual ou descrição com as mesmas medidas — sem ninguém
+ *  precisar clicar. O que ficar em dúvida aparece para conferir na lista. */
+async function vincularListaDoProjeto(id: number) {
+  await supaAdmin().schema("approval").rpc("rc_projetos_autolink_pc", { p_pedido_id: id });
 }
 
 /** Resposta 403 se a pessoa não tem a permissão fina; null se tem. */
