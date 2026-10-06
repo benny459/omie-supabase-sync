@@ -1541,6 +1541,7 @@ function GruposRc({ compras, p, sel, toggleSel, podeAprovar, podeEditar, ehAdmin
                     <InputTexto key={`novo-${pcs.map(([n]) => n).join(",")}`} mono className="in caixa" valor="" placeholder={pcs.length ? "+ PC" : "nº PC"}
                       onSalvar={(v) => { if (v.trim()) void incluirPc(rc, itens, v); }} />
                   </span>
+                  <span style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", minWidth: 0 }}>
                   {rc && semPc.length > 0 && (() => {
                     // Selecionados nesta RC (sem PC) ou, sem seleção, todos os que faltam.
                     const marcados = semPc.filter((c) => sel.has(c.key));
@@ -1554,6 +1555,7 @@ function GruposRc({ compras, p, sel, toggleSel, podeAprovar, podeEditar, ehAdmin
                     );
                   })()}
                   {pcs.length === 0 && !p.compras.some((c) => c.pc) && <span className="desc" style={{ color: "var(--ww-text-faint)", fontSize: 12 }}>digite o nº de um pedido de compra já existente, ou use “Gerar pedido de compra” — fornecedor, valor e status vêm do Compras do painel</span>}
+                  </span>
                 </div>
               )}
             </div>
