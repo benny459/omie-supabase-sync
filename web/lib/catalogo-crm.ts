@@ -169,3 +169,94 @@ export async function precosMaximos(ids: number[], empresa = "SF"): Promise<Reco
   for (const r of (data ?? []) as { n_cod_prod: number; preco_maximo: number }[]) out[Number(r.n_cod_prod)] = Number(r.preco_maximo);
   return out;
 }
+
+// ── "Criar item nosso" a partir do CRM (06/10/26, PV/OS de projeto por evento) ──
+// Produto → estoque nosso (orders.estoque_cadastrar, mesma trava de parecidos do
+// Faturamento); serviço → cadastros.aux 'servicos' (onde a OS, o recibo e a NFS-e
+// leem o serviço), com LC116/código municipal padrão dos serviços da empresa.
+
+export type ItemCriado = { id: number; desc: string; cod: string | null; un: string; ncm: string | null; tipo: "produto" | "servico" };
+export type Candidato = { id: number; cod: string | null; desc: string };
+export class Parecido extends Error { constructor(public candidatos: Candidato[]) { super("Já existe item parecido no catálogo — use o existente"); } }
+
+/** Família padrão de produto criado pelo CRM: SISTEMAS (projetos), senão a "Sem família". */
+async function familiaPadrao(empresa: string): Promise<number | null> {
+  const { data } = await supaAdmin().schema("platform").from("estoque_familia").select("id, nome, sistema")
+    .eq("empresa", empresa).eq("ativo", true);
+  const fams = (data ?? []) as { id: number; nome: string; sistema: boolean }[];
+  return (fams.find((f) => f.nome.toUpperCase() === "SISTEMAS") ?? fams.find((f) => f.sistema) ?? fams[0])?.id ?? null;
+}
+
+export async function familiasCrm(empresa = "SF") {
+  const { data, error } = await supaAdmin().schema("platform").from("estoque_familia").select("id, nome, prefixo, material")
+    .eq("empresa", empresa).eq("ativo", true).is("mesclada_em", null).order("nome");
+  if (error) throw new Error(error.message);
+  return data ?? [];
+}
+
+export async function criarItemCrm(a: {
+  tipo: "produto" | "servico"; descricao: string; unidade?: string; ncm?: string | null; por: string;
+  empresa?: string; familia_id?: number | null; lc116?: string | null; simular?: boolean;
+}): Promise<ItemCriado> {
+  const empresa = (a.empresa ?? "SF").toUpperCase();
+  const descricao = String(a.descricao ?? "").trim().replace(/\s+/g, " ").toUpperCase();
+  if (descricao.length < 3) throw new Error("Informe a descrição do item");
+  const un = String(a.unidade ?? "UN").trim().toUpperCase() || "UN";
+  const por = `crm:${String(a.por ?? "").slice(0, 80) || "crm"}`;
+
+  if (a.tipo === "servico") {
+    // cadastros não é exposto no PostgREST: a lista vem de orders.crm_erp_lista e a trava de
+    // duplicados é a do próprio cad_aux_salvar (P0D01 → candidatos).
+    const lista = await servicosDaEmpresa(empresa);
+    const conta = new Map<string, number>();
+    for (const r of lista) { const k = `${r.lc116 ?? ""}|${r.cod_municipio ?? ""}`; conta.set(k, (conta.get(k) ?? 0) + 1); }
+    const [lc, mun] = ([...conta.entries()].sort((x, y) => y[1] - x[1])[0]?.[0] ?? "|").split("|");
+    const dados = { lc116: a.lc116 || lc || null, cod_municipio: mun || null, aliquota_iss: 0, origem_crm: true };
+    if (a.simular) return { id: 0, desc: descricao, cod: null, un, ncm: null, tipo: "servico" };
+    const { data, error } = await supaAdmin().schema("orders").rpc("cad_aux_salvar", {
+      p: { registro: "servicos", empresa, nome: descricao, dados }, p_por: por });
+    if (error) {
+      if (error.code === "P0D01") {
+        let cs: { id: number; codigo: string; nome: string }[] = [];
+        try { cs = JSON.parse(error.details ?? "[]"); } catch { /* sem candidatos */ }
+        throw new Parecido(cs.map((x) => ({ id: Number(x.codigo), cod: x.codigo, desc: x.nome })));
+      }
+      throw new Error(error.message);
+    }
+    const s = data as { codigo: string; nome: string };
+    return { id: Number(s.codigo), desc: s.nome, cod: s.codigo, un, ncm: null, tipo: "servico" };
+  }
+
+  // produto
+  const ncm = String(a.ncm ?? "").replace(/\D/g, "");
+  if (ncm.length !== 8) throw new Error("NCM obrigatório para produto (8 dígitos)");
+  const par = await orders().rpc("estoque_parecidos", { p_empresa: empresa, p_descricao: descricao, p_excluir: null });
+  const cands = ((par.data ?? []) as { n_cod_prod: number; codigo_novo: string | null; descricao: string; sim: number; igual: boolean }[])
+    .filter((p) => p.codigo_novo && (p.igual || Number(p.sim) >= 0.85));
+  if (cands.length) throw new Parecido(cands.map((p) => ({ id: Number(p.n_cod_prod), cod: p.codigo_novo, desc: p.descricao })));
+  const familia = a.familia_id != null ? Number(a.familia_id) : await familiaPadrao(empresa);
+  if (a.simular) return { id: 0, desc: descricao, cod: null, un, ncm, tipo: "produto" };
+  const r = await orders().rpc("estoque_cadastrar", {
+    p: { empresa, descricao, unidade: un, ncm, familia_id: familia, ativo: true, obs: "Criado pelo CRM (PV/OS de projeto)" },
+    p_admin: false, p_email: por,
+  });
+  if (r.error) throw new Error(r.error.message);
+  const novo = r.data as { n_cod_prod: number; codigo: string };
+  return { id: Number(novo.n_cod_prod), desc: descricao, cod: novo.codigo, un, ncm, tipo: "produto" };
+}
+
+type Serv = { id: number; cod: string; desc: string; un: string; lc116: string | null; cod_municipio: string | null };
+async function servicosDaEmpresa(empresa: string): Promise<Serv[]> {
+  const { data, error } = await orders().rpc("crm_erp_lista", { p_empresa: empresa, p_lista: "servicos" });
+  if (error) throw new Error(error.message);
+  return ((data ?? []) as { id: number; cod: string; desc: string; fiscal?: { lc116?: string; mun?: string } }[])
+    .map((s) => ({ id: Number(s.id), cod: s.cod, desc: s.desc, un: "UN", lc116: s.fiscal?.lc116 || null, cod_municipio: s.fiscal?.mun || null }));
+}
+
+/** Serviços do cadastro (para a OS) — busca por nome/código; vazio traz os primeiros. */
+export async function buscarServicosCrm(q: string, lim = 10, empresa = "SF"): Promise<Serv[]> {
+  const norm = (t: string) => t.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+  const termos = norm(q.trim()).split(/\s+/).filter(Boolean);
+  const todos = await servicosDaEmpresa(empresa);
+  return todos.filter((s) => termos.every((t) => norm(`${s.desc} ${s.cod}`).includes(t))).slice(0, Math.max(1, Math.min(lim, 30)));
+}

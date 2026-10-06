@@ -2,6 +2,7 @@
 //   GET  ?empresa=SF                    → { pv_os_nativo } (a chave por empresa; padrão desligada = Omie)
 //   GET  ?empresa=SF&proposta=OPS…      → PV/OS nativos da proposta
 //   GET  ?empresa=SF&id=123             → documento (o "consultar" do CRM)
+//   GET  ?op=proximo&tipo=PV|OS&empresa=SF → { tipo, proximo } — próximo nº SEM consumir (prévia; confirmado ao gravar)
 //   POST { empresa, proposta, tipo, cab, itens, parcelas, por }
 //        → cria o PV/OS no painel (no lugar do IncluirPedido/IncluirOS do Omie).
 //        Recebe o mesmo "cab/itens/parcelas" que o CRM montava para o Omie.
@@ -41,6 +42,12 @@ export async function GET(req: Request) {
   const sp = new URL(req.url).searchParams;
   const empresa = (sp.get("empresa") ?? "SF").toUpperCase();
   try {
+    if (sp.get("op") === "proximo") {
+      const tipo = (sp.get("tipo") ?? "PV").toUpperCase();
+      if (tipo !== "PV" && tipo !== "OS") return NextResponse.json({ error: "tipo deve ser PV ou OS" }, { status: 400 });
+      const p = await rpc<{ pv: number; os: number }>("fat_proximos", { p_empresa: empresa });
+      return NextResponse.json({ empresa, tipo, proximo: tipo === "PV" ? p.pv : p.os, aviso: "prévia — confirmado ao gravar" });
+    }
     if (sp.get("id")) return NextResponse.json(await documento(Number(sp.get("id"))));
     if (sp.get("proposta")) return NextResponse.json(await rpc("vendas_da_proposta", { p_empresa: empresa, p_proposta: sp.get("proposta") }));
     return NextResponse.json(await rpc("vendas_config", { p_empresa: empresa }));
