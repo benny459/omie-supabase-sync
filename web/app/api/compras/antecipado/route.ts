@@ -20,6 +20,11 @@ export async function GET(req: Request) {
   const a = await exigir();
   if (a instanceof NextResponse) return a;
   const u = new URL(req.url);
+  // Escolher o PC a antecipar a partir do Contas a Pagar: PCs aprovados (180 dias) por nº, fornecedor ou PV/OS.
+  if (u.searchParams.get("op") === "busca") {
+    const { data, error } = await ord().rpc("compras_antecipar_busca", { p_q: (u.searchParams.get("q") ?? "").trim() || null, p_lim: 20 });
+    return error ? erroDb(error) : NextResponse.json({ itens: data ?? [] });
+  }
   const ids = (u.searchParams.get("ids") ?? "").split(",").map(Number).filter((n) => n > 0);
   if (u.searchParams.has("ids") || (!u.searchParams.get("pedido") && !u.searchParams.get("numero"))) {
     const { data, error } = await ord().rpc("compras_antecipados", { p_ids: ids.length ? ids : null });

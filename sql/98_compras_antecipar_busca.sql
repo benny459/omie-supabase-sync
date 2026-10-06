@@ -1,0 +1,2 @@
+-- 06/10/26: Contas a Pagar → "Antecipar PC" escolhe o PC numa lista (aprovados, 180 dias,
+-- busca por nº, fornecedor ou PV/OS). Função orders.compras_antecipar_busca (migração p98).

@@ -72,11 +72,7 @@ export default function TelaPagarV3() {
               <button className="btn" id="hdrSync">Sincronizar</button>
               {antNum === null
                 ? <button className="btn" title="Lança um pagamento antecipado (Pix/depósito) ligado a um pedido de compra" onClick={() => setAntNum("")}>💸 Antecipar PC</button>
-                : <form style={{ display: "flex", gap: 6 }} onSubmit={(e) => { e.preventDefault(); const n = antNum.replace(/\D/g, ""); if (n) { setAntAbrir({ num: n, emp: "" }); setAntNum(null); } }}>
-                    <input className="in" id="antPcNum" autoFocus placeholder="nº do PC" value={antNum} onChange={(e) => setAntNum(e.target.value)} style={{ width: 110 }} />
-                    <button className="btn" type="submit">Abrir</button>
-                    <button className="btn ghost" type="button" onClick={() => setAntNum(null)}>✕</button>
-                  </form>}
+                : <EscolherPcAntecipar q={antNum} setQ={setAntNum} escolher={(num, emp) => { setAntAbrir({ num, emp }); setAntNum(null); }} />}
               <button className="btn pri" id="hdrNova">+ Nova conta</button>
             </div>
           </div>
@@ -180,5 +176,41 @@ export default function TelaPagarV3() {
       {editar && <EditarTituloModal tipo="pagar" refTit={editar} onClose={() => setEditar(null)} onDone={() => motor.current?.recarregar()} />}
       {serie && <SerieDialog serieId={serie.id} refAtual={serie.ref} onClose={() => setSerie(null)} onDone={() => motor.current?.recarregar()} />}
     </>
+  );
+}
+
+
+type PcBusca = { id: number; emp: string; num: string; forn: string | null; valor: number | null; pv: string | null; proj: string | null; previsao: string | null };
+/** Caminho inverso do pagamento antecipado (06/10/26): no Contas a Pagar, busca e escolhe o PC aprovado. */
+function EscolherPcAntecipar({ q, setQ, escolher }: { q: string; setQ: (v: string | null) => void; escolher: (num: string, emp: string) => void }) {
+  const [lista, setLista] = useState<PcBusca[] | null>(null);
+  useEffect(() => {
+    const t = window.setTimeout(() => {
+      fetch(`/api/compras/antecipado?op=busca&q=${encodeURIComponent(q.trim())}`, { cache: "no-store" })
+        .then((r) => r.json()).then((j) => setLista((j.itens ?? []) as PcBusca[])).catch(() => setLista([]));
+    }, 250);
+    return () => window.clearTimeout(t);
+  }, [q]);
+  const brl = (n: number | null) => (n == null ? "—" : n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }));
+  return (
+    <div style={{ position: "relative" }}>
+      <div style={{ display: "flex", gap: 6 }}>
+        <input className="in" id="antPcBusca" autoFocus placeholder="PC, fornecedor ou PV/OS" value={q} onChange={(e) => setQ(e.target.value)} style={{ width: 240 }}
+          onKeyDown={(e) => { if (e.key === "Escape") setQ(null); if (e.key === "Enter" && lista?.[0]) { e.preventDefault(); escolher(lista[0].num, lista[0].emp); } }} />
+        <button className="btn ghost" type="button" onClick={() => setQ(null)}>✕</button>
+      </div>
+      <div role="listbox" aria-label="PCs aprovados" style={{ position: "absolute", right: 0, top: "calc(100% + 6px)", zIndex: 40, width: "min(560px, 90vw)", maxHeight: 360, overflowY: "auto",
+        background: "var(--ww-panel, #0f1a2c)", border: "1px solid var(--ww-border-strong, #28395a)", borderRadius: 10, boxShadow: "0 18px 40px rgba(0,0,0,.35)" }}>
+        {lista == null ? <div style={{ padding: 12 }} className="muted">Buscando…</div>
+          : !lista.length ? <div style={{ padding: 12 }} className="muted">Nenhum PC aprovado encontrado (últimos 180 dias).</div>
+          : lista.map((p) => (
+            <button key={p.id} type="button" role="option" aria-selected="false" onClick={() => escolher(p.num, p.emp)}
+              style={{ display: "grid", gridTemplateColumns: "auto 1fr auto", gap: 10, width: "100%", textAlign: "left", padding: "9px 12px", background: "none", border: 0, borderBottom: "1px solid var(--ww-border, #1f2c44)", color: "inherit", cursor: "pointer" }}>
+              <b style={{ fontFamily: "ui-monospace, Menlo, monospace" }}>PC {p.num}</b>
+              <span style={{ minWidth: 0 }}>{p.forn ?? "—"}<small style={{ display: "block", opacity: .7 }}>{[p.emp, p.pv, p.proj, p.previsao ? `entrega ${p.previsao.slice(8, 10)}/${p.previsao.slice(5, 7)}` : null].filter(Boolean).join(" · ")}</small></span>
+              <span style={{ fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>{brl(p.valor)}</span>
+            </button>))}
+      </div>
+    </div>
   );
 }
