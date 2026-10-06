@@ -90,6 +90,7 @@ export async function POST(req: Request) {
   const dedup = new Map<string, Required<Omit<Item, "pc_numero" | "un" | "data_necessaria" | (typeof CAT_KEYS)[number]>> & { pc_numero: string | null }>();
   const catPorChave = new Map<string, Cat>();
   const extraPorChave = new Map<string, { un?: string | null; data_necessaria?: string | null }>();
+  const semObs = new Set<string>();
   for (const raw of body.items) {
     const equipamento = String(raw.equipamento ?? "").trim();
     const item = String(raw.item ?? "").trim();
@@ -111,6 +112,7 @@ export async function POST(req: Request) {
       ex.data_necessaria = /^\d{4}-\d{2}-\d{2}$/.test(d) ? d : null;
     }
     if (Object.keys(ex).length) extraPorChave.set(key, ex);
+    if (!("observacao" in raw)) semObs.add(key); // planilha sem a coluna: mantém a observação gravada
     if (CAT_KEYS.some((k) => k in raw)) {
       const numOuNull = (v: unknown) => (v == null || v === "" || !Number.isFinite(Number(v)) ? null : Number(v));
       // Só as colunas que a origem trouxe: a planilha com "Código" e "Custo"
@@ -171,7 +173,7 @@ export async function POST(req: Request) {
       item: d.item,
       qtd: d.qtd,
       modelo: d.modelo,
-      observacao: d.observacao,
+      observacao: semObs.has(key) ? (prior?.observacao ?? null) : d.observacao,
       pc_numero: pcFinal,
       ...(Object.fromEntries(CAT_KEYS.map((k) => {
         const veio = catPorChave.get(key);

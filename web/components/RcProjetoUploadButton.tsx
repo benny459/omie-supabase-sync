@@ -32,6 +32,7 @@ type ParsedItem = {
   cat_valor_unit?: number | null;
   cat_fornecedor?: string | null;
   data_necessaria?: string | null;
+  observacao?: string | null;
 };
 
 /** Data da planilha → AAAA-MM-DD: número de série do Excel, dd/mm/aaaa ou ISO. */
@@ -122,15 +123,15 @@ export default function RcProjetoUploadButton({
           // silêncio — o erro final dizia "nenhum item válido" sem dizer qual aba
           // nem qual coluna faltou.
           const cols: { item: number; qtd: number; modelo: number; pc: number;
-                        cod: number; un: number; custo: number; forn: number; data: number } =
-            { item: -1, qtd: -1, modelo: -1, pc: -1, cod: -1, un: -1, custo: -1, forn: -1, data: -1 };
+                        cod: number; un: number; custo: number; forn: number; data: number; obs: number } =
+            { item: -1, qtd: -1, modelo: -1, pc: -1, cod: -1, un: -1, custo: -1, forn: -1, data: -1, obs: -1 };
           let headerIdx = -1;
           for (let i = 0; i < Math.min(aoa.length, 12); i++) {
             const row = aoa[i];
             if (!row) continue;
             const cels = row.map((v) => norm(v));
 
-            cols.item = cols.qtd = cols.modelo = cols.pc = cols.cod = cols.un = cols.custo = cols.forn = cols.data = -1;
+            cols.item = cols.qtd = cols.modelo = cols.pc = cols.cod = cols.un = cols.custo = cols.forn = cols.data = cols.obs = -1;
             cels.forEach((s, idx) => {
               if (!s) return;
               // Nome do material. "itens" (plural) tem prioridade sobre "item",
@@ -146,6 +147,7 @@ export default function RcProjetoUploadButton({
               if (cols.un === -1 && (s === "un" || s === "unid" || s === "unid." || s === "unidade")) cols.un = idx;
               if (cols.custo === -1 && (s.startsWith("custo") || s.startsWith("valor unit") || s.startsWith("preco"))) cols.custo = idx;
               if (cols.forn === -1 && s.startsWith("fornecedor")) cols.forn = idx;
+              if (cols.obs === -1 && (s.startsWith("observ") || s.startsWith("informacoes adicionais"))) cols.obs = idx;
               if (cols.data === -1 && (s.startsWith("data necessaria") || s.startsWith("necessario") || s.startsWith("data de necessidade"))) cols.data = idx;
             });
             // Só então "item" singular, pra não roubar a coluna de "itens".
@@ -180,6 +182,7 @@ export default function RcProjetoUploadButton({
             if (cols.custo >= 0) extra.cat_valor_unit = parseNum(row[cols.custo]);
             if (cols.forn >= 0) extra.cat_fornecedor = row[cols.forn] != null ? String(row[cols.forn]).trim() || null : null;
             if (cols.data >= 0) extra.data_necessaria = dataPlanilha(row[cols.data]);
+            if (cols.obs >= 0) extra.observacao = row[cols.obs] != null ? String(row[cols.obs]).trim() || null : null;
             all.push({ equipamento: sheetName.trim(), item, qtd, modelo, pc_numero, ...extra });
           }
         }
@@ -356,7 +359,7 @@ export default function RcProjetoUploadButton({
                   Cada <strong>aba</strong> = 1 equipamento. As colunas são achadas pelo <strong>nome no cabeçalho</strong>, em qualquer posição:{" "}
                   <code className="bg-ww-bg px-1 rounded">Itens</code>/<code className="bg-ww-bg px-1 rounded">Item</code>/<code className="bg-ww-bg px-1 rounded">Descrição</code>,{" "}
                   <code className="bg-ww-bg px-1 rounded">Qtd</code>/<code className="bg-ww-bg px-1 rounded">Qtde</code>/<code className="bg-ww-bg px-1 rounded">Quantidade</code>, e opcionalmente{" "}
-                  <code className="bg-ww-bg px-1 rounded">Modelo</code> e <code className="bg-ww-bg px-1 rounded">PC</code>. Abas de catálogo (Base WW, Como usar) são ignoradas.
+                  <code className="bg-ww-bg px-1 rounded">Código</code>, <code className="bg-ww-bg px-1 rounded">Un</code>, <code className="bg-ww-bg px-1 rounded">Custo estimado</code>, <code className="bg-ww-bg px-1 rounded">Fornecedor sugerido</code>, <code className="bg-ww-bg px-1 rounded">Data necessária</code>, <code className="bg-ww-bg px-1 rounded">Modelo</code>, <code className="bg-ww-bg px-1 rounded">Observação</code> e <code className="bg-ww-bg px-1 rounded">PC</code>. Abas de catálogo (Base WW, Como usar) são ignoradas.
                 </p>
                 <p className="text-[11px] text-ww-textMuted mt-1">
                   Novo upload <strong>substitui</strong> a lista: itens novos entram, existentes atualizam,
