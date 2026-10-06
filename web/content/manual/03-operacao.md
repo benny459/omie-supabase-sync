@@ -17,6 +17,14 @@ A lista de **pedidos de venda (PV/OS)** com as compras ligadas a cada um.
 - Use as abas **Em aberto / Faturados / Todos**, a busca e os filtros rápidos (Pode faturar, Venda em atraso, Compra em atraso, Minha aprovação, Sem PC, etc.).
 - Alterne a visão entre **Lista, Tabela, Kanban e Linha do tempo**.
 
+### Período e ordem da lista
+
+- **Entrou 7 dias / Entrou 30 dias**: pedidos **emitidos** (que entraram no painel) nos últimos 7 ou 30 dias — a data que aparece como "emitido" na linha. Um PV criado hoje aparece em "Entrou 7 dias".
+- **Vence em 7 dias**: prazo limite nos próximos 7 dias. **Vencidos**: prazo limite já passou.
+- Por padrão a lista vem do **mais novo para o mais antigo** (data de emissão).
+- **Clique no nome da coluna para reordenar, como no Excel**: Pedido, emissão, Cliente, Etapas (quanto da cadeia já andou), Prazo, Serviço e, no bloco de valores, **RC**, **PC**, **PV** ou **M.B.** separadamente. Clique de novo para inverter (↑ crescente · ↓ decrescente). A ordem escolhida fica gravada para a próxima vez e entra em **Salvar visão atual**.
+- Na vista **Tabela**, clique no cabeçalho de qualquer coluna para ordenar as linhas; o 3º clique volta à ordem da lista.
+
 ### Como faço para gerar o pedido de compra direto da linha (atalho)
 
 1. Abra o PV/OS (clique na linha) para ver a **RC** e os itens.

@@ -78,11 +78,25 @@ export default function GradeOperacao({ visiveis, modulo, $, podeAprovar, podeEd
 
   // Linhas navegáveis (compras) e cabeçalhos de pedido.
   const [limite, setLimite] = useState(400);
+  /* Ordem por coluna, como no Excel (06/10/26): 1º clique crescente, 2º
+     decrescente, 3º volta à ordem da lista (a mesma da vista Lista). */
+  const [ordCol, setOrdCol] = useState<{ k: string; d: 1 | -1 } | null>(null);
+  const clicarCab = (k: string) => setOrdCol((o) => (!o || o.k !== k ? { k, d: 1 } : o.d === 1 ? { k, d: -1 } : null));
   const linhas = useMemo(() => {
     const out: { p: Pedido; c: Compra }[] = [];
     for (const { p, compras } of visiveis) for (const c of compras) out.push({ p, c });
+    const col = ordCol ? COLS.find((x) => x.k === ordCol.k) : null;
+    if (col && ordCol) {
+      const num = (v: string) => { const t = v.trim(); return t !== "" && !Number.isNaN(Number(t)) ? Number(t) : null; };
+      out.sort((a, b) => {
+        const va = col.valor(a.c, a.p) ?? "", vb = col.valor(b.c, b.p) ?? "";
+        if (!va && !vb) return 0; if (!va) return 1; if (!vb) return -1;
+        const na = num(va), nb = num(vb);
+        return (na != null && nb != null ? na - nb : va.localeCompare(vb, "pt-BR", { numeric: true })) * ordCol.d;
+      });
+    }
     return out.slice(0, limite);
-  }, [visiveis, limite]);
+  }, [visiveis, limite, ordCol, COLS]);
   const totalLinhas = visiveis.reduce((a, x) => a + x.compras.length, 0);
 
   const [cel, setCel] = useState<{ r: number; c: number }>({ r: 0, c: 0 });
@@ -234,7 +248,9 @@ export default function GradeOperacao({ visiveis, modulo, $, podeAprovar, podeEd
                 <input type="checkbox" className="cb" checked={linhas.length > 0 && linhas.every((l) => sel.has(l.c.key))}
                   onChange={(e) => setSel(e.target.checked ? new Set(linhas.map((l) => l.c.key)) : new Set())} />
               </th>
-              {cols.map((c) => <th key={c.k} className={c.al === "r" ? "r" : ""} style={{ minWidth: c.w, maxWidth: c.w + 60 }}>{c.tipo ? "✎ " : ""}{c.l}</th>)}
+              {cols.map((c) => <th key={c.k} className={c.al === "r" ? "r" : ""} style={{ minWidth: c.w, maxWidth: c.w + 60, cursor: "pointer", userSelect: "none" }}
+                title="Clique para ordenar (de novo inverte; 3º clique volta à ordem da lista)" onClick={() => clicarCab(c.k)}>
+                {c.tipo ? "✎ " : ""}{c.l}{ordCol?.k === c.k ? (ordCol.d === 1 ? " ↑" : " ↓") : ""}</th>)}
               <th style={{ width: 90 }} />
             </tr>
           </thead>

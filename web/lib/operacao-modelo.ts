@@ -513,7 +513,10 @@ export function financeiro(p: Pedido) {
 
 // ── Filtros ────────────────────────────────────────────────────────────────
 export type Escopo = "aberto" | "faturado" | "todos";
-export type Periodo = "tudo" | "7" | "30" | "vencidos";
+/** "7"/"30" = entrou no painel (emissão do PV/OS · PC) nos últimos N dias —
+ *  era o prazo até 06/10/26; as visões salvas com "7"/"30" passam a ser por entrada.
+ *  "vence7" = prazo nos próximos 7 dias (o comportamento antigo). */
+export type Periodo = "tudo" | "7" | "30" | "vence7" | "vencidos";
 export type Rapida = "todos" | "minha" | "atrasados" | "sem_pc" | "alarme"
   | "serv_exec" | "serv_agend" | "serv_semos" | "pode_fat"
   | "venda_atraso" | "compra_atraso" | "recusa" | "sem_projeto" | "serv_atraso"
@@ -562,8 +565,10 @@ export function passa(p: Pedido, c: Compra | null, q: string, per: Periodo, f: F
   if (f.fornecedor && (c?.fornecedor ?? "").toUpperCase() !== f.fornecedor.toUpperCase()) return false;
   if (f.categoria && c?.categoria !== f.categoria) return false;
   const d = diasAte(p.lim);
-  if (per === "7" && (d == null || d < 0 || d > 7)) return false;
-  if (per === "30" && (d == null || d < 0 || d > 30)) return false;
+  const desde = diasAte(p.emissao); // ≤ 0: dias desde a emissão/entrada
+  if (per === "7" && (desde == null || desde < -7)) return false;
+  if (per === "30" && (desde == null || desde < -30)) return false;
+  if (per === "vence7" && (d == null || d < 0 || d > 7)) return false;
   if (per === "vencidos" && (d == null || d >= 0)) return false;
   if (rap === "minha" && c?.estado !== "pendente") return false;
   if (rap === "atrasados" && !p.flags.some((x) => x.t === "venda em atraso" || x.t === "compra em atraso")) return false;
@@ -595,6 +600,50 @@ export function passa(p: Pedido, c: Compra | null, q: string, per: Periodo, f: F
     if (rap === "pode_fat" && !p.flags.some((x) => x.t === "pode faturar")) return false;
   }
   return true;
+}
+
+// ── Ordenação (cabeçalho clicável, como no Excel — 06/10/26) ──────────────
+export type OrdemCampo = "emissao" | "pedido" | "cliente" | "etapas" | "prazo" | "servico" | "rc" | "pc" | "pv" | "mb";
+export type Ordem = { k: OrdemCampo; d: 1 | -1 };
+export const ORDEM_PADRAO: Ordem = { k: "emissao", d: -1 }; // mais novo primeiro
+
+const numDoRotulo = (id: string) => { const m = /(\d+)/.exec(id); return m ? Number(m[1]) : null; };
+
+/** Valor de ordenação de um pedido para a coluna escolhida (null vai sempre para o fim). */
+export function chaveOrdem(p: Pedido, k: OrdemCampo, modulo: string): number | string | null {
+  switch (k) {
+    case "emissao": return p.emissao;
+    case "pedido": return numDoRotulo(p.id) ?? p.id;
+    case "cliente": return p.cliente || null;
+    case "prazo": return diasAte(p.lim);
+    case "etapas": {
+      const L = fases(p, modulo).lista;
+      return L.length ? L.filter((f) => f.s === "d" || f.s === "na").length / L.length : null;
+    }
+    case "servico": {
+      const sv = servicoDoPedido(p);
+      return sv ? ORDEM_SERV.indexOf(sv.rotulo) : null;
+    }
+    default: {
+      const f = financeiro(p);
+      if (k === "rc") return f.rc || null;
+      if (k === "pc") return f.pc || null;
+      if (k === "pv") return p.valorPv || null;
+      return f.mb;
+    }
+  }
+}
+
+export function ordenarPedidos<T extends { p: Pedido }>(lista: T[], o: Ordem, modulo: string): T[] {
+  const ch = new Map(lista.map((x) => [x.p.id, chaveOrdem(x.p, o.k, modulo)]));
+  return [...lista].sort((a, b) => {
+    const va = ch.get(a.p.id), vb = ch.get(b.p.id);
+    if (va == null && vb == null) return 0;
+    if (va == null) return 1;
+    if (vb == null) return -1;
+    const r = typeof va === "number" && typeof vb === "number" ? va - vb : String(va).localeCompare(String(vb), "pt-BR", { numeric: true });
+    return r * o.d || ((numDoRotulo(b.p.id) ?? 0) - (numDoRotulo(a.p.id) ?? 0));
+  });
 }
 
 export const brl = (v: number | null | undefined) =>

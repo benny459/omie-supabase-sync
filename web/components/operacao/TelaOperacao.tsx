@@ -32,6 +32,7 @@ import {
   type Compra, type Escopo, type Estado, type Filtros, type Pedido, type Periodo, type Rapida,
   servicoDoPedido, servicoAtrasado, tipoVenda, STATUS_SERVICO, type Servico,
   materialDoItem, MAT_MANUAL, type MatManual,
+  ordenarPedidos, ORDEM_PADRAO, type Ordem, type OrdemCampo,
 } from "@/lib/operacao-modelo";
 import { chaveRentab, type RentabResumo } from "@/lib/rentabilidade";
 import { mudarStatus, mudarStatusEmMassa, salvarCampo, CAMPOS, type Modulo } from "@/lib/approvals-write";
@@ -64,7 +65,7 @@ export const RECUSAS = new Set(["NAO_APROVADO", "REJEITADO_VALIDADE", "CANCELAR_
 
 type Vista = "lista" | "tabela" | "kanban" | "tempo";
 type Toast = { msg: string; desfazer?: () => void; erro?: boolean } | null;
-type Visao = { nome: string; escopo: Escopo; periodo: Periodo; filtros: Filtros; rapida: Rapida | Rapida[]; q: string };
+type Visao = { nome: string; escopo: Escopo; periodo: Periodo; filtros: Filtros; rapida: Rapida | Rapida[]; q: string; ordem?: Ordem };
 
 const VIEW_DO_MODULO: Record<Modulo, string> = { avulsos: "v_pc_avulsos", projetos: "v_pc_projetos", pcs: "v_pc_pcs" };
 
@@ -107,6 +108,9 @@ export default function TelaOperacao({ modulo, title, rows: rowsIniciais, parcia
   // ?q=PV1966 (vindo do cartão da RC/PC em Compras) já abre a tela filtrada.
   useEffect(() => { const v = new URLSearchParams(window.location.search).get("q"); if (v) setQ(v); }, []);
   const [periodo, setPeriodo] = useState<Periodo>("tudo");
+  /* Ordem da lista: mais novo primeiro; clicar no cabeçalho reordena, de novo
+     inverte (como no Excel). Gravada por módulo e nas visões salvas (06/10/26). */
+  const [ordem, setOrdemSt] = useState<Ordem>(ORDEM_PADRAO);
   const [filtros, setFiltros] = useState<Filtros>({});
   /* Filtros rápidos marcados — vários ao mesmo tempo; cada um estreita a
      lista (E). Vazio = todos. (pedido do Benny, 01/10/2026) */
@@ -142,8 +146,14 @@ export default function TelaOperacao({ modulo, title, rows: rowsIniciais, parcia
       if (v && ["lista", "tabela", "kanban", "tempo"].includes(v)) setVista(v);
       const vs = JSON.parse(localStorage.getItem(`${chaveLS}:visoes`) ?? "[]");
       if (Array.isArray(vs)) setVisoes(vs);
+      const o = JSON.parse(localStorage.getItem(`${chaveLS}:ordem`) ?? "null") as Ordem | null;
+      if (o?.k && (o.d === 1 || o.d === -1)) setOrdemSt(o);
     } catch { /* sem storage */ }
   }, [chaveLS]);
+  const setOrdem = (o: Ordem) => { setOrdemSt(o); try { localStorage.setItem(`${chaveLS}:ordem`, JSON.stringify(o)); } catch { /* */ } };
+  const ordenarPor = (k: OrdemCampo) => setOrdem(ordem.k === k
+    ? { k, d: ordem.d === 1 ? -1 : 1 }
+    : { k, d: k === "emissao" || k === "rc" || k === "pc" || k === "pv" || k === "mb" ? -1 : 1 });
   const trocarVista = (v: Vista) => { setVista(v); try { localStorage.setItem(`${chaveLS}:vista`, v); } catch { /* */ } };
 
   // ⌘K / Ctrl+K foca a busca.
@@ -291,7 +301,7 @@ export default function TelaOperacao({ modulo, title, rows: rowsIniciais, parcia
     }
     return out;
   }, [noScope, q, periodo, filtros]);
-  const visiveis = useMemo(() => filtrarPor(marcados), [filtrarPor, marcados]);
+  const visiveis = useMemo(() => ordenarPedidos(filtrarPor(marcados), ordem, modulo), [filtrarPor, marcados, ordem, modulo]);
   const opcoes = useMemo(() => {
     const uniq = (a: string[]) => [...new Set(a.filter(Boolean))].sort((x, y) => x.localeCompare(y, "pt-BR"));
     return {
@@ -325,11 +335,11 @@ export default function TelaOperacao({ modulo, title, rows: rowsIniciais, parcia
   const salvarVisao = () => {
     const nome = window.prompt("Nome desta visão:");
     if (!nome?.trim()) return;
-    const nv = [...visoes.filter((v) => v.nome !== nome.trim()), { nome: nome.trim(), escopo, periodo, filtros, rapida: marcados, q }];
+    const nv = [...visoes.filter((v) => v.nome !== nome.trim()), { nome: nome.trim(), escopo, periodo, filtros, rapida: marcados, q, ordem }];
     setVisoes(nv);
     try { localStorage.setItem(`${chaveLS}:visoes`, JSON.stringify(nv)); } catch { /* */ }
   };
-  const aplicarVisao = (v: Visao) => { setEscopo(v.escopo); setPeriodo(v.periodo); setFiltros(v.filtros); setMarcados(Array.isArray(v.rapida) ? v.rapida : v.rapida && v.rapida !== "todos" ? [v.rapida] : []); setQ(v.q); };
+  const aplicarVisao = (v: Visao) => { setEscopo(v.escopo); setPeriodo(v.periodo); setFiltros(v.filtros); setMarcados(Array.isArray(v.rapida) ? v.rapida : v.rapida && v.rapida !== "todos" ? [v.rapida] : []); setQ(v.q); if (v.ordem) setOrdem(v.ordem); };
   const removerVisao = (nome: string) => {
     const nv = visoes.filter((v) => v.nome !== nome);
     setVisoes(nv);
@@ -606,8 +616,9 @@ export default function TelaOperacao({ modulo, title, rows: rowsIniciais, parcia
           <span className="kbd">⌘ K</span>
         </div>
         <div className="seg">
-          {([["tudo", "Tudo"], ["7", "7 dias"], ["30", "30 dias"], ["vencidos", "Vencidos"]] as const).map(([k, l]) => (
-            <button key={k} className={periodo === k ? "on" : ""} onClick={() => setPeriodo(k)}>{l}</button>
+          {([["tudo", "Tudo", ""], ["7", "Entrou 7 dias", "Emitidos (entraram no painel) nos últimos 7 dias"], ["30", "Entrou 30 dias", "Emitidos (entraram no painel) nos últimos 30 dias"],
+            ["vence7", "Vence em 7 dias", "Prazo limite nos próximos 7 dias"], ["vencidos", "Vencidos", "Prazo limite já passou"]] as const).map(([k, l, t]) => (
+            <button key={k} className={periodo === k ? "on" : ""} title={t || undefined} onClick={() => setPeriodo(k)}>{l}</button>
           ))}
         </div>
         <div style={{ position: "relative" }}>
@@ -724,8 +735,12 @@ export default function TelaOperacao({ modulo, title, rows: rowsIniciais, parcia
         <>
           {visiveis.length > 0 && (
             <div className="pvh pvcols">
-              <span /><span>{rotulo}</span><span>{modulo === "pcs" ? "Fornecedor · alertas" : "Cliente · alertas"}</span><span>Etapas</span><span>Prazo</span>
-              {modulo !== "pcs" && <span>Serviço</span>}<span style={{ textAlign: "center" }}>RC · PC · PV · M.B.</span>
+              <span />
+              <span><OrdCab k="pedido" l={rotulo} o={ordem} on={ordenarPor} /> · <OrdCab k="emissao" l="emissão" o={ordem} on={ordenarPor} /></span>
+              <span><OrdCab k="cliente" l={modulo === "pcs" ? "Fornecedor" : "Cliente"} o={ordem} on={ordenarPor} /> · alertas</span>
+              <span><OrdCab k="etapas" l="Etapas" o={ordem} on={ordenarPor} /></span><span><OrdCab k="prazo" l="Prazo" o={ordem} on={ordenarPor} /></span>
+              {modulo !== "pcs" && <span><OrdCab k="servico" l="Serviço" o={ordem} on={ordenarPor} /></span>}
+              <span style={{ textAlign: "center" }}><OrdCab k="rc" l="RC" o={ordem} on={ordenarPor} /> · <OrdCab k="pc" l="PC" o={ordem} on={ordenarPor} /> · <OrdCab k="pv" l="PV" o={ordem} on={ordenarPor} /> · <OrdCab k="mb" l="M.B." o={ordem} on={ordenarPor} /></span>
             </div>
           )}
           {visiveis.slice(0, limite).map(({ p, compras }) => (
@@ -1621,6 +1636,17 @@ function SeletorStatusLote({ cs, podeAprovar, ehAdmin, statusLote }: {
 }
 
 // ─────────────────────────────────────────────────────────────────────────
+/** Rótulo de coluna clicável: 1º clique ordena, 2º inverte (↑ crescente · ↓ decrescente). */
+function OrdCab({ k, l, o, on }: { k: OrdemCampo; l: string; o: Ordem; on: (k: OrdemCampo) => void }) {
+  const ativo = o.k === k;
+  return (
+    <button type="button" className="ordcab" onClick={() => on(k)} title={`Ordenar por ${l}${ativo ? " (clique de novo para inverter)" : ""}`}
+      style={{ all: "unset", cursor: "pointer", font: "inherit", color: ativo ? "var(--ww-text, inherit)" : "inherit", fontWeight: ativo ? 700 : "inherit", textDecoration: ativo ? "underline" : "none", textUnderlineOffset: 3 }}>
+      {l}{ativo ? (o.d === 1 ? " ↑" : " ↓") : ""}
+    </button>
+  );
+}
+
 function Kanban({ visiveis, $, nomeId, podeAprovar, podeEditar, setStatus, gravar, abrirDrawer }: {
   visiveis: { p: Pedido; compras: Compra[] }[]; $: (v: number | null) => string; nomeId: (p: Pedido) => string;
   podeAprovar: boolean; podeEditar: boolean; setStatus: (c: Compra, v: string) => void; gravar: Gravar; abrirDrawer: (k: string) => void;
