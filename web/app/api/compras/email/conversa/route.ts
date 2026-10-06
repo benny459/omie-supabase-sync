@@ -5,7 +5,7 @@
 //        por In-Reply-To/References, mesmas cópias ocultas e o "responder para" do pedido)
 import { NextResponse } from "next/server";
 import { exigirCompras, rpc, erro, semPermissao } from "@/lib/compras-server";
-import { emailConfigurado, destinatarios, enviarResend, novoMessageId, responderPara, htmlResposta, lista } from "@/lib/compras-email";
+import { emailConfigurado, destinatarios, enviarResend, novoMessageId, responderPara, htmlResposta, lista, assuntoTeste, faixaTeste } from "@/lib/compras-email";
 import type { Pedido } from "@/lib/compras";
 
 export const runtime = "nodejs";
@@ -55,10 +55,11 @@ export async function POST(req: Request) {
     if ("erro" in dest) return NextResponse.json({ error: dest.erro }, { status: 400 });
     if (!dest.para.length) return NextResponse.json({ error: "Sem destinatário — informe o e-mail do fornecedor." }, { status: 400 });
     const base = ultima?.assunto ?? `Pedido de Compra Nº ${p.num}`;
-    const assunto = /^(re|res|resp):/i.test(base.trim()) ? base : `Re: ${base}`;
+    const base2 = base.replace(/^\[TESTE[^\]]*\]\s*/, "");
+    const assunto = assuntoTeste(/^(re|res|resp):/i.test(base2.trim()) ? base2 : `Re: ${base2}`, dest);
     const refs = msgs.map((m) => m.messageId).filter((x): x is string => !!x);
     const messageId = novoMessageId(p.num);
-    const html = htmlResposta(texto, ultima ? { de: ultima.de, em: new Date(ultima.em).toLocaleString("pt-BR"), texto: ultima.texto } : undefined);
+    const html = faixaTeste(dest) + htmlResposta(texto, ultima ? { de: ultima.de, em: new Date(ultima.em).toLocaleString("pt-BR"), texto: ultima.texto } : undefined);
     const anexos: { filename: string; content: string }[] = [];
     const extra = b.anexo as { nome?: string; base64?: string } | undefined;
     if (extra?.base64 && extra.nome) {
@@ -70,7 +71,7 @@ export async function POST(req: Request) {
     await rpc("compras_email_registrar", { p: { pedido_id: id, direcao: "saida", message_id: messageId, in_reply_to: ultima?.messageId ?? null,
       de: process.env.COMPRAS_EMAIL_REMETENTE, para: dest.para, cc: dest.cc, cco: dest.cco, assunto, texto, html,
       anexos: anexos.map((a) => ({ nome: a.filename })), enviado_por: q.email, resend_id: resendId,
-      status: lista(process.env.COMPRAS_EMAIL_SO_PARA).length ? "teste" : "ok" } });
+      status: dest.teste ? "teste" : "ok" } });
     await rpc("compras_registrar", { p_id: id, p_texto: `E-mail ao fornecedor · para ${dest.para.join(", ")}`, p_por: q.email }).catch(() => null);
     return NextResponse.json({ ok: true, id: resendId });
   } catch (e) { return erro(e); }

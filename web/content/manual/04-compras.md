@@ -45,7 +45,10 @@ Se algum item estiver acima do máximo, o painel **Pronto para salvar?** avisa e
 4. A aba **E-mails** do pedido mostra a conversa inteira: o envio do PDF, as respostas do fornecedor (com anexos) e as suas respostas. Para responder, escreva embaixo e clique **Enviar** — sai na mesma conversa (o fornecedor vê como resposta ao e-mail do pedido).
 5. Quando o fornecedor responde, quem enviou o pedido recebe aviso no Webex e a resposta no Gmail; o cartão do pedido em Compras ganha o selo **✉ N** até alguém abrir a aba E-mails.
 
-> **Modo teste:** enquanto estiver ligado, os e-mails só saem para os endereços de teste (e a cópia do compras@) — o painel avisa no topo do envio.
+6. Depois do envio o pedido ganha o selo **✉ Enviado** (no cartão do kanban, no topo da folha do pedido e na coluna "Enviado ao fornecedor" da Tabela). Passe o mouse para ver quando, por quem, para quem e por qual caminho. O mesmo selo aparece quando você usa **Marcar como enviado** (WhatsApp, em mãos…). Fica registrado também no histórico do pedido.
+7. Pedido aprovado que ainda não foi ao fornecedor mostra **não enviado**. O filtro **✉ Não enviados** (na barra de filtros) lista só esses.
+
+> **Modo teste:** se a trava de teste estiver ligada, nada é bloqueado — o painel **redireciona**: quem estiver no Para/Cc/Cco e não for endereço de teste é trocado pelo endereço de teste. O assunto começa com **[TESTE → era para: …]** e uma faixa amarela no e-mail mostra para quem iria. O pedido fica com **✉ Enviado (teste)**. O aviso azul no topo do envio mostra a troca antes de enviar.
 
 ## NF de entrada (pela Focus)
 

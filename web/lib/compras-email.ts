@@ -1,5 +1,7 @@
 import "server-only";
 import { createHmac, randomUUID, timingSafeEqual } from "node:crypto";
+import { montarDestinatarios } from "@/lib/compras-email-destinos";
+export { assuntoTeste, faixaTeste } from "@/lib/compras-email-destinos";
 
 // Conversa por e-mail do pedido de compra com o fornecedor (06/10/26).
 //
@@ -12,12 +14,14 @@ import { createHmac, randomUUID, timingSafeEqual } from "node:crypto";
 //   chama /api/compras/email/entrada, que liga a mensagem ao pedido. A
 //   assinatura (HMAC) impede que alguém invente endereços de outros pedidos.
 //   Sem a flag, o "responder para" continua a ser o e-mail de quem enviou.
-// • COMPRAS_EMAIL_SO_PARA (modo teste) vale para Para, Cc e Cco: só esses
-//   endereços e a cópia fixa do compras@ recebem.
+// • COMPRAS_EMAIL_SO_PARA (modo teste) vale para Para, Cc e Cco: redireciona
+//   tudo o que é externo para esses endereços (o assunto e o corpo dizem para
+//   quem iria). Nenhum endereço externo recebe com a trava ligada.
 
 export const lista = (v: unknown) =>
   (Array.isArray(v) ? v : String(v ?? "").split(/[,;\s]+/)).map((x) => String(x).trim()).filter(Boolean);
 export const emailOk = (e: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e);
+export const soParaLista = () => lista(process.env.COMPRAS_EMAIL_SO_PARA).map((e) => e.toLowerCase());
 
 export const emailConfigurado = () => !!(process.env.RESEND_API_KEY && process.env.COMPRAS_EMAIL_REMETENTE);
 export const respostasLigadas = () => process.env.COMPRAS_EMAIL_RESPOSTAS === "1";
@@ -57,23 +61,10 @@ export const novoMessageId = (numero: string) => `<pc-${String(numero).replace(/
 
 /**
  * Monta Para/Cc/Cco finais aplicando a cópia fixa, a cópia de quem enviou e o
- * modo teste. Devolve o erro (texto) se algum destinatário digitado ferir o modo teste.
+ * modo teste — que REDIRECIONA para a lista de teste (ver compras-email-destinos.ts).
  */
 export function destinatarios(para: string[], cc: string[], cco: string[], quem: string) {
-  const so = soPara(), fixo = ccoFixo();
-  const okTeste = (e: string) => !so.length || so.includes(e.toLowerCase()) || fixo.includes(e.toLowerCase());
-  const digitados = [...para, ...cc, ...cco];
-  const ruim = digitados.find((e) => !emailOk(e));
-  if (ruim) return { erro: `E-mail inválido: ${ruim}` };
-  const fora = digitados.filter((e) => !okTeste(e));
-  if (fora.length) return { erro: `Modo teste: só envia para ${[...so, ...fixo].join(", ")}.` };
-  const ja = new Set([...para, ...cc].map((e) => e.toLowerCase()));
-  const ccoFinal: string[] = [];
-  for (const e of [...cco, ...fixo, ...(quem && okTeste(quem) ? [quem] : [])]) {
-    const k = e.toLowerCase();
-    if (!ja.has(k)) { ja.add(k); ccoFinal.push(e); }
-  }
-  return { para, cc, cco: ccoFinal };
+  return montarDestinatarios(para, cc, cco, quem, soPara(), ccoFixo());
 }
 
 type Anexo = { filename: string; content: string };

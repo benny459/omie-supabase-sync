@@ -52,7 +52,7 @@ export type PedidoLista = {
   contrato?: string; nf?: string; dtRec?: string; dtFat?: string; pv?: string; pvCliente?: string; obsInt?: string;
   valor: number; nItens: number; busca?: string; aprov: Aprov; aprovPor?: string; aprovEm?: string;
   origem: "painel" | "omie"; sync?: string; rcs?: string[]; cobDone?: number; cobTotal?: number; cobPcs?: string[];
-  saldo?: number; parciais?: number; enviadoEm?: string; enviadoPara?: string; enviadoMeio?: string;
+  saldo?: number; parciais?: number; enviadoEm?: string; enviadoPara?: string; enviadoMeio?: string; enviadoPor?: string;
   semRc?: boolean; avulsa?: boolean; criadoEm?: string;
 };
 
@@ -203,3 +203,21 @@ export const novaChave = () => `k${Date.now().toString(36)}${(seqKey++).toString
 export function itemVazio(): Item {
   return { key: novaChave(), cod: "", desc: "", un: "UN", qtd: 1, vu: 0, desc0: 0, ipi: 0, st: 0, ncm: "", local: null, obs: "" };
 }
+
+/** Status "✉ Enviado" do pedido de compra (06/10/26) — não é etapa (o kanban não tem
+ *  coluna Enviado desde 01/10/26): é um selo ao lado de Pendente/Aprovado. */
+type ComEnvio = { enviadoEm?: string | null; enviadoPara?: string | null; enviadoMeio?: string | null; enviadoPor?: string | null };
+export function rotuloEnvio(p: ComEnvio) {
+  if (!p.enviadoEm) return null;
+  const teste = p.enviadoMeio === "email_teste";
+  const meio = p.enviadoMeio === "email" || teste ? "por e-mail" : p.enviadoMeio === "whatsapp" ? "por WhatsApp" : "por outro caminho";
+  const quando = new Date(p.enviadoEm).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" });
+  return {
+    texto: teste ? "✉ Enviado (teste)" : "✉ Enviado",
+    dica: [`Enviado ao fornecedor em ${quando}`, meio, p.enviadoPor ? `por ${p.enviadoPor}` : "", p.enviadoPara ? `para ${p.enviadoPara}` : ""].filter(Boolean).join(" · "),
+    teste,
+  };
+}
+/** PC aprovado, emitido no painel, ainda sem envio registrado ao fornecedor. */
+export const naoEnviado = (p: { tipo: string; origem: string; aprov: string; etapa: string; enviadoEm?: string | null }) =>
+  p.tipo === "PC" && p.origem === "painel" && p.aprov === "aprovado" && !p.enviadoEm && ["10", "15", "35"].includes(p.etapa);

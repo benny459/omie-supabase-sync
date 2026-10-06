@@ -5,8 +5,8 @@
 // COMPRAS_EMAIL_REMETENTE ("Compras WaterWorks <compras@waterworks.com.br>",
 // domínio verificado no Resend). Sem isso o modal mostra "e-mail não
 // configurado" e oferece baixar o PDF e marcar como enviado à mão.
-// COMPRAS_EMAIL_SO_PARA (lista separada por vírgula), se definida, limita os
-// destinatários — usada para testar só com endereços internos.
+// COMPRAS_EMAIL_SO_PARA (lista separada por vírgula), se definida, REDIRECIONA
+// todos os destinatários externos para esses endereços (modo teste).
 // Cópia oculta automática (compras@ + quem enviou), "responder para" do pedido
 // e registro da conversa: lib/compras-email.ts (06/10/26).
 import { NextResponse } from "next/server";
@@ -14,7 +14,7 @@ import { exigirCompras, rpc, erro, semPermissao } from "@/lib/compras-server";
 import { gerarPdfPedido, type VariantePdf } from "@/lib/compras-pdf";
 import { supaAdmin } from "@/lib/supabase-admin";
 import type { Pedido } from "@/lib/compras";
-import { emailConfigurado, destinatarios, enviarResend, novoMessageId, responderPara, ccoFixo, respostasLigadas, lista } from "@/lib/compras-email";
+import { emailConfigurado, destinatarios, enviarResend, novoMessageId, responderPara, ccoFixo, respostasLigadas, lista, assuntoTeste, faixaTeste } from "@/lib/compras-email";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -79,13 +79,14 @@ export async function POST(req: Request) {
   const dest = destinatarios(lista(b.para), lista(b.cc), lista(b.cco), q.email);
   if ("erro" in dest) return NextResponse.json({ error: dest.erro }, { status: 400 });
   const { para, cc, cco } = dest;
+  const teste = !!dest.teste;
   if (!para.length) return NextResponse.json({ error: "Informe pelo menos um destinatário em “Para”." }, { status: 400 });
   try {
     const { pdf, pedido, empresa } = await gerarPdfPedido(id, variante, q.nome, b.anterior == null ? undefined : !!b.anterior);
     if (pedido.aprov !== "aprovado") throw new Error("Pedido ainda não aprovado — aprove antes de enviar ao fornecedor");
     const nomeEmp = titulo(empresa.razao_social ?? pedido.emp);
     const texto = String(b.texto ?? "").trim();
-    const html = `<div style="font-family:-apple-system,Segoe UI,Helvetica,Arial,sans-serif;color:#1A2731;font-size:14px;line-height:1.55;max-width:600px">
+    const html = `${faixaTeste(dest)}<div style="font-family:-apple-system,Segoe UI,Helvetica,Arial,sans-serif;color:#1A2731;font-size:14px;line-height:1.55;max-width:600px">
       <div style="height:4px;background:linear-gradient(90deg,#10324A,#1C7FA0);margin-bottom:18px"></div>
       <img src="https://painel.waterworks.com.br/logo-waterworks.png" alt="WaterWorks" width="150" style="display:block;margin-bottom:16px">
       <p>Prezado Fornecedor,</p>
@@ -103,15 +104,17 @@ export async function POST(req: Request) {
       if (extra.base64.length > 10_000_000) throw new Error("Anexo extra grande demais (máx. ~7 MB)");
       anexos.push({ filename: extra.nome, content: extra.base64 });
     }
-    const assunto = String(b.assunto ?? `Pedido de Compra Nº ${pedido.num}`);
+    const assunto = assuntoTeste(String(b.assunto ?? `Pedido de Compra Nº ${pedido.num}`), dest);
     const messageId = novoMessageId(pedido.num);
     const resendId = await enviarResend({ para, cc, cco, assunto, html, replyTo: responderPara(id, pedido.num, q.email), messageId, anexos });
     await rpc("compras_email_registrar", { p: { pedido_id: id, direcao: "saida", message_id: messageId, de: process.env.COMPRAS_EMAIL_REMETENTE,
       para, cc, cco, assunto, texto: texto || `Pedido de Compra Nº ${pedido.num} (PDF anexo)`, html,
       anexos: anexos.map((a) => ({ nome: a.filename })), enviado_por: q.email, resend_id: resendId,
-      status: lista(process.env.COMPRAS_EMAIL_SO_PARA).length ? "teste" : "ok" } }).catch(() => null);
-    await rpc("compras_registrar", { p_id: id, p_texto: `E-mail enviado (${variante === "sem_valores" ? "sem valores" : "completo"}) · para ${para.join(", ")}${cc.length ? ` · cc ${cc.join(", ")}` : ""}${cco.length ? ` · cco ${cco.join(", ")}` : ""}`, p_por: q.email });
-    await rpc("compras_marcar_enviado", { p_id: id, p_para: para.join(", "), p_meio: "email", p_por: q.email });
-    return NextResponse.json({ ok: true, id: resendId });
+      status: teste ? "teste" : "ok" } }).catch(() => null);
+    const orig = dest.teste?.originais;
+    const eraPara = orig && (orig.para.length || orig.cc.length) ? [...orig.para, ...orig.cc.map((e) => `cc ${e}`)].join(", ") : "";
+    await rpc("compras_registrar", { p_id: id, p_texto: `${teste ? "[TESTE] " : ""}E-mail enviado (${variante === "sem_valores" ? "sem valores" : "completo"}) · para ${para.join(", ")}${cc.length ? ` · cc ${cc.join(", ")}` : ""}${cco.length ? ` · cco ${cco.join(", ")}` : ""}${eraPara ? ` · iria para ${eraPara}` : ""}`, p_por: q.email });
+    await rpc("compras_marcar_enviado", { p_id: id, p_para: teste ? `${para.join(", ")} (teste${eraPara ? ` — era para ${eraPara}` : ""})` : para.join(", "), p_meio: teste ? "email_teste" : "email", p_por: q.email });
+    return NextResponse.json({ ok: true, id: resendId, teste, vaiPara: para, originais: orig ?? null });
   } catch (e) { return erro(e); }
 }

@@ -22,6 +22,7 @@ import CaixaNfSemPedido, { type NfSemPedido, type NfDoPedido } from "./CaixaNfSe
 import {
   ETAPAS, ETAPA, ETAPA_AJUDA, APROV_LABEL, money, dBR, rel, hoje, diffDias, situacao, atrasado, rcAtendida,
   type PedidoLista, type Etapa, type Refs,
+  rotuloEnvio, naoEnviado,
 } from "@/lib/compras";
 
 type Col = { k: string; l: string; v: (p: PedidoLista) => string | number | null | undefined; r?: boolean; sum?: boolean; tr?: boolean;
@@ -57,6 +58,7 @@ export default function TelaCompras() {
   const [projeto, setProjeto] = useState("");
   const [periodo, setPeriodo] = useState("");
   const [soAtraso, setSoAtraso] = useState(false);
+  const [soNaoEnviado, setSoNaoEnviado] = useState(false);
   const [soNf, setSoNf] = useState(false);
   const [origem, setOrigem] = useState<"" | "painel" | "omie">("");
   const [filtroAprov, setFiltroAprovS] = useState<"" | "pendente" | "aprovado">("");
@@ -165,6 +167,7 @@ export default function TelaCompras() {
       if (projeto && p.proj !== projeto) return false;
       if (periodo && p.emissao && diffDias(hoje(), p.emissao) > Number(periodo)) return false;
       if (soAtraso && !atrasado(p)) return false;
+      if (soNaoEnviado && !naoEnviado(p)) return false;
       if (soNf && !nfSug[p.id]) return false;
       if (origem && p.origem !== origem) return false;
       if (soSemPedido && !idsSugeridos.has(p.id)) return false;
@@ -175,7 +178,7 @@ export default function TelaCompras() {
       }
       return true;
     });
-  }, [todos, q, comprador, projeto, periodo, soAtraso, soNf, nfSug, origem, soSemPedido, idsSugeridos, pedidosEq]);
+  }, [todos, q, comprador, projeto, periodo, soAtraso, soNaoEnviado, soNf, nfSug, origem, soSemPedido, idsSugeridos, pedidosEq]);
 
   // ── ações ────────────────────────────────────────────────────────────────
   const acao = useCallback(async (body: Record<string, unknown>) => {
@@ -249,6 +252,7 @@ export default function TelaCompras() {
   const porEtapa = (c: Etapa) => filtrados.filter((p) => p.etapa === c);
   const atrasados = filtrados.filter(atrasado);
   const comNf = filtrados.filter((p) => nfSug[p.id]);
+  const naoEnviados = todos.filter(naoEnviado);
 
   // ── tabela ───────────────────────────────────────────────────────────────
   const COLS: Col[] = useMemo(() => [
@@ -277,7 +281,7 @@ export default function TelaCompras() {
     { k: "pv", l: "Venda de origem (PV/OS)", v: (p) => p.pv ? `${p.pv}${p.pvCliente ? " · " + p.pvCliente : ""}` : "", tr: true },
     { k: "obsInt", l: "Obs. interna", v: (p) => p.obsInt ?? "", tr: true },
     { k: "origem", l: "Origem", v: (p) => (p.origem === "omie" ? "Omie (histórico)" : "Painel"), h: (p) => <span className={`tag ${p.origem === "omie" ? "orig-omie" : "orig-painel"}`}>{p.origem === "omie" ? "Omie" : "Painel"}</span> },
-    { k: "enviado", l: "Enviado ao fornecedor", v: (p) => p.enviadoEm ?? "", h: (p) => p.enviadoEm ? <span className="pill p-env">{dBR(p.enviadoEm.slice(0, 10))}{p.enviadoMeio === "whatsapp" ? " · WhatsApp" : p.enviadoMeio === "email" ? " · e-mail" : ""}</span> : "" },
+    { k: "enviado", l: "Enviado ao fornecedor", v: (p) => p.enviadoEm ?? "", h: (p) => { const e = rotuloEnvio(p); return e ? <span className="pill p-env" title={e.dica}>{e.texto} {dBR(p.enviadoEm!.slice(0, 10))}{p.enviadoMeio === "whatsapp" ? " · WhatsApp" : p.enviadoMeio?.startsWith("email") ? " · e-mail" : ""}</span> : naoEnviado(p) ? <span className="pill" style={{ opacity: .75 }}>não enviado</span> : ""; } },
   ], [parcDesc, nfSug]);
   const COL = useMemo(() => Object.fromEntries(COLS.map((c) => [c.k, c])), [COLS]);
   const colsVis = cols.map((k) => COL[k]).filter(Boolean) as Col[];
@@ -309,7 +313,10 @@ export default function TelaCompras() {
             {avisos.novas.has(p.id) && <span className="badge-nova" title="Requisição nova desde a sua última visita">nova</span>}
             {emailsNovos[String(p.id)] ? <span className="badge-nova" style={{ background: "#0EA5E9" }} title="O fornecedor respondeu por e-mail — abra o pedido, aba E-mails">✉ {emailsNovos[String(p.id)]}</span> : null}
             {naColPc && (p.aprov === "aprovado"
-              ? <span className="badge-ap ok">✓ Aprovado</span> : <span className="badge-ap pend">Pendente</span>)}</span>
+              ? <span className="badge-ap ok">✓ Aprovado</span> : <span className="badge-ap pend">Pendente</span>)}
+            {p.tipo === "PC" && (() => { const e = rotuloEnvio(p); return e
+              ? <span className="badge-ap env" title={e.dica} style={{ background: e.teste ? "color-mix(in srgb,#F59E0B 18%,transparent)" : "color-mix(in srgb,#06B6D4 18%,transparent)", color: e.teste ? "#B45309" : "#0E7490" }}>{e.texto}</span>
+              : naoEnviado(p) ? <span className="badge-ap" title="Aprovado e ainda não enviado ao fornecedor" style={{ background: "color-mix(in srgb,#64748B 16%,transparent)", color: "var(--tx-2)" }}>não enviado</span> : null; })()}</span>
           <button className="kebab" aria-label="Ações" onClick={(e) => { e.stopPropagation(); const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
             setCtx({ p, x: Math.min(r.left, window.innerWidth - 250), y: Math.min(r.bottom + 4, window.innerHeight - 380) }); }}>⋮</button>
         </div>
@@ -327,7 +334,7 @@ export default function TelaCompras() {
           <div className="ent"><button className="btn sm ok" style={{ height: 24, padding: "0 10px", fontSize: 11.5 }}
             onClick={(ev) => { ev.stopPropagation(); aprovar([p.id]); }}>✓ Aprovar</button></div>}
         {p.enviadoEm && naColPc ? <div className="ent">✉ enviado {dBR(p.enviadoEm.slice(0, 10), true)}
-          {p.enviadoMeio === "whatsapp" ? " · WhatsApp" : p.enviadoMeio === "email" ? " · e-mail" : ""}</div> : null}
+          {p.enviadoMeio === "whatsapp" ? " · WhatsApp" : p.enviadoMeio?.startsWith("email") ? " · e-mail" : ""}</div> : null}
         {["40", "60", "80"].includes(p.etapa) && (nfsDele.length ? nfsDele.map((n) => (
           <div key={n.chave} className="nfl" title={`${n.como ?? ""}${n.por ? " · " + n.por : ""}`}>
             <span className="nfn">📄 NF-e <span className="num">{String(n.n).replace(/^0+/, "")}</span> · {money(n.valor)}</span>
@@ -428,6 +435,8 @@ export default function TelaCompras() {
           {semPedido.length > 0 && <button className={`chipf semped${soSemPedido ? " on" : ""}`} title="Mostra só as NF-e sem pedido e os pedidos sugeridos para elas"
             onClick={() => setSoSemPedido((v) => !v)}>⛔ NF sem pedido ({semPedido.length})</button>}
           <button className={`chipf${soAtraso ? " on" : ""}`} onClick={() => setSoAtraso((v) => !v)}>⚠ Entrega atrasada{lista ? ` · ${atrasados.length}` : ""}</button>
+          <button className={`chipf${soNaoEnviado ? " on" : ""}`} title="Pedidos de compra aprovados que ainda não foram enviados ao fornecedor"
+            onClick={() => setSoNaoEnviado((v) => !v)}>✉ Não enviados{lista ? ` · ${naoEnviados.length}` : ""}</button>
           <button className={`chipf${soNf ? " on" : ""}`} style={soNf ? { borderColor: "#0EA5E9", color: "#0369A1", background: "color-mix(in srgb,#0EA5E9 14%,transparent)" } : undefined}
             onClick={() => setSoNf((v) => !v)}>📄 NF chegou (Focus){lista ? ` · ${comNf.length}` : ""}</button>
           {view === "tabela" && (

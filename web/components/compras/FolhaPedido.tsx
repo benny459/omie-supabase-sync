@@ -20,6 +20,7 @@ import {
   ETAPAS, ETAPA, APROV_LABEL, TIPOS_FRETE, UFS, TIPOS_DOC, DEPTOS_PADRAO,
   money, num2, qtd as fq, parseNum, hoje, dBR, totais, totalItem, gerarParcelas, infoPreco, itemVazio, novaChave, erroVinculo,
   type Pedido, type Item, type Refs, type HistPreco, type Etapa, type Parcela,
+  rotuloEnvio,
 } from "@/lib/compras";
 
 type RcAberta = {
@@ -380,6 +381,9 @@ export default function FolhaPedido({
             {D.id && <span className="pill" style={{ background: ETAPA[D.etapa]?.cor, color: "#fff" }}>{ETAPA[D.etapa]?.nome}</span>}
             {D.origem === "omie" ? <span className="tag orig-omie" title="Importado do Omie — histórico, só leitura">Omie · histórico</span>
               : <span className="tag orig-painel">Emitido pela plataforma</span>}
+            {!isRC && (() => { const e = rotuloEnvio(D); return e
+              ? <span className="pill" title={e.dica} style={{ background: e.teste ? "color-mix(in srgb,#F59E0B 22%,transparent)" : "color-mix(in srgb,#06B6D4 22%,transparent)", color: e.teste ? "#B45309" : "#0E7490", fontWeight: 600 }}>{e.texto}</span>
+              : D.id && D.aprov === "aprovado" && D.origem === "painel" ? <span className="pill" title="Aprovado e ainda não enviado ao fornecedor" style={{ opacity: .8 }}>não enviado</span> : null; })()}
             <span className="sp" />
             <div className="stepper" aria-label="Etapas">
               {ETAPAS.filter((e) => e.cod !== "15" && e.cod !== "35").map((e, i, arr) => (
@@ -1037,7 +1041,7 @@ export default function FolhaPedido({
               {D.enviadoEm && (
                 <section className="card2"><h4>Enviado ao fornecedor</h4><div className="hist">
                   <div><span className="pill p-env">✉ {new Date(D.enviadoEm).toLocaleString("pt-BR")}</span>
-                    <small>{D.enviadoMeio === "email" ? "por e-mail" : D.enviadoMeio === "whatsapp" ? "por WhatsApp" : "marcado à mão"}{D.enviadoPara ? ` · ${D.enviadoPara}` : ""}{D.enviadoPor ? ` · ${D.enviadoPor}` : ""}</small></div>
+                    <small>{D.enviadoMeio === "email" ? "por e-mail" : D.enviadoMeio === "email_teste" ? "por e-mail (teste)" : D.enviadoMeio === "whatsapp" ? "por WhatsApp" : "marcado à mão"}{D.enviadoPara ? ` · ${D.enviadoPara}` : ""}{D.enviadoPor ? ` · ${D.enviadoPor}` : ""}</small></div>
                 </div></section>
               )}
               {isRC && (D.pcsDaRc ?? []).length > 0 && (

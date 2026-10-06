@@ -85,7 +85,7 @@ export default function ModalEnviar({ id, onClose, onEnviado, toast }: {
         body: JSON.stringify({ id, para, cc, cco, copia, assunto, texto, variante, anexo, anterior }) });
       const j = await r.json().catch(() => ({}));
       if (!r.ok) throw new Error(j.error ?? r.statusText);
-      onEnviado(`Pedido ${d?.numero} enviado para ${para.join(", ")}`);
+      onEnviado(j.teste ? `Pedido ${d?.numero} enviado em modo TESTE para ${(j.vaiPara ?? []).join(", ")} — status “Enviado (teste)”` : `Pedido ${d?.numero} enviado para ${para.join(", ")}`);
     } catch (e) { toast((e as Error).message, true); }
     finally { setOcupado(false); }
   };
@@ -121,7 +121,14 @@ export default function ModalEnviar({ id, onClose, onEnviado, toast }: {
                     <div className="aviso p-warn">E-mail ainda não configurado no painel — dá para visualizar/baixar o PDF e
                       <b> marcar como enviado</b> (WhatsApp, entregue em mãos). Para enviar daqui falta a conta de envio (Resend) na Vercel.</div>
                   )}
-                  {d.soPara.length > 0 && <div className="aviso p-sky">Modo teste: só envia para {d.soPara.join(", ")}.</div>}
+                  {d.soPara.length > 0 && (() => {
+                    // Modo teste REDIRECIONA (06/10/26): quem não está na lista de teste não recebe — vai para a lista no lugar.
+                    const lib = new Set([...d.soPara, ...(d.ccoFixo ?? [])].map((e) => e.toLowerCase()));
+                    const fora = [...para, ...cc, ...cco].filter((e) => !lib.has(e.toLowerCase()));
+                    return <div className="aviso p-sky"><b>Modo teste:</b> {fora.length
+                      ? <>vai para {d.soPara.join(", ")} no lugar de {fora.join(", ")}. O assunto e o corpo mostram para quem iria.</>
+                      : <>só {d.soPara.join(", ")} e a cópia do compras@ recebem.</>}</div>;
+                  })()}
                   {bloqueio && <div className="aviso p-crit">{bloqueio}</div>}
                   {d.enviadoEm && <div className="aviso p-env">Já enviado em {new Date(d.enviadoEm).toLocaleString("pt-BR")}{d.enviadoPara ? ` para ${d.enviadoPara}` : ""}.</div>}
                   <div className="f"><label>Para</label><CampoEmails valor={para} onChange={setPara} placeholder="e-mail do fornecedor" />
