@@ -3,7 +3,7 @@
 // o que a pessoa não pode ver. O banco (platform.permissoes_catalogo) só
 // espelha estas chaves para a FK das escolhas.
 
-export type ModuloPerm = "compras" | "estoque" | "financeiro";
+export type ModuloPerm = "compras" | "estoque" | "financeiro" | "faturamento";
 
 export type Chave =
   | "compras.acesso" | "compras.ver_valores" | "compras.aprovar" | "compras.gerar_pc_nf"
@@ -11,6 +11,7 @@ export type Chave =
   | "estoque.acesso" | "estoque.ver_custos" | "estoque.ajustar" | "estoque.mesclar"
   | "estoque.senha_inventario" | "estoque.codigos" | "estoque.config_mov" | "estoque.aprovar_perdas"
   | "estoque.separar_projeto"
+  | "faturamento.acesso"
   | "financeiro.ver_pagar" | "financeiro.ver_receber" | "financeiro.editar_titulo"
   | "financeiro.baixar" | "financeiro.conciliar";
 
@@ -41,9 +42,10 @@ export const CATALOGO: ItemCatalogo[] = [
   { chave: "financeiro.editar_titulo",  modulo: "financeiro", rotulo: "Incluir / excluir título",   descricao: "Criar ou excluir títulos",                         padrao: "erp" },
   { chave: "financeiro.baixar",         modulo: "financeiro", rotulo: "Baixar / estornar título",   descricao: "Registar pagamento ou recebimento de título do painel", padrao: "admin" },
   { chave: "financeiro.conciliar",      modulo: "financeiro", rotulo: "Conciliação bancária",       descricao: "Importar extrato OFX e casar com títulos",          padrao: "admin" },
+  { chave: "faturamento.acesso",        modulo: "faturamento", rotulo: "Abrir e emitir no Faturamento", descricao: "Carteira de PV/OS, emissão de NF-e, recibo e registro de NFS-e", padrao: "admin" },
 ];
 
-export const MODULO_LABEL: Record<ModuloPerm, string> = { compras: "Compras", estoque: "Estoque", financeiro: "Financeiro" };
+export const MODULO_LABEL: Record<ModuloPerm, string> = { compras: "Compras", estoque: "Estoque", financeiro: "Financeiro", faturamento: "Faturamento" };
 
 /** Perfis prontos: aplicar e depois ajustar à mão. */
 export const PERFIS: Record<string, { rotulo: string; chaves: Chave[] }> = {

@@ -76,6 +76,7 @@ const NIVEIS: Record<ModuloPerm, Record<"ver" | "usar", Chave[]>> = {
   compras:    { ver: ["compras.acesso", "compras.ver_valores"], usar: ["compras.acesso", "compras.ver_valores", "compras.gerar_pc_nf", "compras.conferir", "compras.enviar_fornecedor"] },
   estoque:    { ver: ["estoque.acesso", "estoque.ver_custos"], usar: ["estoque.acesso", "estoque.ver_custos", "estoque.ajustar"] },
   financeiro: { ver: ["financeiro.ver_pagar", "financeiro.ver_receber"], usar: ["financeiro.ver_pagar", "financeiro.ver_receber", "financeiro.editar_titulo"] },
+  faturamento: { ver: ["faturamento.acesso"], usar: ["faturamento.acesso"] },
 };
 
 async function fotografia(userId: string) {

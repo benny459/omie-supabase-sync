@@ -16,8 +16,8 @@ export async function exigirFaturamento(): Promise<QuemFat | NextResponse> {
   if (!perms) return NextResponse.json({ error: "Sessão expirada — entre de novo" }, { status: 401 });
   if (!canViewArea(perms, "erp")) return NextResponse.json({ error: "Sem acesso à área ERP" }, { status: 403 });
   const pode = await permissoesDe(perms);
-  if (!perms.is_admin && !pode["financeiro.editar_titulo"]) {
-    return NextResponse.json({ error: "Sem permissão para faturar (Incluir / excluir título)" }, { status: 403 });
+  if (!perms.is_admin && !pode["faturamento.acesso"]) {
+    return NextResponse.json({ error: "Sem permissão para o Faturamento — peça ao administrador (Usuários e acessos → Faturamento)" }, { status: 403 });
   }
   const supa = await supaServer("platform");
   const { data: { user } } = await supa.auth.getUser();
