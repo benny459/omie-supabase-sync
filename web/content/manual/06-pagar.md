@@ -103,3 +103,7 @@ O título da CD fica **PAGO** e o sistema registra sozinho "**CD deve à SF**" e
 ## Conciliação: esta aba ou a tela completa?
 
 A aba de conciliação desta tela mostra só as **saídas (contas a pagar)** da conta. Para ver **tudo o que falta conciliar** num banco — entradas e saídas, com a situação de cada movimento — e a visão geral de todos os bancos, clique em **Conciliação completa ↗** (ou vá em **Financeiro → Conciliação bancária**).
+
+## Pagamento antecipado de pedido de compra
+
+O botão **💸 Antecipar PC** (no topo) pede o nº do pedido e abre o lançamento do adiantamento (Pix ou depósito, com os dados do cadastro do fornecedor). O título nasce com o nº **PC 7356-ANT**, aparece aqui e pode ir no arquivo C6. As parcelas do pedido descontam o valor adiantado, então a conta não aparece duas vezes. Detalhes em **Compras › Pagamento antecipado**.

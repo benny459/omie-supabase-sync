@@ -97,3 +97,17 @@ O novo valor passa a valer em Operação (Vendas avulsas / Projetos), na fila de
 **O PC não salva.** Veja se todos os itens têm RC (ou “sem RC” com motivo) e se o pedido tem PV/OS ou está marcado como compra avulsa.
 
 **Posso mandar o PC por e-mail direto daqui?** Ainda não: o envio por e-mail depende da configuração do e-mail compras@. Por enquanto, gere o PDF e envie.
+
+## Como faço um pagamento antecipado de um pedido de compra
+
+Quando o fornecedor exige pagamento antes da entrega:
+
+1. No cartão do PC aprovado, abra o menu **⋮ → 💸 Pagamento antecipado…** (ou, dentro do pedido, **💸 Pagamento antecipado** em Ações; ou no Contas a Pagar, **💸 Antecipar PC** e digite o número).
+2. Confira o **valor** (vem o saldo do PC; use **50%** ou digite um valor para adiantamento parcial) e a **data do pagamento** (próximo dia útil).
+3. Escolha **Pix** ou **TED / depósito** — a chave Pix ou banco/agência/conta vêm do cadastro do fornecedor; se mudar, marque **guardar no cadastro** para o arquivo C6 já sair certo.
+4. Escolha a **conta corrente pagadora** e clique em **Lançar pagamento antecipado**.
+
+O que acontece:
+- Nasce um título no **Contas a Pagar** com o nº **PC 7356-ANT**, ligado ao pedido — entra no **arquivo C6**, no BI e no fluxo de caixa.
+- O histórico do PC registra o adiantamento, e o cartão ganha o selo **💸 Antecipado · a pagar**, que vira **💸 Antecipado · pago** quando o título é baixado/conciliado (nada a fazer à parte).
+- **Não paga duas vezes:** quando a NF do pedido chega, as parcelas a pagar do PC descontam o que já foi adiantado — a parcela coberta inteira sai do Contas a Pagar; a parcial fica só com o saldo (total − adiantado). Se o título antecipado for excluído, as parcelas voltam ao valor cheio.

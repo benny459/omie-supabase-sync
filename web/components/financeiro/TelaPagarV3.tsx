@@ -15,6 +15,7 @@ import FornecedorDrawer from "../FornecedorDrawer";
 import RemessaC6 from "./RemessaC6";
 import SerieDialog from "./SerieDialog";
 import EditarTituloModal from "./EditarTituloModal";
+import PagamentoAntecipado from "../compras/PagamentoAntecipado";
 import { montarPagarV3 } from "./pagar-v3-motor";
 import "./pagar-v3.css";
 
@@ -23,6 +24,9 @@ export default function TelaPagarV3() {
   const ref = useRef<HTMLDivElement>(null);
   const motor = useRef<{ recarregar: () => Promise<void>; destruir: () => void } | null>(null);
   const [nova, setNova] = useState(false);
+  // pagamento antecipado de PC a partir do nº (06/10/26)
+  const [antNum, setAntNum] = useState<string | null>(null);
+  const [antAbrir, setAntAbrir] = useState<{ num: string; emp: string } | null>(null);
   const [forn, setForn] = useState<{ cod: number; emp: string } | null>(null);
   const [remessa, setRemessa] = useState<string[] | null>(null);
   const [serie, setSerie] = useState<{ id: string; ref: string } | null>(null);
@@ -52,6 +56,8 @@ export default function TelaPagarV3() {
   return (
     <>
       <CasarHost />
+      {antAbrir && <PagamentoAntecipado numero={antAbrir.num} empresa={antAbrir.emp} fechar={() => setAntAbrir(null)}
+        feito={() => motor.current?.recarregar()} />}
       <div className="cp3" ref={ref}>
         <div className="wrap">
           <div className="hdr">
@@ -64,6 +70,13 @@ export default function TelaPagarV3() {
               <Link href="/financeiro/pagar?classica=1" className="classica">tela clássica</Link>
               <button className="btn" id="hdrOfx">Importar OFX</button>
               <button className="btn" id="hdrSync">Sincronizar</button>
+              {antNum === null
+                ? <button className="btn" title="Lança um pagamento antecipado (Pix/depósito) ligado a um pedido de compra" onClick={() => setAntNum("")}>💸 Antecipar PC</button>
+                : <form style={{ display: "flex", gap: 6 }} onSubmit={(e) => { e.preventDefault(); const n = antNum.replace(/\D/g, ""); if (n) { setAntAbrir({ num: n, emp: "" }); setAntNum(null); } }}>
+                    <input className="in" id="antPcNum" autoFocus placeholder="nº do PC" value={antNum} onChange={(e) => setAntNum(e.target.value)} style={{ width: 110 }} />
+                    <button className="btn" type="submit">Abrir</button>
+                    <button className="btn ghost" type="button" onClick={() => setAntNum(null)}>✕</button>
+                  </form>}
               <button className="btn pri" id="hdrNova">+ Nova conta</button>
             </div>
           </div>

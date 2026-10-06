@@ -15,6 +15,7 @@ import GerarPcDaRc from "@/components/operacao/GerarPcDaRc";
 import ConversaEmail from "./ConversaEmail";
 import CadastroFornecedorOverlay from "./CadastroFornecedorOverlay";
 import Autocompletar, { type Opcao } from "./Autocompletar";
+import PagamentoAntecipado from "./PagamentoAntecipado";
 import { BotaoNovoProjeto } from "@/components/cadastros/NovoProjetoRapido";
 import {
   ETAPAS, ETAPA, APROV_LABEL, TIPOS_FRETE, UFS, TIPOS_DOC, DEPTOS_PADRAO,
@@ -89,6 +90,7 @@ export default function FolhaPedido({
   const [D, setD] = useState<Pedido | null>(null);
   // Cadastro do fornecedor por cima da folha e respostas por e-mail ainda não lidas (06/10/26).
   const [cadForn, setCadForn] = useState(false);
+  const [antecipar, setAntecipar] = useState(false); // pagamento antecipado (06/10/26)
   const [naoLidos, setNaoLidos] = useState(0);
   useEffect(() => {
     if (!id) return;
@@ -1019,6 +1021,9 @@ export default function FolhaPedido({
                 {D.id && !isRC && (["15", "40"].includes(D.etapa) || (D.etapa === "10" && D.origem === "omie")) && <button className="btn" onClick={() => onReceber(D.id!)}>📦 Registrar recebimento</button>}
                 {D.id && <button className="btn ghost" onClick={() => onDuplicar(D.id!)}>⧉ Duplicar</button>}
                 {D.id && !isRC && <button className="btn" style={{ borderColor: "#06B6D4" }} onClick={() => onImprimir(D.id!)}>🖨 Imprimir / PDF / enviar ao fornecedor</button>}
+                {D.id && !isRC && D.aprov === "aprovado" && <button className="btn ghost" title="Lança um título a pagar (Pix/depósito) ligado a este PC; as parcelas do PC descontam o adiantado"
+                  onClick={() => setAntecipar(true)}>💸 Pagamento antecipado</button>}
+                {antecipar && D.id && <PagamentoAntecipado pedidoId={D.id} fechar={() => setAntecipar(false)} />}
               </div></section>
               {!ro && (
                 <section className="card2"><h4>Pronto para salvar?</h4><div className="check">

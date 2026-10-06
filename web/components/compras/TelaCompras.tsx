@@ -10,6 +10,7 @@
  * recebimento com a NF que chega pela Focus.
  */
 
+import PagamentoAntecipado from "@/components/compras/PagamentoAntecipado";
 import "./compras.css";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CabecalhoTela, PaginaNavy, Carregando, Aviso } from "@/components/navy/tela/KitTela";
@@ -66,6 +67,9 @@ export default function TelaCompras() {
   const setFiltroAprov = (v: "" | "pendente" | "aprovado") => { setFiltroAprovS(v); lsSet("cmp-filtro-aprov", v); };
   useEffect(() => { const v = lsGet("cmp-filtro-aprov"); if (v === "pendente" || v === "aprovado") setFiltroAprovS(v); }, []);
   const [enviar, setEnviar] = useState<number | null>(null);
+  // Pagamento antecipado de PC (06/10/26): diálogo + selo 💸 no cartão
+  const [antecipar, setAntecipar] = useState<number | null>(null);
+  const [antecipados, setAntecipados] = useState<Record<string, { valor: number; pago: boolean }>>({});
   const [sort, setSort] = useState<{ k: string; dir: 1 | -1 }>({ k: "emissao", dir: -1 });
   const [group, setGroup] = useState("");
   const [sel, setSel] = useState<Set<number>>(new Set());
@@ -102,6 +106,7 @@ export default function TelaCompras() {
       if (!r.ok) throw new Error(j.error ?? r.statusText);
       setLista(j.pedidos); setNfSug(j.nfSug ?? {}); setNfsPed(j.nfsPorPedido ?? {}); setSemPedido(j.semPedido ?? []); setErro(null);
       // respostas do fornecedor por e-mail ainda não lidas (selo ✉ no cartão)
+      fetch("/api/compras/antecipado?ids=").then((x) => x.json()).then((m) => setAntecipados(m && typeof m === "object" && !m.error ? m : {})).catch(() => null);
       fetch("/api/compras/email/conversa?naoLidos=1").then((x) => x.json()).then((m) => setEmailsNovos(m && typeof m === "object" && !m.error ? m : {})).catch(() => null);
     } catch (e) { setErro((e as Error).message); }
   }, [historico]);
@@ -239,6 +244,7 @@ export default function TelaCompras() {
       if (k === "receb") setReceb({ id: p.id });
       if (k === "conf") await mover(p, "80");
       if (k === "print" || k === "enviar") setEnviar(p.id);
+      if (k === "antecipar") setAntecipar(p.id);
       if (k === "venda") setFolha({ id: p.id });
       if (k === "cancel") setConfirma({ texto: `Cancelar o ${p.tipo === "RC" ? "requisição" : "pedido"} ${p.num}?`, acao: async () => {
         await acao({ acao: "cancelar", id: p.id }); toast(`${p.num} cancelado`); carregar();
@@ -317,7 +323,10 @@ export default function TelaCompras() {
               ? <span className="badge-ap ok">✓ Aprovado</span> : <span className="badge-ap pend">Pendente</span>)}
             {p.tipo === "PC" && (() => { const e = rotuloEnvio(p); return e
               ? <span className={`badge-ap selo-env${e.teste ? " teste" : ""}`} title={e.dica}>{e.texto}</span>
-              : naoEnviado(p) ? <span className="badge-ap" title="Aprovado e ainda não enviado ao fornecedor" style={{ background: "color-mix(in srgb,#64748B 16%,transparent)", color: "var(--tx-2)" }}>não enviado</span> : null; })()}</span>
+              : naoEnviado(p) ? <span className="badge-ap" title="Aprovado e ainda não enviado ao fornecedor" style={{ background: "color-mix(in srgb,#64748B 16%,transparent)", color: "var(--tx-2)" }}>não enviado</span> : null; })()}
+            {p.tipo === "PC" && antecipados[String(p.id)] && (() => { const a = antecipados[String(p.id)]; return (
+              <span className="badge-ap" title={`Pagamento antecipado de ${money(Number(a.valor))}${a.pago ? " — pago (baixado/conciliado)" : " — a pagar"}`}
+                style={{ background: a.pago ? "#15803D" : "#B45309", color: "#fff" }}>💸 Antecipado · {a.pago ? "pago" : "a pagar"}</span>); })()}</span>
           <button className="kebab" aria-label="Ações" onClick={(e) => { e.stopPropagation(); const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
             setCtx({ p, x: Math.min(r.left, window.innerWidth - 250), y: Math.min(r.bottom + 4, window.innerHeight - 380) }); }}>⋮</button>
         </div>
@@ -619,6 +628,7 @@ export default function TelaCompras() {
         if (podeReceber(p)) it.push(["receb", nfSug[p.id] ? "Registrar recebimento (NF chegou)" : "Registrar recebimento"]);
         if (p.etapa === "60") it.push(["conf", "Marcar como conferido"]);
         if (p.tipo === "PC") it.push(["print", "Imprimir / PDF para fornecedor"]);
+        if (p.tipo === "PC" && p.aprov === "aprovado" && !["60", "80"].includes(p.etapa)) it.push(["antecipar", "💸 Pagamento antecipado…"]);
         if (p.tipo === "RC") it.push(["venda", p.pv ? "Trocar venda vinculada" : "Vincular à venda (PV/OS)"]);
         it.push(["cancel", p.tipo === "RC" ? "Cancelar requisição" : "Cancelar pedido", p.origem !== "painel"]);
         const info = [p.contato && `👤 ${p.contato}`, p.proj && `📁 ${p.proj}`, p.cnpj && `🏷 ${p.cnpj}`].filter(Boolean) as string[];
@@ -661,6 +671,7 @@ export default function TelaCompras() {
         <FolhaRecebimento id={receb.id} candidatos={candidatosReceb} toast={toast} onClose={() => setReceb(null)}
           onFeito={(m) => { setReceb(null); toast(m); carregar(); }} />
       )}
+      {antecipar != null && <PagamentoAntecipado pedidoId={antecipar} fechar={() => setAntecipar(null)} feito={(m) => { toast(m); carregar(); }} />}
       {enviar != null && <ModalEnviar id={enviar} toast={toast} onClose={() => setEnviar(null)}
         onEnviado={(m) => { setEnviar(null); toast(m); carregar(); }} />}
       {caixa && <CaixaNfSemPedido nfs={semPedido} pedidos={todos} foco={caixa.foco} onClose={() => setCaixa(null)}
