@@ -264,3 +264,75 @@ export async function buscarServicosCrm(q: string, lim = 10, empresa = "SF"): Pr
   const todos = await servicosDaEmpresa(empresa);
   return todos.filter((s) => termos.every((t) => norm(`${s.desc} ${s.cod}`).includes(t))).slice(0, Math.max(1, Math.min(lim, 30)));
 }
+
+// ── Compatibilizar com o estoque (06/10/26) ─────────────────────────────────
+import { indexar, pontuarLinha, normTexto, type Candidato as CandidatoTop, type ItemNosso } from "@/lib/catalogo-casar";
+
+let cacheNossos: { empresa: string; em: number; base: ReturnType<typeof indexar> } | null = null;
+
+/** Itens NOSSOS ativos (com código novo, não mesclados) — cache de 5 min. */
+async function itensNossos(empresa: string) {
+  if (cacheNossos && cacheNossos.empresa === empresa && Date.now() - cacheNossos.em < 300_000) return cacheNossos.base;
+  const todos: ItemNosso[] = [];
+  for (let ini = 0; ; ini += 1000) {
+    const { data, error } = await orders().from("v_estoque_item")
+      .select("n_cod_prod, codigo_novo, descricao, unidade, cmc, ult_preco, ativo, mesclado_em")
+      .eq("empresa", empresa).not("codigo_novo", "is", null).is("mesclado_em", null)
+      .order("n_cod_prod").range(ini, ini + 999);
+    if (error) throw new Error(error.message);
+    const lote = (data ?? []) as { n_cod_prod: number; codigo_novo: string; descricao: string; unidade: string | null; cmc: number | null; ult_preco: number | null; ativo: boolean | null }[];
+    for (const r of lote) if (r.ativo !== false)
+      todos.push({ id: Number(r.n_cod_prod), cod: r.codigo_novo, desc: r.descricao, un: r.unidade ?? "UN", cmc: n(r.cmc), ultimo_preco: n(r.ult_preco) });
+    if (lote.length < 1000) break;
+  }
+  const base = indexar(todos);
+  cacheNossos = { empresa, em: Date.now(), base };
+  return base;
+}
+
+/** Top N candidatos por linha (de-para gravado primeiro, score 1). Até 200 linhas. */
+export async function casarTopCrm(textos: string[], custos: (number | null)[] = [], unidades: (string | null)[] = [],
+                                  top = 3, empresa = "SF"): Promise<CandidatoTop[][]> {
+  const linhas = textos.slice(0, 200).map((t) => String(t ?? ""));
+  const [base, alias] = await Promise.all([
+    itensNossos(empresa),
+    orders().rpc("crm_alias_ler", { p_empresa: empresa, p_textos_norm: [...new Set(linhas.map(normTexto).filter(Boolean))] }),
+  ]);
+  if (alias.error) throw new Error(alias.error.message);
+  const porTexto = new Map(((alias.data ?? []) as { texto_norm: string; ncod_prod: number }[]).map((a) => [a.texto_norm, Number(a.ncod_prod)]));
+  const porId = new Map(base.itens.map((i) => [i.id, i]));
+  return linhas.map((t, k) => {
+    const c = Number(custos[k]) || null;
+    const lista = pontuarLinha(t, c, unidades[k] ?? null, base, top);
+    const fixo = porId.get(porTexto.get(normTexto(t)) ?? -1);
+    if (!fixo) return lista;
+    return [{ id: fixo.id, cod: fixo.cod, desc: fixo.desc, un: fixo.un, cmc: fixo.cmc, ultimo_preco: fixo.ultimo_preco, score: 1, motivo: "de-para gravado" },
+      ...lista.filter((x) => x.id !== fixo.id)].slice(0, Math.max(1, Math.min(top, 10)));
+  });
+}
+
+/** Grava o de-para texto/código de compra → item nosso (idempotente). Se o código
+ *  de compra é um produto de compra do catálogo, também liga o vínculo do Estoque. */
+export async function vincularCrm(a: { descricao_compra: string; codigo_compra?: string | null; ncod_prod: number; por: string; empresa?: string }) {
+  const empresa = (a.empresa ?? "SF").toUpperCase();
+  const texto = String(a.descricao_compra ?? "").trim();
+  const destino = Number(a.ncod_prod);
+  if (!texto && !a.codigo_compra) throw new Error("descricao_compra ou codigo_compra obrigatório");
+  if (!destino) throw new Error("ncod_prod obrigatório");
+  const base = await itensNossos(empresa);
+  if (!base.itens.some((i) => i.id === destino)) throw new Error("ncod_prod não é um item nosso ativo (com código novo)");
+  const por = `crm:${String(a.por ?? "").slice(0, 80) || "crm"}`;
+  const { data, error } = await orders().rpc("crm_alias_salvar", { p_empresa: empresa, p_texto_norm: normTexto(texto || String(a.codigo_compra)),
+    p_texto: texto || String(a.codigo_compra), p_codigo_compra: a.codigo_compra ?? null, p_ncod_prod: destino, p_por: por });
+  if (error) throw new Error(error.message);
+  let estoque: string | null = null;
+  if (a.codigo_compra) {
+    const { data: cat } = await orders().from("mv_catalogo_compra").select("ncod_prod").eq("codigo", String(a.codigo_compra)).limit(1).maybeSingle();
+    const origem = Number((cat as { ncod_prod?: number } | null)?.ncod_prod) || 0;
+    if (origem && origem !== destino) {
+      const v = await orders().rpc("estoque_vinculo_salvar", { p_empresa: empresa, p_origem: origem, p_destino: destino, p_por: por, p_tipo: "crm", p_confianca: null, p_lote: null });
+      estoque = v.error ? `vínculo do estoque não gravado: ${v.error.message}` : "vinculado no estoque";
+    }
+  }
+  return { ...(data as Record<string, unknown>), estoque };
+}
