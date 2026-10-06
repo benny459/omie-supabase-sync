@@ -1,0 +1,237 @@
+"use client";
+/* Atalho em Operação (06/10/26, Benny): gerar o pedido de compra que atende a
+   RC sem sair da linha do PV/OS. Folha compacta, pré-preenchida da RC (itens,
+   quantidades em aberto, valores, fornecedor sugerido, projeto, PV/OS); grava
+   pelo MESMO caminho da folha de Compras (POST /api/compras/pedido →
+   compras_salvar), com os itens ligados à RC — numeração, aprovação e travas
+   são as de sempre. Itens que ficarem de fora continuam disponíveis para outro
+   PC (ex.: outro fornecedor). */
+import { useEffect, useMemo, useState } from "react";
+import { money, gerarParcelas, hoje, addDias, TIPOS_FRETE, type Refs } from "@/lib/compras";
+
+type ItemRc = { id: number; seq: number; cod?: string | null; ncodProd?: number | null; desc: string; un?: string | null;
+  qtd: number; vu?: number | null; ncm?: string | null; obs?: string | null; cov: number };
+type RcFull = { id: number; num: string; emp: string; pv?: string | null; pvCliente?: string | null; proj?: string | null;
+  projCod?: number | null; forn?: string | null; fornCod?: number | null; previsao?: string | null; comprador?: string | null;
+  compradorCod?: number | null; itens: ItemRc[] };
+type Forn = { cod: number; nome: string; fantasia?: string; cnpj?: string; ultCatCod?: string; ultCat?: string; ultContato?: string; ultParc?: string };
+type Linha = { it: ItemRc; on: boolean; qtd: number; vu: number };
+
+async function json<T>(r: Response): Promise<T> {
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error((j as { error?: string }).error ?? r.statusText);
+  return j as T;
+}
+
+export default function GerarPcDaRc({ rc, empresa, itensRc, onFechar, onFeito }: {
+  rc: string; empresa: string;
+  /** ids dos itens da RC escolhidos na linha (vazio = todos os que ainda faltam). */
+  itensRc: number[];
+  onFechar: () => void;
+  onFeito: (num: string, id: number) => void;
+}) {
+  const [rcFull, setRcFull] = useState<RcFull | null>(null);
+  const [refs, setRefs] = useState<Refs | null>(null);
+  const [linhas, setLinhas] = useState<Linha[]>([]);
+  const [forn, setForn] = useState<Forn | null>(null);
+  const [fornQ, setFornQ] = useState("");
+  const [fornOps, setFornOps] = useState<Forn[]>([]);
+  const [catCod, setCatCod] = useState("");
+  const [parc, setParc] = useState("");
+  const [previsao, setPrevisao] = useState(addDias(hoje(), 7));
+  const [obs, setObs] = useState("");
+  const [erro, setErro] = useState<string | null>(null);
+  const [salvando, setSalvando] = useState(false);
+
+  // Carrega a RC (com o que já está coberto por outros PCs) e as listas de Compras.
+  useEffect(() => {
+    let vivo = true;
+    (async () => {
+      try {
+        const abertas = await json<{ id: number; num: string }[]>(await fetch(`/api/compras/buscar?tipo=rc&q=${encodeURIComponent(rc)}`));
+        const alvo = abertas.find((x) => x.num === rc);
+        if (!alvo) throw new Error(`A RC ${rc} não está aberta em Compras (já atendida ou cancelada).`);
+        const [full, rf] = await Promise.all([
+          json<RcFull>(await fetch(`/api/compras/pedido?id=${alvo.id}`)),
+          json<Refs>(await fetch(`/api/compras/refs?emp=${encodeURIComponent(empresa)}`)),
+        ]);
+        if (!vivo) return;
+        setRcFull(full); setRefs(rf);
+        setParc(rf.parcelas[0]?.cod ?? "");
+        const escolhidos = new Set(itensRc);
+        setLinhas(full.itens.map((it) => {
+          const falta = Math.max(0, (Number(it.qtd) || 0) - (Number(it.cov) || 0));
+          return { it, on: falta > 0 && (!escolhidos.size || escolhidos.has(it.id)), qtd: falta, vu: Number(it.vu) || 0 };
+        }));
+        // Fornecedor sugerido pela RC (nome) → procura o cadastro.
+        const sug = (full.forn ?? "").trim();
+        if (sug) {
+          setFornQ(sug);
+          const ops = await json<Forn[]>(await fetch(`/api/compras/buscar?tipo=fornecedor&emp=${encodeURIComponent(empresa)}&q=${encodeURIComponent(sug.slice(0, 30))}`)).catch(() => []);
+          if (!vivo) return;
+          const f = ops.find((o) => o.cod === full.fornCod) ?? ops[0];
+          if (f) escolherForn(f, rf);
+        }
+      } catch (e) { if (vivo) setErro((e as Error).message); }
+    })();
+    return () => { vivo = false; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rc, empresa]);
+
+  function escolherForn(f: Forn, rf: Refs | null = refs) {
+    setForn(f); setFornQ(f.fantasia || f.nome); setFornOps([]);
+    if (f.ultCatCod) setCatCod(f.ultCatCod);
+    if (f.ultParc && rf?.parcelas.some((p) => p.cod === f.ultParc)) setParc(f.ultParc);
+  }
+
+  // Busca de fornecedor (digitando).
+  useEffect(() => {
+    if (!fornQ.trim() || (forn && fornQ === (forn.fantasia || forn.nome))) { setFornOps([]); return; }
+    const t = window.setTimeout(async () => {
+      const ops = await json<Forn[]>(await fetch(`/api/compras/buscar?tipo=fornecedor&emp=${encodeURIComponent(empresa)}&q=${encodeURIComponent(fornQ.trim())}`)).catch(() => []);
+      setFornOps(ops);
+    }, 250);
+    return () => window.clearTimeout(t);
+  }, [fornQ, forn, empresa]);
+
+  const ativos = linhas.filter((l) => l.on && l.qtd > 0);
+  const total = useMemo(() => Math.round(ativos.reduce((a, l) => a + l.qtd * l.vu, 0) * 100) / 100, [ativos]);
+  const cat = refs?.categorias.find((c) => c.cod === catCod);
+  const dias = refs?.parcelas.find((p) => p.cod === parc)?.dias ?? [0];
+
+  const montar = () => ({
+    tipo: "PC", emp: rcFull!.emp || empresa,
+    fornCod: forn?.cod ?? null, forn: forn?.nome ?? "", cnpj: forn?.cnpj ?? null,
+    catCod: cat?.cod ?? "", cat: cat?.desc ?? "",
+    comprador: rcFull!.comprador ?? null, compradorCod: rcFull!.compradorCod ?? null,
+    projCod: rcFull!.projCod ?? null, proj: rcFull!.proj ?? "",
+    contaCod: null, conta: "", parc, previsao, contato: forn?.ultContato ?? null, numForn: null, contrato: null,
+    obs: obs || null, obsInt: `Gerado em Operação a partir da RC ${rcFull!.num}${rcFull!.pv ? ` (${rcFull!.pv})` : ""}`,
+    pv: rcFull!.pv ?? "", pvCliente: rcFull!.pvCliente ?? "", frete: { tipo: TIPOS_FRETE[5] },
+    semRc: false, semRcMotivo: null, avulsa: false, avulsaMotivo: null,
+    itens: ativos.map((l) => ({ id: null, cod: l.it.cod ?? "", ncodProd: l.it.ncodProd ?? null, desc: l.it.desc, un: l.it.un ?? "UN",
+      qtd: l.qtd, vu: l.vu, desc0: 0, ipi: 0, st: 0, ncm: l.it.ncm ?? null, local: null, obs: l.it.obs ?? null, rc: { itemId: l.it.id } })),
+    parcelas: gerarParcelas(total, dias, previsao || hoje()), deptos: [],
+    origemDe: `Gerado a partir da RC ${rcFull!.num}`,
+  });
+
+  const criar = async () => {
+    setErro(null);
+    if (!forn) { setErro('O "Fornecedor" deve ser preenchido.'); return; }
+    if (!cat) { setErro('A "Categoria da Compra" deve ser preenchida.'); return; }
+    if (!ativos.length) { setErro("Escolha pelo menos 1 item com quantidade."); return; }
+    const acima = ativos.find((l) => l.qtd > (Number(l.it.qtd) || 0) - (Number(l.it.cov) || 0) + 1e-9);
+    if (acima) { setErro(`"${acima.it.desc}": a quantidade passa do que falta atender na RC.`); return; }
+    setSalvando(true);
+    try {
+      const r = await json<{ id: number; num: string }>(await fetch("/api/compras/pedido", {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(montar()),
+      }));
+      onFeito(r.num, r.id);
+    } catch (e) { setErro((e as Error).message); }
+    finally { setSalvando(false); }
+  };
+
+  const lab: React.CSSProperties = { display: "grid", gap: 4, fontSize: 12, color: "var(--ww-text-muted)" };
+  const inp: React.CSSProperties = { height: 34, borderRadius: 8, border: "1px solid var(--ww-border-strong)", background: "var(--ww-panel-sunken, var(--ww-panel))", color: "var(--ww-text)", padding: "0 10px", fontSize: 13 };
+
+  return (
+    <div onClick={onFechar} style={{ position: "fixed", inset: 0, zIndex: 80, background: "rgba(5,10,20,.55)", display: "grid", placeItems: "center", padding: 16 }}>
+      <div role="dialog" aria-modal="true" aria-label={`Gerar pedido de compra da RC ${rc}`} onClick={(e) => e.stopPropagation()}
+        style={{ width: "min(860px, 96vw)", maxHeight: "92vh", overflow: "auto", background: "var(--ww-panel)", color: "var(--ww-text)",
+          border: "1px solid var(--ww-border-strong)", borderRadius: 14, boxShadow: "0 30px 80px rgba(0,0,0,.45)", padding: 20, display: "grid", gap: 14 }}>
+        <div style={{ display: "flex", alignItems: "baseline", gap: 10 }}>
+          <h3 style={{ margin: 0, fontSize: 17 }}>Gerar pedido de compra</h3>
+          <span style={{ color: "var(--ww-text-muted)", fontSize: 13 }}>
+            atende a RC {rc}{rcFull?.pv ? ` · ${rcFull.pv}` : ""}{rcFull?.proj ? ` · ${rcFull.proj}` : ""}
+          </span>
+          <button className="btn ghost sm" style={{ marginLeft: "auto" }} onClick={onFechar} aria-label="Fechar">✕</button>
+        </div>
+
+        {!rcFull && !erro && <div style={{ color: "var(--ww-text-muted)" }}>Carregando a RC…</div>}
+        {rcFull && (
+          <>
+            <div style={{ display: "grid", gridTemplateColumns: "2fr 1.4fr 1fr 1fr", gap: 10 }}>
+              <label style={{ ...lab, position: "relative" }}>Fornecedor
+                <input style={inp} value={fornQ} placeholder="nome, fantasia ou CNPJ"
+                  onChange={(e) => { setFornQ(e.target.value); setForn(null); }} />
+                {fornOps.length > 0 && (
+                  <div style={{ position: "absolute", top: 58, left: 0, right: 0, zIndex: 2, background: "var(--ww-panel)", border: "1px solid var(--ww-border-strong)", borderRadius: 8, maxHeight: 220, overflow: "auto" }}>
+                    {fornOps.map((f) => (
+                      <button key={f.cod} type="button" onClick={() => escolherForn(f)}
+                        style={{ display: "block", width: "100%", textAlign: "left", padding: "7px 10px", background: "transparent", border: 0, color: "var(--ww-text)", cursor: "pointer", fontSize: 13 }}>
+                        {f.fantasia || f.nome}<small style={{ color: "var(--ww-text-muted)" }}>{f.fantasia && f.fantasia !== f.nome ? ` · ${f.nome}` : ""}{f.cnpj ? ` · ${f.cnpj}` : ""}</small>
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {rcFull.forn && <small style={{ color: "var(--ww-text-faint)" }}>sugerido na RC: {rcFull.forn}</small>}
+              </label>
+              <label style={lab}>Categoria da compra
+                <select style={inp} value={catCod} onChange={(e) => setCatCod(e.target.value)}>
+                  <option value="">Selecione…</option>
+                  {refs?.categorias.map((c) => <option key={c.cod} value={c.cod}>{c.cod} · {c.desc}</option>)}
+                </select>
+              </label>
+              <label style={lab}>Condição
+                <select style={inp} value={parc} onChange={(e) => setParc(e.target.value)}>
+                  {refs?.parcelas.map((p) => <option key={p.cod} value={p.cod}>{p.desc}</option>)}
+                </select>
+              </label>
+              <label style={lab}>Previsão de entrega
+                <input type="date" style={inp} value={previsao} onChange={(e) => setPrevisao(e.target.value)} />
+                {rcFull.previsao && <small style={{ color: "var(--ww-text-faint)" }}>prazo da venda: {rcFull.previsao.split("-").reverse().join("/")}</small>}
+              </label>
+            </div>
+
+            <div style={{ border: "1px solid var(--ww-border)", borderRadius: 10, overflow: "hidden" }}>
+              <div style={{ display: "grid", gridTemplateColumns: "28px 1fr 90px 110px 110px", gap: 8, padding: "8px 10px", fontSize: 11.5, color: "var(--ww-text-muted)", background: "var(--ww-panel-sunken, transparent)" }}>
+                <span /><span>Item da RC</span><span style={{ textAlign: "right" }}>Qtd</span><span style={{ textAlign: "right" }}>Valor unit.</span><span style={{ textAlign: "right" }}>Total</span>
+              </div>
+              {linhas.map((l, i) => {
+                const falta = Math.max(0, (Number(l.it.qtd) || 0) - (Number(l.it.cov) || 0));
+                const atendido = falta <= 0;
+                return (
+                  <div key={l.it.id} style={{ display: "grid", gridTemplateColumns: "28px 1fr 90px 110px 110px", gap: 8, padding: "8px 10px", alignItems: "center", borderTop: "1px solid var(--ww-border)", opacity: atendido ? 0.5 : 1 }}>
+                    <input type="checkbox" checked={l.on && !atendido} disabled={atendido}
+                      onChange={() => setLinhas((x) => x.map((y, k) => (k === i ? { ...y, on: !y.on } : y)))} />
+                    <div style={{ fontSize: 13 }}>{l.it.desc}
+                      <small style={{ display: "block", color: "var(--ww-text-faint)" }}>
+                        {l.it.cod ? `${l.it.cod} · ` : ""}RC {l.it.qtd} {l.it.un ?? "UN"}{Number(l.it.cov) > 0 ? ` · ${l.it.cov} já em PC` : ""}{atendido ? " · já atendido" : ""}
+                      </small>
+                    </div>
+                    <input type="number" min={0} max={falta} step="any" style={{ ...inp, textAlign: "right", height: 30 }} disabled={atendido || !l.on} value={l.qtd}
+                      onChange={(e) => { const v = Number(e.target.value); setLinhas((x) => x.map((y, k) => (k === i ? { ...y, qtd: v } : y))); }} />
+                    <input type="number" min={0} step="0.01" style={{ ...inp, textAlign: "right", height: 30 }} disabled={atendido || !l.on} value={l.vu}
+                      onChange={(e) => { const v = Number(e.target.value); setLinhas((x) => x.map((y, k) => (k === i ? { ...y, vu: v } : y))); }} />
+                    <span style={{ textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{l.on && !atendido ? money(l.qtd * l.vu) : "—"}</span>
+                  </div>
+                );
+              })}
+            </div>
+
+            <label style={lab}>Observação para o fornecedor (opcional)
+              <input style={inp} value={obs} onChange={(e) => setObs(e.target.value)} />
+            </label>
+
+            <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+              <span style={{ fontSize: 13, color: "var(--ww-text-muted)" }}>
+                {ativos.length} ite{ativos.length === 1 ? "m" : "ns"} · total <b style={{ color: "var(--ww-text)" }}>{money(total)}</b>
+                {" · "}{dias.length} parcela{dias.length === 1 ? "" : "s"} a partir da previsão
+              </span>
+              <span style={{ marginLeft: "auto" }} />
+              <button className="btn" onClick={onFechar} disabled={salvando}>Cancelar</button>
+              <button className="btn primary" onClick={() => void criar()} disabled={salvando || !ativos.length}>
+                {salvando ? "Criando…" : "Criar pedido de compra"}
+              </button>
+            </div>
+            <small style={{ color: "var(--ww-text-faint)" }}>
+              O pedido nasce em Compras, ligado à RC e ao {rcFull.pv || "PV/OS"}, e segue a aprovação de sempre. Itens que ficarem de fora continuam disponíveis para outro pedido (ex.: outro fornecedor). Departamentos, frete e conta corrente podem ser completados depois na folha completa em Compras.
+            </small>
+          </>
+        )}
+        {erro && <div style={{ color: "var(--ww-danger, #ef4444)", fontSize: 13 }}>{erro}</div>}
+      </div>
+    </div>
+  );
+}

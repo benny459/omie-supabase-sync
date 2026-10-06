@@ -19,6 +19,7 @@
  * antiga). A grade antiga continua em ?classica=1 até a conferência final.
  */
 
+import GerarPcDaRc from "@/components/operacao/GerarPcDaRc";
 import "./operacao.css";
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
@@ -117,6 +118,7 @@ export default function TelaOperacao({ modulo, title, rows: rowsIniciais, parcia
   const [patches, setPatches] = useState<Map<string, AnyRow>>(new Map());
   const [toast, setToast] = useState<Toast>(null);
   const [drawer, setDrawer] = useState<string | null>(null);
+  const [gerarPcDe, setGerarPcDe] = useState<{ p: Pedido; rc: string; itens: Compra[] } | null>(null);
   const [painelFiltro, setPainelFiltro] = useState(false);
   const [menu, setMenu] = useState<"mais" | "export" | null>(null);
   const [logAberto, setLogAberto] = useState(false);
@@ -734,6 +736,7 @@ export default function TelaOperacao({ modulo, title, rows: rowsIniciais, parcia
               excluirPv={ehAdmin && modulo !== "pcs" ? () => void excluirPv(p) : null}
               statusLote={(lista, st) => { if (lista.length === 1) void setStatus(lista[0], st); else void emMassa(st, lista); }}
               incluirPc={(rc, itens, numero) => incluirPc(p, rc, itens, numero)}
+              gerarPc={(rc, itens) => setGerarPcDe({ p, rc, itens })}
               filtrarRapida={(r) => { setMarcados((m) => (m.includes(r) ? m : [...m, r])); window.scrollTo({ top: 0, behavior: "smooth" }); }}
               notas={notas[p.id] ?? []} abrirNotas={() => setNotasDe(p)} marcarMaterial={marcarMaterial} marcarMaterialLote={marcarMaterialLote} />
           ))}
@@ -776,6 +779,17 @@ export default function TelaOperacao({ modulo, title, rows: rowsIniciais, parcia
         onCancelar={() => setSel(new Set())} />
 
       {/* ── gaveta ── */}
+      {gerarPcDe && (
+        <GerarPcDaRc rc={gerarPcDe.rc} empresa={s(gerarPcDe.p.bucket.rows[0]?.empresa) || "SF"}
+          itensRc={gerarPcDe.itens.map((c) => Number((c.row.custom_fields as Record<string, unknown> | null)?.rc_compras)).filter((x) => Number.isFinite(x) && x > 0)}
+          onFechar={() => setGerarPcDe(null)}
+          onFeito={(num) => {
+            const alvo = gerarPcDe.p;
+            setGerarPcDe(null);
+            mostrar({ msg: `Pedido de compra ${num} criado e ligado à RC ${gerarPcDe.rc} — segue para aprovação em Compras.` });
+            void recarregarPedido(alvo).catch(() => null);
+          }} />
+      )}
       <Gaveta compra={drawerCompra} pedido={drawerCompra ? porId.get(drawerCompra.pedidoId) ?? null : null}
         onFechar={() => setDrawer(null)} $={$} podeAprovar={podeAprovar} podeEditar={podeEditar} ehAdmin={ehAdmin}
         setStatus={setStatus} gravar={gravar} />
@@ -1083,18 +1097,25 @@ function Alm({ a, onFiltrar, chip }: { a: AlarmeIcone; onFiltrar?: (r: Rapida) =
 function CelServico({ sv }: { sv: Servico | null }) {
   if (!sv) return <div className="srv-nada" />;
   const d = sv.prev != null && sv.st !== "Concluída" && sv.st !== "Cancelada" ? diasAte(sv.prev) : null;
+  const semOs = sv.rotulo === "Sem vínculo" && !sv.os;
   const hist = sv.historico.length
     ? "Mudanças da previsão:\n" + sv.historico.map((h) => `• ${h.data ? dBR(dataMs(h.data)) : "sem data"} (em ${dBR(dataMs(h.em))}${h.por ? ` por ${h.por}` : ""})`).join("\n")
     : "";
   return (
     <div className={`srv ${servicoAtrasado(sv) ? "atrasado" : ""}`} onClick={(e) => e.stopPropagation()}
-      title={[sv.st === "Concluída" ? (sv.rotulo === "Concluída" ? "OS concluída e liberada no app de serviços" : "OS concluída, mas ainda não liberada para faturar no app de serviços") : `OS ${sv.rotulo}`, hist, "Vem do app de serviços"].filter(Boolean).join("\n\n")}>
+      title={[sv.st === "Concluída" ? (sv.rotulo === "Concluída" ? "OS concluída e liberada no app de serviços" : "OS concluída, mas ainda não liberada para faturar no app de serviços")
+        : semOs ? "A venda já aparece no Painel de Vendas do app de serviços, à espera de que gerem a OS. Quando a OS for criada lá, o nº, o status e a previsão aparecem aqui sozinhos."
+        : `OS ${sv.rotulo}`, hist, "Vem do app de serviços"].filter(Boolean).join("\n\n")}>
       <span className="srv-k">Serviço</span>
       <div className="srv-l1">
-        <span className={`st svc-st ${sv.tom}`}>{sv.rotulo}</span>
+        {/* "Sem vínculo" = venda com serviço ainda sem OS: ela já está na fila do
+            Painel de Vendas do app de serviços (06/10/26) — mostra isso, com atalho. */}
+        <span className={`st svc-st ${sv.tom}`}>{semOs ? "Aguardando OS" : sv.rotulo}</span>
         {sv.os
           ? <a className="mono svc-os" href={`https://app.waterworks.com.br/ordens-de-servico/${encodeURIComponent(sv.os)}`} target="_blank" rel="noopener noreferrer" title="Abrir a OS no app de serviços">{sv.os.replace(/-/g, "")} ↗</a>
-          : <span className="svc-os mute">sem OS</span>}
+          : semOs
+            ? <a className="svc-os" href="https://app.waterworks.com.br/painel-de-vendas" target="_blank" rel="noopener noreferrer" title="Abrir o Painel de Vendas no app de serviços para gerar a OS">gerar OS ↗</a>
+            : <span className="svc-os mute">sem OS</span>}
       </div>
       <div className={`srv-l2 ${d != null && d < 0 ? "late" : ""}`}>
         {sv.st === "Concluída" ? (sv.concluidoEm ? `concluída ${dBR(sv.concluidoEm)}` : "concluída")
@@ -1186,6 +1207,7 @@ function CartaoPedido(props: {
   excluirPv: (() => void) | null;
   statusLote: (lista: Compra[], status: string) => void;
   incluirPc: (rc: string, itens: Compra[], numero: string) => Promise<void>;
+  gerarPc: (rc: string, itens: Compra[]) => void;
   filtrarRapida: (r: Rapida) => void;
   marcarMaterial: MarcarMaterial;
   marcarMaterialLote: MarcarMaterialLote;
@@ -1363,17 +1385,19 @@ function LinhaCompra({ c, sel, toggleSel, podeAprovar, podeEditar, ehAdmin, setS
  *  PC · fornecedor · status (aprovação) · previsão · status do material
  *  e, se o pedido tem serviço, o estado do serviço. Não há relação 1:1
  *  entre itens e PCs: um PC pode atender várias RCs e vice-versa. */
-function GruposRc({ compras, p, sel, toggleSel, podeAprovar, podeEditar, ehAdmin, statusLote, incluirPc, marcarMaterial, marcarMaterialLote, gravar, abrirDrawer, $ }: {
+function GruposRc({ compras, p, sel, toggleSel, podeAprovar, podeEditar, ehAdmin, statusLote, incluirPc, gerarPc, marcarMaterial, marcarMaterialLote, gravar, abrirDrawer, $ }: {
   compras: Compra[]; p: Pedido; sel: Set<string>; toggleSel: (k: string) => void;
   podeAprovar: boolean; podeEditar: boolean; ehAdmin: boolean;
   statusLote: (lista: Compra[], status: string) => void;
   incluirPc: (rc: string, itens: Compra[], numero: string) => Promise<void>;
+  gerarPc: (rc: string, itens: Compra[]) => void;
   marcarMaterial: MarcarMaterial;
   marcarMaterialLote: MarcarMaterialLote;
   gravar: Gravar; abrirDrawer: (k: string) => void; $: (v: number | null) => string;
 }) {
   // Serviço é do pedido inteiro: aparece uma vez na faixa acima (FaixaServico).
   const servico = null as null | { st: string; prev: number | null };
+  const empresa = s(p.bucket.rows[0]?.empresa) || "SF";
 
   const grupos = new Map<string, Compra[]>();
   for (const c of compras) {
@@ -1443,7 +1467,10 @@ function GruposRc({ compras, p, sel, toggleSel, podeAprovar, podeEditar, ehAdmin
               {itensVisiveis(itens).map((c, idx) => (
                 <div key={c.key} className={`it ${sel.has(c.key) ? "sel" : ""}`}>
                   <input type="checkbox" className="cb" checked={sel.has(c.key)} onChange={() => toggleSel(c.key)} />
-                  <span>{rc ? <span className={`rcnum ${idx ? "rep" : ""}`}>RC {rc}</span> : <span className="rcnum vazio">sem RC</span>}</span>
+                  <span>{rc
+                    ? <a className={`rcnum ${idx ? "rep" : ""}`} href={linkCompras(rc, "RC", empresa)} title={`Abrir a RC ${rc} em Compras`}
+                        onClick={(e) => e.stopPropagation()} style={{ textDecoration: "none", cursor: "pointer" }}>RC {rc}</a>
+                    : <span className="rcnum vazio">sem RC</span>}</span>
                   <div className="desc item-nome" title={c.desc}>{c.desc}
                     <small>{c.qtd} × {$(c.unit)} = <b style={{ color: "var(--ww-text-muted)" }}>{$(c.rcTotal)}</b></small></div>
                   <MatCelula c={c} podeEditar={podeEditar} marcar={marcarMaterial} />
@@ -1466,7 +1493,8 @@ function GruposRc({ compras, p, sel, toggleSel, podeAprovar, podeEditar, ehAdmin
                 const recusado = cs.find((x) => x.estado === "recusado");
                 return (
                   <div key={pc} className="pc">
-                    <span className="mono">{pc}</span>
+                    <a className="mono" href={linkCompras(pc, "PC", empresa)} title={`Abrir o PC ${pc} em Compras`}
+                      onClick={(e) => e.stopPropagation()} style={{ color: "var(--ww-accent, inherit)", textDecoration: "none" }}>{pc}</a>
                     <span className="desc" title={c.fornecedor}>{c.fornecedor || "—"}<small>{c.categoria}</small></span>
                     <span className="num" style={{ textAlign: "right" }}><b>{c.pcValor != null ? $(c.pcValor) : "—"}</b></span>
                     <span>
@@ -1513,7 +1541,19 @@ function GruposRc({ compras, p, sel, toggleSel, podeAprovar, podeEditar, ehAdmin
                     <InputTexto key={`novo-${pcs.map(([n]) => n).join(",")}`} mono className="in caixa" valor="" placeholder={pcs.length ? "+ PC" : "nº PC"}
                       onSalvar={(v) => { if (v.trim()) void incluirPc(rc, itens, v); }} />
                   </span>
-                  {pcs.length === 0 && !p.compras.some((c) => c.pc) && <span className="desc" style={{ color: "var(--ww-text-faint)", fontSize: 12 }}>digite o nº do pedido de compra — fornecedor, valor e status vêm do Omie</span>}
+                  {rc && semPc.length > 0 && (() => {
+                    // Selecionados nesta RC (sem PC) ou, sem seleção, todos os que faltam.
+                    const marcados = semPc.filter((c) => sel.has(c.key));
+                    const alvo = marcados.length ? marcados : semPc;
+                    return (
+                      <button className="btn sm primary" style={{ whiteSpace: "nowrap" }}
+                        title={marcados.length ? "Gera um pedido de compra com os itens marcados desta RC" : "Gera um pedido de compra com os itens desta RC que ainda não têm PC (marque linhas para escolher só alguns)"}
+                        onClick={() => gerarPc(rc, alvo)}>
+                        + Gerar pedido de compra{alvo.length < itens.length ? ` (${alvo.length})` : ""}
+                      </button>
+                    );
+                  })()}
+                  {pcs.length === 0 && !p.compras.some((c) => c.pc) && <span className="desc" style={{ color: "var(--ww-text-faint)", fontSize: 12 }}>digite o nº de um pedido de compra já existente, ou use “Gerar pedido de compra” — fornecedor, valor e status vêm do Compras do painel</span>}
                 </div>
               )}
             </div>
@@ -1529,6 +1569,11 @@ function GruposRc({ compras, p, sel, toggleSel, podeAprovar, podeEditar, ehAdmin
     </>
   );
 }
+
+/** Link direto para a RC/PC na tela de Compras (06/10/26) — <a> de verdade,
+ *  para Cmd/meio-clique abrirem em outra aba. */
+const linkCompras = (num: string, tipo: "RC" | "PC", emp: string) =>
+  `/erp/compras?${new URLSearchParams({ abrir: num, tipo, emp })}`;
 
 /** Status da NF de entrada do PC (Omie, só leitura): número + data quando
  *  chegou; senão aguardando — em vermelho se a previsão já venceu. */

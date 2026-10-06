@@ -9,9 +9,17 @@ export const dynamic = "force-dynamic";
 export async function GET(req: Request) {
   const q = await exigirCompras();
   if (q instanceof NextResponse) return q;
-  const id = Number(new URL(req.url).searchParams.get("id"));
-  if (!id) return NextResponse.json({ error: "id obrigatório" }, { status: 400 });
+  const sp = new URL(req.url).searchParams;
+  let id = Number(sp.get("id"));
   try {
+    // ?num=7346&tipo=RC&emp=SF — abre pelo número (link vindo de Operação, 06/10/26).
+    if (!id && sp.get("num")) {
+      id = Number(await rpc<number | null>("compras_id_por_numero", {
+        p_empresa: (sp.get("emp") ?? "SF").toUpperCase(), p_numero: String(sp.get("num")), p_tipo: sp.get("tipo") || null,
+      })) || 0;
+      if (!id) return NextResponse.json({ error: `${sp.get("tipo") || "Pedido"} ${sp.get("num")} não encontrado em Compras` }, { status: 404 });
+    }
+    if (!id) return NextResponse.json({ error: "id obrigatório" }, { status: 400 });
     const p = await rpc("compras_pedido", { p_id: id });
     if (!p) return NextResponse.json({ error: "Pedido não encontrado" }, { status: 404 });
     // contas a pagar do pedido no financeiro (fase do ciclo: previsto → … → liberado)
@@ -38,6 +46,11 @@ export async function POST(req: Request) {
   }
   if (!itens.length) return NextResponse.json({ error: "Inclua pelo menos 1 item." }, { status: 400 });
   if (itens.some((i) => !(Number(i.qtd) > 0))) return NextResponse.json({ error: "Há item com quantidade zerada." }, { status: 400 });
+  // ?simular=1 (06/10/26): passa pelas mesmas travas e devolve o que seria
+  // gravado, sem gravar nem consumir número — usado para testar atalhos.
+  if (new URL(req.url).searchParams.get("simular") === "1") {
+    return NextResponse.json({ ok: true, simulado: true, tipo: body.tipo, itens: itens.length, body });
+  }
   try {
     const r = await rpc<{ id: number; num: string }>("compras_salvar", { p: body, p_por: q.email, p_uid: q.uid });
     await posGravar(r.id, String(body.tipo));

@@ -58,7 +58,9 @@ export async function podeAprovar(q: Quem, valor: number): Promise<string | null
 export async function posGravar(id: number, tipo?: string) {
   await Promise.all([
     tipo !== "RC" ? rpc("compras_gerar_previsoes", { p_id: id }).catch(() => null) : null,
-    tipo !== "PC" ? rpc("compras_publicar_rcs").catch(() => null) : null,
+    // PC também republica as RCs (06/10/26): o nº do PC aparece na hora nas
+    // linhas da RC em Operação (Vendas avulsas / Projetos).
+    rpc("compras_publicar_rcs").catch(() => null),
   ]);
 }
 

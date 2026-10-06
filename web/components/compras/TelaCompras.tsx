@@ -100,6 +100,23 @@ export default function TelaCompras() {
     } catch (e) { setErro((e as Error).message); }
   }, [historico]);
   useEffect(() => { carregar(); }, [carregar]);
+  // Link direto (06/10/26): /erp/compras?abrir=7346&tipo=RC&emp=SF abre a folha
+  // daquele pedido/requisição — usado pelos chips de RC/PC em Operação.
+  useEffect(() => {
+    const sp = new URLSearchParams(window.location.search);
+    const num = sp.get("abrir");
+    if (!num) return;
+    const qs = new URLSearchParams({ num, emp: (sp.get("emp") ?? "SF").toUpperCase() });
+    if (sp.get("tipo")) qs.set("tipo", String(sp.get("tipo")).toUpperCase());
+    fetch(`/api/compras/pedido?${qs}`).then(async (r) => {
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok || !j?.id) { toast(j?.error ?? `Não achei ${num} em Compras`, true); return; }
+      setFolha({ id: Number(j.id) });
+    }).catch(() => null);
+    sp.delete("abrir"); sp.delete("tipo"); sp.delete("emp");
+    window.history.replaceState(null, "", `${window.location.pathname}${sp.toString() ? `?${sp}` : ""}`);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   useEffect(() => {
     fetch("/api/compras/avisos").then((r) => (r.ok ? r.json() : null)).then((j) => {
       if (!j) return;

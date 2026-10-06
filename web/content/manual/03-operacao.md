@@ -5,7 +5,7 @@ icone: 📋
 area: operacao
 rotas: /avulsos, /projetos, /pcs, /erp/vendas
 caminhos: web/components/BoldAvulsosView.tsx, web/components/operacao, web/app/(app)/avulsos, web/app/(app)/projetos, web/app/(app)/pcs, web/app/(app)/erp/vendas, web/components/vendas
-atualizado: 2026-10-05
+atualizado: 2026-10-06
 ---
 
 ## Avulsos
@@ -16,6 +16,23 @@ A lista de **pedidos de venda (PV/OS)** com as compras ligadas a cada um.
 - A coluna **M.B.** é a margem bruta (venda menos compras ligadas).
 - Use as abas **Em aberto / Faturados / Todos**, a busca e os filtros rápidos (Pode faturar, Venda em atraso, Compra em atraso, Minha aprovação, Sem PC, etc.).
 - Alterne a visão entre **Lista, Tabela, Kanban e Linha do tempo**.
+
+### Como faço para gerar o pedido de compra direto da linha (atalho)
+
+1. Abra o PV/OS (clique na linha) para ver a **RC** e os itens.
+2. Na coluna PC, clique em **+ Gerar pedido de compra**. Sem nada marcado, entram todos os itens da RC que ainda não têm PC; para escolher só alguns, marque as linhas antes (o botão mostra quantos).
+3. A folha abre já preenchida da RC: itens, quantidade que ainda falta atender, valor, **fornecedor sugerido** (o da RC, com a última categoria e condição usadas com ele), projeto e PV/OS. Confira o fornecedor, a **categoria**, a **condição** e a **previsão de entrega**; dá para desmarcar itens e mudar quantidade (parcial) e valor.
+4. **Criar pedido de compra** grava o PC em Compras, ligado à RC e ao PV/OS — mesma numeração e mesma aprovação de sempre. O nº do PC aparece na linha logo em seguida.
+5. Precisa de **mais de um pedido** (outro fornecedor, entrega separada)? Os itens que ficaram de fora — ou a quantidade que faltou — continuam disponíveis: clique de novo em **+ Gerar pedido de compra**.
+
+- Os números **RC 7346** e o nº do **PC** na linha são links: clique para abrir a requisição ou o pedido direto em **Compras** (Cmd/clique do meio abre em outra aba).
+
+> Departamentos, frete e conta corrente podem ser completados depois, abrindo o pedido em **Compras**. Para ligar um PC que já existe, digite o nº no campo **nº PC**.
+
+### Serviço (vendas Mix e de serviço)
+
+- O cartão **Serviço** vem do app de serviços. **Aguardando OS** quer dizer que a venda tem serviço previsto (vendedor Mix ou Serviços) e já está no **Painel de Vendas** do app de serviços, mas a OS ainda não foi gerada — o atalho **gerar OS ↗** abre esse painel.
+- Quando a OS é criada a partir da venda no app de serviços, o nº da OS, o status e a previsão aparecem aqui sozinhos.
 
 ## Projetos
 
