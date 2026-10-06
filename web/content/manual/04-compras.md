@@ -37,9 +37,9 @@ Logo abaixo dos totais aparece **vs RC**: o máximo dos itens ligados, o valor d
 
 Se algum item estiver acima do máximo, o painel **Pronto para salvar?** avisa e pede um **motivo** — sem ele o pedido não salva. O motivo vai para a observação interna e o cartão do pedido em Compras ganha o selo **▲ acima do máximo da RC**, para quem aprova ver.
 
-## Aprovação automática pelo Agente IA
+## Aprovação automática pela Aria
 
-Pedidos de compra de **Vendas avulsas** que cumprem a regra abaixo são aprovados sozinhos, sem passar pelo aprovador. Quem aprova fica registrado como **Agente IA**.
+Pedidos de compra de **Vendas avulsas** que cumprem a regra abaixo são aprovados sozinhos, sem passar pelo aprovador. Quem aprova fica registrado como **Aria**.
 
 **A regra (todas ao mesmo tempo):**
 - PC de **Vendas avulsas** incluído nos **últimos 30 dias** e ainda **pendente** de aprovação;
@@ -51,8 +51,8 @@ Pedidos de compra de **Vendas avulsas** que cumprem a regra abaixo são aprovado
 
 **Onde ver:**
 1. Em **Compras**, botão **🤖 Aprovação automática**: lista dos PCs pendentes com a decisão de cada um (elegível ou o motivo de não ser) e as últimas aprovações do agente. Administrador pode clicar em **Aprovar agora**.
-2. No PC aprovado: "Aprovado · por Agente IA" e, no histórico, "Aprovado automaticamente pelo Agente IA — PC R$ X ≤ RC R$ Y · condição faturada …".
-3. No Webex, canal **Pedidos Aprovados!**: o cartão de sempre, com "Aprovado por: Agente IA (aprovação automática)".
+2. No PC aprovado: "Aprovado · por Aria" e, no histórico, "Aprovado automaticamente pela Aria — PC R$ X ≤ RC R$ Y · condição faturada …".
+3. No Webex, canal **Pedidos Aprovados!**: o cartão de sempre, com "Aprovado por: Aria (aprovação automática)".
 4. No **Cesar** (assistente do painel): peça "simule a aprovação automática" ou "aprove os PCs elegíveis".
 
 ## Como faço para enviar o pedido ao fornecedor por e-mail e conversar com ele

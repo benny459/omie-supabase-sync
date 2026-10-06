@@ -1,4 +1,4 @@
-// /api/compras/aprovacao-ia — aprovação automática de PCs avulsos pelo Agente IA.
+// /api/compras/aprovacao-ia — aprovação automática de PCs avulsos pela Aria.
 //   GET   simulação: lista dos PCs pendentes com a decisão (elegível / pulado + motivo)
 //         e as últimas rodadas registradas.
 //   POST  {aplicar: true} aprova os elegíveis agora (só administrador).

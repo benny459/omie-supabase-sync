@@ -1,4 +1,4 @@
-// /api/cron/aprovacao-ia — aprovação automática de PCs avulsos pelo Agente IA.
+// /api/cron/aprovacao-ia — aprovação automática de PCs avulsos pela Aria.
 // Vercel cron 11:00, 15:00 e 20:00 UTC = 08:00, 12:00 e 17:00 de Brasília.
 // Idempotente: só aprova o que continua pendente e elegível.
 // Manual: /api/cron/aprovacao-ia?secret=<CRON_SECRET>[&simular=1]

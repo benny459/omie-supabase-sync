@@ -391,7 +391,7 @@ async function testarFontes(ctx: CtxAcao, report: never): Promise<string | null>
 export const ACOES: Record<string, DefAcao> = {
   aprovar_pcs_elegiveis: {
     descricao:
-      "Aprovação automática de PCs de Vendas avulsas pelo Agente IA: PC dos últimos 30 dias, ainda pendente, com valor ≤ RC e condição de pagamento faturada (prazo depois da NF, nunca à vista). Com aplicar=false (padrão) só SIMULA e devolve a lista com a decisão e o motivo de cada PC. Com aplicar=true APROVA os elegíveis (só administrador) — chame com aplicar=true SÓ depois de mostrar a simulação e a pessoa CONFIRMAR. A mesma regra já roda sozinha às 08h, 12h e 17h.",
+      "Aprovação automática de PCs de Vendas avulsas pela Aria: PC dos últimos 30 dias, ainda pendente, com valor ≤ RC e condição de pagamento faturada (prazo depois da NF, nunca à vista). Com aplicar=false (padrão) só SIMULA e devolve a lista com a decisão e o motivo de cada PC. Com aplicar=true APROVA os elegíveis (só administrador) — chame com aplicar=true SÓ depois de mostrar a simulação e a pessoa CONFIRMAR. A mesma regra já roda sozinha às 08h, 12h e 17h.",
     entrada: { aplicar: { type: "boolean", description: "false = simular (padrão); true = aprovar os elegíveis." } },
     required: [],
     exec: async (ctx, i) => {

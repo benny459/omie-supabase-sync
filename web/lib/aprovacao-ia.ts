@@ -11,7 +11,7 @@ import { randomUUID } from "node:crypto";
 import { rpc, posGravar } from "@/lib/compras-server";
 import { postWebexMessage, buildApprovalMarkdown } from "@/lib/webex";
 
-export const AGENTE_IA = "Agente IA";
+export const AGENTE_IA = "Aria";
 
 export type CandidatoIA = {
   empresa: string; pc: string; pedido_id: number | null; origem: string | null; ncods: number[];
@@ -51,6 +51,7 @@ export async function rodarAprovacaoIA(opts: { aplicar: boolean; disparo: string
       decisao: l.decisao, motivo: l.detalhe ? `${l.motivo} — ${l.detalhe}` : l.motivo,
     })),
   }).catch(() => null);
+  if (opts.aplicar) await enviarWebexPendentes().catch(() => null);
   return {
     rodada, modo: opts.aplicar ? "aplicado" : "simulacao",
     aprovados: linhas.filter((l) => l.decisao === "aprovado").length,
@@ -77,16 +78,29 @@ async function aprovar(c: CandidatoIA) {
     if (c.pedido_id) await rpc("compras_aprovar", { p_ids: [c.pedido_id], p_status: "aprovado", p_por: AGENTE_IA }).catch(() => null);
   }
   if (c.pedido_id) {
-    await rpc("compras_registrar", { p_id: c.pedido_id, p_texto: `Aprovado automaticamente pelo Agente IA — ${c.motivo}`, p_por: AGENTE_IA }).catch(() => null);
+    await rpc("compras_registrar", { p_id: c.pedido_id, p_texto: `Aprovado automaticamente pela Aria — ${c.motivo}`, p_por: AGENTE_IA }).catch(() => null);
     await posGravar(c.pedido_id).catch(() => null);
   }
-  await postWebexMessage(buildApprovalMarkdown({
-    pc_numero: c.pc, nome_fornecedor: c.fornecedor, pc_forma_pagamento: c.condicao, valor,
-    projeto_nome: c.projeto, pv_os_label: c.pv_os, aprovador_email: `${AGENTE_IA} (aprovação automática) — ${c.motivo}`,
-    status_label: "Aprovado",
-  })).catch(() => null);
 }
 
 export async function ultimasRodadasIA(limite = 200) {
   return rpc<Record<string, unknown>[]>("compras_auto_aprov_ultimas", { p_limite: limite });
+}
+
+/** Cartão no Webex "Pedidos Aprovados!" de cada PC aprovado pela Aria que ainda não foi
+ *  anunciado (inclui aprovações feitas fora da rotina). Roda no fim de toda rodada. */
+export async function enviarWebexPendentes() {
+  const pend = await rpc<{ id: number; pc: string; fornecedor: string | null; condicao: string | null; valor_pc: number | null;
+    projeto: string | null; pv_os: string | null; motivo: string | null }[]>("compras_auto_aprov_webex_pendentes", { p_dias: 2 });
+  const ok: number[] = [];
+  for (const c of pend ?? []) {
+    const r = await postWebexMessage(buildApprovalMarkdown({
+      pc_numero: c.pc, nome_fornecedor: c.fornecedor, pc_forma_pagamento: c.condicao, valor: Number(c.valor_pc) || null,
+      projeto_nome: c.projeto, pv_os_label: c.pv_os, aprovador_email: `Aria (aprovação automática) — ${c.motivo ?? ""}`,
+      status_label: "Aprovado",
+    })).catch(() => ({ ok: false }));
+    if ((r as { ok?: boolean }).ok) ok.push(c.id);
+  }
+  if (ok.length) await rpc("compras_auto_aprov_webex_ok", { p_ids: ok });
+  return { enviados: ok.length, pendentes: (pend ?? []).length };
 }
