@@ -9,6 +9,8 @@
 //       { acao: "regra_criar", contem, acao_regra: "ignorar"|"lancar", categoria?, descricao?, natureza?, empresa?, cod_cc?, valor_max? }
 //       { acao: "regra_remover", id }   { acao: "regras_aplicar", empresa, cod_cc, de?, ate? }
 //  GET  ?regras=1 → regras de conciliação
+//  GET  ?resumo=1&de&ate → visão geral de TODAS as contas (06/10/26): % conciliado, pendentes (qtd/R$,
+//       entradas×saídas), último extrato importado — para ver de cara qual banco precisa de atenção
 //  GET  ?candidatos=<mov>&q&vmin&vmax&venc_de&venc_ate&todas=1 → painel "Casar" (sql/73): candidatos com
 //       motivos (valor, vencimento, CNPJ/nome/NF no histórico, nosso número, aprendido) de TODOS os
 //       títulos em aberto (Omie + painel), grupos de parcelas e busca livre
@@ -48,6 +50,13 @@ export async function GET(req: Request) {
     const { data, error } = await fin().rpc("transferencia_candidatos", { p_movimento_id: trMov });
     if (error) return erroDb(error);
     return NextResponse.json({ candidatos: data ?? [] });
+  }
+  if (u.searchParams.get("resumo")) {
+    const de = u.searchParams.get("de") ?? "", ate = u.searchParams.get("ate") ?? "";
+    if (!ISO.test(de) || !ISO.test(ate)) return NextResponse.json({ error: "de e ate (YYYY-MM-DD) obrigatórios" }, { status: 400 });
+    const { data, error } = await fin().rpc("conciliacao_resumo", { p_de: de, p_ate: ate });
+    if (error) return erroDb(error);
+    return NextResponse.json({ contas: data ?? [] });
   }
   if (u.searchParams.get("regras")) {
     const { data, error } = await fin().from("conciliacao_regras").select("*").eq("ativo", true).order("id", { ascending: false });

@@ -99,3 +99,7 @@ O título da CD fica **PAGO** e o sistema registra sozinho "**CD deve à SF**" e
 **O valor de uma conta recorrente veio diferente este mês.** Abra o título, **Editar título…**, mude o valor e deixe **Só esta**. Se mudou de vez, use **Esta e as próximas desta série**.
 
 **Onde vejo o detalhe de um título do Omie?** Clique na linha; a gaveta mostra PC, NF, histórico e o fornecedor.
+
+## Conciliação: esta aba ou a tela completa?
+
+A aba de conciliação desta tela mostra só as **saídas (contas a pagar)** da conta. Para ver **tudo o que falta conciliar** num banco — entradas e saídas, com a situação de cada movimento — e a visão geral de todos os bancos, clique em **Conciliação completa ↗** (ou vá em **Financeiro → Conciliação bancária**).

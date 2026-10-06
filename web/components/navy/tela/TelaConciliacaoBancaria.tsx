@@ -58,6 +58,27 @@ type ExtPrev = {
 type Mapa = { data: number; valor: number; credito?: number; debito?: number; historico: number; documento?: number; nome?: number; saldo?: number; linha_inicial?: number; formato_data?: "dmy" | "ymd" | "mdy"; inverter_sinal?: boolean };
 type Regra = { id: number; empresa: string | null; cod_cc: number | null; contem: string; natureza: "P" | "R" | null; acao: "ignorar" | "lancar"; categoria_cod: string | null; descricao: string | null; aplicacoes: number };
 type Categoria = { codigo: string; descricao: string };
+/** Visão geral de todas as contas (06/10/26) — finance.conciliacao_resumo. */
+type ResumoConta = {
+  empresa: string; cod_cc: number; descricao: string; codigo_banco: string | null; n: number; resolvidos: number; conciliados: number;
+  omie: number; ignorados: number; transferencias: number; pendentes: number; pendentes_valor: number; pend_entradas: number; pend_saidas: number;
+  entradas: number; saidas: number; pct: number | null; extrato_ate: string | null; ultima_importacao: string | null; ultimo_arquivo: string | null;
+  ultimo_de: string | null; ultimo_ate: string | null; saldo_extrato: number | null;
+};
+/** Filtro de situação da tela (o que a equipa pergunta: "o que falta conciliar?"). */
+type Situacao = "pendentes" | "sugestao" | "conciliados" | "ignorados" | "";
+const SITUACOES: { k: Situacao; label: string }[] = [
+  { k: "pendentes", label: "Pendentes" }, { k: "sugestao", label: "Com sugestão" },
+  { k: "conciliados", label: "Conciliados" }, { k: "ignorados", label: "Ignorados / transferências" }, { k: "", label: "Todos" },
+];
+const ehPendente = (m: { estado: string }) => m.estado === "pendente" || m.estado === "parcial";
+/** Rótulo do ignorado pelo motivo: transferência entre contas, tarifa ou ignorado. */
+function rotuloIgnorado(m: { transferencia_par?: number | null; ignorado_motivo: string | null }) {
+  const mot = (m.ignorado_motivo ?? "").toLowerCase();
+  if (m.transferencia_par || mot.includes("transfer")) return "Transferência entre contas";
+  if (mot.includes("tarifa")) return "Tarifa";
+  return "Ignorado";
+}
 type Titulo = { natureza: "P" | "R"; titulo: string; contraparte: string | null; documento: string | null; vencimento: string | null; valor: number; valor_pago: number; saldo: number; fase: string | null };
 
 const ESTADO: Record<Mov["estado"], { label: string; tom: Tom }> = {
@@ -80,14 +101,16 @@ const chaveConta = (c: { empresa: string; cod_cc: number }) => `${c.empresa}:${c
 export default function TelaConciliacaoBancaria() {
   const [contas, setContas] = useState<Conta[]>([]);
   const [conta, setConta] = useState("");
-  const [de, setDe] = useState(() => somaDias(hojeISO(), -30));
+  const [de, setDe] = useState(() => somaDias(hojeISO(), -90));
   const [ate, setAte] = useState(hojeISO());
   const [movs, setMovs] = useState<Mov[] | null>(null);
   const [titulos, setTitulos] = useState<Titulo[]>([]);
   const [podeBaixar, setPodeBaixar] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const [aviso, setAviso] = useState<string | null>(null);
-  const [estadoSel, setEstadoSel] = useState<Mov["estado"] | "">("pendente");
+  const [situacao, setSituacao] = useState<Situacao>("pendentes");
+  const [sentido, setSentido] = useState<"" | "entrada" | "saida">("");
+  const [resumo, setResumo] = useState<ResumoConta[] | null>(null);
   const [soAuto, setSoAuto] = useState(false);
   const [q, setQ] = useState("");
   const [aberto, setAberto] = useState<number | null>(null);
@@ -105,6 +128,9 @@ export default function TelaConciliacaoBancaria() {
       const cs = (j.contas ?? []) as Conta[];
       setContas(cs);
       try {
+        // link de Pagar/Receber: /financeiro/conciliacao?conta=SF:123
+        const u = new URLSearchParams(window.location.search).get("conta");
+        if (u && cs.some((c) => chaveConta(c) === u)) { setConta(u); return; }
         const g = localStorage.getItem("concil-conta");
         if (g && cs.some((c) => chaveConta(c) === g)) { setConta(g); return; }
       } catch { /* sem storage */ }
@@ -125,6 +151,11 @@ export default function TelaConciliacaoBancaria() {
     } catch (e) { setErro((e as Error).message); }
   }, [conta, de, ate]);
   useEffect(() => { setMovs(null); carregar(); }, [carregar, refresh]);
+  // visão geral de todas as contas (mesmo período)
+  useEffect(() => {
+    fetch(`/api/financeiro/conciliacao?resumo=1&de=${de}&ate=${ate}`).then((r) => r.json())
+      .then((j) => { if (!j.error) setResumo(j.contas ?? []); }).catch(() => null);
+  }, [de, ate, refresh]);
   // o painel "Casar" avisa quando muda alguma coisa
   useEffect(() => {
     const h = () => carregar();
@@ -202,9 +233,14 @@ export default function TelaConciliacaoBancaria() {
 
   const lista = useMemo(() => {
     const t = q.trim().toLowerCase();
-    return (movs ?? []).filter((m) => (!estadoSel || m.estado === estadoSel) && (!soAuto || !!m.auto) &&
+    const okSit = (m: Mov) =>
+      situacao === "pendentes" ? ehPendente(m) :
+      situacao === "sugestao" ? ehPendente(m) && m.sugestoes.length > 0 :
+      situacao === "conciliados" ? m.estado === "conciliado" || m.estado === "omie" :
+      situacao === "ignorados" ? m.estado === "ignorado" : true;
+    return (movs ?? []).filter((m) => okSit(m) && (!sentido || (sentido === "entrada" ? m.valor > 0 : m.valor < 0)) && (!soAuto || !!m.auto) &&
       (!t || `${m.memo ?? ""} ${m.nome ?? ""} ${m.valor} ${m.checknum ?? ""}`.toLowerCase().includes(t)));
-  }, [movs, estadoSel, soAuto, q]);
+  }, [movs, situacao, sentido, soAuto, q]);
 
   const kpis: Kpi[] = useMemo(() => {
     const ms = movs ?? [];
@@ -293,6 +329,9 @@ export default function TelaConciliacaoBancaria() {
         </>}
       />
 
+      <VisaoContas resumo={resumo} conta={conta} onEscolher={(k) => { setConta(k); setSituacao("pendentes"); }} />
+      {contaSel && <CabecalhoConta r={resumo?.find((x) => chaveConta(x) === conta) ?? null} movs={movs} />}
+
       <FaixaFiltros busca={q} onBusca={setQ} placeholder="Histórico, valor, documento… (clique num pendente para casar · j/k navega · / busca no painel)">
         <select value={conta} onChange={(e) => setConta(e.target.value)} style={campo} title="Conta corrente">
           {!conta && <option value="">Escolha a conta…</option>}
@@ -301,12 +340,15 @@ export default function TelaConciliacaoBancaria() {
         <CampoData valor={de} onChange={setDe} title="De" />
         <span style={{ color: "var(--ww-text-faint)", fontSize: 12 }}>→</span>
         <CampoData valor={ate} onChange={setAte} title="Até" />
-        <ChipFiltro ativo={!estadoSel} onClick={() => setEstadoSel("")}>Todos</ChipFiltro>
-        {(Object.keys(ESTADO) as Mov["estado"][]).map((k) => (
-          <ChipFiltro key={k} ativo={estadoSel === k} onClick={() => setEstadoSel(estadoSel === k ? "" : k)}>
-            {ESTADO[k].label} · {(movs ?? []).filter((m) => m.estado === k).length}
-          </ChipFiltro>
-        ))}
+        {SITUACOES.map(({ k, label }) => {
+          const ms = movs ?? [];
+          const n = k === "pendentes" ? ms.filter(ehPendente).length : k === "sugestao" ? ms.filter((m) => ehPendente(m) && m.sugestoes.length).length
+            : k === "conciliados" ? ms.filter((m) => m.estado === "conciliado" || m.estado === "omie").length
+            : k === "ignorados" ? ms.filter((m) => m.estado === "ignorado").length : ms.length;
+          return <ChipFiltro key={k || "todos"} ativo={situacao === k} onClick={() => setSituacao(k)}>{label} · {n}</ChipFiltro>;
+        })}
+        <ChipFiltro ativo={sentido === "entrada"} onClick={() => setSentido(sentido === "entrada" ? "" : "entrada")}>Entradas (receber)</ChipFiltro>
+        <ChipFiltro ativo={sentido === "saida"} onClick={() => setSentido(sentido === "saida" ? "" : "saida")}>Saídas (pagar)</ChipFiltro>
         <ChipFiltro ativo={soAuto} onClick={() => setSoAuto((v) => !v)}>
           Conciliados automaticamente · {(movs ?? []).filter((m) => m.auto).length}
         </ChipFiltro>
@@ -403,7 +445,19 @@ function LinhaMov({ m, titulos, aberto, podeBaixar, ocupado, onToggle, acao, emp
           {(m.estado === "pendente" || m.estado === "parcial") && podeBaixar && (
             <button type="button" style={pilula("var(--ww-accent-text)")} onClick={(e) => { e.stopPropagation(); abrirCasar(m.id); }}>casar…</button>
           )}
-          <StatusPill tone={ESTADO[m.estado].tom}>{ESTADO[m.estado].label}</StatusPill>
+          {(m.estado === "pendente" || m.estado === "parcial") && podeBaixar && top && m.estado === "pendente" && (top.natureza === "R" || top.fase === "liberado") && (
+            <button type="button" disabled={ocupado} style={pilula("var(--ww-ok-text)")} title={`Aceitar: ${top.contraparte ?? ""} · ${top.documento ?? ""} · ${brl(top.saldo)}`}
+              onClick={(e) => {
+                e.stopPropagation();
+                const itens = top.grupo && top.itens?.length ? top.itens.map((x) => ({ titulo: x.titulo, valor: x.saldo })) : [{ titulo: top.titulo, valor: Math.min(top.saldo, restante) }];
+                acao({ acao: "conciliar", movimento_id: m.id, itens }, `Conciliado: ${top.contraparte ?? ""}`);
+              }}>aceitar sugestão</button>
+          )}
+          {m.estado === "ignorado"
+            ? <StatusPill tone="off">{rotuloIgnorado(m)}</StatusPill>
+            : m.estado === "pendente" && top
+              ? <StatusPill tone="info">Sugestão</StatusPill>
+              : <StatusPill tone={ESTADO[m.estado].tom}>{m.estado === "pendente" ? "Pendente · sem par" : ESTADO[m.estado].label}</StatusPill>}
         </span>
       </div>
 
@@ -748,6 +802,73 @@ function PainelRegras({ regras, contaSel, ocupado, acao, aplicar }: {
             onClick={() => acao({ acao: "regra_remover", id: r.id }, "Regra removida")}>remover</button>
         </div>
       ))}
+    </div>
+  );
+}
+
+/** Visão geral (06/10/26): todas as contas com extrato, % conciliado e o que falta — clica para abrir a conta. */
+function VisaoContas({ resumo, conta, onEscolher }: { resumo: ResumoConta[] | null; conta: string; onEscolher: (k: string) => void }) {
+  if (!resumo?.length) return null;
+  const th: React.CSSProperties = { fontSize: 11, textTransform: "uppercase", letterSpacing: ".06em", color: "var(--ww-text-faint)", fontWeight: 600, padding: "8px 12px", textAlign: "left", whiteSpace: "nowrap" };
+  const td: React.CSSProperties = { padding: "9px 12px", fontSize: 13, borderTop: "1px solid var(--ww-border)", whiteSpace: "nowrap" };
+  return (
+    <div style={{ ...cartao, padding: 0, overflowX: "auto" }}>
+      <div style={{ padding: "10px 14px 4px", fontSize: 13, fontWeight: 700, color: "var(--ww-text)" }}>
+        Contas · situação da conciliação no período <span style={{ fontWeight: 400, color: "var(--ww-text-faint)" }}>(clique para abrir a conta)</span>
+      </div>
+      <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 760 }}>
+        <thead><tr>
+          <th style={th}>Conta</th><th style={th}>Extrato até</th><th style={{ ...th, textAlign: "right" }}>Movimentos</th>
+          <th style={th}>Conciliado</th><th style={{ ...th, textAlign: "right" }}>Falta conciliar</th><th style={th}>Último extrato importado</th>
+        </tr></thead>
+        <tbody>
+          {resumo.map((r) => {
+            const k = chaveConta(r); const sel = k === conta; const pct = r.pct ?? 0;
+            const cor = r.n === 0 ? "var(--ww-text-faint)" : pct >= 95 ? "var(--ww-ok-text)" : pct >= 60 ? "var(--ww-warn-text, #d97706)" : "var(--ww-crit-text)";
+            const dias = r.extrato_ate ? Math.round((Date.parse(hojeISO()) - Date.parse(r.extrato_ate)) / 864e5) : null;
+            return (
+              <tr key={k} onClick={() => onEscolher(k)} style={{ cursor: "pointer", background: sel ? "var(--ww-panel-sunken)" : undefined }}>
+                <td style={{ ...td, fontWeight: sel ? 700 : 500 }}>{r.empresa} · {r.descricao}</td>
+                <td style={td}>{r.extrato_ate ? ddmmaa(r.extrato_ate) : "—"}{dias != null && dias > 3 && <span style={{ color: "var(--ww-crit-text)", fontSize: 11.5 }}> · {dias} dias sem extrato</span>}</td>
+                <td style={{ ...td, textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{r.n}</td>
+                <td style={td}>
+                  <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
+                    <span style={{ width: 90, height: 6, borderRadius: 99, background: "var(--ww-panel-sunken)", overflow: "hidden", display: "inline-block" }}>
+                      <span style={{ display: "block", height: "100%", width: `${pct}%`, background: cor }} />
+                    </span>
+                    <b style={{ color: cor, fontVariantNumeric: "tabular-nums" }}>{r.n ? `${pct}%` : "—"}</b>
+                  </span>
+                </td>
+                <td style={{ ...td, textAlign: "right", fontVariantNumeric: "tabular-nums" }}>
+                  {r.pendentes ? <><b>{r.pendentes}</b> · {brl(r.pendentes_valor)}<span style={{ display: "block", fontSize: 11.5, color: "var(--ww-text-faint)" }}>{r.pend_entradas} entradas · {r.pend_saidas} saídas</span></> : <span style={{ color: "var(--ww-ok-text)" }}>nada pendente</span>}
+                </td>
+                <td style={{ ...td, fontSize: 12, color: "var(--ww-text-muted)" }}>
+                  {r.ultima_importacao ? <>{ddmmaa(r.ultima_importacao.slice(0, 10))}{r.ultimo_arquivo ? ` · ${r.ultimo_arquivo}` : ""}{r.ultimo_de && r.ultimo_ate ? ` (${ddmmaa(r.ultimo_de)}–${ddmmaa(r.ultimo_ate)})` : ""}</> : r.omie ? "movimentos vindos do Omie" : "—"}
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+/** Cabeçalho da conta aberta: quanto falta, em que lado (entrada/saída) e de quando é o extrato. */
+function CabecalhoConta({ r, movs }: { r: ResumoConta | null; movs: Mov[] | null }) {
+  const ms = movs ?? [];
+  const pend = ms.filter(ehPendente);
+  const sug = pend.filter((m) => m.sugestoes.length).length;
+  const pe = pend.filter((m) => m.valor > 0).length, ps = pend.filter((m) => m.valor < 0).length;
+  const resolvidos = ms.length - pend.length; const pct = ms.length ? Math.round((100 * resolvidos) / ms.length) : null;
+  return (
+    <div style={{ ...cartao, padding: "10px 14px", display: "flex", flexWrap: "wrap", gap: "6px 18px", alignItems: "center", fontSize: 13, color: "var(--ww-text-muted)" }}>
+      <b style={{ color: "var(--ww-text)" }}>{r ? `${r.empresa} · ${r.descricao}` : "Conta"}</b>
+      {pct != null && <span><b style={{ color: pct >= 95 ? "var(--ww-ok-text)" : "var(--ww-text)" }}>{pct}% conciliado</b> no período</span>}
+      <span><b style={{ color: "var(--ww-text)" }}>{pend.length}</b> pendentes ({pe} entradas · {ps} saídas) · <b style={{ color: "var(--ww-text)" }}>{sug}</b> com sugestão</span>
+      {r?.extrato_ate && <span>extrato até <b style={{ color: "var(--ww-text)" }}>{ddmmaa(r.extrato_ate)}</b></span>}
+      {r?.ultimo_arquivo && <span>último arquivo {r.ultimo_arquivo}{r.ultimo_de && r.ultimo_ate ? ` (${ddmmaa(r.ultimo_de)}–${ddmmaa(r.ultimo_ate)})` : ""}</span>}
+      {r?.saldo_extrato != null && <span>saldo final do extrato <b style={{ color: "var(--ww-text)" }}>{brl(r.saldo_extrato)}</b></span>}
     </div>
   );
 }

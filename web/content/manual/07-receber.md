@@ -5,7 +5,7 @@ icone: 💰
 area: erp
 rotas: /financeiro/receber
 caminhos: web/components/financeiro/TelaReceberV1.tsx, web/components/financeiro/receber-v1-motor.ts, web/components/financeiro/EditarTituloModal.tsx, web/lib/financeiro-editar.ts, web/app/api/financeiro/receber
-atualizado: 2026-10-05
+atualizado: 2026-10-06
 ---
 
 **Financeiro → Títulos a Receber** mostra o que os clientes devem: títulos do Omie e as parcelas criadas pelo **Faturamento** do painel.
@@ -54,3 +54,7 @@ atualizado: 2026-10-05
 **De onde vêm as parcelas?** Do Faturamento: ao emitir NF-e/recibo ou registrar NFS-e, as parcelas são criadas exatamente como na tela de emissão.
 
 **Como abro a rentabilidade do pedido?** Na gaveta do título, use o link do PV/OS.
+
+## Conciliação: esta aba ou a tela completa?
+
+A aba de conciliação desta tela mostra só as **entradas (contas a receber)** da conta. Para ver **tudo o que falta conciliar** num banco — entradas e saídas, com a situação de cada movimento — e a visão geral de todos os bancos, clique em **Conciliação completa ↗** (ou vá em **Financeiro → Conciliação bancária**).

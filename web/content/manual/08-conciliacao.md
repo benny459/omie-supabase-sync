@@ -4,11 +4,26 @@ resumo: Extrato de qualquer banco (OFX/CSV), sugestões, painel Casar, regras e 
 icone: 🏦
 area: erp
 rotas: /financeiro/conciliacao
-caminhos: web/components/navy/tela/TelaConciliacaoBancaria.tsx, web/components/financeiro/CasarPainel.tsx, web/lib/ofx.ts, web/app/api/financeiro/ofx, web/app/api/financeiro/conciliacao
-atualizado: 2026-10-05
+caminhos: web/components/navy/tela/TelaConciliacaoBancaria.tsx, web/components/financeiro/pagar-v3-motor.ts, web/components/financeiro/receber-v1-motor.ts, web/components/financeiro/CasarPainel.tsx, web/lib/ofx.ts, web/app/api/financeiro/ofx, web/app/api/financeiro/conciliacao
+atualizado: 2026-10-06
 ---
 
 Conciliar é ligar cada lançamento do extrato ao título que ele paga ou recebe. Quando você concilia, o título fica **PAGO** ou **RECEBIDO** em todo o sistema (telas, BI e fluxo de caixa).
+
+## Onde vejo o que falta conciliar em cada banco
+
+**Financeiro → Conciliação bancária** é o lugar único da conciliação: **entradas e saídas** de cada conta, num só lugar.
+
+1. No topo, a tabela **Contas** mostra todos os bancos com extrato no período: até que dia o extrato vai (e quantos dias está sem extrato), quantos movimentos, **% conciliado**, quanto **falta conciliar** (quantidade, valor, entradas × saídas) e o último arquivo importado. A conta com mais pendências aparece primeiro.
+2. Clique numa conta para abrir os movimentos dela. Logo abaixo aparece o resumo da conta aberta (% conciliado, pendentes, sugestões, extrato até, saldo final do extrato).
+3. Cada movimento mostra a situação numa etiqueta:
+   - **Conciliado** — já ligado ao título (aparece com quem/qual documento; dá para **desfazer**);
+   - **Sugestão** — o sistema achou o título provável: **aceitar sugestão** concilia com um clique (ou **casar…** para escolher outro);
+   - **Pendente · sem par** — ninguém achou: **casar…** abre a busca de títulos (pagar e receber), criar lançamento (tarifa, juros, despesa) ou marcar transferência;
+   - **Transferência entre contas**, **Tarifa** ou **Ignorado** — fora dos títulos, com o motivo.
+4. Os filtros **Pendentes · Com sugestão · Conciliados · Ignorados / transferências · Todos** e **Entradas (receber) · Saídas (pagar)** deixam ver só o que interessa. A tela abre em **Pendentes**, últimos 90 dias.
+
+> As abas de conciliação dentro de **Títulos a Pagar** (só saídas) e **Títulos a Receber** (só entradas) continuam, com o botão **Conciliação completa ↗** que abre esta tela já na mesma conta.
 
 ## Como faço para importar o extrato
 
