@@ -1005,8 +1005,8 @@ export default function FolhaPedido({
                      [isRC || Math.abs(t.total - D.parcelas.reduce((a, x) => a + (Number(x.valor) || 0), 0)) <= 0.05, "Parcelas batem com o total"]] as [boolean, string][])
                     .map(([ok, l]) => <div key={l}><span className={`dot ${ok ? "ok" : "no"}`} />{l}</div>)}
                   {!isRC && cmpRc && (cmpRc.acima.length > 0
-                    ? <div><span className="dot" style={{ background: "#f59e0b" }} />{cmpRc.acima.length} item(ns) acima do máximo da RC
-                        {!ro && <input className="in" style={{ marginTop: 6 }} value={motivoAcima} placeholder="Motivo (obrigatório para salvar acima do máximo)"
+                    ? <div style={{ flexWrap: "wrap" }}><span className="dot" style={{ background: "#f59e0b" }} />{cmpRc.acima.length} item(ns) acima do máximo da RC
+                        {!ro && <input className="in" style={{ marginTop: 6, flexBasis: "100%", width: "100%" }} value={motivoAcima} placeholder="Motivo (obrigatório para salvar acima do máximo)"
                           onChange={(e) => setMotivoAcima(e.target.value)} />}</div>
                     : <div><span className="dot ok" />Itens dentro do máximo da RC</div>)}
                 </div></section>
