@@ -27,7 +27,9 @@ const VAZIO: Form = {
 const UFS = ["AC", "AL", "AM", "AP", "BA", "CE", "DF", "ES", "GO", "MA", "MG", "MS", "MT", "PA", "PB", "PE", "PI", "PR", "RJ", "RN", "RO", "RR", "RS", "SC", "SE", "SP", "TO"];
 const emailOk = (e: string) => !e.trim() || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e.trim());
 
-export default function FormPessoa({ id }: { id?: number }) {
+/** emOverlay: aberto por cima de outra tela (ex.: folha do pedido de compra) —
+ *  salvar/cancelar fecham a janela em vez de navegar. */
+export default function FormPessoa({ id, emOverlay }: { id?: number; emOverlay?: { onSalvo: (p: Pessoa) => void; onFechar: () => void } }) {
   const router = useRouter();
   const sp = useSearchParams();
   const editando = id != null;
@@ -132,6 +134,7 @@ export default function FormPessoa({ id }: { id?: number }) {
         contatos: f.contatos.filter((c) => Object.values(c).some((v) => String(v ?? "").trim())),
         ...(forcar.on ? { forcar: true, forcarMotivo: forcar.motivo } : {}) };
       const p = await pedir<Pessoa>(editando ? `/api/cadastros/${id}` : "/api/cadastros", { method: editando ? "PUT" : "POST", body: JSON.stringify(body) });
+      if (emOverlay) { emOverlay.onSalvo(p); return; }
       router.push(`/cadastros/${p.id}?salvo=1`);
     } catch (e) {
       setErro((e as Error).message); setIndo(false);
@@ -145,7 +148,7 @@ export default function FormPessoa({ id }: { id?: number }) {
   return (
     <div className="est">
       <div className="crumbs">
-        <button className="link" onClick={() => router.push(editando ? `/cadastros/${id}` : `/cadastros/${papel === "cliente" ? "clientes" : "fornecedores"}`)}>
+        <button className="link" onClick={() => emOverlay ? emOverlay.onFechar() : router.push(editando ? `/cadastros/${id}` : `/cadastros/${papel === "cliente" ? "clientes" : "fornecedores"}`)}>
           ‹ {editando ? "Ficha" : papel === "cliente" ? "Clientes" : "Fornecedores"}</button>
         <span>/</span><span>{editando ? "Editar cadastro" : "Novo cadastro"}</span>
       </div>
@@ -253,7 +256,7 @@ export default function FormPessoa({ id }: { id?: number }) {
 
         <div className="filtros" style={{ justifyContent: "flex-end" }}>
           <span className="mini" style={{ marginRight: "auto" }}>Fica só no painel. Nada é enviado ao Omie.</span>
-          <button className="btn" onClick={() => router.back()}>Cancelar</button>
+          <button className="btn" onClick={() => emOverlay ? emOverlay.onFechar() : router.back()}>Cancelar</button>
           <button className="btn pri" disabled={indo || erros.length > 0 || (forcar.on && !forcar.motivo.trim())} onClick={salvar}>{indo ? "Salvando…" : editando ? "Salvar cadastro" : "Cadastrar"}</button>
         </div>
       </div>

@@ -37,6 +37,16 @@ Logo abaixo dos totais aparece **vs RC**: o máximo dos itens ligados, o valor d
 
 Se algum item estiver acima do máximo, o painel **Pronto para salvar?** avisa e pede um **motivo** — sem ele o pedido não salva. O motivo vai para a observação interna e o cartão do pedido em Compras ganha o selo **▲ acima do máximo da RC**, para quem aprova ver.
 
+## Como faço para enviar o pedido ao fornecedor por e-mail e conversar com ele
+
+1. Abra o pedido (aprovado) e clique em **Imprimir / PDF / enviar ao fornecedor** → enviar por e-mail.
+2. O **Para** vem do cadastro do fornecedor. Fornecedor sem e-mail? Clique em **cadastrar ↗** (ou **editar e-mails no cadastro ↗**): o cadastro abre **por cima**, você salva e volta ao envio com o e-mail novo. Na folha do pedido, ao lado do CNPJ, **abrir cadastro ↗** faz o mesmo.
+3. Todo e-mail sai de **compras@waterworks.com.br** com **cópia oculta automática para o compras@ e para você** — a conversa fica também no seu Gmail.
+4. A aba **E-mails** do pedido mostra a conversa inteira: o envio do PDF, as respostas do fornecedor (com anexos) e as suas respostas. Para responder, escreva embaixo e clique **Enviar** — sai na mesma conversa (o fornecedor vê como resposta ao e-mail do pedido).
+5. Quando o fornecedor responde, quem enviou o pedido recebe aviso no Webex e a resposta no Gmail; o cartão do pedido em Compras ganha o selo **✉ N** até alguém abrir a aba E-mails.
+
+> **Modo teste:** enquanto estiver ligado, os e-mails só saem para os endereços de teste (e a cópia do compras@) — o painel avisa no topo do envio.
+
 ## NF de entrada (pela Focus)
 
 - As NF-e emitidas contra a empresa chegam sozinhas (**📄 NF chegou pela Focus**) e **casam com o PC** automaticamente.

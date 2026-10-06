@@ -7,19 +7,21 @@
 // configurado" e oferece baixar o PDF e marcar como enviado à mão.
 // COMPRAS_EMAIL_SO_PARA (lista separada por vírgula), se definida, limita os
 // destinatários — usada para testar só com endereços internos.
+// Cópia oculta automática (compras@ + quem enviou), "responder para" do pedido
+// e registro da conversa: lib/compras-email.ts (06/10/26).
 import { NextResponse } from "next/server";
 import { exigirCompras, rpc, erro, semPermissao } from "@/lib/compras-server";
 import { gerarPdfPedido, type VariantePdf } from "@/lib/compras-pdf";
 import { supaAdmin } from "@/lib/supabase-admin";
 import type { Pedido } from "@/lib/compras";
+import { emailConfigurado, destinatarios, enviarResend, novoMessageId, responderPara, ccoFixo, respostasLigadas, lista } from "@/lib/compras-email";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
-const configurado = () => !!(process.env.RESEND_API_KEY && process.env.COMPRAS_EMAIL_REMETENTE);
+const configurado = emailConfigurado;
 const emailOk = (e: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e);
-const lista = (v: unknown) => (Array.isArray(v) ? v : String(v ?? "").split(/[,;\s]+/)).map((x) => String(x).trim()).filter(Boolean);
 const esc = (t: string) => t.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]!));
 const titulo = (t?: string | null) => (t ?? "").toLowerCase().replace(/(^|\s)(\p{L})/gu, (_m, a, b) => a + b.toUpperCase());
 
@@ -30,16 +32,21 @@ export async function GET(req: Request) {
   if (!id) return NextResponse.json({ error: "id obrigatório" }, { status: 400 });
   try {
     const p = await rpc<Pedido>("compras_pedido", { p_id: id });
-    const [{ data: emp }, { data: forn }] = await Promise.all([
+    const [{ data: emp }, { data: forn }, { data: pes }] = await Promise.all([
       supaAdmin().schema("orders").rpc("compras_empresa", { p_empresa: p.emp }),
       p.fornCod ? supaAdmin().schema("finance").from("clientes").select("email, razao_social").eq("empresa", p.emp)
         .eq("codigo_cliente_omie", p.fornCod).maybeSingle() : Promise.resolve({ data: null }),
+      supaAdmin().schema("orders").rpc("compras_fornecedor_pessoa", { p_empresa: p.emp, p_cod: p.fornCod ?? null, p_cnpj: p.cnpj || null }),
     ]);
     const empresa = (emp as { razao_social?: string } | null)?.razao_social ?? p.emp;
-    // e-mails do cadastro do fornecedor, sem os nossos (o Omie põe o contasareceber@ em vários)
-    const para = lista((forn as { email?: string } | null)?.email).filter((e) => emailOk(e) && !/@waterworks\.com\.br$/i.test(e));
+    // E-mails do cadastro do fornecedor (cadastros.pessoas — editável na ficha; o
+    // espelho do Omie só de reserva), sem os nossos (o Omie põe o contasareceber@ em vários).
+    const pessoa = pes as { id?: number; email?: string | null; emailNfe?: string | null } | null;
+    const fonte = pessoa?.email ? pessoa.email : (forn as { email?: string } | null)?.email;
+    const para = lista(fonte).filter((e) => emailOk(e) && !/@waterworks\.com\.br$/i.test(e));
     return NextResponse.json({
       configurado: configurado(), soPara: lista(process.env.COMPRAS_EMAIL_SO_PARA), para,
+      ccoFixo: ccoFixo(), respostas: respostasLigadas(), pessoaId: pessoa?.id ?? null, emp: p.emp, fornCod: p.fornCod, cnpj: p.cnpj,
       assunto: `${empresa.toUpperCase()} - Pedido de Compra Nº ${p.num}`, empresa, numero: p.num,
       fornecedor: p.forn, eu: q.email, aprovado: p.aprov === "aprovado", origem: p.origem,
       enviadoEm: p.enviadoEm, enviadoPara: p.enviadoPara,
@@ -68,16 +75,11 @@ export async function POST(req: Request) {
   if (!configurado()) {
     return NextResponse.json({ error: "E-mail não configurado no painel (falta RESEND_API_KEY e COMPRAS_EMAIL_REMETENTE na Vercel). Baixe o PDF e use “Marcar como enviado”." }, { status: 503 });
   }
-  const para = lista(b.para), cc = lista(b.cc), cco = lista(b.cco);
-  if (b.copia) cco.push(q.email);
-  const todos = [...para, ...cc, ...cco];
+  // Cópia oculta automática: compras@ (fixa) e quem enviou — a conversa fica no Gmail de cada um.
+  const dest = destinatarios(lista(b.para), lista(b.cc), lista(b.cco), q.email);
+  if ("erro" in dest) return NextResponse.json({ error: dest.erro }, { status: 400 });
+  const { para, cc, cco } = dest;
   if (!para.length) return NextResponse.json({ error: "Informe pelo menos um destinatário em “Para”." }, { status: 400 });
-  const ruim = todos.find((e) => !emailOk(e));
-  if (ruim) return NextResponse.json({ error: `E-mail inválido: ${ruim}` }, { status: 400 });
-  const so = lista(process.env.COMPRAS_EMAIL_SO_PARA).map((e) => e.toLowerCase());
-  if (so.length && todos.some((e) => !so.includes(e.toLowerCase()))) {
-    return NextResponse.json({ error: `Modo teste: só envia para ${so.join(", ")}.` }, { status: 400 });
-  }
   try {
     const { pdf, pedido, empresa } = await gerarPdfPedido(id, variante, q.nome, b.anterior == null ? undefined : !!b.anterior);
     if (pedido.aprov !== "aprovado") throw new Error("Pedido ainda não aprovado — aprove antes de enviar ao fornecedor");
@@ -101,15 +103,15 @@ export async function POST(req: Request) {
       if (extra.base64.length > 10_000_000) throw new Error("Anexo extra grande demais (máx. ~7 MB)");
       anexos.push({ filename: extra.nome, content: extra.base64 });
     }
-    const r = await fetch("https://api.resend.com/emails", {
-      method: "POST", headers: { Authorization: `Bearer ${process.env.RESEND_API_KEY}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ from: process.env.COMPRAS_EMAIL_REMETENTE, to: para, cc: cc.length ? cc : undefined,
-        bcc: cco.length ? cco : undefined, reply_to: q.email, subject: String(b.assunto ?? `Pedido de Compra Nº ${pedido.num}`), html, attachments: anexos }),
-    });
-    const j = await r.json().catch(() => ({}));
-    if (!r.ok) throw new Error(`Falha no envio: ${(j as { message?: string }).message ?? r.statusText}`);
+    const assunto = String(b.assunto ?? `Pedido de Compra Nº ${pedido.num}`);
+    const messageId = novoMessageId(pedido.num);
+    const resendId = await enviarResend({ para, cc, cco, assunto, html, replyTo: responderPara(id, pedido.num, q.email), messageId, anexos });
+    await rpc("compras_email_registrar", { p: { pedido_id: id, direcao: "saida", message_id: messageId, de: process.env.COMPRAS_EMAIL_REMETENTE,
+      para, cc, cco, assunto, texto: texto || `Pedido de Compra Nº ${pedido.num} (PDF anexo)`, html,
+      anexos: anexos.map((a) => ({ nome: a.filename })), enviado_por: q.email, resend_id: resendId,
+      status: lista(process.env.COMPRAS_EMAIL_SO_PARA).length ? "teste" : "ok" } }).catch(() => null);
     await rpc("compras_registrar", { p_id: id, p_texto: `E-mail enviado (${variante === "sem_valores" ? "sem valores" : "completo"}) · para ${para.join(", ")}${cc.length ? ` · cc ${cc.join(", ")}` : ""}${cco.length ? ` · cco ${cco.join(", ")}` : ""}`, p_por: q.email });
     await rpc("compras_marcar_enviado", { p_id: id, p_para: para.join(", "), p_meio: "email", p_por: q.email });
-    return NextResponse.json({ ok: true, id: (j as { id?: string }).id });
+    return NextResponse.json({ ok: true, id: resendId });
   } catch (e) { return erro(e); }
 }

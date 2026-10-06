@@ -10,9 +10,10 @@
  */
 
 import { useEffect, useState } from "react";
+import CadastroFornecedorOverlay from "./CadastroFornecedorOverlay";
 
 type Dados = {
-  configurado: boolean; soPara: string[]; para: string[]; assunto: string; empresa: string; numero: string;
+  configurado: boolean; soPara: string[]; ccoFixo?: string[]; respostas?: boolean; emp?: string; fornCod?: number | null; cnpj?: string | null; para: string[]; assunto: string; empresa: string; numero: string;
   fornecedor?: string; eu: string; aprovado: boolean; origem: string; enviadoEm?: string | null; enviadoPara?: string | null;
 };
 
@@ -46,7 +47,7 @@ export default function ModalEnviar({ id, onClose, onEnviado, toast }: {
   const [para, setPara] = useState<string[]>([]);
   const [cc, setCc] = useState<string[]>([]);
   const [cco, setCco] = useState<string[]>([]);
-  const [copia, setCopia] = useState(true);
+  const copia = true;
   const [assunto, setAssunto] = useState("");
   const [texto, setTexto] = useState("");
   const [variante, setVariante] = useState<"completo" | "sem_valores">("completo");
@@ -56,20 +57,22 @@ export default function ModalEnviar({ id, onClose, onEnviado, toast }: {
   const [ocupado, setOcupado] = useState(false);
   const [meio, setMeio] = useState<"whatsapp" | "outro">("whatsapp");
 
+  const [cadForn, setCadForn] = useState(false);
+  const [recarga, setRecarga] = useState(0);
   useEffect(() => {
     (async () => {
       try {
         const r = await fetch(`/api/compras/email?id=${id}`); const j = await r.json();
         if (!r.ok) throw new Error(j.error ?? r.statusText);
-        setD(j); setPara(j.para); setAssunto(j.assunto);
+        setD(j); setPara((atual) => (recarga && atual.length ? atual : j.para)); setAssunto((a) => (recarga && a ? a : j.assunto));
       } catch (e) { toast((e as Error).message, true); onClose(); }
     })();
-  }, [id, onClose, toast]);
+  }, [id, onClose, toast, recarga]);
   useEffect(() => {
-    const esc = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    const esc = (e: KeyboardEvent) => { if (e.key === "Escape" && !cadForn) onClose(); };
     document.addEventListener("keydown", esc);
     return () => document.removeEventListener("keydown", esc);
-  }, [onClose]);
+  }, [onClose, cadForn]);
 
   const ver = () => window.open(`/api/compras/pdf?id=${id}&variante=${variante}&anterior=${anterior ? 1 : 0}`, "_blank", "noopener");
   const baixar = () => window.open(`/api/compras/pdf?id=${id}&variante=${variante}&anterior=${anterior ? 1 : 0}&baixar=1`, "_blank", "noopener");
@@ -122,11 +125,13 @@ export default function ModalEnviar({ id, onClose, onEnviado, toast }: {
                   {bloqueio && <div className="aviso p-crit">{bloqueio}</div>}
                   {d.enviadoEm && <div className="aviso p-env">Já enviado em {new Date(d.enviadoEm).toLocaleString("pt-BR")}{d.enviadoPara ? ` para ${d.enviadoPara}` : ""}.</div>}
                   <div className="f"><label>Para</label><CampoEmails valor={para} onChange={setPara} placeholder="e-mail do fornecedor" />
-                    {!d.para.length && <span className="hint">O cadastro do fornecedor não tem e-mail — digite.</span>}</div>
+                    {!d.para.length
+                      ? <span className="hint">Fornecedor sem e-mail no cadastro — digite ou <button type="button" className="linkbtn" onClick={() => setCadForn(true)}>cadastrar ↗</button></span>
+                      : <span className="hint"><button type="button" className="linkbtn" onClick={() => setCadForn(true)}>editar e-mails no cadastro ↗</button></span>}</div>
                   <div className="f"><label>Cc</label><CampoEmails valor={cc} onChange={setCc} /></div>
                   <div className="f"><label>Cco</label><CampoEmails valor={cco} onChange={setCco} /></div>
-                  <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 12.5 }}>
-                    <input type="checkbox" checked={copia} onChange={(e) => setCopia(e.target.checked)} /> Quero receber uma cópia deste e-mail ({d.eu})</label>
+                  <span className="hint">Cópia oculta automática para {[...(d.ccoFixo ?? []), d.eu].filter(Boolean).join(" e ")} — a conversa fica no seu Gmail.
+                    {d.respostas ? " As respostas do fornecedor também aparecem no pedido (aba E-mails)." : ""}</span>
                   <div className="f"><label>Assunto</label><input className="in" value={assunto} onChange={(e) => setAssunto(e.target.value)} /></div>
                   <div className="f"><label>Texto complementar</label><textarea className="in" value={texto} onChange={(e) => setTexto(e.target.value)} placeholder="Opcional — entra no corpo do e-mail" /></div>
                   <div className="f"><label>Incluir um novo anexo</label>
@@ -187,6 +192,10 @@ export default function ModalEnviar({ id, onClose, onEnviado, toast }: {
           )}
         </div>
       </div>
+      {cadForn && d && (
+        <CadastroFornecedorOverlay emp={d.emp ?? "SF"} fornCod={d.fornCod ?? null} cnpj={d.cnpj} nome={d.fornecedor}
+          onFechar={(salvou) => { setCadForn(false); if (salvou) { setPara([]); setRecarga((n) => n + 1); toast("Cadastro salvo — e-mail do fornecedor atualizado"); } }} />
+      )}
     </div>
   );
 }

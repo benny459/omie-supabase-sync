@@ -12,6 +12,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import CodigoHoje from "./CodigoHoje";
 import GerarPcDaRc from "@/components/operacao/GerarPcDaRc";
+import ConversaEmail from "./ConversaEmail";
+import CadastroFornecedorOverlay from "./CadastroFornecedorOverlay";
 import Autocompletar, { type Opcao } from "./Autocompletar";
 import { BotaoNovoProjeto } from "@/components/cadastros/NovoProjetoRapido";
 import {
@@ -32,7 +34,7 @@ type ItemCat = { ncod_prod: number; codigo: string | null; descricao: string; un
 /** PC × máximo da RC (06/10/26): itens da RC com o que os OUTROS pedidos já compraram. */
 type RcResumo = { num: string; itens: { id: number; qtd: number; vuMax?: number; covOutros: number; valOutros?: number }[] };
 const MARCA_ACIMA = "[acima do máximo da RC]";
-type Tab = "itens" | "deptos" | "frete" | "parcelas" | "info" | "obs";
+type Tab = "itens" | "deptos" | "frete" | "parcelas" | "info" | "obs" | "emails";
 type PagarLinha = { n: number; total: number; venc: string | null; valor: number; fase: string; parcial: boolean;
   liberado: number | null; nf: string | null; status: string; omie: string | null; origem: string };
 /* Ciclo do pagar (sql/36): só "Liberado para pagar" é pagável. */
@@ -84,6 +86,13 @@ export default function FolhaPedido({
   onAbrir?: (id: number) => void;
 }) {
   const [D, setD] = useState<Pedido | null>(null);
+  // Cadastro do fornecedor por cima da folha e respostas por e-mail ainda não lidas (06/10/26).
+  const [cadForn, setCadForn] = useState(false);
+  const [naoLidos, setNaoLidos] = useState(0);
+  useEffect(() => {
+    if (!id) return;
+    fetch("/api/compras/email/conversa?naoLidos=1").then((r) => r.json()).then((j) => setNaoLidos(Number(j?.[String(id)] ?? 0))).catch(() => null);
+  }, [id]);
   // RC (06/10/26): itens marcados para gerar o pedido de compra, e a folha compacta.
   const [selRc, setSelRc] = useState<Set<number>>(new Set());
   const [gerarPc, setGerarPc] = useState(false);
@@ -230,10 +239,10 @@ export default function FolhaPedido({
   }, [D, hist]);
 
   useEffect(() => {
-    const esc = (e: KeyboardEvent) => { if (e.key === "Escape" && !picker && !document.querySelector(".cmp .aclist")) onClose(); };
+    const esc = (e: KeyboardEvent) => { if (e.key === "Escape" && !picker && !cadForn && !document.querySelector(".cmp .aclist")) onClose(); };
     document.addEventListener("keydown", esc);
     return () => document.removeEventListener("keydown", esc);
-  }, [onClose, picker]);
+  }, [onClose, picker, cadForn]);
 
   if (!D) {
     return (
@@ -356,7 +365,8 @@ export default function FolhaPedido({
     ? [["itens", "Itens da Compra", D.itens.length, errs.itens], ["info", "Informações Adicionais", ""], ["obs", "Observações", D.obs || D.obsInt ? "•" : ""]]
     : [["itens", "Itens da Compra", D.itens.length, errs.itens || errs.vinculo], ["deptos", "Departamentos", D.deptos.length || "", errs.deptos],
        ["frete", "Frete e Outras Despesas", t.extra ? "R$" : ""], ["parcelas", "Parcelas", D.parcelas.length, errs.parcelas],
-       ["info", "Informações Adicionais", ""], ["obs", "Observações", D.obs || D.obsInt ? "•" : ""]];
+       ["info", "Informações Adicionais", ""], ["obs", "Observações", D.obs || D.obsInt ? "•" : ""],
+       ...(D.id ? [["emails", "E-mails", naoLidos ? `${naoLidos} nova${naoLidos > 1 ? "s" : ""}` : ""] as [Tab, string, string | number]] : [])];
   const tabAtual: Tab = isRC && !["itens", "info", "obs"].includes(tab) ? "itens" : tab;
   const deptosLista = refs?.departamentos.length ? refs.departamentos.map((d) => d.desc) : DEPTOS_PADRAO;
   const rcAtual = rcView ? rcCache[rcView] : null;
@@ -409,7 +419,9 @@ export default function FolhaPedido({
                         toast(f.ultCat ? "Categoria, contato e condição sugeridos pelo último pedido deste fornecedor" : "Fornecedor selecionado");
                       }} />
                     {errs.forn ? <span className="errmsg">{errs.forn}</span>
-                      : D.cnpj ? <span className="hint">CNPJ {D.cnpj}</span>
+                      : D.cnpj || D.fornCod ? <span className="hint">{D.cnpj ? `CNPJ ${D.cnpj}` : ""}
+                          <button type="button" className="linkbtn" style={{ marginLeft: 8 }} title="Abre o cadastro do fornecedor por cima deste pedido (e-mails, contatos…)"
+                            onClick={() => setCadForn(true)}>abrir cadastro ↗</button></span>
                       : !ro && !D.fornCod ? <span className="hint">Não achou? <a href={`/cadastros/novo?papel=fornecedor&emp=${D.emp}${D.forn ? `&razao=${encodeURIComponent(D.forn)}` : ""}`} target="_blank" rel="noreferrer" style={{ textDecoration: "underline" }}>Cadastrar fornecedor</a> (abre em outra aba; depois é só buscar de novo)</span> : null}
                   </div>
                   <div className="f s3"><label htmlFor="dPrev">{isRC ? "Data limite de entrega" : "Previsão de Entrega"}</label>
@@ -954,6 +966,10 @@ export default function FolhaPedido({
                   </div>
                 )}
 
+                {tabAtual === "emails" && D.id && (
+                  <ConversaEmail id={D.id} podeEscrever={D.origem !== "omie"} aoLer={() => setNaoLidos(0)} />
+                )}
+
                 {tabAtual === "obs" && (
                   <div className="gridf">
                     <div className="f s12"><label>Observações deste pedido — impressas no pedido enviado ao fornecedor</label>
@@ -1059,6 +1075,10 @@ export default function FolhaPedido({
           </div>
         </div>
 
+        {cadForn && D && (
+          <CadastroFornecedorOverlay emp={D.emp} fornCod={D.fornCod} cnpj={D.cnpj} nome={D.forn}
+            onFechar={(salvou) => { setCadForn(false); if (salvou) toast("Cadastro do fornecedor salvo — o envio por e-mail já usa os dados novos"); }} />
+        )}
         {picker && (
           <PickerRc onClose={() => setPicker(false)} covEfetiva={covEfetiva}
             onAdd={(sel) => {

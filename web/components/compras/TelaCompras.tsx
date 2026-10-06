@@ -91,12 +91,15 @@ export default function TelaCompras() {
     const h = lsGet("cmp-historico"); if (h) setHistorico(h);
   }, []);
 
+  const [emailsNovos, setEmailsNovos] = useState<Record<string, number>>({});
   const carregar = useCallback(async () => {
     try {
       const r = await fetch(`/api/compras?desde=${historico}`);
       const j = await r.json();
       if (!r.ok) throw new Error(j.error ?? r.statusText);
       setLista(j.pedidos); setNfSug(j.nfSug ?? {}); setNfsPed(j.nfsPorPedido ?? {}); setSemPedido(j.semPedido ?? []); setErro(null);
+      // respostas do fornecedor por e-mail ainda não lidas (selo ✉ no cartão)
+      fetch("/api/compras/email/conversa?naoLidos=1").then((x) => x.json()).then((m) => setEmailsNovos(m && typeof m === "object" && !m.error ? m : {})).catch(() => null);
     } catch (e) { setErro((e as Error).message); }
   }, [historico]);
   useEffect(() => { carregar(); }, [carregar]);
@@ -304,6 +307,7 @@ export default function TelaCompras() {
         <div className="l1">
           <span className="no"><b className="nro" title={p.tipo === "RC" ? `Requisição Nº ${p.num}` : `Pedido de compra Nº ${p.num}`}>{p.tipo === "RC" ? `RC ${p.num}` : `PC ${p.num}`}</b>
             {avisos.novas.has(p.id) && <span className="badge-nova" title="Requisição nova desde a sua última visita">nova</span>}
+            {emailsNovos[String(p.id)] ? <span className="badge-nova" style={{ background: "#0EA5E9" }} title="O fornecedor respondeu por e-mail — abra o pedido, aba E-mails">✉ {emailsNovos[String(p.id)]}</span> : null}
             {naColPc && (p.aprov === "aprovado"
               ? <span className="badge-ap ok">✓ Aprovado</span> : <span className="badge-ap pend">Pendente</span>)}</span>
           <button className="kebab" aria-label="Ações" onClick={(e) => { e.stopPropagation(); const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
