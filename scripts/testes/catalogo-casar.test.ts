@@ -43,3 +43,8 @@ test("modelo e dimensão diferentes derrubam a nota", () => {
   const v = pontuarLinha("Válvula automática F74A3", 2231, "UN", b);
   assert.ok(!v.length || v[0].score < 0.5);
 });
+test("modelo diferente é barreira, mesmo escrito com espaço (F 74A3 × F67)", () => {
+  const b = indexar([{ id: 9, cod: "H0938", desc: "VALVULA RUNXIN F67 B1", un: "UN", cmc: 2100, ultimo_preco: 2231 }]);
+  const r = pontuarLinha("Válvula automática, F 74A3", 2231, "UN", b);
+  assert.ok(!r.length || r[0].score < 0.4, `score alto demais: ${r[0]?.score}`);
+});

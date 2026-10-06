@@ -39,8 +39,14 @@ export function pontuarLinha(texto: string, custo: number | null | undefined, un
     const dim = (w: string) => /^\d+X\d+$/.test(w);
     const dA = alvo.filter(dim), dB = it.tok.filter(dim);
     if (dA.length && dB.length && !dA.some((x) => dB.includes(x))) nome *= 0.4;
-    const modelo = (w: string) => /^(?=.*\d)(?=.*[A-Z])[A-Z0-9]{4,}$/.test(w) && !dim(w) && !/^\d+(MM|CM|CV|PSI|LPM|GPD|KG|ML|M3H|M3|V|W)$/.test(w);
-    const mA = alvo.filter(modelo), mB = it.tok.filter(modelo);
+    // modelo: letras+dígitos com 3+ caracteres ("F67", "F74A3"); "F 74A3" escrito com espaço também conta
+    const modelo = (w: string) => /^(?=.*\d)(?=.*[A-Z])[A-Z0-9]{3,}$/.test(w) && !dim(w) && !/^\d+(MM|CM|CV|PSI|LPM|GPD|KG|ML|M3H|M3|V|W|L|M)$/.test(w);
+    const modelos = (t: string[]) => {
+      const m = t.filter(modelo);
+      for (let i = 0; i + 1 < t.length; i++) if (/^[A-Z]$/.test(t[i]) && /^\d[A-Z0-9]*$/.test(t[i + 1])) m.push(t[i] + t[i + 1]);
+      return m;
+    };
+    const mA = modelos(alvo), mB = modelos(it.tok);
     if (mA.length && mB.length && !mA.some((x) => mB.includes(x))) nome *= 0.55;
     // precisa de ao menos uma PALAVRA em comum (medida sozinha não identifica o item)
     const pal = (w: string) => /^[A-Z]{3,}$/.test(w);
