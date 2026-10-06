@@ -212,6 +212,10 @@ export async function criarItemCrm(a: {
     for (const r of lista) { const k = `${r.lc116 ?? ""}|${r.cod_municipio ?? ""}`; conta.set(k, (conta.get(k) ?? 0) + 1); }
     const [lc, mun] = ([...conta.entries()].sort((x, y) => y[1] - x[1])[0]?.[0] ?? "|").split("|");
     const dados = { lc116: a.lc116 || lc || null, cod_municipio: mun || null, aliquota_iss: 0, origem_crm: true };
+    // Duplicado (sem acento, maiúsculas e espaços) já aqui — vale também na simulação.
+    const chave = (t: string) => t.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]/g, "");
+    const iguais = lista.filter((r) => chave(r.desc) === chave(descricao));
+    if (iguais.length) throw new Parecido(iguais.map((x) => ({ id: x.id, cod: x.cod, desc: x.desc })));
     if (a.simular) return { id: 0, desc: descricao, cod: null, un, ncm: null, tipo: "servico" };
     const { data, error } = await supaAdmin().schema("orders").rpc("cad_aux_salvar", {
       p: { registro: "servicos", empresa, nome: descricao, dados }, p_por: por });
