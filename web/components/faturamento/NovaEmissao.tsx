@@ -111,7 +111,7 @@ const ITEM0: ItemFat = { codigo: "", descricao: "", quantidade: 1, valor_unitari
 /** Sugestão do catálogo nativo para uma linha de item (05/10/26). */
 type ItemCat = { codigo: string; codigo_omie: string | null; descricao: string; unidade: string; ncm: string | null; cest: string | null;
   origem: number | null; cmc: number | null; saldo: number | null; ultimo_preco: number | null; ultima_compra: string | null;
-  ultima_venda: number | null; ultima_venda_em: string | null; via?: string | null; nativo?: boolean };
+  ultima_venda: number | null; ultima_venda_em: string | null; via?: string | null; nativo?: boolean; n_cod_prod?: number | null };
 /** Código de compra (produto do Omie fora do estoque nosso) — só entra na nota depois de vincular/cadastrar. */
 type CodCompra = { n_cod_prod: number; codigo: string | null; descricao: string; unidade: string | null; ultimo_preco: number | null;
   ultima_compra: string | null; fornecedor: string | null; fornecedor_cod: number | null; ncm: string | null };
@@ -505,23 +505,49 @@ export default function NovaEmissao({ config, aberto, fechar, avisar, onEmitido,
     const j = await fetch(`/api/faturamento/nova?op=itens&emp=${empresa}&q=${encodeURIComponent(codigo)}${cliCodigo ? `&cli=${encodeURIComponent(cliCodigo)}` : ""}&estoque=1`, { cache: "no-store" })
       .then((x) => x.json()).catch(() => ({}));
     const it = ((j.itens ?? []) as ItemCat[]).find((x) => x.codigo.toUpperCase() === codigo.toUpperCase()) ?? (j.itens ?? [])[0];
+    const antes = itens[n];
     // substitui a linha no lugar: quantidade e valor da linha continuam (05/10/26)
-    if (it) escolherItem(n, it, true);
+    if (it) {
+      escolherItem(n, it, true);
+      // grava a troca no PV/OS de origem e o de-para (06/10/26) — a próxima nota já vem com o item nosso
+      if (antes?.codigo && it.n_cod_prod) gravarTroca(antes.codigo, antes.descricao ?? "", it.n_cod_prod, it.codigo);
+    }
     setAcerto(null);
   }
+  function gravarTroca(codigoAntigo: string, descricao: string, nCodProd: number, codigo: string) {
+    if (codigoAntigo.trim().toUpperCase() === codigo.trim().toUpperCase()) return;
+    fetch("/api/faturamento/nova", { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ op: "trocar_item", empresa, chave, codigo_antigo: codigoAntigo.trim(), descricao, n_cod_prod: nCodProd, codigo }) }).catch(() => {});
+  }
 
-  // Quais códigos das linhas não são item nosso (NF-e movimenta estoque)
-  const codsLinhas = tipo === "nfe" ? [...new Set(itens.map((i) => (i.codigo ?? "").trim()).filter(Boolean))].sort().join(",") : "";
+  // Quais códigos das linhas não são item nosso — em TODO tipo (NF-e, recibo, NFS-e): o item nosso é o que
+  // movimenta/organiza o estoque. Na NF-e a emissão é bloqueada (faltaEstoque); nos demais é aviso.
+  const codsLinhas = [...new Set(itens.map((i) => (i.codigo ?? "").trim()).filter(Boolean))].sort().join(",");
   useEffect(() => {
     if (!codsLinhas) { setSemEst({}); return; }
     const t = window.setTimeout(() => {
       fetch(`/api/faturamento/nova?op=sem_estoque&emp=${empresa}&cods=${encodeURIComponent(codsLinhas)}`, { cache: "no-store" })
-        .then((x) => x.json()).then((j) => setSemEst(Object.fromEntries(((j.sem ?? []) as { codigo: string; compra: CodCompra | null }[]).map((x) => [x.codigo.toUpperCase(), x.compra]))))
+        .then((x) => x.json()).then((j) => {
+          setSemEst(Object.fromEntries(((j.sem ?? []) as { codigo: string; compra: CodCompra | null }[]).map((x) => [x.codigo.toUpperCase(), x.compra])));
+          // código antigo que já aponta para um item nosso (ex.: id do Omie de um serviço → SV0013): troca sozinho
+          const res = (j.resolvidos ?? []) as { codigo: string; codigo_nativo: string; n_cod_prod: number }[];
+          if (res.length) {
+            const mapa = new Map(res.map((r) => [r.codigo.trim().toUpperCase(), r]));
+            setItens((its) => its.map((x) => {
+              const r = mapa.get((x.codigo ?? "").trim().toUpperCase());
+              return r ? { ...x, codigo: r.codigo_nativo, nativo: true } : x;
+            }));
+            for (const r of res) {
+              const linha = itens.find((x) => (x.codigo ?? "").trim().toUpperCase() === r.codigo.trim().toUpperCase());
+              gravarTroca(r.codigo, linha?.descricao ?? "", r.n_cod_prod, r.codigo_nativo);
+            }
+          }
+        })
         .catch(() => {});
     }, 400);
     return () => window.clearTimeout(t);
   }, [codsLinhas, empresa]);
-  const linhaCompra = (it: { codigo?: string | null }) => tipo === "nfe" && !!(it.codigo ?? "").trim() && (it.codigo ?? "").trim().toUpperCase() in semEst;
+  const linhaCompra = (it: { codigo?: string | null }) => !!(it.codigo ?? "").trim() && (it.codigo ?? "").trim().toUpperCase() in semEst;
   /** Abre o acerto da linha: produto de compra do catálogo, ou os dados da própria linha. */
   function acertarLinha(n: number) {
     const it = itens[n];

@@ -1,0 +1,13 @@
+-- 06/10/26: serviços com código NATIVO + itens fora do estoque em qualquer nota.
+-- Aplicado como migrações p98_servicos_nativos e p98b_vendas_item_trocar_hist (corpo completo no banco).
+--  * platform.estoque_item_vinculo: origem aceita também 'crm', 'servico', 'faturamento'.
+--  * platform.estoque_familia: "SERVIÇOS" prefixo SV, material=false (SF, CD, WW).
+--  * orders.servico_nativo_garantir(empresa, codigo_cadastro, por): cria o item SV via estoque_cadastrar,
+--    grava dados.ncod_prod_nativo/codigo_nativo no cadastros.aux 'servicos' e o vínculo
+--    código antigo (id Omie) → item SV (origem 'servico'). Idempotente.
+--  * orders.servicos_nativos(empresa): lista serviço × código nativo.
+--  * orders.fat_itens_resolver(empresa, codigos[]): códigos antigos que já apontam para item nosso.
+--  * orders.vendas_item_trocar_codigo(documento, codigo_antigo, n_cod_prod, codigo, por): troca a linha do PV/OS
+--    nativo e registra em vendas.historico (acao 'item_nosso').
+-- Backfill rodado: SF 35 serviços (SV0001–SV0035), CD 31 (SV0001–SV0031).
+--   ex.: SF 2244292537 PRESTAÇÃO DE SERVICOS PROJETOS → SV0013; 2251199256 MAO DE OBRA PARA STARTUP… → SV0034.

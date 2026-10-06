@@ -149,6 +149,18 @@ Códigos de compra sem item nosso aparecem separados, em **Códigos de compra se
 
 > **Atenção:** a nota não emite com item sem código do estoque ("vincule ou cadastre"). Saldo zerado **não** bloqueia: aparece só o aviso "saldo do item ainda não conferido".
 
+### Item fora do estoque em qualquer nota (recibo, NFS-e e NF-e)
+
+Em **todo** tipo de documento, a linha com código que não é item nosso mostra o selo **código fora do estoque** e os botões **Criar item nosso** / **Vincular a item existente**. A janela traz:
+
+- **Sugestões** — os 3 itens nossos mais parecidos (nome, preço e unidade), com a % de semelhança → **Usar este**;
+- **Já existe no estoque?** e a busca por nome/código;
+- **Cadastrar no estoque** (próximo código da família).
+
+A escolha troca a linha na hora **e fica gravada no PV/OS** de origem, junto com o de-para: da próxima vez o mesmo código/descrição já entra como item nosso. Código antigo que já aponta para um item nosso (ex.: o id do Omie de um serviço) é trocado sozinho ao abrir a folha. No recibo e na NFS-e o selo é um aviso; só a NF-e bloqueia a emissão.
+
+**Serviços têm código nosso:** cada serviço do cadastro ganhou um item na família **SV · Serviços** (SV0001, SV0002…), que não movimenta estoque. O código do Omie continua ligado a ele (ex.: 2244292537 → SV0013 "PRESTAÇÃO DE SERVICOS PROJETOS"); LC116 e código municipal continuam os do cadastro de serviços.
+
 ## NFS-e da prefeitura
 
 A NFS-e continua sendo emitida no portal da prefeitura. Depois:

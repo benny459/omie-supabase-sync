@@ -5,7 +5,7 @@ icone: 📦
 area: erp
 rotas: /estoque
 caminhos: web/components/navy/estoque, web/components/navy/tela/TelaEstoqueNavy.tsx, web/app/(app)/estoque, web/app/api/estoque
-atualizado: 2026-10-05
+atualizado: 2026-10-06
 ---
 
 ## Itens e ficha do item
@@ -46,6 +46,10 @@ Peça comprada pelo Omie com código do fornecedor (ex.: `3019075`) e que nunca 
 4. Errou? Na aba **Vinculados**, clique em **desfazer**.
 
 > **Atenção:** item cadastrado assim nasce com saldo 0 (a tela mostra quanto foi comprado). Registre o saldo conferido em **Estoque › Inventário**.
+
+## Serviços no catálogo (família SV)
+
+Os serviços (mão de obra, projeto, startup…) também têm código nosso: família **SV · Serviços**, marcada como **não-material** — aparecem no catálogo e na busca, mas **não movimentam estoque** nem pedem inventário. Cada um está ligado ao serviço do cadastro (LC116, código municipal) e ao código antigo do Omie, então notas e OS antigas resolvem sozinhas para o SV. Serviço novo criado pelo CRM ou pelo cadastro já nasce com o seu SV.
 
 ## Como faço para corrigir o NCM de uma peça
 

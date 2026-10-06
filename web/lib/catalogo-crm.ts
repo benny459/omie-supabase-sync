@@ -175,7 +175,8 @@ export async function precosMaximos(ids: number[], empresa = "SF"): Promise<Reco
 // Faturamento); serviço → cadastros.aux 'servicos' (onde a OS, o recibo e a NFS-e
 // leem o serviço), com LC116/código municipal padrão dos serviços da empresa.
 
-export type ItemCriado = { id: number; desc: string; cod: string | null; un: string; ncm: string | null; tipo: "produto" | "servico" };
+export type ItemCriado = { id: number; desc: string; cod: string | null; un: string; ncm: string | null; tipo: "produto" | "servico";
+  /** serviço: id antigo do cadastro (Omie) e o item nativo SV */ omie_id?: string; ncod_prod?: number | null };
 export type Candidato = { id: number; cod: string | null; desc: string };
 export class Parecido extends Error { constructor(public candidatos: Candidato[]) { super("Já existe item parecido no catálogo — use o existente"); } }
 
@@ -228,7 +229,11 @@ export async function criarItemCrm(a: {
       throw new Error(error.message);
     }
     const s = data as { codigo: string; nome: string };
-    return { id: Number(s.codigo), desc: s.nome, cod: s.codigo, un, ncm: null, tipo: "servico" };
+    // nasce também o item nativo (família SV · Serviços) com o código do cadastro ligado a ele
+    const nat = await orders().rpc("servico_nativo_garantir", { p_empresa: empresa, p_codigo: s.codigo, p_por: por });
+    const nn = (nat.data ?? null) as { n_cod_prod?: number; codigo?: string } | null;
+    return { id: Number(s.codigo), desc: s.nome, cod: nn?.codigo ?? s.codigo, un, ncm: null, tipo: "servico",
+      omie_id: s.codigo, ncod_prod: nn?.n_cod_prod != null ? Number(nn.n_cod_prod) : null };
   }
 
   // produto
@@ -249,12 +254,24 @@ export async function criarItemCrm(a: {
   return { id: Number(novo.n_cod_prod), desc: descricao, cod: novo.codigo, un, ncm, tipo: "produto" };
 }
 
-type Serv = { id: number; cod: string; desc: string; un: string; lc116: string | null; cod_municipio: string | null };
+/** Serviço para o CRM (06/10/26): `id` continua o id do cadastro (Omie) para compatibilidade;
+ *  `cod` passa a ser o código NATIVO (SV0001…) quando existe; `ncod_prod` é o item nosso. */
+type Serv = { id: number; cod: string; desc: string; un: string; lc116: string | null; cod_municipio: string | null;
+  omie_id: string; ncod_prod: number | null; cod_nativo: string | null };
 async function servicosDaEmpresa(empresa: string): Promise<Serv[]> {
-  const { data, error } = await orders().rpc("crm_erp_lista", { p_empresa: empresa, p_lista: "servicos" });
+  const [{ data, error }, nat] = await Promise.all([
+    orders().rpc("crm_erp_lista", { p_empresa: empresa, p_lista: "servicos" }),
+    orders().rpc("servicos_nativos", { p_empresa: empresa }),
+  ]);
   if (error) throw new Error(error.message);
+  const mapa = new Map(((nat.data ?? []) as { codigo_omie: string; ncod_prod_nativo: number | null; codigo_nativo: string | null }[])
+    .map((x) => [String(x.codigo_omie), x]));
   return ((data ?? []) as { id: number; cod: string; desc: string; fiscal?: { lc116?: string; mun?: string } }[])
-    .map((s) => ({ id: Number(s.id), cod: s.cod, desc: s.desc, un: "UN", lc116: s.fiscal?.lc116 || null, cod_municipio: s.fiscal?.mun || null }));
+    .map((s) => {
+      const n = mapa.get(String(s.cod)) ?? mapa.get(String(s.id));
+      return { id: Number(s.id), cod: n?.codigo_nativo || s.cod, desc: s.desc, un: "UN", lc116: s.fiscal?.lc116 || null, cod_municipio: s.fiscal?.mun || null,
+        omie_id: String(s.cod ?? s.id), ncod_prod: n?.ncod_prod_nativo != null ? Number(n.ncod_prod_nativo) : null, cod_nativo: n?.codigo_nativo ?? null };
+    });
 }
 
 /** Serviços do cadastro (para a OS) — busca por nome/código; vazio traz os primeiros. */
@@ -319,7 +336,8 @@ export async function vincularCrm(a: { descricao_compra: string; codigo_compra?:
   const destino = Number(a.ncod_prod);
   if (!texto && !a.codigo_compra) throw new Error("descricao_compra ou codigo_compra obrigatório");
   if (!destino) throw new Error("ncod_prod obrigatório");
-  const base = await itensNossos(empresa);
+  let base = await itensNossos(empresa);
+  if (!base.itens.some((i) => i.id === destino)) { cacheNossos = null; base = await itensNossos(empresa); } // item recém-criado
   if (!base.itens.some((i) => i.id === destino)) throw new Error("ncod_prod não é um item nosso ativo (com código novo)");
   const por = `crm:${String(a.por ?? "").slice(0, 80) || "crm"}`;
   const { data, error } = await orders().rpc("crm_alias_salvar", { p_empresa: empresa, p_texto_norm: normTexto(texto || String(a.codigo_compra)),

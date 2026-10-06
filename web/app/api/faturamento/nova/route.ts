@@ -4,7 +4,7 @@ import { prevoo, prevooRecibo } from "@/lib/faturamento/server";
 import { supaAdmin } from "@/lib/supabase-admin";
 import type { DocFat } from "@/lib/faturamento/montar";
 import { buscarItensEstoque, codigosSemEstoque, MSG_SEM_ESTOQUE, type CodigoCompra } from "@/lib/estoque-vinculos";
-import { buscarItensCrm } from "@/lib/catalogo-crm";
+import { buscarItensCrm, casarTopCrm, vincularCrm } from "@/lib/catalogo-crm";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
@@ -17,7 +17,11 @@ export const maxDuration = 30;
  *  GET ?op=nf_origem&emp=SF&q=…        → NF de entrada para a devolução (Focus + espelho Omie), com itens/tributos quando há
  *  GET ?op=pessoa_doc&emp=SF&doc=CNPJ  → id do cadastro (cadastros.pessoas) pelo CNPJ/CPF
  *  GET ?op=itens&emp=SF&q=…&cli=COD    → itens do catálogo nativo (código novo/Omie/descrição) com NCM/CEST/origem, CMC, última compra, saldo e último preço de venda ao cliente
+ *  GET ?op=sem_estoque&emp=SF&cods=…  → códigos fora do estoque (com o produto de compra) + "resolvidos" (código antigo que já
+ *                                      aponta para um item nosso — ex.: id do Omie de um serviço → SV0013; a folha troca sozinha)
+ *  GET ?op=sugerir&emp=SF&q=…&custo=&un= → 3 itens NOSSOS mais parecidos (mesmo motor do "Compatibilizar" do CRM)
  *  POST { op: "previa", documento }   → pré-voo (payload + checagens + parcelas), sem enviar nada
+ *  POST { op: "trocar_item", empresa, chave, codigo_antigo, descricao, n_cod_prod, codigo } → grava a troca no PV/OS (venda:N) e o de-para
  */
 
 type NfOrigemItem = {
@@ -90,8 +94,12 @@ export async function GET(req: NextRequest) {
       // Linhas da folha (CRM, rascunho antigo, digitadas) cujo código não é item nosso: com o produto
       // de compra correspondente, para "Criar item nosso" / "Vincular" na própria linha (05/10/26).
       const cods = (sp.get("cods") ?? "").split(",").map((c) => c.trim()).filter(Boolean).slice(0, 200);
-      const sem = await codigosSemEstoque(emp, cods);
-      if (!sem.length) return NextResponse.json({ sem: [] });
+      const [sem, res] = await Promise.all([
+        codigosSemEstoque(emp, cods),
+        a.schema("orders").rpc("fat_itens_resolver", { p_empresa: emp, p_codigos: cods }),
+      ]);
+      const resolvidos = ((res.data ?? []) as { codigo: string; codigo_nativo: string; n_cod_prod: number; descricao: string | null }[]);
+      if (!sem.length) return NextResponse.json({ sem: [], resolvidos });
       const [cat, fis] = await Promise.all([
         a.schema("orders").from("mv_catalogo_compra").select("ncod_prod,codigo,descricao,unidade,ultimo_preco,ultima_compra,fornecedor,fornecedor_cod")
           .eq("empresa", emp).in("codigo", sem),
@@ -107,7 +115,14 @@ export async function GET(req: NextRequest) {
           ultimo_preco: c.ultimo_preco, ultima_compra: c.ultima_compra, fornecedor: c.fornecedor, fornecedor_cod: c.fornecedor_cod,
           ncm: nMap.get(codigo.toUpperCase()) ?? null } : null;
         return { codigo, compra };
-      }) });
+      }), resolvidos });
+    }
+    if (op === "sugerir") {
+      const texto = (sp.get("q") ?? "").trim();
+      if (texto.length < 2) return NextResponse.json({ itens: [] });
+      const custo = Number(sp.get("custo")) || null;
+      const [lista] = await casarTopCrm([texto], [custo], [sp.get("un")], 3, emp);
+      return NextResponse.json({ itens: lista ?? [] });
     }
     if (op === "itens") {
       // Autocompletar dos itens da folha (05/10/26): catálogo nativo + fiscal + CMC/última compra/saldo
@@ -144,7 +159,7 @@ export async function GET(req: NextRequest) {
         return { codigo: b.codigo ?? b.codigo_omie ?? "", codigo_omie: b.codigo_omie, descricao: b.descricao, unidade: f?.unidade || b.unidade || "UN",
           ncm: f?.ncm ?? b.ncm ?? null, cest: f?.cest ?? null, origem: f?.origem ?? null, cmc: b.cmc, saldo: b.saldo,
           ultimo_preco: b.ultimo_preco, ultima_compra: b.ultima_compra ?? null, ultima_venda: v ? Number(v.valor_unitario) : null, ultima_venda_em: v?.d_inc_d ?? null,
-          via: b.via ?? null, nativo: sp.get("estoque") === "1" };
+          via: b.via ?? null, nativo: sp.get("estoque") === "1", n_cod_prod: b.n_cod_prod ?? null };
       }), compra });
     }
     if (op === "proximos") {
@@ -259,6 +274,27 @@ export async function POST(req: NextRequest) {
   if (q instanceof NextResponse) return q;
   const body = await req.json().catch(() => ({})) as { op?: string; documento?: DocFat; tipo?: string;
     empresa?: string; codigo?: string | number; dados?: Record<string, unknown> };
+  // Item escolhido na folha para uma linha fora do estoque (06/10/26): grava no PV/OS nativo de origem
+  // (venda:N) e o de-para texto/código → item nosso, para as próximas notas resolverem sozinhas.
+  if (body.op === "trocar_item") {
+    try {
+      const b = body as unknown as { empresa?: string; chave?: string | null; codigo_antigo?: string; descricao?: string; n_cod_prod?: number; codigo?: string };
+      const emp = String(b.empresa ?? "SF").toUpperCase();
+      const antigo = String(b.codigo_antigo ?? "").trim(), cod = String(b.codigo ?? "").trim(), ncod = Number(b.n_cod_prod);
+      if (!antigo || !cod || !ncod) return falha("informe código antigo, código e item nosso");
+      const a = supaAdmin();
+      let linhas = 0;
+      const m = /^venda:(\d+)$/.exec(String(b.chave ?? ""));
+      if (m) {
+        const r = await a.schema("orders").rpc("vendas_item_trocar_codigo", { p_documento: Number(m[1]), p_codigo_antigo: antigo, p_n_cod_prod: ncod, p_codigo: cod, p_por: q.email });
+        if (r.error) return falha(r.error.message);
+        linhas = Number(r.data) || 0;
+      }
+      const vinculo = await vincularCrm({ descricao_compra: String(b.descricao ?? "").trim() || antigo, codigo_compra: antigo, ncod_prod: ncod, por: q.email, empresa: emp })
+        .catch((e) => ({ erro: (e as Error).message }));
+      return NextResponse.json({ ok: true, linhas, vinculo });
+    } catch (e) { return falha((e as Error).message); }
+  }
   // Dados de pagamento da conta de recebimento (chave PIX / banco), gravados no
   // cadastro da conta sem sair da emissão (05/10/26). Só estes campos.
   if (body.op === "conta_pagamento") {

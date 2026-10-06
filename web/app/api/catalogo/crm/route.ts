@@ -3,9 +3,10 @@
 //   POST { acao: "buscar", q, limite?, historico? } → { itens: ItemCrm[] }
 //   POST { acao: "resolver", codigos: string[], historico? } → { itens: { [codigo]: ItemCrm } }  (propostas antigas)
 //   POST { acao: "casar", textos: string[], historico? }     → { itens: (ItemCrm|null)[] }       (linhas sem código)
-//   POST { acao: "buscar", tipo: "servico", q } → { itens: [{ id, cod, desc, un, lc116, cod_municipio }] } (cadastro de serviços)
+//   POST { acao: "buscar", tipo: "servico", q } → { itens: [{ id, cod, desc, un, lc116, cod_municipio, omie_id, ncod_prod, cod_nativo }] }
+//        (06/10/26: cod = código NATIVO SV…; ncod_prod = item nosso; id/omie_id = código antigo do cadastro, mantido p/ compatibilidade)
 //   POST { acao: "criar", tipo: "produto"|"servico", descricao, unidade?, ncm? (8 díg., obrigatório p/ produto), familia_id?, lc116?, por, simular? }
-//        → { item: { id, desc, cod, un, ncm, tipo } } · parecido → 409 { error, duplicado: true, candidatos: [{ id, cod, desc }] }
+//        → { item: { id, desc, cod, un, ncm, tipo, omie_id?, ncod_prod? } } (serviço: cod = SV… nativo) · parecido → 409 { error, duplicado: true, candidatos: [{ id, cod, desc }] }
 //   POST { acao: "familias" } → { familias: [{ id, nome, prefixo, material }] }
 //   POST { acao: "casar_top", textos[], custos?[], unidades?[], top?=3 } → { itens: Candidato[][] }  (até 200 linhas; top N itens NOSSOS por linha)
 //   POST { acao: "vincular", descricao_compra, codigo_compra?, ncod_prod, por } → { ok, vinculo }  (de-para texto → item nosso)

@@ -33,6 +33,8 @@ export default function AcertoItemEstoque({ empresa, compra, onFechar, onPronto 
   const [ocupado, setOcupado] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const [info, setInfo] = useState<Info | null>(null);
+  /** Sugestões do mesmo motor do "Compatibilizar com o estoque" (nome + preço + unidade), 06/10/26 */
+  const [sug, setSug] = useState<{ id: number; cod: string; desc: string; un: string; score: number; motivo: string }[] | null>(null);
 
   useEffect(() => {
     fetch(`/api/estoque/vinculos?op=preparar&emp=${empresa}&origem=${compra.n_cod_prod}&descricao=${encodeURIComponent(compra.descricao)}`, { cache: "no-store" })
@@ -41,6 +43,13 @@ export default function AcertoItemEstoque({ empresa, compra, onFechar, onPronto 
         if (j.familia_sugerida) setFamilia(j.familia_sugerida);
       }).catch(() => setParecidos([]));
   }, [empresa, compra.descricao]);
+
+  useEffect(() => {
+    const p = new URLSearchParams({ op: "sugerir", emp: empresa, q: compra.descricao });
+    if (compra.ultimo_preco) p.set("custo", String(compra.ultimo_preco));
+    if (compra.unidade) p.set("un", compra.unidade);
+    fetch(`/api/faturamento/nova?${p}`, { cache: "no-store" }).then((x) => x.json()).then((j) => setSug(j.itens ?? [])).catch(() => setSug([]));
+  }, [empresa, compra.descricao, compra.ultimo_preco, compra.unidade]);
 
   useEffect(() => {
     if (q.trim().length < 2) { setBusca([]); return; }
@@ -80,10 +89,19 @@ export default function AcertoItemEstoque({ empresa, compra, onFechar, onPronto 
     <div className="ne-acerto" role="dialog" aria-label="Acertar item do estoque">
       <div className="ne-acerto-cab">
         <div>
-          <b>Código de compra {compra.codigo ?? compra.n_cod_prod}</b> — {compra.descricao}
+          <b>{compra.n_cod_prod ? "Código de compra" : "Código fora do estoque"} {compra.codigo ?? compra.n_cod_prod}</b> — {compra.descricao}
           <small>{[compra.fornecedor && `forn. ${compra.fornecedor}`, "não existe no nosso estoque — escolha o item nosso ou cadastre"].filter(Boolean).join(" · ")}</small>
         </div>
         <button className="ne-lk" onClick={onFechar}>fechar</button>
+      </div>
+
+      <div className="ne-acerto-sec">
+        <div className="ne-acerto-tit">Sugestões <small>(nome, preço e unidade — os 3 itens nossos mais parecidos)</small></div>
+        {sug == null ? <div className="ne-dica">procurando…</div> : sug.length === 0 ? <div className="ne-dica">Nenhuma sugestão — veja abaixo ou cadastre.</div> : sug.map((x) => (
+          <div key={x.id} className="ne-comp-it">
+            <div style={{ flex: 1 }}><b>{x.cod}</b> — {x.desc}<small style={{ display: "block" }}>{Math.round(x.score * 100)}% · {x.motivo}</small></div>
+            <button className="ne-btn" disabled={ocupado} onClick={() => vincular(x.id, x.cod)}>Usar este</button>
+          </div>))}
       </div>
 
       <div className="ne-acerto-sec">
