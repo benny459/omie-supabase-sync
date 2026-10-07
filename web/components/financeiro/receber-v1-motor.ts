@@ -77,7 +77,12 @@ export function montarReceberV1(o: Opts) {
   }
   async function carregar() {
     try {
-      const r = await fetch("/api/financeiro/receber", { cache: "no-store" });
+      // 07/10/26: uma chamada às vezes ficava presa no servidor e a tela em "Carregando" para sempre —
+      // corta em 20 s e tenta de novo; na segunda falha mostra o erro (com o botão de recarregar do navegador).
+      const tentar = async () => { const ctl = new AbortController(); const t = setTimeout(() => ctl.abort(), 20000);
+        try { return await fetch("/api/financeiro/receber", { cache: "no-store", signal: ctl.signal }); } finally { clearTimeout(t); } };
+      let r;
+      try { r = await tentar(); } catch { r = await tentar().catch(() => { throw new Error("O servidor demorou para responder — recarregue a página (F5)."); }); }
       const j = await r.json();
       if (!r.ok) throw new Error(j.error ?? "HTTP " + r.status);
       if (!vivo) return;
