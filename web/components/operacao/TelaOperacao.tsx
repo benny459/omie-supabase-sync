@@ -768,7 +768,7 @@ export default function TelaOperacao({ modulo, title, rows: rowsIniciais, parcia
               <span><OrdCab k="cliente" l={modulo === "pcs" ? "Fornecedor" : "Cliente"} o={ordem} on={ordenarPor} /> · alertas</span>
               <span><OrdCab k="etapas" l="Etapas" o={ordem} on={ordenarPor} /></span><span><OrdCab k="prazo" l="Prazo" o={ordem} on={ordenarPor} /></span>
               {modulo !== "pcs" && <span><OrdCab k="servico" l="Serviço" o={ordem} on={ordenarPor} /></span>}
-              <span style={{ textAlign: "center" }}><OrdCab k="rc" l="RC" o={ordem} on={ordenarPor} /> · <OrdCab k="pc" l="PC" o={ordem} on={ordenarPor} /> · <OrdCab k="pv" l="PV" o={ordem} on={ordenarPor} /> · <OrdCab k="mb" l="M.B." o={ordem} on={ordenarPor} /></span>
+              <span style={{ textAlign: "center" }}><OrdCab k="rc" l="RC" o={ordem} on={ordenarPor} /> · <OrdCab k="pc" l="PC" o={ordem} on={ordenarPor} /> · <OrdCab k="pv" l="PV" o={ordem} on={ordenarPor} /> · {modulo === "projetos" ? <span>M. proj. · M. real</span> : <OrdCab k="mb" l="M.B." o={ordem} on={ordenarPor} />}</span>
             </div>
           )}
           {visiveis.slice(0, limite).map(({ p, compras }) => (

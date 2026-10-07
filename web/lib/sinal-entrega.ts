@@ -49,6 +49,11 @@ export function sinalEntrega(a: {
       chegada = hoje;
       porque = `chegada efetiva hoje (PC atrasado ${pcAtrasadoDias}d, previsão era ${br(prevPc)})`;
     } else { chegada = prevPc; porque = `chegada prev. ${br(prevPc)} (PC)`; }
+  } else if (a.prazoDias == null || !(Number(a.prazoDias) > 0)) {
+    // sem PC e sem prazo médio no catálogo: não dá para estimar a chegada
+    if (!nec) return null;
+    if (dias(nec, hoje) < 0) return { ...base, nivel: "atrasado", chegada: null, estimada: true, folga: dias(nec, hoje), motivo: `necessário ${br(nec)} já passou e não foi recebido` };
+    return { ...base, nivel: "risco", chegada: null, estimada: true, folga: null, motivo: "sem PC e sem prazo médio no catálogo — não dá para estimar a chegada" };
   } else {
     chegada = addDias(hoje, Math.max(0, Number(a.prazoDias) || 0));
     estimada = true;

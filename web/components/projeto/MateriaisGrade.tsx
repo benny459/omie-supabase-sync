@@ -97,6 +97,14 @@ function camposDoCatalogo(c: Cat, match: "ok" | "conferir", alts: Cat[] = [], va
     _match: match, _alts: alts.length ? JSON.stringify(alts) : "",
   };
 }
+/** Sugestão do catálogo (07/10/26, Benny): casamento provável (⚠ conferir com nota ≥ SUG_MIN)
+ *  vai para a linha como SUGESTÃO — fica à vista, mas não é código confirmado: não grava
+ *  no banco, não conta como casado e o PC não sai com ela até alguém aceitar. */
+const SUG_MIN = 0.6;
+function camposSugestao(c: Cat, alts: Cat[] = []): Record<string, string> {
+  return { _match: "sug", _sug: JSON.stringify(c), _alts: alts.length ? JSON.stringify(alts) : "", cat_ncod_prod: "", cat_codigo: "", _cat_desc: "" };
+}
+const lerSug = (l: Record<string, string>): Cat | null => { try { return l._sug ? JSON.parse(l._sug) as Cat : null; } catch { return null; } };
 function sugestao(c: Cat): SugestaoGrade {
   const partes = [
     c.codigo ? `cód ${c.codigo}` : "sem código",
@@ -150,7 +158,7 @@ export default function MateriaisGrade({
   const [equipFiltro, setEquipFiltro] = useState<string | null>(null);
   /** ?pc=N vindo de Projetos: só as linhas daquele PC (07/10/26). */
   const [filtroPcNum, setFiltroPcNum] = useState<string | null>(null);
-  const [filtroPc, setFiltroPc] = useState<"todas" | "sem_pc" | "com_pc" | "risco" | "atrasado" | "pc_atrasado">("todas");
+  const [filtroPc, setFiltroPc] = useState<"todas" | "sem_pc" | "com_pc" | "risco" | "atrasado" | "pc_atrasado" | "sug">("todas");
   /** Rascunho não salvo encontrado neste navegador ao abrir (ms de quando foi feito). */
   const [rascunhoDe, setRascunhoDe] = useState<number | null>(null);
   const chaveRascunho = `painel.materiais.rascunho.${empresa}.${codigoProjeto}`;
@@ -318,6 +326,31 @@ export default function MateriaisGrade({
   // As editáveis à esquerda; à direita, o catálogo e o bloco do PC (leitura,
   // com fundo próprio para se ver que vêm do mesmo lugar).
   const PC = "bg-sky-500/[0.05]";
+  /* Aceitar / recusar sugestões de código (07/10/26, Benny). Aceitar = o código vira
+     confirmado na linha e o de-para (texto → item nosso) é gravado, como a escolha à mão. */
+  const [aceiteDesfazer, setAceiteDesfazer] = useState<{ n: number; antes: LinhaGrade[] } | null>(null);
+  const aceitarSugestoes = useCallback(async (ids: string[]) => {
+    const alvo = new Set(ids);
+    const escolhidas = linhas.filter((l) => alvo.has(l._id) && l._match === "sug" && lerSug(l));
+    if (!escolhidas.length) return;
+    const antes = linhas;
+    setLinhas((atual) => atual.map((l) => {
+      if (!alvo.has(l._id) || l._match !== "sug") return l;
+      const c = lerSug(l); if (!c) return l;
+      const temValor = !!String(l.cat_valor_unit ?? "").trim();
+      return { ...l, ...camposDoCatalogo(c, "ok", [], l.cat_valor_unit ?? ""), _sug: "",
+        ...(temValor ? { cat_valor_unit: l.cat_valor_unit, _vu_fonte: l._vu_fonte ?? "" } : {}) };
+    }));
+    setSujo(true);
+    setAceiteDesfazer({ n: escolhidas.length, antes });
+    setAviso(`${escolhidas.length} sugestão(ões) aceita(s) — viraram código confirmado. A lista é salva sozinha em instantes.`);
+    // de-para em segundo plano: da próxima vez o mesmo texto casa sozinho
+    void Promise.all(escolhidas.map((l) => fetch("/api/catalogo/projeto", { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ acao: "vincular", emp: empresa, texto: textoCasar(l.item, l.modelo), ncod_prod: lerSug(l)!.ncod_prod }) }).catch(() => null)));
+  }, [linhas, empresa]);
+  const recusarSugestao = useCallback((id: string) => {
+    setLinhas((atual) => atual.map((l) => (l._id === id && l._match === "sug" ? { ...l, _match: "sem", _sug: "" } : l)));
+  }, []);
   /* 07/10/26 (redesenho pedido pelo Benny no PJ361): Código antes do Item; casado,
      o Item mostra a descrição do catálogo (o texto original fica na dica); a antiga
      coluna Catálogo virou o ícone ao lado do código; sem Modelo (o dado continua na
@@ -355,11 +388,15 @@ export default function MateriaisGrade({
     // casamento (✓ / ⚠ conferir / ⌕ sem) e abre o seletor do catálogo.
     { key: "cat_codigo", label: "Código", w: 88, fixa: true, pularNoColar: true,
       limpaAoEditar: ["cat_ncod_prod", "_match", "_alts", "_cat_desc"],
-      marca: (l) => (String(l.item ?? "").trim() && (!l.cat_ncod_prod || l._match === "omie")
+      exibir: (l) => (l._match === "sug" ? (lerSug(l)?.codigo ?? null) : null),
+      marca: (l) => (l._match === "sug" && lerSug(l)
+        ? { classe: "bg-amber-500/25 italic", etiqueta: `sugestão ${Math.round((lerSug(l)!.score ?? 0) * 100)}%`,
+            dica: `Sugestão do catálogo: ${lerSug(l)!.codigo ?? ""} ${lerSug(l)!.descricao} — ainda NÃO confirmada (✓ aceita, ✕ recusa)` }
+        : String(l.item ?? "").trim() && (!l.cat_ncod_prod || l._match === "omie")
         ? { classe: "bg-amber-500/15", etiqueta: l.cat_codigo ? "" : l._omie ? `Omie ${l._omie}` : "sem código",
             dica: l._omie ? `Só no Omie (${l._omie}), sem item do nosso estoque` : "Sem item do nosso estoque" } : null),
       acao: {
-        rot: (l) => (l.cat_ncod_prod && l._match !== "omie" ? (l._match === "conferir" ? "⚠" : "✓") : "⌕"),
+        rot: (l) => (l._match === "sug" ? "⚠" : l.cat_ncod_prod && l._match !== "omie" ? (l._match === "conferir" ? "⚠" : "✓") : "⌕"),
         classe: (l) => (l.cat_ncod_prod && l._match !== "omie" ? (l._match === "conferir" ? "text-amber-600 dark:text-amber-300" : "text-emerald-600 dark:text-emerald-400") : "text-amber-700 dark:text-amber-300"),
         dica: (l) => (l.cat_ncod_prod && l._match !== "omie"
           ? (l._match === "conferir" ? "Casamento incerto — clique para conferir ou trocar" : "Item do nosso estoque — clique para trocar")
@@ -374,6 +411,13 @@ export default function MateriaisGrade({
         },
         aoEscolher: (sg, linha) => camposDoCatalogo(sg.dados as Cat, "ok", [], linha.cat_valor_unit ?? ""),
       } },
+    { key: "_aceita", label: "", w: 34, fixa: true,
+      dicaCab: "Sugestão de código: ✓ aceita (vira código confirmado e ensina o de-para) · ✕ recusa (fica sem código)",
+      render: (l) => (l._match === "sug" ? (
+        <span className="inline-flex gap-0.5">
+          <button type="button" title="Aceitar a sugestão" className="text-emerald-600 dark:text-emerald-400 font-bold hover:scale-110" onClick={() => void aceitarSugestoes([l._id])}>✓</button>
+          <button type="button" title="Recusar a sugestão (fica sem código)" className="text-ww-textFaint hover:text-rose-500" onClick={() => recusarSugestao(l._id)}>✕</button>
+        </span>) : null) },
     { key: "item",        label: "Item",        w: 224, fixa: true,
       // "RC" na célula: usar um item da RC ainda não usado nesta linha (07/10/26)
       acao: { rot: "RC", dica: "Usar item da RC nesta linha (os itens da RC que ainda não estão na lista)",
@@ -423,7 +467,7 @@ export default function MateriaisGrade({
         if (sg.previsaoPc && sg.pcAtrasadoDias > 0) return <span className="text-[11px] leading-tight"><span className="text-rose-600 dark:text-rose-400 font-semibold">{dia(sg.previsaoPc)}</span><br /><small className="text-rose-600 dark:text-rose-400">PC atrasado {sg.pcAtrasadoDias}d</small></span>;
         if (sg.previsaoPc) return <span className="text-[11px]">{dia(sg.previsaoPc)}</span>;
         if (sg.estimada && sg.chegada) return <span className="text-[11px] italic text-ww-textMuted">≈ {dia(sg.chegada)}</span>;
-        return <span className="text-[10.5px] text-ww-textFaint">PC sem prev.</span>;
+        return <span className="text-[10.5px] text-ww-textFaint">{sg.estimada ? "sem prazo" : "PC sem prev."}</span>;
       } },
     { key: "_ent", label: "", w: 22,
       dicaCab: `Prazo × necessidade: ✓ chega com folga (≥ ${FOLGA_ENTREGA_DIAS} dias) · ⚠ menos de ${FOLGA_ENTREGA_DIAS} dias ou PC sem previsão · ✕ chega depois do necessário. PC atrasado conta como chegada hoje.`,
@@ -565,7 +609,7 @@ export default function MateriaisGrade({
             💬{n > 0 && <span className="absolute -top-1.5 -right-2 min-w-[14px] px-0.5 rounded-full bg-ww-accent text-white text-[9px] font-bold leading-[14px] text-center">{n}</span>}
           </button>);
       } },
-  ], [empresa, cmp, cmpPorId, nomesPadrao, gruposMeta, abrirSeletorLista, PC, conversa, sinais, origemCp, cpNaoUsados]);
+  ], [empresa, cmp, cmpPorId, nomesPadrao, gruposMeta, abrirSeletorLista, PC, conversa, sinais, origemCp, cpNaoUsados, aceitarSugestoes, recusarSugestao]);
 
   /** A leitura inicial funcionou?
    *
@@ -573,6 +617,8 @@ export default function MateriaisGrade({
    *  falso mandaria uma lista vazia por cima do que está no banco — a rota já
    *  trava, mas a tela não deve nem tentar. */
   const [carregouOk, setCarregouOk] = useState(false);
+  /** Sugestões recalculadas depois de cada carga (não ficam no banco — ver SUG_MIN). */
+  const sugeridoRef = useRef(false);
 
   const carregar = useCallback(async () => {
     setCarregando(true);
@@ -614,6 +660,7 @@ export default function MateriaisGrade({
         vazia(),
       ]);
       setSujo(false); setErro(null); setMarcadas(new Set()); setCarregouOk(true);
+      sugeridoRef.current = false;
       /* Lista colada e não salva sumia no primeiro recarregar — "Atualizar
          versão", F5, fechar a aba. Aconteceu mais de uma vez (PJ359, PJ362–364,
          set/2026): o banco nunca recebeu essas listas. Agora o que não foi
@@ -740,6 +787,7 @@ export default function MateriaisGrade({
       if (filtroPc === "risco" && sinais.get(l._id)?.nivel !== "risco") return false;
       if (filtroPc === "atrasado" && sinais.get(l._id)?.nivel !== "atrasado") return false;
       if (filtroPc === "pc_atrasado" && !((sinais.get(l._id)?.pcAtrasadoDias ?? 0) > 0)) return false;
+      if (filtroPc === "sug" && l._match !== "sug") return false;
       return true;
     }),
     [linhas, equipFiltro, filtroPc, temPc, sinais, filtroPcNum, cmpPorId]);
@@ -877,6 +925,30 @@ export default function MateriaisGrade({
   // ── Catálogo ────────────────────────────────────────────────────────────
   const [casando, setCasando] = useState(false);
 
+  /* Depois de carregar: linha sem código ganha a SUGESTÃO do catálogo (provável), à vista e
+     sem gravar nada — confirmar é com ✓ / "Aceitar todas as sugestões". */
+  useEffect(() => {
+    if (!carregouOk || sugeridoRef.current || carregando) return;
+    const alvo = linhas.map((l, i) => ({ l, i })).filter(({ l }) => String(l.item ?? "").trim() && !l.cat_ncod_prod && l._match !== "omie" && l._match !== "sug" && !l._omie);
+    sugeridoRef.current = true;
+    if (!alvo.length) return;
+    (async () => {
+      try {
+        const r = await fetch("/api/catalogo/projeto", { method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ acao: "casar", emp: empresa, textos: alvo.map(({ l }) => textoCasar(l.item, l.modelo)), custos: alvo.map(() => null) }) });
+        const j = (await r.json()) as { casamentos?: Casamento[] };
+        if (!r.ok || !j.casamentos) return;
+        const porId = new Map<string, Record<string, string>>();
+        alvo.forEach(({ l }, k) => {
+          const c = j.casamentos![k];
+          if (c?.melhor && (c.status === "ok" || (c.melhor.score ?? 0) >= SUG_MIN)) porId.set(l._id, camposSugestao(c.melhor, c.alternativas ?? []));
+          else if (c?.alternativas?.length) porId.set(l._id, { _match: "sem", _alts: JSON.stringify(c.alternativas) });
+        });
+        if (porId.size) setLinhas((atual) => atual.map((l) => (porId.has(l._id) && !l.cat_ncod_prod ? { ...l, ...porId.get(l._id)! } : l)));
+      } catch { /* sem sugestão: a linha segue sem código */ }
+    })();
+  }, [carregouOk, carregando, linhas, empresa]);
+
   /** Casa com o catálogo (itens NOSSOS) as linhas com texto e sem vínculo. Aceita
    *  sozinho só o que é de-para gravado ou muito parecido; o resto fica "conferir". */
   const casarLinhas = useCallback(async (entrada: LinhaGrade[]) => {
@@ -909,13 +981,13 @@ export default function MateriaisGrade({
     let ok = 0, conf = 0, sem = 0;
     alvo.forEach(({ l, i }, k) => {
       const c = j.casamentos![k];
-      if (!c?.melhor) { novas[i] = { ...l, _match: "sem" }; sem++; return; }
-      novas[i] = { ...l, ...camposDoCatalogo(c.melhor, c.status === "ok" ? "ok" : "conferir",
-        c.status === "ok" ? [] : c.alternativas, l.cat_valor_unit ?? "") };
-      if (c.status === "ok") ok++; else conf++;
+      if (!c?.melhor) { novas[i] = { ...l, _match: "sem", _sug: "" }; sem++; return; }
+      if (c.status === "ok") { novas[i] = { ...l, _sug: "", ...camposDoCatalogo(c.melhor, "ok", [], l.cat_valor_unit ?? "") }; ok++; return; }
+      if ((c.melhor.score ?? 0) >= SUG_MIN) { novas[i] = { ...l, ...camposSugestao(c.melhor, c.alternativas) }; conf++; return; }
+      novas[i] = { ...l, _match: "sem", _sug: "", _alts: c.alternativas?.length ? JSON.stringify(c.alternativas) : "" }; sem++;
     });
     setAviso(`Catálogo: ${ok} item(ns) casado(s)`
-      + (conf ? ` · ${conf} para CONFERIR (amarelo — clique na coluna Catálogo e escolha)` : "")
+      + (conf ? ` · ${conf} com SUGESTÃO (⚠ âmbar — aceite com ✓ na linha ou "Aceitar todas as sugestões")` : "")
       + (sem ? ` · ${sem} sem correspondência (clique em "escolher" para procurar ou criar o item nosso)` : "") + ". A lista é salva sozinha em instantes.");
     return novas;
   }, [empresa]);
@@ -1045,8 +1117,9 @@ export default function MateriaisGrade({
         const campos = camposDoCatalogo(c.melhor!, "ok", [], base.cat_valor_unit);
         novas.push({ ...base, ...campos, _vu_fonte: campos._vu_fonte || base._vu_fonte });
       } else {
-        // sem item nosso certo: entra "sem código" (âmbar), com as sugestões guardadas para o ⌕
-        novas.push({ ...base, _match: "sem", _alts: c?.alternativas?.length ? JSON.stringify(c.alternativas) : "" });
+        // sem item nosso certo: provável → entra com SUGESTÃO; senão "sem código" (âmbar), com as alternativas para o ⌕
+        if (c?.melhor && (c.melhor.score ?? 0) >= SUG_MIN) novas.push({ ...base, ...camposSugestao(c.melhor, c.alternativas ?? []) });
+        else novas.push({ ...base, _match: "sem", _alts: c?.alternativas?.length ? JSON.stringify(c.alternativas) : "" });
       }
     }
     if (!novas.length) { setAviso("Nada novo para adicionar — os marcados já estão na lista."); return; }
@@ -1056,7 +1129,8 @@ export default function MateriaisGrade({
     setImportarAberto(false);
     setSubAba("lista");
     const sem = novas.filter((l) => l._match === "sem").length;
-    setAviso(`${novas.length} item(ns) da RC adicionados à lista${sem ? ` · ${sem} sem código (âmbar — resolva no ⌕ do Código)` : ""}. A lista é salva sozinha em instantes.`);
+    const sg = novas.filter((l) => l._match === "sug").length;
+    setAviso(`${novas.length} item(ns) da RC adicionados à lista${sg ? ` · ${sg} com sugestão de código (aceite com ✓ ou "Aceitar todas as sugestões")` : ""}${sem ? ` · ${sem} sem código (resolva no ⌕ do Código)` : ""}. A lista é salva sozinha em instantes.`);
   }, [cp, cpMarcados, usoCp, linhas]);
 
   /** Escolha no seletor: grava o de-para (texto → item nosso) e aplica na linha. */
@@ -1306,6 +1380,9 @@ export default function MateriaisGrade({
   const nRisco = validas.filter((l) => sinais.get(l._id)?.nivel === "risco").length;
   const nAtraso = validas.filter((l) => sinais.get(l._id)?.nivel === "atrasado").length;
   const nPcAtraso = validas.filter((l) => (sinais.get(l._id)?.pcAtrasadoDias ?? 0) > 0).length;
+  const nSug = validas.filter((l) => l._match === "sug").length;
+  const nSemCod = validas.filter((l) => !l.cat_ncod_prod && l._match !== "sug").length;
+  const nCod = validas.filter((l) => !!l.cat_ncod_prod && l._match !== "omie").length;
   const riscoGrupo = (k: string) => {
     const ls = validas.filter((l) => normGrupo(l.equipamento || "Geral") === k);
     return { risco: ls.filter((l) => sinais.get(l._id)?.nivel === "risco").length, atraso: ls.filter((l) => sinais.get(l._id)?.nivel === "atrasado").length };
@@ -1359,6 +1436,14 @@ export default function MateriaisGrade({
                      hover:bg-emerald-100 dark:hover:bg-emerald-900/50 transition disabled:opacity-40">
           {casando ? "…" : "⚡ Casar com o catálogo"}
         </button>
+        {nSug > 0 && (
+          <button type="button" onClick={() => void aceitarSugestoes(validas.filter((l) => l._match === "sug").map((l) => l._id))}
+            title={`Confirma as ${nSug} sugestões de código (⚠ âmbar). Dá para desfazer logo depois.`}
+            className="px-2 py-1 text-[11px] rounded-lg border border-amber-500/70 text-amber-800 dark:text-amber-200 font-semibold hover:bg-amber-500/10 transition">
+            ✓ Aceitar todas as sugestões ({nSug})
+          </button>
+        )}
+        <span className="text-[10.5px] text-ww-textFaint" title="Códigos da lista">✓ {nCod} · ⚠ {nSug} sugestão · ⌕ {nSemCod} sem código</span>
         <button type="button" onClick={() => void verSugestoes()} disabled={!!ocupado}
           title="Mostra as linhas parecidas com itens dos pedidos de compra do projeto, para você confirmar"
           className="px-2 py-1 text-[11px] rounded-lg border border-ww-border text-ww-textMuted hover:text-ww-text hover:bg-ww-rowHover transition disabled:opacity-40">
@@ -1446,7 +1531,7 @@ export default function MateriaisGrade({
             📅 Datas por grupo{semDataComItens.length ? ` (${semDataComItens.length} sem data)` : ""}
           </button>
           <span className="ml-auto self-center flex items-center gap-1 text-[11px]">
-            {(["todas", "sem_pc", "com_pc", "risco", "atrasado", "pc_atrasado"] as const).map((k) => (
+            {(["todas", "sem_pc", "com_pc", "risco", "atrasado", "pc_atrasado", ...(nSug ? ["sug"] as const : [])] as const).map((k) => (
               <button key={k} type="button" onClick={() => setFiltroPc(k)}
                 title={k === "risco" ? `Chegada com menos de ${FOLGA_ENTREGA_DIAS} dias de folga antes do necessário, ou PC sem previsão` : k === "atrasado" ? "Chega depois do necessário, ou o necessário já passou sem receber"
                   : k === "pc_atrasado" ? "A previsão do PC já passou e o item não chegou (pode ainda estar dentro do necessário)" : undefined}
@@ -1454,7 +1539,7 @@ export default function MateriaisGrade({
                   : k === "risco" && nRisco ? "border-amber-500/60 text-amber-700 dark:text-amber-300" : (k === "atrasado" && nAtraso) || (k === "pc_atrasado" && nPcAtraso) ? "border-rose-500/60 text-rose-600 dark:text-rose-400"
                   : "border-ww-border text-ww-textMuted hover:text-ww-text"}`}>
                 {k === "todas" ? `Todas ${validas.length}` : k === "sem_pc" ? `Sem PC ${validas.length - nComPc}` : k === "com_pc" ? `Com PC ${nComPc}`
-                  : k === "risco" ? `⚠ Em risco ${nRisco}` : k === "atrasado" ? `✕ Atrasados ${nAtraso}` : `PC atrasado ${nPcAtraso}`}
+                  : k === "risco" ? `⚠ Em risco ${nRisco}` : k === "atrasado" ? `✕ Atrasados ${nAtraso}` : k === "sug" ? `Sugestões a aceitar ${nSug}` : `PC atrasado ${nPcAtraso}`}
               </button>))}
           </span>
         </div>
@@ -1540,6 +1625,12 @@ export default function MateriaisGrade({
             className="px-2.5 py-1 rounded-lg bg-ww-accent text-white text-[11.5px] font-semibold hover:brightness-110 transition disabled:opacity-40">
             🧾 Gerar pedido de compra ({paraPc.length})
           </button>
+          {[...marcadas].some((id) => linhas.find((l) => l._id === id)?._match === "sug") && (
+            <button type="button" onClick={() => void aceitarSugestoes([...marcadas])}
+              className="px-2.5 py-1 rounded-lg border border-amber-500/70 text-amber-800 dark:text-amber-200 text-[11.5px] font-semibold hover:bg-amber-500/10 transition">
+              ✓ Aceitar sugestões dos marcados ({[...marcadas].filter((id) => linhas.find((l) => l._id === id)?._match === "sug").length})
+            </button>
+          )}
           <button type="button" onClick={() => excluirLinhas([...marcadas])}
             className="px-2.5 py-1 rounded-lg border border-rose-400/60 text-rose-700 dark:text-rose-300 text-[11.5px] hover:bg-rose-500/10 transition">
             🗑 Excluir {marcadas.size} linha{marcadas.size === 1 ? "" : "s"}
@@ -1567,6 +1658,14 @@ export default function MateriaisGrade({
           </span>
           <button type="button" onClick={descartarRascunho}
             className="ml-auto text-[11px] underline opacity-80 hover:opacity-100">descartar rascunho</button>
+        </div>
+      )}
+      {aceiteDesfazer && (
+        <div className="flex items-center gap-3 flex-wrap p-2 rounded-lg border border-emerald-500/40 bg-emerald-500/10 text-[12px] text-emerald-800 dark:text-emerald-200">
+          <span>{aceiteDesfazer.n} sugestão(ões) aceita(s) — viraram código confirmado.</span>
+          <button type="button" onClick={() => { setLinhas(aceiteDesfazer.antes); setSujo(true); setAceiteDesfazer(null); setAviso("Aceite desfeito — as linhas voltaram a sugestão."); }}
+            className="ml-auto px-2 py-0.5 rounded border border-emerald-500/60 font-semibold hover:bg-emerald-500/10">Desfazer</button>
+          <button type="button" onClick={() => setAceiteDesfazer(null)} className="text-[11px] opacity-70 hover:opacity-100">ok</button>
         </div>
       )}
       {remocao && (
@@ -1826,7 +1925,7 @@ export default function MateriaisGrade({
           <div role="dialog" aria-label="Importar para a lista" className="w-full sm:w-[min(1100px,97vw)] max-h-[90vh] overflow-auto rounded-t-xl sm:rounded-xl border border-ww-border bg-[rgb(var(--color-ww-panel))] shadow-2xl p-3.5 space-y-2.5 text-[12px]">
             <div className="flex items-start gap-2">
               <div><h4 className="text-[14px] font-semibold text-ww-text">Importar itens da RC para a lista</h4>
-                <p className="text-[11px] text-ww-textMuted">Cada item da RC vem casado com o nosso catálogo (✓ certo · ⚠ conferir · sem correspondência). Resolva em “No catálogo”, marque o que entra e adicione. O que já está na lista fica apagado.</p></div>
+                <p className="text-[11px] text-ww-textMuted">Cada item da RC vem casado com o nosso catálogo (✓ certo · ⚠ sugestão · sem correspondência). Sugestão entra na lista como sugestão (âmbar) — aceite lá com ✓ ou “Aceitar todas as sugestões”. Marque o que entra e adicione; o que já está na lista fica apagado.</p></div>
               <button type="button" className="ml-auto text-ww-accent hover:underline" onClick={() => setImportarAberto(false)}>fechar</button>
             </div>
             {/* RC já lançada em Compras (nº da RC): entra com o vínculo, para os PCs cobrirem a RC */}
@@ -1912,7 +2011,7 @@ export default function MateriaisGrade({
                                 : st === "ok"
                                   ? <span className="text-ww-textMuted">{c.manual ? <span className="text-sky-700 dark:text-sky-300" title="Escolhido à mão (de-para)">✋ </span> : <span className="text-emerald-600 dark:text-emerald-400">✓ </span>}
                                       <b className="text-ww-text">{m.codigo}</b> {m.descricao.length > 40 ? `${m.descricao.slice(0, 40)}…` : m.descricao}</span>
-                                  : <span className="text-amber-700 dark:text-amber-300">⚠ conferir · <b>{m.codigo}</b> {m.descricao.length > 34 ? `${m.descricao.slice(0, 34)}…` : m.descricao}</span>}
+                                  : <span className="text-amber-700 dark:text-amber-300">⚠ <b>{m.codigo}</b> {(m.score ?? 0) >= SUG_MIN ? `(sugestão ${Math.round((m.score ?? 0) * 100)}%)` : "(conferir)"} {m.descricao.length > 30 ? `${m.descricao.slice(0, 30)}…` : m.descricao}</span>}
                             </button>
                           </td>
                           <td className="p-1.5 text-right tabular-nums">{m ? brl(m.ultimo_preco) : "—"}</td>

@@ -38,3 +38,7 @@ test("sem data necessária: ainda mostra a chegada (sem nível de prazo)", () =>
   const s = sinalEntrega({ necessario: null, temPc: true, previsaoPc: "2026-09-18", hoje });
   assert.equal(s?.pcAtrasadoDias, 19); assert.equal(s?.folga, null);
 });
+test("sem PC e sem prazo médio: risco, sem chegada estimada", () => {
+  const s = sinalEntrega({ necessario: "2026-10-30", temPc: false, hoje });
+  assert.equal(s?.nivel, "risco"); assert.equal(s?.chegada, null);
+});
