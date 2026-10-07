@@ -20,10 +20,13 @@ export default function TelaGruposEquipamento() {
   const [novo, setNovo] = useState({ nome: "", descricao: "" });
   const [edit, setEdit] = useState<G | null>(null);
   const [erro, setErro] = useState("");
+  const [carregando, setCarregando] = useState(true);
 
   async function carregar() {
-    const r = await fetch("/api/cadastros/grupos-equipamento", { cache: "no-store" });
-    const j = await r.json();
+    const r = await fetch("/api/cadastros/grupos-equipamento", { cache: "no-store" }).catch(() => null);
+    const j = r ? await r.json().catch(() => ({})) : {};
+    setCarregando(false);
+    if (!r) { setErro("Não consegui carregar os grupos — tente de novo"); return; }
     if (!r.ok) { setErro(j.error ?? "Erro"); return; }
     setLista(j.grupos ?? []); setUso(j.emUso ?? []); setPode(!!j.podeEditar); setPendente(!!j.pendente);
   }
@@ -77,7 +80,7 @@ export default function TelaGruposEquipamento() {
                   <td>{pode && <button className="btn sm" onClick={() => setEdit(g)}>Editar</button>}</td>
                 </tr>
               ))}
-              {!lista.length && <tr><td colSpan={4} className="mini">Nenhum grupo cadastrado.</td></tr>}
+              {!lista.length && <tr><td colSpan={4} className="mini">{carregando ? "Carregando os grupos…" : "Nenhum grupo cadastrado."}</td></tr>}
             </tbody>
           </table>
         </div>

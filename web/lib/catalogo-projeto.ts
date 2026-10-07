@@ -108,11 +108,7 @@ export async function buscarItensProjeto(empresa: string, q: string, lim = 12): 
 export async function resolverItensProjeto(empresa: string, ids: number[]): Promise<Record<string, ItemLista>> {
   const uniq = [...new Set(ids.filter((x) => Number.isFinite(x) && x > 0))].slice(0, 500);
   if (!uniq.length) return {};
-  const destino = new Map<number, number>();
-  await Promise.all(uniq.map(async (id) => {
-    const { data } = await orders().rpc("estoque_item_nativo", { p_empresa: empresa, p_prod: id });
-    if (data != null) destino.set(id, Number(data));
-  }));
+  const destino = await nativosEmLote(empresa, uniq);
   const nativos = [...new Set(destino.values())];
   if (!nativos.length) return {};
   const { data, error } = await orders().from("v_estoque_item")
@@ -127,6 +123,31 @@ export async function resolverItensProjeto(empresa: string, ids: number[]): Prom
     const it = porId.get(dest);
     if (it) out[String(origem)] = origem === dest ? it : { ...it, via: `era ${origem}` };
   }
+  return out;
+}
+
+/** orders.estoque_item_nativo em lote (07/10/26): eram 60+ chamadas por lista (N+1,
+ *  ~1,3–1,9 s no PJ361); agora 3 consultas. Mesma regra: vínculo de compra ativo,
+ *  senão o dono da mescla, senão o próprio — e só vale se tiver código atual. */
+async function nativosEmLote(empresa: string, ids: number[]): Promise<Map<number, number>> {
+  const [vinc, mescla] = await Promise.all([
+    platform().from("estoque_item_vinculo").select("n_cod_prod_origem, n_cod_prod_destino")
+      .eq("empresa", empresa).is("desfeito_em", null).in("n_cod_prod_origem", ids),
+    orders().from("v_estoque_mescla_dono").select("secundario, dono").eq("empresa", empresa).in("secundario", ids),
+  ]);
+  if (vinc.error) throw new Error(vinc.error.message);
+  if (mescla.error) throw new Error(mescla.error.message);
+  const porVinc = new Map(((vinc.data ?? []) as { n_cod_prod_origem: number; n_cod_prod_destino: number }[])
+    .map((v) => [Number(v.n_cod_prod_origem), Number(v.n_cod_prod_destino)]));
+  const porMescla = new Map(((mescla.data ?? []) as { secundario: number; dono: number }[]).map((m) => [Number(m.secundario), Number(m.dono)]));
+  const alvo = new Map(ids.map((id) => [id, porVinc.get(id) ?? porMescla.get(id) ?? id]));
+  const candidatos = [...new Set(alvo.values())];
+  const { data, error } = await platform().from("estoque_item_codigo").select("n_cod_prod")
+    .eq("empresa", empresa).eq("atual", true).in("n_cod_prod", candidatos);
+  if (error) throw new Error(error.message);
+  const comCodigo = new Set(((data ?? []) as { n_cod_prod: number }[]).map((k) => Number(k.n_cod_prod)));
+  const out = new Map<number, number>();
+  for (const [id, a] of alvo) if (comCodigo.has(a)) out.set(id, a);
   return out;
 }
 

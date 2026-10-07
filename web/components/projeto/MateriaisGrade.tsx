@@ -376,6 +376,8 @@ export default function MateriaisGrade({
 
   const carregar = useCallback(async () => {
     setCarregando(true);
+    // compras do projeto saem JUNTO com a lista (não depois): é a chamada mais demorada
+    const pCompras = carregarCompras();
     try {
       const supa = supaBrowser();
       const approval = supa.schema("approval" as never);
@@ -428,8 +430,7 @@ export default function MateriaisGrade({
           }
         }
       } catch { /* storage bloqueado: segue sem rascunho */ }
-      if (!comRascunho) void enriquecerRef.current?.(rows);
-      else void carregarCompras();
+      if (!comRascunho) void enriquecerRef.current?.(rows, pCompras);
     } catch (e) {
       setErro(e instanceof Error ? e.message : String(e));
       setCarregouOk(false);
@@ -441,9 +442,9 @@ export default function MateriaisGrade({
      nosso (código novo); valor unit. vazio vem do PC, senão do último preço do
      catálogo, senão do custo da CP (a estimativa da própria lista). O que muda
      é salvo sozinho, como qualquer edição. */
-  const enriquecer = useCallback(async (rows: ItemRow[]) => {
+  const enriquecer = useCallback(async (rows: ItemRow[], pCompras?: Promise<DadosCompras | null>) => {
     const [dados, resolv, cpRes] = await Promise.all([
-      carregarCompras(),
+      pCompras ?? carregarCompras(),
       (async () => {
         const ids = [...new Set(rows.map((r) => Number(r.cat_ncod_prod)).filter((x) => x > 0))];
         if (!ids.length) return {} as Record<string, Cat>;
