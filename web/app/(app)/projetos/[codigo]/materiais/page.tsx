@@ -34,29 +34,29 @@ export default async function ProjetoMateriaisPage({
   let empresa = empresaParam ? String(empresaParam) : "";
   let projetoNome = "";
 
-  // Se empresa não veio na URL, tenta encontrar por codigo_projeto
-  if (!empresa) {
-    const { data: any1 } = await supa
-      .schema("approval" as never)
-      .from("v_pc_projetos")
-      .select("empresa, projeto_nome")
-      .eq("codigo_projeto", codigoProjeto)
-      .limit(1)
-      .maybeSingle();
+  /* 07/10/26: o cadastro (finance.projetos) e o plano vêm PRIMEIRO, em paralelo. A view
+     approval.v_pc_projetos monta todos os PCs antes de filtrar (0,8–3 s, mais sob carga) e
+     segurava a tela inteira; agora só é lida quando o cadastro não tem o projeto. */
+  const cadQ = supa.schema("finance" as never).from("projetos").select("empresa, nome").eq("codigo", codigoProjeto);
+  const [{ data: cads }, { data: planos }] = await Promise.all([
+    empresa ? cadQ.eq("empresa", empresa).limit(1) : cadQ.limit(1),
+    (() => {
+      const q = supa.schema("approval" as never).from("projeto_plano").select("empresa, cliente, proposta").eq("codigo_projeto", codigoProjeto);
+      return empresa ? q.eq("empresa", empresa).limit(1) : q.limit(1);
+    })(),
+  ]);
+  const cad = ((cads ?? []) as { empresa?: string; nome?: string }[])[0] ?? null;
+  if (!empresa && cad?.empresa) empresa = String(cad.empresa);
+
+  // Sem cadastro: o nome (e a empresa, se não veio) saem da view, como antes
+  if (!String(cad?.nome ?? "").trim()) {
+    let q = supa.schema("approval" as never).from("v_pc_projetos").select("empresa, projeto_nome").eq("codigo_projeto", codigoProjeto);
+    if (empresa) q = q.eq("empresa", empresa);
+    const { data: any1 } = await q.limit(1).maybeSingle();
     if (any1) {
-      empresa = String((any1 as { empresa?: string }).empresa ?? "SF");
+      if (!empresa) empresa = String((any1 as { empresa?: string }).empresa ?? "SF");
       projetoNome = String((any1 as { projeto_nome?: string }).projeto_nome ?? "");
     }
-  } else {
-    const { data: proj } = await supa
-      .schema("approval" as never)
-      .from("v_pc_projetos")
-      .select("projeto_nome")
-      .eq("empresa", empresa)
-      .eq("codigo_projeto", codigoProjeto)
-      .limit(1)
-      .maybeSingle();
-    if (proj) projetoNome = String((proj as { projeto_nome?: string }).projeto_nome ?? "");
   }
 
   if (!empresa) empresa = "SF"; // fallback pra padrão da instância
@@ -65,10 +65,8 @@ export default async function ProjetoMateriaisPage({
      o nome vem do cadastro de projetos (finance.projetos, onde os nativos também vivem). O
      código interno nunca aparece como se fosse o número do projeto. Cliente e proposta vêm
      do plano (fechamento do CRM). */
-  const [{ data: cad }, { data: plano }] = await Promise.all([
-    supa.schema("finance" as never).from("projetos").select("nome").eq("empresa", empresa).eq("codigo", codigoProjeto).maybeSingle(),
-    supa.schema("approval" as never).from("projeto_plano").select("cliente, proposta").eq("empresa", empresa).eq("codigo_projeto", codigoProjeto).maybeSingle(),
-  ]);
+  const plano = ((planos ?? []) as { empresa?: string; cliente?: string; proposta?: string }[])
+    .find((x) => !x.empresa || x.empresa === empresa) ?? null;
   const nomeCad = String((cad as { nome?: string } | null)?.nome ?? "").trim();
   if (nomeCad) projetoNome = nomeCad;
   const cliente = String((plano as { cliente?: string } | null)?.cliente ?? "").trim();
