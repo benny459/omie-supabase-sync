@@ -6,13 +6,14 @@ export type Etapa = "20" | "10" | "15" | "35" | "40" | "60" | "80";
 export type Aprov = "na" | "nao_solicitada" | "aguardando" | "aprovado" | "nao_aprovado";
 
 export const ETAPAS: { cod: Etapa; nome: string; plural: string; cor: string }[] = [
+  // cores = paleta única da situação do PC (lib/situacao-pc, 07/10/26)
   { cod: "20", nome: "Requisição", plural: "requisições", cor: "#94A3B8" },
-  { cod: "10", nome: "Pedido de Compra", plural: "pedidos de compra", cor: "#3B82F6" },
-  { cod: "15", nome: "Aprovação", plural: "em aprovação", cor: "#8B5CF6" },
-  { cod: "35", nome: "Enviado ao fornecedor", plural: "enviados", cor: "#06B6D4" },
-  { cod: "40", nome: "Faturado pelo Fornecedor", plural: "faturados", cor: "#F59E0B" },
-  { cod: "60", nome: "Recebido", plural: "recebidos", cor: "#0EA5E9" },
-  { cod: "80", nome: "Conferido", plural: "conferidos", cor: "#22C55E" },
+  { cod: "10", nome: "Pedido de Compra", plural: "pedidos de compra", cor: "#2563EB" },
+  { cod: "15", nome: "Aprovação", plural: "em aprovação", cor: "#F59E0B" },
+  { cod: "35", nome: "Enviado ao fornecedor", plural: "enviados", cor: "#6366F1" },
+  { cod: "40", nome: "Faturado pelo Fornecedor", plural: "faturados", cor: "#A855F7" },
+  { cod: "60", nome: "Recebido", plural: "recebidos", cor: "#0D9488" },
+  { cod: "80", nome: "Conferido", plural: "conferidos", cor: "#16A34A" },
 ]
 /** Texto curto que explica a etapa (Benny pode ressignificar depois). */
 export const ETAPA_AJUDA: Partial<Record<Etapa, string>> = {

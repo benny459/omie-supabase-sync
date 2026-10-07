@@ -48,6 +48,8 @@ import { CSS_CDL, KpisCompras, SugestoesVinculo, ForaDaLista, FluxoCompras, situ
 import { supaBrowser } from "@/lib/supabase";
 import { deHtml } from "@/lib/match-pc";
 import { normGrupo, dataDoGrupo, aplicarDataGrupo, nomePadrao } from "@/lib/grupos-equipamento-puro";
+import { estadoPc, dicaEstadoPc, LEGENDA_SITUACAO } from "@/lib/situacao-pc";
+import { sinalEntrega, FOLGA_ENTREGA_DIAS, type SinalEntrega } from "@/lib/sinal-entrega";
 
 type ItemRow = {
   id: string; equipamento: string | null; item: string;
@@ -139,7 +141,7 @@ export default function MateriaisGrade({
   const [marcadas, setMarcadas] = useState<Set<string>>(new Set());
   const [picker, setPicker] = useState(false);
   const [equipFiltro, setEquipFiltro] = useState<string | null>(null);
-  const [filtroPc, setFiltroPc] = useState<"todas" | "sem_pc" | "com_pc">("todas");
+  const [filtroPc, setFiltroPc] = useState<"todas" | "sem_pc" | "com_pc" | "risco" | "atrasado">("todas");
   /** Rascunho não salvo encontrado neste navegador ao abrir (ms de quando foi feito). */
   const [rascunhoDe, setRascunhoDe] = useState<number | null>(null);
   const chaveRascunho = `painel.materiais.rascunho.${empresa}.${codigoProjeto}`;
@@ -189,6 +191,23 @@ export default function MateriaisGrade({
     return new Map([...m.entries()].map(([k, ds]) => [k, dataDoGrupo(ds)]));
   }, [linhas]);
   const dataGrupoRef = useRef(dataGrupo);
+
+  /** Sinal de entrega de cada linha: a compra chega a tempo do "Necessário em"? (07/10/26) */
+  const sinais = useMemo(() => {
+    const m = new Map<string, SinalEntrega | null>();
+    for (const l of linhas) {
+      if (!String(l.item ?? "").trim()) continue;
+      const c = cmpPorId.get(l._id);
+      const p = c?.pcs[0];
+      m.set(l._id, sinalEntrega({
+        necessario: l.data_necessaria || null,
+        recebidoEm: p?.dt_rec ?? null, recebido: !!p && ((Number(p.qtd_recebida) || 0) > 0 || p.etapa === "60" || p.etapa === "80"),
+        temPc: !!c?.pcs.length, previsaoPc: p?.previsao ?? null,
+        prazoDias: l.cat_entrega_dias ? Number(l.cat_entrega_dias) : null,
+      }));
+    }
+    return m;
+  }, [linhas, cmpPorId]);
   dataGrupoRef.current = dataGrupo;
 
   // ── Seletor de item do catálogo (linha da CP ou da lista) ────────────────
@@ -327,6 +346,21 @@ export default function MateriaisGrade({
         if (l.data_necessaria !== g) return { classe: "bg-amber-500/10", dica: `Data própria — o grupo está em ${dia(g)}` };
         return null;
       } },
+    { key: "_ent", label: "", w: 22,
+      dicaCab: `Chega a tempo? ✓ recebido ou com folga · ⚠ em risco (menos de ${FOLGA_ENTREGA_DIAS} dias de folga, PC sem previsão ou só estimativa pelo prazo médio) · ✕ atrasado`,
+      dica: (l) => {
+        const sg = sinais.get(l._id);
+        if (!sg) return undefined;
+        return [sg.chegada ? `chega ${sg.estimada ? "estimado" : sg.motivo === "recebido" ? "recebido" : "prev."} ${dia(sg.chegada)}` : "sem previsão de chegada",
+          `necessário ${dia(l.data_necessaria)}`, sg.folga != null ? `folga ${sg.folga} dia(s)` : "", sg.motivo].filter(Boolean).join(" · ");
+      },
+      render: (l) => {
+        const sg = sinais.get(l._id);
+        if (!sg) return null;
+        return sg.nivel === "ok" ? <span className="text-emerald-600 dark:text-emerald-400 font-bold">✓</span>
+          : sg.nivel === "risco" ? <span className="text-amber-600 dark:text-amber-300 font-bold">⚠</span>
+          : <span className="text-rose-600 dark:text-rose-400 font-bold">✕</span>;
+      } },
     { key: "cat_valor_unit", label: "Valor unit.", w: 84, tipo: "moeda", alinhaDireita: true,
       dicaCab: "Valor unitário estimado da linha. Vazio, vem do PC, senão do último preço do catálogo, senão do custo da CP (a origem aparece pequena na célula).",
       marca: (l) => {
@@ -357,11 +391,17 @@ export default function MateriaisGrade({
         const c = cmpPorId.get(l._id);
         if (!c?.pcs.length) {
           if (!l._id.startsWith("db") || !String(l.item ?? "").trim()) return null;
-          return (
-            <button type="button" onClick={() => setVincLinha(l._id)}
-              className="text-[10.5px] text-ww-accent hover:underline" title="Ligar esta linha a um pedido de compra (sugestões ou busca)">
-              {l.pc_numero ? `${l.pc_numero}?` : "+ vincular"}
-            </button>);
+          // nº de PC digitado/importado que não virou vínculo: é SUGESTÃO, com outra cara
+          return l.pc_numero
+            ? <button type="button" onClick={() => setVincLinha(l._id)}
+                className="px-1 rounded border border-dashed border-amber-500/70 text-[10px] italic text-amber-700 dark:text-amber-300 hover:bg-amber-500/10"
+                title={`Sugestão: PC ${l.pc_numero} (digitado na lista, não está vinculado a nenhum pedido) — clique para vincular`}>
+                sug. {l.pc_numero}
+              </button>
+            : <button type="button" onClick={() => setVincLinha(l._id)}
+                className="text-[10.5px] text-ww-accent hover:underline" title="Ligar esta linha a um pedido de compra (sugestões ou busca)">
+                + vincular
+              </button>;
         }
         return (
           <span className="inline-flex items-center gap-1">
@@ -372,25 +412,30 @@ export default function MateriaisGrade({
             {c.pcs.length > 1 && <span className="text-[10px] text-ww-textMuted">+{c.pcs.length - 1}</span>}
           </span>);
       } },
-    { key: "_sit", label: "Situação", w: 124, classe: PC,
-      dicaCab: "Situação do pedido de compra, com os mesmos nomes e cores do Compras.",
+    { key: "_sit", label: "Situação ⓘ", w: 120, classe: PC,
+      dicaCab: `Situação real do pedido (aprovação + etapa da compra) — as mesmas cores do Compras e do /pcs:\n${LEGENDA_SITUACAO}`,
       dica: (l) => {
         const c = cmpPorId.get(l._id);
-        return c?.pcs.map((p) => `${situacaoPc(p).t} · ${p.dt_rec ? `recebido ${dia(p.dt_rec)}${p.qtd_recebida != null ? ` (${p.qtd_recebida})` : ""}` : `previsão ${dia(p.previsao)}`}`).join("\n");
+        if (!c?.pcs.length) return l.pc_numero ? `Sugestão: PC ${l.pc_numero} — ainda não vinculado` : undefined;
+        return c.pcs.map((p) => `PC ${p.pc}: ${dicaEstadoPc(p)}`).join("\n");
       },
       render: (l) => {
         const c = cmpPorId.get(l._id);
-        if (!c?.pcs.length) return c?.rc ? <span className="text-ww-textMuted text-[10.5px]">em RC</span> : null;
-        const st = situacaoPc(c.pcs[0]);
+        if (!c?.pcs.length) {
+          if (l.pc_numero && l._id.startsWith("db")) return (
+            <button type="button" onClick={() => setVincLinha(l._id)} className="text-[10.5px] italic text-ww-accent hover:underline">sugestão · vincular</button>);
+          return c?.rc ? <span className="text-ww-textMuted text-[10.5px]">em RC</span> : null;
+        }
+        const st = estadoPc(c.pcs[0]);
         const pode = c.vinculo_via === "codigo" || c.vinculo_via === "descricao" || c.vinculo_via === "manual";
         return (
           <span className="inline-flex items-center gap-1 max-w-full">
-            <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold text-white truncate" style={{ background: st.cor }}>{st.t}</span>
+            <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold text-white truncate" style={{ background: st.cor }}>{st.rot}</span>
             {pode && <button type="button" title="Desfazer o vínculo com o PC" className="text-[10px] text-ww-textFaint hover:text-rose-500"
               onClick={() => void desvincularRef.current?.(c.id)}>✕</button>}
           </span>);
       } },
-    { key: "_forn", label: "Fornecedor", w: 116, classe: PC,
+    { key: "_forn", label: "Fornecedor", w: 104, classe: PC,
       dica: (l) => {
         const c = cmpPorId.get(l._id);
         const f = c?.pcs.map((p) => p.fornecedor).filter(Boolean).join(", ");
@@ -444,7 +489,7 @@ export default function MateriaisGrade({
             💬{n > 0 && <span className="absolute -top-1.5 -right-2 min-w-[14px] px-0.5 rounded-full bg-ww-accent text-white text-[9px] font-bold leading-[14px] text-center">{n}</span>}
           </button>);
       } },
-  ], [empresa, cmpPorId, nomesPadrao, gruposMeta, abrirSeletorLista, PC, conversa]);
+  ], [empresa, cmpPorId, nomesPadrao, gruposMeta, abrirSeletorLista, PC, conversa, sinais]);
 
   /** A leitura inicial funcionou?
    *
@@ -612,9 +657,11 @@ export default function MateriaisGrade({
       if (equipFiltro && normGrupo(l.equipamento || "Geral") !== equipFiltro) return false;
       if (filtroPc === "com_pc" && !temPc(l)) return false;
       if (filtroPc === "sem_pc" && temPc(l)) return false;
+      if (filtroPc === "risco" && sinais.get(l._id)?.nivel !== "risco") return false;
+      if (filtroPc === "atrasado" && sinais.get(l._id)?.nivel !== "atrasado") return false;
       return true;
     }),
-    [linhas, equipFiltro, filtroPc, temPc]);
+    [linhas, equipFiltro, filtroPc, temPc, sinais]);
 
   const salvar = useCallback(async (confirmarRemocao = false, silencioso = false) => {
     const versaoInicio = versaoRef.current;
@@ -1034,6 +1081,12 @@ export default function MateriaisGrade({
   const semDataComItens = grupos.filter((g) => g.n > 0 && !g.data);
 
   const nComPc = validas.filter(temPc).length;
+  const nRisco = validas.filter((l) => sinais.get(l._id)?.nivel === "risco").length;
+  const nAtraso = validas.filter((l) => sinais.get(l._id)?.nivel === "atrasado").length;
+  const riscoGrupo = (k: string) => {
+    const ls = validas.filter((l) => normGrupo(l.equipamento || "Geral") === k);
+    return { risco: ls.filter((l) => sinais.get(l._id)?.nivel === "risco").length, atraso: ls.filter((l) => sinais.get(l._id)?.nivel === "atrasado").length };
+  };
 
   // ── Seletor aberto ──────────────────────────────────────────────────────
   const seletorDados = useMemo(() => {
@@ -1135,6 +1188,8 @@ export default function MateriaisGrade({
               </span>
               <span className={`block text-[9.5px] tabular-nums ${g.data ? "text-ww-textFaint" : "text-amber-700 dark:text-amber-300"}`}>
                 {g.data ? `necessário ${dia(g.data).slice(0, 5)}` : "sem data"}{g.proprias ? ` · ${g.proprias} própria(s)` : ""}
+                {riscoGrupo(g.k).risco > 0 && <span className="text-amber-700 dark:text-amber-300"> · ⚠{riscoGrupo(g.k).risco}</span>}
+                {riscoGrupo(g.k).atraso > 0 && <span className="text-rose-600 dark:text-rose-400"> · ✕{riscoGrupo(g.k).atraso}</span>}
               </span>
             </button>
           ))}
@@ -1143,10 +1198,14 @@ export default function MateriaisGrade({
             📅 Datas por grupo{semDataComItens.length ? ` (${semDataComItens.length} sem data)` : ""}
           </button>
           <span className="ml-auto self-center flex items-center gap-1 text-[11px]">
-            {(["todas", "sem_pc", "com_pc"] as const).map((k) => (
+            {(["todas", "sem_pc", "com_pc", "risco", "atrasado"] as const).map((k) => (
               <button key={k} type="button" onClick={() => setFiltroPc(k)}
-                className={`px-2 py-0.5 rounded-full border transition ${filtroPc === k ? "border-ww-accent bg-ww-accent text-white" : "border-ww-border text-ww-textMuted hover:text-ww-text"}`}>
-                {k === "todas" ? `Todas ${validas.length}` : k === "sem_pc" ? `Sem PC ${validas.length - nComPc}` : `Com PC ${nComPc}`}
+                title={k === "risco" ? `Chegada prevista com menos de ${FOLGA_ENTREGA_DIAS} dias de folga, PC sem previsão ou só estimativa` : k === "atrasado" ? "Chega depois do necessário, ou o necessário já passou sem receber" : undefined}
+                className={`px-2 py-0.5 rounded-full border transition ${filtroPc === k ? "border-ww-accent bg-ww-accent text-white"
+                  : k === "risco" && nRisco ? "border-amber-500/60 text-amber-700 dark:text-amber-300" : k === "atrasado" && nAtraso ? "border-rose-500/60 text-rose-600 dark:text-rose-400"
+                  : "border-ww-border text-ww-textMuted hover:text-ww-text"}`}>
+                {k === "todas" ? `Todas ${validas.length}` : k === "sem_pc" ? `Sem PC ${validas.length - nComPc}` : k === "com_pc" ? `Com PC ${nComPc}`
+                  : k === "risco" ? `⚠ Em risco ${nRisco}` : `✕ Atrasados ${nAtraso}`}
               </button>))}
           </span>
         </div>
@@ -1181,7 +1240,7 @@ export default function MateriaisGrade({
             <table className="w-full text-[11.5px]">
               <thead><tr className="text-left text-[10px] uppercase tracking-wider text-ww-textMuted">
                 <th className="py-1 pr-2">Grupo</th><th className="py-1 pr-2 text-right">Itens</th><th className="py-1 pr-2">Necessário em</th>
-                <th className="py-1 pr-2">Data própria</th><th className="py-1">Sugestão</th>
+                <th className="py-1 pr-2">Data própria</th><th className="py-1 pr-2">Entrega</th><th className="py-1">Sugestão</th>
               </tr></thead>
               <tbody>
                 {grupos.map((g) => {
@@ -1201,6 +1260,11 @@ export default function MateriaisGrade({
                           className="bg-transparent border border-ww-border rounded px-1 py-0.5 text-[11.5px] text-ww-text" />
                       </td>
                       <td className="py-1.5 pr-2 tabular-nums">{g.proprias ? <span className="text-amber-700 dark:text-amber-300">{g.proprias} linha(s)</span> : <span className="text-ww-textFaint">—</span>}</td>
+                      <td className="py-1.5 pr-2 tabular-nums whitespace-nowrap">
+                        {riscoGrupo(g.k).risco > 0 && <span className="text-amber-700 dark:text-amber-300 mr-1.5">⚠ {riscoGrupo(g.k).risco} em risco</span>}
+                        {riscoGrupo(g.k).atraso > 0 && <span className="text-rose-600 dark:text-rose-400">✕ {riscoGrupo(g.k).atraso} atrasada(s)</span>}
+                        {!riscoGrupo(g.k).risco && !riscoGrupo(g.k).atraso && <span className="text-ww-textFaint">—</span>}
+                      </td>
                       <td className="py-1.5">
                         {sugestaoData && g.data !== sugestaoData
                           ? <button type="button" className="text-ww-accent hover:underline" onClick={() => definirDataGrupo(g.k, sugestaoData)}>aplicar {dia(sugestaoData)}</button>

@@ -9,10 +9,12 @@ import { acharLinhaPc, valorLinhaPc, deHtml, type LinhaPc } from "@/lib/lista-pc
    do item é achada dentro dele: código, senão descrição. Junto vêm a data de
    recebimento e o fornecedor sem "&amp;". */
 type PcJ = { pc: string; pedido_id: number; fornecedor: string | null; qtd?: number | null; valor_unit?: number | null;
-  valor?: number | null; qtd_recebida?: number | null; via: string; dt_rec?: string | null; casado_por?: string | null; etapa?: string | null; aprov?: string | null };
+  valor?: number | null; qtd_recebida?: number | null; via: string; dt_rec?: string | null; casado_por?: string | null; etapa?: string | null; aprov?: string | null;
+  dt_fat?: string | null; enviado_em?: string | null; aprov_por?: string | null; aprov_em?: string | null; cancelado?: boolean | null };
 type ItemJ = { id: string; item: string; modelo: string | null; codigo: string | null; pcs: PcJ[]; valor_pc: number | null; fornecedor: string | null };
 export type DadosPcs = { itens: ItemJ[]; fora_da_lista: { fornecedor: string | null }[] } & Record<string, unknown>;
-type PedJ = { dtRec?: string | null; etapa?: string | null; aprov?: string | null;
+type PedJ = { dtRec?: string | null; etapa?: string | null; aprov?: string | null; dtFat?: string | null; enviadoEm?: string | null;
+  aprovPor?: string | null; aprovEm?: string | null; cancelado?: boolean | null;
   itens?: { cod: string | null; desc: string; qtd: number; vu: number; desc0?: number; ipi?: number; st?: number; rec?: number | null }[] };
 
 export async function completarPcs(d: DadosPcs): Promise<DadosPcs> {
@@ -30,6 +32,9 @@ export async function completarPcs(d: DadosPcs): Promise<DadosPcs> {
       const ped = peds.get(Number(p.pedido_id));
       if (!ped) { if (p.valor != null) { soma += Number(p.valor); temValor = true; } continue; }
       p.dt_rec = ped.dtRec ?? null;
+      p.dt_fat = ped.dtFat ?? null; p.enviado_em = ped.enviadoEm ?? null; p.cancelado = ped.cancelado ?? null;
+      p.aprov_por = ped.aprovPor ?? null; p.aprov_em = ped.aprovEm ?? null;
+      if (ped.aprov) p.aprov = ped.aprov; if (ped.etapa) p.etapa = ped.etapa;
       if (p.valor == null) {
         const linhas: LinhaPc[] = (ped.itens ?? []).map((i) => ({ cod: i.cod, desc: deHtml(i.desc), qtd: Number(i.qtd) || 0,
           vu: Number(i.vu) || 0, valor: valorLinhaPc(i), rec: i.rec == null ? null : Number(i.rec) }));

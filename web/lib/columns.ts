@@ -273,11 +273,12 @@ export function formatCell(value: unknown, fmt?: ColumnFormat, opts?: { canViewV
 // contam como efetivamente aprovados (isApproved=true).
 // Fundos custom via classes arbitrárias (Tailwind) — light + dark.
 export const STATUS_META: Record<string, { label: string; tone: string; emoji: string; isApproved: boolean }> = {
-  APROVADO:             { label: "Aprovado!",               tone: "bg-[#0e6e57] text-white dark:bg-[#3eba9a] dark:text-[#0a1812]",                emoji: "✅", isApproved: true  },
+  // 07/10/26: mesma paleta da situação do PC (lib/situacao-pc): aprovado azul, pendente âmbar, não aprovado/cancelar vermelho
+  APROVADO:             { label: "Aprovado!",               tone: "bg-[#2563EB] text-white dark:bg-[#60a5fa] dark:text-[#0a1430]",                emoji: "✅", isApproved: true  },
   APROVADO_FAT_DIRETO:  { label: "Aprovado Fat. Direto",    tone: "bg-[#0e6493] text-white dark:bg-[#5cb6ed] dark:text-[#0a1622]",                emoji: "✅", isApproved: true  },
   PRE_SELECAO:          { label: "Pré seleção",             tone: "bg-[#b8651a] text-white dark:bg-[#e8a04a] dark:text-[#1a0e02]",                emoji: "⏳", isApproved: false },
-  PENDENTE:             { label: "Pendente",                tone: "bg-[#1a1a18] text-white dark:bg-[#f1f1ea] dark:text-[#0a0a08]",                emoji: "⏸️", isApproved: false },
-  NAO_APROVADO:         { label: "Não Aprovado",            tone: "bg-[#5223a4] text-white dark:bg-[#ad8af0] dark:text-[#1a0e2c]",                emoji: "❌", isApproved: false },
+  PENDENTE:             { label: "Pendente",                tone: "bg-[#F59E0B] text-[#1a0e02] dark:bg-[#fbbf24] dark:text-[#1a0e02]",            emoji: "⏸️", isApproved: false },
+  NAO_APROVADO:         { label: "Não Aprovado",            tone: "bg-[#E11D48] text-white dark:bg-[#fb7185] dark:text-[#2a0710]",                emoji: "❌", isApproved: false },
   REJEITADO_VALIDADE:   { label: "Rejeitado por validade",  tone: "bg-[#ede2ff] text-[#5223a4] dark:bg-[#2a1c45] dark:text-[#c2a8e8]",            emoji: "🕒", isApproved: false },
   CANCELAR_PEDIDO:      { label: "Cancelar Pedido",         tone: "bg-[#b8253a] text-white dark:bg-[#ed5f7a] dark:text-[#280a10]",                emoji: "🚫", isApproved: false },
   N_A:                  { label: "N/A",                     tone: "bg-ww-border text-ww-textMuted dark:bg-ww-border dark:text-ww-textMuted",     emoji: "—",  isApproved: false },

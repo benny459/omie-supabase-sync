@@ -10,6 +10,7 @@
  * recebimento com a NF que chega pela Focus.
  */
 
+import { estadoPc, dicaEstadoPc } from "@/lib/situacao-pc";
 import PagamentoAntecipado from "@/components/compras/PagamentoAntecipado";
 import "./compras.css";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -263,7 +264,14 @@ export default function TelaCompras() {
 
   // ── tabela ───────────────────────────────────────────────────────────────
   const COLS: Col[] = useMemo(() => [
-    { k: "situacao", l: "Situação", v: situacao, h: (p) => { const s = situacao(p); const c = p.etapa === "80" ? "p-conf" : s === "Recebido" ? "p-rec" : s.includes("atrasada") ? "p-crit" : s.startsWith("Requisição") ? "p-off" : p.etapa === "35" ? "p-env" : p.etapa === "40" ? "p-fat" : "p-warn"; return <span className={`pill ${c}`}>{p.etapa === "80" ? "Conferido" : p.etapa === "35" ? "Enviado" : p.etapa === "40" ? "Faturado" : s}</span>; } },
+    // 07/10/26: situação = aprovação + etapa, com a paleta única do painel (lib/situacao-pc)
+    { k: "situacao", l: "Situação", v: situacao, h: (p) => {
+      if (p.tipo === "RC") { const s = situacao(p); return <span className={`pill ${s.startsWith("Requisição") ? "p-off" : "p-warn"}`}>{s}</span>; }
+      const dp = { etapa: p.etapa, aprov: p.aprov, nf: p.nf, enviado_em: p.enviadoEm, dt_fat: p.dtFat, dt_rec: p.dtRec, aprov_por: p.aprovPor, aprov_em: p.aprovEm, previsao: p.previsao };
+      const e = estadoPc(dp);
+      return <span title={`${dicaEstadoPc(dp)}${atrasado(p) ? " · previsão de entrega atrasada" : ""}`}>
+        <span className="pill" style={{ background: e.cor, color: "#fff" }}>{e.rot}</span>{atrasado(p) && <span className="pill p-crit" style={{ marginLeft: 4 }}>atrasada</span>}</span>;
+    } },
     { k: "aprov", l: "Situação da Aprovação", v: (p) => APROV_LABEL[p.aprov], h: (p) => p.aprov === "aprovado" ? <span className="pill p-ok">✓ Aprovado</span> : p.aprov === "aguardando" ? <span className="pill p-vio">Aguardando</span> : <span className="faint">{APROV_LABEL[p.aprov]}</span> },
     { k: "num", l: "Número", v: (p) => p.num, h: (p) => <b>{p.num}</b> },
     { k: "tipo", l: "Tipo", v: (p) => p.tipo },
@@ -309,7 +317,7 @@ export default function TelaCompras() {
     const cond = p.tipo === "RC" ? `com ${p.nItens} ${p.nItens === 1 ? "item" : "itens"}` : (parcDesc(p.parc) || "").toLowerCase();
     return (
       <article key={p.id} className={`card${avisos.novas.has(p.id) ? " nova" : ""}${naColPc ? (p.aprov === "aprovado" ? " aprovado" : " pendente") : late ? " late" : ""}${arrasto === String(p.id) ? " dragging" : ""}`} draggable tabIndex={0}
-        style={{ ["--c" as string]: naColPc ? (p.aprov === "aprovado" ? "#22C55E" : "#8B5CF6") : ETAPA[p.etapa]?.cor }}
+        style={{ ["--c" as string]: p.tipo === "PC" ? estadoPc({ etapa: p.etapa, aprov: p.aprov, nf: p.nf, enviado_em: p.enviadoEm, dt_fat: p.dtFat, dt_rec: p.dtRec }).cor : ETAPA[p.etapa]?.cor }}
         aria-label={`${p.tipo} ${p.num}`}
         onClick={(e) => { if ((e.target as HTMLElement).closest(".kebab")) return; setFolha({ id: p.id }); }}
         onKeyDown={(e) => { if (e.key === "Enter") setFolha({ id: p.id }); }}

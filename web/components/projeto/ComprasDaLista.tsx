@@ -15,11 +15,12 @@
 //   situacaoPc       — a pílula de situação, com os nomes e cores do Compras
 
 import { useMemo, useState } from "react";
-import { ETAPA, APROV_LABEL, type Etapa, type Aprov } from "@/lib/compras";
+import { estadoPc } from "@/lib/situacao-pc";
 
 export type PcLinha = { pc: string; pedido_id: number; origem: string; fornecedor: string | null; etapa: string | null; aprov: string | null;
   previsao: string | null; nf: string | null; qtd?: number | null; valor_unit?: number | null; valor?: number | null;
-  qtd_recebida?: number | null; via: string; dt_rec?: string | null; casado_por?: string | null };
+  qtd_recebida?: number | null; via: string; dt_rec?: string | null; casado_por?: string | null;
+  dt_fat?: string | null; enviado_em?: string | null; aprov_por?: string | null; aprov_em?: string | null; cancelado?: boolean | null };
 export type LinhaCompras = { id: string; equipamento: string | null; item: string; modelo: string | null; qtd: number | null; un: string | null;
   codigo: string | null; custo: number | null; fornecedor: string | null; data_necessaria: string | null; estimado: number;
   rc: string | null; vinculo_via: string | null; vinculo_score: number | null; pcs: PcLinha[]; valor_pc: number | null };
@@ -42,19 +43,10 @@ const mesRot = (s: string | null) => {
   return `${["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"][Number(m) - 1]}/${a.slice(2)}`;
 };
 
-/** Situação do PC com os MESMOS nomes e cores do Compras (kanban e /pcs): etapa do
- *  pedido, e a aprovação quando é ela que segura o pedido. NF junto, se houver. */
-export function situacaoPc(p: Pick<PcLinha, "etapa" | "aprov" | "nf" | "qtd_recebida">): { t: string; cor: string } {
-  const e = ETAPA[(p.etapa ?? "") as Etapa];
-  const nf = p.nf ? ` · NF ${p.nf}` : "";
-  if (p.etapa === "60" || p.etapa === "80") return { t: e.nome + nf, cor: e.cor };
-  if ((p.qtd_recebida ?? 0) > 0) return { t: "Recebido" + nf, cor: ETAPA["60"].cor };
-  if (p.aprov === "nao_aprovado") return { t: APROV_LABEL.nao_aprovado, cor: "#E11D48" };
-  if (p.aprov === "aguardando") return { t: APROV_LABEL.aguardando, cor: ETAPA["15"].cor };
-  if (p.etapa === "40" || p.nf) return { t: ETAPA["40"].nome + nf, cor: ETAPA["40"].cor };
-  if (p.etapa === "35") return { t: e.nome, cor: e.cor };
-  if (p.aprov === ("aprovado" as Aprov)) return { t: "Aprovado", cor: ETAPA["10"].cor };
-  return { t: e?.nome ?? "Pedido de Compra", cor: e?.cor ?? ETAPA["10"].cor };
+/** Situação do PC — paleta e regra únicas do painel (lib/situacao-pc). */
+export function situacaoPc(p: PcLinha | Pick<PcLinha, "etapa" | "aprov" | "nf" | "qtd_recebida">): { t: string; cor: string } {
+  const e = estadoPc(p as Parameters<typeof estadoPc>[0]);
+  return { t: e.rot, cor: e.cor };
 }
 
 /** 1. Quanto vou gastar? O estimado e o restante vêm da lista (valor da linha, senão
