@@ -17,6 +17,7 @@ type Titulo = {
   valor: number; pago: number; vencimento: string; previsao: string | null;
   categoria_cod: string | null; conta_cod: number | null; projeto_cod: string | number | null;
   contraparte_cod: number | null; contraparte_nome: string | null; documento: string | null; obs: string | null;
+  nf?: string | null; emissao?: string | null;
   serie: { tipo: "omie" | "painel"; id: string | number; proximas: number } | null;
   ajuste: { orig: { valor?: number; vencimento?: string }; novo?: Record<string, unknown>; motivo?: string | null; por?: string | null; em?: string | null } | null;
 };
@@ -34,7 +35,7 @@ export default function EditarTituloModal({ tipo, refTit, onClose, onDone }: { t
   const [aux, setAux] = useState<Aux>({ categorias: [], contas_correntes: [], projetos: [] });
   const [erro, setErro] = useState("");
   const [indo, setIndo] = useState(false);
-  const [f, setF] = useState({ valor: "", vencimento: "", previsao: "", categoria_cod: "", conta_cod: "", projeto_cod: "", documento: "", obs: "", motivo: "", barras: "" });
+  const [f, setF] = useState({ valor: "", vencimento: "", previsao: "", categoria_cod: "", conta_cod: "", projeto_cod: "", documento: "", obs: "", motivo: "", barras: "", nf: "", emissao: "" });
   const [escopo, setEscopo] = useState<"esta" | "proximas" | "todas">("esta");
   const [cli, setCli] = useState<{ cod: number; nome: string } | null>(null);
   const [busca, setBusca] = useState("");
@@ -49,7 +50,8 @@ export default function EditarTituloModal({ tipo, refTit, onClose, onDone }: { t
     const x = j.titulo as Titulo;
     setT(x);
     setF({ valor: fmt(x.valor), vencimento: s(x.vencimento).slice(0, 10), previsao: s(x.previsao).slice(0, 10), categoria_cod: s(x.categoria_cod),
-      conta_cod: s(x.conta_cod), projeto_cod: s(x.projeto_cod), documento: s(x.documento), obs: s(x.obs), motivo: "", barras: s((x as { codigo_barras?: string | null }).codigo_barras) });
+      conta_cod: s(x.conta_cod), projeto_cod: s(x.projeto_cod), documento: s(x.documento), obs: s(x.obs), motivo: "", barras: s((x as { codigo_barras?: string | null }).codigo_barras),
+      nf: s(x.nf), emissao: s(x.emissao).slice(0, 10) });
     setCli(x.contraparte_cod ? { cod: x.contraparte_cod, nome: x.contraparte_nome ?? "" } : null);
     const a = await fetch(`/api/financeiro/aux?empresa=${x.empresa}&tipo=${tipo}`).then((y) => y.json()).catch(() => null);
     if (a) setAux({ categorias: a.categorias ?? [], contas_correntes: a.contas_correntes ?? [], projetos: a.projetos ?? [] });
@@ -66,6 +68,7 @@ export default function EditarTituloModal({ tipo, refTit, onClose, onDone }: { t
   }, [busca, t, tipo]);
 
   const omie = t?.origem === "omie", pc = t?.origem === "pc";
+  const temNf = omie || (tipo === "pagar" && refTit.startsWith("p:"));
   const vNovo = num(f.valor);
   const mudouValor = !!t && Math.abs(vNovo - Number(t.valor)) > 0.004;
   const temSerie = !!t?.serie && t.serie.proximas > 0;
@@ -94,6 +97,9 @@ export default function EditarTituloModal({ tipo, refTit, onClose, onDone }: { t
     if (f.projeto_cod !== s(t.projeto_cod)) c.projeto_cod = f.projeto_cod || null;
     if (!omie && f.documento !== s(t.documento)) c.documento = f.documento;
     if (f.obs !== s(t.obs)) c.obs = f.obs;
+    // nº da NF e emissão (07/10/26): título do Omie (pagar ou receber) e conta a pagar do painel
+    if (temNf && f.nf.trim() !== s(t.nf)) c.nf = f.nf.trim();
+    if (temNf && f.emissao !== s(t.emissao).slice(0, 10)) c.emissao = f.emissao;
     if (tipo === "pagar" && refTit.startsWith("p:") && f.barras.replace(/\D/g, "") !== s((t as { codigo_barras?: string | null }).codigo_barras)) c.codigo_barras = f.barras.replace(/\D/g, "");
     if (t.origem === "manual" && cli && cli.cod !== t.contraparte_cod) c.contraparte_cod = cli.cod;
     if (!Object.keys(c).length) { setErro("Nada mudou"); return; }
@@ -146,6 +152,8 @@ export default function EditarTituloModal({ tipo, refTit, onClose, onDone }: { t
                 {f.projeto_cod && !aux.projetos.some((p) => String(p.codigo) === f.projeto_cod) && <option value={f.projeto_cod}>{f.projeto_cod}</option>}
                 {aux.projetos.map((p) => <option key={p.codigo} value={String(p.codigo)}>{p.nome}</option>)}</select></label>
               {!omie && <label>Documento<input value={f.documento} onChange={set("documento")} /></label>}
+              {temNf && <label>Nº da nota fiscal<input value={f.nf} onChange={set("nf")} placeholder="ex.: 253" /></label>}
+              {temNf && <label>Data de emissão<input type="date" value={f.emissao} onChange={set("emissao")} /></label>}
               {tipo === "pagar" && refTit.startsWith("p:") && <label className="full">Código de barras / linha digitável<input value={f.barras} onChange={set("barras")} inputMode="numeric" placeholder="44, 47 ou 48 dígitos" style={{ fontFamily: "ui-monospace,monospace" }} /></label>}
               {t.origem === "manual" && <label className="full">{rotCp}
                 <input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder={cli ? `${cli.nome} — digite para trocar` : "buscar por nome ou CNPJ"} />

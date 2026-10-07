@@ -13,6 +13,7 @@ export type CamposEditar = {
   valor?: number; vencimento?: string; previsao?: string; categoria_cod?: string | null; conta_cod?: number | null;
   projeto_cod?: string | number | null; contraparte_cod?: number | null; documento?: string | null; obs?: string | null;
   /** boleto (só contas a pagar do painel, 'p:<id>') — vazio remove */ codigo_barras?: string | null;
+  /** nº da NF e data de emissão (07/10/26) — Omie (sobreposição) e conta a pagar do painel */ nf?: string | null; emissao?: string | null;
 };
 
 const ISO = /^\d{4}-\d{2}-\d{2}$/;
@@ -41,6 +42,7 @@ export async function editarTitulo(natureza: "P" | "R", ref: string, campos: Cam
   const esc = ["esta", "proximas", "todas"].includes(escopo) ? escopo : "esta";
   if (campos.vencimento != null && !ISO.test(campos.vencimento)) return NextResponse.json({ error: "vencimento inválido" }, { status: 400 });
   if (campos.previsao != null && !ISO.test(campos.previsao)) return NextResponse.json({ error: "previsão inválida" }, { status: 400 });
+  if (campos.emissao != null && campos.emissao !== "" && !ISO.test(campos.emissao)) return NextResponse.json({ error: "data de emissão inválida" }, { status: 400 });
   if (campos.valor != null && !(Number(campos.valor) > 0)) return NextResponse.json({ error: "valor inválido" }, { status: 400 });
   if (esc !== "esta" && campos.vencimento != null) return NextResponse.json({ error: "Vencimento só se muda nesta ocorrência" }, { status: 400 });
 
@@ -50,7 +52,8 @@ export async function editarTitulo(natureza: "P" | "R", ref: string, campos: Cam
   if (t.origem === "omie") {
     if (esc === "todas") return NextResponse.json({ error: "Título do Omie: escolha só esta ou esta e as próximas" }, { status: 400 });
     const c = so({ valor: campos.valor, vencimento: campos.vencimento, cod_categoria: campos.categoria_cod,
-      cod_cc: campos.conta_cod, cod_projeto: campos.projeto_cod == null ? campos.projeto_cod : String(campos.projeto_cod), observacao: campos.obs });
+      cod_cc: campos.conta_cod, cod_projeto: campos.projeto_cod == null ? campos.projeto_cod : String(campos.projeto_cod), observacao: campos.obs,
+      nf: campos.nf, emissao: campos.emissao });
     if (Object.keys(c).length) {
       const { data, error } = await fin().rpc("titulo_ajustar", { p_empresa: t.empresa, p_cod: t.cod_titulo, p_campos: c, p_escopo: esc, p_motivo: motivo, p_usuario: email });
       if (error) return erroDb(error);
@@ -67,7 +70,7 @@ export async function editarTitulo(natureza: "P" | "R", ref: string, campos: Cam
   } else {
     const c = so({ valor: campos.valor, vencimento: campos.vencimento, categoria_cod: campos.categoria_cod, conta_cod: campos.conta_cod,
       projeto_cod: campos.projeto_cod, documento: campos.documento, obs: campos.obs,
-      ...(natureza === "P" ? { fornecedor_cod: campos.contraparte_cod } : { cliente_cod: campos.contraparte_cod }) });
+      ...(natureza === "P" ? { fornecedor_cod: campos.contraparte_cod, nf: campos.nf, emissao: campos.emissao } : { cliente_cod: campos.contraparte_cod }) });
     if (Object.keys(c).length) {
       const { data, error } = natureza === "P"
         ? await fin().rpc("pagar_editar", { p_id: Number(ref.slice(2)), p_campos: c, p_motivo: motivo, p_usuario: email })

@@ -551,10 +551,10 @@ export function montarPagarV3(o: Opts) {
           <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:4px"><input type="date" id="pvData" value="${iso(r.d)}" style="max-width:170px;height:30px;padding:0 8px;border-radius:7px;border:1px solid var(--line2);background:var(--bg);color:var(--tx);color-scheme:dark light;font:inherit"><button class="btn sm" id="pvOk">Reprogramar</button>${r.repr ? '<button class="link" id="pvReg">voltar à regra do dia útil</button>' : ""}<span id="pvAv" class="sub2" style="color:#f59e0b"></span></div>
           <div class="sub2" id="pvHist" style="margin-top:4px">${r.repr ? "reprogramada · carregando histórico…" : +r.d !== +r.vd ? "dia útil seguinte ao vencimento (regra)" : ""}</div></div><div><span>Valor em aberto</span><b class="num" style="font-size:16px">${brl(r.v)}</b>${r.vdoc && Math.abs(r.vdoc - r.v) > 0.01 ? `<div class="sub2">documento ${brl(r.vdoc)}</div>` : ""}${r.aj?.novo?.valor != null ? `<div class="sub2">valor ajustado (orig. ${brl(Number(r.aj.orig?.valor ?? 0))})${PODE.editar ? ' · <button class="link" id="dDesAj">desfazer ajuste</button>' : ""}</div>` : ""}</div>
         <div><span>Categoria</span><span class="${r.cat ? "" : "nocat"}">${esc(r.cat || "Sem categoria")}</span></div><div><span>Projeto</span>${esc(r.proj || "—")}</div>
-        <div><span>Documento / Parcela</span>${esc(r.doc || "—")} · ${esc(r.parc || "—")}</div><div><span>Emissão</span><span id="dEmis">…</span></div><div class="full" style="grid-column:1/-1"><span>Código de barras</span><span id="dBarras" class="mono" style="word-break:break-all">…</span></div><div><span>Tipo doc.</span>${esc(r.tipo === "99999" ? "Outros" : r.tipo || "—")}</div>
+        <div><span>Documento / Parcela</span>${esc(r.doc || "—")} · ${esc(r.parc || "—")}</div><div><span>Nº da NF</span><span id="dNf" class="mono">…</span></div><div><span>Emissão</span><span id="dEmis">…</span></div><div class="full" style="grid-column:1/-1"><span>Código de barras</span><span id="dBarras" class="mono" style="word-break:break-all">…</span></div><div><span>Tipo doc.</span>${esc(r.tipo === "99999" ? "Outros" : r.tipo || "—")}</div>
         <div><span>Conta prevista</span>${esc(r.conta || "—")}</div><div><span>${r.orig === "o" ? "Cód. título Omie" : "Previsão do PC"}</span><span class="mono">${r.orig === "o" ? r.cod : esc(r.ref)}</span></div>
       </div>
-      <div style="margin:-6px 0 14px;display:flex;gap:14px;flex-wrap:wrap;align-items:center">${PODE.editar ? `<button class="btn sm" id="dEdit" title="Valor, vencimento, previsão, categoria, conta, projeto, observação">Editar título…</button>` : ""}${r.cod_forn ? `<button class="link" id="dForn">Ver fornecedor (histórico) →</button>` : ""}</div>
+      <div style="margin:-6px 0 14px;display:flex;gap:14px;flex-wrap:wrap;align-items:center">${PODE.editar ? `<button class="btn sm" id="dEdit" title="Valor, vencimento, previsão, categoria, conta, projeto, nº da NF, emissão, observação">Editar título…</button>` : ""}${r.cod_forn ? `<button class="link" id="dForn">Ver fornecedor (histórico) →</button>` : ""}</div>
       ${r.serie ? `<div class="box" style="margin-bottom:12px"><h4>Conta recorrente</h4><div class="sub2">Ocorrência ${r.serie.seq}${r.serie.n ? " de " + r.serie.n : ""} da série</div><div style="margin-top:8px"><button class="btn sm" id="dSerie">Editar / encerrar série…</button></div></div>` : ""}
       ${PODE.baixar ? `<div class="box"><h4>Baixar título</h4>
         <div class="frm">
@@ -589,13 +589,14 @@ export function montarPagarV3(o: Opts) {
     if (q("pvReg")) q("pvReg").onclick = async () => { try { await api({ acao: "reprogramar", refs: [r.ref], data: null }); toast("Previsão voltou à regra do dia útil"); closeAll(); await recarregarTudo(); } catch (e) { toast(e.message, true); } };
     fetch(`/api/financeiro/pagar?doc=${encodeURIComponent(r.ref)}`, { cache: "no-store" }).then((x) => x.json()).then((j) => {
       const d = j.doc || {}; const em = q("dEmis"), bc = q("dBarras"); if (!em || !bc) return;
+      const nfEl = q("dNf"); if (nfEl) nfEl.textContent = d.nf ? String(d.nf).replace(/^0+(?=\d)/, "") : "— (edite o título para informar)";
       const f = (x) => (x ? new Date(String(x).slice(0, 10) + "T00:00:00").toLocaleDateString("pt-BR") : "—");
       em.textContent = d.emissao ? f(d.emissao) + (d.lancado_em && String(d.emissao).slice(0, 10) === String(d.lancado_em).slice(0, 10) ? " · data do lançamento" : "") : "—";
       if (d.barras) {
         bc.innerHTML = `${esc(d.barras)} <button class="link" id="dBarrasCp">copiar</button>`;
         q("dBarrasCp").onclick = () => { navigator.clipboard?.writeText(d.barras).then(() => toast("Código de barras copiado"), () => toast("Não deu para copiar", true)); };
       } else bc.textContent = "—";
-    }).catch(() => { const em = q("dEmis"), bc = q("dBarras"); if (em) em.textContent = "—"; if (bc) bc.textContent = "—"; });
+    }).catch(() => { const em = q("dEmis"), bc = q("dBarras"), nfEl = q("dNf"); if (em) em.textContent = "—"; if (bc) bc.textContent = "—"; if (nfEl) nfEl.textContent = "—"; });
     if (r.repr) fetch(`/api/financeiro/pagar?hist=${encodeURIComponent(r.ref)}`, { cache: "no-store" }).then((x) => x.json()).then((j) => {
       const h = (j.historico ?? [])[0]; const el = q("pvHist"); if (!el) return;
       const f = (x) => (x ? new Date(x + "T00:00:00").toLocaleDateString("pt-BR") : "—");
