@@ -13,6 +13,7 @@ import { supaAdmin } from "@/lib/supabase-admin";
 import { supaServer } from "@/lib/supabase-server";
 import { exigirCompras, rpc, erro, posGravar } from "@/lib/compras-server";
 import { completarPcs, type DadosPcs } from "@/lib/lista-pc-completar";
+import { fetchItensCp } from "@/lib/crm-fechamento";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -166,12 +167,21 @@ export async function POST(req: Request) {
       const its = (((full ?? {}) as { itens?: { id: number; cod?: string | null; ncodProd?: number | null; desc: string; un?: string | null; qtd: number; vu?: number | null; obs?: string | null }[] }).itens ?? [])
         .filter((i) => !ligados.has(Number(i.id)));
       const chave = (eq: string, it: string) => `${eq.trim().toLowerCase()}|${it.trim().toLowerCase()}`;
+      // equipamento: o da RC (obs "Equip.: X"), senão o da CP do CRM com a mesma descrição
+      const eqDaCp = new Map<string, string>();
+      try {
+        const { itens: cpIts } = await fetchItensCp(codigo);
+        for (const c of cpIts) {
+          eqDaCp.set(c.item.trim().toLowerCase(), c.equipamento);
+          eqDaCp.set([c.item, c.modelo].filter(Boolean).join(" ").trim().toLowerCase(), c.equipamento);
+        }
+      } catch { /* sem CP: fica "Geral" */ }
       const existentes = new Map(((naLista ?? []) as { id: string; rc_item_id: number | null; equipamento: string; item: string }[])
         .map((r) => [chave(r.equipamento ?? "", r.item ?? ""), r]));
       const novas: Record<string, unknown>[] = [], ligar: { id: string; rc_item_id: number }[] = [];
       for (const i of its) {
-        const eq = /Equip\.?:\s*([^·|]+)/i.exec(i.obs ?? "")?.[1]?.trim() || "Geral";
         const desc = String(i.desc ?? "").trim();
+        const eq = /Equip\.?:\s*([^·|]+)/i.exec(i.obs ?? "")?.[1]?.trim() || eqDaCp.get(desc.toLowerCase()) || "Geral";
         if (!desc) continue;
         const ja = existentes.get(chave(eq, desc));
         if (ja) { if (!ja.rc_item_id) ligar.push({ id: ja.id, rc_item_id: Number(i.id) }); continue; }
