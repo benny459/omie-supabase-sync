@@ -122,7 +122,8 @@ export async function montar(empresa: string, codigo: number): Promise<{ docs: V
   // Faturado: o título a receber (NF / recibo) manda no recebimento
   const fats = docs.filter((d) => d.faturado && d.nf);
   await Promise.all(fats.map(async (d) => {
-    const { data } = await adm.schema("finance").rpc("receber_buscar", { p_q: String(d.nf), p_lim: 30 });
+    let { data, error } = await adm.schema("finance").rpc("receber_buscar", { p_q: String(d.nf), p_lim: 30 });
+    if (error) ({ data, error } = await adm.schema("finance").rpc("receber_buscar", { p_q: String(d.nf), p_lim: 30 }));
     const ts = ((data ?? []) as Titulo[]).filter((t) => dig(t.doc) === dig(d.nf));
     const t = ts.find((x) => Math.abs(Number(x.valor) - d.valor) < 0.05) ?? (ts.length === 1 ? ts[0] : null);
     if (t) { d.titulo_ref = t.ref; d.titulo_venc = dia(t.venc); d.recebido = t.situacao === "pago" || Number(t.saldo) <= 0.004; }

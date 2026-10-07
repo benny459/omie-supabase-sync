@@ -1773,11 +1773,23 @@ function GruposPcProjeto({ compras, p, podeAprovar, podeEditar, ehAdmin, statusL
  *  × pago, com a mesma conta da Lista de materiais — é aqui que se aprovam os PCs. */
 function ResumoBudgetProjeto({ empresa, codigo, $, valorPv }: { empresa: string; codigo: number; $: (v: number | null) => string; valorPv: number }) {
   const [d, setD] = useState<{ budget: number | null; comp: number; proj: number; pago: number; aprov: number; pend: number } | null>(null);
+  const [falhou, setFalhou] = useState(false);
   useEffect(() => {
     let vivo = true;
-    fetch(`/api/rc-projetos/compras?empresa=${encodeURIComponent(empresa)}&codigo=${codigo}`, { cache: "no-store" })
-      .then((r) => (r.ok ? r.json() : null)).then((j: { itens?: { rc: string | null; pcs: unknown[]; estimado: number }[]; totais?: Record<string, number | null> } | null) => {
-        if (!vivo || !j?.totais) return;
+    /* a rota às vezes cai por tempo (projeto grande): tenta 3 vezes antes de desistir */
+    const buscar = async () => {
+      for (let k = 0; k < 3; k++) {
+        try {
+          const r = await fetch(`/api/rc-projetos/compras?empresa=${encodeURIComponent(empresa)}&codigo=${codigo}`, { cache: "no-store" });
+          if (r.ok) return await r.json();
+        } catch { /* tenta de novo */ }
+        await new Promise((ok) => setTimeout(ok, 1500 * (k + 1)));
+      }
+      return null;
+    };
+    void buscar().then((j: { itens?: { rc: string | null; pcs: unknown[]; estimado: number }[]; totais?: Record<string, number | null> } | null) => {
+        if (!vivo) return;
+        if (!j?.totais) { setFalhou(true); return; }
         const t = j.totais;
         const resto = (j.itens ?? []).filter((l) => !l.rc && !l.pcs.length).reduce((a, l) => a + (Number(l.estimado) || 0), 0);
         const comp = Number(t.comprometido) || 0;
@@ -1786,7 +1798,7 @@ function ResumoBudgetProjeto({ empresa, codigo, $, valorPv }: { empresa: string;
       }).catch(() => null);
     return () => { vivo = false; };
   }, [empresa, codigo]);
-  if (!d) return <div className="pcproj-resumo carregando">Resumo do projeto…</div>;
+  if (!d) return <div className="pcproj-resumo carregando">{falhou ? "Resumo do projeto indisponível agora — abra o projeto para ver a Lista de materiais." : "Resumo do projeto…"}</div>;
   const max = Math.max(d.budget ?? 0, d.proj, d.comp, d.pago) || 1;
   const pct = (v: number) => `${Math.min(100, (v / max) * 100)}%`;
   const estoura = d.budget != null && d.proj > d.budget ? d.proj - d.budget : 0;
