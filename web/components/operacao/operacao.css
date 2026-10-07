@@ -523,7 +523,7 @@
 .op .pcproj-itens{padding:4px 12px 8px 110px;display:flex;flex-direction:column;gap:2px;font-size:12px}
 .op .pcproj-itens > div{display:flex;justify-content:space-between;gap:10px}
 .op .pcproj-itens small{color:var(--ww-text-faint);white-space:nowrap}
-.op .pcproj-hd,.op .pcproj-pc{display:grid;grid-template-columns:54px minmax(0,1fr) 92px 112px 118px 128px 92px 56px;gap:10px;align-items:center;padding:7px 10px}
+.op .pcproj-hd,.op .pcproj-pc{display:grid;grid-template-columns:48px minmax(130px,1fr) 88px 106px 112px 104px 96px 34px 26px;gap:10px;align-items:center;padding:7px 10px}
 .op .pcproj-hd{font-size:11px;color:var(--ww-text-faint);text-transform:uppercase;letter-spacing:.06em;border-bottom:1px solid var(--ww-border)}
 .op .pcproj-pc + .pcproj-pc{border-top:1px dashed var(--ww-border)}
 .op .pcproj-pc > *{min-width:0}
@@ -551,7 +551,7 @@
 
 /* Vendas do projeto (PV/OS) — 07/10/26 */
 .op .pcproj-vendas{border:1px solid var(--ww-border);border-radius:10px;overflow:hidden}
-.op .pcproj-vendas .hd,.op .pcproj-vendas .ln{display:grid;grid-template-columns:minmax(0,1fr) 96px 150px 150px 92px;gap:10px;align-items:center;padding:6px 10px;font-size:12px}
+.op .pcproj-vendas .hd,.op .pcproj-vendas .ln{display:grid;grid-template-columns:minmax(0,1fr) 84px 124px 124px 74px;gap:10px;align-items:center;padding:6px 10px;font-size:12px}
 .op .pcproj-vendas .hd{font-size:11px;color:var(--ww-text-faint);text-transform:uppercase;letter-spacing:.06em;border-bottom:1px solid var(--ww-border)}
 .op .pcproj-vendas .ln+.ln{border-top:1px solid color-mix(in srgb,var(--ww-border) 60%,transparent)}
 .op .pcproj-vendas .ln.tot{font-weight:600;background:var(--ww-panel-sunken)}
@@ -565,13 +565,12 @@
 .op .pcproj-vendas .vprev em.adianta{color:#059669;background:rgba(5,150,105,.1)}
 .op .pcproj-vendas .vprev button{font-size:11px;color:var(--ww-text-faint);background:none;border:0;cursor:pointer}
 
-.op .fin.proj{grid-template-columns:1fr 1.1fr 1fr .9fr .9fr}
 
 /* Projeto aberto lado a lado (07/10/26): vendas | compras, como a linha aberta dos Avulsos */
 .op .pcproj-cq{container-type:inline-size}
 .op .pcproj-lados{display:grid;grid-template-columns:minmax(0,1fr);gap:10px;border-top:1px solid var(--ww-border-strong);padding-top:8px}
 @container (min-width:1240px){
-  .op .pcproj-lados{grid-template-columns:minmax(0,.92fr) minmax(0,1.08fr);gap:0}
+  .op .pcproj-lados{grid-template-columns:minmax(0,.78fr) minmax(0,1.22fr);gap:0}
   .op .pcproj-lados > .vendas{border-right:1px solid var(--ww-border);padding-right:10px}
   .op .pcproj-lados > .compras{padding-left:10px}
 }
@@ -586,5 +585,43 @@
 .op .pcproj-vendas .num small{font-size:10.5px;color:var(--ww-text-faint)}
 .op .pcproj-vendas .stv{display:flex;flex-direction:column;gap:2px}
 .op .pcproj-vendas .stv small{font-size:10.5px;color:var(--ww-text-faint)}
-.op .pcproj-vendas .vprev input{width:118px}
+.op .pcproj-vendas .vprev input{width:112px}
 .op .pcproj-pc .sitmat{display:flex;flex-direction:column;gap:3px;min-width:0}
+
+/* Linha do projeto (07/10/26): RC · PC · PV em cima, M. proj. · M. real embaixo — nada cruza divisória */
+.op .fin.proj{container-type:inline-size;grid-template-columns:repeat(6,minmax(0,1fr));row-gap:6px}
+.op .fin.proj > div{grid-column:span 2;overflow:hidden}
+.op .fin.proj > div:nth-child(4){border-left:0}
+.op .fin.proj > div.mb{grid-column:span 3;border-top:1px dashed var(--ww-border);padding-top:5px}
+.op .fin.proj b{font-size:12.5px;max-width:100%;overflow:hidden;text-overflow:ellipsis}
+.op .fin.proj .mb b{font-size:14px}
+.op .fin.proj small{font-size:10.5px;color:var(--ww-text-faint);font-variant-numeric:tabular-nums;white-space:nowrap}
+.op .fin.proj label{white-space:nowrap}
+@container (max-width:300px){.op .fin.proj b{font-size:11px}.op .fin.proj > div{padding:0 4px}}
+.op .pcproj-pc .pcbal{background:none;border:0;cursor:pointer;font-size:13px;opacity:.45;position:relative;padding:0}
+.op .pcproj-pc .pcbal.tem{opacity:1}
+.op .pcproj-pc .pcbal i{position:absolute;top:-6px;right:-6px;font-style:normal;font-size:9.5px;font-weight:700;background:var(--ww-accent,#4f7cff);color:#fff;border-radius:8px;padding:0 4px;line-height:14px}
+.op .pcproj-pc .pcmenu{position:relative}
+.op .pcproj-pc .pcmenu summary{list-style:none;cursor:pointer;color:var(--ww-text-muted);font-size:15px;text-align:center}
+.op .pcproj-pc .pcmenu summary::-webkit-details-marker{display:none}
+.op .pcproj-pc .pcmenu-pop{position:absolute;right:0;top:20px;z-index:40;min-width:230px;background:var(--ww-panel);border:1px solid var(--ww-border);border-radius:10px;box-shadow:0 10px 30px rgba(0,0,0,.25);padding:4px;display:flex;flex-direction:column;font-size:12px}
+.op .pcproj-pc .pcmenu-pop > button,.op .pcproj-pc .pcmenu-pop > a{text-align:left;padding:6px 8px;border-radius:6px;background:none;border:0;color:var(--ww-text);cursor:pointer;text-decoration:none}
+.op .pcproj-pc .pcmenu-pop > button:hover,.op .pcproj-pc .pcmenu-pop > a:hover{background:var(--ww-row-hover,rgba(127,127,127,.12))}
+.op .pcproj-pc .pcmenu-mat{display:flex;flex-direction:column;gap:3px;padding:6px 8px;color:var(--ww-text-faint);font-size:11px;border-top:1px solid var(--ww-border);margin-top:2px}
+.op .pcproj-pc > *{min-width:0}
+.op .pcproj-pc .desc{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* comentários do PC — portal fora do .op */
+.pccoment-scrim{position:fixed;inset:0;z-index:200;background:rgba(0,0,0,.35);display:flex;align-items:flex-start;justify-content:center;padding-top:14vh}
+.pccoment{width:min(460px,94vw);background:var(--ww-panel,#fff);color:var(--ww-text,#111);border:1px solid var(--ww-border,#ddd);border-radius:12px;box-shadow:0 20px 50px rgba(0,0,0,.3);display:flex;flex-direction:column;max-height:70vh;font-size:13px}
+.pccoment .hd{display:flex;align-items:center;gap:8px;padding:10px 12px;border-bottom:1px solid var(--ww-border,#ddd)}
+.pccoment .hd small{color:var(--ww-text-faint,#888);flex:1}
+.pccoment .hd button{background:none;border:0;cursor:pointer;color:inherit}
+.pccoment .corpo{padding:10px 12px;overflow:auto;display:flex;flex-direction:column;gap:8px}
+.pccoment .c .m{display:flex;gap:6px;align-items:baseline}
+.pccoment .c .m small{color:var(--ww-text-faint,#888)}
+.pccoment .pe{display:flex;gap:6px;padding:10px 12px;border-top:1px solid var(--ww-border,#ddd)}
+.pccoment .pe textarea{flex:1;font:inherit;background:transparent;color:inherit;border:1px solid var(--ww-border,#ddd);border-radius:8px;padding:6px}
+.pccoment .pe button{border:0;border-radius:8px;background:var(--ww-accent,#4f7cff);color:#fff;padding:0 12px;cursor:pointer}
+.pccoment .pe button:disabled{opacity:.5}
+.op .pcproj-pc .nf{min-width:0;overflow:hidden}
+.op .pcproj-pc .nf .st{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:inline-block}

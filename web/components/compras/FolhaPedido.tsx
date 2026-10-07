@@ -110,6 +110,8 @@ export default function FolhaPedido({
   const [rcLigadas, setRcLigadas] = useState<string[]>([]);
   const [marcas, setMarcas] = useState<Record<string, { on: boolean; qtd: number }>>({});
   const [picker, setPicker] = useState(false);
+  /** "Puxar itens da Lista de materiais" (07/10/26): PC de projeto (PJ…) puxando as linhas da lista sem PC. */
+  const [pickerLista, setPickerLista] = useState(false);
   const [colar, setColar] = useState<string | null>(null);
   const salvosRc = useRef<Record<number, number>>({}); // rcItemId → qtd já gravada por ESTE pedido
   const [pmax, setPmax] = useState<Record<number, number | null>>({}); // n_cod_prod → preço máximo de compra (Estoque)
@@ -340,7 +342,7 @@ export default function FolhaPedido({
                           avulsa: !!D.avulsa, avulsaMotivo: D.avulsa ? D.avulsaMotivo ?? "" : null }),
         itens: D.itens.map((i) => ({ id: i.id ?? null, cod: i.cod, ncodProd: i.ncodProd, desc: i.desc, un: i.un, qtd: i.qtd,
           vu: i.vu, desc0: i.desc0, ipi: i.ipi, st: i.st, ncm: i.ncm, local: i.local, obs: i.obs,
-          rc: i.rc ? { itemId: i.rc.itemId } : null })),
+          rc: i.rc ? { itemId: i.rc.itemId } : null, listaId: i.listaId ?? null })),
         parcelas: isRC ? [] : D.parcelas, deptos: isRC ? [] : D.deptos,
         novaEtapa: o.novaEtapa, novaAprov: o.novaAprov,
         origemDe: !D.id && rcLigadas.length ? `Gerado a partir da RC ${rcLigadas.join(", ")}` : undefined,
@@ -773,6 +775,10 @@ export default function FolhaPedido({
                         <div className="addrow">
                           <button className="btn sm pri" onClick={() => setD((d) => d ? { ...d, itens: [...d.itens, itemVazio()] } : d)}>＋ Novo Item</button>
                           <button className="btn sm" onClick={() => setColar((c) => (c == null ? "" : null))}>⎘ Colar do Excel</button>
+                          {!isRC && D.projCod && /^\s*PJ\s*\d/i.test(D.proj ?? "") && (
+                            <button className="btn sm" title="As linhas da Lista de materiais deste projeto que ainda não têm PC — cada item fica ligado à sua linha"
+                              onClick={() => setPickerLista(true)}>📋 Puxar itens da Lista de materiais</button>
+                          )}
                           <span className="hint" style={{ alignSelf: "center" }}>O preço sugerido é o do último pedido daquele produto.</span>
                         </div>
                         {colar != null && (
@@ -1093,6 +1099,19 @@ export default function FolhaPedido({
           <CadastroFornecedorOverlay emp={D.emp} fornCod={D.fornCod} cnpj={D.cnpj} nome={D.forn}
             onFechar={(salvou) => { setCadForn(false); if (salvou) toast("Cadastro do fornecedor salvo — o envio por e-mail já usa os dados novos"); }} />
         )}
+        {pickerLista && D.projCod && (
+          <PickerLista empresa={D.emp || "SF"} codigo={Number(D.projCod)} projeto={D.proj ?? ""}
+            jaNoPedido={new Set(D.itens.map((i) => i.listaId).filter((x): x is string => !!x))}
+            onClose={() => setPickerLista(false)}
+            onAdd={(linhas) => {
+              const novos: Item[] = linhas.map((l) => ({ ...itemVazio(), cod: l.codigo ?? "", ncodProd: l.ncod_prod, desc: [l.item, l.modelo].filter(Boolean).join(" · "),
+                un: l.un || "UN", qtd: l.qtd || 1, vu: Math.round((l.valor_unit ?? 0) * 100) / 100,
+                obs: l.equipamento ? `Equip.: ${l.equipamento}` : null, rc: l.rc_item_id ? { itemId: l.rc_item_id, num: "", idx: 0, desc: l.item, qtd: l.qtd } : null, listaId: l.id }));
+              setD((d) => d ? { ...d, itens: [...d.itens.filter((i) => i.desc.trim() || i.cod), ...novos] } : d);
+              setPickerLista(false);
+              toast(`${novos.length} item(ns) da Lista de materiais — ao salvar, cada um fica ligado à sua linha`);
+            }} />
+        )}
         {picker && (
           <PickerRc onClose={() => setPicker(false)} covEfetiva={covEfetiva}
             onAdd={(sel) => {
@@ -1190,6 +1209,77 @@ function PickerRc({ onClose, onAdd, covEfetiva }: {
             });
             onAdd(sel);
           }}>Adicionar {n || ""} item(ns) ao pedido</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+type LinhaLista = { id: string; equipamento: string; item: string; modelo: string | null; qtd: number; un: string; codigo: string | null;
+  ncod_prod: number | null; valor_unit: number | null; fornecedor: string | null; necessario: string | null; rc_item_id: number | null };
+/** Linhas da Lista de materiais do projeto ainda sem PC (07/10/26) — filtro por grupo e fornecedor. */
+function PickerLista({ empresa, codigo, projeto, jaNoPedido, onClose, onAdd }: {
+  empresa: string; codigo: number; projeto: string; jaNoPedido: Set<string>;
+  onClose: () => void; onAdd: (linhas: LinhaLista[]) => void;
+}) {
+  const [linhas, setLinhas] = useState<LinhaLista[] | null>(null);
+  const [erro, setErro] = useState<string | null>(null);
+  const [grupo, setGrupo] = useState("");
+  const [forn, setForn] = useState("");
+  const [q, setQ] = useState("");
+  const [marc, setMarc] = useState<Set<string>>(new Set());
+  useEffect(() => {
+    fetch(`/api/rc-projetos/lista-sem-pc?empresa=${encodeURIComponent(empresa)}&codigo=${codigo}`, { cache: "no-store" })
+      .then((r) => r.json()).then((j) => { if (j.error) setErro(j.error); else setLinhas((j.linhas ?? []).filter((l: LinhaLista) => !jaNoPedido.has(l.id))); })
+      .catch((e) => setErro(String(e)));
+  }, [empresa, codigo, jaNoPedido]);
+  const grupos = [...new Set((linhas ?? []).map((l) => l.equipamento))].sort();
+  const forns = [...new Set((linhas ?? []).map((l) => l.fornecedor ?? "").filter(Boolean))].sort();
+  const vis = (linhas ?? []).filter((l) => (!grupo || l.equipamento === grupo) && (!forn || l.fornecedor === forn)
+    && (!q || `${l.item} ${l.codigo ?? ""} ${l.modelo ?? ""}`.toLowerCase().includes(q.toLowerCase())));
+  const tot = (linhas ?? []).filter((l) => marc.has(l.id)).reduce((a, l) => a + l.qtd * (l.valor_unit ?? 0), 0);
+  return (
+    <div className="cmp-scrim" style={{ zIndex: 70, justifyContent: "center", alignItems: "flex-start", padding: "5vh 16px" }}
+      onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="card2" style={{ width: "min(1040px,100%)", maxHeight: "88vh", display: "flex", flexDirection: "column", gap: 10, boxShadow: "var(--shadow-float)" }}
+        role="dialog" aria-modal="true" aria-label="Puxar itens da Lista de materiais">
+        <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+          <b style={{ fontSize: 16 }}>Puxar itens da Lista de materiais</b><span className="tag">{projeto}</span>
+          <span className="hint">Só linhas sem PC. Cada item do pedido fica ligado à sua linha (como no “Gerar pedido de compra” da lista).</span>
+          <span style={{ flex: 1 }} /><button className="btn ghost sm" onClick={onClose}>Fechar ✕</button>
+        </div>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <input className="in" style={{ flex: "1 1 220px" }} autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder="Filtrar por item ou código" />
+          <select className="in" style={{ flex: "0 1 220px" }} value={grupo} onChange={(e) => setGrupo(e.target.value)}>
+            <option value="">Todos os grupos</option>{grupos.map((g) => <option key={g} value={g}>{g}</option>)}</select>
+          <select className="in" style={{ flex: "0 1 240px" }} value={forn} onChange={(e) => setForn(e.target.value)}>
+            <option value="">Todos os fornecedores</option>{forns.map((f) => <option key={f} value={f}>{f}</option>)}</select>
+        </div>
+        <div style={{ overflow: "auto", border: "1px solid var(--line)", borderRadius: 10 }}>
+          {erro && <div className="empty">Não consegui ler a lista: {erro}</div>}
+          {!erro && linhas == null && <div className="empty">Carregando…</div>}
+          {linhas && !vis.length && <div className="empty">Nenhuma linha sem PC com esse filtro</div>}
+          {vis.length > 0 && (
+            <table className="items" style={{ minWidth: 0 }}>
+              <thead><tr>
+                <th style={{ width: 34 }}><input type="checkbox" aria-label="Marcar todas" checked={vis.every((l) => marc.has(l.id))}
+                  onChange={(e) => setMarc((m) => { const n = new Set(m); vis.forEach((l) => (e.target.checked ? n.add(l.id) : n.delete(l.id))); return n; })} /></th>
+                <th>Equipamento</th><th>Código</th><th>Item</th><th className="r">Qtd</th><th>Necessário em</th><th className="r">Valor unit.</th><th>Fornecedor sugerido</th>
+              </tr></thead>
+              <tbody>{vis.map((l) => (
+                <tr key={l.id} onClick={() => setMarc((m) => { const n = new Set(m); if (n.has(l.id)) n.delete(l.id); else n.add(l.id); return n; })} style={{ cursor: "pointer" }}>
+                  <td><input type="checkbox" checked={marc.has(l.id)} readOnly aria-label="Selecionar linha" /></td>
+                  <td className="faint">{l.equipamento}</td><td className="mono">{l.codigo ?? <span className="faint">sem código</span>}</td>
+                  <td>{l.item}{l.modelo ? <span className="faint"> · {l.modelo}</span> : null}</td>
+                  <td className="r">{fq(l.qtd)} {l.un}</td><td>{l.necessario ? dBR(l.necessario) : "—"}</td>
+                  <td className="r">{l.valor_unit != null ? money(l.valor_unit) : "—"}</td><td className="faint">{l.fornecedor ?? "—"}</td>
+                </tr>))}</tbody>
+            </table>)}
+        </div>
+        <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", alignItems: "center" }}>
+          <span className="hint">{marc.size} linha(s) · {money(tot)} pelo valor da lista (dá para mudar no pedido)</span>
+          <button className="btn" onClick={onClose}>Cancelar</button>
+          <button className="btn pri" disabled={!marc.size} onClick={() => onAdd((linhas ?? []).filter((l) => marc.has(l.id)))}>Adicionar {marc.size || ""} item(ns) ao pedido</button>
         </div>
       </div>
     </div>

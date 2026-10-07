@@ -64,6 +64,9 @@ export type Item = {
   id?: number; key: string; cod?: string | null; ncodProd?: number | null; desc: string; un: string;
   qtd: number; vu: number; desc0: number; ipi: number; st: number; ncm?: string | null; local?: string | null;
   obs?: string | null; rec?: number | null; rc?: ItemRc | null; cov?: number; seq?: number;
+  /** Linha da Lista de materiais do projeto que este item atende (approval.rc_projetos_itens.id) —
+   *  "Puxar itens da Lista de materiais" (07/10/26). Ao salvar, a linha fica ligada a este item. */
+  listaId?: string | null;
   _open?: boolean; _hist?: boolean;
 };
 export type Parcela = { n: number; venc: string; valor: number; doc: string };

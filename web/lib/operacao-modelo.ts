@@ -525,7 +525,8 @@ export function margensProjeto(p: Pedido, budgetMateriais: number | null) {
   const pv = p.valorPv;
   const m = (custo: number) => (pv > 0 ? { valor: pv - custo, pct: (pv - custo) / pv } : null);
   return { pv, aprov, pend, budget: budgetMateriais,
-    projetada: budgetMateriais != null ? m(budgetMateriais) : null, real: m(aprov), comPendentes: m(aprov + pend) };
+    // sem PC aprovado não há custo real ainda: "—", não 100%
+    projetada: budgetMateriais != null ? m(budgetMateriais) : null, real: aprov > 0 ? m(aprov) : null, comPendentes: aprov + pend > 0 ? m(aprov + pend) : null };
 }
 
 // ── Filtros ────────────────────────────────────────────────────────────────

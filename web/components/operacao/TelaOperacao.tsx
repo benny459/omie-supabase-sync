@@ -1206,15 +1206,16 @@ export function FinStrip({ p, $, projeto }: { p: Pedido; $: (v: number | null) =
     const M = margensProjeto(p, projeto.budget);
     const cel = (rot: string, x: { valor: number; pct: number } | null, dica: string) => (
       <div className={`mb ${mbCls(x?.pct ?? null)}`} title={dica}><label>{rot}</label><b>{x == null ? "—" : pct(x.pct)}</b>
-        {x != null && <small style={{ display: "block", fontSize: 10.5, color: "var(--ww-text-faint)" }}>{$(x.valor)}</small>}</div>);
+        {x != null && <small>{$(x.valor)}</small>}</div>);
     return (
       <div className="fin proj">
-        <div><label>RC</label><b>{$(projeto.budget)}</b></div>
-        <div><label>PC <span>{F.pcN} {F.pcN === 1 ? "pedido" : "pedidos"}</span></label><b>{F.pcN ? $(F.pc) : "—"}</b></div>
+        <div title="Budget de materiais (RC)"><label>RC</label><b>{$(projeto.budget)}</b></div>
+        <div title={`${F.pcN} pedido(s) de compra`}><label>PC <span>{F.pcN}</span></label><b>{F.pcN ? $(F.pc) : "—"}</b></div>
         <div><label>PV</label><b>{$(p.valorPv)}</b></div>
-        {cel("M. projetada", M.projetada, `Margem projetada = (PV − budget de materiais da RC) ÷ PV\n${$(p.valorPv)} − ${$(M.budget)}`)}
-        {cel("M. real", M.real, `Margem real = (PV − PCs aprovados) ÷ PV\n${$(p.valorPv)} − ${$(M.aprov)} aprovados`
-          + (M.pend ? `\nSe os ${$(M.pend)} aguardando aprovação forem aprovados: ${M.comPendentes ? `${pct(M.comPendentes.pct)} (${$(M.comPendentes.valor)})` : "—"}` : ""))}
+        {cel("M. proj.", M.projetada, `Margem projetada = (PV − budget de materiais da RC) ÷ PV\n${$(p.valorPv)} − ${$(M.budget)}`)}
+        {cel("M. real", M.real, M.real == null ? "Margem real = (PV − PCs aprovados) ÷ PV — sem PCs aprovados ainda, não há custo real"
+          : `Margem real = (PV − PCs aprovados) ÷ PV\n${$(p.valorPv)} − ${$(M.aprov)} aprovados`
+            + (M.pend ? `\nSe os ${$(M.pend)} aguardando aprovação forem aprovados: ${M.comPendentes ? `${pct(M.comPendentes.pct)} (${$(M.comPendentes.valor)})` : "—"}` : ""))}
       </div>
     );
   }
@@ -1346,9 +1347,10 @@ function CartaoPedido(props: {
       {modulo === "projetos" && props.bucket && (
         <div className="pvfoot" style={{ justifyContent: "flex-start", paddingTop: 0 }} onClick={(e) => e.stopPropagation()}>
           {(() => { const pj = projetoDoBucket(modulo, props.bucket!); return pj ? <LinkAbrirProjeto {...pj} /> : null; })()}
-          <div style={{ flex: 1, maxWidth: 760 }}>
+          {/* aberto, o resumo compacto do projeto (logo abaixo) já mostra estes números */}
+          {!aberto && <div style={{ flex: 1, maxWidth: 760 }}>
             <BucketTotals bucket={props.bucket} items={props.bucket.rows} modulo={modulo} canViewValues={props.verValores} budgetMap={props.budgetMap} />
-          </div>
+          </div>}
         </div>
       )}
 
@@ -1673,12 +1675,18 @@ function GruposPcProjeto({ compras, p, podeAprovar, podeEditar, ehAdmin, statusL
 }) {
   const empresa = s(p.bucket.rows[0]?.empresa) || proj.empresaProj || "SF";
   const lista = (extra: string) => `/projetos/${proj.codProj}/materiais?${new URLSearchParams({ empresa, aba: "materiais" })}&${extra}`;
-  // RCs com item ainda sem PC
-  const rcs = new Map<string, Compra[]>();
-  for (const c of compras) if (!c.pc && c.rcNumero && c.rcTotal > 0) rcs.set(c.rcNumero, [...(rcs.get(c.rcNumero) ?? []), c]);
   // PCs (um por número)
   const pcs = new Map<string, Compra[]>();
   for (const c of compras) if (c.pc) pcs.set(c.pc, [...(pcs.get(c.pc) ?? []), c]);
+  /* 💬 por PC (07/10/26): comentários no histórico do pedido (aparecem também no Compras) */
+  const [coment, setComent] = useState<Record<string, number>>({});
+  const [comentPc, setComentPc] = useState<string | null>(null);
+  const chavePcs = [...pcs.keys()].join(",");
+  useEffect(() => {
+    if (!chavePcs) return;
+    fetch(`/api/compras/comentarios?emp=${encodeURIComponent(empresa)}&pcs=${encodeURIComponent(chavePcs)}`, { cache: "no-store" })
+      .then((r) => r.json()).then((j) => setComent(j.contagem ?? {})).catch(() => {});
+  }, [empresa, chavePcs]);
   const situacao = (cs: Compra[]) => {
     const st = cs[0].statusCodigo;
     const aprov = /^APROVADO/.test(st) ? "aprovado" : st === "NAO_APROVADO" ? "nao_aprovado" : st === "CANCELAR_PEDIDO" ? "nao_aprovado" : "aguardando";
@@ -1700,7 +1708,7 @@ function GruposPcProjeto({ compras, p, podeAprovar, podeEditar, ehAdmin, statusL
       <div className="lado compras pcproj-bloco">
         <div className="pcproj-tit">Pedidos de compra</div>
         <div className="pcproj-hd"><span>PC</span><span>Fornecedor</span><span style={{ textAlign: "right" }}>Valor</span><span>Aprovação</span>
-          <span>Prev. material</span><span>Situação · material</span><span>NF entrada</span><span /></div>
+          <span>Prev. material</span><span>Situação</span><span>NF entrada</span><span title="Comentários">💬</span><span /></div>
         {[...pcs.entries()].map(([pc, cs]) => {
           const c = cs[0];
           const todosRecebidos = cs.every((x) => x.estado === "recebido");
@@ -1727,8 +1735,9 @@ function GruposPcProjeto({ compras, p, podeAprovar, podeEditar, ehAdmin, statusL
                   : <span className={late ? "late" : ""}>{prev ? dBR(prev) : "—"}</span>}
                 {late && <small className="atraso">⚠ {-(diasAte(prev) ?? 0)}d de atraso</small>}
               </span>
-              <span className="sitmat"><span className="sitpill" style={{ background: st.cor }} title={st.rot}>{st.rot}</span>
-                <MatPc cs={cs} auto={mat} podeEditar={podeEditar} marcarLote={marcarMaterialLote} /></span>
+              {/* uma informação por célula (07/10/26): o material marcado à mão vai no ⋯ */}
+              <span><span className="sitpill" style={{ background: st.cor }}
+                title={`${st.rot}${cs.some((x) => x.matManual?.v) ? ` · material marcado à mão: ${MAT_MANUAL.find((m) => m.v === cs.find((x) => x.matManual?.v)?.matManual?.v)?.t ?? ""}` : ""}`}>{st.rot}</span></span>
               <NfEntrada cs={cs} late={late} aprovado={aprovado} />
               <span className="acts">
                 {pendente && podeAprovar && (
@@ -1737,15 +1746,25 @@ function GruposPcProjeto({ compras, p, podeAprovar, podeEditar, ehAdmin, statusL
                     <button className="icon" title="Recusar" onClick={() => statusLote(cs, "NAO_APROVADO")}>✕</button>
                   </>
                 )}
-                <a className="icon" title="Ver os itens deste PC na Lista de materiais" href={lista(`pc=${encodeURIComponent(pc)}`)}>☰</a>
-                <button className="icon" title="Todos os campos" onClick={() => abrirDrawer(c.key)}>⋯</button>
               </span>
+              <button type="button" className={`pcbal ${coment[pc] ? "tem" : ""}`} title={coment[pc] ? `${coment[pc]} comentário(s)` : "Comentar este PC"}
+                onClick={() => setComentPc(pc)}>💬{coment[pc] ? <i>{coment[pc]}</i> : null}</button>
+              <details className="pcmenu" onClick={(e) => e.stopPropagation()}>
+                <summary title="Mais">⋯</summary>
+                <div className="pcmenu-pop">
+                  <button type="button" onClick={(e) => { (e.currentTarget.closest("details") as HTMLDetailsElement).open = false; abrirDrawer(c.key); }}>Todos os campos do PC</button>
+                  <a href={lista(`pc=${encodeURIComponent(pc)}`)}>Ver itens na Lista de materiais</a>
+                  {podeEditar && <label className="pcmenu-mat">Material (marcar à mão)
+                    <MatPc cs={cs} auto={mat} podeEditar={podeEditar} marcarLote={marcarMaterialLote} /></label>}
+                </div>
+              </details>
             </div>
           );
         })}
         {!pcs.size && <div className="pcproj-vazio">Nenhum pedido de compra ainda — gere pela Lista de materiais.</div>}
       </div>
       </div></div>
+      {comentPc && <ComentariosPc empresa={empresa} pc={comentPc} onFechar={(n) => { if (n != null) setComent((c) => ({ ...c, [comentPc]: n })); setComentPc(null); }} />}
     </div>
   );
 }
@@ -1787,8 +1806,8 @@ function ResumoBudgetProjeto({ empresa, codigo, $, valorPv }: { empresa: string;
         return (
           <div className="pcproj-resumo-nums" style={{ marginTop: 4 }}>
             <span title={`(PV ${$(valorPv)} − budget de materiais da RC ${$(d.budget)}) ÷ PV`}>Margem projetada <b className={mProj != null && mProj < 0 ? "neg" : ""}>{mProj == null ? "—" : `${$(mProj)} · ${pc(mProj)}`}</b></span>
-            <span title={`(PV ${$(valorPv)} − PCs aprovados ${$(d.aprov)}) ÷ PV${d.pend ? `\nSe os ${$(d.pend)} aguardando aprovação forem aprovados: ${$(mPend)} · ${pc(mPend)}` : ""}`}>
-              Margem real <b className={mReal < 0 ? "neg" : ""}>{$(mReal)} · {pc(mReal)}</b>{d.pend ? <small style={{ color: "var(--ww-text-faint)" }}> (com os aguardando: {pc(mPend)})</small> : null}</span>
+            <span title={d.aprov > 0 ? `(PV ${$(valorPv)} − PCs aprovados ${$(d.aprov)}) ÷ PV${d.pend ? `\nSe os ${$(d.pend)} aguardando aprovação forem aprovados: ${$(mPend)} · ${pc(mPend)}` : ""}` : "Sem PCs aprovados ainda — não há custo real"}>
+              Margem real <b className={d.aprov > 0 && mReal < 0 ? "neg" : ""}>{d.aprov > 0 ? `${$(mReal)} · ${pc(mReal)}` : "—"}</b>{d.aprov > 0 && d.pend ? <small style={{ color: "var(--ww-text-faint)" }}> (com os aguardando: {pc(mPend)})</small> : null}</span>
           </div>);
       })()}
       <div className="pcproj-trilho" title="Pago · comprometido · projetado, numa escala só; o traço é o budget">
@@ -1894,6 +1913,44 @@ function VendasDoProjeto({ empresa, codigo, $, valorPv, podeEditar }: { empresa:
       {aviso && <small style={{ display: "block", marginTop: 4, color: aviso.startsWith("Não") ? "#e11d48" : "var(--ww-text-muted)" }}>{aviso}</small>}
     </div>
   );
+}
+
+/** Comentários de um PC (07/10/26): quem escreveu e quando, e o campo para acrescentar. */
+function ComentariosPc({ empresa, pc, onFechar }: { empresa: string; pc: string; onFechar: (n: number | null) => void }) {
+  const [lista, setLista] = useState<{ texto: string; por: string | null; em: string | null }[] | null>(null);
+  const [txt, setTxt] = useState("");
+  const [erro, setErro] = useState<string | null>(null);
+  const [ocupado, setOcupado] = useState(false);
+  useEffect(() => {
+    fetch(`/api/compras/comentarios?emp=${encodeURIComponent(empresa)}&pc=${encodeURIComponent(pc)}`, { cache: "no-store" })
+      .then((r) => r.json()).then((j) => setLista(j.comentarios ?? [])).catch((e) => setErro(String(e)));
+  }, [empresa, pc]);
+  const enviar = async () => {
+    if (!txt.trim()) return;
+    setOcupado(true); setErro(null);
+    try {
+      const r = await fetch("/api/compras/comentarios", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ emp: empresa, pc, texto: txt }) });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.error ?? r.statusText);
+      setLista(j.comentarios ?? []); setTxt("");
+    } catch (e) { setErro((e as Error).message); } finally { setOcupado(false); }
+  };
+  const quem = (a: string | null) => (a ? (a.includes("@") ? a.split("@")[0] : a) : "—");
+  return createPortal(
+    <div className="pccoment-scrim" onMouseDown={(e) => { if (e.target === e.currentTarget) onFechar(lista?.length ?? null); }}>
+      <div className="pccoment" role="dialog" aria-label={`Comentários do PC ${pc}`}>
+        <div className="hd"><b>💬 PC {pc}</b><small>fica no histórico do pedido (Compras)</small><button type="button" onClick={() => onFechar(lista?.length ?? null)}>✕</button></div>
+        <div className="corpo">
+          {lista == null && !erro && <small>carregando…</small>}
+          {lista?.length === 0 && <small>Nenhum comentário ainda.</small>}
+          {lista?.map((c, i) => <div key={i} className="c"><div className="m"><b>{quem(c.por)}</b><small>{c.em ? new Date(c.em).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }) : ""}</small></div><div>{c.texto}</div></div>)}
+          {erro && <small style={{ color: "#e11d48" }}>{erro}</small>}
+        </div>
+        <div className="pe"><textarea value={txt} onChange={(e) => setTxt(e.target.value)} placeholder="Escreva um comentário…" rows={2}
+          onKeyDown={(e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) void enviar(); }} />
+          <button type="button" disabled={ocupado || !txt.trim()} onClick={() => void enviar()}>{ocupado ? "…" : "Comentar"}</button></div>
+      </div>
+    </div>, document.body);
 }
 
 /** Material do PC (07/10/26): o seletor editável, no lugar da pílula repetida.

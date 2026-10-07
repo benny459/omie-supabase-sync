@@ -46,6 +46,31 @@ export async function GET(req: Request) {
   } catch (e) { return erro(e); }
 }
 
+/** Itens puxados da Lista de materiais (07/10/26): cada item do PC fica ligado à sua linha
+ *  da lista — o MESMO vínculo do "Gerar pedido de compra" da lista (pc_item_id, pc_numero,
+ *  vinculo_via "lista"). Os itens do PC são achados na ordem em que foram mandados (seq). */
+async function ligarLista(r: { id: number; num: string }, body: Record<string, unknown>, itens: Record<string, unknown>[], email: string) {
+  const alvos = itens.map((i, k) => ({ k, lista: i.listaId ? String(i.listaId) : "" })).filter((x) => x.lista);
+  if (!alvos.length) return 0;
+  const { data: full } = await supaAdmin().schema("orders").rpc("compras_pedido", { p_id: r.id });
+  const its = [...(((full ?? {}) as { itens?: { id: number; seq: number }[] }).itens ?? [])].sort((x, y) => x.seq - y.seq);
+  const emp = String(body.emp ?? "SF").toUpperCase();
+  const proj = Number(body.projCod ?? 0);
+  let n = 0;
+  for (const a of alvos) {
+    const it = its[a.k];
+    if (!it) continue;
+    let qy = supaAdmin().schema("approval").from("rc_projetos_itens")
+      .update({ pc_item_id: it.id, pc_numero: r.num, vinculo_via: "lista", vinculo_em: new Date().toISOString(), atualizado_por: email })
+      .eq("id", a.lista).eq("empresa", emp);
+    if (proj > 0) qy = qy.eq("codigo_projeto", proj);
+    // linha já ligada a OUTRO PC não é tomada
+    const { data } = await qy.or(`pc_item_id.is.null,pc_item_id.eq.${it.id}`).select("id");
+    n += (data ?? []).length;
+  }
+  return n;
+}
+
 export async function POST(req: Request) {
   const q = await exigirCompras();
   if (q instanceof NextResponse) return q;
@@ -66,8 +91,9 @@ export async function POST(req: Request) {
   }
   try {
     const r = await rpc<{ id: number; num: string }>("compras_salvar", { p: body, p_por: q.email, p_uid: q.uid });
+    const ligadas = body.tipo === "PC" ? await ligarLista(r, body, itens, q.email) : 0;
     await posGravar(r.id, String(body.tipo));
-    return NextResponse.json(r);
+    return NextResponse.json({ ...r, ligadas });
   } catch (e) { return erro(e); }
 }
 
