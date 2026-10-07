@@ -111,7 +111,13 @@ export async function montarFluxoComparado(empresa: string, codigo: number, quem
     }
     return r;
   };
-  const [ini0, planoCab, parcPlano, saidPlano, vendas, pcItens, manuais, condicoes] = await Promise.all([
+  /* PV/OS do projeto (lib/vendas-projeto): só servem para trocar a data da parcela pelo
+     vencimento do título quando já faturou — a nova previsão de recebimento já está em
+     dt_ajustada. A montagem procura o título de cada NF e chega a levar 30–40 s; com
+     parcelas no plano espera no máximo 6 s e segue sem (avisa). */
+  const vazioVendas = { docs: [] as Awaited<ReturnType<typeof montar>>["docs"], parcelas: [] };
+  const vendasP = montar(empresa, codigo).catch((e: Error) => { avisos.push(`PV/OS não carregaram (${e.message}).`); return vazioVendas; });
+  const [ini0, planoCab, parcPlano, saidPlano, pcItens, manuais, condicoes] = await Promise.all([
     ap.from("projeto_fluxo_inicial").select("tipo, data, valor, descricao, origem, ref, proposta, congelado_em")
       .eq("empresa", empresa).eq("codigo_projeto", codigo).order("data", { ascending: true }),
     ap.from("projeto_plano").select("proposta").eq("empresa", empresa).eq("codigo_projeto", codigo).maybeSingle(),
@@ -119,7 +125,6 @@ export async function montarFluxoComparado(empresa: string, codigo: number, quem
       .eq("empresa", empresa).eq("codigo_projeto", codigo).order("parcela"),
     ap.from("projeto_plano_saida").select("id, origem, descricao, fornecedor, dt_prevista, valor, no_fluxo")
       .eq("empresa", empresa).eq("codigo_projeto", codigo).order("dt_prevista"),
-    montar(empresa, codigo).catch((e: Error) => { avisos.push(`PV/OS não carregaram (${e.message}).`); return { docs: [], parcelas: [] }; }),
     comRetry(() => ap.rpc("_projeto_pc_itens", { p_empresa: empresa, p_projeto: codigo })),
     ap.from("projeto_fluxo_linha").select("tipo, descricao, data_prevista, valor")
       .eq("empresa", empresa).eq("codigo_projeto", codigo),
@@ -183,7 +188,10 @@ export async function montarFluxoComparado(empresa: string, codigo: number, quem
   type Pend = EvFluxo & { prioridade: number };
   const entPend: Pend[] = [];
   const parcelasDelta: ParcelaDelta[] = [];
-  const docs = vendas.docs;
+  const limite = parcelasPlano.length ? 6000 : 25000;
+  const vendas = await Promise.race([vendasP, new Promise<null>((ok) => setTimeout(() => ok(null), limite))]);
+  if (!vendas) avisos.push("Os títulos dos PV/OS faturados demoraram a responder — as parcelas usam a nova previsão de recebimento (ou a inicial).");
+  const docs = (vendas ?? vazioVendas).docs;
   if (parcelasPlano.length) {
     for (const p of parcelasPlano) {
       const d = docs.find((x) => x.parcela === p.parcela);
