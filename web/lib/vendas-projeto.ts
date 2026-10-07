@@ -25,6 +25,8 @@ export type VendaProjeto = {
   receb_inicial: string | null; receb_nova: string | null;
   faturado: boolean; dt_fat: string | null; nf: string | null; recebido: boolean;
   titulo_ref: string | null; titulo_venc: string | null;
+  /** faturado, mas a consulta do título falhou: o recebimento fica "indisponível" (nunca outra data) */
+  titulo_indisponivel?: boolean;
 };
 
 export const dia = (v: unknown): string | null => {
@@ -41,7 +43,8 @@ const dig = (s: unknown) => String(s ?? "").replace(/\D/g, "").replace(/^0+/, ""
 
 export type ParcelaPlano = { parcela: number; evento: string | null; valor: number | null; dt_plano: string | null; dt_ajustada: string | null };
 type ParV = { id: number; documento_id: number; numero: number; vencimento: string | null; faturamento_previsto: string | null; faturada_em: string | null; descricao: string | null };
-type Titulo = { ref: string; doc: string; venc: string | null; valor: number; saldo: number; situacao: string; proj: string | null };
+type TituloRow = { id: string; numero_documento: string | null; numero_documento_fiscal: string | null; vencimento: string | null;
+  valor_documento: number | null; val_aberto: number | null; status_titulo: string | null };
 
 export async function montar(empresa: string, codigo: number): Promise<{ docs: VendaProjeto[]; parcelas: ParcelaPlano[] }> {
   const adm = supaAdmin();
@@ -119,15 +122,32 @@ export async function montar(empresa: string, codigo: number): Promise<{ docs: V
     const p = parcelas.find((x) => x.parcela === d.parcela);
     if (p) { d.receb_inicial = p.dt_plano; d.receb_nova = p.dt_ajustada; if (!d.evento) d.evento = p.evento; }
   }
-  // Faturado: o título a receber (NF / recibo) manda no recebimento
+  /* Faturado: o título a receber (NF / recibo) manda no recebimento. 07/10/26 (perf): UMA
+     consulta para todos os documentos, direto na finance.v_receber_bruto (a receber_buscar,
+     uma por NF e com ilike na base inteira, levava 8–37 s e às vezes caía). Falhou duas vezes:
+     "vencimento indisponível" — nunca outra data no lugar. */
   const fats = docs.filter((d) => d.faturado && d.nf);
-  await Promise.all(fats.map(async (d) => {
-    let { data, error } = await adm.schema("finance").rpc("receber_buscar", { p_q: String(d.nf), p_lim: 30 });
-    if (error) ({ data, error } = await adm.schema("finance").rpc("receber_buscar", { p_q: String(d.nf), p_lim: 30 }));
-    const ts = ((data ?? []) as Titulo[]).filter((t) => dig(t.doc) === dig(d.nf));
-    const t = ts.find((x) => Math.abs(Number(x.valor) - d.valor) < 0.05) ?? (ts.length === 1 ? ts[0] : null);
-    if (t) { d.titulo_ref = t.ref; d.titulo_venc = dia(t.venc); d.recebido = t.situacao === "pago" || Number(t.saldo) <= 0.004; }
-  }));
+  if (fats.length) {
+    const nfs = [...new Set(fats.flatMap((d) => [String(d.nf), dig(d.nf)]).filter(Boolean))];
+    const lista = nfs.map((n) => `"${n.replace(/"/g, "")}"`).join(",");
+    const consulta = () => adm.schema("finance").from("v_receber_bruto")
+      .select("id, numero_documento, numero_documento_fiscal, vencimento, valor_documento, val_aberto, status_titulo")
+      .eq("empresa", empresa).or(`numero_documento_fiscal.in.(${lista}),numero_documento.in.(${lista})`).limit(500);
+    let r = await consulta();
+    if (r.error) r = await consulta();
+    if (r.error) { for (const d of fats) d.titulo_indisponivel = true; }
+    else {
+      const ts = ((r.data ?? []) as TituloRow[]).filter((t) => !["EXCLUIDO", "CANCELADO"].includes(String(t.status_titulo ?? "")));
+      for (const d of fats) {
+        const meus = ts.filter((t) => dig(t.numero_documento_fiscal) === dig(d.nf) || dig(t.numero_documento) === dig(d.nf));
+        const t = meus.find((x) => Math.abs(Number(x.valor_documento) - d.valor) < 0.05) ?? (meus.length === 1 ? meus[0] : null);
+        if (t) {
+          d.titulo_ref = `r:${t.id}`; d.titulo_venc = dia(t.vencimento);
+          d.recebido = ["RECEBIDO", "LIQUIDADO"].includes(String(t.status_titulo ?? "")) || Number(t.val_aberto ?? t.valor_documento) <= 0.004;
+        }
+      }
+    }
+  }
   docs.sort((a, b) => (a.parcela ?? 99) - (b.parcela ?? 99) || (a.fat_inicial ?? "9").localeCompare(b.fat_inicial ?? "9"));
   return { docs, parcelas };
 }

@@ -1839,6 +1839,7 @@ type VendaDoc = {
   chave: string; tipo: string; rotulo: string; origem: string; evento: string | null; valor: number; oc: string | null;
   parcela: number | null; fat_inicial: string | null; fat_nova: string | null; receb_inicial: string | null; receb_nova: string | null;
   faturado: boolean; dt_fat: string | null; nf: string | null; recebido: boolean; titulo_ref: string | null; titulo_venc: string | null;
+  titulo_indisponivel?: boolean;
 };
 const isoBR = (v: string | null | undefined) => (v ? dBR(Date.parse(`${v}T12:00:00`)) : "—");
 const difD = (a: string | null, b: string | null) => (a && b ? Math.round((Date.parse(`${a}T12:00:00`) - Date.parse(`${b}T12:00:00`)) / 86400000) : 0);
@@ -1910,7 +1911,10 @@ function VendasDoProjeto({ empresa, codigo, $, valorPv, podeEditar }: { empresa:
                   {difD(d.dt_fat, d.fat_inicial) !== 0 && <em className={difD(d.dt_fat, d.fat_inicial) > 0 ? "atraso" : "adianta"}>{difD(d.dt_fat, d.fat_inicial) > 0 ? "+" : ""}{difD(d.dt_fat, d.fat_inicial)}d</em>}</span>
               : <DataPrev rotulo="faturamento" inicial={d.fat_inicial} nova={d.fat_nova} editavel={ed && !!d.chave} ocupado={gravando === `${d.chave}|faturamento`} onMudar={(v) => void mudar(d, "faturamento", v)} />}
             {d.faturado && !d.titulo_ref
-              ? <span className="vprev"><small>inicial {isoBR(d.receb_inicial)}</small><b title="título não encontrado — veja em Financeiro › Receber">—</b></span>
+              ? <span className="vprev"><small>inicial {isoBR(d.receb_inicial)}</small>
+                  {d.titulo_indisponivel
+                    ? <b className="text-amber-600" title="A consulta do título a receber falhou agora — recarregue">vencimento indisponível</b>
+                    : <b title="título não encontrado — veja em Financeiro › Receber">—</b>}</span>
               : <DataPrev rotulo="recebimento" inicial={d.receb_inicial} nova={d.faturado ? null : d.receb_nova} atual={d.faturado ? d.titulo_venc : null}
                   editavel={ed && !!d.parcela && !d.recebido && (!d.faturado || pode.titulo)} ocupado={gravando === `${d.chave}|recebimento`}
                   onMudar={(v) => void mudar(d, "recebimento", v)} />}
