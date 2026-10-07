@@ -41,6 +41,7 @@ import { createPortal } from "react-dom";
 import * as XLSX from "xlsx";
 import GradeEditavel, { linhaVazia, num, type ColunaGrade, type LinhaGrade, type SugestaoGrade } from "./GradeEditavel";
 import PcPickerModal, { type PcSearchResult } from "./PcPickerModal";
+import GerarPcDaLista, { type LinhaParaPc } from "./GerarPcDaLista";
 import AcertoItemEstoque, { type Compra, type Escolhido } from "@/components/faturamento/AcertoItemEstoque";
 import "@/components/faturamento/nova-emissao.css";
 import { CSS_CDL, KpisCompras, SugestoesVinculo, ForaDaLista, FluxoCompras, situacaoPc,
@@ -141,6 +142,8 @@ export default function MateriaisGrade({
   const [marcadas, setMarcadas] = useState<Set<string>>(new Set());
   const [picker, setPicker] = useState(false);
   const [equipFiltro, setEquipFiltro] = useState<string | null>(null);
+  /** ?pc=N vindo de Projetos: só as linhas daquele PC (07/10/26). */
+  const [filtroPcNum, setFiltroPcNum] = useState<string | null>(null);
   const [filtroPc, setFiltroPc] = useState<"todas" | "sem_pc" | "com_pc" | "risco" | "atrasado">("todas");
   /** Rascunho não salvo encontrado neste navegador ao abrir (ms de quando foi feito). */
   const [rascunhoDe, setRascunhoDe] = useState<number | null>(null);
@@ -667,11 +670,12 @@ export default function MateriaisGrade({
       if (equipFiltro && normGrupo(l.equipamento || "Geral") !== equipFiltro) return false;
       if (filtroPc === "com_pc" && !temPc(l)) return false;
       if (filtroPc === "sem_pc" && temPc(l)) return false;
+      if (filtroPcNum && !cmpPorId.get(l._id)?.pcs.some((p) => p.pc === filtroPcNum)) return false;
       if (filtroPc === "risco" && sinais.get(l._id)?.nivel !== "risco") return false;
       if (filtroPc === "atrasado" && sinais.get(l._id)?.nivel !== "atrasado") return false;
       return true;
     }),
-    [linhas, equipFiltro, filtroPc, temPc, sinais]);
+    [linhas, equipFiltro, filtroPc, temPc, sinais, filtroPcNum, cmpPorId]);
 
   const salvar = useCallback(async (confirmarRemocao = false, silencioso = false) => {
     const versaoInicio = versaoRef.current;
@@ -985,6 +989,60 @@ export default function MateriaisGrade({
   desvincularRef.current = desvincular;
 
   /** Linhas marcadas que podem virar RC: gravadas, sem RC e sem PC. */
+  /* ── PC pela lista e RC → lista (07/10/26) ── */
+  const [gerarPcLinhas, setGerarPcLinhas] = useState<LinhaParaPc[] | null>(null);
+  /** Linhas marcadas que podem virar PC: gravadas e sem PC (com ou sem RC — a RC fica de origem). */
+  const paraPc = useMemo(() => [...marcadas].filter((id) => {
+    if (!id.startsWith("db")) return false;
+    const c = cmpPorId.get(id);
+    const l = linhas.find((x) => x._id === id);
+    return !c?.pcs.length && !String(l?.pc_numero ?? "").trim();
+  }), [marcadas, cmpPorId, linhas]);
+  const abrirGerarPc = useCallback((ids: string[]) => {
+    if (sujo) { setErro("Há alterações não salvas — salve a lista antes de gerar o pedido de compra."); return; }
+    const ls = ids.map((id) => linhas.find((x) => x._id === id)).filter((x): x is LinhaGrade => !!x).map((l) => ({
+      id: l._id.slice(2), item: l._cat_desc || l.item, codigo: l.cat_codigo || "", qtd: num(l.qtd), vu: num(l.cat_valor_unit),
+      fornecedor: l.cat_fornecedor || "", necessario: l.data_necessaria || null, un: l.un || "UN" }));
+    if (!ls.length) { setErro("Marque linhas sem PC para gerar o pedido de compra."); return; }
+    setGerarPcLinhas(ls);
+  }, [sujo, linhas]);
+  const [rcsAbertas, setRcsAbertas] = useState<{ id: number; num: string; valor: number; itens: number; na_lista: number }[] | null>(null);
+  const [rcsCarregando, setRcsCarregando] = useState(false);
+  const abrirTrazerRc = useCallback(async () => {
+    setRcsCarregando(true); setRcsAbertas([]);
+    try { const j = await postCompras({ acao: "rcs_do_projeto" }) as { rcs: { id: number; num: string; valor: number; itens: number; na_lista: number }[] }; setRcsAbertas(j.rcs ?? []); }
+    catch (e) { setErro((e as Error).message); setRcsAbertas(null); }
+    finally { setRcsCarregando(false); }
+  }, [postCompras]);
+  const importarRc = useCallback(async (rcId: number) => {
+    if (sujo) { setErro("Há alterações não salvas — salve a lista antes de trazer a RC."); return; }
+    setOcupado(`rc${rcId}`);
+    try {
+      const j = await postCompras({ acao: "importar_rc", rc_id: rcId }) as { rc: string; novas: number; ligadas: number };
+      setAviso(`RC ${j.rc}: ${j.novas} linha(s) nova(s) na lista${j.ligadas ? ` e ${j.ligadas} já existente(s) ligada(s) à RC` : ""}. A RC fica como origem; o catálogo casa os códigos sozinho.`);
+      setRcsAbertas(null);
+      await carregar();
+    } catch (e) { setErro((e as Error).message); } finally { setOcupado(null); }
+  }, [postCompras, sujo, carregar]);
+
+  /* Vindo de Projetos (07/10/26): ?rc=N marca os itens daquela RC sem PC e abre o gerador;
+     ?pc=N mostra só as linhas daquele PC. */
+  const rcUrlFeito = useRef(false);
+  useEffect(() => {
+    try { const pc = new URLSearchParams(window.location.search).get("pc"); if (pc) setFiltroPcNum(pc); } catch { /* */ }
+  }, []);
+  useEffect(() => {
+    if (rcUrlFeito.current || !cmp || !carregouOk) return;
+    let rc: string | null = null;
+    try { rc = new URLSearchParams(window.location.search).get("rc"); } catch { /* */ }
+    if (!rc) { rcUrlFeito.current = true; return; }
+    rcUrlFeito.current = true;
+    const ids = linhas.filter((l) => l._id.startsWith("db") && cmpPorId.get(l._id)?.rc === rc && !cmpPorId.get(l._id)?.pcs.length && !String(l.pc_numero ?? "").trim()).map((l) => l._id);
+    if (!ids.length) { setAviso(`Nenhuma linha da lista vem da RC ${rc} sem PC — use “⤵ Trazer RC para a lista” para trazer os itens dela.`); return; }
+    setMarcadas(new Set(ids));
+    abrirGerarPc(ids);
+  }, [cmp, carregouOk, linhas, cmpPorId, abrirGerarPc]);
+
   const paraRc = useMemo(() => [...marcadas].filter((id) => {
     if (!id.startsWith("db")) return false;
     const c = cmpPorId.get(id);
@@ -1163,6 +1221,16 @@ export default function MateriaisGrade({
           className="px-2 py-1 text-[11px] rounded-lg border border-ww-accent text-ww-accent hover:bg-ww-accentSoft transition disabled:opacity-40">
           {ocupado === "rc" ? "Gerando…" : `Gerar RC (${paraRc.length})`}
         </button>
+        <button type="button" onClick={() => abrirGerarPc(paraPc)} disabled={!!ocupado || !paraPc.length}
+          title={paraPc.length ? "Gera os pedidos de compra (um por fornecedor) com as linhas marcadas sem PC" : "Marque linhas sem PC na caixinha da esquerda"}
+          className="px-2 py-1 text-[11px] rounded-lg bg-ww-accent text-white font-semibold hover:brightness-110 transition disabled:opacity-40">
+          🧾 Gerar pedido de compra ({paraPc.length})
+        </button>
+        <button type="button" onClick={() => void abrirTrazerRc()} disabled={!!ocupado}
+          title="Traz para a lista os itens das RCs deste projeto que ainda não estão nela (a RC fica como origem)"
+          className="px-2 py-1 text-[11px] rounded-lg border border-ww-border text-ww-textMuted hover:text-ww-text hover:bg-ww-rowHover transition disabled:opacity-40">
+          ⤵ Trazer RC para a lista
+        </button>
         <span className="flex-1" />
         <button type="button" onClick={exportar} disabled={!validas.length}
           className="px-2 py-1 text-[11px] rounded-lg border border-ww-border text-ww-textMuted
@@ -1180,6 +1248,12 @@ export default function MateriaisGrade({
 
       {/* Grupos de equipamento (07/10/26, 2ª versão): só chips de filtro, cada um com a
           data do grupo embaixo; as datas se editam no painel "Datas por grupo". */}
+      {filtroPcNum && (
+        <div className="flex items-center gap-2 rounded-lg border border-ww-accent/50 bg-ww-accentSoft px-2.5 py-1.5 text-[11.5px]">
+          <span>Mostrando só as linhas do <b className="font-mono">PC {filtroPcNum}</b></span>
+          <button type="button" className="ml-auto text-ww-accent hover:underline" onClick={() => setFiltroPcNum(null)}>ver a lista toda</button>
+        </div>
+      )}
       {grupos.length > 0 && (
         <div className="flex items-start gap-1.5 flex-wrap">
           <button type="button" onClick={() => setEquipFiltro(null)}
@@ -1301,6 +1375,10 @@ export default function MateriaisGrade({
             title={paraRc.length < marcadas.size ? `${marcadas.size - paraRc.length} marcada(s) já têm RC/PC e ficam de fora` : undefined}
             className="px-2.5 py-1 rounded-lg border border-ww-accent text-ww-accent text-[11.5px] font-semibold hover:bg-ww-panel transition disabled:opacity-40">
             Gerar RC ({paraRc.length})
+          </button>
+          <button type="button" onClick={() => abrirGerarPc(paraPc)} disabled={!paraPc.length || !!ocupado}
+            className="px-2.5 py-1 rounded-lg bg-ww-accent text-white text-[11.5px] font-semibold hover:brightness-110 transition disabled:opacity-40">
+            🧾 Gerar pedido de compra ({paraPc.length})
           </button>
           <button type="button" onClick={() => setMarcadas(new Set())}
             className="text-[11px] text-ww-textMuted hover:text-ww-text">limpar</button>
@@ -1566,6 +1644,31 @@ export default function MateriaisGrade({
           </div>);
       })(), document.body)}
 
+      {gerarPcLinhas && (
+        <GerarPcDaLista empresa={empresa} codigoProjeto={codigoProjeto} linhas={gerarPcLinhas}
+          onFechar={() => setGerarPcLinhas(null)}
+          onFeito={(nums) => { setGerarPcLinhas(null); setMarcadas(new Set()); setAviso(`Pedido(s) de compra criado(s): ${nums.map((n) => `PC ${n}`).join(", ")} — já ligados às linhas da lista; seguem para aprovação.`); void carregar(); onGravado?.(); }} />
+      )}
+      {rcsAbertas && createPortal(
+        <div className="fixed inset-0 z-[120] bg-black/40 flex items-end sm:items-start justify-center sm:pt-[12vh]" onMouseDown={(e) => { if (e.target === e.currentTarget) setRcsAbertas(null); }}>
+          <div role="dialog" aria-label="Trazer RC para a lista" className="w-full sm:w-[min(560px,96vw)] max-h-[80vh] overflow-auto rounded-t-xl sm:rounded-xl border border-ww-border bg-[rgb(var(--color-ww-panel))] shadow-2xl p-3.5 space-y-2 text-[12px]">
+            <div className="flex items-start gap-2">
+              <div><h4 className="text-[13px] font-semibold text-ww-text">Trazer RC para a lista</h4>
+                <p className="text-[11px] text-ww-textMuted">Os itens da RC entram como linhas da lista (a RC fica como origem e referência; a lista é quem manda).</p></div>
+              <button type="button" className="ml-auto text-ww-accent hover:underline" onClick={() => setRcsAbertas(null)}>fechar</button>
+            </div>
+            {rcsCarregando ? <p className="text-ww-textFaint">procurando as RCs do projeto…</p>
+              : !rcsAbertas.length ? <p className="text-ww-textFaint">Todas as RCs deste projeto já estão na lista.</p>
+              : rcsAbertas.map((r) => (
+                <div key={r.id} className="flex items-center gap-2 border-t border-ww-border/60 pt-1.5">
+                  <div className="flex-1"><b>RC {r.num}</b> <span className="text-ww-textMuted">· {r.itens} item(ns), {r.na_lista} já na lista · {brl(r.valor)}</span></div>
+                  <button type="button" disabled={!!ocupado} onClick={() => void importarRc(r.id)}
+                    className="px-2 py-0.5 rounded border border-ww-accent text-ww-accent hover:bg-ww-accentSoft disabled:opacity-40">
+                    {ocupado === `rc${r.id}` ? "…" : `Trazer ${r.itens - r.na_lista}`}
+                  </button>
+                </div>))}
+          </div>
+        </div>, document.body)}
       {picker && createPortal(
         <PcPickerModal empresa={empresa} codigoProjeto={codigoProjeto}
           title={vincBusca ? "Vincular a linha a um PC" : `Vincular ${marcadas.size} item(ns) a um PC`}

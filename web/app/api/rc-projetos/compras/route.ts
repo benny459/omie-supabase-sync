@@ -55,7 +55,8 @@ export async function POST(req: Request) {
   const user = await usuario();
   if (!user) return NextResponse.json({ error: "Sessão expirada — entre de novo" }, { status: 401 });
   let b: { acao?: string; empresa?: string; codigo?: number; aplicar?: boolean; lista_id?: string; pc_item_id?: number;
-    ids?: string[]; previsao?: string; simular?: boolean };
+    ids?: string[]; previsao?: string; simular?: boolean; rc_id?: number;
+    grupos?: { corpo: Record<string, unknown>; linhas: { lista_id: string; qtd: number; vu: number }[] }[] };
   try { b = await req.json(); } catch { return NextResponse.json({ error: "JSON inválido" }, { status: 400 }); }
   const empresa = String(b.empresa ?? "SF").toUpperCase();
   const codigo = Number(b.codigo);
@@ -137,6 +138,111 @@ export async function POST(req: Request) {
       }
       await posGravar(r.id, "RC");
       return NextResponse.json({ ok: true, rc: r.num, id: r.id, linhas: linhas.length });
+    }
+
+    /* ── RC → lista (07/10/26) ────────────────────────────────────────────────
+       RCs do projeto que ainda não estão inteiras na lista. A RC vira ORIGEM da linha
+       (rc_item_id) — só rastreio; a lista manda. */
+    if (b.acao === "rcs_do_projeto" || b.acao === "importar_rc") {
+      const { data: pj } = await supaAdmin().schema("finance").from("projetos").select("nome").eq("empresa", empresa).eq("codigo", codigo).maybeSingle();
+      const nomeProj = String((pj as { nome?: string } | null)?.nome ?? "").trim();
+      const { data: lst } = await supaAdmin().schema("orders").rpc("compras_lista", { p_desde: null });
+      const rcs = ((lst ?? []) as { id: number; tipo: string; num: string; proj?: string | null; valor?: number; nItens?: number; emissao?: string | null }[])
+        .filter((x) => x.tipo === "RC" && nomeProj && String(x.proj ?? "").trim() === nomeProj);
+      const { data: naLista } = await approval().from("rc_projetos_itens").select("id, rc_item_id, equipamento, item")
+        .eq("empresa", empresa).eq("codigo_projeto", codigo);
+      const ligados = new Set(((naLista ?? []) as { rc_item_id: number | null }[]).map((r) => Number(r.rc_item_id)).filter(Boolean));
+      if (b.acao === "rcs_do_projeto") {
+        const out = await Promise.all(rcs.map(async (r) => {
+          const { data: full } = await supaAdmin().schema("orders").rpc("compras_pedido", { p_id: r.id });
+          const its = (((full ?? {}) as { itens?: { id: number }[] }).itens ?? []);
+          return { id: r.id, num: r.num, valor: Number(r.valor) || 0, emissao: r.emissao ?? null, itens: its.length, na_lista: its.filter((i) => ligados.has(Number(i.id))).length };
+        }));
+        return NextResponse.json({ rcs: out.filter((r) => r.itens > r.na_lista), todas: out });
+      }
+      const rc = rcs.find((r) => r.id === Number(b.rc_id));
+      if (!rc) return NextResponse.json({ error: "Essa RC não é deste projeto" }, { status: 400 });
+      const { data: full } = await supaAdmin().schema("orders").rpc("compras_pedido", { p_id: rc.id });
+      const its = (((full ?? {}) as { itens?: { id: number; cod?: string | null; ncodProd?: number | null; desc: string; un?: string | null; qtd: number; vu?: number | null; obs?: string | null }[] }).itens ?? [])
+        .filter((i) => !ligados.has(Number(i.id)));
+      const chave = (eq: string, it: string) => `${eq.trim().toLowerCase()}|${it.trim().toLowerCase()}`;
+      const existentes = new Map(((naLista ?? []) as { id: string; rc_item_id: number | null; equipamento: string; item: string }[])
+        .map((r) => [chave(r.equipamento ?? "", r.item ?? ""), r]));
+      const novas: Record<string, unknown>[] = [], ligar: { id: string; rc_item_id: number }[] = [];
+      for (const i of its) {
+        const eq = /Equip\.?:\s*([^·|]+)/i.exec(i.obs ?? "")?.[1]?.trim() || "Geral";
+        const desc = String(i.desc ?? "").trim();
+        if (!desc) continue;
+        const ja = existentes.get(chave(eq, desc));
+        if (ja) { if (!ja.rc_item_id) ligar.push({ id: ja.id, rc_item_id: Number(i.id) }); continue; }
+        novas.push({ empresa, codigo_projeto: codigo, equipamento: eq, item: desc, qtd: Number(i.qtd) || null, un: i.un ?? null,
+          cat_codigo: i.cod ?? null, cat_ncod_prod: i.ncodProd ?? null, cat_valor_unit: i.vu ?? null, observacao: `RC ${rc.num}`,
+          rc_item_id: Number(i.id), vinculo_via: "rc", vinculo_em: new Date().toISOString(), criado_por: por, atualizado_por: por });
+      }
+      if (b.simular) return NextResponse.json({ ok: true, simulado: true, rc: rc.num, novas: novas.length, ligadas: ligar.length, linhas: novas });
+      if (novas.length) { const { error } = await approval().from("rc_projetos_itens").insert(novas); if (error) throw new Error(error.message); }
+      for (const l of ligar) await approval().from("rc_projetos_itens").update({ rc_item_id: l.rc_item_id, vinculo_via: "rc", vinculo_em: new Date().toISOString(), atualizado_por: por }).eq("id", l.id);
+      return NextResponse.json({ ok: true, rc: rc.num, novas: novas.length, ligadas: ligar.length });
+    }
+
+    /* ── Gerar PC pela lista (07/10/26) ──────────────────────────────────────
+       Um PC por fornecedor, pelo MESMO caminho da folha de Compras (compras_salvar +
+       posGravar: numeração, aprovação, avisos). Cada item do PC já nasce ligado à
+       linha da lista (pc_item_id) — e, se a linha veio de uma RC, ao item da RC.
+       simular=true: valida e devolve os pedidos que seriam criados, sem gravar. */
+    if (b.acao === "gerar_pc") {
+      const q = await exigirCompras();
+      if (q instanceof NextResponse) return q;
+      const grupos = Array.isArray(b.grupos) ? b.grupos : [];
+      if (!grupos.length) return NextResponse.json({ error: "Nada para gerar" }, { status: 400 });
+      const ids = grupos.flatMap((g) => g.linhas.map((l) => String(l.lista_id)));
+      const { data: rows, error } = await approval().from("rc_projetos_itens")
+        .select("id, item, modelo, qtd, un, cat_codigo, cat_ncod_prod, cat_valor_unit, equipamento, observacao, rc_item_id, pc_item_id, pc_numero, data_necessaria")
+        .eq("empresa", empresa).eq("codigo_projeto", codigo).in("id", ids);
+      if (error) throw new Error(error.message);
+      const porId = new Map(((rows ?? []) as Record<string, unknown>[]).map((r) => [String(r.id), r]));
+      const { data: pj } = await supaAdmin().schema("finance").from("projetos").select("nome").eq("empresa", empresa).eq("codigo", codigo).maybeSingle();
+      const { data: vendas } = await supaAdmin().schema("sales").from("v_erp_vendas").select("label, cliente, emissao").eq("empresa", empresa).eq("codigo_projeto", String(codigo));
+      const venda = ((vendas ?? []) as { label: string; cliente: string | null; emissao: string | null }[])
+        .sort((x, y) => Number(y.label.startsWith("PV")) - Number(x.label.startsWith("PV")) || String(y.emissao ?? "").localeCompare(String(x.emissao ?? "")))[0];
+      const montados: { corpo: Record<string, unknown>; linhas: string[] }[] = [];
+      for (const g of grupos) {
+        const linhas: string[] = [];
+        const itens = [];
+        for (const l of g.linhas) {
+          const r = porId.get(String(l.lista_id));
+          if (!r) return NextResponse.json({ error: "Linha da lista não encontrada neste projeto" }, { status: 400 });
+          if (r.pc_item_id || String(r.pc_numero ?? "").trim()) return NextResponse.json({ error: `"${r.item}" já tem PC` }, { status: 400 });
+          if (!(Number(l.qtd) > 0)) return NextResponse.json({ error: `"${r.item}" está sem quantidade` }, { status: 400 });
+          itens.push({ id: null, cod: r.cat_codigo ?? "", ncodProd: r.cat_ncod_prod ?? null, desc: [r.item, r.modelo].filter(Boolean).join(" · "),
+            un: r.un || "UN", qtd: Number(l.qtd), vu: Math.round((Number(l.vu) || 0) * 100) / 100, desc0: 0, ipi: 0, st: 0, ncm: null, local: null,
+            obs: [r.equipamento ? `Equip.: ${r.equipamento}` : "", r.observacao ?? ""].filter(Boolean).join(" · ") || null,
+            rc: r.rc_item_id ? { itemId: Number(r.rc_item_id) } : null });
+          linhas.push(String(r.id));
+        }
+        const corpo: Record<string, unknown> = { ...g.corpo, tipo: "PC", emp: empresa, projCod: codigo, proj: (pj as { nome?: string } | null)?.nome ?? "",
+          ...(venda ? { pv: venda.label, pvCliente: venda.cliente ?? "" } : {}),
+          semRc: false, semRcMotivo: null, avulsa: false, avulsaMotivo: null, itens,
+          origemDe: `Lista de materiais do projeto ${(pj as { nome?: string } | null)?.nome ?? codigo}`,
+          obsInt: `PC gerado da Lista de materiais do projeto ${(pj as { nome?: string } | null)?.nome ?? codigo} · ${linhas.length} linha(s)` };
+        if (!corpo.fornCod && !corpo.forn) return NextResponse.json({ error: 'O "Fornecedor" deve ser preenchido em todos os pedidos.' }, { status: 400 });
+        if (!corpo.cat) return NextResponse.json({ error: 'A "Categoria da Compra" deve ser preenchida em todos os pedidos.' }, { status: 400 });
+        montados.push({ corpo, linhas });
+      }
+      if (b.simular) return NextResponse.json({ ok: true, simulado: true, pedidos: montados.map((m) => m.corpo) });
+      const feitos: { num: string; id: number; linhas: number }[] = [];
+      for (const m of montados) {
+        const r = await rpc<{ id: number; num: string }>("compras_salvar", { p: m.corpo, p_por: q.email, p_uid: q.uid });
+        const { data: full } = await supaAdmin().schema("orders").rpc("compras_pedido", { p_id: r.id });
+        const its = [...(((full ?? {}) as { itens?: { id: number; seq: number }[] }).itens ?? [])].sort((x, y) => x.seq - y.seq);
+        for (let k = 0; k < m.linhas.length && k < its.length; k++) {
+          await approval().from("rc_projetos_itens").update({ pc_item_id: its[k].id, pc_numero: r.num, vinculo_via: "lista", vinculo_em: new Date().toISOString(), atualizado_por: por })
+            .eq("id", m.linhas[k]);
+        }
+        await posGravar(r.id, "PC");
+        feitos.push({ num: r.num, id: r.id, linhas: m.linhas.length });
+      }
+      return NextResponse.json({ ok: true, pedidos: feitos });
     }
 
     return NextResponse.json({ error: "acao inválida" }, { status: 400 });

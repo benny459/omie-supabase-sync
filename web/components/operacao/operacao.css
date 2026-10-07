@@ -513,3 +513,26 @@
    título da coluna vizinha ("MATERIAL"). Título em cima, controle embaixo, na largura da coluna. */
 .op .rcg-hd .hd-lote{flex-direction:column;align-items:flex-start;gap:3px;overflow:hidden}
 .op .rcg-hd .hd-lote .todos,.op .rcg-hd input.todos{width:100%;max-width:100%;box-sizing:border-box}
+/* Projetos › pedido aberto, visão por PC (07/10/26) */
+.op .pcproj{display:flex;flex-direction:column;gap:10px;padding:8px 12px 12px}
+.op .pcproj-tit{font-size:12px;font-weight:600;color:var(--ww-text);margin-bottom:4px}
+.op .pcproj-tit small{font-weight:400;color:var(--ww-text-faint)}
+.op .pcproj-rc{border:1px solid var(--ww-border);border-radius:8px;margin-bottom:4px}
+.op .pcproj-rc summary{display:grid;grid-template-columns:90px 1fr 120px auto;gap:10px;align-items:center;padding:6px 10px;cursor:pointer;list-style:none}
+.op .pcproj-rc summary::-webkit-details-marker{display:none}
+.op .pcproj-itens{padding:4px 12px 8px 110px;display:flex;flex-direction:column;gap:2px;font-size:12px}
+.op .pcproj-itens > div{display:flex;justify-content:space-between;gap:10px}
+.op .pcproj-itens small{color:var(--ww-text-faint);white-space:nowrap}
+.op .pcproj-hd,.op .pcproj-pc{display:grid;grid-template-columns:64px minmax(0,1.4fr) minmax(0,.9fr) 96px 124px 124px 132px 120px 120px 76px;gap:10px;align-items:center;padding:7px 10px}
+.op .pcproj-hd{font-size:11px;color:var(--ww-text-faint);text-transform:uppercase;letter-spacing:.06em;border-bottom:1px solid var(--ww-border)}
+.op .pcproj-pc + .pcproj-pc{border-top:1px dashed var(--ww-border)}
+.op .pcproj-pc > *{min-width:0}
+.op .pcproj-pc .pcnum{font-family:ui-monospace,monospace;font-weight:700;font-size:13.5px;color:var(--ww-accent,inherit);text-decoration:none}
+.op .pcproj-pc .desc{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.op .pcproj-pc .desc small{display:block;overflow:hidden;text-overflow:ellipsis}
+.op .pcproj-pc .rcs{display:flex;flex-wrap:wrap;gap:3px}
+.op .rcchip{font-size:10.5px;padding:0 5px;border-radius:5px;border:1px solid var(--ww-border-strong);color:var(--ww-text-muted);text-decoration:none;white-space:nowrap}
+.op .sitpill{display:inline-block;max-width:100%;padding:2px 7px;border-radius:6px;color:#fff;font-size:10.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.op .pcproj-pc input.in,.op .pcproj-pc .matsel,.op .pcproj-pc .stsel{width:100%}
+.op .pcproj-vazio{padding:10px;color:var(--ww-text-faint);font-size:12px}
+@media (max-width:1100px){.op .pcproj-hd{display:none}.op .pcproj-pc{grid-template-columns:64px 1fr 96px;row-gap:6px}}

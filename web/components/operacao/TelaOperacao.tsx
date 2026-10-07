@@ -45,6 +45,7 @@ import SyncNowButton from "../SyncNowButton";
 import PcsExcluidosButton, { type PcEscondido } from "../PcsExcluidosButton";
 import { AtribuicaoModal } from "../AtribuirClienteView";
 import { supaBrowser } from "@/lib/supabase";
+import { estadoPc } from "@/lib/situacao-pc";
 import GradeOperacao from "./GradeOperacao";
 
 type AnyRow = Record<string, unknown>;
@@ -1313,7 +1314,9 @@ function CartaoPedido(props: {
 
       {aberto && (
         <div className="pcs">
-          {modulo !== "pcs" ? (
+          {modulo === "projetos" && props.bucket && projetoDoBucket(modulo, props.bucket) ? (
+            <GruposPcProjeto {...props} proj={projetoDoBucket(modulo, props.bucket)!} />
+          ) : modulo !== "pcs" ? (
             <GruposRc {...props} />
           ) : (
             <>
@@ -1612,6 +1615,108 @@ function GruposRc({ compras, p, sel, toggleSel, podeAprovar, podeEditar, ehAdmin
         </div>
       )}
     </>
+  );
+}
+
+/** Projetos › pedido aberto, visão por PC (07/10/26, aprovado pelo Benny).
+ *  Em cima, "RCs sem PC": uma linha por RC com o que ainda falta comprar e o
+ *  atalho para gerar o pedido pela Lista de materiais (já filtrada na RC). Embaixo,
+ *  uma linha por PC: nº em destaque, fornecedor, RCs que atende, valor, aprovação,
+ *  Prev. material (a do PC), situação (mesmas cores da lista), material, NF de
+ *  entrada e o link para ver os itens daquele PC na Lista de materiais. Sem as
+ *  linhas "sem RC · PC 7262 · 1 × R$ 0,00" que só serviam para pendurar o PC. */
+function GruposPcProjeto({ compras, p, podeAprovar, podeEditar, ehAdmin, statusLote, marcarMaterialLote, gravar, abrirDrawer, $, proj }: {
+  compras: Compra[]; p: Pedido; podeAprovar: boolean; podeEditar: boolean; ehAdmin: boolean;
+  statusLote: (lista: Compra[], status: string) => void; marcarMaterialLote: MarcarMaterialLote;
+  gravar: Gravar; abrirDrawer: (k: string) => void; $: (v: number | null) => string;
+  proj: { codProj: number; empresaProj: string };
+}) {
+  const empresa = s(p.bucket.rows[0]?.empresa) || proj.empresaProj || "SF";
+  const lista = (extra: string) => `/projetos/${proj.codProj}/materiais?${new URLSearchParams({ empresa, aba: "materiais" })}&${extra}`;
+  // RCs com item ainda sem PC
+  const rcs = new Map<string, Compra[]>();
+  for (const c of compras) if (!c.pc && c.rcNumero && c.rcTotal > 0) rcs.set(c.rcNumero, [...(rcs.get(c.rcNumero) ?? []), c]);
+  // PCs (um por número)
+  const pcs = new Map<string, Compra[]>();
+  for (const c of compras) if (c.pc) pcs.set(c.pc, [...(pcs.get(c.pc) ?? []), c]);
+  const situacao = (cs: Compra[]) => {
+    const st = cs[0].statusCodigo;
+    const aprov = /^APROVADO/.test(st) ? "aprovado" : st === "NAO_APROVADO" ? "nao_aprovado" : st === "CANCELAR_PEDIDO" ? "nao_aprovado" : "aguardando";
+    const rec = cs.every((x) => x.recebidoEm != null) ? Math.max(...cs.map((x) => x.recebidoEm ?? 0)) : null;
+    const parcial = !rec && cs.some((x) => x.recebidoEm != null);
+    return estadoPc({ aprov, nf: cs.find((x) => x.nfFornecedor)?.nfFornecedor || null,
+      dt_rec: rec ? new Date(rec).toISOString().slice(0, 10) : null, qtd: parcial ? 2 : null, qtd_recebida: parcial ? 1 : null });
+  };
+  return (
+    <div className="pcproj">
+      {rcs.size > 0 && (
+        <div className="pcproj-bloco">
+          <div className="pcproj-tit">RCs sem PC <small>— o que ainda falta comprar; o pedido sai da Lista de materiais, um por fornecedor</small></div>
+          {[...rcs.entries()].map(([rc, cs]) => (
+            <details key={rc} className="pcproj-rc">
+              <summary>
+                <a className="rcnum" href={linkCompras(rc, "RC", empresa)} onClick={(e) => e.stopPropagation()} title={`Abrir a RC ${rc} em Compras`}>RC {rc}</a>
+                <span className="desc">{cs.length} item(ns) sem PC</span>
+                <b className="num">{$(cs.reduce((a, c) => a + c.rcTotal, 0))}</b>
+                <a className="btn sm primary" href={lista(`rc=${encodeURIComponent(rc)}`)} onClick={(e) => e.stopPropagation()}
+                  title="Abre a Lista de materiais com os itens desta RC marcados e o gerador de pedido aberto">+ Gerar pedido de compra</a>
+              </summary>
+              <div className="pcproj-itens">{cs.map((c) => (
+                <div key={c.key}><span title={c.desc}>{c.desc}</span><small>{c.qtd} × {$(c.unit)} = {$(c.rcTotal)}</small></div>))}</div>
+            </details>
+          ))}
+        </div>
+      )}
+      <div className="pcproj-bloco">
+        <div className="pcproj-hd"><span>PC</span><span>Fornecedor</span><span>RC</span><span style={{ textAlign: "right" }}>Valor</span><span>Aprovação</span>
+          <span>Prev. material</span><span>Situação</span><span>Material</span><span>NF entrada</span><span /></div>
+        {[...pcs.entries()].map(([pc, cs]) => {
+          const c = cs[0];
+          const todosRecebidos = cs.every((x) => x.estado === "recebido");
+          const prev = cs.map((x) => x.prev).find((x) => x != null) ?? null;
+          const aprovado = cs.some((x) => x.estado === "aprovado" || x.estado === "recebido");
+          const late = !todosRecebidos && prev != null && (diasAte(prev) ?? 0) < 0;
+          const mat = todosRecebidos ? { t: "Recebido", c: "recebido" } : !aprovado ? { t: "—", c: "" }
+            : late ? { t: "Atrasado", c: "recusado" } : prev ? { t: "A caminho", c: "aprovado" } : { t: "Sem previsão", c: "pendente" };
+          const st = situacao(cs);
+          const rcsDoPc = [...new Set(cs.map((x) => x.rcNumero).filter(Boolean))];
+          const pendente = cs.some((x) => x.estado === "pendente");
+          const valor = cs.find((x) => x.pcValor != null)?.pcValor ?? null;
+          return (
+            <div key={pc} className="pcproj-pc">
+              <a className="pcnum" href={linkCompras(pc, "PC", empresa)} title={`Abrir o PC ${pc} em Compras`}>{pc}</a>
+              <span className="desc" title={c.fornecedor}>{c.fornecedor || "—"}<small>{c.categoria}</small></span>
+              <span className="rcs">{rcsDoPc.length ? rcsDoPc.map((r) => <a key={r} className="rcchip" href={linkCompras(r, "RC", empresa)}>RC {r}</a>) : <small style={{ color: "var(--ww-text-faint)" }}>sem RC</small>}</span>
+              <b className="num" style={{ textAlign: "right" }}>{valor != null ? $(valor) : "—"}</b>
+              <span>{c.estado === "recebido" ? <span className="st aprovado">Aprovado</span>
+                : <SeletorStatusLote cs={cs} podeAprovar={podeAprovar} ehAdmin={ehAdmin} statusLote={statusLote} />}</span>
+              <span>
+                {!todosRecebidos && podeEditar
+                  ? <input type="date" className={`in ${late ? "late" : ""}`} value={isoDia(prev)}
+                      title={c.prevNova ? `Remarcada · original do PC ${dBR(c.prevOriginal)}` : "Previsão do PC"}
+                      onChange={(e) => { const iso = e.target.value || null; for (const x of cs) void gravar(x, "prevMateriais", iso, { nova_prev_materiais: iso }); }} />
+                  : <span className={late ? "late" : ""}>{prev ? dBR(prev) : "—"}</span>}
+                {late && <small className="atraso">⚠ {-(diasAte(prev) ?? 0)}d de atraso</small>}
+              </span>
+              <span><span className="sitpill" style={{ background: st.cor }} title={st.rot}>{st.rot}</span></span>
+              <MatPc cs={cs} auto={mat} podeEditar={podeEditar} marcarLote={marcarMaterialLote} />
+              <NfEntrada cs={cs} late={late} aprovado={aprovado} />
+              <span className="acts">
+                {pendente && podeAprovar && (
+                  <>
+                    <button className="icon ok" title="Aprovar" onClick={() => statusLote(cs, "APROVADO")}>✓</button>
+                    <button className="icon" title="Recusar" onClick={() => statusLote(cs, "NAO_APROVADO")}>✕</button>
+                  </>
+                )}
+                <a className="icon" title="Ver os itens deste PC na Lista de materiais" href={lista(`pc=${encodeURIComponent(pc)}`)}>☰</a>
+                <button className="icon" title="Todos os campos" onClick={() => abrirDrawer(c.key)}>⋯</button>
+              </span>
+            </div>
+          );
+        })}
+        {!pcs.size && <div className="pcproj-vazio">Nenhum pedido de compra ainda — gere pela Lista de materiais.</div>}
+      </div>
+    </div>
   );
 }
 
