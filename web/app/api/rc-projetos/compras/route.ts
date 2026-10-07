@@ -12,6 +12,7 @@ import { NextResponse } from "next/server";
 import { supaAdmin } from "@/lib/supabase-admin";
 import { supaServer } from "@/lib/supabase-server";
 import { exigirCompras, rpc, erro, posGravar } from "@/lib/compras-server";
+import { completarPcs, type DadosPcs } from "@/lib/lista-pc-completar";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -33,7 +34,11 @@ export async function GET(req: Request) {
   if (!codigo) return NextResponse.json({ error: "codigo obrigatório" }, { status: 400 });
   const { data, error } = await approval().rpc("rc_projetos_compras", { p_empresa: empresa, p_projeto: codigo });
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json(data);
+  try {
+    return NextResponse.json(await completarPcs(data as DadosPcs));
+  } catch {
+    return NextResponse.json(data); // sem o detalhe dos PCs, a lista continua de pé
+  }
 }
 
 type Linha = { id: string; item: string; modelo: string | null; qtd: number | null; un: string | null;

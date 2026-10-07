@@ -93,7 +93,7 @@ export default async function ProjetoMateriaisPage({
         empresa={empresa}
         codigoProjeto={codigoProjeto}
         nomeProjeto={projetoNome || undefined}
-        abaInicial={aba === "materiais" ? "materiais" : aba === "compras" ? "compras" : aba === "separados" ? "separados" : "resumo"}
+        abaInicial={aba === "materiais" || aba === "compras" ? "materiais" : aba === "separados" ? "separados" : "resumo"}
       />
     </div>
   );

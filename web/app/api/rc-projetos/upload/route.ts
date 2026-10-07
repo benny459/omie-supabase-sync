@@ -15,6 +15,7 @@
 // }
 
 import { NextResponse } from "next/server";
+import { dataDoGrupo, normGrupo } from "@/lib/grupos-equipamento-puro";
 import { supaServer } from "@/lib/supabase-server";
 
 export const runtime = "nodejs";
@@ -185,6 +186,16 @@ export async function POST(req: Request) {
       atualizado_por: userEmail,
     };
   });
+  /* "Necessário em" por grupo (07/10/26): linha sem data herda a data do grupo de
+     equipamento (a mais comum entre as linhas do grupo) — vale também para a
+     planilha subida, não só para a grade. */
+  const porGrupo = new Map<string, (string | null | undefined)[]>();
+  for (const r of rows) porGrupo.set(normGrupo(r.equipamento), [...(porGrupo.get(normGrupo(r.equipamento)) ?? []), r.data_necessaria]);
+  for (const r of rows) {
+    if (r.data_necessaria) continue;
+    const d = dataDoGrupo(porGrupo.get(normGrupo(r.equipamento)) ?? []);
+    if (d) r.data_necessaria = d;
+  }
 
   const { error: upErr } = await approval
     .from("rc_projetos_itens")

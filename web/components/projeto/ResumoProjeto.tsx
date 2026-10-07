@@ -437,13 +437,17 @@ function Composicao({ mat, mao, desp }: { mat: number; mao: number; desp: number
             title={`${f.rot}: ${brl(f.v)}`} />
         ))}
       </div>
-      <div className="mt-1.5 flex flex-wrap gap-x-2.5 gap-y-0.5">
+      {/* Uma linha por natureza, com o valor em R$ (07/10/26: o Benny quer
+          ver quanto é cada parte, não só a %). Valor à direita alinhado, para
+          caber no cartão estreito do celular sem quebrar no meio. */}
+      <div className="mt-1.5 flex flex-col gap-0.5">
         {fatias.map((f) => (
-          <span key={f.rot} className="inline-flex items-center gap-1 text-[10px] text-ww-textMuted">
-            <span aria-hidden className={`w-1.5 h-1.5 rounded-[1px] ${f.tom}`} />
-            {f.rot}{" "}
-            <span className="tabular-nums text-ww-textFaint">{Math.round((f.v / tot) * 100)}%</span>
-          </span>
+          <div key={f.rot} className="flex items-center gap-1 text-[10px] text-ww-textMuted min-w-0">
+            <span aria-hidden className={`shrink-0 w-1.5 h-1.5 rounded-[1px] ${f.tom}`} />
+            <span className="shrink-0">{f.rot}</span>
+            <span className="ml-auto tabular-nums text-ww-text truncate">{brl(f.v)}</span>
+            <span className="shrink-0 w-8 text-right tabular-nums text-ww-textFaint">{Math.round((f.v / tot) * 100)}%</span>
+          </div>
         ))}
       </div>
     </div>

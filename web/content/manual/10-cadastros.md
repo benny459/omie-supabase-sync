@@ -5,7 +5,7 @@ icone: 🗂️
 area: erp
 rotas: /cadastros
 caminhos: web/components/cadastros, web/app/(app)/cadastros, web/app/api/cadastros, web/lib/cadastros-server.ts
-atualizado: 2026-10-05
+atualizado: 2026-10-07
 ---
 
 Tudo o que era cadastrado no Omie agora é cadastrado aqui e vale para o painel, o CRM e os Serviços.
@@ -16,7 +16,7 @@ Tudo o que era cadastrado no Omie agora é cadastrado aqui e vale para o painel,
 | Itens | Itens (catálogo), Unidades de medida, Serviços (LC 116) |
 | Projetos e vendas | Projetos, Condições de pagamento |
 | Financeiro | Bancos e contas, Categorias, Centros de custo, Tipos de documento |
-| Geral | Empresas do grupo, Feriados (dias úteis) |
+| Geral | Empresas do grupo, Feriados (dias úteis), Grupos de equipamento |
 
 ## Como faço para cadastrar um cliente ou fornecedor
 
@@ -52,6 +52,7 @@ Em **Cadastros → Duplicidades**:
 - **Projetos**: o próximo código livre (PJ… / CT…) aparece sozinho. Também dá para criar com **+ Novo projeto** direto no PV/OS, na emissão e no PC.
 - **Bancos e contas**: banco, agência, conta, **chave Pix** e beneficiário (usados nos recibos, na NF-e e no arquivo C6).
 - **Feriados**: usados para levar a previsão de pagar/receber ao próximo dia útil.
+- **Grupos de equipamento**: nomes padrão dos grupos da lista de materiais do projeto (“Filtro Multimeios”, “Osmose Reversa”, “Geral”…). A lista aceita texto livre, mas sugere estes nomes e oferece **≈ Nome** quando um grupo é quase igual a um padrão. A tela também mostra os nomes já usados nos projetos, para cadastrar com um clique.
 
 ## Perguntas frequentes
 

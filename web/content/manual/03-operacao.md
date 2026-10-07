@@ -4,8 +4,8 @@ resumo: Avulsos, projetos, PCs e pedidos de venda — o dia a dia da operação.
 icone: 📋
 area: operacao
 rotas: /avulsos, /projetos, /pcs, /erp/vendas
-caminhos: web/components/BoldAvulsosView.tsx, web/components/operacao, web/app/(app)/avulsos, web/app/(app)/projetos, web/app/(app)/pcs, web/app/(app)/erp/vendas, web/components/vendas
-atualizado: 2026-10-06
+caminhos: web/components/BoldAvulsosView.tsx, web/components/projeto, web/components/operacao, web/app/(app)/avulsos, web/app/(app)/projetos, web/app/(app)/pcs, web/app/(app)/erp/vendas, web/components/vendas
+atualizado: 2026-10-07
 ---
 
 ## Avulsos
@@ -54,22 +54,28 @@ A lista de **pedidos de venda (PV/OS)** com as compras ligadas a cada um.
 
 ### Lista de materiais, compras e budget do projeto
 
-Na linha do projeto, **🧾 Materiais × compras** abre direto a aba **Compras × lista**.
+Tudo fica numa aba só: **Lista de materiais** (a antiga aba “Compras × lista” entrou nela; o atalho **🧾 Materiais × compras** da linha do projeto abre esta aba).
 
-**Montar a lista** (aba **Lista de materiais**):
-1. Digite o item: o sistema busca no catálogo e já traz **último preço pago, fornecedor e prazos**. Preencha **Qtd**, **Un** e **Necessário em** (a data entra no fluxo de caixa).
-2. A lista **salva sozinha** alguns segundos depois de cada mudança. Só remover itens pede o botão **Salvar lista** (com confirmação).
-3. Para importar do Excel: **Lista RC (Projeto) → 📄 Baixar modelo (.xlsx)**, preencha (uma aba por equipamento; colunas Código, Descrição, Un, Qtd, Custo estimado, Fornecedor sugerido, Data necessária, Modelo, Observação) e suba o arquivo. A prévia mostra o que entra, muda e sai antes de confirmar. Depois, **Casar com o catálogo** acha os itens que vieram sem código.
+**No topo**: **Estimado da lista**, **Budget de materiais** (do CP/MC do CRM ou **editar**), **Comprometido (PCs)**, **Pago**, **Projetado × budget** (sobra/estoura) e a **Margem** contra a do fechamento. O estimado de cada linha é o **Valor unit.** da linha; vazio, o sistema preenche com o preço do **PC**, senão o **último preço do catálogo**, senão o **custo da CP** (a célula mostra de onde veio: “do PC”, “catálogo”, “da CP”).
 
-**Comprar** (aba **Compras × lista**):
-1. Marque as linhas e clique **Gerar RC (N)** — a RC entra em Compras com a venda (PV) do projeto e **cada linha fica ligada à lista**. O pedido de compra feito a partir dessa RC aparece na linha sozinho.
-2. PC feito direto para o projeto (sem RC da lista) é **casado automaticamente** ao salvar: pelo **código** do item ou pela **descrição com as mesmas medidas** (ex.: "abraçadeira 1.1/2" não casa com "2.1/2"). O que ficou parecido mas sem certeza aparece em **Ver sugestões de vínculo** para você **Confirmar**; vínculo errado se **desfaz** na própria linha.
-3. **Comprado fora da lista**: itens de PCs do projeto que nenhuma linha cobre (escopo extra ou nome diferente).
+**Montar a lista** (**Minha lista**):
+1. Digite o item: o catálogo sugere primeiro os **itens do nosso estoque** (código novo, como no Faturamento) com **último preço pago, fornecedor e prazos**; código de compra já vinculado aparece como “cód. compra X”. Linha antiga com código do Omie que já tem item nosso passa a mostrar o código novo.
+2. A coluna **Catálogo** mostra o item escolhido (✓), o que é para **conferir** (amarelo) e o que está **sem correspondência**. Clique nela para **escolher**: sugestões com % de semelhança, busca por nome/código ou **Criar item nosso** (família e próximo código; serviço → família SV). A escolha fica gravada para aquele texto — da próxima vez casa sozinho.
+3. A lista **salva sozinha** alguns segundos depois de cada mudança. Só remover itens pede o botão **Salvar lista** (com confirmação).
+4. Para importar do Excel: **Lista RC (Projeto) → 📄 Baixar modelo (.xlsx)**, preencha e suba. Depois, **⚡ Casar com o catálogo** acha os itens que vieram sem código (escolhas feitas à mão não mudam).
 
-**Acompanhar**:
-- No topo: **Estimado da lista**, **Budget de materiais** (do CP/MC do CRM ou editável), **Comprometido** (PCs), **Pago**, **Projetado × budget** e o efeito na **Margem** do fechamento.
-- Cada linha mostra RC, PC (fornecedor), valor comprado com ▲/▼ contra o estimado e a situação (aprovado, faturado, recebido, NF).
-- **Fluxo de compras do projeto**, mês a mês: planejado (linhas sem PC, pela data necessária) × comprometido (parcelas dos PCs) × pago, com o acumulado contra o budget.
+**Itens da CP**: a composição de preço da proposta do CRM. Só entra em **Minha lista** o item **casado** (✓ automático ou ✋ escolhido por você) — a caixinha de quem não casou fica travada (“case o item primeiro”). Clique em **No catálogo** para escolher ou criar o item.
+
+**Grupos de equipamento e “Necessário em”**: a faixa **Grupos de equipamento** mostra cada grupo (vem da coluna Equipamento e da CP) com a quantidade de itens e a data **necessário em** do grupo. Definir a data do grupo preenche as linhas dele; uma linha pode ter **data própria** (fica marcada); linha nova do grupo herda a data. **usar dd/mm** aplica a entrega prevista da proposta. **≈ Nome** troca o nome do grupo pelo padrão do cadastro (Cadastros › Grupos de equipamento). Filtros **Todas / Sem PC / Com PC** combinam com o grupo. A data da linha é a que vai para a RC (data limite) e para o fluxo.
+
+**Comprar e acompanhar** (colunas da direita, em azul claro):
+- **RC**, **Pedido de compra** (clique abre o PC; fornecedor, previsão ou data/quantidade recebida), **Comprado** (valor da linha do PC; avisa quando a quantidade do PC é diferente da lista), **Situação** (mesmas cores do Compras: Pedido de Compra, Aguardando aprovação, Aprovado, Enviado, Faturado, Recebido, Conferido · NF) e **Vínculo** (nº do PC, código, descrição, manual — **desfazer**).
+- Linha ligada só pelo **número do PC** também mostra valor: o sistema acha a linha do item dentro do PC (código, senão descrição).
+- Marque as linhas e clique **Gerar RC (N)** — a RC entra em Compras com a venda (PV) do projeto e cada linha fica ligada à lista.
+- **⇄ Vincular PCs automaticamente** liga as linhas aos itens dos PCs do projeto (código, depois descrição com as mesmas medidas); **Ver sugestões de vínculo** mostra as parecidas para **Confirmar**.
+- Abaixo da lista: **Comprado fora da lista** e o **Fluxo de compras do projeto** mês a mês.
+
+**Cartão “Custo planejado”** (topo do projeto): a barra mostra a composição e a legenda traz o valor de cada parte — materiais, obra e despesas, em R$ e %.
 
 ## Pedidos · PV/OS
 

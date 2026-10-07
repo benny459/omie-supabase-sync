@@ -7,7 +7,11 @@ import { tokens, construirIdf, pontuar } from "@/lib/match-pc";
 
 export type ItemNosso = { id: number; cod: string; desc: string; un: string; cmc: number | null; ultimo_preco: number | null };
 export type Candidato = ItemNosso & { score: number; motivo: string };
-export type ItemIndexado = ItemNosso & { tok: string[] };
+export type ItemIndexado = ItemNosso & { tok: string[]; nums?: string[] };
+
+/** Números do texto cru, com o separador uniformizado ("4,5" = "4.5" = "4/5"). */
+export const numerosSoltos = (t: string) =>
+  [...new Set((String(t ?? "").match(/\d+(?:[.,/]\d+)*/g) ?? []).map((n) => n.replace(/[.,]/g, "/").replace(/^0+(?=\d)/, "")))];
 
 /** Chave do de-para: sem acento, caixa, pontuação nem espaços. */
 export const normTexto = (t: string) => String(t ?? "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
@@ -29,6 +33,7 @@ export function pontuarLinha(texto: string, custo: number | null | undefined, un
   const alvo = tokens(texto);
   if (!alvo.length) return [];
   const un = unidade ? normUn(unidade) : "";
+  const nA = numerosSoltos(texto);
   const out: Candidato[] = [];
   for (const it of base.itens) {
     let nome = pontuar(alvo, it.tok, base.idf);
@@ -47,11 +52,27 @@ export function pontuarLinha(texto: string, custo: number | null | undefined, un
       return m;
     };
     const mA = modelos(alvo), mB = modelos(it.tok);
-    if (mA.length && mB.length && !mA.some((x) => mB.includes(x))) nome *= 0.55;
+    if (mA.length && mB.length && !mA.some((x) => mB.includes(x))) {
+      // mesma série com outra letra na frente ("F74A3" × "N74A3"): parecido, não igual
+      const nucleo = (w: string) => w.replace(/^[A-Z]/, "");
+      nome *= mA.some((x) => mB.some((y) => nucleo(x).length >= 3 && nucleo(x) === nucleo(y))) ? 0.85 : 0.55;
+    }
     // precisa de ao menos uma PALAVRA em comum (medida sozinha não identifica o item)
     const pal = (w: string) => /^[A-Z]{3,}$/.test(w);
     const pA = alvo.filter(pal), pB = it.tok.filter(pal);
-    if (pA.length && !pA.some((w) => pB.some((p) => p === w || (w.length >= 4 && p.length >= 4 && (p.startsWith(w) || w.startsWith(p)))))) nome *= 0.3;
+    const casaPal = (w: string, p: string) => p === w || (w.length >= 4 && p.length >= 4 && (p.startsWith(w) || w.startsWith(p)));
+    if (pA.length && !pA.some((w) => pB.some((p) => casaPal(w, p)))) nome *= 0.3;
+    // 07/10/26 (CP do PJ366): o SUBSTANTIVO da frase é a 1ª palavra — "Tubo PEX 3/4"
+    // não é "CURVA … P/ TUBO PEX", "Filtro de ar" não é "CARCAÇA … (FILTRO AR)".
+    // Núcleo da linha ausente no item pesa mais que o núcleo do item ausente na linha.
+    if (pA.length && pB.length) {
+      if (!pB.some((p) => casaPal(pA[0], p))) nome *= 0.6;
+      if (!pA.some((w) => casaPal(w, pB[0]))) nome *= 0.75;
+    }
+    // número solto dos dois lados ("8 g/h" × "5 g/h", "500 litros" × "200 L") precisa bater
+    // (lido do texto cru: o tokenizador descarta número de um dígito, e "8 g/h" sumiria)
+    const nB = it.nums ?? (it.nums = numerosSoltos(it.desc));
+    if (nA.length && nB.length && !nA.some((x) => nB.includes(x))) nome *= 0.5;
     if (nome < 0.2) continue;
     let s = nome;
     const motivo: string[] = [`nome ${Math.round(nome * 100)}%`];
@@ -71,4 +92,21 @@ export function pontuarLinha(texto: string, custo: number | null | undefined, un
   }
   out.sort((a, b) => b.score - a.score);
   return out.slice(0, Math.max(1, Math.min(top, 10)));
+}
+
+/** Aceita sozinho? (07/10/26) De-para gravado sempre; senão, nome muito parecido
+ *  E folga para o segundo colocado — dois manômetros quase iguais pedem o olho
+ *  de alguém. Abaixo de 0,35 nem vale como sugestão. */
+export const ACEITA_AUTO = 0.8;
+export const FOLGA_AUTO = 0.05;
+export const MINIMO_SUGESTAO = 0.35;
+export function statusCasamento(c: Candidato[], texto?: string): "ok" | "conferir" | "sem" {
+  const [a, b] = c;
+  if (!a || a.score < MINIMO_SUGESTAO) return "sem";
+  if (a.motivo === "de-para gravado") return "ok";
+  // descrição idêntica à do item (sem acento/caixa/pontuação) — mesmo havendo um
+  // cadastro duplicado empatado em 100% (PJ361: membrana, crepina, manômetro)
+  if (texto && a.score >= ACEITA_AUTO && normTexto(a.desc) === normTexto(texto)) return "ok";
+  if (a.score >= ACEITA_AUTO && (!b || a.score - b.score >= FOLGA_AUTO)) return "ok";
+  return "conferir";
 }

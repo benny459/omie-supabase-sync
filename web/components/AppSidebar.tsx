@@ -541,6 +541,20 @@ export const FINANCEIRO: NavItem[] = [
     ),
   },
   {
+    // Grupos de equipamento (sql/100, 07/10/26): nomes padrão dos grupos da lista de materiais.
+    href: "/cadastros/grupos-equipamento",
+    area: "erp",
+    grupo: "cadastros",
+    secao: "Geral",
+    label: "Grupos de equipamento",
+    tone: "text-slate-700",
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className="w-5 h-5" strokeLinecap="round" strokeLinejoin="round">
+        <rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><path d="M14 17.5h7M17.5 14v7"/>
+      </svg>
+    ),
+  },
+  {
     // Duplicados que já existem: mesclar / agrupar / "não é duplicado" (sql/57).
     href: "/cadastros/duplicidades",
     area: "erp",

@@ -49,6 +49,12 @@ export type ColunaGrade = {
   /** Chaves da linha zeradas quando o usuário digita nesta coluna (ex.: o
    *  vínculo com o catálogo deixa de valer se o texto do item mudou). */
   limpaAoEditar?: string[];
+  /** Marca na célula editável (07/10/26): data própria fora da data do grupo,
+   *  valor que veio do PC… `etiqueta` aparece pequena no canto da célula. */
+  marca?: (linha: LinhaGrade) => { classe?: string; dica?: string; etiqueta?: string } | null;
+  /** Classe extra da coluna inteira (cabeçalho e células) — para agrupar à vista
+   *  as colunas de leitura que vêm do mesmo lugar (ex.: o bloco do PC). */
+  classe?: string;
 };
 
 export type LinhaGrade = Record<string, string> & { _id: string };
@@ -299,7 +305,7 @@ export default function GradeEditavel({
               {cols.map((c) => (
                 <th key={c.key} style={{ width: c.w, minWidth: c.w }}
                     className={`p-1.5 text-[10px] uppercase tracking-wider font-semibold text-ww-textMuted shadow-[0_1px_0_0_rgb(var(--color-ww-border))] ${
-                      c.alinhaDireita ? "text-right" : "text-left"}`}>
+                      c.alinhaDireita ? "text-right" : "text-left"} ${c.classe ?? ""}`}>
                   {c.label}
                 </th>
               ))}
@@ -327,7 +333,7 @@ export default function GradeEditavel({
                     return (
                       <td key={c.key}
                           className={`p-1.5 border-b border-ww-border/40 bg-ww-rowHover/40 ${
-                            c.alinhaDireita ? "text-right tabular-nums" : ""}`}>
+                            c.alinhaDireita ? "text-right tabular-nums" : ""} ${c.classe ?? ""}`}>
                         {c.render(linha)}
                       </td>
                     );
@@ -335,14 +341,18 @@ export default function GradeEditavel({
                   if (c.calculada) {
                     return (
                       <td key={c.key}
-                          className="p-1.5 text-right tabular-nums text-ww-textMuted border-b border-ww-border/40 bg-ww-rowHover/40">
+                          className={`p-1.5 text-right tabular-nums text-ww-textMuted border-b border-ww-border/40 bg-ww-rowHover/40 ${c.classe ?? ""}`}>
                         {c.calculada(linha)}
                       </td>
                     );
                   }
                   const ci = editaveis.findIndex((x) => x.key === c.key);
+                  const mk = c.marca?.(linha) ?? null;
                   return (
-                    <td key={c.key} className="p-0 border-b border-ww-border/40">
+                    <td key={c.key} className={`p-0 border-b border-ww-border/40 relative ${mk?.classe ?? ""} ${c.classe ?? ""}`} title={mk?.dica}>
+                      {mk?.etiqueta && (
+                        <span className="pointer-events-none absolute left-1 top-0 text-[8.5px] leading-none text-ww-textFaint">{mk.etiqueta}</span>
+                      )}
                       <input
                         data-cel={`${li}-${ci}`}
                         value={linha[c.key] ?? ""}
