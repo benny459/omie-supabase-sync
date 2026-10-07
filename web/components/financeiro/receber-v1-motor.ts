@@ -284,7 +284,38 @@ export function montarReceberV1(o: Opts) {
 
   /* TABELA */
   const PER = { hoje: (r) => D(r) === 0, venc: (r) => r.diasV < 0, amanha: (r) => D(r) === 1, d7: (r) => D(r) >= 0 && D(r) <= 7, d30: (r) => D(r) >= 0 && D(r) <= 30, tudo: () => true };
-  function tblBase() { const a = base(); return S.filter ? a.filter(S.filter.f) : a.filter(PER[S.per]); }
+  // Com busca digitada o período não corta (07/10/26, igual ao Contas a pagar).
+  function tblBase() { const a = base(); return S.filter ? a.filter(S.filter.f) : S.q ? a : a.filter(PER[S.per]); }
+  // Histórico da busca (servidor): recebidos e cancelados — a lista acima só tem os em aberto.
+  let HIST = { q: "", itens: [], carregando: false }, histT = 0;
+  function buscarHist() {
+    clearTimeout(histT);
+    const termo = S.q;
+    if (termo.length < 3) { HIST = { q: "", itens: [], carregando: false }; renderHist(); return; }
+    HIST = { q: termo, itens: [], carregando: true }; renderHist();
+    histT = setTimeout(async () => {
+      try {
+        const r = await fetch(`/api/financeiro/receber?buscar=${encodeURIComponent(termo)}`, { cache: "no-store" });
+        const j = await r.json(); if (!r.ok) throw new Error(j.error ?? "HTTP " + r.status);
+        if (S.q === termo) { HIST = { q: termo, itens: j.itens ?? [], carregando: false }; renderHist(); }
+      } catch (e) { if (S.q === termo) { HIST = { q: termo, itens: [], carregando: false, erro: e.message }; renderHist(); } }
+    }, 350);
+  }
+  function renderHist() {
+    const tb = q("tbl"); if (!tb) return;
+    let el = q("tblHist");
+    if (!el) { el = document.createElement("div"); el.id = "tblHist"; (tb.closest(".tbl") || tb).insertAdjacentElement("afterend", el); }
+    if (!HIST.q) { el.innerHTML = ""; return; }
+    if (HIST.carregando) { el.innerHTML = `<div class="sub2" style="padding:12px 4px">Procurando “${esc(HIST.q)}” em todos os títulos (recebidos e cancelados)…</div>`; return; }
+    if (HIST.erro) { el.innerHTML = `<div class="sub2" style="padding:12px 4px;color:#f87171">Busca no histórico falhou: ${esc(HIST.erro)}</div>`; return; }
+    const abertos = new Set(rows.filter((r) => !r.paid).map((r) => r.ref));
+    const it = HIST.itens.filter((x) => !abertos.has(x.ref) && empOk({ emp: x.emp }));
+    const SITH = { pago: ["Recebido", "#22c55e"], atrasado: ["Vencido", "#f87171"], aberto: ["Em aberto", "#cbd5e1"], cancelado: ["Cancelado", "#94a3b8"] };
+    const dbr = (s) => (s ? new Date(String(s).slice(0, 10) + "T12:00:00").toLocaleDateString("pt-BR") : "—");
+    el.innerHTML = `<div style="margin-top:18px"><div style="display:flex;gap:10px;align-items:baseline;margin:0 4px 8px"><b>Histórico de “${esc(HIST.q)}”</b><span class="sub2">${it.length} título(s) fora da lista acima — recebidos e cancelados · ${brl(it.reduce((s, x) => s + Number(x.valor || 0), 0))}${HIST.itens.length >= 400 ? " · mostrando os 400 mais próximos de hoje" : ""}</span></div>
+      ${it.length ? `<div class="tbl" style="max-height:520px"><table class="num"><thead><tr><th>Vencimento</th><th>Emp.</th><th>Cliente</th><th>Categoria</th><th>Documento</th><th>Situação</th><th class="r">Valor</th><th class="r">Saldo</th></tr></thead><tbody>${it.map((x) => { const s = SITH[x.situacao] || [x.situacao, "#cbd5e1"];
+        return `<tr><td>${dbr(x.venc)}</td><td><span class="emp ${esc(x.emp)}">${esc(x.emp)}</span></td><td style="font-weight:500">${esc(x.forn)}</td><td style="color:var(--tx2)">${esc(x.cat || "Sem categoria")}</td><td class="mono">${esc(x.doc || "—")}${x.parc ? ` <span class="sub2">· ${esc(x.parc)}</span>` : ""}</td><td><span style="color:${s[1]};font-weight:600">${s[0]}</span>${x.situacao === "pago" && x.pago_em ? `<div class="sub2">em ${dbr(x.pago_em)}</div>` : ""}</td><td class="r">${brl(Number(x.valor || 0))}</td><td class="r">${Number(x.saldo) > 0.004 ? brl(Number(x.saldo)) : "—"}</td></tr>`; }).join("")}</tbody></table></div>` : `<div class="sub2" style="padding:4px">Nada além do que está na lista acima.</div>`}</div>`;
+  }
   const cobLbl = (r) => (r.bol ? "Boleto" : r.tipo === "NFS" ? "NF/RPS" : "Sem boleto");
   const histLbl = (r) => (r.nh == null ? "Sem histórico" : r.pont >= 80 && r.atr <= 3 ? "Bom pagador" : r.atr > 10 || r.pont < 40 ? "Atrasa muito" : "Atrasa às vezes");
   const COLV = { dias: (r) => r.d.toLocaleDateString("pt-BR"), prev: (r) => DD(r).toLocaleDateString("pt-BR"), emp: (r) => r.emp, forn: (r) => r.forn, cat: (r) => r.cat || "Sem categoria", cob: cobLbl, sit: (r) => SIT[r.st].l, hist: histLbl, bank: (r) => (r.bank ? bankDesc(r.bank) : "(sem banco)") };
@@ -328,7 +359,7 @@ export function montarReceberV1(o: Opts) {
     qa("#tbl th[data-k]").forEach((h) => (h.onclick = () => { const key = h.dataset.k; S.sort = S.sort.k === key ? { k: key, dir: -S.sort.dir } : { k: key, dir: key === "v" ? -1 : 1 }; renderTable(); }));
     renderBStrip(pre);
     q("tblFoot").textContent = `${a.length} títulos · ${brl(sum(a))} · a cobrar ${brl(sum(a.filter((r) => r.st === "cobrar")))}${a.length > 400 ? " · mostrando 400" : ""}`;
-    q("tcTit").textContent = pre.length; renderAbar();
+    q("tcTit").textContent = pre.length; renderHist(); renderAbar();
   }
   async function programar(rs, cod) {
     const porEmp = {}; rs.forEach((r) => (porEmp[r.emp] = porEmp[r.emp] || []).push(r));
@@ -583,7 +614,7 @@ export function montarReceberV1(o: Opts) {
   seg("empSeg", "emp", () => { S.rkOpen = null; }); seg("baseSeg", "base", () => { S.agSel = 0; }); seg("agMode", "agMode", () => (S.agSel = 0));
   seg("vcEmp", "vcEmp", () => { S.vcCut = null; S.rkOpen = null; }); seg("vcRange", "vcRange", () => { S.vcCut = null; S.rkOpen = null; }, 1); seg("rkDim", "rkDim", () => (S.rkOpen = null));
   seg("tPer", "per", () => { S.filter = null; S.kpi = null; S.st = "all"; });
-  q("q").oninput = (e) => { S.q = e.target.value.trim().toLowerCase(); render(); };
+  q("q").oninput = (e) => { S.q = e.target.value.trim().toLowerCase(); render(); buscarHist(); };
 
   render();
   (async () => { await carregar(); await Promise.all([carregarMov(), carregarBaixas()]); if (vivo) render(); })();

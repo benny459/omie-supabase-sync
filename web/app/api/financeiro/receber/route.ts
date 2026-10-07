@@ -39,6 +39,13 @@ export async function GET(req: Request) {
     const { data, error } = await fin().rpc("receber_v1_baixas", { p_desde: inicioHoje.toISOString(), p_so_omie_pendente: baixas === "omie" });
     return error ? erroDb(error) : NextResponse.json({ baixas: data });
   }
+  // Busca em TODOS os títulos a receber — recebidos, cancelados, em aberto (07/10/26)
+  const buscar = (u.searchParams.get("buscar") ?? "").trim();
+  if (buscar) {
+    if (buscar.length < 3) return NextResponse.json({ itens: [] });
+    const { data, error } = await fin().rpc("receber_buscar", { p_q: buscar.slice(0, 80), p_lim: 400 });
+    return error ? erroDb(error) : NextResponse.json({ itens: data ?? [] }, { headers: { "Cache-Control": "no-store" } });
+  }
   const cob = u.searchParams.get("cobrancas");
   if (cob) {
     if (!UUID.test(cob)) return NextResponse.json({ error: "id inválido" }, { status: 400 });
