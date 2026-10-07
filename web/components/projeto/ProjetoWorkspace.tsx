@@ -77,6 +77,8 @@ export default function ProjetoWorkspace({
   const [temCrm, setTemCrm] = useState<boolean | null>(null);
   /** O fluxo inicial × em andamento, para o Δ das tabelas da aba 4. */
   const [comparado, setComparado] = useState<DadosComparado | null>(null);
+  const [cmpPronto, setCmpPronto] = useState(false);
+  const marcarCmpPronto = useCallback(() => setCmpPronto(true), []);
 
   /** O plano, para os KPIs do topo. Leitura barata e independente do fluxo. */
   const [plano, setPlano] = useState<PlanoCompleto | null>(null);
@@ -191,9 +193,11 @@ export default function ProjetoWorkspace({
       {aba === "fluxo" && (
         <>
           <FluxoComparado key={`cmp-${versaoPlano}`} empresa={empresa} codigoProjeto={codigoProjeto}
-            onDados={setComparado} />
-          <FluxoSimples key={`fluxo-${versaoPlano}`} empresa={empresa} codigoProjeto={codigoProjeto}
-            tetoPlano={tetoPlano} comparado={comparado} />
+            onDados={setComparado} onPronto={marcarCmpPronto} />
+          {cmpPronto
+            ? <FluxoSimples key={`fluxo-${versaoPlano}`} empresa={empresa} codigoProjeto={codigoProjeto}
+                tetoPlano={tetoPlano} comparado={comparado} />
+            : <div className="text-[12px] text-ww-textMuted px-1">As agendas de entradas e saídas carregam depois do gráfico…</div>}
         </>
       )}
 

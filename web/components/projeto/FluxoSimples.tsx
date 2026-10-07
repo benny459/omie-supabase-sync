@@ -205,12 +205,18 @@ export default function FluxoSimples({
 
   const carregar = useCallback(async () => {
     try {
-      const r = await fetch(
-        `/api/rc-projetos/fluxo?empresa=${encodeURIComponent(empresa)}&codigo_projeto=${codigoProjeto}`,
-        { cache: "no-store" });
-      const j = (await r.json()) as Payload;
-      if (!r.ok) { setErro(j.error ?? r.statusText); return; }
-      setErro(null); setData(j);
+      // 07/10/26: o banco às vezes estoura o statement timeout — tenta de novo duas vezes.
+      for (let t = 0; ; t++) {
+        const r = await fetch(
+          `/api/rc-projetos/fluxo?empresa=${encodeURIComponent(empresa)}&codigo_projeto=${codigoProjeto}`,
+          { cache: "no-store" });
+        const j = (await r.json()) as Payload;
+        if (!r.ok && t < 2 && /timeout|canceling statement/i.test(j.error ?? "")) {
+          await new Promise((ok) => setTimeout(ok, 1500)); continue;
+        }
+        if (!r.ok) { setErro(j.error ?? r.statusText); return; }
+        setErro(null); setData(j); return;
+      }
     } catch (e) { setErro(e instanceof Error ? e.message : String(e)); }
   }, [empresa, codigoProjeto]);
   useEffect(() => { void carregar(); }, [carregar]);

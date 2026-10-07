@@ -170,8 +170,11 @@ function Kpi({ rot, ini, at, fmt = brl, melhorMaior = true, sub }: {
   );
 }
 
-export default function FluxoComparado({ empresa, codigoProjeto, onDados }: {
+export default function FluxoComparado({ empresa, codigoProjeto, onDados, onPronto }: {
   empresa: string; codigoProjeto: number; onDados?: (d: DadosComparado) => void;
+  /** Chamado ao terminar (com ou sem erro): as agendas embaixo só carregam depois —
+   *  as duas leituras juntas estouravam o statement timeout do banco. */
+  onPronto?: () => void;
 }) {
   const [d, setD] = useState<DadosComparado | null>(null);
   const [erro, setErro] = useState<string | null>(null);
@@ -188,7 +191,8 @@ export default function FluxoComparado({ empresa, codigoProjeto, onDados }: {
       if (!r.ok) { setErro(j.error ?? r.statusText); return; }
       setErro(null); setD(j); onDados?.(j);
     } catch (e) { setErro(e instanceof Error ? e.message : String(e)); }
-  }, [empresa, codigoProjeto, onDados]);
+    finally { onPronto?.(); }
+  }, [empresa, codigoProjeto, onDados, onPronto]);
   useEffect(() => { void carregar(); }, [carregar]);
 
   /* Semana em projeto curto, mês quando passa de ~4 meses: 30 barras semanais num
