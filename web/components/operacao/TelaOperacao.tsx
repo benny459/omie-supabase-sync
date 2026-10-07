@@ -758,7 +758,7 @@ export default function TelaOperacao({ modulo, title, rows: rowsIniciais, parcia
               <span><OrdCab k="cliente" l={modulo === "pcs" ? "Fornecedor" : "Cliente"} o={ordem} on={ordenarPor} /> · alertas</span>
               <span><OrdCab k="etapas" l="Etapas" o={ordem} on={ordenarPor} /></span><span><OrdCab k="prazo" l="Prazo" o={ordem} on={ordenarPor} /></span>
               {modulo !== "pcs" && <span><OrdCab k="servico" l="Serviço" o={ordem} on={ordenarPor} /></span>}
-              <span style={{ textAlign: "center" }}><OrdCab k="rc" l={modulo === "projetos" ? "CP" : "RC"} o={ordem} on={ordenarPor} /> · <OrdCab k="pc" l="PC" o={ordem} on={ordenarPor} /> · <OrdCab k="pv" l="PV" o={ordem} on={ordenarPor} /> · <OrdCab k="mb" l="M.B." o={ordem} on={ordenarPor} /></span>
+              <span style={{ textAlign: "center" }}><OrdCab k="rc" l="RC" o={ordem} on={ordenarPor} /> · <OrdCab k="pc" l="PC" o={ordem} on={ordenarPor} /> · <OrdCab k="pv" l="PV" o={ordem} on={ordenarPor} /> · <OrdCab k="mb" l="M.B." o={ordem} on={ordenarPor} /></span>
             </div>
           )}
           {visiveis.slice(0, limite).map(({ p, compras }) => (
@@ -1179,22 +1179,21 @@ function NfSaida({ p }: { p: Pedido }) {
   );
 }
 
-export function SeloDif({ d, compacto, termo = "RC" }: { d: number | null; compacto?: boolean; termo?: "RC" | "CP" }) {
+export function SeloDif({ d, compacto }: { d: number | null; compacto?: boolean }) {
   if (d == null) return <span className="fb mute">sem PC</span>;
-  if (Math.abs(d) < 0.005) return <span className="fb eq">= {termo}</span>;
-  const ref = termo === "CP" ? "da CP" : "da requisição";
+  if (Math.abs(d) < 0.005) return <span className="fb eq">= RC</span>;
   return d > 0
-    ? <span className="fb up" title={`PC acima ${ref}`}>▲ {pct(d)}{compacto ? "" : ` vs ${termo}`}</span>
-    : <span className="fb dn" title={`PC abaixo ${ref}`}>▼ {pct(-d)}{compacto ? "" : ` vs ${termo}`}</span>;
+    ? <span className="fb up" title="PC acima da requisição">▲ {pct(d)}{compacto ? "" : " vs RC"}</span>
+    : <span className="fb dn" title="PC abaixo da requisição">▼ {pct(-d)}{compacto ? "" : " vs RC"}</span>;
 }
 const mbCls = (m: number | null) => (m == null ? "" : m >= 0.35 ? "good" : m >= 0.2 ? "warn" : "bad");
 
-export function FinStrip({ p, $, termo = "RC" }: { p: Pedido; $: (v: number | null) => string; termo?: "RC" | "CP" }) {
+export function FinStrip({ p, $ }: { p: Pedido; $: (v: number | null) => string }) {
   const F = financeiro(p);
   return (
-    <div className="fin" title={`M.B. = (PV − custo) ÷ PV · custo usa o valor do PC quando existe, senão o da ${termo}`}>
-      <div><label>{termo}</label><b>{$(F.rc)}</b></div>
-      <div><label>PC <span>{F.pcN} {F.pcN === 1 ? "pedido" : "pedidos"}</span></label><b>{F.pcN ? $(F.pc) : "—"}</b>{F.pcN ? <SeloDif d={F.dif} compacto termo={termo} /> : null}</div>
+    <div className="fin" title="M.B. = (PV − custo) ÷ PV · custo usa o valor do PC quando existe, senão o da RC">
+      <div><label>RC</label><b>{$(F.rc)}</b></div>
+      <div><label>PC <span>{F.pcN} {F.pcN === 1 ? "pedido" : "pedidos"}</span></label><b>{F.pcN ? $(F.pc) : "—"}</b>{F.pcN ? <SeloDif d={F.dif} compacto /> : null}</div>
       <div><label>PV</label><b>{$(p.valorPv)}</b></div>
       <div className={`mb ${mbCls(F.mb)}`}><label>M.B.{F.estimada ? "*" : ""}</label><b>{F.mb == null ? "—" : pct(F.mb)}</b></div>
     </div>
@@ -1301,7 +1300,7 @@ function CartaoPedido(props: {
           {d != null && !p.faturado && <small className={d < 0 ? "late" : d <= 7 ? "soon" : ""}>{d < 0 ? `${-d}d atrasado` : `${d}d de folga`}</small>}
         </div>
         {modulo !== "pcs" && <CelServico sv={servicoDoPedido(p)} />}
-        <FinStrip p={p} $={$} termo={modulo === "projetos" ? "CP" : "RC"} />
+        <FinStrip p={p} $={$} />
       </div>
 
       {modulo === "projetos" && props.bucket && (

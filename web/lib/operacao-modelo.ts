@@ -337,16 +337,11 @@ export function fases(p: Pedido, modulo: string, cadeia?: RentabResumo | null): 
   if (modulo !== "pcs") {
     L.push({ k: "PV", s: "d", t: "Venda registrada no Omie" });
     const nRcNum = [...E.rcs.keys()].filter((k) => k.startsWith("rc:")).length;
-    // No projeto RC e CP são a mesma coisa (07/10/26, Benny): a etapa chama-se "CP".
-    const R = modulo === "projetos" ? "CP" : "RC";
     // Linha sem RC conta como um item solto; sem nenhuma RC, fala-se em itens.
-    const alvoTxt = (n: number) => nRcNum ? plural(n, R, `${R}s`) : plural(n, "item", "itens");
+    const alvoTxt = (n: number) => nRcNum ? plural(n, "RC", "RCs") : plural(n, "item", "itens");
     L.push(nRcNum === 0 && nPcs > 0
-      ? { k: R, s: "na", t: R === "CP" ? "sem CP lançada — compra direto por PC" : "sem requisição — compra direto por PC" }
-      : { k: R, s: nRcNum ? "d" : "o",
-        t: nRcNum ? (R === "CP" ? plural(nRcNum, "CP lançada em Compras", "CPs lançadas em Compras") : plural(nRcNum, "requisição", "requisições"))
-          : R === "CP" ? "nenhuma CP lançada ainda" : "nenhuma requisição ainda",
-        next: R === "CP" ? "lançar a CP" : "criar requisição" });
+      ? { k: "RC", s: "na", t: "sem requisição — compra direto por PC" }
+      : { k: "RC", s: nRcNum ? "d" : "o", t: nRcNum ? plural(nRcNum, "requisição", "requisições") : "nenhuma requisição ainda", next: "criar requisição" });
     // Sem relação fixa RC × PC: basta haver PC para a etapa estar feita.
     L.push({ k: "PC", s: nPcs ? "d" : atrasado && E.nRcs ? "l" : "o",
       t: nPcs ? `${plural(nPcs, "pedido de compra", "pedidos de compra")} · ${alvoTxt(E.nRcs)}`

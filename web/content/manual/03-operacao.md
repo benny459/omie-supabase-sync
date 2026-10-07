@@ -51,7 +51,6 @@ A lista de **pedidos de venda (PV/OS)** com as compras ligadas a cada um.
 1. Abra **Operação → Projetos** e clique no projeto.
 2. As abas seguem a ordem do trabalho: **1 Resumo · 2 Lista de materiais · 3 Materiais separados · 4 Fluxo de caixa**.
 3. Na lista de projetos, um selo mostra **“N itens separados · R$ · x% da lista”** quando já há material separado — clique para ir direto à aba.
-4. Em Projetos a etapa e os valores falam **CP** (não RC): **CP · PC · PV · M.B.**; a etapa **CP** fica feita quando a CP do projeto está lançada em Compras.
 
 ### Lista de materiais, compras e budget do projeto
 
