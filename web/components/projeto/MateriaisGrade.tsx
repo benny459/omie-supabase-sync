@@ -202,8 +202,6 @@ export default function MateriaisGrade({
     });
     return m;
   }, [linhas, cpBase]);
-  /** A RC entra na lista UMA vez: enquanto nenhum item dela está na lista, o "Importar" fica na barra. */
-  const primeiraImportacao = !!cpBase?.itens.length && usoCp.size === 0;
   const cpNaoUsados = useMemo(() => (cpBase?.itens ?? []).map((i, k) => ({ i, k })).filter(({ k }) => !usoCp.has(k)), [cpBase, usoCp]);
   /** Linha que está escolhendo "Usar item da CP". */
   const [usarCpEm, setUsarCpEm] = useState<string | null>(null);
@@ -1368,13 +1366,13 @@ export default function MateriaisGrade({
           className="px-2 py-1 text-[11px] rounded-lg bg-ww-accent text-white font-semibold hover:brightness-110 transition disabled:opacity-40">
           🧾 Gerar pedido de compra ({paraPc.length})
         </button>
-        {/* Importar é de UMA vez (07/10/26, Benny): depois que a RC entrou na lista, o
-            botão sai da barra e fica no ⋯ como "Reimportar itens da RC (raro)". */}
-        {primeiraImportacao && (
-          <button type="button" onClick={() => { setImportarAberto(true); void abrirTrazerRc(); }} disabled={!!ocupado}
-            title="Traz para a lista os itens da RC do projeto, já casados com o nosso catálogo"
-            className="px-2 py-1 text-[11px] rounded-lg border border-emerald-500/60 text-emerald-800 dark:text-emerald-200 hover:bg-emerald-500/10 transition disabled:opacity-40">
-            ⤵ Importar itens da RC
+        {/* Importar da RC o que falta (07/10/26, Benny): sempre à vista na barra da Lista. N = itens
+            da RC "não usado"; abre o importar com eles marcados (casam com o catálogo antes). */}
+        {!!cpBase?.itens.length && (
+          <button type="button" onClick={() => levarParaLista(cpNaoUsados.map((x) => x.k))} disabled={!!ocupado || !cpNaoUsados.length}
+            title={cpNaoUsados.length ? "Abre o importar com os itens da RC que ainda não estão na lista, já casados com o nosso catálogo" : "A lista já tem todos os itens da RC"}
+            className="px-2 py-1 text-[11px] rounded-lg border border-emerald-500/60 text-emerald-800 dark:text-emerald-200 font-semibold hover:bg-emerald-500/10 transition disabled:opacity-50 disabled:font-normal">
+            {cpNaoUsados.length ? `⤵ Importar da RC o que falta (${cpNaoUsados.length})` : "⤵ lista já tem todos os itens da RC"}
           </button>
         )}
         <span className="flex-1" />
@@ -1397,12 +1395,6 @@ export default function MateriaisGrade({
                 className="block w-full text-left px-2 py-1.5 rounded hover:bg-ww-rowHover"
                 title="Itens de PCs do projeto que nenhuma linha da lista cobre — já contam no comprometido">
                 {foraAberto ? "Esconder" : "Ver"} PCs com itens fora da lista <span className="text-ww-textFaint">({cmp.fora_da_lista.length})</span></button>
-            )}
-            {!primeiraImportacao && (
-              <button type="button" onClick={(e) => { (e.currentTarget.closest("details") as HTMLDetailsElement).open = false; setImportarAberto(true); void abrirTrazerRc(); }} disabled={!!ocupado}
-                className="block w-full text-left px-2 py-1.5 rounded hover:bg-ww-rowHover disabled:opacity-40"
-                title="A RC já foi importada. Use só para trazer itens da RC que ficaram de fora (o que já está na lista fica apagado).">
-                Importar itens da RC que faltam</button>
             )}
           </div>
         </details>
@@ -1629,8 +1621,8 @@ export default function MateriaisGrade({
                 {naoUsados.length > 0 && (
                   <div className="flex items-center gap-2 mb-1.5">
                     <button type="button" onClick={() => levarParaLista(naoUsados)}
-                      className="px-2.5 py-1 text-[11.5px] rounded-lg border border-emerald-500/60 text-emerald-800 dark:text-emerald-200 font-semibold hover:bg-emerald-500/10 transition">
-                      ⤵ Levar {naoUsados.length} ite{naoUsados.length === 1 ? "m" : "ns"} não usado{naoUsados.length === 1 ? "" : "s"} para a lista
+                      className="px-2.5 py-1 text-[11.5px] rounded-lg bg-ww-accent text-white font-semibold hover:brightness-110 transition">
+                      ⤴ Exportar para a lista os que faltam ({naoUsados.length})
                     </button>
                     <span className="text-[10.5px] text-ww-textFaint">abre o importar com eles marcados — confira o código de cada um antes de adicionar</span>
                   </div>
@@ -1672,7 +1664,7 @@ export default function MateriaisGrade({
                 </div>
                 </>);
             })()}
-          <p className="text-[10.5px] text-ww-textFaint">A RC é a referência e a origem do budget de materiais. O que não está na lista aparece como “não usado”: leve um item com “→ lista” ou todos com “⤵ Levar … para a lista” (casam com o nosso código antes de entrar). Na lista você exclui, inclui e casa.</p>
+          <p className="text-[10.5px] text-ww-textFaint">A RC é a referência e a origem do budget de materiais. O que não está na lista aparece como “não usado”: leve um item com “→ lista” ou todos com “⤴ Exportar para a lista os que faltam” (casam com o nosso código antes de entrar). Na lista você exclui, inclui e casa.</p>
         </div>
       ) : carregando
         ? <p className="text-[11.5px] text-ww-textFaint py-3">Carregando a lista…</p>
