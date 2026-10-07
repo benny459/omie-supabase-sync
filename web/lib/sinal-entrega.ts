@@ -31,6 +31,11 @@ export function sinalEntrega(a: {
       return { nivel: "risco", chegada: null, estimada: false, folga: null, motivo: "PC sem previsão de entrega" };
     }
     chegada = a.previsaoPc.slice(0, 10);
+    // previsão do PC já passou e nada chegou: a data não vale mais — risco (ou atraso, se a necessária também passou)
+    if (dias(chegada, hoje) < 0) {
+      if (dias(nec, hoje) < 0) return { nivel: "atrasado", chegada, estimada: false, folga: dias(nec, chegada), motivo: "necessário já passou e não foi recebido" };
+      return { nivel: "risco", chegada, estimada: false, folga: dias(nec, chegada), motivo: "previsão do PC vencida e ainda não recebido" };
+    }
   } else {
     chegada = addDias(hoje, Math.max(0, Number(a.prazoDias) || 0));
     estimada = true;

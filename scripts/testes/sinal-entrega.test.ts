@@ -21,3 +21,7 @@ test("sem PC: estimativa pelo prazo médio", () => {
   assert.equal(sinalEntrega({ necessario: "2026-10-30", temPc: false, prazoDias: 21, hoje })?.nivel, "risco");
   assert.equal(sinalEntrega({ necessario: "2026-10-30", temPc: false, prazoDias: 30, hoje })?.nivel, "atrasado");
 });
+test("previsão do PC vencida sem receber é risco", () => {
+  const s = sinalEntrega({ necessario: "2026-10-15", temPc: true, previsaoPc: "2026-09-18", hoje });
+  assert.equal(s?.nivel, "risco"); assert.match(s!.motivo, /vencida/);
+});
