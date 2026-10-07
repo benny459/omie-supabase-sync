@@ -57,6 +57,11 @@ export async function GET(req: Request) {
 
   const perms = await loadPerms();
   const admin = supaAdmin();
+  /* ?partes=agenda (07/10/26): a aba 4 (agendas de entradas e saídas) só usa linhas,
+     previsto, execução e orçamento — o resto (realizado mensal/diário, cobertura,
+     eventos, vendas) volta vazio e não é consultado. */
+  const soAgenda = ctx.url.searchParams.get("partes") === "agenda";
+  const vazio = Promise.resolve({ data: [] as unknown[], error: null });
 
   // Tudo de uma vez: a tela mostra as quatro coisas juntas e buscar em série
   // somaria quatro idas ao banco antes do primeiro pixel.
@@ -67,9 +72,9 @@ export async function GET(req: Request) {
       .order("data_prevista", { ascending: true }).order("ordem", { ascending: true }),
     admin.schema("approval").from("projeto_fluxo")
       .select("*").eq("empresa", empresa).eq("codigo_projeto", codigo).maybeSingle(),
-    admin.schema("bi").rpc("projeto_realizado_mensal", { p_codigo_projeto: codigo }),
-    admin.schema("bi").rpc("projeto_cobertura_titulo", { p_codigo_projeto: codigo }),
-    admin.schema("approval").from("projeto_fluxo_evento")
+    soAgenda ? vazio : admin.schema("bi").rpc("projeto_realizado_mensal", { p_codigo_projeto: codigo }),
+    soAgenda ? vazio : admin.schema("bi").rpc("projeto_cobertura_titulo", { p_codigo_projeto: codigo }),
+    soAgenda ? vazio : admin.schema("approval").from("projeto_fluxo_evento")
       .select("versao, acao, por, em, motivo, total_entradas, total_saidas, linhas")
       .eq("empresa", empresa).eq("codigo_projeto", codigo)
       .order("em", { ascending: false }).limit(20),
@@ -81,7 +86,7 @@ export async function GET(req: Request) {
     // O realizado dia a dia. A curva de saldo é montada na TELA a partir dele
     // e do previsto — uma função de banco que juntasse os dois teria que
     // recalcular o previsto inteiro, e o previsto é a parte cara.
-    admin.schema("bi").rpc("projeto_realizado_diario", { p_codigo_projeto: codigo }),
+    soAgenda ? vazio : admin.schema("bi").rpc("projeto_realizado_diario", { p_codigo_projeto: codigo }),
     // O teto de gasto do projeto. Vem da mesma tabela que a tela de materiais
     // usa — um segundo lugar para editar o mesmo número daria dois budgets.
     admin.schema("approval").from("rc_projetos_budget")
@@ -98,7 +103,7 @@ export async function GET(req: Request) {
     // Os PV/OS do projeto. Vêm de sales, NÃO da view de pedidos de compra:
     // aquela só enxerga PV que tem PC, e mostrava uma das quatro parcelas
     // deste projeto — escondendo justamente a que já foi faturada.
-    admin.schema("bi").rpc("projeto_vendas", {
+    soAgenda ? vazio : admin.schema("bi").rpc("projeto_vendas", {
       p_codigo_projeto: codigo, p_empresa: empresa,
     }),
   ]);

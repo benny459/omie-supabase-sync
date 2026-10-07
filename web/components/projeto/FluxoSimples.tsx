@@ -208,7 +208,7 @@ export default function FluxoSimples({
       // 07/10/26: o banco às vezes estoura o statement timeout — tenta de novo duas vezes.
       for (let t = 0; ; t++) {
         const r = await fetch(
-          `/api/rc-projetos/fluxo?empresa=${encodeURIComponent(empresa)}&codigo_projeto=${codigoProjeto}`,
+          `/api/rc-projetos/fluxo?empresa=${encodeURIComponent(empresa)}&codigo_projeto=${codigoProjeto}&partes=agenda`,
           { cache: "no-store" });
         const j = (await r.json()) as Payload;
         if (!r.ok && t < 2 && /timeout|canceling statement/i.test(j.error ?? "")) {
