@@ -1954,7 +1954,7 @@ export default function MateriaisGrade({
           <div role="dialog" aria-label="Importar para a lista" className="w-full sm:w-[min(1100px,97vw)] max-h-[90vh] overflow-auto rounded-t-xl sm:rounded-xl border border-ww-border bg-[rgb(var(--color-ww-panel))] shadow-2xl p-3.5 space-y-2.5 text-[12px]">
             <div className="flex items-start gap-2">
               <div><h4 className="text-[14px] font-semibold text-ww-text">Importar itens da RC para a lista</h4>
-                <p className="text-[11px] text-ww-textMuted">Cada item da RC vem casado com o nosso catálogo (✓ certo · ⚠ sugestão · sem correspondência). Sugestão entra na lista como sugestão (âmbar) — aceite lá com ✓ ou “Aceitar todas as sugestões”. Marque o que entra e adicione; o que já está na lista fica apagado.</p></div>
+                <p className="text-[11px] text-ww-textMuted">Cada item da RC vem casado com o nosso catálogo (✓ certo · ⚠ sugestão · sem correspondência). Sugestão entra na lista como sugestão (âmbar) — aceite lá com ✓ ou “Aceitar todas as sugestões”. Marque o que entra e adicione; o que já está na lista fica apagado.<br /><span className="text-ww-textFaint">No catálogo: <b className="text-emerald-600">✓</b> casado sozinho · <b className="text-sky-600">✋</b> já escolhido à mão antes (o de-para guardou a escolha para este texto) · <b className="text-amber-600">⚠</b> sugestão · “sem correspondência” = nada parecido no estoque.</span></p></div>
               <button type="button" className="ml-auto text-ww-accent hover:underline" onClick={() => setImportarAberto(false)}>fechar</button>
             </div>
             {/* RC já lançada em Compras (nº da RC): entra com o vínculo, para os PCs cobrirem a RC */}
@@ -1986,11 +1986,16 @@ export default function MateriaisGrade({
                   className="px-3 py-1 rounded-lg bg-ww-accent text-white text-[11.5px] font-semibold hover:brightness-110 transition disabled:opacity-40">
                   Adicionar {cpMarcados.size || ""} à lista
                 </button>
+                <button type="button" className="text-[11px] text-ww-accent hover:underline"
+                  title="Marca TODOS os itens da RC que ainda não estão na lista (com código, com sugestão e sem código)"
+                  onClick={() => setCpMarcados(new Set(cp.itens.map((_, k) => k).filter((k) => !usoCp.has(k))))}>
+                  marcar todos que faltam ({cp.itens.filter((_, k) => !usoCp.has(k)).length})
+                </button>
                 <button type="button" className="text-[11px] text-ww-textMuted hover:text-ww-text"
-                  title="Marca os itens casados (✓ ou escolhidos) que ainda não estão na lista"
+                  title="Marca só os que faltam e já têm código do nosso estoque (✓ automático ou ✋ escolhido antes)"
                   onClick={() => setCpMarcados(new Set(cp.itens.map((it, k) => [it, k] as const)
                     .filter(([it, k]) => casado(it) && !usoCp.has(k)).map(([, k]) => k)))}>
-                  marcar os casados que faltam
+                  só os que já têm código
                 </button>
                 <button type="button" className="text-[11px] text-ww-textMuted hover:text-ww-text" onClick={() => setCpMarcados(new Set())}>limpar</button>
                 <span className="text-[10.5px] text-ww-textFaint">
@@ -2002,7 +2007,12 @@ export default function MateriaisGrade({
                 <table className="w-full text-[11.5px] border-collapse">
                   <thead className="sticky top-0 bg-ww-panel text-ww-textMuted z-[1]">
                     <tr className="text-left">
-                      <th className="p-1.5 w-7"></th>
+                      <th className="p-1.5 w-7">{(() => {
+                        const falta = cp.itens.map((_, k) => k).filter((k) => !usoCp.has(k));
+                        const todos = falta.length > 0 && falta.every((k) => cpMarcados.has(k));
+                        return <input type="checkbox" title="Marcar / desmarcar todos os que faltam" checked={todos} disabled={!falta.length}
+                          onChange={() => setCpMarcados(todos ? new Set() : new Set(falta))} />;
+                      })()}</th>
                       <th className="p-1.5">Equipamento</th>
                       <th className="p-1.5">Item da RC</th>
                       <th className="p-1.5 text-right">Qtd</th>
