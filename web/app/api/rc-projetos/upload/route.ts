@@ -53,6 +53,9 @@ type Body = {
   /** Autoriza uma remoção em massa (metade ou mais da lista). Sem isto a rota
    *  devolve 409 e não apaga nada — ver a trava, mais abaixo. */
   confirmar_remocao?: boolean;
+  /** Lista inteira excluída pela grade (🗑 em todas as linhas, 07/10/26): items vazio vale,
+   *  e tudo vai para a lixeira. Só com confirmar_remocao. Planilha vazia continua recusada. */
+  esvaziar?: boolean;
 };
 
 const HARD_CAP = 2000;
@@ -76,7 +79,8 @@ export async function POST(req: Request) {
   if (!body.empresa || !body.codigo_projeto || !Array.isArray(body.items)) {
     return NextResponse.json({ error: "empresa, codigo_projeto e items[] obrigatórios" }, { status: 400 });
   }
-  if (body.items.length === 0) {
+  const esvaziar = body.items.length === 0 && body.esvaziar === true && body.confirmar_remocao === true;
+  if (body.items.length === 0 && !esvaziar) {
     return NextResponse.json({ error: "items vazio" }, { status: 400 });
   }
   if (body.items.length > HARD_CAP) {
@@ -130,7 +134,7 @@ export async function POST(req: Request) {
     }
   }
   const deduped = [...dedup.values()];
-  if (deduped.length === 0) {
+  if (deduped.length === 0 && !esvaziar) {
     return NextResponse.json({ error: "Nenhum item válido (equipamento e item são obrigatórios)" }, { status: 400 });
   }
 
@@ -197,13 +201,15 @@ export async function POST(req: Request) {
     if (d) r.data_necessaria = d;
   }
 
-  const { error: upErr } = await approval
-    .from("rc_projetos_itens")
-    .upsert(rows, {
-      onConflict: "empresa,codigo_projeto,equipamento,item_norm",
-      ignoreDuplicates: false,
-    });
-  if (upErr) return NextResponse.json({ error: upErr.message }, { status: 500 });
+  if (rows.length) {
+    const { error: upErr } = await approval
+      .from("rc_projetos_itens")
+      .upsert(rows, {
+        onConflict: "empresa,codigo_projeto,equipamento,item_norm",
+        ignoreDuplicates: false,
+      });
+    if (upErr) return NextResponse.json({ error: upErr.message }, { status: 500 });
+  }
 
   // ── Sync destrutivo, agora com lixeira ───────────────────────────────────
   //

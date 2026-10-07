@@ -141,7 +141,7 @@ export default function MateriaisGrade({
   const [sujo, setSujo] = useState(false);
   /** Exclusão pedida pelo 🗑 (07/10/26): grava sozinha depois de alguns segundos,
    *  com "Desfazer" até lá. `antes` = a grade antes de excluir. */
-  const [remocao, setRemocao] = useState<{ n: number; comPc: number; antes: LinhaGrade[] } | null>(null);
+  const [remocao, setRemocao] = useState<{ n: number; comPc: number; antes: LinhaGrade[]; erro?: string } | null>(null);
   const remocaoRef = useRef(false);
   const [foraAberto, setForaAberto] = useState(false);
   const [original, setOriginal] = useState(0);
@@ -662,8 +662,10 @@ export default function MateriaisGrade({
       if (i.custo_cp != null) custoCp.set(chaveItem(i.equipamento, i.item), Number(i.custo_cp));
     }
     const porId = new Map((dados?.itens ?? []).map((l) => [`db${l.id}`, l]));
-    let mudou = 0;
-    setLinhas((atual) => atual.map((l) => {
+    /* 07/10/26 (PJ366 continuava com MAN7MLA no banco): o "mudou" era contado dentro do
+       atualizador do setLinhas, que o React roda depois — a checagem logo abaixo via 0 e a
+       lista nunca era marcada para salvar. Agora o aviso e o "salvar" saem de dentro dele. */
+    setLinhas((atual) => { let mudou = 0; const res = atual.map((l) => {
       if (!l._id.startsWith("db") || !String(l.item ?? "").trim()) return l;
       const novo: LinhaGrade = { ...l };
       // código do Omie → item nosso
@@ -689,11 +691,12 @@ export default function MateriaisGrade({
         else if (custoCp.has(chaveItem(l.equipamento, l.item))) { novo.cat_valor_unit = moeda(custoCp.get(chaveItem(l.equipamento, l.item))); novo._vu_fonte = "CP"; mudou++; }
       } else if (pcVu != null && Math.abs(num(l.cat_valor_unit) - pcVu) < 0.005) novo._vu_fonte = "pc";
       return novo;
-    }));
-    if (mudou) {
+    });
+    if (mudou) queueMicrotask(() => {
       setSujo(true);
       setAviso(`${mudou} ajuste(s) automático(s) na lista: código do Omie trocado pelo item nosso e/ou valor unit. vazio preenchido (do PC, do catálogo ou da RC). A lista é salva sozinha em instantes.`);
-    }
+    });
+    return res; });
   }, [empresa, codigoProjeto, carregarCompras]);
   const enriquecerRef = useRef<typeof enriquecer | null>(null);
   enriquecerRef.current = enriquecer;
@@ -763,6 +766,7 @@ export default function MateriaisGrade({
         body: JSON.stringify({
           empresa, codigo_projeto: codigoProjeto,
           confirmar_remocao: confirmarRemocao || intencional,
+          esvaziar: intencional && validas.length === 0,
           items: validas.map((l) => ({
             equipamento: String(l.equipamento ?? "").trim() || "Geral",
             item: String(l.item ?? "").trim(),
@@ -791,7 +795,12 @@ export default function MateriaisGrade({
         }
         return;
       }
-      if (!r.ok) { setErro(j.error ?? r.statusText); return; }
+      if (!r.ok) {
+        setErro(j.error ?? r.statusText);
+        // exclusão pelo 🗑 que não gravou: o aviso fica com Desfazer e Tentar de novo
+        if (intencional) setRemocao((x) => (x ? { ...x, erro: String(j.error ?? r.statusText) } : x));
+        return;
+      }
       if (silencioso) {
         // Gravado sem recarregar a grade (quem está digitando não perde o foco).
         try { window.localStorage.removeItem(`painel.materiais.rascunho.${empresa}.${codigoProjeto}`); } catch { /* */ }
@@ -833,6 +842,7 @@ export default function MateriaisGrade({
   useEffect(() => {
     if (!sujo || !carregouOk || salvando || rascunhoDe) return;
     const intencional = remocao != null && remocaoRef.current;
+    if (remocao?.erro) return;   // falhou: espera o "Tentar de novo" ou o "Desfazer"
     if (!intencional && (validas.length < original || !validas.length)) return;
     const t = window.setTimeout(() => { void salvarRef.current?.(false, true); }, intencional ? 6000 : 2500);
     return () => window.clearTimeout(t);
@@ -1561,8 +1571,11 @@ export default function MateriaisGrade({
       )}
       {remocao && (
         <div className="flex items-center gap-3 flex-wrap p-2 rounded-lg border border-rose-500/40 bg-rose-500/10 text-[12px] text-rose-800 dark:text-rose-200">
-          <span>{remocao.n} linha(s) excluída(s){remocao.comPc ? ` (${remocao.comPc} com PC — o pedido de compra não muda)` : ""} · grava em instantes</span>
-          <button type="button" onClick={desfazerExclusao} className="ml-auto px-2 py-0.5 rounded border border-rose-400/60 font-semibold hover:bg-rose-500/10">Desfazer</button>
+          <span>{remocao.n} linha(s) excluída(s){remocao.comPc ? ` (${remocao.comPc} com PC — o pedido de compra não muda)` : ""}
+            {remocao.erro ? <> · <b>não gravou</b>: {remocao.erro}</> : " · grava em instantes"}</span>
+          {remocao.erro && <button type="button" onClick={() => { setRemocao((x) => (x ? { ...x, erro: undefined } : x)); setErro(null); void salvarRef.current?.(true, true); }}
+            className="ml-auto px-2 py-0.5 rounded border border-rose-400/60 hover:bg-rose-500/10">Tentar de novo</button>}
+          <button type="button" onClick={desfazerExclusao} className={`${remocao.erro ? "" : "ml-auto "}px-2 py-0.5 rounded border border-rose-400/60 font-semibold hover:bg-rose-500/10`}>Desfazer</button>
         </div>
       )}
       {sujo && validas.length < original && !remocao && (
