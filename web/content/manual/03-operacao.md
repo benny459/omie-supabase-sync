@@ -52,6 +52,18 @@ A lista de **pedidos de venda (PV/OS)** com as compras ligadas a cada um.
 2. As abas seguem a ordem do trabalho: **1 Resumo · 2 Lista de materiais · 3 Materiais separados · 4 Fluxo de caixa**.
 3. Na lista de projetos, um selo mostra **“N itens separados · R$ · x% da lista”** quando já há material separado — clique para ir direto à aba.
 
+### Resumo e Fluxo de caixa do projeto
+
+**1 Resumo** mostra só o **fechamento do CRM**: no topo a proposta (OPJ…), o cliente e o **valor fechado** em destaque (com as saídas previstas e a sobra), os botões **▦ Baixar CP/MC Excel**, **⟳ Gerar atualizado** e **abrir no CRM ↗**; embaixo, os blocos **Projeto** (início, prazo, entrega prevista, quando saem mão de obra e despesas), **Por conta de quem** (frete, deslocamento, instalação e impostos — selo âmbar = por nossa conta), **Custos considerados** (materiais da RC, mão de obra, frete, demais despesas, total e a barra de composição) e **Recebimento** (parcelas com faturamento → pagamento). Projeto sem fechamento no CRM mostra as premissas do plano.
+
+**4 Fluxo de caixa** abre com:
+- **Aprovação do fluxo** (barra no topo, antes ficava no Resumo): Rascunho / Aguardando / Aprovado / Rejeitado, com **Enviar para aprovação**, **Aprovar fluxo**, **Rejeitar**, **Reabrir** e o **Histórico**. É ela que libera a aprovação dos PCs do projeto, como antes.
+- **Os números** (inicial × em andamento): entradas, saídas, resultado, **menor saldo** (e quando), e o desvio de **prazo** das entradas e das saídas em dias (+ = atrasou / ficou para depois).
+- **O gráfico**: por **semana** ou **mês** (Auto escolhe pelo tamanho do projeto). Barras para cima = entradas, para baixo = saídas; **contorno** = fluxo **inicial**, **cheia** = fluxo **em andamento**. A linha tracejada é o saldo acumulado inicial; a cheia, o em andamento. Marcados: o **menor saldo** de cada linha, o **maior desvio** entre as duas e **hoje**. Passe o mouse num período para ver entradas, saídas e saldo — inicial, atual e a diferença.
+- **Fluxo inicial** = a foto do plano do fechamento na primeira importação (parcelas na data inicial, agenda de saídas da planilha). **Não muda** quando o CRM reimporta; se a proposta foi revisada, aparece o aviso e só o **administrador** pode **redefinir fluxo inicial**.
+- **Fluxo em andamento**: **entradas** = cada parcela na data atual (vencimento do título se já faturou; senão a nova previsão de recebimento dos PV/OS; senão a inicial). **Saídas** = **PCs** do projeto (sem escondidos, cancelados e reprovados) nas parcelas do PC, ou previsão de entrega + prazo da condição; + linhas da **Lista sem PC** (estimado, no “Necessário em”); + saídas do plano que **não são material** (obra, despesas). **Sem contar duas vezes**: quando o projeto tem PC ou Lista, a saída de **material** do plano sai do andamento (os PCs e a Lista a substituem). O que já foi **baixado** (recebido/pago) entra na data da baixa e abate o previsto em ordem de data; previsto vencido e não baixado conta como **hoje**.
+- Embaixo, recolhíveis (clique no título): **Entradas**, **Saídas** (com a coluna **Δ vs inicial** — dias que a data andou e diferença de valor; “novo” = não existia no inicial) e **Budget × pedidos de compra** (o antigo “Execução da despesa” do Resumo — requisitado, aprovado e pago contra o budget).
+
 ### Lista de materiais, compras e budget do projeto
 
 Tudo fica numa aba só: **Lista de materiais** (a antiga aba “Compras × lista” entrou nela). Na linha do projeto, **📂 Abrir projeto** leva até ela.

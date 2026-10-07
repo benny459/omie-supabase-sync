@@ -12,6 +12,11 @@
 
 import { useCallback, useEffect, useState } from "react";
 import PlanoFechamento, { type PlanoCompleto } from "./PlanoFechamento";
+import type { DadosComparado } from "./FluxoComparado";
+
+/** Diferença de uma linha da agenda contra o fluxo INICIAL travado (07/10/26). */
+type Delta = { dias: number | null; valor: number } | null;
+const difDias = (a: string, b: string) => Math.round((Date.parse(`${a}T12:00:00Z`) - Date.parse(`${b}T12:00:00Z`)) / 86400000);
 
 type Linha = {
   id: number; tipo: "entrada" | "saida"; descricao: string;
@@ -64,18 +69,26 @@ function Num({ rot, val, tom, sub }: { rot: string; val: string; tom?: string; s
 }
 
 function Agenda({
-  titulo, dica, linhas, itensErp, jaFoi, falta, rotJa, rotFalta, tom, rotLiq,
+  titulo, dica, linhas, itensErp, jaFoi, falta, rotJa, rotFalta, tom, rotLiq, deltas,
 }: {
   titulo: string; dica: string; linhas: Linha[]; itensErp: Item[];
   jaFoi: number; falta: number; rotJa: string; rotFalta: string; tom: string; rotLiq: string;
+  deltas?: Map<number, Delta>;
 }) {
   const previsto = linhas.reduce((s, l) => s + Number(l.valor || 0), 0);
+  const comDelta = !!deltas && deltas.size > 0;
   return (
-    <section className="viz-panel bg-ww-panel border border-ww-border rounded-xl p-3.5 min-w-0 space-y-3">
-      <header>
-        <h3 className="text-[12.5px] font-semibold text-ww-text tracking-wide uppercase">{titulo}</h3>
-        <p className="text-[11px] text-ww-textMuted mt-0.5">{dica}</p>
-      </header>
+    /* Recolhível (07/10/26): o gráfico em cima responde a pergunta; as tabelas são o detalhe. */
+    <details open className="group viz-panel bg-ww-panel border border-ww-border rounded-xl p-3.5 min-w-0">
+      <summary className="list-none cursor-pointer select-none flex items-start gap-2">
+        <span aria-hidden className="mt-0.5 text-ww-textFaint transition-transform group-open:rotate-90">▸</span>
+        <div className="min-w-0">
+          <h3 className="text-[12.5px] font-semibold text-ww-text tracking-wide uppercase">{titulo}</h3>
+          <p className="text-[11px] text-ww-textMuted mt-0.5">{dica}</p>
+        </div>
+        <span className="ml-auto text-[13px] font-bold tabular-nums text-ww-text">{brl(previsto)}</span>
+      </summary>
+      <div className="space-y-3 mt-3">
 
       <div className="grid grid-cols-3 gap-3">
         <Num rot="Previsto na planilha" val={brl(previsto)} sub={`${linhas.length} lançamento(s)`} />
@@ -96,17 +109,35 @@ function Agenda({
                 <th className="py-1 font-semibold">Descrição</th>
                 <th className="py-1 font-semibold">Categoria</th>
                 <th className="py-1 font-semibold text-right w-[120px]">Valor</th>
+                {comDelta && (
+                  <th className="py-1 font-semibold text-right w-[150px]"
+                      title="Contra o fluxo inicial travado: dias que a data andou e diferença de valor">Δ vs inicial</th>
+                )}
               </tr>
             </thead>
             <tbody>
-              {linhas.map((l) => (
+              {linhas.map((l) => {
+                const dl = deltas?.get(l.id) ?? null;
+                return (
                 <tr key={l.id} className="border-b border-ww-border/50 last:border-0">
                   <td className="py-1 tabular-nums text-ww-textMuted">{dia(l.data_prevista)}</td>
                   <td className="py-1 text-ww-text">{l.descricao}</td>
                   <td className="py-1 text-ww-textMuted">{l.categoria || "—"}</td>
                   <td className="py-1 text-right tabular-nums">{brl(l.valor)}</td>
+                  {comDelta && (
+                    <td className="py-1 text-right tabular-nums text-[11.5px]">
+                      {!dl ? <span className="text-ww-textFaint" title="Sem par no fluxo inicial">novo</span>
+                        : (!dl.dias && Math.abs(dl.valor) < 0.5) ? <span className="text-ww-textFaint">=</span>
+                        : <>
+                            {dl.dias ? <span className={dl.dias > 0 ? "text-amber-600 dark:text-amber-300" : "text-sky-600 dark:text-sky-300"}>{dl.dias > 0 ? "+" : ""}{dl.dias} d</span> : null}
+                            {dl.dias && Math.abs(dl.valor) >= 0.5 ? " · " : ""}
+                            {Math.abs(dl.valor) >= 0.5 ? <span className="text-ww-textMuted">{dl.valor > 0 ? "+" : "−"}{brl(Math.abs(dl.valor))}</span> : null}
+                          </>}
+                    </td>
+                  )}
                 </tr>
-              ))}
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -148,13 +179,14 @@ function Agenda({
           </div>
         </div>
       )}
-    </section>
+      </div>
+    </details>
   );
 }
 
 export default function FluxoSimples({
-  empresa, codigoProjeto, tetoPlano,
-}: { empresa: string; codigoProjeto: number; tetoPlano: number }) {
+  empresa, codigoProjeto, tetoPlano, comparado,
+}: { empresa: string; codigoProjeto: number; tetoPlano: number; comparado?: DadosComparado | null }) {
   const [data, setData] = useState<Payload | null>(null);
   const [erro, setErro] = useState<string | null>(null);
   /* O plano é o que enche as duas agendas. O upload vive AQUI porque é aqui
@@ -211,6 +243,29 @@ export default function FluxoSimples({
   const agenda = [...doPlano, ...(data.linhas ?? [])]
     .sort((a, b) => (a.data_prevista || "9").localeCompare(b.data_prevista || "9"));
   const entradas = agenda.filter((l) => l.tipo === "entrada");
+  /* Δ vs inicial (07/10/26): parcela pelo número; saída do plano pela descrição e,
+     havendo repetidas, pela ordem. */
+  const deltasEnt = new Map<number, Delta>();
+  const deltasSai = new Map<number, Delta>();
+  if (comparado && comparado.inicial_fonte === "congelado") {
+    for (const pp of plano?.parcelas ?? []) {
+      const ini = comparado.inicial.find((e) => e.tipo === "entrada" && e.ref === String(pp.parcela));
+      const atual = pp.dt_ajustada ?? pp.dt_plano;
+      deltasEnt.set(-1000 - pp.parcela, ini ? {
+        dias: ini.data && atual ? difDias(atual, ini.data) : null, valor: Number(pp.valor || 0) - ini.valor } : null);
+    }
+    const usados = new Set<number>();
+    const iniSai = comparado.inicial.filter((e) => e.tipo === "saida");
+    for (const x of (plano?.saidas ?? []).filter((y) => y.no_fluxo)) {
+      const desc = x.descricao || x.fornecedor || "Saída do plano";
+      const k = iniSai.findIndex((e, i) => !usados.has(i) && e.descricao === desc);
+      if (k < 0) { deltasSai.set(-1 - x.id, null); continue; }
+      usados.add(k);
+      const ini = iniSai[k];
+      deltasSai.set(-1 - x.id, { dias: ini.data && x.dt_prevista ? difDias(x.dt_prevista, ini.data) : null,
+        valor: Number(x.valor || 0) - ini.valor });
+    }
+  }
   const saidas = agenda.filter((l) => l.tipo === "saida");
   /* O que entrou e o que saiu vêm do ERP — título baixado e pedido pago. A
      agenda é previsão; caixa é o que o banco confirma. */
@@ -244,23 +299,27 @@ export default function FluxoSimples({
         titulo="Entradas" dica="a agenda que veio da planilha — e o que dela já caiu no caixa"
         linhas={entradas} itensErp={doErp("entrada")} jaFoi={recebido} falta={aReceber}
         rotJa="Já entrou" rotFalta="Ainda não entrou" rotLiq="Recebido"
-        tom="text-emerald-600 dark:text-emerald-300" />
+        tom="text-emerald-600 dark:text-emerald-300" deltas={deltasEnt} />
 
       <Agenda
         titulo="Saídas" dica="a agenda de compras e despesas do plano, e os pedidos de compra que já existem no Omie"
         linhas={saidas} itensErp={doErp("saida")} jaFoi={pago} falta={aPagar}
         rotJa="Já saiu" rotFalta="Ainda não saiu" rotLiq="Pago"
-        tom="text-rose-600 dark:text-rose-300" />
+        tom="text-rose-600 dark:text-rose-300" deltas={deltasSai} />
 
-      <section className="viz-panel bg-ww-panel border border-ww-border rounded-xl p-3.5 min-w-0 space-y-3">
-        <header>
+      <details open className="group viz-panel bg-ww-panel border border-ww-border rounded-xl p-3.5 min-w-0">
+        <summary className="list-none cursor-pointer select-none flex items-start gap-2">
+          <span aria-hidden className="mt-0.5 text-ww-textFaint transition-transform group-open:rotate-90">▸</span>
+          <div>
           <h3 className="text-[12.5px] font-semibold text-ww-text tracking-wide uppercase">
             Budget × pedidos de compra
           </h3>
           <p className="text-[11px] text-ww-textMuted mt-0.5">
             o que o fechamento reservou, contra o que já foi aprovado e o que já foi pago
           </p>
-        </header>
+          </div>
+        </summary>
+        <div className="space-y-3 mt-3">
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           <Num rot="Budget do fechamento" val={brl(budget)} sub="reservado para gastar" />
           <Num rot="Requisitado" val={brl(requisitado)}
@@ -276,7 +335,8 @@ export default function FluxoSimples({
               : <>Resta <strong className="text-ww-text">{brl(sobra)}</strong> do budget por comprometer.</>}
           </div>
         )}
-      </section>
+        </div>
+      </details>
     </div>
   );
 }

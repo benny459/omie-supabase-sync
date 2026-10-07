@@ -85,5 +85,12 @@ export async function importarPlano(
     }),
     p_quem: quem,
   });
+  /* Fluxo de caixa INICIAL (sql/112): a primeira importação congela o plano como
+     foto travada; as seguintes não mexem nela (só "Redefinir", administrador).
+     Sem a sql/112 o erro é ignorado — a tela cai no plano vivo. */
+  if (!error) {
+    await supaAdmin().schema("approval").rpc("fluxo_inicial_congelar",
+      { p_empresa: empresa, p_codigo: codigo, p_quem: quem, p_forcar: false }).then(() => null, () => null);
+  }
   return { data, error };
 }

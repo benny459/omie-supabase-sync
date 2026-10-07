@@ -115,7 +115,7 @@ const TOM: Record<Cabecalho["status"], { rot: string; ponto: string; dica: strin
 
 /** As abas do projeto. Cada assunto na sua — antes era tudo numa rolagem só,
  *  com treze números antes da primeira tabela. */
-export type AbaProjeto = "resumo" | "premissas" | "condicoes" | "faturamento" | "fluxo" | "omie";
+export type AbaProjeto = "resumo" | "premissas" | "condicoes" | "faturamento" | "fluxo" | "omie" | "aprovacao";
 
 export default function FluxoProjetoView({
   empresa, codigoProjeto, nomeProjeto, abas = ["resumo"],
@@ -501,6 +501,8 @@ export default function FluxoProjetoView({
           do projeto — e "Rascunho" não é uma informação do mesmo peso que
           R$ 91 mil. Um ponto de cor e uma frase bastam; o que precisa de
           destaque são os botões, e eles já o têm por serem botões. */}
+      {/* 07/10/26: a barra de aprovação vive na aba 4 (FluxoComparado); aqui só com "aprovacao". */}
+      {ver("aprovacao") && (
       <div className="flex items-center gap-2.5 flex-wrap px-1 text-[12px]">
         <span aria-hidden className={`w-2 h-2 rounded-full shrink-0 ${tom.ponto}`} />
         <div className="min-w-0">
@@ -563,6 +565,7 @@ export default function FluxoProjetoView({
           )}
         </div>
       </div>
+      )}
 
       {erro && (
         <div className="p-2.5 rounded-lg border border-rose-500/40 bg-rose-500/10 text-[12px] text-rose-700 dark:text-rose-300">
@@ -576,7 +579,7 @@ export default function FluxoProjetoView({
       )}
       {/* O desvio contra o plano aprovado. Fica junto dos avisos e não escondido
           numa coluna: escorregar 30 dias no recebimento é notícia, não detalhe. */}
-      {desvio && (
+      {ver("aprovacao") && desvio && (
         <div className="p-2.5 rounded-lg border border-rose-500/40 bg-rose-500/[0.08] text-[12px] text-rose-800 dark:text-rose-200">
           <strong>{desvio.linhas} linha(s) mudaram de data desde a aprovação.</strong>{" "}
           A pior escorregou <strong>{desvio.pior > 0 ? `${desvio.pior} dias para frente` : `${-desvio.pior} dias para trás`}</strong>
@@ -587,7 +590,7 @@ export default function FluxoProjetoView({
       {/* O confronto que fecha o projeto: combinei X, hoje espero Y.
           Fica no topo junto dos outros avisos porque perder 10% da margem
           entre o fechamento e a obra é notícia, não linha de tabela. */}
-      {vsPlano && (Math.abs(vsPlano.resultado) > 0.5 || vsPlano.parcelasAtrasadas > 0) && (
+      {ver("aprovacao") && vsPlano && (Math.abs(vsPlano.resultado) > 0.5 || vsPlano.parcelasAtrasadas > 0) && (
         // Barra à esquerda em vez de caixa inteira colorida: a cor continua
         // dizendo bom/ruim sem competir em peso com os números do resumo.
         <div className={`pl-3 py-1.5 border-l-[3px] text-[11.5px] ${
@@ -626,15 +629,14 @@ export default function FluxoProjetoView({
             <ReguaExecucao plano={plano} execucao={data?.execucao ?? null} teto={tetoVigente} />
           </Bloco>
 
-          {/* As premissas só aparecem quando NÃO há fechamento do CRM
-              linkado: com ele, o cartão do topo já traz parcelas, condições e
-              custos — e o mesmo conteúdo duas vezes na mesma rolagem é o que
-              fazia a tela parecer complicada. */}
-          {ver("premissas") && (
-            <PlanoFechamento empresa={empresa} codigoProjeto={codigoProjeto}
-              podeEditar={podeEditar} dados={plano} onMudou={() => void carregarPlano()} />
-          )}
         </>
+      )}
+      {/* As premissas só aparecem quando NÃO há fechamento do CRM linkado: com ele,
+          o cartão do topo já traz parcelas, condições e custos. 07/10/26: independe
+          de "resumo" (o Resumo agora é só o fechamento). */}
+      {ver("premissas") && (
+        <PlanoFechamento empresa={empresa} codigoProjeto={codigoProjeto}
+          podeEditar={podeEditar} dados={plano} onMudou={() => void carregarPlano()} />
       )}
 
       {/* ── CONDIÇÕES COMERCIAIS ─────────────────────────────────────────── */}
@@ -647,7 +649,7 @@ export default function FluxoProjetoView({
           {/* Na mesma aba que o Resumo, o bloco completo de premissas já foi
               desenhado acima — repetir só a parte das condições punha
               "PREMISSAS DO FECHAMENTO" duas vezes na mesma rolagem. */}
-          {!ver("resumo") && (
+          {!ver("resumo") && !ver("premissas") && (
             <PlanoFechamento empresa={empresa} codigoProjeto={codigoProjeto}
               podeEditar={podeEditar} dados={plano} onMudou={() => void carregarPlano()}
               somenteCondicoes />
@@ -789,7 +791,7 @@ export default function FluxoProjetoView({
       </section>
       )}
 
-      {ver("resumo") && (data?.eventos?.length ?? 0) > 0 && (
+      {ver("aprovacao") && (data?.eventos?.length ?? 0) > 0 && (
         <details className="rounded-xl border border-ww-border bg-ww-panel px-3.5 py-2.5">
           <summary className="text-[11.5px] text-ww-textMuted cursor-pointer">
             Histórico de aprovação ({data!.eventos.length})

@@ -32,6 +32,7 @@ import MateriaisGrade from "./MateriaisGrade";
 import { SecaoSeparadosProjeto } from "../navy/estoque/Separacao";
 import FechamentoCrmBloco from "./FechamentoCrmBloco";
 import FluxoSimples from "./FluxoSimples";
+import FluxoComparado, { type DadosComparado } from "./FluxoComparado";
 import ProjetoEscopoButton from "../ProjetoEscopoButton";
 import { KpisProjeto } from "./ResumoProjeto";
 import type { PlanoCompleto } from "./PlanoFechamento";
@@ -57,7 +58,7 @@ const ABAS: Array<{ k: Aba; label: string; dica: string; partes: AbaProjeto[] }>
     dica: "material do estoque já reservado para este projeto — separar em lote, devolver ou consumir",
     partes: [] },
   { k: "fluxo",     label: "Fluxo de caixa",
-    dica: "as agendas de entrada e saída da planilha, o que já entrou e saiu, e o budget contra as compras",
+    dica: "fluxo inicial travado × em andamento (gráfico), aprovação do fluxo, agendas de entrada e saída e o budget contra as compras",
     partes: [] },
 ];
 export default function ProjetoWorkspace({
@@ -74,6 +75,8 @@ export default function ProjetoWorkspace({
      condições — o cartão já as traz. Sem ele, elas voltam, senão o projeto
      ficaria sem nenhuma referência de plano. */
   const [temCrm, setTemCrm] = useState<boolean | null>(null);
+  /** O fluxo inicial × em andamento, para o Δ das tabelas da aba 4. */
+  const [comparado, setComparado] = useState<DadosComparado | null>(null);
 
   /** O plano, para os KPIs do topo. Leitura barata e independente do fluxo. */
   const [plano, setPlano] = useState<PlanoCompleto | null>(null);
@@ -183,17 +186,25 @@ export default function ProjetoWorkspace({
           gastar — e o CP/MC para baixar. */}
       {aba === "resumo" && <FechamentoCrmBloco codigoProjeto={codigoProjeto} onCarregado={setTemCrm} />}
 
+      {/* 07/10/26: a aba 4 abre com o gráfico inicial × em andamento e a barra de
+          aprovação do fluxo (que morava no Resumo); as agendas vêm embaixo, recolhíveis. */}
       {aba === "fluxo" && (
-        <FluxoSimples key={`fluxo-${versaoPlano}`} empresa={empresa} codigoProjeto={codigoProjeto}
-          tetoPlano={tetoPlano} />
+        <>
+          <FluxoComparado key={`cmp-${versaoPlano}`} empresa={empresa} codigoProjeto={codigoProjeto}
+            onDados={setComparado} />
+          <FluxoSimples key={`fluxo-${versaoPlano}`} empresa={empresa} codigoProjeto={codigoProjeto}
+            tetoPlano={tetoPlano} comparado={comparado} />
+        </>
       )}
 
-      {aba === "resumo" && (
+      {/* 07/10/26 (Benny): o Resumo é SÓ o fechamento do CRM. A barra de aprovação foi
+          para a aba 4; "Execução da despesa" saiu (a aba 4 já tem Budget × pedidos de
+          compra, com os mesmos números). Sem fechamento no CRM, as premissas do plano
+          continuam aqui — senão o Resumo ficaria vazio. */}
+      {aba === "resumo" && temCrm === false && (
         <FluxoProjetoView key={`resumo-${versaoPlano}`} empresa={empresa} codigoProjeto={codigoProjeto}
           nomeProjeto={nomeProjeto}
-          abas={(temCrm === false
-            ? (["resumo", "premissas", "condicoes"] as AbaProjeto[])
-            : (["resumo"] as AbaProjeto[]))} />
+          abas={["premissas", "condicoes"] as AbaProjeto[]} />
       )}
 
       {/* UMA tabela. Antes havia duas com os mesmos itens — a grade para
