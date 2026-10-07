@@ -146,6 +146,16 @@ export default function TelaFaturamento() {
     const t = window.setTimeout(() => setQServ(q.trim().length >= 3 ? q.trim() : ""), 350);
     return () => window.clearTimeout(t);
   }, [q]);
+  /* Link vindo de outra tela (07/10/26 — Operação › Projetos, vendas do projeto):
+     /faturamento?abrir=<chave>&q=<PV1971> busca o documento e abre a gaveta. */
+  const [abrirChave, setAbrirChave] = useState<string | null>(null);
+  useEffect(() => {
+    const u = new URLSearchParams(window.location.search);
+    const ch = u.get("abrir"), qq = u.get("q"), emp = u.get("emp");
+    if (emp) setEmpresa(emp);
+    if (qq) setQ(qq);
+    if (ch) setAbrirChave(ch);
+  }, []);
   const [orig, setOrig] = useState("");
   const [fst, setFst] = useState<"" | St>("");
   const [chips, setChips] = useState<Set<string>>(new Set());
@@ -353,6 +363,9 @@ export default function TelaFaturamento() {
   }
 
   const docAberto = aberto ? (docs ?? []).find((d) => d.chave === aberto) ?? null : null;
+  useEffect(() => {
+    if (abrirChave && (docs ?? []).some((d) => d.chave === abrirChave)) { setAberto(abrirChave); setAbrirChave(null); }
+  }, [abrirChave, docs]);
   const h = hoje();
   const rotPeriodo: Record<string, string> = { mes: `${MESES[h.getMonth()]}/${String(h.getFullYear()).slice(2)}`, tri: "Trimestre", ano: String(h.getFullYear()), "12m": "12 meses", tudo: "Tudo" };
   const ativos: { k: string; l: string; limpar: () => void }[] = [

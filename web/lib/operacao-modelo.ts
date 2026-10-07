@@ -511,6 +511,23 @@ export function financeiro(p: Pedido) {
   };
 }
 
+/** Margens do PROJETO (07/10/26, Benny — PJ361 mostrava M.B. −16%: o M.B. somava os PCs
+ *  E os itens da RC sem PC, e no projeto os PCs saem da Lista sem ligar à RC — a mesma
+ *  compra contava duas vezes). Duas margens, lado a lado:
+ *    projetada = (PV − budget de materiais da RC) ÷ PV
+ *    real      = (PV − PCs aprovados) ÷ PV   (cada PC uma vez; recebido conta como aprovado)
+ *  `comPendentes` = a real se os PCs aguardando aprovação forem aprovados. */
+export function margensProjeto(p: Pedido, budgetMateriais: number | null) {
+  const porPc = new Map<string, { v: number; e: Estado }>();
+  for (const c of p.compras) if (c.pc && c.pcValor != null) porPc.set(c.pc, { v: c.pcValor, e: c.estado });
+  let aprov = 0, pend = 0;
+  for (const { v, e } of porPc.values()) { if (e === "aprovado" || e === "recebido") aprov += v; else if (e === "pendente") pend += v; }
+  const pv = p.valorPv;
+  const m = (custo: number) => (pv > 0 ? { valor: pv - custo, pct: (pv - custo) / pv } : null);
+  return { pv, aprov, pend, budget: budgetMateriais,
+    projetada: budgetMateriais != null ? m(budgetMateriais) : null, real: m(aprov), comPendentes: m(aprov + pend) };
+}
+
 // ── Filtros ────────────────────────────────────────────────────────────────
 export type Escopo = "aberto" | "faturado" | "todos";
 /** "7"/"30" = entrou no painel (emissão do PV/OS · PC) nos últimos N dias —

@@ -59,7 +59,7 @@ Tudo fica numa aba só: **Lista de materiais** (a antiga aba “Compras × lista
 **O caminho**: a **RC** (composição de preço da proposta) é a referência e a origem do **budget de materiais**. **⤵ Importar itens da RC** uma vez e casar com o nosso código; depois a lista é o que se compra — exclua itens da RC que não vão, inclua os novos. Da lista saem os **pedidos de compra**; os PCs se acompanham em **Operação › Projetos** (por PC) e aqui, item a item.
 
 **Resumo no topo** (um bloco só):
-- **Budget de materiais** = total de **materiais** da RC (a linha “materiais” do Custo planejado). **editar** define outro valor só para materiais; **usar o da RC** volta ao da RC. Não é o custo total do projeto (materiais + mão de obra + despesas) — esse continua sendo o teto do Fluxo de caixa.
+- **Budget de materiais** = total de **materiais** da RC (a linha “materiais” do Custo planejado). Só o **administrador** vê o **editar** (para projeto antigo cuja RC não veio do CRM); **usar o da RC** volta ao da RC. Não é o custo total do projeto (materiais + mão de obra + despesas) — esse continua sendo o teto do Fluxo de caixa.
 - **Lista prevista** = PCs do projeto + o estimado das linhas que ainda não têm PC, e quanto isso é do budget (%).
 - **Pedidos de compra**: **aprovados** e **aguardando aprovação** (R$ e % do budget), e o **pago**.
 - A linha de situação diz **Dentro do budget · sobra R$ X** ou, em vermelho, **Estoura o budget em R$ X**. A barra mostra, na mesma escala, aprovados, aguardando, o que ainda falta comprar e a marca do budget.
@@ -70,6 +70,16 @@ Tudo fica numa aba só: **Lista de materiais** (a antiga aba “Compras × lista
 **Comprar pela lista**: marque as linhas sem PC e clique **🧾 Gerar pedido de compra** — abre uma folha com **um pedido por fornecedor** (o fornecedor sugerido de cada linha agrupa; dá para trocar), com preço, quantidade, categoria, condição e previsão (o “Necessário em” mais cedo do grupo) editáveis. **Simular** confere tudo sem gravar. Os PCs nascem pelo caminho de sempre do Compras (numeração, aprovação, avisos) e cada item já fica ligado à sua linha da lista. **⤵ Importar itens da RC** (só aparece enquanto a RC não entrou na lista; depois fica em **⋯ › Reimportar itens da RC**, raro) traz os itens da **RC** (a composição de preço da proposta) que ainda não estão na lista, cada um já casado com o nosso catálogo: resolva o ⚠ conferir / sem correspondência em **No catálogo** (sugestões, busca, Criar item nosso), marque o que entra (sem código entra âmbar, para resolver depois; desmarque para pular) e adicione. Se a RC já foi lançada em Compras, os itens vêm ligados a ela. Numa linha, o **RC** discreto na célula do Item (passe o mouse) usa um item da RC ainda não usado (descrição, qtd, equipamento e custo da RC, passando pelo catálogo). Item digitado ou buscado livremente é **novo**. Para subir a lista inteira de uma planilha (uma aba por equipamento), use **📋 Subir planilha** no canto da aba.
 
 > No projeto, **RC e CP (composição de preço) são a mesma coisa** e o nome usado é **RC**: os itens da RC são os da composição de preço da proposta; o nº mostrado é o do documento em Compras.
+
+**Margens do projeto** (na linha do projeto e no projeto aberto, lado a lado):
+- **Margem projetada** = (PV − budget de materiais da RC) ÷ PV.
+- **Margem real** = (PV − PCs aprovados) ÷ PV — cada PC uma vez; passe o mouse para ver como fica se os PCs aguardando aprovação forem aprovados.
+- O antigo **M.B.** somava os PCs **e** os itens da RC sem PC; no projeto os PCs saem da Lista sem ligar à RC, e a mesma compra contava duas vezes (o PJ361 aparecia com −16%). Nos Avulsos o M.B. continua como era.
+
+**Vendas do projeto (PV/OS)** (no projeto aberto, abaixo do resumo): os PV/OS gerados para o projeto — nº (abre no Faturamento), evento/parcela, valor e % do total (a soma confere com o PV do projeto), situação (a faturar / faturado com NF ou recibo / recebido) e OC do cliente. Para cada um, **faturamento** e **recebimento** têm a **previsão inicial** (do resumo financeiro do projeto — não muda) e a **nova previsão** (editável; vazia = igual à inicial), com o **desvio** em dias (+N vermelho, −N verde).
+- A nova previsão de **faturamento** é a mesma da carteira do Faturamento (“Previsão fat.”). Mudá-la leva o recebimento junto (mesmo prazo), se o recebimento não tiver nova previsão própria.
+- A nova previsão de **recebimento** é a data da parcela no **Fluxo de caixa** do projeto (a reimportação do CRM não apaga). Já faturado: muda o vencimento do título a receber (precisa de “Editar título” no Financeiro). ↺ volta à inicial.
+- PV/OS antigos do Omie aparecem com as datas do Omie; o Omie nunca é alterado.
 
 **Projetos › pedido aberto**: em cima, o resumo do projeto e os **Itens da RC sem PC** (uma linha por RC, com **+ Gerar pedido de compra**, que abre a Lista de materiais com os itens da RC marcados e o gerador aberto); embaixo, **uma linha por PC** — nº do PC, fornecedor, RC que atende, valor, aprovação, Prev. material, situação (mesmas cores da lista), material, NF de entrada e **☰** para ver os itens daquele PC na Lista de materiais.
 

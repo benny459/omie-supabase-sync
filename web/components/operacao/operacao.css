@@ -548,3 +548,19 @@
 .op .pcproj-trilho .pago{background:#16a34a}
 .op .pcproj-trilho .bud{left:auto;width:0;border-left:2px solid var(--ww-text);top:-3px;bottom:-3px;border-radius:0}
 .op .pcproj-alerta{margin-top:6px;color:#e11d48;font-size:12px}
+
+/* Vendas do projeto (PV/OS) — 07/10/26 */
+.op .pcproj-vendas{border:1px solid var(--ww-border);border-radius:10px;overflow:hidden}
+.op .pcproj-vendas .hd,.op .pcproj-vendas .ln{display:grid;grid-template-columns:100px minmax(0,1.3fr) 115px 50px 190px 190px 170px minmax(0,.6fr);gap:10px;align-items:center;padding:6px 10px;font-size:12px}
+.op .pcproj-vendas .hd{font-size:11px;color:var(--ww-text-faint);text-transform:uppercase;letter-spacing:.06em;border-bottom:1px solid var(--ww-border)}
+.op .pcproj-vendas .ln+.ln{border-top:1px solid color-mix(in srgb,var(--ww-border) 60%,transparent)}
+.op .pcproj-vendas .ln.tot{font-weight:600;background:var(--ww-panel-sunken)}
+@media (max-width:1100px){.op .pcproj-vendas .hd{display:none}.op .pcproj-vendas .ln{grid-template-columns:100px 1fr 110px;row-gap:4px}}
+.op .pcproj-vendas .vprev{display:flex;flex-wrap:wrap;align-items:center;gap:2px 5px}
+.op .pcproj-vendas .vprev small{flex-basis:100%;font-size:10.5px;color:var(--ww-text-faint)}
+.op .pcproj-vendas .vprev input{font:inherit;font-size:12px;background:transparent;color:var(--ww-text);border:1px solid var(--ww-border);border-radius:6px;padding:1px 4px;width:128px}
+.op .pcproj-vendas .vprev b{font-weight:500}
+.op .pcproj-vendas .vprev em{font-style:normal;font-size:11px;font-weight:600;padding:0 4px;border-radius:4px}
+.op .pcproj-vendas .vprev em.atraso{color:#e11d48;background:rgba(225,29,72,.1)}
+.op .pcproj-vendas .vprev em.adianta{color:#059669;background:rgba(5,150,105,.1)}
+.op .pcproj-vendas .vprev button{font-size:11px;color:var(--ww-text-faint);background:none;border:0;cursor:pointer}

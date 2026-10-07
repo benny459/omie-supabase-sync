@@ -27,7 +27,7 @@ import { STATUS_META } from "@/lib/columns";
 import { useUserPerms } from "../UserPermsProvider";
 import { canApprove, canEdit, canReleasePv, canViewValues } from "@/lib/permissions";
 import {
-  montarPedido, fases, financeiro, passa, noEscopo, dataMs, diasAte, dBR, isoDia, brl, pct,
+  montarPedido, fases, financeiro, margensProjeto, passa, noEscopo, dataMs, diasAte, dBR, isoDia, brl, pct,
   ESTADO_LABEL, FILTRO_LABEL,
   type Compra, type Escopo, type Estado, type Filtros, type Pedido, type Periodo, type Rapida,
   servicoDoPedido, servicoAtrasado, tipoVenda, STATUS_SERVICO, type Servico,
@@ -1199,8 +1199,25 @@ export function SeloDif({ d, compacto }: { d: number | null; compacto?: boolean 
 }
 const mbCls = (m: number | null) => (m == null ? "" : m >= 0.35 ? "good" : m >= 0.2 ? "warn" : "bad");
 
-export function FinStrip({ p, $ }: { p: Pedido; $: (v: number | null) => string }) {
+export function FinStrip({ p, $, projeto }: { p: Pedido; $: (v: number | null) => string; projeto?: { budget: number | null } }) {
   const F = financeiro(p);
+  if (projeto) {
+    /* Projeto (07/10/26): duas margens no lugar do M.B. — ver margensProjeto. */
+    const M = margensProjeto(p, projeto.budget);
+    const cel = (rot: string, x: { valor: number; pct: number } | null, dica: string) => (
+      <div className={`mb ${mbCls(x?.pct ?? null)}`} title={dica}><label>{rot}</label><b>{x == null ? "—" : pct(x.pct)}</b>
+        {x != null && <small style={{ display: "block", fontSize: 10.5, color: "var(--ww-text-faint)" }}>{$(x.valor)}</small>}</div>);
+    return (
+      <div className="fin">
+        <div><label>RC</label><b>{$(projeto.budget)}</b></div>
+        <div><label>PC <span>{F.pcN} {F.pcN === 1 ? "pedido" : "pedidos"}</span></label><b>{F.pcN ? $(F.pc) : "—"}</b></div>
+        <div><label>PV</label><b>{$(p.valorPv)}</b></div>
+        {cel("M. projetada", M.projetada, `Margem projetada = (PV − budget de materiais da RC) ÷ PV\n${$(p.valorPv)} − ${$(M.budget)}`)}
+        {cel("M. real", M.real, `Margem real = (PV − PCs aprovados) ÷ PV\n${$(p.valorPv)} − ${$(M.aprov)} aprovados`
+          + (M.pend ? `\nSe os ${$(M.pend)} aguardando aprovação forem aprovados: ${M.comPendentes ? `${pct(M.comPendentes.pct)} (${$(M.comPendentes.valor)})` : "—"}` : ""))}
+      </div>
+    );
+  }
   return (
     <div className="fin" title="M.B. = (PV − custo) ÷ PV · custo usa o valor do PC quando existe, senão o da RC">
       <div><label>RC</label><b>{$(F.rc)}</b></div>
@@ -1319,7 +1336,11 @@ function CartaoPedido(props: {
           {d != null && !p.faturado && <small className={d < 0 ? "late" : d <= 7 ? "soon" : ""}>{d < 0 ? `${-d}d atrasado` : `${d}d de folga`}</small>}
         </div>
         {modulo !== "pcs" && <CelServico sv={servicoDoPedido(p)} />}
-        <FinStrip p={p} $={$} />
+        <FinStrip p={p} $={$} projeto={modulo === "projetos" && props.bucket ? (() => {
+          const pj = projetoDoBucket(modulo, props.bucket!);
+          const b = pj ? props.budgetMap.get(`${pj.empresaProj}|${pj.codProj}`) : undefined;
+          return { budget: b?.budget_custos != null ? Number(b.budget_custos) : null };
+        })() : undefined} />
       </div>
 
       {modulo === "projetos" && props.bucket && (
@@ -1668,7 +1689,8 @@ function GruposPcProjeto({ compras, p, podeAprovar, podeEditar, ehAdmin, statusL
   };
   return (
     <div className="pcproj">
-      <ResumoBudgetProjeto empresa={empresa} codigo={proj.codProj} $={$} />
+      <ResumoBudgetProjeto empresa={empresa} codigo={proj.codProj} $={$} valorPv={p.valorPv} />
+      <VendasDoProjeto empresa={empresa} codigo={proj.codProj} $={$} valorPv={p.valorPv} podeEditar={podeEditar} />
       {rcs.size > 0 && (
         <div className="pcproj-bloco">
           <div className="pcproj-tit">Itens da RC sem PC <small>— o que ainda falta comprar; o pedido sai da Lista de materiais, um por fornecedor</small></div>
@@ -1742,8 +1764,8 @@ function GruposPcProjeto({ compras, p, podeAprovar, podeEditar, ehAdmin, statusL
 
 /** Resumo do projeto inteiro (07/10/26): budget de materiais × projetado × comprometido
  *  × pago, com a mesma conta da Lista de materiais — é aqui que se aprovam os PCs. */
-function ResumoBudgetProjeto({ empresa, codigo, $ }: { empresa: string; codigo: number; $: (v: number | null) => string }) {
-  const [d, setD] = useState<{ budget: number | null; comp: number; proj: number; pago: number } | null>(null);
+function ResumoBudgetProjeto({ empresa, codigo, $, valorPv }: { empresa: string; codigo: number; $: (v: number | null) => string; valorPv: number }) {
+  const [d, setD] = useState<{ budget: number | null; comp: number; proj: number; pago: number; aprov: number; pend: number } | null>(null);
   useEffect(() => {
     let vivo = true;
     fetch(`/api/rc-projetos/compras?empresa=${encodeURIComponent(empresa)}&codigo=${codigo}`, { cache: "no-store" })
@@ -1752,7 +1774,8 @@ function ResumoBudgetProjeto({ empresa, codigo, $ }: { empresa: string; codigo: 
         const t = j.totais;
         const resto = (j.itens ?? []).filter((l) => !l.rc && !l.pcs.length).reduce((a, l) => a + (Number(l.estimado) || 0), 0);
         const comp = Number(t.comprometido) || 0;
-        setD({ budget: (t.budget_lista ?? t.budget_plano) != null ? Number(t.budget_lista ?? t.budget_plano) : null, comp, proj: comp + resto, pago: Number(t.pago) || 0 });
+        setD({ budget: (t.budget_lista ?? t.budget_plano) != null ? Number(t.budget_lista ?? t.budget_plano) : null, comp, proj: comp + resto, pago: Number(t.pago) || 0,
+          aprov: t.pcs_aprovado != null ? Number(t.pcs_aprovado) : comp, pend: Number(t.pcs_pendente ?? 0) });
       }).catch(() => null);
     return () => { vivo = false; };
   }, [empresa, codigo]);
@@ -1768,11 +1791,121 @@ function ResumoBudgetProjeto({ empresa, codigo, $ }: { empresa: string; codigo: 
         <span>Comprometido (PCs) <b>{$(d.comp)}</b></span>
         <span>Pago <b>{$(d.pago)}</b></span>
       </div>
+      {valorPv > 0 && (() => {
+        /* Duas margens (07/10/26, Benny): projetada pelo budget de materiais da RC, real pelos PCs aprovados. */
+        const mProj = d.budget != null ? valorPv - d.budget : null;
+        const mReal = valorPv - d.aprov, mPend = valorPv - d.aprov - d.pend;
+        const pc = (v: number) => `${Math.round((v / valorPv) * 1000) / 10}%`;
+        return (
+          <div className="pcproj-resumo-nums" style={{ marginTop: 4 }}>
+            <span title={`(PV ${$(valorPv)} − budget de materiais da RC ${$(d.budget)}) ÷ PV`}>Margem projetada <b className={mProj != null && mProj < 0 ? "neg" : ""}>{mProj == null ? "—" : `${$(mProj)} · ${pc(mProj)}`}</b></span>
+            <span title={`(PV ${$(valorPv)} − PCs aprovados ${$(d.aprov)}) ÷ PV${d.pend ? `\nSe os ${$(d.pend)} aguardando aprovação forem aprovados: ${$(mPend)} · ${pc(mPend)}` : ""}`}>
+              Margem real <b className={mReal < 0 ? "neg" : ""}>{$(mReal)} · {pc(mReal)}</b>{d.pend ? <small style={{ color: "var(--ww-text-faint)" }}> (com os aguardando: {pc(mPend)})</small> : null}</span>
+          </div>);
+      })()}
       <div className="pcproj-trilho" title="Pago · comprometido · projetado, numa escala só; o traço é o budget">
         <div className="proj" style={{ width: pct(d.proj) }} /><div className="comp" style={{ width: pct(d.comp) }} /><div className="pago" style={{ width: pct(d.pago) }} />
         {d.budget != null && <div className="bud" style={{ left: pct(d.budget) }} />}
       </div>
       {estoura > 0 && <div className="pcproj-alerta">⚠ O projetado estoura o budget de materiais em <b>{$(estoura)}</b> — PC que passar do budget fica para os administradores.</div>}
+    </div>
+  );
+}
+
+/** Vendas do projeto (PV/OS) — 07/10/26, pedido do Benny: o lado da venda, como no
+ *  Avulsos. Cada documento com evento, valor, % do total, previsão de faturamento
+ *  (editável: a mesma da carteira do Faturamento, e o recebimento da parcela no
+ *  Fluxo de caixa do projeto anda junto), recebimento previsto, situação e OC. */
+type VendaDoc = {
+  chave: string; tipo: string; rotulo: string; origem: string; evento: string | null; valor: number; oc: string | null;
+  parcela: number | null; fat_inicial: string | null; fat_nova: string | null; receb_inicial: string | null; receb_nova: string | null;
+  faturado: boolean; dt_fat: string | null; nf: string | null; recebido: boolean; titulo_ref: string | null; titulo_venc: string | null;
+};
+const isoBR = (v: string | null | undefined) => (v ? dBR(Date.parse(`${v}T12:00:00`)) : "—");
+const difD = (a: string | null, b: string | null) => (a && b ? Math.round((Date.parse(`${a}T12:00:00`) - Date.parse(`${b}T12:00:00`)) / 86400000) : 0);
+/** Previsão inicial (só leitura) + nova (editável, vazia = inicial) + desvio em dias. */
+function DataPrev({ inicial, nova, atual, editavel, ocupado, onMudar, rotulo }: {
+  inicial: string | null; nova: string | null; atual?: string | null; editavel: boolean; ocupado: boolean;
+  onMudar: (v: string | null) => void; rotulo: string;
+}) {
+  const vigente = atual ?? nova ?? inicial;
+  const desvio = difD(vigente, inicial);
+  return (
+    <span className="vprev">
+      <small title={`Previsão inicial de ${rotulo} (resumo financeiro do projeto) — não muda`}>inicial {isoBR(inicial)}</small>
+      {editavel
+        ? <input type="date" key={`${vigente}`} defaultValue={nova ?? atual ?? ""} disabled={ocupado} placeholder="= inicial"
+            title={`Nova previsão de ${rotulo} — vazia = igual à inicial. Muda o Fluxo de caixa do projeto.`}
+            onBlur={(e) => { const v = e.currentTarget.value || null; if (v !== (nova ?? atual ?? null)) onMudar(v); }} />
+        : <b>{nova || atual ? isoBR(vigente) : "= inicial"}</b>}
+      {desvio !== 0 && <em className={desvio > 0 ? "atraso" : "adianta"} title="desvio da nova previsão contra a inicial">{desvio > 0 ? `+${desvio}` : desvio}d</em>}
+      {editavel && (nova || (atual && atual !== inicial)) ? <button type="button" title="Voltar à inicial" onClick={() => onMudar(null)}>↺</button> : null}
+    </span>
+  );
+}
+function VendasDoProjeto({ empresa, codigo, $, valorPv, podeEditar }: { empresa: string; codigo: number; $: (v: number | null) => string; valorPv: number; podeEditar: boolean }) {
+  const [docs, setDocs] = useState<VendaDoc[] | null>(null);
+  const [pode, setPode] = useState<{ editar: boolean; titulo: boolean }>({ editar: false, titulo: false });
+  const [erro, setErro] = useState<string | null>(null);
+  const [aviso, setAviso] = useState<string | null>(null);
+  const [gravando, setGravando] = useState<string | null>(null);
+  const carregar = useCallback(() => {
+    fetch(`/api/rc-projetos/vendas?empresa=${encodeURIComponent(empresa)}&codigo=${codigo}`, { cache: "no-store" })
+      .then((r) => r.json()).then((j) => { if (j.error) setErro(j.error); else { setErro(null); setDocs(j.docs ?? []); setPode(j.pode ?? { editar: false, titulo: false }); } })
+      .catch((e) => setErro(String(e)));
+  }, [empresa, codigo]);
+  useEffect(() => { carregar(); }, [carregar]);
+  const mudar = async (d: VendaDoc, campo: "faturamento" | "recebimento", data: string | null) => {
+    setGravando(`${d.chave}|${campo}`); setAviso(null);
+    try {
+      const r = await fetch("/api/rc-projetos/vendas", { method: "POST", headers: { "content-type": "application/json" },
+        body: JSON.stringify({ empresa, codigo, chave: d.chave, campo, data }) });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.error ?? r.statusText);
+      setAviso(`${d.rotulo}: previsão de ${campo} ${data ? isoBR(data) : "de volta à inicial"}${(j.avisos ?? []).length ? ` · ${(j.avisos as string[]).join(" · ")}` : ""} · Fluxo de caixa${campo === "faturamento" ? " e carteira do Faturamento" : ""} atualizados.`);
+      carregar();
+    } catch (e) { setAviso(`Não gravou: ${(e as Error).message}`); } finally { setGravando(null); }
+  };
+  const tit = <div className="pcproj-tit">Vendas do projeto (PV/OS) <small>— previsão inicial (do resumo financeiro) e nova previsão; a nova manda no Fluxo de caixa do projeto e na carteira do Faturamento</small></div>;
+  if (erro) return <div className="pcproj-bloco">{tit}<small style={{ color: "var(--ww-text-faint)" }}>Não consegui ler as vendas: {erro}</small></div>;
+  if (!docs) return <div className="pcproj-bloco">{tit}<small style={{ color: "var(--ww-text-faint)" }}>carregando…</small></div>;
+  if (!docs.length) return null;
+  const total = docs.reduce((a, d) => a + d.valor, 0);
+  const confere = Math.abs(total - valorPv) < 0.05;
+  const ed = podeEditar && pode.editar;
+  return (
+    <div className="pcproj-bloco">
+      {tit}
+      <div className="pcproj-vendas">
+        <div className="hd"><span>Documento</span><span>Evento / parcela</span><span style={{ textAlign: "right" }}>Valor</span><span style={{ textAlign: "right" }}>%</span>
+          <span>Faturamento</span><span>Recebimento</span><span>Situação</span><span>OC cliente</span></div>
+        {docs.map((d) => (
+          <div key={d.chave || d.rotulo} className="ln">
+            <span><a className="rcnum" href={`/faturamento?${new URLSearchParams({ abrir: d.chave, q: d.rotulo, emp: empresa })}`} title={`Abrir ${d.rotulo} no Faturamento${d.origem === "Omie" ? " (espelhado do Omie)" : ""}`}>{d.rotulo}</a>
+              {d.origem === "Omie" && <small style={{ color: "var(--ww-text-faint)", marginLeft: 4 }}>Omie</small>}</span>
+            <span title={d.evento ?? ""} style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+              {d.parcela ? <small style={{ color: "var(--ww-text-faint)" }}>parcela {d.parcela} · </small> : null}{(d.evento ?? "").replace(/^\s*\d+\s*·\s*/, "") || "—"}</span>
+            <b className="num" style={{ textAlign: "right" }}>{$(d.valor)}</b>
+            <span className="num" style={{ textAlign: "right", color: "var(--ww-text-muted)" }}>{total ? `${Math.round((d.valor / total) * 1000) / 10}%` : "—"}</span>
+            {d.faturado
+              ? <span className="vprev"><small>inicial {isoBR(d.fat_inicial)}</small><b>faturado {isoBR(d.dt_fat)}</b>
+                  {difD(d.dt_fat, d.fat_inicial) !== 0 && <em className={difD(d.dt_fat, d.fat_inicial) > 0 ? "atraso" : "adianta"}>{difD(d.dt_fat, d.fat_inicial) > 0 ? "+" : ""}{difD(d.dt_fat, d.fat_inicial)}d</em>}</span>
+              : <DataPrev rotulo="faturamento" inicial={d.fat_inicial} nova={d.fat_nova} editavel={ed && !!d.chave} ocupado={gravando === `${d.chave}|faturamento`} onMudar={(v) => void mudar(d, "faturamento", v)} />}
+            {d.faturado && !d.titulo_ref
+              ? <span className="vprev"><small>inicial {isoBR(d.receb_inicial)}</small><b title="título não encontrado — veja em Financeiro › Receber">—</b></span>
+              : <DataPrev rotulo="recebimento" inicial={d.receb_inicial} nova={d.faturado ? null : d.receb_nova} atual={d.faturado ? d.titulo_venc : null}
+                  editavel={ed && !!d.parcela && !d.recebido && (!d.faturado || pode.titulo)} ocupado={gravando === `${d.chave}|recebimento`}
+                  onMudar={(v) => void mudar(d, "recebimento", v)} />}
+            <span>{d.recebido ? <span className="fb eq">Recebido</span>
+              : d.faturado ? <span className="fb up" style={{ background: "transparent" }}>Faturado{d.nf ? ` · ${d.tipo === "OS" ? "NF/recibo" : "NF"} ${d.nf}` : ""}</span>
+              : <span className="fb mute">A faturar</span>}
+              {d.faturado && d.titulo_ref && <a href={`/financeiro/receber?q=${encodeURIComponent(d.nf ?? "")}`} style={{ marginLeft: 4, fontSize: 11 }} title="Título a receber">título</a>}</span>
+            <span style={{ color: "var(--ww-text-muted)" }}>{d.oc ?? "—"}</span>
+          </div>))}
+        <div className="ln tot"><span>Total</span><span>{docs.length} documento(s)</span><b className="num" style={{ textAlign: "right" }}>{$(total)}</b><span />
+          <span style={{ gridColumn: "span 4", color: confere ? "var(--ww-text-faint)" : "#e11d48" }}>{confere ? "confere com o PV do projeto" : `PV do projeto ${$(valorPv)} — diferença ${$(total - valorPv)}`}</span></div>
+      </div>
+      {aviso && <small style={{ display: "block", marginTop: 4, color: aviso.startsWith("Não") ? "#e11d48" : "var(--ww-text-muted)" }}>{aviso}</small>}
     </div>
   );
 }
