@@ -47,6 +47,8 @@ import { AtribuicaoModal } from "../AtribuirClienteView";
 import { supaBrowser } from "@/lib/supabase";
 import { estadoPc } from "@/lib/situacao-pc";
 import GradeOperacao from "./GradeOperacao";
+import { OcChip, useOcResumo } from "../vendas/OcAnexos";
+import type { OcResumo } from "@/lib/vendas-anexos";
 
 type AnyRow = Record<string, unknown>;
 const s = (v: unknown) => String(v ?? "").trim();
@@ -221,6 +223,14 @@ export default function TelaOperacao({ modulo, title, rows: rowsIniciais, parcia
       .then((ls: Record<string, string>[]) => { if (vivo) setPropostas(Object.assign({}, ...ls)); });
     return () => { vivo = false; };
   }, [empresasVistas, modulo]);
+  /* OC do cliente e 📎 anexos de cada PV/OS (07/10/26, sql/110). */
+  const pvosDe = useCallback((p: Pedido) => [...new Set([p.id, ...p.bucket.rows.map((r) => s(r.pv_os_label))]
+    .map((l) => String(l).toUpperCase()).filter((l) => /^(PV|OS)\d+$/.test(l)))], []);
+  const ocItens = useMemo(() => modulo === "pcs" ? [] : pedidos.flatMap((p) => {
+    const empresa = s(p.bucket.rows[0]?.empresa) || "SF";
+    return pvosDe(p).map((label) => ({ empresa, label }));
+  }), [pedidos, modulo, pvosDe]);
+  const ocMapa = useOcResumo(ocItens);
   const porId = useMemo(() => new Map(pedidos.map((p) => [p.id, p])), [pedidos]);
   const bucketPorId = useMemo(() => new Map(buckets.map((b) => [b.pv_os_label, b])), [buckets]);
 
@@ -764,6 +774,7 @@ export default function TelaOperacao({ modulo, title, rows: rowsIniciais, parcia
           {visiveis.slice(0, limite).map(({ p, compras }) => (
             <CartaoPedido key={p.id} p={p} compras={compras} modulo={modulo} aberto={abertos.has(p.id)}
               propostas={[...new Set([p.id, ...p.bucket.rows.map((r) => s(r.pv_os_label))].map((l) => propostas[String(l).toUpperCase()]).filter(Boolean))]}
+              ocs={modulo === "pcs" ? undefined : pvosDe(p).map((label) => ({ label, r: ocMapa.get(`${(s(p.bucket.rows[0]?.empresa) || "SF").toUpperCase()}|${label}`) }))}
               onToggle={() => toggleAberto(p.id)} nomeId={nomeId(p)} $={$}
               sel={sel} toggleSel={toggleSel} podeAprovar={podeAprovar} podeEditar={podeEditar} ehAdmin={ehAdmin}
               setStatus={setStatus} gravar={gravar} abrirDrawer={setDrawer} abrirAtrib={abrirAtrib} atrib={atrib}
@@ -1251,6 +1262,8 @@ function CartaoPedido(props: {
   abrirNotas: () => void;
   /** Propostas do CRM que geraram o(s) PV/OS deste cartão. */
   propostas?: string[];
+  /** OC do cliente e anexos de cada PV/OS do cartão (sql/110). */
+  ocs?: { label: string; r?: OcResumo }[];
 }) {
   const { p, compras, modulo, aberto, $ } = props;
   const d = diasAte(p.lim);
@@ -1291,6 +1304,12 @@ function CartaoPedido(props: {
               <a key={n} className="meta" href={`https://allka.ai/w/waterworks/crm/legado/${encodeURIComponent(n)}`}
                 title={`Gerado da proposta ${n} do CRM — abrir no CRM`} onClick={(e) => e.stopPropagation()}
                 style={{ textDecoration: "none", cursor: "pointer", color: "var(--ww-accent, #4f7cff)" }}>↗ {n}</a>
+            ))}
+            {/* OC do cliente + 📎: Avulsos sempre (para poder anexar); em Projetos só
+                os PV/OS que já têm OC ou anexo, com o nº do PV/OS à frente. */}
+            {(props.ocs ?? []).filter((o) => modulo === "avulsos" || o.r).map((o) => (
+              <OcChip key={o.label} className="meta" empresa={empresa} label={o.label} resumo={o.r} compacto
+                prefixo={modulo === "avulsos" ? undefined : o.label} />
             ))}
           </div>
         </div>

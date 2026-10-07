@@ -69,14 +69,16 @@ export function useOcResumo(itens: { empresa: string; label: string }[]) {
 }
 
 /** "OC 4500931962" + "📎 2". Clicar no clipe abre a janela de anexos. */
-export function OcChip({ empresa, label, resumo, mostrarOc = true, compacto = false }: {
+export function OcChip({ empresa, label, resumo, mostrarOc = true, compacto = false, prefixo, className }: {
   empresa: string; label: string; resumo?: OcResumo | null; mostrarOc?: boolean; compacto?: boolean;
+  /** texto antes (Projetos: o PV/OS a que se refere) */ prefixo?: string; className?: string;
 }) {
   const [aberto, setAberto] = useState(false);
   const oc = resumo?.num_pedido_cliente ?? null;
   const n = resumo?.anexos ?? 0;
   return (
-    <span className="inline-flex items-center gap-1.5 min-w-0" onClick={(e) => e.stopPropagation()}>
+    <span className={`inline-flex items-center gap-1.5 min-w-0 ${className ?? ""}`} onClick={(e) => e.stopPropagation()}>
+      {prefixo && <span className="text-ww-textFaint">{prefixo}</span>}
       {mostrarOc && oc && (
         <span className="font-mono truncate" title={`OC do cliente${resumo?.oc_origem === "omie" ? " (do Omie)" : ""}`}>OC {oc}</span>
       )}
