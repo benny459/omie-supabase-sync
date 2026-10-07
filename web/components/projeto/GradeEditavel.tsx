@@ -55,6 +55,11 @@ export type ColunaGrade = {
   /** Classe extra da coluna inteira (cabeçalho e células) — para agrupar à vista
    *  as colunas de leitura que vêm do mesmo lugar (ex.: o bloco do PC). */
   classe?: string;
+  /** Fora do colar por POSIÇÃO (07/10/26): coluna nova no meio não pode deslocar
+   *  o "Equipamento · Item · Qtd…" de sempre. Com cabeçalho no que se cola, entra. */
+  pularNoColar?: boolean;
+  /** Botãozinho dentro da célula editável (ex.: abrir o seletor do catálogo). */
+  acao?: { rot: string; dica: string; fn: (linha: LinhaGrade) => void; mostrar?: (linha: LinhaGrade) => boolean };
 };
 
 export type LinhaGrade = Record<string, string> & { _id: string };
@@ -137,12 +142,21 @@ export default function GradeEditavel({
       .map((l) => (l.includes("\t") ? l.split("\t") : l.split(/;(?=(?:[^"]*"[^"]*")*[^"]*$)/)));
     if (!grade.length) return;
 
+    // Primeira linha é cabeçalho (2+ nomes de coluna)? Então cada coluna vai pelo
+    // NOME — inclusive as que ficam fora do colar por posição.
+    const nrm = (t: string) => t.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+    const porNome = grade[0].map((c) => editaveis.find((e) => nrm(e.label) === nrm(c) || nrm(e.key) === nrm(c)));
+    const comCabecalho = porNome.filter(Boolean).length >= 2;
+    const corpo = comCabecalho ? grade.slice(1) : grade;
+    const posicionais = editaveis.filter((e, i) => !e.pularNoColar || i === ci);
+    const ini = Math.max(0, posicionais.indexOf(editaveis[ci]));
+
     const novas = [...linhas];
-    grade.forEach((cells, dl) => {
+    corpo.forEach((cells, dl) => {
       const alvo = li + dl;
       while (novas.length <= alvo) novas.push(linhaVazia(cols));
       cells.forEach((valor, dc) => {
-        const col = editaveis[ci + dc];
+        const col = comCabecalho ? porNome[dc] : posicionais[ini + dc];
         if (!col) return;   // passou da última coluna: descarta em vez de embaralhar
         novas[alvo] = { ...novas[alvo], [col.key]: valor.trim().replace(/^"|"$/g, "") };
       });
@@ -352,6 +366,12 @@ export default function GradeEditavel({
                     <td key={c.key} className={`p-0 border-b border-ww-border/40 relative ${mk?.classe ?? ""} ${c.classe ?? ""}`} title={mk?.dica}>
                       {mk?.etiqueta && (
                         <span className="pointer-events-none absolute left-1 top-0 text-[8.5px] leading-none text-ww-textFaint">{mk.etiqueta}</span>
+                      )}
+                      {c.acao && (c.acao.mostrar?.(linha) ?? true) && (
+                        <button type="button" tabIndex={-1} title={c.acao.dica} onClick={() => c.acao!.fn(linha)}
+                          className="absolute right-0.5 top-1/2 -translate-y-1/2 px-1 text-[11px] text-ww-textFaint hover:text-ww-accent">
+                          {c.acao.rot}
+                        </button>
                       )}
                       <input
                         data-cel={`${li}-${ci}`}

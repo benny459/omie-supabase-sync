@@ -60,9 +60,10 @@ Tudo fica numa aba só: **Lista de materiais** (a antiga aba “Compras × lista
 
 **Montar a lista** (**Minha lista**):
 1. Digite o item: o catálogo sugere primeiro os **itens do nosso estoque** (código novo, como no Faturamento) com **último preço pago, fornecedor e prazos**; código de compra já vinculado aparece como “cód. compra X”. Linha antiga com código do Omie que já tem item nosso passa a mostrar o código novo.
-2. A coluna **Catálogo** mostra o item escolhido (✓), o que é para **conferir** (amarelo) e o que está **sem correspondência**. Clique nela para **escolher**: sugestões com % de semelhança, busca por nome/código ou **Criar item nosso** (família e próximo código; serviço → família SV). A escolha fica gravada para aquele texto — da próxima vez casa sozinho.
-3. A lista **salva sozinha** alguns segundos depois de cada mudança. Só remover itens pede o botão **Salvar lista** (com confirmação).
-4. Para importar do Excel: **Lista RC (Projeto) → 📄 Baixar modelo (.xlsx)**, preencha e suba. Depois, **⚡ Casar com o catálogo** acha os itens que vieram sem código (escolhas feitas à mão não mudam).
+2. A coluna **Código** mostra o código do **nosso estoque** (nunca o do Omie). Sem item casado, a célula fica **âmbar** (“sem código” ou “Omie X”): clique em **⌕** para escolher ou criar. Dá para digitar o código (busca na hora) e colar com cabeçalho “Código” — código nosso, antigo ou de compra já ligado resolve a linha direto.
+3. A coluna **Catálogo** mostra o item escolhido (✓), o que é para **conferir** (amarelo) e o que está **sem correspondência**. Clique nela para **escolher**: sugestões com % de semelhança, busca por nome/código ou **Criar item nosso** (família e próximo código; serviço → família SV). A escolha fica gravada para aquele texto — da próxima vez casa sozinho.
+4. A lista **salva sozinha** alguns segundos depois de cada mudança. Só remover itens pede o botão **Salvar lista** (com confirmação).
+5. Para importar do Excel: **Lista RC (Projeto) → 📄 Baixar modelo (.xlsx)**, preencha e suba. Depois, **⚡ Casar com o catálogo** acha os itens que vieram sem código (escolhas feitas à mão não mudam).
 
 **Itens da CP**: a composição de preço da proposta do CRM. Só entra em **Minha lista** o item **casado** (✓ automático ou ✋ escolhido por você) — a caixinha de quem não casou fica travada (“case o item primeiro”). Clique em **No catálogo** para escolher ou criar o item.
 

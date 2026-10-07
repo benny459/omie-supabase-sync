@@ -75,7 +75,7 @@ type Casamento = { idx: number; status: "ok" | "conferir" | "sem"; manual?: bool
 const CAT_CAMPOS = ["cat_ncod_prod", "cat_codigo", "cat_valor_unit", "cat_fornecedor",
                     "cat_entrega_dias", "cat_fat_dias", "_match", "_alts", "_vu_fonte"];
 /** Chaves da linha (para a linha vazia — independe das colunas de leitura). */
-const CHAVES = ["equipamento", "item", "qtd", "un", "data_necessaria", "modelo", "pc_numero", "observacao", "cat_valor_unit"];
+const CHAVES = ["equipamento", "item", "cat_codigo", "qtd", "un", "data_necessaria", "modelo", "pc_numero", "observacao", "cat_valor_unit"];
 const vazia = () => linhaVazia(CHAVES.map((key) => ({ key, label: "", w: 0 })));
 
 const s = (v: unknown) => (v == null ? "" : String(v));
@@ -232,6 +232,24 @@ export default function MateriaisGrade({
           try { return (JSON.parse(linha._alts) as Cat[]).map(sugestao); } catch { return []; }
         },
       } },
+    // Código NOSSO (estoque/ALLKA), nunca o do Omie (07/10/26). Sem item casado: âmbar,
+    // e o ⌕ abre o seletor. Digitar busca pelo código; colar com cabeçalho "Código" entra.
+    { key: "cat_codigo", label: "Código", w: 92, pularNoColar: true,
+      limpaAoEditar: ["cat_ncod_prod", "_match", "_alts"],
+      marca: (l) => (String(l.item ?? "").trim() && (!l.cat_ncod_prod || l._match === "omie")
+        ? { classe: "bg-amber-500/15", etiqueta: l.cat_codigo ? "" : l._omie ? `Omie ${l._omie}` : "sem código",
+            dica: l._omie ? `Só no Omie (${l._omie}), sem item do nosso estoque — clique em ⌕ para escolher ou criar` : "Sem item do nosso estoque — clique em ⌕ para escolher ou criar" } : null),
+      acao: { rot: "⌕", dica: "Escolher o item do catálogo (sugestões, busca, criar item nosso)",
+        fn: (l) => abrirSeletorLista(l._id), mostrar: (l) => !!String(l.item ?? "").trim() },
+      autocompletar: {
+        buscar: async (q) => {
+          const r = await fetch(`/api/catalogo/projeto?op=buscar&emp=${empresa}&q=${encodeURIComponent(q)}&lim=10`);
+          if (!r.ok) return [];
+          const j = (await r.json()) as { itens?: Cat[] };
+          return (j.itens ?? []).map(sugestao);
+        },
+        aoEscolher: (sg, linha) => camposDoCatalogo(sg.dados as Cat, "ok", [], linha.cat_valor_unit ?? ""),
+      } },
     { key: "qtd",         label: "Qtd",         w: 56, tipo: "num", alinhaDireita: true },
     { key: "un",          label: "Un",          w: 44 },
     { key: "data_necessaria", label: "Necessário em", w: 116, tipo: "data",
@@ -265,6 +283,8 @@ export default function MateriaisGrade({
           ? ` · ${l.cat_entrega_dias ? `${l.cat_entrega_dias}d` : "—"}/${l.cat_fat_dias ? `${l.cat_fat_dias}d` : "—"}` : "";
         const corpo = l._match === "conferir"
           ? <span className="text-amber-700 dark:text-amber-300">⚠ conferir · {l.cat_codigo || "—"}</span>
+          : l._match === "omie"
+            ? <span className="text-amber-700 dark:text-amber-300">só no Omie · escolher</span>
           : l._match === "sem" || !l.cat_ncod_prod
             ? <span className="text-ww-textFaint">{l._match === "sem" ? "sem correspondência" : "—"} · escolher</span>
             : <span className="text-ww-textMuted"><span className="text-emerald-600 dark:text-emerald-400">✓</span> {l.cat_codigo || "item"} · {l.cat_fornecedor || "sem compra anterior"}<span className="tabular-nums">{prazos}</span></span>;
@@ -419,8 +439,8 @@ export default function MateriaisGrade({
         const ids = [...new Set(rows.map((r) => Number(r.cat_ncod_prod)).filter((x) => x > 0))];
         if (!ids.length) return {} as Record<string, Cat>;
         const r = await fetch("/api/catalogo/projeto", { method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ acao: "resolver", emp: empresa, ids }) }).then((x) => x.json()).catch(() => ({}));
-        return (r.itens ?? {}) as Record<string, Cat>;
+          body: JSON.stringify({ acao: "resolver", emp: empresa, ids }) }).then((x) => (x.ok ? x.json() : null)).catch(() => null);
+        return r?.itens ? (r.itens as Record<string, Cat>) : null; // null = não deu para saber (não mexe em nada)
       })(),
       rows.some((r) => r.cat_valor_unit == null)
         ? fetch(`/api/rc-projetos/itens-cp?codigo_projeto=${codigoProjeto}&sem_casar=1`).then((x) => x.json()).catch(() => ({}))
@@ -436,7 +456,12 @@ export default function MateriaisGrade({
       if (!l._id.startsWith("db") || !String(l.item ?? "").trim()) return l;
       const novo: LinhaGrade = { ...l };
       // código do Omie → item nosso
-      const nat = l.cat_ncod_prod ? resolv[l.cat_ncod_prod] : undefined;
+      const nat = l.cat_ncod_prod && resolv ? resolv[l.cat_ncod_prod] : undefined;
+      // produto só do Omie, sem item nosso: o código do Omie sai da coluna Código (fica de dica) e a linha pede o seletor
+      if (l.cat_ncod_prod && resolv && !nat && l._match !== "omie") {
+        novo._omie = l.cat_codigo ?? ""; novo.cat_codigo = ""; novo._match = "omie";
+        if (l.cat_codigo) mudou++;
+      }
       if (nat && (String(nat.ncod_prod) !== l.cat_ncod_prod || (nat.codigo ?? "") !== l.cat_codigo)) {
         novo.cat_ncod_prod = String(nat.ncod_prod); novo.cat_codigo = nat.codigo ?? "";
         if (!novo.cat_fornecedor && nat.fornecedor) novo.cat_fornecedor = nat.fornecedor;
@@ -592,7 +617,22 @@ export default function MateriaisGrade({
 
   /** Casa com o catálogo (itens NOSSOS) as linhas com texto e sem vínculo. Aceita
    *  sozinho só o que é de-para gravado ou muito parecido; o resto fica "conferir". */
-  const casarLinhas = useCallback(async (base: LinhaGrade[]) => {
+  const casarLinhas = useCallback(async (entrada: LinhaGrade[]) => {
+    // 1º o código digitado/colado: código nosso (ou antigo/de compra já ligado a um item nosso) resolve direto
+    let base = entrada;
+    const comCodigo = base.map((l, i) => ({ l, i }))
+      .filter(({ l }) => String(l.item ?? "").trim() && !l.cat_ncod_prod && String(l.cat_codigo ?? "").trim());
+    if (comCodigo.length) {
+      const achados = await Promise.all(comCodigo.map(async ({ l }) => {
+        const cod = String(l.cat_codigo).trim().toUpperCase();
+        const j = await fetch(`/api/catalogo/projeto?op=buscar&emp=${empresa}&q=${encodeURIComponent(cod)}&lim=5`).then((x) => x.json()).catch(() => ({})) as { itens?: Cat[] };
+        const its = j.itens ?? [];
+        return its.find((c) => String(c.codigo ?? "").toUpperCase() === cod)
+          ?? its.find((c) => String(c.via ?? "").toUpperCase().split(/\s+/).includes(cod)) ?? null;
+      }));
+      base = [...base];
+      comCodigo.forEach(({ l, i }, k) => { const c = achados[k]; if (c) base[i] = { ...l, ...camposDoCatalogo(c, "ok", [], l.cat_valor_unit ?? "") }; });
+    }
     const alvo = base.map((l, i) => ({ l, i }))
       .filter(({ l }) => String(l.item ?? "").trim() && !l.cat_ncod_prod);
     if (!alvo.length) return base;
@@ -651,7 +691,7 @@ export default function MateriaisGrade({
   useEffect(() => { if (subAba === "cp" && !cp && !cpCarregando) void carregarCp(); },
     [subAba, cp, cpCarregando, carregarCp]);
 
-  const casarAgora = useCallback(async () => {
+  const casarAgora = useCallback(async (baseColada?: LinhaGrade[]) => {
     setCasando(true); setErro(null);
     try {
       if (subAba === "cp") {
@@ -664,9 +704,10 @@ export default function MateriaisGrade({
         }
         return;
       }
-      const novas = await casarLinhas(linhas);
-      if (novas !== linhas) { setLinhas(novas); setSujo(true); }
-      else setAviso("Todas as linhas já estão ligadas ao catálogo.");
+      const base = baseColada ?? linhas;
+      const novas = await casarLinhas(base);
+      if (novas !== base) { setLinhas(novas); setSujo(true); }
+      else if (!baseColada) setAviso("Todas as linhas já estão ligadas ao catálogo.");
     } catch (e) { setErro(`Não consegui casar com o catálogo: ${e instanceof Error ? e.message : String(e)}`); }
     finally { setCasando(false); }
   }, [casarLinhas, linhas, subAba, carregarCp]);
@@ -678,13 +719,14 @@ export default function MateriaisGrade({
   useEffect(() => {
     if (!casarAposColar) return;
     setCasarAposColar(false);
-    setLinhas((atual) => atual.map((l) => {
+    const comData = linhas.map((l) => {
       if (!String(l.item ?? "").trim() || l.data_necessaria) return l;
       const g = dataGrupoRef.current.get(normGrupo(l.equipamento || "Geral"));
       return g ? { ...l, data_necessaria: g } : l;
-    }));
-    void casarAgora();
-  }, [casarAposColar, casarAgora]);
+    });
+    setLinhas(comData);
+    void casarAgora(comData);
+  }, [casarAposColar, casarAgora, linhas]);
 
   const adicionarDaCp = useCallback(() => {
     if (!cp) return;
