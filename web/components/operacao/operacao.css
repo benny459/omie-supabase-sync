@@ -341,7 +341,7 @@
    Colunas do PC: PC · Fornecedor · Status · Prev. material · Material · NF · [Serviço] · ações */
 .op .rcg{display:grid;grid-template-columns:minmax(0,.85fr) minmax(0,1.75fr);border-top:1px solid var(--ww-border-strong)}
 .op .rcg > .it-col,.op .rcg > .it{border-right:1px solid var(--ww-border)}
-.op .rcg .it{display:grid;grid-template-columns:20px 74px minmax(0,1fr) 124px 92px;gap:10px;align-items:center;padding:7px 12px;min-height:50px}
+.op .rcg .it{display:grid;grid-template-columns:20px 74px minmax(0,1fr) 92px;gap:10px;align-items:center;padding:7px 12px;min-height:50px}
 .op .rcg .it + .it{border-top:1px dashed var(--ww-border)}
 .op .rcg .it.sel{background:var(--ww-info-soft)}
 .op .rcg .pc{display:grid;grid-template-columns:62px minmax(0,1fr) 96px 124px 118px 96px 112px 34px;gap:10px;align-items:center;padding:7px 12px;min-height:50px}

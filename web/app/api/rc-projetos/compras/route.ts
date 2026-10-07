@@ -32,10 +32,16 @@ export async function GET(req: Request) {
   const empresa = (sp.get("empresa") ?? "SF").toUpperCase();
   const codigo = Number(sp.get("codigo"));
   if (!codigo) return NextResponse.json({ error: "codigo obrigatório" }, { status: 400 });
-  const { data, error } = await approval().rpc("rc_projetos_compras", { p_empresa: empresa, p_projeto: codigo });
+  // 07/10/26: o banco às vezes estoura o statement timeout (refresh das MVs de compras
+  // na mesma hora) — tenta de novo duas vezes antes de desistir.
+  let { data, error } = await approval().rpc("rc_projetos_compras", { p_empresa: empresa, p_projeto: codigo });
+  for (let t = 0; t < 2 && error && /timeout|canceling statement/i.test(error.message); t++) {
+    await new Promise((r) => setTimeout(r, 1500));
+    ({ data, error } = await approval().rpc("rc_projetos_compras", { p_empresa: empresa, p_projeto: codigo }));
+  }
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   try {
-    return NextResponse.json(await completarPcs(data as DadosPcs));
+    return NextResponse.json(await completarPcs(data as DadosPcs, empresa, codigo));
   } catch {
     return NextResponse.json(data); // sem o detalhe dos PCs, a lista continua de pé
   }

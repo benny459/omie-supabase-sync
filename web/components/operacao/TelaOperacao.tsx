@@ -1454,16 +1454,6 @@ function GruposRc({ compras, p, sel, toggleSel, podeAprovar, podeEditar, ehAdmin
     <>
       <div className={`${cls} rcg-hd`}>
         <div className="it"><span /><span>RC</span><span>Item</span>
-          <span className="hd-lote">Material
-            {podeEditar && compras.some((c) => c.recebidoEm == null) && (
-              <select className="todos" value="" title="Mudar o material de todos os itens deste pedido"
-                onChange={(e) => { const v = e.target.value; if (v) void marcarMaterialLote(compras, v === "auto" ? null : (v as MatManual["v"])); }}>
-                <option value="">todos ▾</option>
-                {MAT_MANUAL.filter((x) => x.v !== "parcial").map((x) => <option key={x.v} value={x.v}>{x.t}</option>)}
-                <option value="auto">↺ Automático</option>
-              </select>
-            )}
-          </span>
           <span style={{ textAlign: "right" }}>Valor RC</span></div>
         <div className="pc"><span>PC</span><span>Fornecedor</span><span style={{ textAlign: "right" }}>Valor PC</span>
           <span className="hd-lote">Status
@@ -1488,7 +1478,19 @@ function GruposRc({ compras, p, sel, toggleSel, podeAprovar, podeEditar, ehAdmin
                 onChange={(e) => { const iso = e.target.value || null; if (!iso) return;
                   for (const c of comPcVis.filter((x) => x.estado !== "recebido")) void gravar(c, "prevMateriais", iso, { nova_prev_materiais: iso }); }} />
             )}
-          </span><span>Material</span><span>NF entrada</span>{servico && <span>Serviço</span>}<span /></div>
+          </span>
+          {/* 07/10/26: um só "Material" — o editável, ao lado da previsão (antes havia o
+              seletor por item à esquerda e uma pílula repetida aqui). */}
+          <span className="hd-lote">Material
+            {podeEditar && compras.some((c) => c.pc && c.recebidoEm == null) && (
+              <select className="todos" value="" title="Mudar o material de todos os PCs deste pedido"
+                onChange={(e) => { const v = e.target.value; if (v) void marcarMaterialLote(compras.filter((c) => c.pc), v === "auto" ? null : (v as MatManual["v"])); }}>
+                <option value="">todos ▾</option>
+                {MAT_MANUAL.filter((x) => x.v !== "parcial").map((x) => <option key={x.v} value={x.v}>{x.t}</option>)}
+                <option value="auto">↺ Automático</option>
+              </select>
+            )}
+          </span><span>NF entrada</span>{servico && <span>Serviço</span>}<span /></div>
       </div>
       {ordem.map(([k, itens]) => {
         const totalRc = itens.reduce((a, c) => a + c.rcTotal, 0);
@@ -1510,7 +1512,6 @@ function GruposRc({ compras, p, sel, toggleSel, podeAprovar, podeEditar, ehAdmin
                     : <span className="rcnum vazio">sem RC</span>}</span>
                   <div className="desc item-nome" title={c.desc}>{c.desc}
                     <small>{c.qtd} × {$(c.unit)} = <b style={{ color: "var(--ww-text-muted)" }}>{$(c.rcTotal)}</b></small></div>
-                  <MatCelula c={c} podeEditar={podeEditar} marcar={marcarMaterial} />
                   <div style={{ textAlign: "right" }} className="num">{idx === 0 ? <b>{$(totalRc)}</b> : null}</div>
                 </div>
               ))}
@@ -1547,7 +1548,7 @@ function GruposRc({ compras, p, sel, toggleSel, podeAprovar, podeEditar, ehAdmin
                         : <span className={late ? "late" : ""}>{prev ? dBR(prev) : "—"}</span>}
                       {late && <small className="atraso">⚠ {-(diasAte(prev) ?? 0)}d de atraso</small>}
                     </span>
-                    <span>{mat.c ? <span className={`st ${mat.c}`}>{mat.t}</span> : <span style={{ color: "var(--ww-text-faint)" }}>—</span>}</span>
+                    <MatPc cs={cs} auto={mat} podeEditar={podeEditar} marcarLote={marcarMaterialLote} />
                     <NfEntrada cs={cs} late={late} aprovado={aprovado} />
                     {servico && <span className="desc">{servico.st}<small>{servico.prev ? `prev. ${dBR(servico.prev)}` : ""}</small></span>}
                     <span className="acts">
@@ -1601,11 +1602,38 @@ function GruposRc({ compras, p, sel, toggleSel, podeAprovar, podeEditar, ehAdmin
       })}
       {compras.length > 0 && (
         <div className={`${cls} rcg-soma`}>
-          <div className="it"><span /><span /><span /><span style={{ textAlign: "right" }}>Soma das RCs</span><span style={{ textAlign: "right" }} className="num"><b>{$(somaRcs)}</b></span></div>
+          <div className="it"><span /><span /><span style={{ textAlign: "right" }}>Soma das RCs</span><span style={{ textAlign: "right" }} className="num"><b>{$(somaRcs)}</b></span></div>
           <div className="pc" />
         </div>
       )}
     </>
+  );
+}
+
+/** Material do PC (07/10/26): o seletor editável, no lugar da pílula repetida.
+ *  "(auto)" é o que o PC/NF diz (Recebido, A caminho, Atrasado…); escolher marca
+ *  todos os itens do PC à mão (Em estoque, Recebido sem NF, Não vai mais). */
+function MatPc({ cs, auto, podeEditar, marcarLote }: {
+  cs: Compra[]; auto: { t: string; c: string }; podeEditar: boolean; marcarLote: MarcarMaterialLote;
+}) {
+  const recebidoNf = cs.every((x) => x.recebidoEm != null);
+  const manual = cs.map((x) => x.matManual?.v ?? "");
+  const igual = manual.every((v) => v === manual[0]) ? manual[0] : "";
+  const rotManual = MAT_MANUAL.find((x) => x.v === igual)?.t;
+  if (recebidoNf || !podeEditar) {
+    const t = rotManual ?? auto.t;
+    return <span>{auto.c || rotManual ? <span className={`st ${auto.c || "pendente"}`}>{t}</span> : <span style={{ color: "var(--ww-text-faint)" }}>—</span>}</span>;
+  }
+  return (
+    <span>
+      <select className={`matsel ${igual ? "manual" : ""}`} value={igual}
+        title={igual ? "Marcado à mão — escolha ↺ Automático para voltar ao que o PC/NF diz" : "Automático pelo PC/NF — escolha para marcar à mão"}
+        onClick={(e) => e.stopPropagation()}
+        onChange={(e) => { const v = e.target.value as MatManual["v"] | ""; void marcarLote(cs, v || null); }}>
+        <option value="">{igual ? "↺ Automático" : `${auto.t === "—" ? "Aguardando" : auto.t} (auto)`}</option>
+        {MAT_MANUAL.filter((x) => x.v !== "parcial").map((x) => <option key={x.v} value={x.v}>{x.t}</option>)}
+      </select>
+    </span>
   );
 }
 

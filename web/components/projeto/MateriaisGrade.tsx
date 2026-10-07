@@ -157,13 +157,20 @@ export default function MateriaisGrade({
   const [ocupado, setOcupado] = useState<string | null>(null);
   const cmpPorId = useMemo(() => new Map((cmp?.itens ?? []).map((l) => [`db${l.id}`, l])), [cmp]);
   const carregarCompras = useCallback(async () => {
-    try {
-      const r = await fetch(`/api/rc-projetos/compras?empresa=${empresa}&codigo=${codigoProjeto}`, { cache: "no-store" });
-      const j = await r.json();
-      if (!r.ok) throw new Error(j.error ?? r.statusText);
-      setCmp(j as DadosCompras); setCmpErro(null);
-      return j as DadosCompras;
-    } catch (e) { setCmpErro((e as Error).message); return null; }
+    // até 3 tentativas: o banco às vezes estoura o tempo enquanto as MVs de compras atualizam
+    for (let t = 0; t < 3; t++) {
+      try {
+        const r = await fetch(`/api/rc-projetos/compras?empresa=${empresa}&codigo=${codigoProjeto}`, { cache: "no-store" });
+        const j = await r.json();
+        if (!r.ok) throw new Error(j.error ?? r.statusText);
+        setCmp(j as DadosCompras); setCmpErro(null);
+        return j as DadosCompras;
+      } catch (e) {
+        setCmpErro(t < 2 ? `${(e as Error).message} — tentando de novo…` : (e as Error).message);
+        if (t < 2) await new Promise((r) => setTimeout(r, 3000));
+      }
+    }
+    return null;
   }, [empresa, codigoProjeto]);
   const postCompras = useCallback(async (corpo: Record<string, unknown>) => {
     const r = await fetch("/api/rc-projetos/compras", { method: "POST", headers: { "Content-Type": "application/json" },
@@ -195,6 +202,7 @@ export default function MateriaisGrade({
   /** Sinal de entrega de cada linha: a compra chega a tempo do "Necessário em"? (07/10/26) */
   const sinais = useMemo(() => {
     const m = new Map<string, SinalEntrega | null>();
+    if (!cmp) return m; // sem as compras não dá para saber se chega a tempo
     for (const l of linhas) {
       if (!String(l.item ?? "").trim()) continue;
       const c = cmpPorId.get(l._id);
@@ -207,7 +215,7 @@ export default function MateriaisGrade({
       }));
     }
     return m;
-  }, [linhas, cmpPorId]);
+  }, [linhas, cmpPorId, cmp]);
   dataGrupoRef.current = dataGrupo;
 
   // ── Seletor de item do catálogo (linha da CP ou da lista) ────────────────
@@ -391,6 +399,7 @@ export default function MateriaisGrade({
         const c = cmpPorId.get(l._id);
         if (!c?.pcs.length) {
           if (!l._id.startsWith("db") || !String(l.item ?? "").trim()) return null;
+          if (!cmp) return l.pc_numero ? <span className="font-mono text-[11px] text-ww-textFaint" title="Carregando as compras do projeto…">{l.pc_numero}</span> : null;
           // nº de PC digitado/importado que não virou vínculo: é SUGESTÃO, com outra cara
           return l.pc_numero
             ? <button type="button" onClick={() => setVincLinha(l._id)}
@@ -422,6 +431,7 @@ export default function MateriaisGrade({
       render: (l) => {
         const c = cmpPorId.get(l._id);
         if (!c?.pcs.length) {
+          if (!cmp) return l.pc_numero ? <span className="text-[10.5px] text-ww-textFaint">carregando…</span> : null;
           if (l.pc_numero && l._id.startsWith("db")) return (
             <button type="button" onClick={() => setVincLinha(l._id)} className="text-[10.5px] italic text-ww-accent hover:underline">sugestão · vincular</button>);
           return c?.rc ? <span className="text-ww-textMuted text-[10.5px]">em RC</span> : null;
@@ -489,7 +499,7 @@ export default function MateriaisGrade({
             💬{n > 0 && <span className="absolute -top-1.5 -right-2 min-w-[14px] px-0.5 rounded-full bg-ww-accent text-white text-[9px] font-bold leading-[14px] text-center">{n}</span>}
           </button>);
       } },
-  ], [empresa, cmpPorId, nomesPadrao, gruposMeta, abrirSeletorLista, PC, conversa, sinais]);
+  ], [empresa, cmp, cmpPorId, nomesPadrao, gruposMeta, abrirSeletorLista, PC, conversa, sinais]);
 
   /** A leitura inicial funcionou?
    *
