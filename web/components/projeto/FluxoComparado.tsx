@@ -157,10 +157,10 @@ function Kpi({ rot, ini, at, fmt = brl, melhorMaior = true, sub }: {
     <div className="min-w-0 rounded-lg border border-ww-border bg-ww-panel px-3 py-2.5">
       <div className="text-[10px] uppercase tracking-[0.6px] font-bold text-ww-textFaint truncate">{rot}</div>
       <div className={`mt-1 text-[16px] font-bold tabular-nums truncate ${corAt}`}>{at == null ? "—" : fmt(at)}</div>
-      {ini !== undefined && <div className="text-[11px] tabular-nums text-ww-textMuted truncate">
+      {ini !== undefined && <div className="text-[11px] tabular-nums text-ww-textMuted flex flex-wrap gap-x-1">
         inicial {ini == null ? "—" : fmt(ini)}
         {dif != null && Math.abs(dif) >= 0.5 && (
-          <span className={`ml-1 font-semibold ${bom ? "text-emerald-600 dark:text-emerald-300" : "text-rose-600 dark:text-rose-300"}`}>
+          <span className={`font-semibold ${bom ? "text-emerald-600 dark:text-emerald-300" : "text-rose-600 dark:text-rose-300"}`}>
             {dif > 0 ? "▲" : "▼"} {fmt(Math.abs(dif))}
           </span>
         )}
@@ -183,6 +183,15 @@ export default function FluxoComparado({ empresa, codigoProjeto, onDados, onPron
   const [aviso, setAviso] = useState<string | null>(null);
   const { mode, tema } = useVizTema();
   const c = CHROME[mode];
+  /* Tela estreita: os rótulos de "HOJE" e "maior desvio" se atropelam — ficam só as linhas
+     (o valor está nos indicadores e na dica). */
+  const [estreito, setEstreito] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 640px)");
+    const f = () => setEstreito(mq.matches);
+    f(); mq.addEventListener("change", f);
+    return () => mq.removeEventListener("change", f);
+  }, []);
 
   const carregar = useCallback(async () => {
     try {
@@ -389,15 +398,15 @@ export default function FluxoComparado({ empresa, codigoProjeto, onDados, onPron
                 <Line xAxisId="ini" dataKey="saldoAt" stroke={corAt} strokeWidth={2.5} dot={false} activeDot={{ r: 4.5, strokeWidth: 2, stroke: c.surface }} isAnimationActive={false} />
                 {xHoje && (
                   <ReferenceLine xAxisId="ini" x={xHoje} stroke={c.inkMuted} strokeDasharray="3 3"
-                    label={{ value: "HOJE", position: "insideTopRight", fill: c.inkMuted, fontSize: 10 }} />
+                    label={estreito ? undefined : { value: "HOJE", position: "insideTopRight", fill: c.inkMuted, fontSize: 10 }} />
                 )}
                 {k.desvio && Math.abs(k.desvio.v) >= 1 && (
                   <ReferenceLine xAxisId="ini" x={k.desvio.x} stroke={corSai} strokeOpacity={0.55} strokeDasharray="2 3"
-                    label={{ value: `maior desvio ${brlK(k.desvio.v)}`, position: "insideTopLeft", fill: c.inkMuted, fontSize: 10 }} />
+                    label={estreito ? undefined : { value: `maior desvio ${brlK(k.desvio.v)}`, position: "insideTopLeft", fill: c.inkMuted, fontSize: 10 }} />
                 )}
                 {k.minIni && (
                   <ReferenceDot xAxisId="ini" x={k.minIni.x} y={k.minIni.v} r={5} fill={c.surface} stroke={corIni} strokeWidth={2}
-                    label={{ value: `mín. inicial ${brlK(k.minIni.v)}`, position: "bottom", fill: c.inkMuted, fontSize: 10 }} />
+                    label={estreito ? undefined : { value: `mín. inicial ${brlK(k.minIni.v)}`, position: "bottom", fill: c.inkMuted, fontSize: 10 }} />
                 )}
                 {k.minAt && (
                   <ReferenceDot xAxisId="ini" x={k.minAt.x} y={k.minAt.v} r={5.5} fill={c.surface} stroke={corAt} strokeWidth={2.5}
