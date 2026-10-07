@@ -10,7 +10,7 @@
 --   já leem). A data do grupo é a data da maioria das linhas dele; definir a data do
 --   grupo preenche as linhas que seguiam o grupo; linha com outra data é "data própria".
 -- A tela funciona sem esta migração (sugere os nomes já usados nos projetos); com ela,
--- o cadastro passa a valer. Migração p100_grupos_equipamento — PENDENTE de aplicar.
+-- o cadastro passa a valer. Aplicada em 07/10/26 como migração p100_grupos_equipamento.
 
 create table if not exists platform.equipamento_grupo (
   id bigserial primary key,

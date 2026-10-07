@@ -49,7 +49,7 @@ A lista de **pedidos de venda (PV/OS)** com as compras ligadas a cada um.
 ## Projetos
 
 1. Abra **Operação → Projetos** e clique no projeto.
-2. A página do projeto tem o plano (CP/MC), a lista de materiais e a aba **Materiais separados**.
+2. As abas seguem a ordem do trabalho: **1 Resumo · 2 Lista de materiais · 3 Materiais separados · 4 Fluxo de caixa**.
 3. Na lista de projetos, um selo mostra **“N itens separados · R$ · x% da lista”** quando já há material separado — clique para ir direto à aba.
 
 ### Lista de materiais, compras e budget do projeto
@@ -58,22 +58,23 @@ Tudo fica numa aba só: **Lista de materiais** (a antiga aba “Compras × lista
 
 **No topo**: **Estimado da lista**, **Budget de materiais** (do CP/MC do CRM ou **editar**), **Comprometido (PCs)**, **Pago**, **Projetado × budget** (sobra/estoura) e a **Margem** contra a do fechamento. O estimado de cada linha é o **Valor unit.** da linha; vazio, o sistema preenche com o preço do **PC**, senão o **último preço do catálogo**, senão o **custo da CP** (a célula mostra de onde veio: “do PC”, “catálogo”, “da CP”).
 
-**Montar a lista** (**Minha lista**):
+**Montar a lista** (**Minha lista**) — colunas: # · Equipamento · **Código** · Item · Qtd · Un · Necessário em · Observação · Valor unit. · Total, e à direita (fundo azul claro) RC · **PC · situação** · Fornecedor · Comprado. Cada linha ocupa uma linha só (passe o mouse para ver o texto inteiro); ao rolar para o lado, as colunas até o Item ficam presas.
 1. Digite o item: o catálogo sugere primeiro os **itens do nosso estoque** (código novo, como no Faturamento) com **último preço pago, fornecedor e prazos**; código de compra já vinculado aparece como “cód. compra X”. Linha antiga com código do Omie que já tem item nosso passa a mostrar o código novo.
-2. A coluna **Código** mostra o código do **nosso estoque** (nunca o do Omie). Sem item casado, a célula fica **âmbar** (“sem código” ou “Omie X”): clique em **⌕** para escolher ou criar. Dá para digitar o código (busca na hora) e colar com cabeçalho “Código” — código nosso, antigo ou de compra já ligado resolve a linha direto.
-3. A coluna **Catálogo** mostra o item escolhido (✓), o que é para **conferir** (amarelo) e o que está **sem correspondência**. Clique nela para **escolher**: sugestões com % de semelhança, busca por nome/código ou **Criar item nosso** (família e próximo código; serviço → família SV). A escolha fica gravada para aquele texto — da próxima vez casa sozinho.
+2. **Código**: sempre o do nosso estoque (nunca o do Omie). O ícone ao lado diz a situação — **✓** casado, **⚠** conferir, **⌕** sem código (célula âmbar). Clique no ícone para **escolher**: sugestões com %, busca por nome/código ou **Criar item nosso** (família e próximo código; serviço → família SV). A escolha fica gravada para aquele texto — da próxima vez casa sozinho.
+3. Casada, a linha mostra no **Item** a descrição do catálogo; o texto original (e o modelo, se houver) aparece ao passar o mouse e volta ao editar.
 4. A lista **salva sozinha** alguns segundos depois de cada mudança. Só remover itens pede o botão **Salvar lista** (com confirmação).
-5. Para importar do Excel: **Lista RC (Projeto) → 📄 Baixar modelo (.xlsx)**, preencha e suba. Depois, **⚡ Casar com o catálogo** acha os itens que vieram sem código (escolhas feitas à mão não mudam).
+5. Colar do Excel sem cabeçalho segue a ordem **Equipamento · Item · Qtd · Un · Necessário em · Observação · Valor unit.**; com a linha de cabeçalho, as colunas vão pelo nome (inclusive **Código, Modelo e PC**). Código nosso, antigo ou de compra já ligado resolve a linha direto. **⚡ Casar com o catálogo** acha o resto (escolhas feitas à mão não mudam).
+6. **Valor unit.** vazio é preenchido do PC, do catálogo ou da CP — a origem aparece pequena na célula (PC / cat. / CP).
 
 **Itens da CP**: a composição de preço da proposta do CRM. Só entra em **Minha lista** o item **casado** (✓ automático ou ✋ escolhido por você) — a caixinha de quem não casou fica travada (“case o item primeiro”). Clique em **No catálogo** para escolher ou criar o item.
 
-**Grupos de equipamento e “Necessário em”**: a faixa **Grupos de equipamento** mostra cada grupo (vem da coluna Equipamento e da CP) com a quantidade de itens e a data **necessário em** do grupo. Definir a data do grupo preenche as linhas dele; uma linha pode ter **data própria** (fica marcada); linha nova do grupo herda a data. **usar dd/mm** aplica a entrega prevista da proposta. **≈ Nome** troca o nome do grupo pelo padrão do cadastro (Cadastros › Grupos de equipamento). Filtros **Todas / Sem PC / Com PC** combinam com o grupo. A data da linha é a que vai para a RC (data limite) e para o fluxo.
+**Grupos de equipamento e “Necessário em”**: os chips acima da lista filtram por grupo e mostram a data do grupo (“necessário 31/10” ou “sem data”). **📅 Datas por grupo** abre o painel com um grupo por linha: data, quantas linhas têm **data própria**, a sugestão (entrega prevista da proposta) com **aplicar**, **Aplicar a todos os grupos sem data** e **≈ Nome** para usar o nome padrão do cadastro. A data do grupo preenche as linhas dele; linha nova herda. Filtros **Todas / Sem PC / Com PC** combinam com o grupo. A data da linha é a que vai para a RC (data limite) e para o fluxo.
 
-**Comprar e acompanhar** (colunas da direita, em azul claro):
-- **RC**, **Pedido de compra** (clique abre o PC; fornecedor, previsão ou data/quantidade recebida), **Comprado** (valor da linha do PC; avisa quando a quantidade do PC é diferente da lista), **Situação** (mesmas cores do Compras: Pedido de Compra, Aguardando aprovação, Aprovado, Enviado, Faturado, Recebido, Conferido · NF) e **Vínculo** (nº do PC, código, descrição, manual — **desfazer**).
+**Comprar e acompanhar**:
+- **PC · situação**: o chip do PC (clique abre o pedido) na cor da situação do Compras (Pedido de Compra, Aguardando aprovação, Aprovado, Enviado, Faturado, Recebido, Conferido · NF); a dica traz previsão/recebimento e por onde foi o vínculo; **✕** desfaz vínculo por código, descrição ou manual. Linha sem PC mostra **+ vincular PC**: itens de PC do projeto parecidos com a linha (**Vincular**) ou **Procurar PC por número ou fornecedor**.
+- **Fornecedor**: o do PC; sem PC, o sugerido pelo catálogo (em itálico) com entrega/fatura médias. **Comprado**: valor da linha do PC (**≠** quando a quantidade do PC difere da lista).
 - Linha ligada só pelo **número do PC** também mostra valor: o sistema acha a linha do item dentro do PC (código, senão descrição).
-- Marque as linhas e clique **Gerar RC (N)** — a RC entra em Compras com a venda (PV) do projeto e cada linha fica ligada à lista.
-- **⇄ Vincular PCs automaticamente** liga as linhas aos itens dos PCs do projeto (código, depois descrição com as mesmas medidas); **Ver sugestões de vínculo** mostra as parecidas para **Confirmar**.
+- Marque as linhas e clique **Gerar RC (N)**; **⇄ Vincular PCs automaticamente** liga as linhas aos PCs do projeto — o que sobrar fica com **+ vincular PC** na própria linha.
 - Abaixo da lista: **Comprado fora da lista** e o **Fluxo de compras do projeto** mês a mês.
 
 **Cartão “Custo planejado”** (topo do projeto): a barra mostra a composição e a legenda traz o valor de cada parte — materiais, obra e despesas, em R$ e %.

@@ -371,8 +371,10 @@ html[data-vidro] .ab::before {
   backdrop-filter: blur(var(--ap-blur, 12px)) saturate(1.35);
   -webkit-backdrop-filter: blur(var(--ap-blur, 12px)) saturate(1.35);
 }
-html[data-vidro] .ab { --ab-bg: rgb(var(--color-ww-sidebar) / var(--ap-a, 1)); }
-html.dark[data-vidro] .ab { --ab-bg: rgb(var(--color-ww-sidebar) / var(--ap-a, 1)); }
+/* 07/10/26: barra fixa quase opaca — translúcida, os cartões que têm desfoque
+   próprio (Valor fechado / Custo planejado) apareciam NÍTIDOS por cima dela ao rolar. */
+html[data-vidro] .ab { --ab-bg: rgb(var(--color-ww-sidebar) / max(var(--ap-a, 1), 0.96)); }
+html.dark[data-vidro] .ab { --ab-bg: rgb(var(--color-ww-sidebar) / max(var(--ap-a, 1), 0.96)); }
 @media (prefers-reduced-transparency: reduce) {
   html[data-vidro] * { backdrop-filter: none !important; -webkit-backdrop-filter: none !important; }
 }

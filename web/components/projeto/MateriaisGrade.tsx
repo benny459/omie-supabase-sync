@@ -73,9 +73,9 @@ type Casamento = { idx: number; status: "ok" | "conferir" | "sem"; manual?: bool
 
 /** Campos que o catálogo preenche na linha. `_match` e `_alts` só vivem na tela. */
 const CAT_CAMPOS = ["cat_ncod_prod", "cat_codigo", "cat_valor_unit", "cat_fornecedor",
-                    "cat_entrega_dias", "cat_fat_dias", "_match", "_alts", "_vu_fonte"];
+                    "cat_entrega_dias", "cat_fat_dias", "_match", "_alts", "_vu_fonte", "_cat_desc"];
 /** Chaves da linha (para a linha vazia — independe das colunas de leitura). */
-const CHAVES = ["equipamento", "item", "cat_codigo", "qtd", "un", "data_necessaria", "modelo", "pc_numero", "observacao", "cat_valor_unit"];
+const CHAVES = ["equipamento", "cat_codigo", "item", "qtd", "un", "data_necessaria", "observacao", "cat_valor_unit", "modelo", "pc_numero"];
 const vazia = () => linhaVazia(CHAVES.map((key) => ({ key, label: "", w: 0 })));
 
 const s = (v: unknown) => (v == null ? "" : String(v));
@@ -86,7 +86,7 @@ const moeda = (v: number | null | undefined) =>
  *  (decisão do Benny, 30/09/2026); sem compra anterior, o que já havia fica. */
 function camposDoCatalogo(c: Cat, match: "ok" | "conferir", alts: Cat[] = [], valorAtual = ""): Record<string, string> {
   return {
-    cat_ncod_prod: s(c.ncod_prod), cat_codigo: s(c.codigo),
+    cat_ncod_prod: s(c.ncod_prod), cat_codigo: s(c.codigo), _cat_desc: c.descricao ?? "",
     cat_valor_unit: c.ultimo_preco != null ? moeda(c.ultimo_preco) : valorAtual,
     _vu_fonte: c.ultimo_preco != null ? "catálogo" : "",
     cat_fornecedor: s(c.fornecedor), cat_entrega_dias: s(c.entrega_dias), cat_fat_dias: s(c.fat_dias),
@@ -192,14 +192,24 @@ export default function MateriaisGrade({
 
   // ── Seletor de item do catálogo (linha da CP ou da lista) ────────────────
   const [seletor, setSeletor] = useState<Seletor | null>(null);
+  /** Linha sem PC com o "vincular" aberto (sugestões de vínculo + busca de PC). */
+  const [vincLinha, setVincLinha] = useState<string | null>(null);
+  const [vincBusca, setVincBusca] = useState<string[] | null>(null);
+  const [painelDatas, setPainelDatas] = useState(false);
   const abrirSeletorLista = useCallback((id: string) => setSeletor({ alvo: "lista", id }), []);
 
   // ── Colunas ───────────────────────────────────────────────────────────────
   // As editáveis à esquerda; à direita, o catálogo e o bloco do PC (leitura,
   // com fundo próprio para se ver que vêm do mesmo lugar).
   const PC = "bg-sky-500/[0.05]";
+  /* 07/10/26 (redesenho pedido pelo Benny no PJ361): Código antes do Item; casado,
+     o Item mostra a descrição do catálogo (o texto original fica na dica); a antiga
+     coluna Catálogo virou o ícone ao lado do código; sem Modelo (o dado continua na
+     linha); PC + situação + vínculo numa coluna só, com "vincular" na própria linha;
+     tudo numa linha só, com reticências, e as colunas até o Item presas ao rolar. */
   const COLS: ColunaGrade[] = useMemo(() => [
-    { key: "equipamento", label: "Equipamento", w: 130,
+    { key: "equipamento", label: "Equipamento", w: 104, fixa: true,
+      dica: (l) => l.equipamento || undefined,
       // Nome livre, mas sugere os padrões do cadastro e os já usados nos projetos.
       autocompletar: {
         buscar: async (q) => {
@@ -212,9 +222,34 @@ export default function MateriaisGrade({
         },
         aoEscolher: (sg) => ({ equipamento: String(sg.dados) }),
       } },
-    { key: "item",        label: "Item",        w: 260,
-      // Digitar busca no catálogo — itens NOSSOS primeiro (código novo); linha
-      // amarela ("conferir") mostra as alternativas assim que a célula recebe o foco.
+    // Código NOSSO (estoque/ALLKA), nunca o do Omie. O ícone diz a situação do
+    // casamento (✓ / ⚠ conferir / ⌕ sem) e abre o seletor do catálogo.
+    { key: "cat_codigo", label: "Código", w: 96, fixa: true, pularNoColar: true,
+      limpaAoEditar: ["cat_ncod_prod", "_match", "_alts", "_cat_desc"],
+      marca: (l) => (String(l.item ?? "").trim() && (!l.cat_ncod_prod || l._match === "omie")
+        ? { classe: "bg-amber-500/15", etiqueta: l.cat_codigo ? "" : l._omie ? `Omie ${l._omie}` : "sem código",
+            dica: l._omie ? `Só no Omie (${l._omie}), sem item do nosso estoque` : "Sem item do nosso estoque" } : null),
+      acao: {
+        rot: (l) => (l.cat_ncod_prod && l._match !== "omie" ? (l._match === "conferir" ? "⚠" : "✓") : "⌕"),
+        classe: (l) => (l.cat_ncod_prod && l._match !== "omie" ? (l._match === "conferir" ? "text-amber-600 dark:text-amber-300" : "text-emerald-600 dark:text-emerald-400") : "text-amber-700 dark:text-amber-300"),
+        dica: (l) => (l.cat_ncod_prod && l._match !== "omie"
+          ? (l._match === "conferir" ? "Casamento incerto — clique para conferir ou trocar" : "Item do nosso estoque — clique para trocar")
+          : "Escolher o item do catálogo (sugestões, busca, criar item nosso)"),
+        fn: (l) => abrirSeletorLista(l._id), mostrar: (l) => !!String(l.item ?? "").trim() },
+      autocompletar: {
+        buscar: async (q) => {
+          const r = await fetch(`/api/catalogo/projeto?op=buscar&emp=${empresa}&q=${encodeURIComponent(q)}&lim=10`);
+          if (!r.ok) return [];
+          const j = (await r.json()) as { itens?: Cat[] };
+          return (j.itens ?? []).map(sugestao);
+        },
+        aoEscolher: (sg, linha) => camposDoCatalogo(sg.dados as Cat, "ok", [], linha.cat_valor_unit ?? ""),
+      } },
+    { key: "item",        label: "Item",        w: 270, fixa: true,
+      // Casado: mostra a descrição do item do catálogo; o texto original (que é a
+      // chave da linha e do de-para) volta ao editar e fica na dica.
+      exibir: (l) => (l.cat_ncod_prod && l._match !== "omie" && l._cat_desc ? l._cat_desc : null),
+      dica: (l) => [l._cat_desc && l._cat_desc !== l.item ? `Texto original: ${l.item}` : l.item, l.modelo ? `Modelo: ${l.modelo}` : ""].filter(Boolean).join(" · ") || undefined,
       limpaAoEditar: CAT_CAMPOS,
       autocompletar: {
         buscar: async (q) => {
@@ -232,42 +267,22 @@ export default function MateriaisGrade({
           try { return (JSON.parse(linha._alts) as Cat[]).map(sugestao); } catch { return []; }
         },
       } },
-    // Código NOSSO (estoque/ALLKA), nunca o do Omie (07/10/26). Sem item casado: âmbar,
-    // e o ⌕ abre o seletor. Digitar busca pelo código; colar com cabeçalho "Código" entra.
-    { key: "cat_codigo", label: "Código", w: 92, pularNoColar: true,
-      limpaAoEditar: ["cat_ncod_prod", "_match", "_alts"],
-      marca: (l) => (String(l.item ?? "").trim() && (!l.cat_ncod_prod || l._match === "omie")
-        ? { classe: "bg-amber-500/15", etiqueta: l.cat_codigo ? "" : l._omie ? `Omie ${l._omie}` : "sem código",
-            dica: l._omie ? `Só no Omie (${l._omie}), sem item do nosso estoque — clique em ⌕ para escolher ou criar` : "Sem item do nosso estoque — clique em ⌕ para escolher ou criar" } : null),
-      acao: { rot: "⌕", dica: "Escolher o item do catálogo (sugestões, busca, criar item nosso)",
-        fn: (l) => abrirSeletorLista(l._id), mostrar: (l) => !!String(l.item ?? "").trim() },
-      autocompletar: {
-        buscar: async (q) => {
-          const r = await fetch(`/api/catalogo/projeto?op=buscar&emp=${empresa}&q=${encodeURIComponent(q)}&lim=10`);
-          if (!r.ok) return [];
-          const j = (await r.json()) as { itens?: Cat[] };
-          return (j.itens ?? []).map(sugestao);
-        },
-        aoEscolher: (sg, linha) => camposDoCatalogo(sg.dados as Cat, "ok", [], linha.cat_valor_unit ?? ""),
-      } },
-    { key: "qtd",         label: "Qtd",         w: 56, tipo: "num", alinhaDireita: true },
-    { key: "un",          label: "Un",          w: 44 },
-    { key: "data_necessaria", label: "Necessário em", w: 116, tipo: "data",
+    { key: "qtd",         label: "Qtd",         w: 52, tipo: "num", alinhaDireita: true },
+    { key: "un",          label: "Un",          w: 40 },
+    { key: "data_necessaria", label: "Necessário em", w: 112, tipo: "data",
       marca: (l) => {
         const g = dataGrupoRef.current.get(normGrupo(l.equipamento || "Geral")) ?? null;
         if (!g) return null;
-        if (!l.data_necessaria) return { etiqueta: `grupo ${dia(g)}`, dica: "Sem data — ao salvar, herda a data do grupo" };
-        if (l.data_necessaria !== g) return { classe: "bg-amber-500/10", etiqueta: "data própria", dica: `Data própria — o grupo está em ${dia(g)}` };
+        if (!l.data_necessaria) return { dica: `Sem data — ao salvar, herda a do grupo (${dia(g)})` };
+        if (l.data_necessaria !== g) return { classe: "bg-amber-500/10", dica: `Data própria — o grupo está em ${dia(g)}` };
         return null;
       } },
-    { key: "modelo",      label: "Modelo",      w: 110 },
-    { key: "pc_numero",   label: "PC nº",       w: 64 },
-    { key: "observacao",  label: "Observação",  w: 120 },
+    { key: "observacao",  label: "Observação",  w: 110, dica: (l) => l.observacao || undefined },
     { key: "cat_valor_unit", label: "Valor unit.", w: 92, tipo: "moeda", alinhaDireita: true,
       marca: (l) => {
         const f = l._vu_fonte;
-        if (!f) return null;
-        return { etiqueta: f === "pc" ? "do PC" : f === "CP" ? "da CP" : "catálogo",
+        if (!f || !String(l.cat_valor_unit ?? "").trim()) return null;
+        return { etiqueta: f === "pc" ? "PC" : f === "CP" ? "CP" : "cat.",
           dica: f === "pc" ? "Preço unitário da linha do pedido de compra" : f === "CP" ? "Custo da composição de preço (CP) — sem compra anterior" : "Último preço pago (catálogo)" };
       } },
     { key: "_total", label: "Total", w: 92, alinhaDireita: true,
@@ -275,86 +290,79 @@ export default function MateriaisGrade({
         const t = num(l.qtd) * num(l.cat_valor_unit);
         return t ? brl(t) : "";
       } },
-    // ── Catálogo (item nosso, fornecedor sugerido e prazos médios) — clique troca ──
-    { key: "_cat", label: "Catálogo", w: 170,
-      render: (l) => {
-        if (!String(l.item ?? "").trim()) return null;
-        const prazos = l.cat_entrega_dias || l.cat_fat_dias
-          ? ` · ${l.cat_entrega_dias ? `${l.cat_entrega_dias}d` : "—"}/${l.cat_fat_dias ? `${l.cat_fat_dias}d` : "—"}` : "";
-        const corpo = l._match === "conferir"
-          ? <span className="text-amber-700 dark:text-amber-300">⚠ conferir · {l.cat_codigo || "—"}</span>
-          : l._match === "omie"
-            ? <span className="text-amber-700 dark:text-amber-300">só no Omie · escolher</span>
-          : l._match === "sem" || !l.cat_ncod_prod
-            ? <span className="text-ww-textFaint">{l._match === "sem" ? "sem correspondência" : "—"} · escolher</span>
-            : <span className="text-ww-textMuted"><span className="text-emerald-600 dark:text-emerald-400">✓</span> {l.cat_codigo || "item"} · {l.cat_fornecedor || "sem compra anterior"}<span className="tabular-nums">{prazos}</span></span>;
-        return (
-          <button type="button" onClick={() => abrirSeletorLista(l._id)} className="text-left w-full truncate hover:underline"
-            title="Escolher/trocar o item do catálogo (sugestões, busca, criar item nosso). Fornecedor sugerido · entrega/fatura médias.">
-            {corpo}
-          </button>);
-      } },
     // ── Bloco do PC (leitura) ──
-    { key: "_rc", label: "RC", w: 62, classe: `${PC} border-l border-ww-border`,
+    { key: "_rc", label: "RC", w: 56, classe: `${PC} border-l border-ww-border`,
       render: (l) => {
         const c = cmpPorId.get(l._id);
         return c?.rc
           ? <a className="text-ww-accent hover:underline" target="_blank" rel="noreferrer" href={`/erp/compras?abrir=${c.rc}&tipo=RC&emp=${empresa}`}>{c.rc}</a>
           : <span className="text-ww-textFaint">—</span>;
       } },
-    { key: "_pc", label: "Pedido de compra", w: 190, classe: PC,
+    { key: "_pc", label: "PC · situação", w: 168, classe: PC,
+      dica: (l) => {
+        const c = cmpPorId.get(l._id);
+        if (!c?.pcs.length) return l.pc_numero ? `PC ${l.pc_numero} (não encontrado no Compras)` : undefined;
+        const v = c.vinculo_via;
+        const via = v === "rc" ? "pela RC" : v === "codigo" ? "pelo código" : v === "descricao" ? `pela descrição ${Math.round(Number(c.vinculo_score ?? 0) * 100)}%` : v === "manual" ? "manual" : "pelo nº do PC";
+        return c.pcs.map((p) => `PC ${p.pc} — ${situacaoPc(p).t} · ${p.dt_rec ? `recebido ${dia(p.dt_rec)}${p.qtd_recebida != null ? ` (${p.qtd_recebida})` : ""}` : `previsão ${dia(p.previsao)}`}`).join("\n") + `\nVínculo ${via}`;
+      },
       render: (l) => {
         const c = cmpPorId.get(l._id);
-        if (!c?.pcs.length) return <span className="text-ww-textFaint">{l.pc_numero ? `PC ${l.pc_numero}` : "sem PC"}</span>;
+        if (!c?.pcs.length) {
+          if (!l._id.startsWith("db") || !String(l.item ?? "").trim()) return null;
+          return (
+            <button type="button" onClick={() => setVincLinha(l._id)}
+              className="text-[10.5px] text-ww-accent hover:underline" title="Ligar esta linha a um pedido de compra (sugestões ou busca)">
+              {l.pc_numero ? `PC ${l.pc_numero}? · vincular` : "+ vincular PC"}
+            </button>);
+        }
+        const p = c.pcs[0];
+        const st = situacaoPc(p);
+        const pode = c.vinculo_via === "codigo" || c.vinculo_via === "descricao" || c.vinculo_via === "manual";
         return (
-          <span className="flex flex-col gap-0.5">
-            {c.pcs.map((p) => (
-              <span key={`${p.pc}-${p.pedido_id}`} className="block min-w-0">
-                <a className="cdl-chip-pc" target="_blank" rel="noreferrer" href={`/erp/compras?abrir=${p.pc}&tipo=PC&emp=${empresa}`}
-                  title="Abrir o pedido de compra">PC {p.pc}</a>{" "}
-                <span className="text-ww-textMuted" title={p.fornecedor ?? undefined}>{p.fornecedor ?? "—"}</span>
-                <span className="block text-[10px] text-ww-textFaint tabular-nums">
-                  {p.dt_rec ? `recebido ${dia(p.dt_rec)}${p.qtd_recebida != null ? ` · ${p.qtd_recebida} un` : ""}` : `prev. ${dia(p.previsao)}`}
-                </span>
-              </span>))}
+          <span className="inline-flex items-center gap-1 max-w-full">
+            <a target="_blank" rel="noreferrer" href={`/erp/compras?abrir=${p.pc}&tipo=PC&emp=${empresa}`}
+              className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold text-white truncate hover:brightness-110"
+              style={{ background: st.cor }} title="Abrir o pedido de compra">
+              {p.pc} · {st.t}
+            </a>
+            {c.pcs.length > 1 && <span className="text-[10px] text-ww-textMuted">+{c.pcs.length - 1}</span>}
+            {pode && <button type="button" title="Desfazer o vínculo" className="text-[10px] text-ww-textFaint hover:text-rose-500"
+              onClick={() => void desvincularRef.current?.(c.id)}>✕</button>}
           </span>);
       } },
-    { key: "_comprado", label: "Comprado", w: 112, alinhaDireita: true, classe: PC,
+    { key: "_forn", label: "Fornecedor", w: 160, classe: PC,
+      dica: (l) => {
+        const c = cmpPorId.get(l._id);
+        const f = c?.pcs.map((p) => p.fornecedor).filter(Boolean).join(", ");
+        const prazos = l.cat_entrega_dias || l.cat_fat_dias ? ` · entrega ~${l.cat_entrega_dias || "—"}d, fatura ${l.cat_fat_dias || "—"}d` : "";
+        return f ? `${f} (do PC)` : l.cat_fornecedor ? `Sugerido pelo catálogo: ${l.cat_fornecedor}${prazos}` : undefined;
+      },
+      render: (l) => {
+        const c = cmpPorId.get(l._id);
+        const f = c?.pcs.map((p) => p.fornecedor).filter(Boolean)[0];
+        if (f) return <span className="text-ww-text">{f}</span>;
+        if (l.cat_fornecedor) return (
+          <span className="text-ww-textMuted italic">{l.cat_fornecedor}
+            {(l.cat_entrega_dias || l.cat_fat_dias) && <span className="not-italic tabular-nums text-ww-textFaint"> · {l.cat_entrega_dias || "—"}d/{l.cat_fat_dias || "—"}d</span>}
+          </span>);
+        return <span className="text-ww-textFaint">—</span>;
+      } },
+    { key: "_comprado", label: "Comprado", w: 100, alinhaDireita: true, classe: PC,
+      dica: (l) => {
+        const c = cmpPorId.get(l._id);
+        if (!c || c.valor_pc == null) return undefined;
+        const vu = c.pcs.find((p) => p.valor_unit != null)?.valor_unit;
+        const qPc = c.pcs.reduce((a, p) => a + (Number(p.qtd) || 0), 0);
+        return [vu != null ? `${brl(vu)}/un` : "", qPc ? `qtd no PC: ${qPc} · na lista: ${num(l.qtd) || "—"}` : ""].filter(Boolean).join(" · ");
+      },
       render: (l) => {
         const c = cmpPorId.get(l._id);
         if (!c || c.valor_pc == null) return <span className="text-ww-textFaint">—</span>;
         const q = num(l.qtd);
         const qPc = c.pcs.reduce((a, p) => a + (Number(p.qtd) || 0), 0);
-        const vu = c.pcs.find((p) => p.valor_unit != null)?.valor_unit;
-        return (
-          <span className="block">
-            {brl(c.valor_pc)}
-            {vu != null && <span className="block text-[10px] text-ww-textFaint">{brl(vu)}/un</span>}
-            {qPc > 0 && q > 0 && Math.abs(qPc - q) > 1e-6 && <span className="block text-[10px] text-amber-700 dark:text-amber-300" title="Quantidade do PC diferente da lista">PC {qPc} × lista {q}</span>}
-          </span>);
-      } },
-    { key: "_sit", label: "Situação", w: 150, classe: PC,
-      render: (l) => {
-        const c = cmpPorId.get(l._id);
-        if (!c?.pcs.length) return c?.rc ? <span className="text-ww-textMuted">em RC</span> : <span className="text-ww-textFaint">—</span>;
-        return (
-          <span className="flex flex-wrap gap-0.5">
-            {c.pcs.map((p) => { const st = situacaoPc(p); return (
-              <span key={`${p.pc}-${p.pedido_id}`} className="inline-flex px-1.5 py-0.5 rounded text-[10px] font-semibold text-white" style={{ background: st.cor }}>{st.t}</span>); })}
-          </span>);
-      } },
-    { key: "_vinc", label: "Vínculo", w: 92, classe: PC,
-      render: (l) => {
-        const c = cmpPorId.get(l._id);
-        if (!c) return null;
-        const v = c.vinculo_via;
-        const t = v === "rc" ? "pela RC" : v === "codigo" ? "código" : v === "descricao" ? `descrição ${Math.round(Number(c.vinculo_score ?? 0) * 100)}%`
-          : v === "manual" ? "manual" : c.pcs.length ? "nº do PC" : "";
-        const pode = v === "codigo" || v === "descricao" || v === "manual";
-        return (
-          <span className="text-ww-textMuted text-[11px]">{t}
-            {pode && <button type="button" className="ml-1 text-ww-accent hover:underline" onClick={() => void desvincularRef.current?.(c.id)}>desfazer</button>}
-          </span>);
+        const dif = qPc > 0 && q > 0 && Math.abs(qPc - q) > 1e-6;
+        return <span>{dif && <span className="text-amber-600 dark:text-amber-300 mr-1" title={`Qtd do PC (${qPc}) diferente da lista (${q})`}>≠</span>}{brl(c.valor_pc)}</span>;
       } },
   ], [empresa, cmpPorId, nomesPadrao, gruposMeta, abrirSeletorLista, PC]);
 
@@ -457,6 +465,7 @@ export default function MateriaisGrade({
       const novo: LinhaGrade = { ...l };
       // código do Omie → item nosso
       const nat = l.cat_ncod_prod && resolv ? resolv[l.cat_ncod_prod] : undefined;
+      if (nat) novo._cat_desc = nat.descricao;
       // produto só do Omie, sem item nosso: o código do Omie sai da coluna Código (fica de dica) e a linha pede o seletor
       if (l.cat_ncod_prod && resolv && !nat && l._match !== "omie") {
         novo._omie = l.cat_codigo ?? ""; novo.cat_codigo = ""; novo._match = "omie";
@@ -811,6 +820,15 @@ export default function MateriaisGrade({
       setSugestoes(j.casamentos ?? []);
     } catch (e) { setErro((e as Error).message); } finally { setOcupado(null); }
   }, [postCompras]);
+  /** Sugestões de vínculo de TODAS as linhas (sem aplicar) — o "vincular" da linha filtra a dela. */
+  const [sugTodas, setSugTodas] = useState<CasamentoPc[] | null>(null);
+  useEffect(() => {
+    if (!vincLinha || sugTodas) return;
+    postCompras({ acao: "autolink", aplicar: false })
+      .then((j: { casamentos?: CasamentoPc[] }) => setSugTodas(j.casamentos ?? []))
+      .catch(() => setSugTodas([]));
+  }, [vincLinha, sugTodas, postCompras]);
+  useEffect(() => { setSugTodas(null); }, [cmp]);
   const confirmarSugestao = useCallback(async (c: CasamentoPc) => {
     setOcupado(`v${c.lista_id}`);
     try {
@@ -848,10 +866,10 @@ export default function MateriaisGrade({
   }, [paraRc, sujo, postCompras, carregarCompras]);
 
   const vincular = useCallback(async (pc: PcSearchResult) => {
-    const ids = Array.from(marcadas)
+    const ids = (vincBusca ?? Array.from(marcadas))
       .filter((id) => id.startsWith("db"))
       .map((id) => id.slice(2));
-    setPicker(false);
+    setPicker(false); setVincBusca(null);
     if (!ids.length) return;
     setSalvando(true); setErro(null);
     try {
@@ -868,7 +886,7 @@ export default function MateriaisGrade({
     } catch (e) {
       setErro(e instanceof Error ? e.message : String(e));
     } finally { setSalvando(false); }
-  }, [marcadas, empresa, codigoProjeto, carregar, onGravado]);
+  }, [marcadas, vincBusca, empresa, codigoProjeto, carregar, onGravado]);
 
   const exportar = useCallback(() => {
     const wb = XLSX.utils.book_new();
@@ -905,10 +923,7 @@ export default function MateriaisGrade({
       g.n++;
       m.set(k, g);
     }
-    for (const nome of gruposMeta?.prazo.grupos ?? []) {
-      const k = normGrupo(nome);
-      if (!m.has(k)) m.set(k, { k, nome, n: 0, data: null, proprias: 0, daCp: true });
-    }
+    // grupos da CP ainda sem itens na lista não aparecem (eram o "SW 0")
     for (const g of m.values()) {
       g.data = dataGrupo.get(g.k) ?? null;
       g.proprias = g.data ? validas.filter((l) => normGrupo(l.equipamento || "Geral") === g.k && l.data_necessaria && l.data_necessaria !== g.data).length : 0;
@@ -963,7 +978,7 @@ export default function MateriaisGrade({
             Lista de materiais
           </h3>
           <p className="text-[11px] text-ww-textMuted mt-0.5">
-            Digite ou cole do Excel as colunas <strong>Equipamento · Item · Qtd · Modelo · PC · Observação</strong> (e, se quiser, Valor unit.).
+            Digite ou cole do Excel as colunas <strong>Equipamento · Item · Qtd · Un · Necessário em · Observação · Valor unit.</strong> (com a linha de cabeçalho, também <strong>Código, Modelo e PC</strong>).
             Ao digitar o Item, o catálogo sugere os <strong>itens do nosso estoque</strong> (código novo) com último preço, fornecedor e prazos;
             à direita, o que já foi comprado: RC, pedido de compra, valor e situação.
           </p>
@@ -1018,61 +1033,101 @@ export default function MateriaisGrade({
         </button>
       </div>
 
-      {/* Grupos de equipamento: filtro + "necessário em" do grupo. Os nomes vêm
-          da coluna Equipamento (e da CP); a data do grupo preenche as linhas. */}
-      {(grupos.length > 0) && (
-        <div className="rounded-lg border border-ww-border bg-ww-bg/30 px-2.5 py-2 space-y-1.5">
-          <div className="flex items-center gap-2 flex-wrap text-[11px]">
-            <strong className="text-ww-text">Grupos de equipamento</strong>
-            <span className="text-ww-textFaint">clique no nome para filtrar · a data do grupo preenche “Necessário em” das linhas dele</span>
-            {sugestaoData && semDataComItens.length > 0 && (
-              <button type="button" className="text-ww-accent hover:underline" title={gruposMeta?.prazo.fonte ?? undefined}
-                onClick={() => semDataComItens.forEach((g) => definirDataGrupo(g.k, sugestaoData))}>
-                usar {dia(sugestaoData)} ({gruposMeta?.prazo.fonte}) nos {semDataComItens.length} grupo(s) sem data
-              </button>
-            )}
-            <span className="ml-auto flex items-center gap-1">
-              {(["todas", "sem_pc", "com_pc"] as const).map((k) => (
-                <button key={k} type="button" onClick={() => setFiltroPc(k)}
-                  className={`px-2 py-0.5 rounded-full border transition ${filtroPc === k ? "border-ww-accent bg-ww-accent text-white" : "border-ww-border text-ww-textMuted hover:text-ww-text"}`}>
-                  {k === "todas" ? `Todas ${validas.length}` : k === "sem_pc" ? `Sem PC ${validas.length - nComPc}` : `Com PC ${nComPc}`}
-                </button>))}
-            </span>
-          </div>
-          <div className="flex gap-1.5 flex-wrap">
-            <button type="button" onClick={() => setEquipFiltro(null)}
-              className={`px-2 py-1 text-[11px] rounded-md border transition ${
-                !equipFiltro ? "border-ww-accent text-ww-accent bg-ww-accentSoft font-semibold" : "border-ww-border text-ww-textMuted hover:text-ww-text"}`}>
-              Todos <span className="tabular-nums opacity-70">{validas.length}</span>
+      {/* Grupos de equipamento (07/10/26, 2ª versão): só chips de filtro, cada um com a
+          data do grupo embaixo; as datas se editam no painel "Datas por grupo". */}
+      {grupos.length > 0 && (
+        <div className="flex items-start gap-1.5 flex-wrap">
+          <button type="button" onClick={() => setEquipFiltro(null)}
+            className={`px-2.5 py-1 rounded-md border text-left transition ${
+              !equipFiltro ? "border-ww-accent bg-ww-accentSoft" : "border-ww-border hover:bg-ww-rowHover"}`}>
+            <span className={`block text-[11.5px] font-semibold ${!equipFiltro ? "text-ww-accent" : "text-ww-text"}`}>Todos <span className="tabular-nums font-normal opacity-70">{validas.length}</span></span>
+            <span className="block text-[9.5px] text-ww-textFaint">todos os grupos</span>
+          </button>
+          {grupos.map((g) => (
+            <button key={g.k} type="button" onClick={() => setEquipFiltro(equipFiltro === g.k ? null : g.k)}
+              title={g.proprias ? `${g.proprias} linha(s) com data própria` : undefined}
+              className={`px-2.5 py-1 rounded-md border text-left transition max-w-[220px] ${
+                equipFiltro === g.k ? "border-ww-accent bg-ww-accentSoft" : "border-ww-border hover:bg-ww-rowHover"}`}>
+              <span className={`block text-[11.5px] font-semibold truncate ${equipFiltro === g.k ? "text-ww-accent" : "text-ww-text"}`}>
+                {g.nome} <span className="tabular-nums font-normal opacity-70">{g.n}</span>
+              </span>
+              <span className={`block text-[9.5px] tabular-nums ${g.data ? "text-ww-textFaint" : "text-amber-700 dark:text-amber-300"}`}>
+                {g.data ? `necessário ${dia(g.data).slice(0, 5)}` : "sem data"}{g.proprias ? ` · ${g.proprias} própria(s)` : ""}
+              </span>
             </button>
-            {grupos.map((g) => {
-              const padrao = nomesPadrao.length ? nomePadrao(g.nome, nomesPadrao) : null;
-              return (
-                <div key={g.k} className={`flex items-center gap-1.5 px-2 py-1 rounded-md border text-[11px] ${
-                  equipFiltro === g.k ? "border-ww-accent bg-ww-accentSoft" : "border-ww-border"} ${g.daCp ? "opacity-70" : ""}`}>
-                  <button type="button" onClick={() => setEquipFiltro(equipFiltro === g.k ? null : g.k)} disabled={!g.n}
-                    className={`font-semibold ${equipFiltro === g.k ? "text-ww-accent" : "text-ww-text"} hover:underline disabled:no-underline`}
-                    title={g.daCp ? "Equipamento da CP ainda sem itens na lista" : "Filtrar a lista por este grupo"}>
-                    {g.nome} <span className="tabular-nums font-normal opacity-70">{g.n}</span>
-                  </button>
-                  {padrao && padrao !== g.nome && g.n > 0 && (
-                    <button type="button" className="text-amber-700 dark:text-amber-300 hover:underline" title={`Usar o nome padrão do cadastro: ${padrao}`}
-                      onClick={() => renomearGrupo(g.k, padrao)}>≈ {padrao}</button>
-                  )}
-                  <label className="flex items-center gap-1 text-ww-textMuted" title="Necessário em (do grupo)">
-                    <span className="sr-only">Necessário em</span>
-                    <input type="date" value={g.data ?? ""} disabled={!g.n}
-                      onChange={(e) => definirDataGrupo(g.k, e.target.value)}
-                      className="bg-transparent border border-ww-border rounded px-1 py-0.5 text-[11px] text-ww-text w-[118px] disabled:opacity-40" />
-                  </label>
-                  {g.proprias > 0 && <span className="text-[10px] text-amber-700 dark:text-amber-300" title="Linhas com data própria, diferente da do grupo">{g.proprias} com data própria</span>}
-                  {!g.data && g.n > 0 && sugestaoData && (
-                    <button type="button" className="text-[10px] text-ww-accent hover:underline" title={gruposMeta?.prazo.fonte ?? undefined}
-                      onClick={() => definirDataGrupo(g.k, sugestaoData)}>usar {dia(sugestaoData)}</button>
-                  )}
-                </div>
-              );
-            })}
+          ))}
+          <button type="button" onClick={() => setPainelDatas(true)}
+            className="self-center px-2 py-1 text-[11px] rounded-lg border border-ww-border text-ww-textMuted hover:text-ww-text hover:bg-ww-rowHover">
+            📅 Datas por grupo{semDataComItens.length ? ` (${semDataComItens.length} sem data)` : ""}
+          </button>
+          <span className="ml-auto self-center flex items-center gap-1 text-[11px]">
+            {(["todas", "sem_pc", "com_pc"] as const).map((k) => (
+              <button key={k} type="button" onClick={() => setFiltroPc(k)}
+                className={`px-2 py-0.5 rounded-full border transition ${filtroPc === k ? "border-ww-accent bg-ww-accent text-white" : "border-ww-border text-ww-textMuted hover:text-ww-text"}`}>
+                {k === "todas" ? `Todas ${validas.length}` : k === "sem_pc" ? `Sem PC ${validas.length - nComPc}` : `Com PC ${nComPc}`}
+              </button>))}
+          </span>
+        </div>
+      )}
+
+      {/* Painel "Datas por grupo": uma linha por grupo. No celular vira folha de largura total. */}
+      {painelDatas && (
+        <div className="fixed inset-0 z-[120] bg-black/40 flex items-end sm:items-start justify-center sm:pt-[10vh]"
+          onMouseDown={(e) => { if (e.target === e.currentTarget) setPainelDatas(false); }}>
+          <div role="dialog" aria-label="Datas por grupo"
+            className="w-full sm:w-[min(760px,96vw)] max-h-[85vh] overflow-auto rounded-t-xl sm:rounded-xl border border-ww-border bg-[rgb(var(--color-ww-panel))] shadow-2xl p-3.5 space-y-2.5">
+            <div className="flex items-start gap-2">
+              <div className="min-w-0">
+                <h4 className="text-[13px] font-semibold text-ww-text">Necessário em — por grupo de equipamento</h4>
+                <p className="text-[11px] text-ww-textMuted">A data do grupo preenche “Necessário em” das linhas dele. Linha com outra data fica como <b>data própria</b> e não muda; linha nova do grupo herda a data. É a data que vai para a RC (data limite) e para o fluxo.</p>
+              </div>
+              <button type="button" className="ml-auto text-[12px] text-ww-accent hover:underline" onClick={() => setPainelDatas(false)}>fechar</button>
+            </div>
+            {sugestaoData && (
+              <div className="flex items-center gap-2 flex-wrap rounded-lg border border-ww-border px-2.5 py-1.5 text-[11.5px]">
+                <span className="text-ww-textMuted">Sugestão: <b className="text-ww-text">{dia(sugestaoData)}</b> — {gruposMeta?.prazo.fonte}</span>
+                <button type="button" disabled={!semDataComItens.length}
+                  className="ml-auto px-2 py-0.5 rounded border border-ww-accent text-ww-accent hover:bg-ww-accentSoft disabled:opacity-40"
+                  onClick={() => semDataComItens.forEach((g) => definirDataGrupo(g.k, sugestaoData))}>
+                  Aplicar a todos os grupos sem data ({semDataComItens.length})
+                </button>
+              </div>
+            )}
+            <div className="overflow-x-auto">
+            <table className="w-full text-[11.5px]">
+              <thead><tr className="text-left text-[10px] uppercase tracking-wider text-ww-textMuted">
+                <th className="py-1 pr-2">Grupo</th><th className="py-1 pr-2 text-right">Itens</th><th className="py-1 pr-2">Necessário em</th>
+                <th className="py-1 pr-2">Data própria</th><th className="py-1">Sugestão</th>
+              </tr></thead>
+              <tbody>
+                {grupos.map((g) => {
+                  const padrao = nomesPadrao.length ? nomePadrao(g.nome, nomesPadrao) : null;
+                  return (
+                    <tr key={g.k} className="border-t border-ww-border/60">
+                      <td className="py-1.5 pr-2">
+                        <span className="font-semibold text-ww-text">{g.nome}</span>
+                        {padrao && padrao !== g.nome && (
+                          <button type="button" className="ml-1.5 text-[10.5px] text-amber-700 dark:text-amber-300 hover:underline"
+                            title={`Trocar pelo nome padrão do cadastro: ${padrao}`} onClick={() => renomearGrupo(g.k, padrao)}>≈ {padrao}</button>
+                        )}
+                      </td>
+                      <td className="py-1.5 pr-2 text-right tabular-nums">{g.n}</td>
+                      <td className="py-1.5 pr-2">
+                        <input type="date" value={g.data ?? ""} onChange={(e) => definirDataGrupo(g.k, e.target.value)}
+                          className="bg-transparent border border-ww-border rounded px-1 py-0.5 text-[11.5px] text-ww-text" />
+                      </td>
+                      <td className="py-1.5 pr-2 tabular-nums">{g.proprias ? <span className="text-amber-700 dark:text-amber-300">{g.proprias} linha(s)</span> : <span className="text-ww-textFaint">—</span>}</td>
+                      <td className="py-1.5">
+                        {sugestaoData && g.data !== sugestaoData
+                          ? <button type="button" className="text-ww-accent hover:underline" onClick={() => definirDataGrupo(g.k, sugestaoData)}>aplicar {dia(sugestaoData)}</button>
+                          : <span className="text-ww-textFaint">—</span>}
+                      </td>
+                    </tr>);
+                })}
+              </tbody>
+            </table>
+            </div>
+            <p className="text-[10.5px] text-ww-textFaint">Nomes padrão em Cadastros › Grupos de equipamento. A lista é salva sozinha em instantes.</p>
           </div>
         </div>
       )}
@@ -1242,6 +1297,7 @@ export default function MateriaisGrade({
       ) : carregando
         ? <p className="text-[11.5px] text-ww-textFaint py-3">Carregando a lista…</p>
         : <GradeEditavel cols={COLS} linhas={visiveis}
+            colarExtras={[{ label: "Modelo", key: "modelo" }, { label: "PC", key: "pc_numero" }, { label: "PC nº", key: "pc_numero" }]}
             aoColar={() => setCasarAposColar(true)}
             onChange={(l) => {
               // Com filtro ativo, o que volta é só o pedaço visível — recompõe
@@ -1267,10 +1323,48 @@ export default function MateriaisGrade({
       {cmp && <ForaDaLista fora={cmp.fora_da_lista} empresa={empresa} />}
       {cmp && <FluxoCompras d={cmp} />}
 
+      {vincLinha && (() => {
+        const l = linhas.find((x) => x._id === vincLinha);
+        const sug = (sugTodas ?? []).filter((c) => `db${c.lista_id}` === vincLinha);
+        return (
+          <div className="fixed inset-0 z-[120] bg-black/40 flex items-end sm:items-start justify-center sm:pt-[12vh]"
+            onMouseDown={(e) => { if (e.target === e.currentTarget) setVincLinha(null); }}>
+            <div role="dialog" aria-label="Vincular a um PC"
+              className="w-full sm:w-[min(640px,96vw)] max-h-[80vh] overflow-auto rounded-t-xl sm:rounded-xl border border-ww-border bg-[rgb(var(--color-ww-panel))] shadow-2xl p-3.5 space-y-2 text-[12px]">
+              <div className="flex items-start gap-2">
+                <div className="min-w-0">
+                  <h4 className="text-[13px] font-semibold text-ww-text">Vincular a um pedido de compra</h4>
+                  <p className="text-[11px] text-ww-textMuted truncate">{l?.cat_codigo ? `${l.cat_codigo} · ` : ""}{l?._cat_desc || l?.item}</p>
+                </div>
+                <button type="button" className="ml-auto text-ww-accent hover:underline" onClick={() => setVincLinha(null)}>fechar</button>
+              </div>
+              <div className="text-[11px] font-semibold text-ww-text">Itens de PC do projeto parecidos com esta linha</div>
+              {sugTodas == null ? <p className="text-ww-textFaint">procurando…</p>
+                : !sug.length ? <p className="text-ww-textFaint">Nenhum item de PC parecido — procure o PC abaixo.</p>
+                : sug.map((c) => (
+                  <div key={`${c.pc_item_id}`} className="flex items-center gap-2 border-t border-ww-border/60 pt-1.5">
+                    <div className="min-w-0 flex-1">
+                      <b>PC {c.pc}</b> — {c.desc_pc}
+                      <span className="block text-[10.5px] text-ww-textMuted">{c.via === "codigo" ? "código igual" : `semelhança ${Math.round(Number(c.score) * 100)}%`}{!c.medidas_ok && c.via !== "codigo" ? " · medidas diferentes" : ""}</span>
+                    </div>
+                    <button type="button" disabled={ocupado === `v${c.lista_id}`}
+                      className="px-2 py-0.5 rounded border border-ww-accent text-ww-accent hover:bg-ww-accentSoft"
+                      onClick={() => void confirmarSugestao(c).then(() => setVincLinha(null))}>Vincular</button>
+                  </div>))}
+              <div className="pt-1.5 border-t border-ww-border/60">
+                <button type="button" className="px-2.5 py-1 rounded-lg border border-ww-border hover:bg-ww-rowHover"
+                  onClick={() => { setVincBusca([vincLinha]); setVincLinha(null); setPicker(true); }}>
+                  Procurar PC por número ou fornecedor…
+                </button>
+              </div>
+            </div>
+          </div>);
+      })()}
+
       {picker && (
         <PcPickerModal empresa={empresa} codigoProjeto={codigoProjeto}
-          title={`Vincular ${marcadas.size} item(ns) a um PC`}
-          onClose={() => setPicker(false)} onConfirm={vincular} />
+          title={vincBusca ? "Vincular a linha a um PC" : `Vincular ${marcadas.size} item(ns) a um PC`}
+          onClose={() => { setPicker(false); setVincBusca(null); }} onConfirm={vincular} />
       )}
 
       {seletor && seletorDados && (

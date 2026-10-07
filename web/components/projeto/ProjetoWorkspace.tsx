@@ -44,12 +44,10 @@ type Aba = "resumo" | "fluxo" | "materiais" | "separados";
    do Omie são os dois lados do Fluxo. Cada aba agora responde uma pergunta
    inteira, e o que se abre é uma tela só em vez de seis meias-telas. */
 const ABAS: Array<{ k: Aba; label: string; dica: string; partes: AbaProjeto[] }> = [
+  /* 07/10/26: ordem de trabalho, numerada — 1 Resumo · 2 Lista · 3 Separados · 4 Fluxo. */
   { k: "resumo",    label: "Resumo",
     dica: "o fechamento que veio do CRM e onde o dinheiro parou",
     partes: ["resumo"] },
-  { k: "fluxo",     label: "Fluxo de caixa",
-    dica: "as agendas de entrada e saída da planilha, o que já entrou e saiu, e o budget contra as compras",
-    partes: [] },
   /* 07/10/26: "Compras × lista" foi absorvida aqui — KPIs, colunas do PC, vínculo e
      Gerar RC vivem na própria lista (link antigo ?aba=compras abre esta aba). */
   { k: "materiais", label: "Lista de materiais",
@@ -57,6 +55,9 @@ const ABAS: Array<{ k: Aba; label: string; dica: string; partes: AbaProjeto[] }>
     partes: [] },
   { k: "separados", label: "Materiais separados",
     dica: "material do estoque já reservado para este projeto — separar em lote, devolver ou consumir",
+    partes: [] },
+  { k: "fluxo",     label: "Fluxo de caixa",
+    dica: "as agendas de entrada e saída da planilha, o que já entrou e saiu, e o budget contra as compras",
     partes: [] },
 ];
 export default function ProjetoWorkspace({
@@ -146,12 +147,14 @@ export default function ProjetoWorkspace({
           ponto de cor cada uma competiriam com os KPIs logo acima. A cor fica
           reservada ao que é dado. */}
       <div className="flex items-center gap-1 flex-wrap border-b border-ww-border">
-        {ABAS.map(({ k, label, dica }) => (
+        {ABAS.map(({ k, label, dica }, i) => (
           <button key={k} type="button" onClick={() => setAba(k)} title={dica}
-            className={`px-3 py-2 text-[12px] -mb-px border-b-2 transition-colors ${
+            className={`inline-flex items-center gap-2 px-3 py-2 text-[15px] -mb-px border-b-2 transition-colors ${
               aba === k
                 ? "border-ww-accent text-ww-text font-semibold"
                 : "border-transparent text-ww-textMuted hover:text-ww-text"}`}>
+            <span aria-hidden className={`inline-flex items-center justify-center w-5 h-5 rounded-full text-[11px] font-bold tabular-nums ${
+              aba === k ? "bg-ww-accent text-white" : "bg-ww-rowHover text-ww-textMuted"}`}>{i + 1}</span>
             {label}
           </button>
         ))}

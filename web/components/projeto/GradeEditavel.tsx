@@ -59,7 +59,15 @@ export type ColunaGrade = {
    *  o "Equipamento · Item · Qtd…" de sempre. Com cabeçalho no que se cola, entra. */
   pularNoColar?: boolean;
   /** Botãozinho dentro da célula editável (ex.: abrir o seletor do catálogo). */
-  acao?: { rot: string; dica: string; fn: (linha: LinhaGrade) => void; mostrar?: (linha: LinhaGrade) => boolean };
+  acao?: { rot: string | ((linha: LinhaGrade) => string); dica: string | ((linha: LinhaGrade) => string); fn: (linha: LinhaGrade) => void;
+           mostrar?: (linha: LinhaGrade) => boolean; classe?: (linha: LinhaGrade) => string };
+  /** Coluna presa à esquerda ao rolar para o lado (07/10/26). Só as primeiras. */
+  fixa?: boolean;
+  /** Texto mostrado quando a célula NÃO está em edição (ex.: a descrição do item
+   *  do catálogo no lugar do texto digitado). Ao focar, volta o valor real. */
+  exibir?: (linha: LinhaGrade) => string | null | undefined;
+  /** Dica (title) da célula. */
+  dica?: (linha: LinhaGrade) => string | undefined;
 };
 
 export type LinhaGrade = Record<string, string> & { _id: string };
@@ -94,8 +102,10 @@ export const brl = (v: number) =>
 
 export default function GradeEditavel({
   cols, linhas, onChange, altura = 340, vazioMsg = "Digite, cole do Excel ou suba a planilha.",
-  selecao, aoColar,
+  selecao, aoColar, colarExtras = [],
 }: {
+  /** Colunas que não aparecem na grade mas entram no colar COM cabeçalho (ex.: Modelo, PC). */
+  colarExtras?: { label: string; key: string }[];
   /** Chamado depois de um paste que trouxe linhas (ex.: casar com o catálogo). */
   aoColar?: () => void;
   cols: ColunaGrade[];
@@ -145,7 +155,8 @@ export default function GradeEditavel({
     // Primeira linha é cabeçalho (2+ nomes de coluna)? Então cada coluna vai pelo
     // NOME — inclusive as que ficam fora do colar por posição.
     const nrm = (t: string) => t.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
-    const porNome = grade[0].map((c) => editaveis.find((e) => nrm(e.label) === nrm(c) || nrm(e.key) === nrm(c)));
+    const alvosNome: { label: string; key: string }[] = [...editaveis, ...colarExtras];
+    const porNome = grade[0].map((c) => alvosNome.find((e) => nrm(e.label) === nrm(c) || nrm(e.key) === nrm(c)));
     const comCabecalho = porNome.filter(Boolean).length >= 2;
     const corpo = comCabecalho ? grade.slice(1) : grade;
     const posicionais = editaveis.filter((e, i) => !e.pularNoColar || i === ci);
@@ -167,7 +178,7 @@ export default function GradeEditavel({
     }
     onChange(novas);
     aoColar?.();
-  }, [linhas, cols, editaveis, onChange, aoColar]);
+  }, [linhas, cols, editaveis, onChange, aoColar, colarExtras]);
 
   /** Paste capturado no CONTÊINER: o navegador entrega o evento ao input, e
    *  tratar só lá faria o bloco inteiro cair numa célula. */
@@ -264,6 +275,20 @@ export default function GradeEditavel({
     }
   };
 
+  // Colunas presas à esquerda: caixinha, # e as `fixa` iniciais, com fundo opaco.
+  const W_SEL = 30, W_NUM = 34;
+  const esq = new Map<string, number>();
+  {
+    let x = (selecao ? W_SEL : 0) + W_NUM;
+    for (const c of cols) { if (!c.fixa) break; esq.set(c.key, x); x += c.w; }
+  }
+  const ultimaFixa = [...esq.keys()].pop();
+  const larguraTotal = (selecao ? W_SEL : 0) + W_NUM + 30 + cols.reduce((a, c) => a + c.w, 0);
+  const OPACO = "bg-[rgb(var(--color-ww-panel))]";
+  const fixo = (left: number, z: number) => ({ position: "sticky" as const, left, zIndex: z });
+  const sombra = (k: string) => (k === ultimaFixa ? "shadow-[2px_0_0_0_rgb(var(--color-ww-border))]" : "");
+  const txt = (v: unknown) => (typeof v === "function" ? undefined : (v as string));
+
   const removerLinha = (li: number) => {
     const novas = linhas.filter((_, i) => i !== li);
     onChange(novas.length ? novas : [linhaVazia(cols)]);
@@ -301,12 +326,12 @@ export default function GradeEditavel({
         </div>,
         document.body)}
       <div className="overflow-auto" style={{ maxHeight: altura }}>
-        <table className="w-full text-[11.5px] border-collapse">
+        <table className="text-[11.5px] border-collapse" style={{ tableLayout: "fixed", width: larguraTotal, minWidth: "100%" }}>
           <thead className="sticky top-0 z-10 bg-ww-panel">
             <tr>
               {selecao && (
-                <th style={{ width: 30 }}
-                    className="p-1.5 shadow-[0_1px_0_0_rgb(var(--color-ww-border))]">
+                <th style={{ width: W_SEL, ...(esq.size ? fixo(0, 21) : {}) }}
+                    className={`p-1.5 shadow-[0_1px_0_0_rgb(var(--color-ww-border))] ${OPACO}`}>
                   <input type="checkbox" aria-label="Marcar todas"
                     checked={linhas.filter(selecao.podeMarcar).length > 0
                              && linhas.filter(selecao.podeMarcar).every((l) => selecao.marcadas.has(l._id))}
@@ -314,12 +339,12 @@ export default function GradeEditavel({
                     className="cursor-pointer" />
                 </th>
               )}
-              <th style={{ width: 34 }}
-                  className="p-1.5 text-[10px] text-ww-textFaint shadow-[0_1px_0_0_rgb(var(--color-ww-border))]">#</th>
+              <th style={{ width: W_NUM, ...(esq.size ? fixo(selecao ? W_SEL : 0, 21) : {}) }}
+                  className={`p-1.5 text-[10px] text-ww-textFaint shadow-[0_1px_0_0_rgb(var(--color-ww-border))] ${OPACO}`}>#</th>
               {cols.map((c) => (
-                <th key={c.key} style={{ width: c.w, minWidth: c.w }}
-                    className={`p-1.5 text-[10px] uppercase tracking-wider font-semibold text-ww-textMuted shadow-[0_1px_0_0_rgb(var(--color-ww-border))] ${
-                      c.alinhaDireita ? "text-right" : "text-left"} ${c.classe ?? ""}`}>
+                <th key={c.key} style={{ width: c.w, minWidth: c.w, ...(esq.has(c.key) ? fixo(esq.get(c.key)!, 21) : {}) }}
+                    className={`p-1.5 text-[10px] uppercase tracking-wider font-semibold text-ww-textMuted whitespace-nowrap overflow-hidden text-ellipsis shadow-[0_1px_0_0_rgb(var(--color-ww-border))] ${
+                      c.alinhaDireita ? "text-right" : "text-left"} ${OPACO} ${c.classe ?? ""}`}>
                   {c.label}
                 </th>
               ))}
@@ -330,7 +355,7 @@ export default function GradeEditavel({
             {linhas.map((linha, li) => (
               <tr key={linha._id} className="viz-row group">
                 {selecao && (
-                  <td className="p-1 text-center border-b border-ww-border/40">
+                  <td style={esq.size ? fixo(0, 5) : undefined} className={`p-1 text-center border-b border-ww-border/40 ${esq.size ? OPACO : ""}`}>
                     {selecao.podeMarcar(linha) && (
                       <input type="checkbox" checked={selecao.marcadas.has(linha._id)}
                         onChange={() => { /* controlado no onClick, pra ler o shift */ }}
@@ -339,14 +364,15 @@ export default function GradeEditavel({
                     )}
                   </td>
                 )}
-                <td className="p-1 text-center text-[10px] text-ww-textFaint tabular-nums border-b border-ww-border/40">
+                <td style={esq.size ? fixo(selecao ? W_SEL : 0, 5) : undefined}
+                    className={`p-1 text-center text-[10px] text-ww-textFaint tabular-nums border-b border-ww-border/40 ${esq.size ? OPACO : ""}`}>
                   {li + 1}
                 </td>
                 {cols.map((c) => {
                   if (c.render) {
                     return (
-                      <td key={c.key}
-                          className={`p-1.5 border-b border-ww-border/40 bg-ww-rowHover/40 ${
+                      <td key={c.key} title={c.dica?.(linha)}
+                          className={`p-1.5 border-b border-ww-border/40 bg-ww-rowHover/40 whitespace-nowrap overflow-hidden text-ellipsis ${
                             c.alinhaDireita ? "text-right tabular-nums" : ""} ${c.classe ?? ""}`}>
                         {c.render(linha)}
                       </td>
@@ -362,33 +388,43 @@ export default function GradeEditavel({
                   }
                   const ci = editaveis.findIndex((x) => x.key === c.key);
                   const mk = c.marca?.(linha) ?? null;
+                  const emEdicao = foco?.l === li && foco?.c === ci;
+                  const mostrado = !emEdicao && c.exibir ? (c.exibir(linha) ?? linha[c.key] ?? "") : (linha[c.key] ?? "");
+                  const ac2 = c.acao && (c.acao.mostrar?.(linha) ?? true) ? c.acao : null;
+                  const fx = esq.has(c.key);
                   return (
-                    <td key={c.key} className={`p-0 border-b border-ww-border/40 relative ${mk?.classe ?? ""} ${c.classe ?? ""}`} title={mk?.dica}>
+                    <td key={c.key} style={fx ? fixo(esq.get(c.key)!, 5) : undefined}
+                        className={`p-0 border-b border-ww-border/40 relative ${fx ? `${OPACO} ${sombra(c.key)}` : ""} ${mk?.classe ?? ""} ${c.classe ?? ""}`}
+                        title={[mk?.dica, c.dica?.(linha)].filter(Boolean).join(" · ") || undefined}>
                       {mk?.etiqueta && (
-                        <span className="pointer-events-none absolute left-1 top-0 text-[8.5px] leading-none text-ww-textFaint">{mk.etiqueta}</span>
+                        <span className="pointer-events-none absolute left-1.5 top-1/2 -translate-y-1/2 text-[9px] leading-none text-ww-textFaint">{mk.etiqueta}</span>
                       )}
-                      {c.acao && (c.acao.mostrar?.(linha) ?? true) && (
-                        <button type="button" tabIndex={-1} title={c.acao.dica} onClick={() => c.acao!.fn(linha)}
-                          className="absolute right-0.5 top-1/2 -translate-y-1/2 px-1 text-[11px] text-ww-textFaint hover:text-ww-accent">
-                          {c.acao.rot}
+                      {ac2 && (
+                        <button type="button" tabIndex={-1} title={typeof ac2.dica === "function" ? ac2.dica(linha) : ac2.dica} onClick={() => ac2.fn(linha)}
+                          className={`absolute right-0.5 top-1/2 -translate-y-1/2 px-1 text-[11px] hover:text-ww-accent ${ac2.classe?.(linha) ?? "text-ww-textFaint"}`}>
+                          {typeof ac2.rot === "function" ? ac2.rot(linha) : txt(ac2.rot)}
                         </button>
                       )}
                       <input
                         data-cel={`${li}-${ci}`}
-                        value={linha[c.key] ?? ""}
+                        value={mostrado}
                         onChange={(e) => { setCel(li, c.key, e.target.value); buscarAc(li, c, e.target.value, e.currentTarget); }}
                         onFocus={(e) => {
                           setFoco({ l: li, c: ci });
                           const ini = c.autocompletar?.iniciais?.(linha) ?? [];
                           if (ini.length) abrirAc(li, c.key, ini, e.currentTarget);
                         }}
-                        onBlur={() => setTimeout(() => setAc((a) => (a && a.li === li && a.key === c.key ? null : a)), 180)}
+                        onBlur={() => {
+                          setTimeout(() => setAc((a) => (a && a.li === li && a.key === c.key ? null : a)), 180);
+                          // célula com `exibir` volta a mostrar o texto de exibição ao sair
+                          if (c.exibir) setTimeout(() => setFoco((f) => (f && f.l === li && f.c === ci && document.activeElement?.getAttribute("data-cel") !== `${li}-${ci}` ? null : f)), 200);
+                        }}
                         onKeyDown={(e) => tecla(e, li, ci)}
                         type={c.tipo === "data" ? "date" : "text"}
                         inputMode={c.tipo === "num" || c.tipo === "moeda" ? "decimal" : undefined}
-                        className={`w-full bg-transparent px-1.5 py-1.5 text-ww-text outline-none
+                        className={`w-full bg-transparent px-1.5 py-1.5 text-ww-text outline-none text-ellipsis
                           focus:bg-ww-accentSoft focus:ring-1 focus:ring-ww-accent rounded-sm ${
-                          c.alinhaDireita ? "text-right tabular-nums" : ""}`}
+                          c.alinhaDireita ? "text-right tabular-nums" : ""} ${ac2 ? "pr-5" : ""}`}
                       />
                     </td>
                   );
