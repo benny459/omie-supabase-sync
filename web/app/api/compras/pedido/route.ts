@@ -2,6 +2,7 @@
 // POST /api/compras/pedido      — incluir/alterar (só o que nasceu no painel)
 import { NextResponse } from "next/server";
 import { exigirCompras, rpc, erro, posGravar, valoresSePuder } from "@/lib/compras-server";
+import { supaAdmin } from "@/lib/supabase-admin";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -32,7 +33,16 @@ export async function GET(req: Request) {
       // RC: que PCs já atendem cada item (06/10/26) — nº + link na folha.
       ehRc ? rpc<Record<string, { id: number; num: string }[]>>("compras_rc_itens_pcs", { p_rc_id: id }).catch(() => ({})) : Promise.resolve({}),
     ]);
-    return NextResponse.json({ ...valoresSePuder(q, { ...(p as object), ...(vinculo ?? {}), pagar, estoque, pcsPorItem }), pode: q.pode });
+    // 07/10/26: remarcação da previsão feita na Operação (PC do Omie) — a folha mostra ao lado
+    let previsaoRemarcada: string | null = null;
+    const ncod = Number((p as { ncodPed?: number }).ncodPed) || 0;
+    if (ncod > 0) {
+      const { data: a } = await supaAdmin().schema("approval").from("approvals").select("custom_fields")
+        .eq("empresa", (p as { emp?: string }).emp ?? "SF").eq("ncod_ped", ncod).maybeSingle();
+      const v = (a as { custom_fields?: Record<string, unknown> } | null)?.custom_fields?.s4b87bk9;
+      if (v && /^\d{4}-\d{2}-\d{2}/.test(String(v))) previsaoRemarcada = String(v).slice(0, 10);
+    }
+    return NextResponse.json({ ...valoresSePuder(q, { ...(p as object), ...(vinculo ?? {}), pagar, estoque, pcsPorItem, previsaoRemarcada }), pode: q.pode });
   } catch (e) { return erro(e); }
 }
 

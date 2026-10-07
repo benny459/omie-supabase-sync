@@ -393,6 +393,11 @@ export default function TelaOperacao({ modulo, title, rows: rowsIniciais, parcia
     aplicar(c.key, patch);
     const erro = await salvarCampo(c.row, def.campo, valor, modulo, { historico: def.historico });
     if (erro) { aplicar(c.key, antes); mostrar({ msg: `Não gravou: ${erro}`, erro: true }); return false; }
+    // 07/10/26: a previsão do material é a do PC — PC nascido no painel recebe a data (sql/103)
+    if (campo === "prevMateriais" && c.pc) {
+      void fetch("/api/compras/previsao", { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ empresa: c.row.empresa, numero: c.pc, data: valor }) }).catch(() => null);
+    }
     return true;
   }, [aplicar, modulo, mostrar]);
 

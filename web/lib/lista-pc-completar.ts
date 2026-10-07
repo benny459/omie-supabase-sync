@@ -16,6 +16,7 @@ type ItemJ = { id: string; item: string; modelo: string | null; codigo: string |
 export type DadosPcs = { itens: ItemJ[]; fora_da_lista: { fornecedor: string | null; pc?: string }[]; totais?: Record<string, unknown> } & Record<string, unknown>;
 type PedJ = { dtRec?: string | null; etapa?: string | null; aprov?: string | null; dtFat?: string | null; enviadoEm?: string | null;
   aprovPor?: string | null; aprovEm?: string | null; cancelado?: boolean | null; ncodPed?: number | null; valor?: number | null; num?: string | null;
+  previsao?: string | null; emissao?: string | null; parcelas?: { venc?: string | null; valor?: number | null }[];
   itens?: { cod: string | null; desc: string; qtd: number; vu: number; desc0?: number; ipi?: number; st?: number; rec?: number | null }[] };
 
 export async function completarPcs(d: DadosPcs, empresa = "SF", projeto?: number): Promise<DadosPcs> {
@@ -56,6 +57,24 @@ export async function completarPcs(d: DadosPcs, empresa = "SF", projeto?: number
     d.totais.comprometido = Math.round(comp * 100) / 100;
     d.totais.pcs_escondidos = [...escondidos];
     d.fora_da_lista = d.fora_da_lista.filter((f) => !f.pc || !escondidos.has(String(f.pc)));
+    // fluxo mensal: tira as parcelas dos PCs escondidos (mesma regra do SQL: vencimento
+    // da parcela, senão previsão/emissão do PC, com o valor da parcela ou do pedido)
+    const fluxo = (d.fluxo ?? []) as { mes: string | null; comprometido: number }[];
+    if (escondidos.size && fluxo.length) {
+      const mesDe = (dt?: string | null) => (dt && /^\d{4}-\d{2}/.test(dt) ? `${dt.slice(0, 7)}-01` : null);
+      for (const [id, num] of porPedido) {
+        if (!escondidos.has(num)) continue;
+        const ped = peds.get(id);
+        if (!ped) continue;
+        const partes = ped.parcelas?.length
+          ? ped.parcelas.map((pa) => ({ mes: mesDe(pa.venc ?? ped.previsao ?? ped.emissao), v: Number(pa.valor) || 0 }))
+          : [{ mes: mesDe(ped.previsao ?? ped.emissao), v: Number(ped.valor) || 0 }];
+        for (const pt of partes) {
+          const m = fluxo.find((f) => f.mes === pt.mes);
+          if (m) m.comprometido = Math.round((Number(m.comprometido) - pt.v) * 100) / 100;
+        }
+      }
+    }
   }
   for (const l of d.itens) {
     l.fornecedor = l.fornecedor ? deHtml(l.fornecedor) : l.fornecedor;

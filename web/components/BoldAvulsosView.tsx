@@ -216,6 +216,8 @@ type CronogramaSummary = {
 // comparação é o quanto do orçamento já virou compromisso.
 export type BudgetSummary = {
   budget_custos: number | null;
+  /** estimado das linhas da Lista de materiais ainda sem RC/PC (07/10/26) */
+  estimado_sem_pc?: number | null;
   valor_total_projeto: number | null;
   resultado_bruto_esperado: number | null;
   resultado_bruto_esperado_pct: number | null;
@@ -5087,6 +5089,7 @@ function BudgetTotals({
                   ? "Materiais e equipamentos (CP) do fechamento da proposta no CRM"
                   : "Custos previstos do Fluxo Financeiro importado"}>
             Budget{budget?.origem === "crm" && <span className="ml-1 font-normal normal-case text-ww-textFaint">· CRM</span>}
+            {budget?.origem === "painel" && <span className="ml-1 font-normal normal-case text-ww-textFaint" title="Budget de materiais definido no painel (Lista de materiais)">· painel</span>}
           </span>
           <span className="text-[13px] font-semibold tabular-nums text-ww-text whitespace-nowrap">
             {budgetVal != null ? gateBRL(budgetVal, canViewValues) : <span className="text-ww-textFaint italic text-[11px]">definir</span>}
@@ -5102,6 +5105,18 @@ function BudgetTotals({
           <span className="text-ww-textMuted">Lançado</span>
           <span className="tabular-nums font-semibold text-ww-text">{gateBRL(lancado, canViewValues)} <span className="text-ww-textFaint">· {consumidoLabel}</span></span>
         </div>
+        {/* Projetado = lançado + o que a Lista de materiais ainda vai comprar (mesmo resumo da lista) */}
+        {budget?.estimado_sem_pc != null && budget.estimado_sem_pc > 0 && (() => {
+          const proj = lancado + Number(budget.estimado_sem_pc);
+          const estoura = budgetVal != null && proj > budgetVal ? proj - budgetVal : 0;
+          return (
+            <div className="flex items-baseline justify-between text-[10px]" title="Projetado = PCs lançados + estimado das linhas da Lista de materiais que ainda não têm RC/PC">
+              <span className="text-ww-textMuted">Projetado</span>
+              <span className={`tabular-nums font-semibold ${estoura ? "text-rose-600 dark:text-rose-400" : "text-ww-text"}`}>
+                {gateBRL(proj, canViewValues)}{estoura > 0 && canViewValues && <span> · estoura {gateBRL(estoura, canViewValues)}</span>}
+              </span>
+            </div>);
+        })()}
       </div>
 
       {/* Col meio — Aprovado / Falta */}

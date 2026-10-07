@@ -434,7 +434,9 @@ export default function FolhaPedido({
                       : !ro && !D.fornCod ? <span className="hint">Não achou? <a href={`/cadastros/novo?papel=fornecedor&emp=${D.emp}${D.forn ? `&razao=${encodeURIComponent(D.forn)}` : ""}`} target="_blank" rel="noreferrer" style={{ textDecoration: "underline" }}>Cadastrar fornecedor</a> (abre em outra aba; depois é só buscar de novo)</span> : null}
                   </div>
                   <div className="f s3"><label htmlFor="dPrev">{isRC ? "Data limite de entrega" : "Previsão de Entrega"}</label>
-                    <input className="in" type="date" id="dPrev" value={D.previsao || ""} disabled={ro} onChange={(e) => set({ previsao: e.target.value })} /></div>
+                    <input className="in" type="date" id="dPrev" value={D.previsao || ""} disabled={ro} onChange={(e) => set({ previsao: e.target.value })} />
+                    {(() => { const r = (D as { previsaoRemarcada?: string | null }).previsaoRemarcada; return r && r !== D.previsao
+                      ? <span className="hint" title="Remarcada na Operação › Projetos (Prev. material) — é a data que vale para o material deste PC">remarcada para <b>{r.split("-").reverse().join("/")}</b></span> : null; })()}</div>
                   <div className="f s3"><label htmlFor="dEmis">Inclusão</label>
                     <input className="in" type="date" id="dEmis" value={D.emissao || ""} disabled /></div>
                   <div className="f s4"><label htmlFor="dCat">Categoria da Compra {!isRC && <span className="req">*</span>}</label>

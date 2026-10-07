@@ -98,6 +98,28 @@ export function KpisCompras({ d, estimado, restante, linhas, empresa, codigoProj
           <small>{t?.margem_plano != null ? `no fechamento: ${brl(t.margem_plano)}` : "sem fechamento do CRM"}</small>
         </div>
       </div>
+      {/* Barra do projeto inteiro (07/10/26): budget × projetado × comprometido × pago, numa escala só */}
+      {budget != null && budget > 0 && (() => {
+        const pago = Number(t?.pago ?? 0), comp = Number(t?.comprometido ?? 0);
+        const max = Math.max(budget, projetado, comp, pago) || 1;
+        const pct = (v: number) => `${Math.min(100, (v / max) * 100)}%`;
+        return (
+          <div className="cdl-barra" title={`Budget ${brl(budget)} · Projetado ${brl(projetado)} · Comprometido ${brl(comp)} · Pago ${brl(pago)}`}>
+            <div className="cdl-barra-trilho">
+              <div className="cdl-barra-proj" style={{ width: pct(projetado) }} />
+              <div className="cdl-barra-comp" style={{ width: pct(comp) }} />
+              <div className="cdl-barra-pago" style={{ width: pct(pago) }} />
+              <div className="cdl-barra-budget" style={{ left: pct(budget) }} />
+            </div>
+            <div className="cdl-barra-leg">
+              <span><i className="pago" /> Pago {brl(pago)}</span>
+              <span><i className="comp" /> Comprometido {brl(comp)}</span>
+              <span><i className="proj" /> Projetado {brl(projetado)}</span>
+              <span><i className="bud" /> Budget {brl(budget)}</span>
+            </div>
+            {projetado > budget && <div className="cdl-alerta">⚠ O projetado estoura o budget de materiais em <b>{brl(projetado - budget)}</b>.</div>}
+          </div>);
+      })()}
       <p className="cdl-nota">Projetado = comprometido nos PCs + estimado das linhas que ainda não têm RC/PC. Margem = margem do fechamento ± a diferença entre o budget e o projetado.
         Estimado de cada linha = valor unit. da linha, senão o último preço do catálogo, senão o custo da CP.</p>
       {erro && <div className="cdl-box cdl-err">{erro}</div>}
@@ -201,5 +223,16 @@ export const CSS_CDL = `
 .pill-ok{background:#047857;color:#fff}.pill-info{background:#0e7490;color:#fff}.pill-warn{background:#b45309;color:#fff}.pill-err{background:#be123c;color:#fff}
 .cdl-chip-pc{display:inline-flex;align-items:center;gap:3px;padding:0 6px;border-radius:6px;border:1px solid var(--ww-accent);color:var(--ww-accent);font-weight:600;font-size:11px;text-decoration:none;white-space:nowrap}
 .cdl-chip-pc:hover{background:var(--ww-accent);color:#fff}
+.cdl-barra{margin:6px 0 2px}
+.cdl-barra-trilho{position:relative;height:12px;border-radius:6px;background:var(--ww-border);overflow:visible}
+.cdl-barra-trilho > div{position:absolute;top:0;bottom:0;left:0;border-radius:6px}
+.cdl-barra-proj{background:repeating-linear-gradient(45deg,#f59e0b55 0 6px,#f59e0b22 6px 12px)}
+.cdl-barra-comp{background:#2563eb}
+.cdl-barra-pago{background:#16a34a}
+.cdl-barra .cdl-barra-budget{left:auto;width:0;border-left:2px solid var(--ww-text);top:-3px;bottom:-3px;border-radius:0}
+.cdl-barra-leg{display:flex;gap:14px;flex-wrap:wrap;font-size:11px;color:var(--ww-text-muted);margin-top:4px}
+.cdl-barra-leg i{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:4px;vertical-align:-1px}
+.cdl-barra-leg i.pago{background:#16a34a}.cdl-barra-leg i.comp{background:#2563eb}.cdl-barra-leg i.proj{background:#f59e0b88}.cdl-barra-leg i.bud{background:var(--ww-text);width:2px}
+.cdl-alerta{margin-top:5px;padding:5px 9px;border-radius:8px;background:#e11d4818;color:#e11d48;font-size:12px}
 .cdl-neg{color:#e11d48}.cdl-pos{color:#059669}.cdl-warn{color:#b45309}
 `;

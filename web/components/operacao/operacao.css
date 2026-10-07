@@ -509,3 +509,7 @@
 
 /* nome do item da RC por inteiro (01/10/26: "FILTRO …" cortado) */
 .op .desc.item-nome{white-space:normal;overflow:visible;text-overflow:clip;overflow-wrap:anywhere;line-height:1.3}
+/* 07/10/26: no cabeçalho do pedido aberto, o "todos" (data/seletor) ia por cima do
+   título da coluna vizinha ("MATERIAL"). Título em cima, controle embaixo, na largura da coluna. */
+.op .rcg-hd .hd-lote{flex-direction:column;align-items:flex-start;gap:3px;overflow:hidden}
+.op .rcg-hd .hd-lote .todos,.op .rcg-hd input.todos{width:100%;max-width:100%;box-sizing:border-box}
