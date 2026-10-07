@@ -3,7 +3,7 @@ import { exigirFaturamento, falha } from "@/lib/faturamento/auth";
 import { emitir, urlArquivo, type OrigemTipo, type TipoDoc } from "@/lib/faturamento/server";
 import { rpc } from "@/lib/compras-server";
 import { salvarVenda } from "@/lib/vendas-server";
-import { codigosSemEstoque, MSG_SEM_ESTOQUE } from "@/lib/estoque-vinculos";
+import { codigosSemEstoque, MSG_SEM_ESTOQUE, trocarParaCodigoNosso } from "@/lib/estoque-vinculos";
 import type { DocFat } from "@/lib/faturamento/montar";
 import type { VendaSalvar } from "@/lib/vendas";
 
@@ -46,6 +46,8 @@ export async function POST(req: NextRequest) {
   try {
     // NF-e movimenta estoque: só itens do estoque nosso (código novo), nunca código de compra solto (05/10/26).
     if (tipo === "nfe") {
+      // código antigo (Omie) de item que já é nosso → troca pelo nosso antes de validar (07/10/26)
+      doc = { ...doc, itens: await trocarParaCodigoNosso(doc.empresa, doc.itens) };
       const sem = await codigosSemEstoque(doc.empresa, doc.itens.map((i) => i.codigo ?? ""));
       if (doc.itens.some((i) => !(i.codigo ?? "").trim())) return falha("Há item sem código — escolha o item do estoque pela busca antes de emitir.");
       if (sem.length) return falha(MSG_SEM_ESTOQUE(sem));

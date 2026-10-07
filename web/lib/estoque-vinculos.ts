@@ -33,5 +33,21 @@ export async function codigosSemEstoque(empresa: string, codigos: string[]): Pro
   return (data ?? []) as string[];
 }
 
+/** Troca, nas linhas, o código antigo (Omie / de compra vinculado) pelo código do NOSSO estoque (07/10/26).
+ *  A nota nunca sai com código que não é do estoque: o que tem item nosso troca aqui, o resto bloqueia
+ *  em codigosSemEstoque. */
+export async function trocarParaCodigoNosso<T extends { codigo?: string | null }>(empresa: string, itens: T[]): Promise<T[]> {
+  const cods = [...new Set(itens.map((i) => (i.codigo ?? "").trim()).filter(Boolean))];
+  if (!cods.length) return itens;
+  const { data, error } = await orders().rpc("fat_itens_resolver", { p_empresa: empresa, p_codigos: cods });
+  if (error) throw new Error(error.message);
+  const mapa = new Map(((data ?? []) as { codigo: string; codigo_nativo: string }[]).map((r) => [r.codigo.trim().toUpperCase(), r.codigo_nativo]));
+  if (!mapa.size) return itens;
+  return itens.map((i) => {
+    const novo = mapa.get((i.codigo ?? "").trim().toUpperCase());
+    return novo ? { ...i, codigo: novo } : i;
+  });
+}
+
 export const MSG_SEM_ESTOQUE = (cods: string[]) =>
   `Item sem código do estoque (${cods.join(", ")}) — vincule a um item nosso ou cadastre no estoque antes de emitir.`;

@@ -468,12 +468,19 @@ html { --ap-fonte: 1; font-size: calc(100% * var(--ap-fonte)); }
 html[data-vidro] :is([role="dialog"], [role="alertdialog"], [role="menu"], [role="listbox"], [aria-modal="true"],
   .ne-folha, .ne-acerto, .ne-pag-inline, [class*="modal"], [class*="Modal"], [class*="drawer"], [class*="Drawer"],
   [class*="gaveta"], [class*="popover"], [data-radix-popper-content-wrapper],
-  .dropdown, [class*="dropdown"], [class*="menu-ctx"], [class*="ctxmenu"]) {
+  .dropdown, [class*="dropdown"], [class*="menu-ctx"], [class*="ctxmenu"],
+  /* 07/10/26: tudo o que é position:fixed (modais Tailwind "fixed inset-0 …",
+     folhas e painéis flutuantes) também é janela por cima da tela */
+  .fixed, [class*="scrim"]) {
   --ap-a: 1;
   /* apelidos locais das telas (ex.: Compras usa --panel/--sunken resolvidos no
      contêiner; sem redeclarar aqui o menu herdava o valor translúcido) */
   --panel: rgb(var(--color-ww-panel));
   --sunken: rgb(var(--color-ww-panelSunken));
+  --panel2: rgb(var(--color-ww-panelSunken));        /* Contas a pagar */
+  --f-bg2: rgb(var(--color-ww-panel));               /* Faturamento (gaveta do PV) */
+  --f-card: rgb(var(--color-ww-panel));
+  --f-card2: rgb(var(--color-ww-panelSunken));
   --ww-panel: rgb(var(--color-ww-panel));
   --ww-panel-grad: rgb(var(--color-ww-panel));
   --ww-panel-sunken: rgb(var(--color-ww-panelSunken));

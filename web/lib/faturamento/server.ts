@@ -2,7 +2,7 @@ import "server-only";
 import { supaAdmin } from "@/lib/supabase-admin";
 import { HOST, baixar, chamar, empresaFocus, tokenDe, type Ambiente } from "./focus";
 import { NATUREZA_OP, montarNfe, montarNfse, operacaoDe, parcelas, reciboHtml, semCobranca, totalDoc, totalItens, totalRetencoes, validar, type DocFat, type Emitente } from "./montar";
-import { codigosSemEstoque, MSG_SEM_ESTOQUE } from "@/lib/estoque-vinculos";
+import { codigosSemEstoque, MSG_SEM_ESTOQUE, trocarParaCodigoNosso } from "@/lib/estoque-vinculos";
 import { checarDoc, docFatPvOmie, type Checagem, type PvOmieDoc } from "./pv-omie";
 import { docFatOsOmie, type OsOmieDoc } from "./os-omie";
 
@@ -472,7 +472,9 @@ export async function emitirPvOmie(empresa: string, codigo: number, o: { ensaio?
   const bruto = base.bruto;
   // Folha de emissão (05/10/26): o documento pode vir revisto pelo usuário
   // (recebimento, parcelas, OC, observações); as travas do PV continuam.
-  const doc: DocFat = o.documento ? { ...o.documento, empresa, rotulo: base.doc.rotulo } : base.doc;
+  const doc0: DocFat = o.documento ? { ...o.documento, empresa, rotulo: base.doc.rotulo } : base.doc;
+  // código antigo (Omie) de item que já é nosso sai com o código nosso (07/10/26)
+  const doc: DocFat = { ...doc0, itens: await trocarParaCodigoNosso(empresa, doc0.itens) };
   if (!o.ensaio) {
     const pre = await prevoo(doc, { nf_omie: bruto.nf_omie, emissao_painel: bruto.emissao_painel, etapa: String(bruto.pv.etapa ?? ""), total_pv: Number(bruto.pv.valor_total) });
     const erros = pre.checagens.filter((c) => !c.ok && c.nivel === "erro");
