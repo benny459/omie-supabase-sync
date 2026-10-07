@@ -1018,8 +1018,10 @@ export default function MateriaisGrade({
     if (sujo) { setErro("Há alterações não salvas — salve a lista antes de trazer a RC."); return; }
     setOcupado(`rc${rcId}`);
     try {
-      const j = await postCompras({ acao: "importar_rc", rc_id: rcId }) as { rc: string; novas: number; ligadas: number };
-      setAviso(`RC ${j.rc}: ${j.novas} linha(s) nova(s) na lista${j.ligadas ? ` e ${j.ligadas} já existente(s) ligada(s) à RC` : ""}. A RC fica como origem; o catálogo casa os códigos sozinho.`);
+      const j = await postCompras({ acao: "importar_rc", rc_id: rcId }) as { rc: string; novas: number; casados: number; ligadas: number };
+      setAviso(`RC ${j.rc}: ${j.novas} linha(s) nova(s) na lista, ${j.casados} já com o código do nosso estoque`
+        + (j.novas - j.casados > 0 ? ` e ${j.novas - j.casados} para resolver (âmbar — clique em ⌕ no Código)` : "")
+        + `${j.ligadas ? `; ${j.ligadas} já existente(s) ligada(s) à RC` : ""}. A RC fica como origem; os pedidos saem da lista.`);
       setRcsAbertas(null);
       await carregar();
     } catch (e) { setErro((e as Error).message); } finally { setOcupado(null); }

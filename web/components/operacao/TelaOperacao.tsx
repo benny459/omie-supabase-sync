@@ -1649,6 +1649,7 @@ function GruposPcProjeto({ compras, p, podeAprovar, podeEditar, ehAdmin, statusL
   };
   return (
     <div className="pcproj">
+      <ResumoBudgetProjeto empresa={empresa} codigo={proj.codProj} $={$} />
       {rcs.size > 0 && (
         <div className="pcproj-bloco">
           <div className="pcproj-tit">RCs sem PC <small>— o que ainda falta comprar; o pedido sai da Lista de materiais, um por fornecedor</small></div>
@@ -1716,6 +1717,43 @@ function GruposPcProjeto({ compras, p, podeAprovar, podeEditar, ehAdmin, statusL
         })}
         {!pcs.size && <div className="pcproj-vazio">Nenhum pedido de compra ainda — gere pela Lista de materiais.</div>}
       </div>
+    </div>
+  );
+}
+
+/** Resumo do projeto inteiro (07/10/26): budget de materiais × projetado × comprometido
+ *  × pago, com a mesma conta da Lista de materiais — é aqui que se aprovam os PCs. */
+function ResumoBudgetProjeto({ empresa, codigo, $ }: { empresa: string; codigo: number; $: (v: number | null) => string }) {
+  const [d, setD] = useState<{ budget: number | null; comp: number; proj: number; pago: number } | null>(null);
+  useEffect(() => {
+    let vivo = true;
+    fetch(`/api/rc-projetos/compras?empresa=${encodeURIComponent(empresa)}&codigo=${codigo}`, { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null)).then((j: { itens?: { rc: string | null; pcs: unknown[]; estimado: number }[]; totais?: Record<string, number | null> } | null) => {
+        if (!vivo || !j?.totais) return;
+        const t = j.totais;
+        const resto = (j.itens ?? []).filter((l) => !l.rc && !l.pcs.length).reduce((a, l) => a + (Number(l.estimado) || 0), 0);
+        const comp = Number(t.comprometido) || 0;
+        setD({ budget: (t.budget_lista ?? t.budget_plano) != null ? Number(t.budget_lista ?? t.budget_plano) : null, comp, proj: comp + resto, pago: Number(t.pago) || 0 });
+      }).catch(() => null);
+    return () => { vivo = false; };
+  }, [empresa, codigo]);
+  if (!d) return <div className="pcproj-resumo carregando">Resumo do projeto…</div>;
+  const max = Math.max(d.budget ?? 0, d.proj, d.comp, d.pago) || 1;
+  const pct = (v: number) => `${Math.min(100, (v / max) * 100)}%`;
+  const estoura = d.budget != null && d.proj > d.budget ? d.proj - d.budget : 0;
+  return (
+    <div className="pcproj-resumo">
+      <div className="pcproj-resumo-nums">
+        <span>Budget de materiais <b>{d.budget != null ? $(d.budget) : "—"}</b></span>
+        <span>Projetado <b className={estoura ? "neg" : ""}>{$(d.proj)}</b></span>
+        <span>Comprometido (PCs) <b>{$(d.comp)}</b></span>
+        <span>Pago <b>{$(d.pago)}</b></span>
+      </div>
+      <div className="pcproj-trilho" title="Pago · comprometido · projetado, numa escala só; o traço é o budget">
+        <div className="proj" style={{ width: pct(d.proj) }} /><div className="comp" style={{ width: pct(d.comp) }} /><div className="pago" style={{ width: pct(d.pago) }} />
+        {d.budget != null && <div className="bud" style={{ left: pct(d.budget) }} />}
+      </div>
+      {estoura > 0 && <div className="pcproj-alerta">⚠ O projetado estoura o budget de materiais em <b>{$(estoura)}</b> — PC que passar do budget fica para os administradores.</div>}
     </div>
   );
 }

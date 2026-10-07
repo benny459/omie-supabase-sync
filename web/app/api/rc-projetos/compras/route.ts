@@ -14,6 +14,7 @@ import { supaServer } from "@/lib/supabase-server";
 import { exigirCompras, rpc, erro, posGravar } from "@/lib/compras-server";
 import { completarPcs, type DadosPcs } from "@/lib/lista-pc-completar";
 import { fetchItensCp } from "@/lib/crm-fechamento";
+import { casarItensProjeto, resolverItensProjeto } from "@/lib/catalogo-projeto";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -179,20 +180,42 @@ export async function POST(req: Request) {
       const existentes = new Map(((naLista ?? []) as { id: string; rc_item_id: number | null; equipamento: string; item: string }[])
         .map((r) => [chave(r.equipamento ?? "", r.item ?? ""), r]));
       const novas: Record<string, unknown>[] = [], ligar: { id: string; rc_item_id: number }[] = [];
+      const entrar: { i: (typeof its)[number]; eq: string; desc: string }[] = [];
       for (const i of its) {
         const desc = String(i.desc ?? "").trim();
         const eq = /Equip\.?:\s*([^·|]+)/i.exec(i.obs ?? "")?.[1]?.trim() || eqDaCp.get(desc.toLowerCase()) || "Geral";
         if (!desc) continue;
         const ja = existentes.get(chave(eq, desc));
         if (ja) { if (!ja.rc_item_id) ligar.push({ id: ja.id, rc_item_id: Number(i.id) }); continue; }
-        novas.push({ empresa, codigo_projeto: codigo, equipamento: eq, item: desc, qtd: Number(i.qtd) || null, un: i.un ?? null,
-          cat_codigo: i.cod ?? null, cat_ncod_prod: i.ncodProd ?? null, cat_valor_unit: i.vu ?? null, observacao: `RC ${rc.num}`,
-          rc_item_id: Number(i.id), vinculo_via: "rc", vinculo_em: new Date().toISOString(), criado_por: por, atualizado_por: por });
+        entrar.push({ i, eq, desc });
       }
-      if (b.simular) return NextResponse.json({ ok: true, simulado: true, rc: rc.num, novas: novas.length, ligadas: ligar.length, linhas: novas });
+      /* A RC é convertida para a lista (07/10/26, Benny): cada item passa pelo catálogo
+         NOSSO — o produto da RC (se já é ou está ligado a um item nosso), senão o texto.
+         Só entra com código quando o casamento é certo; o resto fica "sem código"/
+         "conferir" na lista para resolver com o seletor. Código da RC que não é nosso
+         (CRM/fornecedor/Omie) não vai para a coluna Código — fica na observação. */
+      const porProduto = await resolverItensProjeto(empresa, entrar.map((e) => Number(e.i.ncodProd)).filter((x) => x > 0));
+      const precisaTexto = entrar.filter((e) => !(e.i.ncodProd && porProduto[String(e.i.ncodProd)]));
+      const cas = precisaTexto.length ? await casarItensProjeto(empresa, precisaTexto.map((e) => e.desc), precisaTexto.map((e) => Number(e.i.vu) || null)) : [];
+      const porTexto = new Map(precisaTexto.map((e, k) => [e, cas[k]]));
+      let casados = 0;
+      for (const e of entrar) {
+        const nat = e.i.ncodProd ? porProduto[String(e.i.ncodProd)] : undefined;
+        const c = porTexto.get(e);
+        const it = nat ?? (c?.status === "ok" ? c.melhor : null);
+        if (it) casados++;
+        const codRc = String(e.i.cod ?? "").trim();
+        novas.push({ empresa, codigo_projeto: codigo, equipamento: e.eq, item: e.desc, qtd: Number(e.i.qtd) || null, un: e.i.un ?? null,
+          cat_codigo: it?.codigo ?? null, cat_ncod_prod: it?.ncod_prod ?? null,
+          cat_valor_unit: e.i.vu ?? it?.ultimo_preco ?? null, cat_fornecedor: it?.fornecedor ?? null,
+          cat_entrega_dias: it?.entrega_dias ?? null, cat_fat_dias: it?.fat_dias ?? null,
+          observacao: [`RC ${rc.num}`, codRc && codRc !== it?.codigo ? `cód. na RC ${codRc}` : ""].filter(Boolean).join(" · "),
+          rc_item_id: Number(e.i.id), vinculo_via: "rc", vinculo_em: new Date().toISOString(), criado_por: por, atualizado_por: por });
+      }
+      if (b.simular) return NextResponse.json({ ok: true, simulado: true, rc: rc.num, novas: novas.length, casados, ligadas: ligar.length, linhas: novas });
       if (novas.length) { const { error } = await approval().from("rc_projetos_itens").insert(novas); if (error) throw new Error(error.message); }
       for (const l of ligar) await approval().from("rc_projetos_itens").update({ rc_item_id: l.rc_item_id, vinculo_via: "rc", vinculo_em: new Date().toISOString(), atualizado_por: por }).eq("id", l.id);
-      return NextResponse.json({ ok: true, rc: rc.num, novas: novas.length, ligadas: ligar.length });
+      return NextResponse.json({ ok: true, rc: rc.num, novas: novas.length, casados, ligadas: ligar.length });
     }
 
     /* ── Gerar PC pela lista (07/10/26) ──────────────────────────────────────

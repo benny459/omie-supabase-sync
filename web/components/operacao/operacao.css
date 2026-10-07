@@ -536,3 +536,15 @@
 .op .pcproj-pc input.in,.op .pcproj-pc .matsel,.op .pcproj-pc .stsel{width:100%}
 .op .pcproj-vazio{padding:10px;color:var(--ww-text-faint);font-size:12px}
 @media (max-width:1100px){.op .pcproj-hd{display:none}.op .pcproj-pc{grid-template-columns:64px 1fr 96px;row-gap:6px}}
+.op .pcproj-resumo{border:1px solid var(--ww-border);border-radius:10px;padding:8px 12px;background:var(--ww-panel-sunken)}
+.op .pcproj-resumo.carregando{color:var(--ww-text-faint);font-size:12px}
+.op .pcproj-resumo-nums{display:flex;gap:18px;flex-wrap:wrap;font-size:12px;color:var(--ww-text-muted)}
+.op .pcproj-resumo-nums b{color:var(--ww-text);margin-left:4px}
+.op .pcproj-resumo-nums b.neg{color:#e11d48}
+.op .pcproj-trilho{position:relative;height:10px;border-radius:5px;background:var(--ww-border);margin-top:6px}
+.op .pcproj-trilho > div{position:absolute;top:0;bottom:0;left:0;border-radius:5px}
+.op .pcproj-trilho .proj{background:repeating-linear-gradient(45deg,#f59e0b55 0 6px,#f59e0b22 6px 12px)}
+.op .pcproj-trilho .comp{background:#2563eb}
+.op .pcproj-trilho .pago{background:#16a34a}
+.op .pcproj-trilho .bud{left:auto;width:0;border-left:2px solid var(--ww-text);top:-3px;bottom:-3px;border-radius:0}
+.op .pcproj-alerta{margin-top:6px;color:#e11d48;font-size:12px}
