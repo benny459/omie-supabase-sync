@@ -61,6 +61,20 @@ export default async function ProjetoMateriaisPage({
 
   if (!empresa) empresa = "SF"; // fallback pra padrão da instância
 
+  /* 07/10/26 (Benny, PJ366): projeto NATIVO (código 9000000000xxx) não está na view do Omie —
+     o nome vem do cadastro de projetos (finance.projetos, onde os nativos também vivem). O
+     código interno nunca aparece como se fosse o número do projeto. Cliente e proposta vêm
+     do plano (fechamento do CRM). */
+  const [{ data: cad }, { data: plano }] = await Promise.all([
+    supa.schema("finance" as never).from("projetos").select("nome").eq("empresa", empresa).eq("codigo", codigoProjeto).maybeSingle(),
+    supa.schema("approval" as never).from("projeto_plano").select("cliente, proposta").eq("empresa", empresa).eq("codigo_projeto", codigoProjeto).maybeSingle(),
+  ]);
+  const nomeCad = String((cad as { nome?: string } | null)?.nome ?? "").trim();
+  if (nomeCad) projetoNome = nomeCad;
+  const cliente = String((plano as { cliente?: string } | null)?.cliente ?? "").trim();
+  const proposta = String((plano as { proposta?: string } | null)?.proposta ?? "").trim();
+
+
   return (
     <div className="w-full px-4 py-6 space-y-4">
       <div className="flex items-center justify-between gap-4 flex-wrap">
@@ -70,12 +84,16 @@ export default async function ProjetoMateriaisPage({
             <span>·</span>
             <span className="font-mono text-[11px]">{empresa}</span>
             <span>·</span>
-            <span className="font-mono text-[11px]">PJ{codigoProjeto}</span>
+            <span className="text-[11.5px]" title={`código interno ${codigoProjeto}`}>{projetoNome || "Projeto"}</span>
           </div>
-          <h1 className="text-[26px] font-semibold text-ww-text tracking-[-0.022em] mt-1 truncate">
-            Projeto
-            {projetoNome && <span className="ml-2 text-ww-textMuted font-normal">— {projetoNome}</span>}
+          <h1 className="text-[26px] font-semibold text-ww-text tracking-[-0.022em] mt-1 truncate" title={`código interno ${codigoProjeto}`}>
+            {projetoNome || "Projeto sem nome no cadastro"}
           </h1>
+          {(cliente || proposta) && (
+            <p className="text-[13px] text-ww-textMuted mt-0.5">
+              {cliente}{cliente && proposta ? " · " : ""}{proposta && <>proposta <span className="font-mono text-[12px]">{proposta}</span></>}
+            </p>
+          )}
           <p className="text-[12px] text-ww-textMuted mt-0.5">
             Fluxo de caixa previsto e lista de materiais na mesma tela. Aprovar o fluxo é o que
             libera a aprovação dos pedidos de compra deste projeto.
