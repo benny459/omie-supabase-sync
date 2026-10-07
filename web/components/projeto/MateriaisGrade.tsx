@@ -139,6 +139,10 @@ export default function MateriaisGrade({
   const [erro, setErro] = useState<string | null>(null);
   const [aviso, setAviso] = useState<string | null>(null);
   const [sujo, setSujo] = useState(false);
+  /** Exclusão pedida pelo 🗑 (07/10/26): grava sozinha depois de alguns segundos,
+   *  com "Desfazer" até lá. `antes` = a grade antes de excluir. */
+  const [remocao, setRemocao] = useState<{ n: number; comPc: number; antes: LinhaGrade[] } | null>(null);
+  const remocaoRef = useRef(false);
   const [original, setOriginal] = useState(0);
   const [marcadas, setMarcadas] = useState<Set<string>>(new Set());
   const [picker, setPicker] = useState(false);
@@ -197,6 +201,8 @@ export default function MateriaisGrade({
     });
     return m;
   }, [linhas, cpBase]);
+  /** A RC entra na lista UMA vez: enquanto nenhum item dela está na lista, o "Importar" fica na barra. */
+  const primeiraImportacao = !!cpBase?.itens.length && usoCp.size === 0;
   const cpNaoUsados = useMemo(() => (cpBase?.itens ?? []).map((i, k) => ({ i, k })).filter(({ k }) => !usoCp.has(k)), [cpBase, usoCp]);
   /** Linha que está escolhendo "Usar item da CP". */
   const [usarCpEm, setUsarCpEm] = useState<string | null>(null);
@@ -372,7 +378,7 @@ export default function MateriaisGrade({
     { key: "item",        label: "Item",        w: 224, fixa: true,
       // "RC" na célula: usar um item da RC ainda não usado nesta linha (07/10/26)
       acao: { rot: "RC", dica: "Usar item da RC nesta linha (os itens da RC que ainda não estão na lista)",
-        classe: () => "text-emerald-700 dark:text-emerald-300 font-bold text-[9px]",
+        classe: () => "text-ww-textFaint text-[8.5px] opacity-0 group-hover:opacity-70 hover:!opacity-100",
         fn: (l) => setUsarCpEm(l._id), mostrar: (l) => cpNaoUsados.length > 0 && !origemCp(l) },
       // Casado: mostra a descrição do item do catálogo; o texto original (que é a
       // chave da linha e do de-para) volta ao editar e fica na dica.
@@ -732,8 +738,9 @@ export default function MateriaisGrade({
             + "gravar agora apagaria o que está no projeto.");
       return;
     }
-    if (validas.length < original) {
-      if (silencioso) return; // remoção nunca é automática: pede o botão Salvar
+    const intencional = remocaoRef.current;
+    if (validas.length < original && !intencional) {
+      if (silencioso) return; // remoção que não veio do 🗑 não é automática: pede o botão Salvar
       const ok = window.confirm(
         `A lista tem ${original} item(ns) gravado(s) e você está salvando ${validas.length}.\n\n` +
         `${original - validas.length} item(ns) serão REMOVIDOS do projeto. Confirma?`);
@@ -745,7 +752,7 @@ export default function MateriaisGrade({
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           empresa, codigo_projeto: codigoProjeto,
-          confirmar_remocao: confirmarRemocao,
+          confirmar_remocao: confirmarRemocao || intencional,
           items: validas.map((l) => ({
             equipamento: String(l.equipamento ?? "").trim() || "Geral",
             item: String(l.item ?? "").trim(),
@@ -781,10 +788,18 @@ export default function MateriaisGrade({
         setRascunhoDe(null);
         setOriginal(validas.length);
         if (versaoRef.current === versaoInicio) setSujo(false);
+        if (intencional) {
+          remocaoRef.current = false; setRemocao(null);
+          const rem = Number(j.total_deletados ?? 0);
+          setAviso(`${rem} linha(s) excluída(s) — recuperável em "Itens removidos". Salvo às ${new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}.`);
+          void carregarCompras();
+          return;
+        }
         setAviso(`Salvo automaticamente às ${new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}.`);
         void carregarCompras();
         return;
       }
+      remocaoRef.current = false; setRemocao(null);
       const removidos = Number(j.total_deletados ?? 0);
       setAviso(`${validas.length} item(ns) gravado(s)${comPc ? `, ${comPc} com PC vinculado` : ""}`
         + (removidos > 0 ? ` · ${removidos} removido(s), recuperável em "Itens removidos"` : "") + ".");
@@ -807,10 +822,37 @@ export default function MateriaisGrade({
      quando há item a REMOVER (isso pede o botão Salvar, com a confirmação). */
   useEffect(() => {
     if (!sujo || !carregouOk || salvando || rascunhoDe) return;
-    if (validas.length < original || !validas.length) return;
-    const t = window.setTimeout(() => { void salvarRef.current?.(false, true); }, 2500);
+    const intencional = remocao != null && remocaoRef.current;
+    if (!intencional && (validas.length < original || !validas.length)) return;
+    const t = window.setTimeout(() => { void salvarRef.current?.(false, true); }, intencional ? 6000 : 2500);
     return () => window.clearTimeout(t);
-  }, [linhas, sujo, carregouOk, salvando, validas.length, original, rascunhoDe]);
+  }, [linhas, sujo, carregouOk, salvando, validas.length, original, rascunhoDe, remocao]);
+
+  /** 🗑 da linha e "Excluir N linhas" (07/10/26): tira da grade e grava sozinho em 6 s;
+   *  até lá dá para desfazer. O que sai vai para a lixeira (Itens removidos). */
+  const excluirLinhas = useCallback((ids: string[]) => {
+    const alvo = new Set(ids);
+    const sai = linhas.filter((l) => alvo.has(l._id) && String(l.item ?? "").trim());
+    const resto = linhas.filter((l) => !alvo.has(l._id));
+    if (!resto.some((l) => !String(l.item ?? "").trim())) resto.push(vazia());
+    setLinhas(resto);
+    setMarcadas((p) => { const n = new Set(p); for (const id of ids) n.delete(id); return n; });
+    if (!sai.length) return;
+    const gravadas = sai.filter((l) => l._id.startsWith("db")).length;
+    setSujo(true);
+    if (gravadas) {
+      remocaoRef.current = true;
+      setRemocao((r) => ({ n: (r?.n ?? 0) + sai.length, comPc: (r?.comPc ?? 0) + sai.filter((l) => !!cmpPorId.get(l._id)?.pcs.length || !!String(l.pc_numero ?? "").trim()).length,
+        antes: r?.antes ?? linhas }));
+    }
+  }, [linhas, cmpPorId]);
+  const desfazerExclusao = useCallback(() => {
+    if (!remocao) return;
+    remocaoRef.current = false;
+    setLinhas(remocao.antes);
+    setRemocao(null);
+    setAviso("Exclusão desfeita.");
+  }, [remocao]);
 
   // ── Catálogo ────────────────────────────────────────────────────────────
   const [casando, setCasando] = useState(false);
@@ -1018,7 +1060,6 @@ export default function MateriaisGrade({
     } catch (e) { setErro(`Não consegui gravar a escolha: ${e instanceof Error ? e.message : String(e)}`); }
   }, [linhas, cp, empresa]);
 
-  const estimado = useMemo(() => validas.reduce((a, l) => a + num(l.qtd) * num(l.cat_valor_unit), 0), [validas]);
   /** Estimado das linhas que ainda não viraram RC/PC — entra no projetado. */
   const restante = useMemo(() => validas.filter((l) => { const c = cmpPorId.get(l._id); return !c?.rc && !c?.pcs.length; })
     .reduce((a, l) => a + num(l.qtd) * num(l.cat_valor_unit), 0), [validas, cmpPorId]);
@@ -1124,7 +1165,7 @@ export default function MateriaisGrade({
     if (!rc) { rcUrlFeito.current = true; return; }
     rcUrlFeito.current = true;
     const ids = linhas.filter((l) => l._id.startsWith("db") && cmpPorId.get(l._id)?.rc === rc && !cmpPorId.get(l._id)?.pcs.length && !String(l.pc_numero ?? "").trim()).map((l) => l._id);
-    if (!ids.length) { setAviso(`Nenhuma linha da lista vem da RC ${rc} sem PC — use “⤵ Importar para a lista” para trazer os itens dela.`); return; }
+    if (!ids.length) { setAviso(`Nenhuma linha da lista vem da RC ${rc} sem PC — use “Importar itens da RC” para trazer os itens dela.`); return; }
     setMarcadas(new Set(ids));
     abrirGerarPc(ids);
   }, [cmp, carregouOk, linhas, cmpPorId, abrirGerarPc]);
@@ -1267,16 +1308,15 @@ export default function MateriaisGrade({
             Lista de materiais
           </h3>
           <p className="text-[11px] text-ww-textMuted mt-0.5">
-            Digite ou cole do Excel as colunas <strong>Equipamento · Item · Qtd · Un · Necessário em · Valor unit.</strong> (com a linha de cabeçalho, também <strong>Código, Modelo, PC e Observação</strong> — a observação vira comentário 💬).
-            Ao digitar o Item, o catálogo sugere os <strong>itens do nosso estoque</strong> (código novo) com último preço, fornecedor e prazos;
-            à direita, o que já foi comprado: pedido de compra, valor e situação.
+            Importe os itens da RC uma vez, ajuste a lista (incluir/excluir/casar com o nosso código) e gere os pedidos de compra a partir dela.{" "}
+            <span className="cursor-help text-ww-textFaint" title={"Digite ou cole do Excel as colunas Equipamento · Item · Qtd · Un · Necessário em · Valor unit.\nCom a linha de cabeçalho, também Código, Modelo, PC e Observação (a observação vira comentário).\nAo digitar o Item, o catálogo sugere os itens do nosso estoque com último preço, fornecedor e prazos.\nÀ direita de cada linha: o pedido de compra, o valor e a situação.\nOs pedidos de compra se acompanham em Operação › Projetos (por PC) e aqui, item a item."}>ⓘ</span>
           </p>
         </div>
       </header>
 
       {/* Quanto vou gastar — KPIs que eram da aba "Compras × lista". */}
       {cmp && (
-        <KpisCompras d={cmp} estimado={estimado} restante={restante} linhas={validas.length}
+        <KpisCompras d={cmp} restante={restante}
           empresa={empresa} codigoProjeto={codigoProjeto} onRecarregar={() => void carregarCompras()} />
       )}
       {cmpErro && !cmp && <p className="text-[11px] text-rose-600">Compras do projeto indisponíveis: {cmpErro}</p>}
@@ -1302,35 +1342,43 @@ export default function MateriaisGrade({
                      hover:bg-sky-100 dark:hover:bg-sky-900/50 transition disabled:opacity-40">
           {ocupado === "auto" ? "Vinculando…" : "⇄ Vincular PCs automaticamente"}
         </button>
-        {cpBase?.proposta && (
-          <button type="button" onClick={() => setSubAba("cp")} className="px-1.5 py-1 text-[10.5px] text-ww-textMuted hover:text-ww-text hover:underline"
-            title="Itens da RC (o plano original): quantos já estão na lista">
-            RC: {cpBase.itens.length} itens · {usoCp.size} já na lista
-          </button>
-        )}
         <button type="button" onClick={() => abrirGerarPc(paraPc)} disabled={!!ocupado || !paraPc.length}
           title={paraPc.length ? "Gera os pedidos de compra (um por fornecedor) com as linhas marcadas sem PC" : "Marque linhas sem PC na caixinha da esquerda"}
           className="px-2 py-1 text-[11px] rounded-lg bg-ww-accent text-white font-semibold hover:brightness-110 transition disabled:opacity-40">
           🧾 Gerar pedido de compra ({paraPc.length})
         </button>
-        <button type="button" onClick={() => { setImportarAberto(true); void abrirTrazerRc(); }} disabled={!!ocupado}
-          title="Traz para a lista os itens da RC do projeto, já casados com o nosso catálogo (o que já está na lista fica apagado)"
-          className="px-2 py-1 text-[11px] rounded-lg border border-emerald-500/60 text-emerald-800 dark:text-emerald-200 hover:bg-emerald-500/10 transition disabled:opacity-40">
-          ⤵ Importar para a lista
-        </button>
+        {/* Importar é de UMA vez (07/10/26, Benny): depois que a RC entrou na lista, o
+            botão sai da barra e fica no ⋯ como "Reimportar itens da RC (raro)". */}
+        {primeiraImportacao && (
+          <button type="button" onClick={() => { setImportarAberto(true); void abrirTrazerRc(); }} disabled={!!ocupado}
+            title="Traz para a lista os itens da RC do projeto, já casados com o nosso catálogo"
+            className="px-2 py-1 text-[11px] rounded-lg border border-emerald-500/60 text-emerald-800 dark:text-emerald-200 hover:bg-emerald-500/10 transition disabled:opacity-40">
+            ⤵ Importar itens da RC
+          </button>
+        )}
         <span className="flex-1" />
-        <button type="button" onClick={exportar} disabled={!validas.length}
-          className="px-2 py-1 text-[11px] rounded-lg border border-ww-border text-ww-textMuted
-                     hover:text-ww-text hover:bg-ww-rowHover transition disabled:opacity-40">
-          Exportar Excel
-        </button>
-        <button type="button" onClick={() => void salvar()} disabled={salvando || !sujo}
-          title={sujo ? "Grava a lista inteira" : "Nada mudou desde a última gravação"}
-          className={`px-2.5 py-1 text-[11.5px] rounded-lg border transition ${
-            sujo ? "border-ww-accent bg-ww-accent text-white font-semibold hover:brightness-110"
-                 : "border-ww-border text-ww-textFaint cursor-not-allowed"}`}>
-          {salvando ? "…" : "Salvar lista"}
-        </button>
+        {sujo && !salvando && remocao == null && rascunhoDe == null && validas.length >= original && (
+          <span className="text-[10.5px] text-ww-textFaint">salvando…</span>)}
+        {salvando && <span className="text-[10.5px] text-ww-textFaint">salvando…</span>}
+        {(rascunhoDe != null || (sujo && validas.length < original && remocao == null)) && (
+          <button type="button" onClick={() => void salvar()} disabled={salvando}
+            className="px-2.5 py-1 text-[11.5px] rounded-lg border border-ww-accent bg-ww-accent text-white font-semibold hover:brightness-110 transition">
+            {salvando ? "…" : "Salvar lista"}
+          </button>
+        )}
+        <details className="relative">
+          <summary className="list-none cursor-pointer px-2 py-1 text-[12px] rounded-lg border border-ww-border text-ww-textMuted hover:text-ww-text hover:bg-ww-rowHover" title="Mais ações">⋯</summary>
+          <div className="absolute right-0 mt-1 z-30 min-w-[230px] rounded-lg border border-ww-border bg-[rgb(var(--color-ww-panel))] shadow-xl p-1 text-[11.5px]">
+            <button type="button" onClick={(e) => { (e.currentTarget.closest("details") as HTMLDetailsElement).open = false; exportar(); }} disabled={!validas.length}
+              className="block w-full text-left px-2 py-1.5 rounded hover:bg-ww-rowHover disabled:opacity-40">Exportar Excel</button>
+            {!primeiraImportacao && (
+              <button type="button" onClick={(e) => { (e.currentTarget.closest("details") as HTMLDetailsElement).open = false; setImportarAberto(true); void abrirTrazerRc(); }} disabled={!!ocupado}
+                className="block w-full text-left px-2 py-1.5 rounded hover:bg-ww-rowHover disabled:opacity-40"
+                title="A RC já foi importada. Use só para trazer itens da RC que ficaram de fora (o que já está na lista fica apagado).">
+                Reimportar itens da RC <span className="text-ww-textFaint">(raro)</span></button>
+            )}
+          </div>
+        </details>
       </div>
 
       {/* Grupos de equipamento (07/10/26, 2ª versão): só chips de filtro, cada um com a
@@ -1462,6 +1510,10 @@ export default function MateriaisGrade({
             className="px-2.5 py-1 rounded-lg bg-ww-accent text-white text-[11.5px] font-semibold hover:brightness-110 transition disabled:opacity-40">
             🧾 Gerar pedido de compra ({paraPc.length})
           </button>
+          <button type="button" onClick={() => excluirLinhas([...marcadas])}
+            className="px-2.5 py-1 rounded-lg border border-rose-400/60 text-rose-700 dark:text-rose-300 text-[11.5px] hover:bg-rose-500/10 transition">
+            🗑 Excluir {marcadas.size} linha{marcadas.size === 1 ? "" : "s"}
+          </button>
           <button type="button" onClick={() => setMarcadas(new Set())}
             className="text-[11px] text-ww-textMuted hover:text-ww-text">limpar</button>
         </div>
@@ -1487,12 +1539,13 @@ export default function MateriaisGrade({
             className="ml-auto text-[11px] underline opacity-80 hover:opacity-100">descartar rascunho</button>
         </div>
       )}
-      {sujo && rascunhoDe == null && validas.length >= original && (
-        <div className="p-2 rounded-lg border border-amber-500/40 bg-amber-500/10 text-[11.5px] text-amber-800 dark:text-amber-200">
-          Alterações <strong>ainda não salvas</strong> — clique em <strong>Salvar lista</strong> para gravar no sistema.
+      {remocao && (
+        <div className="flex items-center gap-3 flex-wrap p-2 rounded-lg border border-rose-500/40 bg-rose-500/10 text-[12px] text-rose-800 dark:text-rose-200">
+          <span>{remocao.n} linha(s) excluída(s){remocao.comPc ? ` (${remocao.comPc} com PC — o pedido de compra não muda)` : ""} · grava em instantes</span>
+          <button type="button" onClick={desfazerExclusao} className="ml-auto px-2 py-0.5 rounded border border-rose-400/60 font-semibold hover:bg-rose-500/10">Desfazer</button>
         </div>
       )}
-      {sujo && validas.length < original && (
+      {sujo && validas.length < original && !remocao && (
         <div className="p-2.5 rounded-lg border border-amber-500/40 bg-amber-500/10 text-[12px] text-amber-800 dark:text-amber-200">
           Você tinha {original} item(ns) e agora há {validas.length}. Salvar vai <strong>remover</strong> a
           diferença — a lista gravada passa a ser exatamente o que está nesta grade.
@@ -1513,6 +1566,16 @@ export default function MateriaisGrade({
             {rot}
           </button>
         ))}
+        {subAba === "lista" && !carregando && (
+          <button type="button" onClick={() => {
+              const nova = { ...vazia(), equipamento: equipFiltro ? (grupos.find((g) => g.k === equipFiltro)?.nome ?? "") : "" } as LinhaGrade;
+              setLinhas((ls) => [nova, ...ls]);
+              setTimeout(() => (document.querySelector('[data-cel^="0-"]') as HTMLInputElement | null)?.focus(), 50);
+            }}
+            className="ml-auto mb-1 px-2 py-0.5 text-[11px] rounded-lg border border-ww-accent/60 text-ww-accent font-semibold hover:bg-ww-accentSoft transition">
+            + Adicionar linha
+          </button>
+        )}
         {subAba === "cp" && cpBase?.proposta && (
           <span className="ml-auto text-[10.5px] text-ww-textFaint pb-1">
             composição de preço da proposta <strong>{cpBase.proposta}</strong> · registro do plano original
@@ -1568,7 +1631,7 @@ export default function MateriaisGrade({
                   </table>
                 </div>);
             })()}
-          <p className="text-[10.5px] text-ww-textFaint">A RC é o plano: daqui só se consulta. Os itens entram na lista pelo “⤵ Importar para a lista” ou pelo “RC” na célula do Item de uma linha.</p>
+          <p className="text-[10.5px] text-ww-textFaint">A RC é a referência e a origem do budget de materiais: daqui só se consulta. Os itens entram na lista uma vez, pelo “⤵ Importar itens da RC” (depois, em ⋯ › Reimportar), e na lista você exclui, inclui e casa com o nosso código.</p>
         </div>
       ) : carregando
         ? <p className="text-[11.5px] text-ww-textFaint py-3">Carregando a lista…</p>
@@ -1586,6 +1649,7 @@ export default function MateriaisGrade({
               setSujo(true);
             }}
             altura={520}
+            aoRemover={(id) => excluirLinhas([id])}
             selecao={{
               marcadas,
               podeMarcar: (l) => l._id.startsWith("db"),
@@ -1713,7 +1777,7 @@ export default function MateriaisGrade({
         <div className="fixed inset-0 z-[110] bg-black/40 flex items-end sm:items-start justify-center sm:pt-[5vh]" onMouseDown={(e) => { if (e.target === e.currentTarget) setImportarAberto(false); }}>
           <div role="dialog" aria-label="Importar para a lista" className="w-full sm:w-[min(1100px,97vw)] max-h-[90vh] overflow-auto rounded-t-xl sm:rounded-xl border border-ww-border bg-[rgb(var(--color-ww-panel))] shadow-2xl p-3.5 space-y-2.5 text-[12px]">
             <div className="flex items-start gap-2">
-              <div><h4 className="text-[14px] font-semibold text-ww-text">Importar para a lista — itens da RC</h4>
+              <div><h4 className="text-[14px] font-semibold text-ww-text">Importar itens da RC para a lista</h4>
                 <p className="text-[11px] text-ww-textMuted">Cada item da RC vem casado com o nosso catálogo (✓ certo · ⚠ conferir · sem correspondência). Resolva em “No catálogo”, marque o que entra e adicione. O que já está na lista fica apagado.</p></div>
               <button type="button" className="ml-auto text-ww-accent hover:underline" onClick={() => setImportarAberto(false)}>fechar</button>
             </div>

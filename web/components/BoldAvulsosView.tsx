@@ -5079,11 +5079,11 @@ function BudgetTotals({
       <div className="flex flex-col min-w-0 flex-1 gap-1">
         <div className="flex items-baseline justify-between gap-2">
           <span className="text-[10px] uppercase tracking-[0.5px] text-ww-textMuted font-bold"
-                title={budget?.origem === "crm"
-                  ? "Materiais e equipamentos (CP) do fechamento da proposta no CRM"
-                  : "Custos previstos do Fluxo Financeiro importado"}>
-            Budget{budget?.origem === "crm" && <span className="ml-1 font-normal normal-case text-ww-textFaint">· CRM</span>}
-            {budget?.origem === "painel" && <span className="ml-1 font-normal normal-case text-ww-textFaint" title="Budget de materiais definido no painel (Lista de materiais)">· painel</span>}
+                title={budget?.origem === "painel"
+                  ? "Budget de materiais definido no painel (Lista de materiais)"
+                  : "Budget de materiais = total de materiais da RC (fechamento da proposta no CRM)"}>
+            Budget materiais{budget?.origem === "rc" && <span className="ml-1 font-normal normal-case text-ww-textFaint">· RC</span>}
+            {budget?.origem === "painel" && <span className="ml-1 font-normal normal-case text-ww-textFaint">· painel</span>}
           </span>
           <span className="text-[13px] font-semibold tabular-nums text-ww-text whitespace-nowrap">
             {budgetVal != null ? gateBRL(budgetVal, canViewValues) : <span className="text-ww-textFaint italic text-[11px]">definir</span>}

@@ -104,8 +104,10 @@ export const brl = (v: number) =>
 
 export default function GradeEditavel({
   cols, linhas, onChange, altura = 340, vazioMsg = "Digite, cole do Excel ou suba a planilha.",
-  selecao, aoColar, colarExtras = [],
+  selecao, aoColar, colarExtras = [], aoRemover,
 }: {
+  /** Quem usa decide como remover (ex.: lista de materiais com "Desfazer"). Sem isso, tira da grade. */
+  aoRemover?: (id: string) => void;
   /** Colunas que não aparecem na grade mas entram no colar COM cabeçalho (ex.: Modelo, PC). */
   colarExtras?: { label: string; key: string }[];
   /** Chamado depois de um paste que trouxe linhas (ex.: casar com o catálogo). */
@@ -292,6 +294,7 @@ export default function GradeEditavel({
   const txt = (v: unknown) => (typeof v === "function" ? undefined : (v as string));
 
   const removerLinha = (li: number) => {
+    if (aoRemover) { aoRemover(linhas[li]._id); return; }
     const novas = linhas.filter((_, i) => i !== li);
     onChange(novas.length ? novas : [linhaVazia(cols)]);
   };
@@ -434,9 +437,9 @@ export default function GradeEditavel({
                 })}
                 <td className="p-0 border-b border-ww-border/40 text-center">
                   <button type="button" onClick={() => removerLinha(li)}
-                    title="Remover linha"
-                    className="opacity-0 group-hover:opacity-100 text-ww-textFaint hover:text-rose-500 transition px-1">
-                    ✕
+                    title="Excluir linha"
+                    className="opacity-0 group-hover:opacity-100 text-ww-textFaint hover:text-rose-500 transition px-1 text-[12px]">
+                    🗑
                   </button>
                 </td>
               </tr>

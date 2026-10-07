@@ -2,6 +2,7 @@
 import "server-only";
 import { supaAdmin } from "@/lib/supabase-admin";
 import { acharLinhaPc, valorLinhaPc, deHtml, type LinhaPc } from "@/lib/lista-pc-linha";
+import { estadoPc } from "@/lib/situacao-pc";
 
 /* 07/10/26 (PJ361): linha ligada só pelo NÚMERO do PC vinha sem valor, quantidade
    nem recebimento — Comprado "—" até em pedido recebido. Aqui cada PC citado
@@ -46,17 +47,40 @@ export async function completarPcs(d: DadosPcs, empresa = "SF", projeto?: number
   /* Comprometido (07/10/26) com a MESMA definição da lista de Projetos: soma do
      valor de cada PC do projeto UMA vez (valor do pedido, com frete), sem os PCs
      escondidos no painel (platform.excluded_pc — ex.: PJ361, PC 7163). */
+  /* Budget de materiais (07/10/26, Benny — PJ361): é o total de MATERIAIS da RC
+     (custo_materiais do fechamento do CRM, "materiais" do Custo planejado), ou o
+     valor que alguém definiu para materiais (rc_projetos_budget.valor_budget_materiais,
+     sql/107). NÃO é o valor_budget: esse é o custo TOTAL (materiais + mão de obra +
+     despesas, preenchido sozinho pelo CRM) e continua sendo o teto do Fluxo de caixa.
+     Lista, cartão de Projetos e regra de aprovação leem daqui. */
+  if (projeto && d.totais) {
+    const { data: bud } = await supaAdmin().schema("approval").from("rc_projetos_budget").select("*")
+      .eq("empresa", empresa).eq("codigo_projeto", projeto).maybeSingle();
+    const manual = (bud as { valor_budget_materiais?: number | null } | null)?.valor_budget_materiais;
+    d.totais.budget_fluxo = d.totais.budget_lista ?? null;
+    d.totais.budget_lista = manual != null ? Number(manual) : null;
+  }
   if (projeto && d.totais) {
     const nums = [...new Set(doProjeto.map((x) => x.numero))];
     const exc = nums.length ? await supaAdmin().schema("platform").from("excluded_pc").select("pc_numero").eq("empresa", empresa).in("pc_numero", nums) : { data: [] };
     const escondidos = new Set(((exc.data ?? []) as { pc_numero: string }[]).map((x) => String(x.pc_numero)));
     const porPedido = new Map<number, string>(doProjeto.map((x) => [Number(x.pedido_id), x.numero]));
-    let comp = 0;
+    let comp = 0, aprovado = 0, pendente = 0, outros = 0;
     const valores: Record<string, number> = {};
     for (const [id, num] of porPedido) if (!escondidos.has(num)) {
-      const v = Number(peds.get(id)?.valor) || 0;
+      const ped = peds.get(id);
+      const v = Number(ped?.valor) || 0;
       comp += v; valores[num] = Math.round(((valores[num] ?? 0) + v) * 100) / 100;
+      // Resumo da lista (07/10/26): PCs aprovados × aguardando aprovação
+      const e = estadoPc({ etapa: ped?.etapa, aprov: ped?.aprov, cancelado: ped?.cancelado, dt_rec: ped?.dtRec, dt_fat: ped?.dtFat, enviado_em: ped?.enviadoEm }).chave;
+      if (e === "aguardando" || e === "requisicao") pendente += v;
+      else if (e === "reprovado" || e === "cancelado") outros += v;
+      else aprovado += v;
     }
+    const r2 = (x: number) => Math.round(x * 100) / 100;
+    d.totais.pcs_aprovado = r2(aprovado);
+    d.totais.pcs_pendente = r2(pendente);
+    d.totais.pcs_outros = r2(outros);
     d.totais.pcs_valores = valores;
     d.totais.comprometido_itens = d.totais.comprometido;
     d.totais.comprometido = Math.round(comp * 100) / 100;

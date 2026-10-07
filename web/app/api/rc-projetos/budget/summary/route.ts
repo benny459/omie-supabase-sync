@@ -50,7 +50,7 @@ export async function GET(req: Request) {
     .filter((r) => keys.includes(`${r.empresa}|${r.codigo_projeto}`))
     .map((r) => ({
       key: `${r.empresa}|${r.codigo_projeto}`,
-      budget_custos: r.valor_previsto_custos,
+      budget_custos: null as number | null,  // budget de MATERIAIS — preenchido abaixo
       valor_total_projeto: r.valor_total_projeto,
       resultado_bruto_esperado: r.resultado_bruto_esperado,
       resultado_bruto_esperado_pct: r.resultado_bruto_esperado_pct,
@@ -71,36 +71,49 @@ export async function GET(req: Request) {
         if (!b) continue;
         const linha = {
           key: `${emp}|${Number(cod)}`,
-          budget_custos: b.budgetCustos,
+          budget_custos: null as number | null,
           valor_total_projeto: b.valorTotalProjeto,
           resultado_bruto_esperado: b.resultadoEsperado,
           resultado_bruto_esperado_pct: b.resultadoEsperadoPct,
           origem: "crm",
         };
         const atual = porKey.get(linha.key);
-        if (atual) Object.assign(atual, linha);
+        if (atual) Object.assign(atual, { ...linha, budget_custos: atual.budget_custos });
         else { rows.push(linha); porKey.set(linha.key, linha); }
       }
     }
   } catch { /* CRM fora do ar não derruba o card */ }
 
-  /* 07/10/26 — o mesmo resumo da Lista de materiais: o budget editado no painel
-     (rc_projetos_budget.valor_budget) manda sobre o do CRM/Fluxo, e o "projetado"
-     soma ao lançado o estimado das linhas da lista que ainda não têm RC/PC. */
+  /* 07/10/26 — o mesmo resumo da Lista de materiais. Budget de MATERIAIS = o definido
+     para materiais no painel (valor_budget_materiais, sql/107), senão o total de
+     materiais da RC (projeto_plano.custo_materiais, do fechamento do CRM). Nunca o
+     valor_budget (custo total — teto do Fluxo). Mesma conta da Lista e da aprovação
+     (lib/lista-pc-completar). O "projetado" soma ao lançado o estimado das linhas
+     da lista que ainda não têm RC/PC. */
   try {
-    const [bud, its] = await Promise.all([
-      supa.schema("approval" as never).from("rc_projetos_budget").select("empresa, codigo_projeto, valor_budget")
+    const [bud, plano, its] = await Promise.all([
+      supa.schema("approval" as never).from("rc_projetos_budget").select("*")
+        .in("empresa", Array.from(empresas)).in("codigo_projeto", Array.from(codigos)),
+      supa.schema("approval" as never).from("projeto_plano").select("empresa, codigo_projeto, custo_materiais")
         .in("empresa", Array.from(empresas)).in("codigo_projeto", Array.from(codigos)),
       supa.schema("approval" as never).from("rc_projetos_itens").select("empresa, codigo_projeto, qtd, cat_valor_unit, pc_numero, rc_item_id, pc_item_id")
         .in("empresa", Array.from(empresas)).in("codigo_projeto", Array.from(codigos)).is("rc_item_id", null).is("pc_item_id", null).limit(20000),
     ]);
     const porKey = new Map(rows.map((r) => [r.key, r as typeof r & { estimado_sem_pc?: number; budget_painel?: boolean }]));
-    for (const b of ((bud.data ?? []) as { empresa: string; codigo_projeto: number; valor_budget: number | null }[])) {
+    const garantir = (k: string) => {
+      let r = porKey.get(k);
+      if (!r) { r = { key: k, budget_custos: null, valor_total_projeto: null, resultado_bruto_esperado: null, resultado_bruto_esperado_pct: null, origem: "rc" }; rows.push(r); porKey.set(k, r); }
+      return r;
+    };
+    for (const p of ((plano.data ?? []) as { empresa: string; codigo_projeto: number; custo_materiais: number | null }[])) {
+      const k = `${p.empresa}|${p.codigo_projeto}`;
+      if (p.custo_materiais == null || !keys.includes(k)) continue;
+      const r = garantir(k); r.budget_custos = Number(p.custo_materiais); r.origem = "rc";
+    }
+    for (const b of ((bud.data ?? []) as { empresa: string; codigo_projeto: number; valor_budget_materiais?: number | null }[])) {
       const k = `${b.empresa}|${b.codigo_projeto}`;
-      if (b.valor_budget == null || !keys.includes(k)) continue;
-      const r = porKey.get(k);
-      if (r) { r.budget_custos = Number(b.valor_budget); r.origem = "painel"; }
-      else { const n = { key: k, budget_custos: Number(b.valor_budget), valor_total_projeto: null, resultado_bruto_esperado: null, resultado_bruto_esperado_pct: null, origem: "painel" }; rows.push(n); porKey.set(k, n); }
+      if (b.valor_budget_materiais == null || !keys.includes(k)) continue;
+      const r = garantir(k); r.budget_custos = Number(b.valor_budget_materiais); r.origem = "painel";
     }
     // linha com nº de PC digitado só sai do "projetado" se esse PC existe de fato (igual à
     // Lista de materiais — sugestão que não casou com nenhum PC continua a comprar)

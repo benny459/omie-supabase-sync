@@ -26,7 +26,7 @@ export type LinhaCompras = { id: string; equipamento: string | null; item: strin
   rc: string | null; vinculo_via: string | null; vinculo_score: number | null; pcs: PcLinha[]; valor_pc: number | null };
 type Fora = { pc_item_id: number; pc: string; fornecedor: string | null; descricao: string; codigo: string | null; qtd: number; valor: number; previsao: string | null };
 type Totais = { estimado: number; comprometido: number; pago: number; budget_lista: number | null; budget_plano: number | null;
-  venda: number | null; margem_plano: number | null };
+  venda: number | null; margem_plano: number | null; pcs_aprovado?: number; pcs_pendente?: number; pcs_outros?: number };
 type Mes = { mes: string | null; planejado: number; comprometido: number; pago: number };
 export type DadosCompras = { itens: LinhaCompras[]; fora_da_lista: Fora[]; totais: Totais; fluxo: Mes[] };
 export type CasamentoPc = { lista_id: string; item: string; pc: string; pc_item_id: number; desc_pc: string; via: string; score: number; medidas_ok: boolean; auto: boolean };
@@ -49,79 +49,86 @@ export function situacaoPc(p: PcLinha | Pick<PcLinha, "etapa" | "aprov" | "nf" |
   return { t: e.rot, cor: e.cor };
 }
 
-/** 1. Quanto vou gastar? O estimado e o restante vêm da lista (valor da linha, senão
- *  último preço do catálogo, senão custo da CP) — o banco só conhece o valor gravado. */
-export function KpisCompras({ d, estimado, restante, linhas, empresa, codigoProjeto, onRecarregar }: {
-  d: DadosCompras; estimado: number; restante: number; linhas: number; empresa: string; codigoProjeto: number; onRecarregar: () => void;
+/** 1. Resumo da lista (07/10/26, Benny): um bloco só, lido de relance —
+ *  X = budget de materiais (da RC) · Y = lista prevista (PCs + estimado das linhas sem PC)
+ *  · pedidos de compra aprovados × aguardando · dentro/estoura · uma barra.
+ *  Mesmos números do cartão de Projetos e da regra de aprovação (lib/lista-pc-completar). */
+export function KpisCompras({ d, restante, empresa, codigoProjeto, onRecarregar }: {
+  d: DadosCompras; restante: number; empresa: string; codigoProjeto: number; onRecarregar: () => void;
 }) {
   const [budgetEdit, setBudgetEdit] = useState<string | null>(null);
   const [ocupado, setOcupado] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const t = d.totais;
   const budget = t ? (t.budget_lista ?? t.budget_plano) : null;
-  const projetado = (t?.comprometido ?? 0) + restante;
-  const folga = budget != null ? budget - projetado : null;
-  const margemProj = t?.margem_plano != null && folga != null ? Number(t.margem_plano) + folga : null;
-  const salvarBudget = async () => {
-    const v = Number(String(budgetEdit ?? "").replace(/\./g, "").replace(",", "."));
-    if (!Number.isFinite(v) || v < 0) { setErro("Budget inválido"); return; }
+  const comp = Number(t?.comprometido ?? 0);
+  const aprov = t?.pcs_aprovado != null ? Number(t.pcs_aprovado) : comp;
+  const pend = t?.pcs_pendente != null ? Number(t.pcs_pendente) : 0;
+  const outros = Number(t?.pcs_outros ?? 0);
+  const lista = comp + restante;   // lista prevista: PCs + estimado das linhas ainda sem PC
+  const folga = budget != null ? budget - lista : null;
+  const pctB = (v: number) => (budget ? `${Math.round((v / budget) * 100)}%` : "");
+  const gravar = async (valor: number | null) => {
     setOcupado(true); setErro(null);
     try {
       const r = await fetch("/api/rc-projetos/budget", { method: "PUT", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ empresa, codigo_projeto: codigoProjeto, valor_budget: v }) });
+        body: JSON.stringify({ empresa, codigo_projeto: codigoProjeto, valor_budget_materiais: valor }) });
       const j = await r.json();
       if (!r.ok) throw new Error(j.error ?? r.statusText);
       setBudgetEdit(null); onRecarregar();
     } catch (e) { setErro((e as Error).message); } finally { setOcupado(false); }
   };
+  const salvarBudget = () => {
+    const v = Number(String(budgetEdit ?? "").replace(/[^\d,.-]/g, "").replace(/\.(?=\d{3}(\D|$))/g, "").replace(",", "."));
+    if (!Number.isFinite(v) || v < 0) { setErro("Budget inválido"); return; }
+    void gravar(v);
+  };
+  const max = Math.max(budget ?? 0, lista) || 1;
+  const w = (v: number) => `${Math.max(0, Math.min(100, (v / max) * 100))}%`;
   return (
-    <div className="cdl space-y-1">
-      <div className="cdl-kpis">
-        <div className="cdl-kpi"><span>Estimado da lista</span><b>{brl(estimado)}</b><small>{linhas} linha(s)</small></div>
-        <div className="cdl-kpi">
+    <div className="cdl cdl-res">
+      <div className="cdl-res-nums">
+        <div>
           <span>Budget de materiais</span>
           {budgetEdit == null
-            ? <b>{brl(budget)} <button className="cdl-lk" onClick={() => setBudgetEdit(String(budget ?? ""))}>editar</button></b>
-            : <span className="cdl-row"><input className="cdl-in" autoFocus value={budgetEdit} onChange={(e) => setBudgetEdit(e.target.value)} />
-                <button className="cdl-btn pri" disabled={ocupado} onClick={() => void salvarBudget()}>ok</button>
+            ? <b>{brl(budget)} <button className="cdl-lk" onClick={() => setBudgetEdit(budget != null ? String(budget).replace(".", ",") : "")}>editar</button></b>
+            : <span className="cdl-row"><input className="cdl-in" autoFocus value={budgetEdit} onChange={(e) => setBudgetEdit(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") salvarBudget(); if (e.key === "Escape") setBudgetEdit(null); }} />
+                <button className="cdl-btn pri" disabled={ocupado} onClick={salvarBudget}>ok</button>
                 <button className="cdl-btn" onClick={() => setBudgetEdit(null)}>×</button></span>}
-          <small>{t?.budget_lista != null ? "definido no painel" : t?.budget_plano != null ? "do CP/MC do CRM" : "sem budget"}</small>
+          <small>{t?.budget_lista != null
+            ? <>definido no painel{t?.budget_plano != null && <> · <button className="cdl-lk" disabled={ocupado} onClick={() => void gravar(null)} title={`Volta ao total de materiais da RC (${brl(t.budget_plano)})`}>usar o da RC</button></>}</>
+            : t?.budget_plano != null ? "total de materiais da RC" : "sem budget — defina em editar"}</small>
         </div>
-        <div className="cdl-kpi"><span>Comprometido (PCs)</span><b>{brl(t?.comprometido)}</b><small>pedidos de compra do projeto</small></div>
-        <div className="cdl-kpi"><span>Pago</span><b>{brl(t?.pago)}</b><small>saídas realizadas do projeto</small></div>
-        <div className={`cdl-kpi ${folga != null && folga < 0 ? "neg" : ""}`}>
-          <span>Projetado × budget</span><b>{brl(projetado)}</b>
-          <small>{folga == null ? "sem budget para comparar" : folga >= 0 ? `sobra ${brl(folga)}` : `estoura ${brl(-folga)}`}</small>
+        <div>
+          <span>Lista prevista</span>
+          <b>{brl(lista)}</b>
+          <small>{budget ? `${pctB(lista)} do budget` : "PCs + estimado das linhas sem PC"}</small>
         </div>
-        <div className={`cdl-kpi ${margemProj != null && t?.margem_plano != null && margemProj < Number(t.margem_plano) ? "neg" : ""}`}>
-          <span>Margem</span><b>{brl(margemProj)}</b>
-          <small>{t?.margem_plano != null ? `no fechamento: ${brl(t.margem_plano)}` : "sem fechamento do CRM"}</small>
+        <div>
+          <span>Pedidos de compra</span>
+          <b>{brl(aprov + pend)}</b>
+          <small><i className="cdl-dot ap" /> aprovados {brl(aprov)}{budget ? ` (${pctB(aprov)})` : ""} · <i className="cdl-dot pe" /> aguardando {brl(pend)}{budget ? ` (${pctB(pend)})` : ""}
+            {t?.pago ? <> · pago {brl(t.pago)}</> : null}</small>
         </div>
       </div>
-      {/* Barra do projeto inteiro (07/10/26): budget × projetado × comprometido × pago, numa escala só */}
-      {budget != null && budget > 0 && (() => {
-        const pago = Number(t?.pago ?? 0), comp = Number(t?.comprometido ?? 0);
-        const max = Math.max(budget, projetado, comp, pago) || 1;
-        const pct = (v: number) => `${Math.min(100, (v / max) * 100)}%`;
-        return (
-          <div className="cdl-barra" title={`Budget ${brl(budget)} · Projetado ${brl(projetado)} · Comprometido ${brl(comp)} · Pago ${brl(pago)}`}>
-            <div className="cdl-barra-trilho">
-              <div className="cdl-barra-proj" style={{ width: pct(projetado) }} />
-              <div className="cdl-barra-comp" style={{ width: pct(comp) }} />
-              <div className="cdl-barra-pago" style={{ width: pct(pago) }} />
-              <div className="cdl-barra-budget" style={{ left: pct(budget) }} />
-            </div>
-            <div className="cdl-barra-leg">
-              <span><i className="pago" /> Pago {brl(pago)}</span>
-              <span><i className="comp" /> Comprometido {brl(comp)}</span>
-              <span><i className="proj" /> Projetado {brl(projetado)}</span>
-              <span><i className="bud" /> Budget {brl(budget)}</span>
-            </div>
-            {projetado > budget && <div className="cdl-alerta">⚠ O projetado estoura o budget de materiais em <b>{brl(projetado - budget)}</b>.</div>}
-          </div>);
-      })()}
-      <p className="cdl-nota">Projetado = comprometido nos PCs + estimado das linhas que ainda não têm PC. Margem = margem do fechamento ± a diferença entre o budget e o projetado.
-        Estimado de cada linha = valor unit. da linha, senão o último preço do catálogo, senão o custo da RC.</p>
+      {budget != null && budget > 0 && (
+        <div className="cdl-res-barra" title={`Aprovados ${brl(aprov)} · Aguardando ${brl(pend)} · Ainda a comprar ${brl(restante)} · Budget ${brl(budget)}`}>
+          <div className="cdl-res-trilho">
+            <div className="ap" style={{ width: w(aprov) }} />
+            <div className="pe" style={{ width: w(pend) }} />
+            <div className="rs" style={{ width: w(restante) }} />
+            <div className="bud" style={{ left: w(budget) }} />
+          </div>
+        </div>
+      )}
+      <div className={`cdl-res-st ${folga != null && folga < 0 ? "neg" : ""}`}>
+        {folga == null ? "Sem budget de materiais para comparar."
+          : folga >= 0 ? <>Dentro do budget · sobra <b>{brl(folga)}</b></>
+          : <>Estoura o budget em <b>{brl(-folga)}</b></>}
+        <span className="mut"> · barra: <i className="cdl-dot ap" /> aprovados <i className="cdl-dot pe" /> aguardando <i className="cdl-dot rs" /> ainda a comprar <i className="cdl-dot bud" /> budget</span>
+        {outros > 0 && <span className="mut"> · inclui {brl(outros)} de PC reprovado/cancelado</span>}
+      </div>
       {erro && <div className="cdl-box cdl-err">{erro}</div>}
     </div>
   );
@@ -192,6 +199,23 @@ export function FluxoCompras({ d }: { d: DadosCompras }) {
 export const CSS_CDL = `
 .cdl{font-size:12.5px;color:var(--ww-text)}
 .cdl .mut{color:var(--ww-text-muted)}
+.cdl-res{border:1px solid var(--ww-border);border-radius:10px;padding:10px 12px;background:var(--ww-panel);display:flex;flex-direction:column;gap:8px}
+.cdl-res-nums{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px}
+.cdl-res-nums>div{display:flex;flex-direction:column;gap:2px}
+.cdl-res-nums span{font-size:11px;color:var(--ww-text-muted)}
+.cdl-res-nums b{font-size:17px;font-weight:650}
+.cdl-res-nums small{font-size:11px;color:var(--ww-text-muted)}
+.cdl-res-trilho{position:relative;height:12px;border-radius:6px;background:var(--ww-row-hover,rgba(127,127,127,.15));display:flex;overflow:visible}
+.cdl-res-trilho>.ap{background:#2563EB;height:100%}
+.cdl-res-trilho>.pe{background:#F59E0B;height:100%}
+.cdl-res-trilho>.rs{background:repeating-linear-gradient(45deg,rgba(148,163,184,.55) 0 4px,rgba(148,163,184,.3) 4px 8px);height:100%}
+.cdl-res-trilho>div:first-child{border-radius:6px 0 0 6px}
+.cdl-res-trilho>.bud{position:absolute;top:-4px;bottom:-4px;width:2px;background:var(--ww-text);transform:translateX(-1px)}
+.cdl-res-st{font-size:12px}
+.cdl-res-st.neg{color:#e11d48;font-weight:600}
+.cdl-res-st .mut{font-weight:400}
+.cdl-dot{display:inline-block;width:8px;height:8px;border-radius:2px;margin:0 2px 0 4px;vertical-align:middle}
+.cdl-dot.ap{background:#2563EB}.cdl-dot.pe{background:#F59E0B}.cdl-dot.rs{background:rgba(148,163,184,.6)}.cdl-dot.bud{background:var(--ww-text);width:2px}
 .cdl-kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:8px}
 .cdl-kpi{border:1px solid var(--ww-border);border-radius:10px;padding:9px 11px;background:var(--ww-panel);display:flex;flex-direction:column;gap:2px}
 .cdl-kpi span{font-size:11px;color:var(--ww-text-muted)}
