@@ -28,7 +28,9 @@ type Painel = {
 type Item = { id?: number; seq?: number; descricao: string; lc116: string | null; cod_serv_munic: string | null; quantidade: number; valor_unitario: number; valor_total?: number; aliq_iss?: number | null; retem_iss?: boolean; servico_codigo?: string | null };
 type Detalhe = {
   contrato: Record<string, unknown>; itens: Item[];
-  historico_faturas: { id: number; competencia: string; status: string; origem: string; documento: string | null; venda_id: number | null; valor: number; data: string | null; recibo: string | null }[];
+  historico_faturas: { id: number; competencia: string; status: string; origem: string; documento: string | null; venda_id: number | null; valor: number; data: string | null; recibo: string | null;
+    emissao: { id: number; tipo: string; status: string; numero: string | null; pdf_path: string | null; mensagem: string | null; ambiente: string; em: string } | null;
+    nfse: { id: number; numero: string; municipio: string; tem_pdf: boolean; data: string | null } | null }[];
   reajustes: { id: number; vigente_desde: string; valor_anterior: number; valor_novo: number; indice: string | null; percentual: number | null; observacao: string | null; origem: string; por: string | null }[];
   log: { por: string | null; acao: string; detalhe: Record<string, unknown> | null; em: string }[];
 };
@@ -244,6 +246,18 @@ export default function ContratosRecorrentes({ empresa, admin, tipoOs, prod, avi
                     <td>{c.proximo_reajuste ? <span style={{ color: c.reajuste_proximo ? "var(--f-warn)" : "var(--f-tx2)" }}>{dataBR(c.proximo_reajuste)}</span> : <span className="orig">—</span>}
                       {c.indice && <div className="orig">{c.indice}</div>}</td>
                     <td onClick={(e) => e.stopPropagation()}><div className="rowact">
+                      {/* OS gerada (07/10/26): as duas saídas sempre à mão — recibo emitido aqui, ou NFS-e emitida na prefeitura e registrada aqui com o PDF */}
+                      {c.competencias.filter((x) => x.situacao === "gerado" && x.venda_id).slice(0, 1).map((x) => (
+                        <span key={`g${x.competencia}`} style={{ display: "inline-flex", gap: 6 }}>
+                          <button className={`btn sm ${(c.tipo_documento ?? tipoOs) === "nfse" ? "" : "pri"}`} disabled={ocupado === `e:${x.venda_id}`}
+                            title={`Emite o recibo da ${x.documento ?? "OS"} (${comp(x.competencia)}) — não passa pela SEFAZ`}
+                            onClick={() => emitirRecibo({ label: x.documento ?? `OS ${comp(x.competencia)}`, id: Number(x.venda_id) })}>
+                            {ocupado === `e:${x.venda_id}` ? "Emitindo…" : "Emitir recibo"}</button>
+                          <button className={`btn sm ${(c.tipo_documento ?? tipoOs) === "nfse" ? "pri" : ""}`}
+                            title={`NFS-e emitida no portal da prefeitura: registre aqui o número e anexe o PDF/XML (${x.documento ?? ""})`}
+                            onClick={() => registrarNfse([`venda:${x.venda_id}`])}>Registrar NFS-e</button>
+                        </span>
+                      ))}
                       {dv.slice(0, 1).map((x) => (
                         <button key={x.competencia} className={`btn sm ${x.situacao === "atrasado" ? "danger" : "pri"}`} disabled={ocupado === `f:${c.id}:${x.competencia}`}
                           onClick={() => faturar(c, x.competencia)}>{ocupado === `f:${c.id}:${x.competencia}` ? "Gerando…" : `Faturar ${comp(x.competencia)}`}</button>
@@ -264,6 +278,7 @@ export default function ContratosRecorrentes({ empresa, admin, tipoOs, prod, avi
       </p>
 
       {ctrAberto && <Gaveta c={ctrAberto} fechar={() => setAberto(null)} faturar={faturar} ocupado={ocupado} avisar={avisar} post={post}
+        emitirRecibo={emitirRecibo} registrarNfse={registrarNfse}
         onMudou={carregar} editar={() => { setEditar(ctrAberto); setAberto(null); }} />}
       {editar && <FormContrato empresa={empresa} c={editar === "novo" ? null : editar} fechar={() => setEditar(null)} post={post} avisar={avisar}
         feito={(id) => { setEditar(null); carregar(); if (id) setAberto(id); }} />}
@@ -313,8 +328,9 @@ function Calendario({ p, abrir }: { p: Painel; abrir: (id: number) => void }) {
 }
 
 // ── Gaveta do contrato ──────────────────────────────────────────────────────
-function Gaveta({ c, fechar, faturar, ocupado, avisar, post, onMudou, editar }: {
+function Gaveta({ c, fechar, faturar, ocupado, avisar, post, onMudou, editar, emitirRecibo, registrarNfse }: {
   c: Ctr; fechar: () => void; faturar: (c: Ctr, comp: string) => void; ocupado: string | null; avisar: (m: string) => void;
+  emitirRecibo: (g: { label: string; id: number }) => Promise<void>; registrarNfse: (chaves: string[]) => void;
   post: (b: Record<string, unknown>) => Promise<Record<string, unknown> & { error?: string }>; onMudou: () => void; editar: () => void;
 }) {
   const [d, setD] = useState<Detalhe | null>(null);
@@ -427,7 +443,24 @@ function Gaveta({ c, fechar, faturar, ocupado, avisar, post, onMudou, editar }: 
           {d && (<>
             <h4>Histórico de faturamento ({d.historico_faturas.length})</h4>
             <table className="it"><tbody>{d.historico_faturas.slice(0, 36).map((h) => (
-              <tr key={h.id}><td>{comp(h.competencia)}</td><td>{h.documento ?? "—"}{h.recibo ? <span className="orig"> · recibo {h.recibo}</span> : null}</td>
+              <tr key={h.id}><td>{comp(h.competencia)}</td>
+                <td>{h.documento ?? "—"}{h.recibo ? <span className="orig"> · recibo {h.recibo}</span> : null}
+                  {/* documentos (07/10/26): abrir o recibo / a NFS-e; tentativa que falhou aparece com o motivo */}
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 3 }}>
+                    {h.emissao?.pdf_path && <a className="btn sm" href={`/api/faturamento/recibo-pdf?p=${encodeURIComponent(h.emissao.pdf_path)}`} target="_blank" rel="noreferrer">
+                      Recibo{h.emissao.numero ? ` nº ${h.emissao.numero}` : ""} (PDF){h.emissao.ambiente === "homologacao" ? " · teste" : ""}</a>}
+                    {h.nfse && <button className="btn sm" onClick={async () => {
+                      const j = await fetch(`/api/faturamento/nfse/${h.nfse!.id}`, { cache: "no-store" }).then((x) => x.json()).catch((e) => ({ error: String(e) }));
+                      if (j.error) avisar(j.error); else if (j.pdf_url) window.open(j.pdf_url, "_blank"); else avisar(`NFS-e ${h.nfse!.numero} registrada sem PDF anexado`);
+                    }}>NFS-e nº {h.nfse.numero}{h.nfse.tem_pdf ? " (PDF)" : " · sem PDF"}</button>}
+                    {h.status === "gerado" && h.venda_id && !h.nfse && h.emissao?.status !== "autorizada" && (<>
+                      {h.emissao && ["erro", "rejeitada"].includes(h.emissao.status) && <span className="flag bad" title={h.emissao.mensagem ?? ""}>
+                        recibo não saiu ({dataBR(h.emissao.em)}): {(h.emissao.mensagem ?? h.emissao.status).slice(0, 80)}</span>}
+                      <button className="btn sm pri" disabled={ocupado === `e:${h.venda_id}`} onClick={async () => { await emitirRecibo({ label: h.documento ?? "OS", id: Number(h.venda_id) }); carregar(); }}>
+                        {ocupado === `e:${h.venda_id}` ? "Emitindo…" : h.emissao ? "Emitir recibo de novo" : "Emitir recibo"}</button>
+                      <button className="btn sm" onClick={() => { registrarNfse([`venda:${h.venda_id}`]); fechar(); }}>Registrar NFS-e (prefeitura)</button>
+                    </>)}
+                  </div></td>
                 <td>{dataBR(h.data)}</td><td className="r mono">{fmt(Number(h.valor))}</td><td className="orig">{h.origem === "omie" ? "Omie" : "painel"}</td></tr>
             ))}</tbody></table>
           </>)}

@@ -139,6 +139,7 @@ export default function TelaFaturamento() {
   const [tipo, setTipo] = useState<"all" | "PV" | "OS">("all");
   const [view, setView] = useState<"list" | "kanban" | "emissoes" | "nfse" | "rascunhos">("list");
   const [regNfse, setRegNfse] = useState<string[] | null>(null);
+  const [verContratos, setVerContratos] = useState(0); // recarrega Contratos depois de registrar NFS-e (07/10/26)
   const [q, setQ] = useState("");
   // Busca no servidor (todos os períodos) a partir de 3 letras, com pausa.
   const [qServ, setQServ] = useState("");
@@ -415,7 +416,7 @@ export default function TelaFaturamento() {
         </div>
 
         {secao === "contratos" && (
-          <ContratosRecorrentes empresa={empresa} admin tipoOs={(cfg?.tipo_os as "recibo" | "nfse") ?? "recibo"} prod={prod}
+          <ContratosRecorrentes key={verContratos} empresa={empresa} admin tipoOs={(cfg?.tipo_os as "recibo" | "nfse") ?? "recibo"} prod={prod}
             avisar={avisar} registrarNfse={(ch) => setRegNfse(ch)} />
         )}
 
@@ -537,7 +538,7 @@ export default function TelaFaturamento() {
           abrirFolha={(sec?: Inicial["secao"]) => abrirFolhaDe(docAberto, sec)}
           registrar={() => { setRegNfse([docAberto.chave]); setAberto(null); }} />}
         {regNfse && <RegistrarNfse empresa={empresa} chaves={regNfse} avisar={avisar} fechar={() => setRegNfse(null)}
-          feito={() => { setRegNfse(null); setSel(new Set()); carregar(); }} />}
+          feito={() => { setRegNfse(null); setSel(new Set()); carregar(); setVerContratos((v) => v + 1); }} />}
         {toast && <div className="fpv-toast" onClick={() => setToast(null)}>{toast}</div>}
       </div>
     </PaginaNavy>
