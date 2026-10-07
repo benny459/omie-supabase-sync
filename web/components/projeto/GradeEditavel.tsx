@@ -68,6 +68,8 @@ export type ColunaGrade = {
   exibir?: (linha: LinhaGrade) => string | null | undefined;
   /** Dica (title) da célula. */
   dica?: (linha: LinhaGrade) => string | undefined;
+  /** Dica do cabeçalho (o que a coluna significa). */
+  dicaCab?: string;
 };
 
 export type LinhaGrade = Record<string, string> & { _id: string };
@@ -276,14 +278,14 @@ export default function GradeEditavel({
   };
 
   // Colunas presas à esquerda: caixinha, # e as `fixa` iniciais, com fundo opaco.
-  const W_SEL = 30, W_NUM = 34;
+  const W_SEL = 28, W_NUM = 28;
   const esq = new Map<string, number>();
   {
     let x = (selecao ? W_SEL : 0) + W_NUM;
     for (const c of cols) { if (!c.fixa) break; esq.set(c.key, x); x += c.w; }
   }
   const ultimaFixa = [...esq.keys()].pop();
-  const larguraTotal = (selecao ? W_SEL : 0) + W_NUM + 30 + cols.reduce((a, c) => a + c.w, 0);
+  const larguraTotal = (selecao ? W_SEL : 0) + W_NUM + 24 + cols.reduce((a, c) => a + c.w, 0);
   const OPACO = "bg-[rgb(var(--color-ww-panel))]";
   const fixo = (left: number, z: number) => ({ position: "sticky" as const, left, zIndex: z });
   const sombra = (k: string) => (k === ultimaFixa ? "shadow-[2px_0_0_0_rgb(var(--color-ww-border))]" : "");
@@ -342,13 +344,13 @@ export default function GradeEditavel({
               <th style={{ width: W_NUM, ...(esq.size ? fixo(selecao ? W_SEL : 0, 21) : {}) }}
                   className={`p-1.5 text-[10px] text-ww-textFaint shadow-[0_1px_0_0_rgb(var(--color-ww-border))] ${OPACO}`}>#</th>
               {cols.map((c) => (
-                <th key={c.key} style={{ width: c.w, minWidth: c.w, ...(esq.has(c.key) ? fixo(esq.get(c.key)!, 21) : {}) }}
+                <th key={c.key} title={c.dicaCab} style={{ width: c.w, minWidth: c.w, ...(esq.has(c.key) ? fixo(esq.get(c.key)!, 21) : {}) }}
                     className={`p-1.5 text-[10px] uppercase tracking-wider font-semibold text-ww-textMuted whitespace-nowrap overflow-hidden text-ellipsis shadow-[0_1px_0_0_rgb(var(--color-ww-border))] ${
                       c.alinhaDireita ? "text-right" : "text-left"} ${OPACO} ${(c.classe ?? "").replace(/(^|\s)bg-\S+/g, " ")}`}>
                   {c.label}
                 </th>
               ))}
-              <th style={{ width: 30 }} className="shadow-[0_1px_0_0_rgb(var(--color-ww-border))]" />
+              <th style={{ width: 24 }} className={`shadow-[0_1px_0_0_rgb(var(--color-ww-border))] ${OPACO}`} />
             </tr>
           </thead>
           <tbody>
@@ -371,8 +373,9 @@ export default function GradeEditavel({
                 {cols.map((c) => {
                   if (c.render) {
                     return (
-                      <td key={c.key} title={c.dica?.(linha)}
-                          className={`p-1.5 border-b border-ww-border/40 bg-ww-rowHover/40 whitespace-nowrap overflow-hidden text-ellipsis ${
+                      <td key={c.key} title={c.dica?.(linha)} style={esq.has(c.key) ? fixo(esq.get(c.key)!, 5) : undefined}
+                          className={`p-1.5 border-b border-ww-border/40 whitespace-nowrap overflow-hidden text-ellipsis ${
+                            esq.has(c.key) ? `${OPACO} ${sombra(c.key)}` : "bg-ww-rowHover/40"} ${
                             c.alinhaDireita ? "text-right tabular-nums" : ""} ${c.classe ?? ""}`}>
                         {c.render(linha)}
                       </td>
@@ -380,8 +383,8 @@ export default function GradeEditavel({
                   }
                   if (c.calculada) {
                     return (
-                      <td key={c.key}
-                          className={`p-1.5 text-right tabular-nums text-ww-textMuted border-b border-ww-border/40 bg-ww-rowHover/40 ${c.classe ?? ""}`}>
+                      <td key={c.key} title={c.dica?.(linha)}
+                          className={`p-1.5 text-right tabular-nums text-ww-textMuted border-b border-ww-border/40 bg-ww-rowHover/40 whitespace-nowrap overflow-hidden ${c.classe ?? ""}`}>
                         {c.calculada(linha)}
                       </td>
                     );

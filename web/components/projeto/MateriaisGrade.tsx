@@ -197,6 +197,44 @@ export default function MateriaisGrade({
   const [vincLinha, setVincLinha] = useState<string | null>(null);
   const [vincBusca, setVincBusca] = useState<string[] | null>(null);
   const [painelDatas, setPainelDatas] = useState(false);
+
+  // ── 💬 Comentários das linhas (sql/101; antes era a coluna Observação) ──
+  type Coment = { id: number | string; autor: string; texto: string; criado_em: string; origem?: string };
+  const [coments, setComents] = useState<Record<string, Coment[]>>({});
+  const [comentPendente, setComentPendente] = useState(false);
+  const [comentLinha, setComentLinha] = useState<string | null>(null);
+  const [comentTexto, setComentTexto] = useState("");
+  const [comentando, setComentando] = useState(false);
+  /** Conversa da linha: a observação gravada na linha (Excel/planilha) entra como
+   *  primeiro comentário enquanto não estiver na conversa. */
+  const conversa = useCallback((l: Record<string, string>): Coment[] => {
+    const id = String(l._id ?? "");
+    const lista = id.startsWith("db") ? (coments[id.slice(2)] ?? []) : [];
+    const obs = String(l.observacao ?? "").trim();
+    if (obs && !lista.some((c) => c.texto.trim() === obs)) {
+      return [{ id: "obs", autor: "observação da lista", texto: obs, criado_em: "", origem: "observacao" }, ...lista];
+    }
+    return lista;
+  }, [coments]);
+  const carregarComentarios = useCallback(async () => {
+    const j = await fetch(`/api/rc-projetos/comentarios?empresa=${empresa}&codigo_projeto=${codigoProjeto}`, { cache: "no-store" })
+      .then((x) => x.json()).catch(() => null) as { comentarios?: Record<string, Coment[]>; pendente?: boolean } | null;
+    if (j?.comentarios) { setComents(j.comentarios); setComentPendente(!!j.pendente); }
+  }, [empresa, codigoProjeto]);
+  const comentar = useCallback(async (linhaId: string) => {
+    const texto = comentTexto.trim();
+    if (!texto) return;
+    setComentando(true);
+    try {
+      const r = await fetch("/api/rc-projetos/comentarios", { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ empresa, codigo_projeto: codigoProjeto, item_id: linhaId.slice(2), texto }) });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.error ?? r.statusText);
+      setComents((m) => ({ ...m, [linhaId.slice(2)]: [...(m[linhaId.slice(2)] ?? []), j.comentario as Coment] }));
+      setComentTexto("");
+    } catch (e) { setErro(`Não consegui gravar o comentário: ${(e as Error).message}`); }
+    finally { setComentando(false); }
+  }, [comentTexto, empresa, codigoProjeto]);
   const abrirSeletorLista = useCallback((id: string) => setSeletor({ alvo: "lista", id }), []);
 
   // ── Colunas ───────────────────────────────────────────────────────────────
@@ -209,7 +247,18 @@ export default function MateriaisGrade({
      linha); PC + situação + vínculo numa coluna só, com "vincular" na própria linha;
      tudo numa linha só, com reticências, e as colunas até o Item presas ao rolar. */
   const COLS: ColunaGrade[] = useMemo(() => [
-    { key: "equipamento", label: "Equipamento", w: 104, fixa: true,
+    // RC: selo pequeno logo depois do #; o número aparece na dica e o selo abre a RC.
+    { key: "_rc", label: "RC", w: 26, fixa: true,
+      dicaCab: "Requisição de compra (RC) da linha — passe o mouse para ver o número; clique para abrir.",
+      dica: (l) => { const c = cmpPorId.get(l._id); return c?.rc ? `RC ${c.rc}` : undefined; },
+      render: (l) => {
+        const c = cmpPorId.get(l._id);
+        return c?.rc
+          ? <a target="_blank" rel="noreferrer" href={`/erp/compras?abrir=${c.rc}&tipo=RC&emp=${empresa}`}
+              className="inline-block px-0.5 rounded bg-slate-500/20 text-[8.5px] font-bold text-ww-textMuted hover:text-ww-accent">RC</a>
+          : null;
+      } },
+    { key: "equipamento", label: "Equipamento", w: 88, fixa: true,
       dica: (l) => l.equipamento || undefined,
       // Nome livre, mas sugere os padrões do cadastro e os já usados nos projetos.
       autocompletar: {
@@ -225,7 +274,7 @@ export default function MateriaisGrade({
       } },
     // Código NOSSO (estoque/ALLKA), nunca o do Omie. O ícone diz a situação do
     // casamento (✓ / ⚠ conferir / ⌕ sem) e abre o seletor do catálogo.
-    { key: "cat_codigo", label: "Código", w: 96, fixa: true, pularNoColar: true,
+    { key: "cat_codigo", label: "Código", w: 88, fixa: true, pularNoColar: true,
       limpaAoEditar: ["cat_ncod_prod", "_match", "_alts", "_cat_desc"],
       marca: (l) => (String(l.item ?? "").trim() && (!l.cat_ncod_prod || l._match === "omie")
         ? { classe: "bg-amber-500/15", etiqueta: l.cat_codigo ? "" : l._omie ? `Omie ${l._omie}` : "sem código",
@@ -246,7 +295,7 @@ export default function MateriaisGrade({
         },
         aoEscolher: (sg, linha) => camposDoCatalogo(sg.dados as Cat, "ok", [], linha.cat_valor_unit ?? ""),
       } },
-    { key: "item",        label: "Item",        w: 270, fixa: true,
+    { key: "item",        label: "Item",        w: 224, fixa: true,
       // Casado: mostra a descrição do item do catálogo; o texto original (que é a
       // chave da linha e do de-para) volta ao editar e fica na dica.
       exibir: (l) => (l.cat_ncod_prod && l._match !== "omie" && l._cat_desc ? l._cat_desc : null),
@@ -268,9 +317,9 @@ export default function MateriaisGrade({
           try { return (JSON.parse(linha._alts) as Cat[]).map(sugestao); } catch { return []; }
         },
       } },
-    { key: "qtd",         label: "Qtd",         w: 52, tipo: "num", alinhaDireita: true },
-    { key: "un",          label: "Un",          w: 40 },
-    { key: "data_necessaria", label: "Necessário em", w: 112, tipo: "data",
+    { key: "qtd",         label: "Qtd",         w: 46, tipo: "num", alinhaDireita: true },
+    { key: "un",          label: "Un",          w: 34 },
+    { key: "data_necessaria", label: "Necessário em", w: 102, tipo: "data",
       marca: (l) => {
         const g = dataGrupoRef.current.get(normGrupo(l.equipamento || "Geral")) ?? null;
         if (!g) return null;
@@ -278,34 +327,31 @@ export default function MateriaisGrade({
         if (l.data_necessaria !== g) return { classe: "bg-amber-500/10", dica: `Data própria — o grupo está em ${dia(g)}` };
         return null;
       } },
-    { key: "observacao",  label: "Observação",  w: 110, dica: (l) => l.observacao || undefined },
-    { key: "cat_valor_unit", label: "Valor unit.", w: 92, tipo: "moeda", alinhaDireita: true,
+    { key: "cat_valor_unit", label: "Valor unit.", w: 84, tipo: "moeda", alinhaDireita: true,
+      dicaCab: "Valor unitário estimado da linha. Vazio, vem do PC, senão do último preço do catálogo, senão do custo da CP (a origem aparece pequena na célula).",
       marca: (l) => {
         const f = l._vu_fonte;
         if (!f || !String(l.cat_valor_unit ?? "").trim()) return null;
         return { etiqueta: f === "pc" ? "PC" : f === "CP" ? "CP" : "cat.",
           dica: f === "pc" ? "Preço unitário da linha do pedido de compra" : f === "CP" ? "Custo da composição de preço (CP) — sem compra anterior" : "Último preço pago (catálogo)" };
       } },
-    { key: "_total", label: "Total", w: 92, alinhaDireita: true,
+    // Projetado × Comprado (PC) × Δ — o que se esperava gastar, o que o PC custou e a diferença.
+    { key: "_proj", label: "Projetado", w: 90, alinhaDireita: true,
+      dicaCab: "Projetado = Qtd × Valor unit. da linha — quanto se espera gastar com este item.",
+      dica: (l) => (l._vu_fonte ? `Qtd × valor unit. (${l._vu_fonte === "pc" ? "do PC" : l._vu_fonte === "CP" ? "da CP" : "do catálogo"})` : "Qtd × valor unit."),
       calculada: (l) => {
         const t = num(l.qtd) * num(l.cat_valor_unit);
         return t ? brl(t) : "";
       } },
     // ── Bloco do PC (leitura) ──
-    { key: "_rc", label: "RC", w: 56, classe: `${PC} border-l border-ww-border`,
-      render: (l) => {
-        const c = cmpPorId.get(l._id);
-        return c?.rc
-          ? <a className="text-ww-accent hover:underline" target="_blank" rel="noreferrer" href={`/erp/compras?abrir=${c.rc}&tipo=RC&emp=${empresa}`}>{c.rc}</a>
-          : <span className="text-ww-textFaint">—</span>;
-      } },
-    { key: "_pc", label: "PC · situação", w: 168, classe: PC,
+    { key: "_pc", label: "PC", w: 72, classe: `${PC} border-l border-ww-border`,
+      dicaCab: "Pedido de compra desta linha — clique para abrir. Sem PC: “+ vincular”.",
       dica: (l) => {
         const c = cmpPorId.get(l._id);
         if (!c?.pcs.length) return l.pc_numero ? `PC ${l.pc_numero} (não encontrado no Compras)` : undefined;
         const v = c.vinculo_via;
         const via = v === "rc" ? "pela RC" : v === "codigo" ? "pelo código" : v === "descricao" ? `pela descrição ${Math.round(Number(c.vinculo_score ?? 0) * 100)}%` : v === "manual" ? "manual" : "pelo nº do PC";
-        return c.pcs.map((p) => `PC ${p.pc} — ${situacaoPc(p).t} · ${p.dt_rec ? `recebido ${dia(p.dt_rec)}${p.qtd_recebida != null ? ` (${p.qtd_recebida})` : ""}` : `previsão ${dia(p.previsao)}`}`).join("\n") + `\nVínculo ${via}`;
+        return `${c.pcs.map((p) => `PC ${p.pc}${p.fornecedor ? ` — ${p.fornecedor}` : ""}`).join("\n")}\nVínculo ${via}`;
       },
       render: (l) => {
         const c = cmpPorId.get(l._id);
@@ -314,25 +360,37 @@ export default function MateriaisGrade({
           return (
             <button type="button" onClick={() => setVincLinha(l._id)}
               className="text-[10.5px] text-ww-accent hover:underline" title="Ligar esta linha a um pedido de compra (sugestões ou busca)">
-              {l.pc_numero ? `PC ${l.pc_numero}? · vincular` : "+ vincular PC"}
+              {l.pc_numero ? `${l.pc_numero}?` : "+ vincular"}
             </button>);
         }
-        const p = c.pcs[0];
-        const st = situacaoPc(p);
+        return (
+          <span className="inline-flex items-center gap-1">
+            <a target="_blank" rel="noreferrer" href={`/erp/compras?abrir=${c.pcs[0].pc}&tipo=PC&emp=${empresa}`}
+              className="font-mono text-[12.5px] font-bold text-ww-text hover:text-ww-accent hover:underline" title="Abrir o pedido de compra">
+              {c.pcs[0].pc}
+            </a>
+            {c.pcs.length > 1 && <span className="text-[10px] text-ww-textMuted">+{c.pcs.length - 1}</span>}
+          </span>);
+      } },
+    { key: "_sit", label: "Situação", w: 124, classe: PC,
+      dicaCab: "Situação do pedido de compra, com os mesmos nomes e cores do Compras.",
+      dica: (l) => {
+        const c = cmpPorId.get(l._id);
+        return c?.pcs.map((p) => `${situacaoPc(p).t} · ${p.dt_rec ? `recebido ${dia(p.dt_rec)}${p.qtd_recebida != null ? ` (${p.qtd_recebida})` : ""}` : `previsão ${dia(p.previsao)}`}`).join("\n");
+      },
+      render: (l) => {
+        const c = cmpPorId.get(l._id);
+        if (!c?.pcs.length) return c?.rc ? <span className="text-ww-textMuted text-[10.5px]">em RC</span> : null;
+        const st = situacaoPc(c.pcs[0]);
         const pode = c.vinculo_via === "codigo" || c.vinculo_via === "descricao" || c.vinculo_via === "manual";
         return (
           <span className="inline-flex items-center gap-1 max-w-full">
-            <a target="_blank" rel="noreferrer" href={`/erp/compras?abrir=${p.pc}&tipo=PC&emp=${empresa}`}
-              className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold text-white truncate hover:brightness-110"
-              style={{ background: st.cor }} title="Abrir o pedido de compra">
-              {p.pc} · {st.t}
-            </a>
-            {c.pcs.length > 1 && <span className="text-[10px] text-ww-textMuted">+{c.pcs.length - 1}</span>}
-            {pode && <button type="button" title="Desfazer o vínculo" className="text-[10px] text-ww-textFaint hover:text-rose-500"
+            <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold text-white truncate" style={{ background: st.cor }}>{st.t}</span>
+            {pode && <button type="button" title="Desfazer o vínculo com o PC" className="text-[10px] text-ww-textFaint hover:text-rose-500"
               onClick={() => void desvincularRef.current?.(c.id)}>✕</button>}
           </span>);
       } },
-    { key: "_forn", label: "Fornecedor", w: 160, classe: PC,
+    { key: "_forn", label: "Fornecedor", w: 116, classe: PC,
       dica: (l) => {
         const c = cmpPorId.get(l._id);
         const f = c?.pcs.map((p) => p.fornecedor).filter(Boolean).join(", ");
@@ -343,19 +401,17 @@ export default function MateriaisGrade({
         const c = cmpPorId.get(l._id);
         const f = c?.pcs.map((p) => p.fornecedor).filter(Boolean)[0];
         if (f) return <span className="text-ww-text">{f}</span>;
-        if (l.cat_fornecedor) return (
-          <span className="text-ww-textMuted italic">{l.cat_fornecedor}
-            {(l.cat_entrega_dias || l.cat_fat_dias) && <span className="not-italic tabular-nums text-ww-textFaint"> · {l.cat_entrega_dias || "—"}d/{l.cat_fat_dias || "—"}d</span>}
-          </span>);
+        if (l.cat_fornecedor) return <span className="text-ww-textMuted italic">{l.cat_fornecedor}</span>;
         return <span className="text-ww-textFaint">—</span>;
       } },
-    { key: "_comprado", label: "Comprado", w: 100, alinhaDireita: true, classe: PC,
+    { key: "_comprado", label: "Comprado (PC)", w: 96, alinhaDireita: true, classe: PC,
+      dicaCab: "Comprado (PC) = valor da linha deste item no pedido de compra (qtd × preço do PC, com IPI/ST e desconto).",
       dica: (l) => {
         const c = cmpPorId.get(l._id);
         if (!c || c.valor_pc == null) return undefined;
         const vu = c.pcs.find((p) => p.valor_unit != null)?.valor_unit;
         const qPc = c.pcs.reduce((a, p) => a + (Number(p.qtd) || 0), 0);
-        return [vu != null ? `${brl(vu)}/un` : "", qPc ? `qtd no PC: ${qPc} · na lista: ${num(l.qtd) || "—"}` : ""].filter(Boolean).join(" · ");
+        return [vu != null ? `${brl(vu)}/un no PC` : "", qPc ? `qtd do PC: ${qPc} · na lista: ${num(l.qtd) || "—"}` : ""].filter(Boolean).join(" · ");
       },
       render: (l) => {
         const c = cmpPorId.get(l._id);
@@ -363,9 +419,32 @@ export default function MateriaisGrade({
         const q = num(l.qtd);
         const qPc = c.pcs.reduce((a, p) => a + (Number(p.qtd) || 0), 0);
         const dif = qPc > 0 && q > 0 && Math.abs(qPc - q) > 1e-6;
-        return <span>{dif && <span className="text-amber-600 dark:text-amber-300 mr-1" title={`Qtd do PC (${qPc}) diferente da lista (${q})`}>≠</span>}{brl(c.valor_pc)}</span>;
+        return <span>{dif && <span className="text-amber-600 dark:text-amber-300 mr-1 cursor-help" title={`Qtd do PC diferente da lista: ${qPc} no PC × ${q} na lista`}>≠</span>}{brl(c.valor_pc)}</span>;
       } },
-  ], [empresa, cmpPorId, nomesPadrao, gruposMeta, abrirSeletorLista, PC]);
+    { key: "_delta", label: "Δ", w: 70, alinhaDireita: true, classe: PC,
+      dicaCab: "Δ = Comprado (PC) − Projetado. Verde: comprou abaixo do projetado; vermelho: acima.",
+      render: (l) => {
+        const c = cmpPorId.get(l._id);
+        const proj = num(l.qtd) * num(l.cat_valor_unit);
+        if (!c || c.valor_pc == null || !proj) return <span className="text-ww-textFaint">—</span>;
+        const d = Math.round((Number(c.valor_pc) - proj) * 100) / 100;
+        if (Math.abs(d) < 0.01) return <span className="text-ww-textFaint" title="Comprado igual ao projetado">=</span>;
+        return <span className={d > 0 ? "text-rose-600 dark:text-rose-400" : "text-emerald-600 dark:text-emerald-400"}
+          title={`${d > 0 ? "Acima" : "Abaixo"} do projetado (${Math.round((d / proj) * 100)}%)`}>{d > 0 ? "+" : "−"}{brl(Math.abs(d)).replace("R$", "").trim()}</span>;
+      } },
+    // 💬 Comentários (antiga Observação) — conversa curta por linha
+    { key: "_obs", label: "💬", w: 30,
+      dicaCab: "Comentários da linha (antiga Observação) — quem escreveu e quando.",
+      render: (l) => {
+        if (!String(l.item ?? "").trim()) return null;
+        const n = conversa(l).length;
+        return (
+          <button type="button" onClick={() => setComentLinha(l._id)} title={n ? `${n} comentário(s)` : "Comentar"}
+            className={`relative text-[13px] leading-none ${n ? "" : "opacity-30 hover:opacity-80"}`}>
+            💬{n > 0 && <span className="absolute -top-1.5 -right-2 min-w-[14px] px-0.5 rounded-full bg-ww-accent text-white text-[9px] font-bold leading-[14px] text-center">{n}</span>}
+          </button>);
+      } },
+  ], [empresa, cmpPorId, nomesPadrao, gruposMeta, abrirSeletorLista, PC, conversa]);
 
   /** A leitura inicial funcionou?
    *
@@ -378,6 +457,7 @@ export default function MateriaisGrade({
     setCarregando(true);
     // compras do projeto saem JUNTO com a lista (não depois): é a chamada mais demorada
     const pCompras = carregarCompras();
+    void carregarComentarios();
     try {
       const supa = supaBrowser();
       const approval = supa.schema("approval" as never);
@@ -435,7 +515,7 @@ export default function MateriaisGrade({
       setErro(e instanceof Error ? e.message : String(e));
       setCarregouOk(false);
     } finally { setCarregando(false); }
-  }, [empresa, codigoProjeto, carregarCompras]);
+  }, [empresa, codigoProjeto, carregarCompras, carregarComentarios]);
 
   /* Depois de carregar (07/10/26): traz as compras do projeto e completa as linhas
      que chegaram "vazias" — código do Omie que já tem item nosso vira o item
@@ -904,12 +984,12 @@ export default function MateriaisGrade({
         Fornecedor: c?.pcs.map((p) => p.fornecedor).filter(Boolean).join(", ") || l._fornecedor,
         Comprado: c?.valor_pc ?? "",
         Situação: c?.pcs.map((p) => situacaoPc(p).t).join(", ") ?? "",
-        Observação: l.observacao,
+        Observação: conversa(l).map((c) => (c.origem === "observacao" && c.id === "obs" ? c.texto : `${c.autor.split("@")[0]}: ${c.texto}`)).join(" | "),
       };
     });
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(dados), "Materiais");
     XLSX.writeFile(wb, `materiais-projeto-${codigoProjeto}.xlsx`);
-  }, [validas, codigoProjeto, cmpPorId]);
+  }, [validas, codigoProjeto, cmpPorId, conversa]);
 
   const alternar = useCallback((id: string, _i: number, _shift: boolean) => {
     setMarcadas((p) => { const n = new Set(p); if (n.has(id)) n.delete(id); else n.add(id); return n; });
@@ -980,7 +1060,7 @@ export default function MateriaisGrade({
             Lista de materiais
           </h3>
           <p className="text-[11px] text-ww-textMuted mt-0.5">
-            Digite ou cole do Excel as colunas <strong>Equipamento · Item · Qtd · Un · Necessário em · Observação · Valor unit.</strong> (com a linha de cabeçalho, também <strong>Código, Modelo e PC</strong>).
+            Digite ou cole do Excel as colunas <strong>Equipamento · Item · Qtd · Un · Necessário em · Valor unit.</strong> (com a linha de cabeçalho, também <strong>Código, Modelo, PC e Observação</strong> — a observação vira comentário 💬).
             Ao digitar o Item, o catálogo sugere os <strong>itens do nosso estoque</strong> (código novo) com último preço, fornecedor e prazos;
             à direita, o que já foi comprado: RC, pedido de compra, valor e situação.
           </p>
@@ -1301,7 +1381,7 @@ export default function MateriaisGrade({
       ) : carregando
         ? <p className="text-[11.5px] text-ww-textFaint py-3">Carregando a lista…</p>
         : <GradeEditavel cols={COLS} linhas={visiveis}
-            colarExtras={[{ label: "Modelo", key: "modelo" }, { label: "PC", key: "pc_numero" }, { label: "PC nº", key: "pc_numero" }]}
+            colarExtras={[{ label: "Modelo", key: "modelo" }, { label: "PC", key: "pc_numero" }, { label: "PC nº", key: "pc_numero" }, { label: "Observação", key: "observacao" }, { label: "Obs", key: "observacao" }]}
             aoColar={() => setCasarAposColar(true)}
             onChange={(l) => {
               // Com filtro ativo, o que volta é só o pedaço visível — recompõe
@@ -1326,6 +1406,53 @@ export default function MateriaisGrade({
 
       {cmp && <ForaDaLista fora={cmp.fora_da_lista} empresa={empresa} />}
       {cmp && <FluxoCompras d={cmp} />}
+
+      {comentLinha && createPortal((() => {
+        const l = linhas.find((x) => x._id === comentLinha);
+        if (!l) return null;
+        const conv = conversa(l);
+        const salva = l._id.startsWith("db");
+        const quem = (a: string) => (a.includes("@") ? a.split("@")[0] : a);
+        return (
+          <div className="fixed inset-0 z-[120] bg-black/40 flex items-end sm:items-start justify-center sm:pt-[14vh]"
+            onMouseDown={(e) => { if (e.target === e.currentTarget) setComentLinha(null); }}>
+            <div role="dialog" aria-label="Comentários da linha"
+              className="w-full sm:w-[min(520px,96vw)] max-h-[80vh] overflow-auto rounded-t-xl sm:rounded-xl border border-ww-border bg-[rgb(var(--color-ww-panel))] shadow-2xl p-3.5 space-y-2 text-[12px]">
+              <div className="flex items-start gap-2">
+                <div className="min-w-0">
+                  <h4 className="text-[13px] font-semibold text-ww-text">💬 Comentários</h4>
+                  <p className="text-[11px] text-ww-textMuted truncate">{l.cat_codigo ? `${l.cat_codigo} · ` : ""}{l._cat_desc || l.item}</p>
+                </div>
+                <button type="button" className="ml-auto text-ww-accent hover:underline" onClick={() => setComentLinha(null)}>fechar</button>
+              </div>
+              {!conv.length && <p className="text-ww-textFaint">Nenhum comentário nesta linha.</p>}
+              {conv.map((c) => (
+                <div key={String(c.id)} className="rounded-lg border border-ww-border/70 px-2.5 py-1.5">
+                  <div className="text-[10.5px] text-ww-textMuted">
+                    <b className="text-ww-text">{quem(c.autor)}</b>{c.criado_em ? ` · ${new Date(c.criado_em).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", year: "2-digit", hour: "2-digit", minute: "2-digit" })}` : ""}
+                    {c.origem === "observacao" && <span className="text-ww-textFaint"> · observação da lista</span>}
+                  </div>
+                  <div className="text-ww-text whitespace-pre-wrap">{c.texto}</div>
+                </div>))}
+              {comentPendente
+                ? <p className="text-[11px] text-amber-700 dark:text-amber-300">Comentários ainda não ativados (migração sql/101 pendente) — por enquanto aparece só a observação da linha.</p>
+                : !salva
+                  ? <p className="text-[11px] text-ww-textFaint">Salve a lista para comentar esta linha.</p>
+                  : <div className="space-y-1.5">
+                      <textarea value={comentTexto} onChange={(e) => setComentTexto(e.target.value)} rows={3} autoFocus
+                        placeholder="Escreva um comentário…"
+                        className="w-full rounded-lg border border-ww-border bg-transparent px-2 py-1.5 text-[12px] text-ww-text outline-none focus:ring-1 focus:ring-ww-accent" />
+                      <div className="flex justify-end">
+                        <button type="button" disabled={!comentTexto.trim() || comentando}
+                          onClick={() => void comentar(l._id)}
+                          className="px-3 py-1 rounded-lg bg-ww-accent text-white text-[11.5px] font-semibold disabled:opacity-40">
+                          {comentando ? "Gravando…" : "Comentar"}
+                        </button>
+                      </div>
+                    </div>}
+            </div>
+          </div>);
+      })(), document.body)}
 
       {vincLinha && createPortal((() => {
         const l = linhas.find((x) => x._id === vincLinha);
