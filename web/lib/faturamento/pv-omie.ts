@@ -111,7 +111,22 @@ export function checarDoc(doc: DocFat, extra: { nf_omie?: PvOmieDoc["nf_omie"]; 
   add("Itens", doc.itens.length > 0, `${doc.itens.length} item(ns)`);
   if (extra.total_pv != null) {
     const t = totalDoc(doc.itens);
-    add("Total da nota = total do PV", Math.abs(t - Number(extra.total_pv)) < 0.02, `nota ${t.toFixed(2)} · PV ${Number(extra.total_pv).toFixed(2)}`);
+    const pv = Number(extra.total_pv);
+    const soma = (k: "valor_frete" | "valor_outras" | "valor_desconto") =>
+      Math.round(doc.itens.reduce((s, i) => s + Number(i[k] ?? 0), 0) * 100) / 100;
+    const frete = soma("valor_frete"), outras = soma("valor_outras"), desc = soma("valor_desconto");
+    const igual = (v: number) => Math.abs(v - pv) < 0.02;
+    if (igual(t)) add("Total da nota = total do PV", true, `nota ${t.toFixed(2)} · PV ${pv.toFixed(2)}`);
+    // 07/10/26 (PV1906): frete destacado / outras despesas / desconto lançados na própria nota mudam o total
+    // de propósito — a diferença explicada por eles vira aviso, não bloqueio.
+    else if ([t - frete - outras, t - frete - outras + desc, t + desc, t - frete, t - outras].some(igual)) {
+      const partes = [frete ? `frete R$ ${frete.toFixed(2)}` : "", outras ? `outras despesas R$ ${outras.toFixed(2)}` : "", desc ? `desconto R$ ${desc.toFixed(2)}` : ""].filter(Boolean).join(" · ");
+      add("Total da nota = total do PV", false, `nota ${t.toFixed(2)} · PV ${pv.toFixed(2)} — diferença lançada na nota (${partes}); o cliente paga ${t.toFixed(2)}`, "aviso");
+    } else add("Total da nota = total do PV", false, `nota ${t.toFixed(2)} · PV ${pv.toFixed(2)}`);
+    // Frete cobrado na nota com modalidade "por conta do destinatário" / "sem frete": incoerente para a SEFAZ e o cliente.
+    const mod = doc.transporte?.modalidade ?? 9;
+    if (frete > 0 && (mod === 1 || mod === 9))
+      add("Modalidade do frete", false, `frete de R$ ${frete.toFixed(2)} cobrado na nota com modalidade ${mod === 1 ? "1 · Destinatário (FOB)" : "9 · Sem frete"} — para frete cobrado do cliente na nota use 0 · Emitente (CIF)`, "aviso");
   }
   for (const i of doc.itens) {
     add(`NCM — ${i.codigo}`, (i.ncm ?? "").replace(/\D/g, "").length === 8, i.ncm || "sem NCM");
