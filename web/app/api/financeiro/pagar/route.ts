@@ -172,6 +172,15 @@ export async function GET(req: Request) {
     return dadosParaEditar(editar);
   }
 
+  // Pagos no período (07/10/26): aba "Pagos" — Omie + baixas do painel, por data do pagamento.
+  if (u.searchParams.get("pagos")) {
+    const de = u.searchParams.get("de") ?? "", ate = u.searchParams.get("ate") ?? "";
+    if (!ISO.test(de) || !ISO.test(ate)) return NextResponse.json({ error: "período inválido" }, { status: 400 });
+    const { data, error } = await fin().rpc("pagar_pagos", { p_de: de, p_ate: ate, p_lim: 5000 });
+    if (error) return erroDb(error);
+    return NextResponse.json({ itens: data ?? [] }, { headers: { "Cache-Control": "no-store" } });
+  }
+
   // Busca em TODOS os títulos a pagar — pagos, vencidos antigos, cancelados (07/10/26)
   const buscar = (u.searchParams.get("buscar") ?? "").trim();
   if (buscar) {

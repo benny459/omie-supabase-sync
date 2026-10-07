@@ -115,7 +115,8 @@ export default function TelaReceberV1() {
 
             <div className="panel ws" id="ws">
               <div className="tabs" id="wsTabs">
-                <button data-v="tit" className="on">Recebimentos<span className="cnt" id="tcTit" /></button>
+                <button data-v="tit" className="on">Em aberto<span className="cnt" id="tcTit" /></button>
+                <button data-v="pagos" title="O que já foi recebidos — por data">✓ Recebidos<span className="cnt" id="tcPagos" /></button>
                 <button data-v="conc">Conciliação OFX<span className="cnt" id="tcConc" /></button>
                 <button data-v="hist">Baixas de hoje<span className="cnt" id="tcHist">0</span></button>
               </div>
@@ -136,6 +137,7 @@ export default function TelaReceberV1() {
               </div>
               <div id="pConc" style={{ display: "none" }} />
               <div id="pHist" style={{ display: "none" }} />
+              <div id="pPagos" style={{ display: "none" }} />
             </div>
           </div>
         </div>

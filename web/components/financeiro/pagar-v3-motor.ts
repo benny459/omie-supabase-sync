@@ -754,7 +754,64 @@ export function montarPagarV3(o: Opts) {
   q("tCsv").onclick = () => csv(`titulos-a-pagar-${iso(TODAY)}.csv`, [["vencimento", "empresa", "fornecedor", "cnpj", "categoria", "projeto", "documento", "parcela", "pc", "nf", "status_pagamento", "banco_programado", "conta_prevista", "valor_aberto", "origem", "ref"],
     ...tblAtual.map((r) => [r.venc, r.emp, r.forn, r.cnpj, r.cat, r.proj, r.doc, r.parc, r.pc, r.nf, PST[r.st].l, bankDesc(r.bank), r.conta, String(r.v).replace(".", ","), r.orig === "o" ? "Omie" : "Previsão PC", r.ref])]);
 
-  function renderTabs() { qa("#wsTabs button").forEach((b) => b.classList.toggle("on", b.dataset.v === S.tab)); q("pTit").style.display = S.tab === "tit" ? "" : "none"; q("pConc").style.display = S.tab === "conc" ? "" : "none"; q("pHist").style.display = S.tab === "hist" ? "" : "none"; }
+  function renderTabs() { qa("#wsTabs button").forEach((b) => b.classList.toggle("on", b.dataset.v === S.tab)); q("pTit").style.display = S.tab === "tit" ? "" : "none"; q("pConc").style.display = S.tab === "conc" ? "" : "none"; q("pHist").style.display = S.tab === "hist" ? "" : "none";
+    const pp = q("pPagos"); if (pp) { pp.style.display = S.tab === "pagos" ? "" : "none"; if (S.tab === "pagos") carregarPagos(); } }
+  /* PAGOS (07/10/26, Benny): o que já foi pago, de forma clara — por data do pagamento, Omie + painel. */
+  let PG = { per: "mes", de: "", ate: "", itens: [], carregando: false, erro: "", chave: "", atraso: false };
+  const isoD = (d) => d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+  function pgPeriodo() {
+    const h = new Date(); h.setHours(0, 0, 0, 0); const d = new Date(h);
+    if (PG.per === "mes") return [isoD(new Date(h.getFullYear(), h.getMonth(), 1)), isoD(h)];
+    if (PG.per === "mesant") return [isoD(new Date(h.getFullYear(), h.getMonth() - 1, 1)), isoD(new Date(h.getFullYear(), h.getMonth(), 0))];
+    if (PG.per === "ano") return [isoD(new Date(h.getFullYear(), 0, 1)), isoD(h)];
+    if (PG.per === "livre") return [PG.de || isoD(new Date(+h - 30 * 864e5)), PG.ate || isoD(h)];
+    d.setDate(d.getDate() - ({ d7: 7, d30: 30, d90: 90 }[PG.per] ?? 30)); return [isoD(d), isoD(h)];
+  }
+  async function carregarPagos() {
+    const [de, ate] = pgPeriodo(); const chave = de + "|" + ate;
+    if (PG.chave === chave && !PG.erro) { renderPagos(); return; }
+    PG.carregando = true; PG.erro = ""; PG.chave = chave; renderPagos();
+    try {
+      const r = await fetch(`/api/financeiro/pagar?pagos=1&de=${de}&ate=${ate}`, { cache: "no-store" });
+      const j = await r.json(); if (!r.ok) throw new Error(j.error ?? "HTTP " + r.status);
+      if (PG.chave === chave) { PG.itens = j.itens ?? []; PG.carregando = false; renderPagos(); }
+    } catch (e) { PG.carregando = false; PG.erro = e.message; PG.chave = ""; renderPagos(); }
+  }
+  function renderPagos() {
+    const el = q("pPagos"); if (!el) return;
+    const [de, ate] = pgPeriodo();
+    const dbr = (s) => (s ? new Date(String(s).slice(0, 10) + "T12:00:00").toLocaleDateString("pt-BR") : "—");
+    const atr = (x) => (x.venc && x.pago_em ? Math.round((new Date(x.pago_em + "T12:00:00") - new Date(x.venc + "T12:00:00")) / 864e5) : 0);
+    const base = PG.itens.filter((x) => empOk({ emp: x.emp }) && (!S.q || [x.forn, x.cat, x.doc, x.conta].join(" ").toLowerCase().includes(S.q)));
+    const it = PG.atraso ? base.filter((x) => atr(x) > 0) : base;
+    const tot = base.reduce((a, x) => a + Number(x.valor_pago || 0), 0), jur = base.reduce((a, x) => a + Number(x.juros || 0), 0);
+    const nAtr = base.filter((x) => atr(x) > 0).length;
+    const PERS = [["mes", "Este mês"], ["mesant", "Mês passado"], ["d7", "7 dias"], ["d30", "30 dias"], ["d90", "90 dias"], ["ano", "Ano"], ["livre", "Período…"]];
+    q("tcPagos").textContent = PG.carregando ? "…" : base.length;
+    el.innerHTML = `<div class="tbar" style="flex-wrap:wrap;gap:8px">
+        <div class="seg sm" id="pgPer">${PERS.map(([v, l]) => `<button data-v="${v}" class="${PG.per === v ? "on" : ""}">${l}</button>`).join("")}</div>
+        ${PG.per === "livre" ? `<input type="date" class="in" id="pgDe" value="${de}" style="height:28px"> até <input type="date" class="in" id="pgAte" value="${ate}" style="height:28px">` : `<span class="sub2">${dbr(de)} a ${dbr(ate)}</span>`}
+        <label class="sub2" style="display:inline-flex;gap:4px;align-items:center;margin-left:8px"><input type="checkbox" id="pgAtr" ${PG.atraso ? "checked" : ""}> só os pagos com atraso</label>
+        <span style="margin-left:auto"></span><button class="btn sm" id="pgCsv">CSV</button></div>
+      <div style="display:flex;gap:18px;flex-wrap:wrap;margin:10px 4px 12px">
+        <div><div class="sub2">Total pago${S.emp !== "ALL" ? " · " + esc(S.emp) : ""}</div><b class="num" style="font-size:20px;color:#22c55e">${brl(tot)}</b></div>
+        <div><div class="sub2">Títulos</div><b class="num" style="font-size:20px">${base.length}</b></div>
+        <div><div class="sub2">Juros / multa</div><b class="num" style="font-size:20px;color:${jur > 0 ? "#f59e0b" : "inherit"}">${brl(jur)}</b></div>
+        <div><div class="sub2">pagos com atraso</div><b class="num" style="font-size:20px;color:${nAtr ? "#f87171" : "inherit"}">${nAtr}</b></div>
+      </div>
+      ${PG.carregando ? '<div class="carregando">Carregando pagos…</div>' : PG.erro ? `<div class="erro">${esc(PG.erro)}</div>` : !it.length ? '<div class="sub2" style="padding:16px">Nada pago neste período com estes filtros.</div>' :
+      `<div class="tbl" style="max-height:600px"><table class="num"><thead><tr><th>Pago em</th><th>Emp.</th><th>Fornecedor</th><th>Categoria</th><th>Documento</th><th>Vencimento</th><th class="r">Valor pago</th><th>Conta</th><th>Origem</th></tr></thead><tbody>${it.slice(0, 1500).map((x) => { const a = atr(x);
+        return `<tr><td><span class="bdg b-pago">Pago</span> ${dbr(x.pago_em)}</td><td><span class="emp ${esc(x.emp)}">${esc(x.emp)}</span></td><td style="font-weight:500">${esc(x.forn)}</td><td style="color:var(--tx2)">${esc(x.cat || "Sem categoria")}</td><td class="mono">${esc(x.doc || "—")}${x.parc ? ` <span class="sub2">· ${esc(x.parc)}</span>` : ""}</td><td>${dbr(x.venc)}${a > 0 ? ` <span style="color:#f87171;font-size:11px">+${a}d</span>` : a < 0 ? ` <span class="sub2">antecipado</span>` : ""}</td><td class="r">${brl(Number(x.valor_pago || 0))}${Number(x.juros) > 0 ? `<div class="sub2" style="color:#f59e0b">juros ${brl(Number(x.juros))}</div>` : ""}${Number(x.desconto) > 0 ? `<div class="sub2">desc. ${brl(Number(x.desconto))}</div>` : ""}</td><td style="color:var(--tx2)">${esc(x.conta || "—")}</td><td class="sub2">${x.origem === "painel" ? "painel" : "Omie"}</td></tr>`; }).join("")}</tbody></table></div>
+      <div class="foot"><span>${it.length} título(s) · ${brl(it.reduce((a, x) => a + Number(x.valor_pago || 0), 0))}${it.length > 1500 ? " · mostrando 1.500 (use o CSV para todos)" : ""}</span><span>Data = dia em que o dinheiro saiu · empresa e busca do topo também filtram aqui</span></div>`}`;
+    qa("#pgPer button").forEach((b) => (b.onclick = () => { PG.per = b.dataset.v; carregarPagos(); }));
+    const de0 = q("pgDe"), ate0 = q("pgAte");
+    if (de0) de0.onchange = () => { PG.de = de0.value; carregarPagos(); };
+    if (ate0) ate0.onchange = () => { PG.ate = ate0.value; carregarPagos(); };
+    q("pgAtr").onchange = (e) => { PG.atraso = e.target.checked; renderPagos(); };
+    q("pgCsv").onclick = () => csv(`pagos-${de}-a-${ate}.csv`, [["pago_em", "empresa", "Fornecedor", "categoria", "documento", "parcela", "vencimento", "valor_pago", "juros_multa", "desconto", "conta", "origem"],
+      ...it.map((x) => [x.pago_em, x.emp, x.forn, x.cat, x.doc, x.parc, x.venc, x.valor_pago, x.juros, x.desconto, x.conta, x.origem])]);
+  }
+
   qa("#wsTabs button").forEach((b) => (b.onclick = () => { S.tab = b.dataset.v; render(); }));
   const goOfx = () => { S.tab = "conc"; render(); goTable(); };
   q("hdrOfx").onclick = goOfx; q("bkOfx").onclick = goOfx;

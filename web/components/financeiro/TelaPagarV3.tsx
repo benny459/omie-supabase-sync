@@ -137,7 +137,8 @@ export default function TelaPagarV3() {
 
             <div className="panel ws" id="ws">
               <div className="tabs" id="wsTabs">
-                <button data-v="tit" className="on">Pagamentos<span className="cnt" id="tcTit" /></button>
+                <button data-v="tit" className="on">Em aberto<span className="cnt" id="tcTit" /></button>
+                <button data-v="pagos" title="O que já foi pagos — por data">✓ Pagos<span className="cnt" id="tcPagos" /></button>
                 <button data-v="conc">Conciliação OFX<span className="cnt" id="tcConc" /></button>
                 <button data-v="hist">Baixas de hoje<span className="cnt" id="tcHist">0</span></button>
               </div>
@@ -159,6 +160,7 @@ export default function TelaPagarV3() {
               </div>
               <div id="pConc" style={{ display: "none" }} />
               <div id="pHist" style={{ display: "none" }} />
+              <div id="pPagos" style={{ display: "none" }} />
             </div>
           </div>
         </div>

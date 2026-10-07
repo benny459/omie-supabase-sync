@@ -39,6 +39,13 @@ export async function GET(req: Request) {
     const { data, error } = await fin().rpc("receber_v1_baixas", { p_desde: inicioHoje.toISOString(), p_so_omie_pendente: baixas === "omie" });
     return error ? erroDb(error) : NextResponse.json({ baixas: data });
   }
+  // Recebidos no período (07/10/26): aba "Recebidos" — por data do recebimento.
+  if (u.searchParams.get("recebidos")) {
+    const de = u.searchParams.get("de") ?? "", ate = u.searchParams.get("ate") ?? "";
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(de) || !/^\d{4}-\d{2}-\d{2}$/.test(ate)) return NextResponse.json({ error: "período inválido" }, { status: 400 });
+    const { data, error } = await fin().rpc("receber_recebidos", { p_de: de, p_ate: ate, p_lim: 5000 });
+    return error ? erroDb(error) : NextResponse.json({ itens: data ?? [] }, { headers: { "Cache-Control": "no-store" } });
+  }
   // Busca em TODOS os títulos a receber — recebidos, cancelados, em aberto (07/10/26)
   const buscar = (u.searchParams.get("buscar") ?? "").trim();
   if (buscar) {
