@@ -952,6 +952,13 @@ export default function MateriaisGrade({
   const [cpMarcados, setCpMarcados] = useState<Set<number>>(new Set());
   const [cpCarregando, setCpCarregando] = useState(false);
   const [cpErro, setCpErro] = useState<string | null>(null);
+  /** Itens da RC a marcar quando o modal de importar abrir (aba Itens da RC → "levar para a lista"). */
+  const [preMarcar, setPreMarcar] = useState<number[] | null>(null);
+  useEffect(() => { if (cp && preMarcar) { setCpMarcados(new Set(preMarcar)); setPreMarcar(null); } }, [cp, preMarcar]);
+  const levarParaLista = (ks: number[]) => {
+    setPreMarcar(ks); setImportarAberto(true);   // o modal carrega a RC sozinho; a marcação entra quando chegar
+    if (cp) { setCpMarcados(new Set(ks)); setPreMarcar(null); }
+  };
 
   const naLista = useMemo(() => new Set(validas.map((l) => chaveItem(l.equipamento, l.item))), [validas]);
   /** Só entra na lista o que está casado: ✓ automático ou escolhido à mão. */
@@ -1326,6 +1333,7 @@ export default function MateriaisGrade({
           </p>
         </div>
       </header>
+      <VendasFaixa empresa={empresa} codigo={codigoProjeto} />
 
       {/* Quanto vou gastar — KPIs que eram da aba "Compras × lista". */}
       {cmp && (
@@ -1394,7 +1402,7 @@ export default function MateriaisGrade({
               <button type="button" onClick={(e) => { (e.currentTarget.closest("details") as HTMLDetailsElement).open = false; setImportarAberto(true); void abrirTrazerRc(); }} disabled={!!ocupado}
                 className="block w-full text-left px-2 py-1.5 rounded hover:bg-ww-rowHover disabled:opacity-40"
                 title="A RC já foi importada. Use só para trazer itens da RC que ficaram de fora (o que já está na lista fica apagado).">
-                Reimportar itens da RC <span className="text-ww-textFaint">(raro)</span></button>
+                Importar itens da RC que faltam</button>
             )}
           </div>
         </details>
@@ -1615,7 +1623,18 @@ export default function MateriaisGrade({
               const plano = cpBase.itens.reduce((a, i) => a + tot(i), 0);
               const usado = cpBase.itens.reduce((a, i, k) => a + (usoCp.has(k) ? tot(i) : 0), 0);
               const projUsado = [...usoCp.values()].reduce((a, l) => a + num(l.qtd) * num(l.cat_valor_unit), 0);
+              const naoUsados = cpBase.itens.map((_, k) => k).filter((k) => !usoCp.has(k));
               return (
+                <>
+                {naoUsados.length > 0 && (
+                  <div className="flex items-center gap-2 mb-1.5">
+                    <button type="button" onClick={() => levarParaLista(naoUsados)}
+                      className="px-2.5 py-1 text-[11.5px] rounded-lg border border-emerald-500/60 text-emerald-800 dark:text-emerald-200 font-semibold hover:bg-emerald-500/10 transition">
+                      ⤵ Levar {naoUsados.length} ite{naoUsados.length === 1 ? "m" : "ns"} não usado{naoUsados.length === 1 ? "" : "s"} para a lista
+                    </button>
+                    <span className="text-[10.5px] text-ww-textFaint">abre o importar com eles marcados — confira o código de cada um antes de adicionar</span>
+                  </div>
+                )}
                 <div className="border border-ww-border rounded-lg overflow-auto" style={{ maxHeight: 520 }}>
                   <table className="w-full text-[11.5px] border-collapse">
                     <thead className="sticky top-0 bg-[rgb(var(--color-ww-panel))] text-ww-textMuted z-[1]">
@@ -1637,7 +1656,8 @@ export default function MateriaisGrade({
                             <td className="p-1.5 text-right tabular-nums">{brl(tot(i))}</td>
                             <td className="p-1.5">{l
                               ? <span className="text-emerald-700 dark:text-emerald-300">✓ na lista{l.cat_codigo ? <> · <b className="font-mono">{l.cat_codigo}</b></> : " · sem código"}{n ? <span className="text-ww-textFaint"> · linha {n}</span> : null}</span>
-                              : <span className="text-ww-textFaint">não usado</span>}</td>
+                              : <span className="text-ww-textFaint">não usado <button type="button" className="ml-1 px-1.5 rounded border border-emerald-500/50 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-500/10"
+                                  title="Levar este item para a lista (casa com o catálogo no modal)" onClick={() => levarParaLista([k])}>→ lista</button></span>}</td>
                           </tr>);
                       })}
                     </tbody>
@@ -1649,9 +1669,10 @@ export default function MateriaisGrade({
                       </tr>
                     </tfoot>
                   </table>
-                </div>);
+                </div>
+                </>);
             })()}
-          <p className="text-[10.5px] text-ww-textFaint">A RC é a referência e a origem do budget de materiais: daqui só se consulta. Os itens entram na lista uma vez, pelo “⤵ Importar itens da RC” (depois, em ⋯ › Reimportar), e na lista você exclui, inclui e casa com o nosso código.</p>
+          <p className="text-[10.5px] text-ww-textFaint">A RC é a referência e a origem do budget de materiais. O que não está na lista aparece como “não usado”: leve um item com “→ lista” ou todos com “⤵ Levar … para a lista” (casam com o nosso código antes de entrar). Na lista você exclui, inclui e casa.</p>
         </div>
       ) : carregando
         ? <p className="text-[11.5px] text-ww-textFaint py-3">Carregando a lista…</p>
@@ -1930,5 +1951,31 @@ export default function MateriaisGrade({
         </div>
       , document.body)}
     </section>
+  );
+}
+
+/** Faixa só de leitura com os PV/OS do projeto (07/10/26, Benny procura as vendas na página
+ *  do projeto): nº, valor e previsão de faturamento; as datas se mudam em Operação › Projetos. */
+function VendasFaixa({ empresa, codigo }: { empresa: string; codigo: number }) {
+  const [docs, setDocs] = useState<{ chave: string; rotulo: string; valor: number; fat_inicial: string | null; fat_nova: string | null; faturado: boolean; dt_fat: string | null; recebido: boolean }[] | null>(null);
+  useEffect(() => {
+    fetch(`/api/rc-projetos/vendas?empresa=${encodeURIComponent(empresa)}&codigo=${codigo}`, { cache: "no-store" })
+      .then((r) => r.json()).then((j) => setDocs(j.docs ?? [])).catch(() => setDocs([]));
+  }, [empresa, codigo]);
+  if (!docs?.length) return null;
+  const d2 = (v: string | null) => (v ? `${v.slice(8, 10)}/${v.slice(5, 7)}` : "—");
+  const tot = docs.reduce((a, d) => a + d.valor, 0);
+  return (
+    <div className="flex items-center gap-1.5 flex-wrap text-[11px] rounded-lg border border-ww-border bg-ww-panel px-2.5 py-1.5">
+      <span className="text-ww-textMuted font-semibold mr-1">Vendas (PV/OS) {brl(tot)}:</span>
+      {docs.map((d) => (
+        <a key={d.chave || d.rotulo} href={`/faturamento?${new URLSearchParams({ abrir: d.chave, q: d.rotulo, emp: empresa })}`}
+          className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded border border-ww-border hover:border-ww-accent"
+          title={d.faturado ? `faturado em ${d2(d.dt_fat)}${d.recebido ? " · recebido" : ""}` : `previsão de faturamento ${d2(d.fat_nova ?? d.fat_inicial)}${d.fat_nova ? ` (inicial ${d2(d.fat_inicial)})` : ""}`}>
+          <b className="font-mono">{d.rotulo}</b><span className="tabular-nums">{brl(d.valor)}</span>
+          <span className={d.faturado ? "text-teal-600 dark:text-teal-400" : "text-ww-textMuted"}>{d.faturado ? (d.recebido ? "recebido" : "faturado") : `fat. ${d2(d.fat_nova ?? d.fat_inicial)}`}</span>
+        </a>))}
+      <a href="/projetos" className="ml-auto text-ww-accent hover:underline" title="As previsões (faturamento e recebimento) se mudam em Operação › Projetos, no projeto aberto">mudar datas em Operação › Projetos →</a>
+    </div>
   );
 }
