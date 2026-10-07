@@ -339,7 +339,7 @@ export default function RcProjetoUploadButton({
         onClick={(e) => { e.stopPropagation(); setOpen(true); }}
         className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-medium text-violet-800 hover:text-violet-950 hover:bg-violet-100 border border-violet-300 transition">
         <span className="text-[13px] leading-none">📋</span>
-        Lista RC (Projeto)
+        Subir planilha
       </button>
 
       {open && (
@@ -354,7 +354,7 @@ export default function RcProjetoUploadButton({
                className="bg-ww-panel rounded-xl shadow-2xl max-w-2xl w-full max-h-[90vh] flex flex-col">
             <div className="px-5 py-4 border-b border-ww-border flex items-start justify-between">
               <div>
-                <h3 className="font-semibold text-ww-text text-[15px]">Lista RC do Projeto</h3>
+                <h3 className="font-semibold text-ww-text text-[15px]">Lista de materiais — subir planilha (.xlsx)</h3>
                 <p className="text-xs text-ww-textMuted mt-0.5">
                   Cada <strong>aba</strong> = 1 equipamento. As colunas são achadas pelo <strong>nome no cabeçalho</strong>, em qualquer posição:{" "}
                   <code className="bg-ww-bg px-1 rounded">Itens</code>/<code className="bg-ww-bg px-1 rounded">Item</code>/<code className="bg-ww-bg px-1 rounded">Descrição</code>,{" "}
