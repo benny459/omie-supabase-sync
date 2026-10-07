@@ -564,3 +564,5 @@
 .op .pcproj-vendas .vprev em.atraso{color:#e11d48;background:rgba(225,29,72,.1)}
 .op .pcproj-vendas .vprev em.adianta{color:#059669;background:rgba(5,150,105,.1)}
 .op .pcproj-vendas .vprev button{font-size:11px;color:var(--ww-text-faint);background:none;border:0;cursor:pointer}
+
+.op .fin.proj{grid-template-columns:1fr 1.1fr 1fr .9fr .9fr}

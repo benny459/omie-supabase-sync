@@ -1208,7 +1208,7 @@ export function FinStrip({ p, $, projeto }: { p: Pedido; $: (v: number | null) =
       <div className={`mb ${mbCls(x?.pct ?? null)}`} title={dica}><label>{rot}</label><b>{x == null ? "—" : pct(x.pct)}</b>
         {x != null && <small style={{ display: "block", fontSize: 10.5, color: "var(--ww-text-faint)" }}>{$(x.valor)}</small>}</div>);
     return (
-      <div className="fin">
+      <div className="fin proj">
         <div><label>RC</label><b>{$(projeto.budget)}</b></div>
         <div><label>PC <span>{F.pcN} {F.pcN === 1 ? "pedido" : "pedidos"}</span></label><b>{F.pcN ? $(F.pc) : "—"}</b></div>
         <div><label>PV</label><b>{$(p.valorPv)}</b></div>

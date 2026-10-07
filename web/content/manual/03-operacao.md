@@ -74,7 +74,7 @@ Tudo fica numa aba só: **Lista de materiais** (a antiga aba “Compras × lista
 **Margens do projeto** (na linha do projeto e no projeto aberto, lado a lado):
 - **Margem projetada** = (PV − budget de materiais da RC) ÷ PV.
 - **Margem real** = (PV − PCs aprovados) ÷ PV — cada PC uma vez; passe o mouse para ver como fica se os PCs aguardando aprovação forem aprovados.
-- O antigo **M.B.** somava os PCs **e** os itens da RC sem PC; no projeto os PCs saem da Lista sem ligar à RC, e a mesma compra contava duas vezes (o PJ361 aparecia com −16%). Nos Avulsos o M.B. continua como era.
+- O antigo **M.B.** somava os PCs **e** os itens da RC sem PC; no projeto os PCs saem da Lista sem ligar à RC, e a mesma compra contava duas vezes (o PJ361 aparecia com −16%). Nos Avulsos o M.B. continua como era. No bloco de budget do projeto, **Result. esp.** é o resultado esperado do fechamento do CRM (venda − materiais − mão de obra − despesas) — não é a margem de materiais.
 
 **Vendas do projeto (PV/OS)** (no projeto aberto, abaixo do resumo): os PV/OS gerados para o projeto — nº (abre no Faturamento), evento/parcela, valor e % do total (a soma confere com o PV do projeto), situação (a faturar / faturado com NF ou recibo / recebido) e OC do cliente. Para cada um, **faturamento** e **recebimento** têm a **previsão inicial** (do resumo financeiro do projeto — não muda) e a **nova previsão** (editável; vazia = igual à inicial), com o **desvio** em dias (+N vermelho, −N verde).
 - A nova previsão de **faturamento** é a mesma da carteira do Faturamento (“Previsão fat.”). Mudá-la leva o recebimento junto (mesmo prazo), se o recebimento não tiver nova previsão própria.

@@ -5167,8 +5167,8 @@ function BudgetTotals({
             </div>
           </div>
           <div className="text-center border-t border-ww-border/50 pt-0.5"
-               title={mbEsperadaPct != null ? `M.B. esperada (Fluxo Financeiro): ${(mbEsperadaPct * 100).toFixed(1)}%` : mb == null ? "Sem PV — impossível calcular M.B." : `M.B. realizada = (PV − PC) / PV = ${(mb * 100).toFixed(1)}%`}>
-            <div className="text-[9.5px] uppercase tracking-[0.5px] text-ww-textMuted font-bold">M.B. {mbEsperadaPct != null ? "esp." : ""}</div>
+               title={mbEsperadaPct != null ? `Resultado esperado do fechamento (CRM) = (venda − materiais − mão de obra − despesas) ÷ venda = ${(mbEsperadaPct * 100).toFixed(1)}%. Não é a margem de materiais: veja M. projetada e M. real na linha do projeto.` : mb == null ? "Sem PV — impossível calcular M.B." : `M.B. realizada = (PV − PC) / PV = ${(mb * 100).toFixed(1)}%`}>
+            <div className="text-[9.5px] uppercase tracking-[0.5px] text-ww-textMuted font-bold">{mbEsperadaPct != null ? "Result. esp." : "M.B."}</div>
             <div className={`text-[13px] font-bold tabular-nums ${
               mbEsperadaPct != null
                 ? (mbEsperadaPct > 0 ? "text-emerald-700 dark:text-emerald-300" : "text-rose-700 dark:text-rose-300")
