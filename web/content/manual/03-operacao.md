@@ -71,7 +71,7 @@ Tudo fica numa aba só: **Lista de materiais** (a antiga aba “Compras × lista
 **O caminho**: a **RC** (composição de preço da proposta) é a referência e a origem do **budget de materiais**. **⤵ Importar itens da RC** uma vez e casar com o nosso código; depois a lista é o que se compra — exclua itens da RC que não vão, inclua os novos. Da lista saem os **pedidos de compra**; os PCs se acompanham em **Operação › Projetos** (por PC) e aqui, item a item.
 
 **Resumo no topo** (um bloco só):
-- **Budget de materiais** = total de **materiais** da RC (a linha “materiais” do Custo planejado). Só o **administrador** vê o **editar** (para projeto antigo cuja RC não veio do CRM); **usar o da RC** volta ao da RC. Não é o custo total do projeto (materiais + mão de obra + despesas) — esse continua sendo o teto do Fluxo de caixa.
+- **Budget de materiais** = total de **materiais** da RC (a linha “materiais” do Custo planejado). O budget fica **🔒 trancado**: só o Benny destranca (🔓) e define o valor (**editar**, para projeto antigo cuja RC não veio do CRM) ou volta ao da RC (**usar o da RC**). O mesmo cadeado vale para o teto do Fluxo de caixa. Não é o custo total do projeto (materiais + mão de obra + despesas) — esse continua sendo o teto do Fluxo de caixa.
 - **Lista prevista** = PCs do projeto + o estimado das linhas que ainda não têm PC, e quanto isso é do budget (%).
 - **Pedidos de compra**: **aprovados** e **aguardando aprovação** (R$ e % do budget), e o **pago**.
 - A linha de situação diz **Dentro do budget · sobra R$ X** ou, em vermelho, **Estoura o budget em R$ X**. A barra mostra, na mesma escala, aprovados, aguardando, o que ainda falta comprar e a marca do budget.

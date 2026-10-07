@@ -5,14 +5,26 @@
 // DELETE /api/rc-projetos/budget?empresa=...&codigo_projeto=... — remove budget.
 import { NextResponse } from "next/server";
 import { supaServer } from "@/lib/supabase-server";
-import { loadPerms } from "@/lib/require-area";
 
 export const runtime = "nodejs";
+
+/* Cadeado do budget (07/10/26, Benny): só ele define o budget — de materiais e o teto do
+   Fluxo. Os demais só veem. */
+const DONO_BUDGET = "benny@waterworks.com.br";
+const ehDono = (email?: string | null) => (email ?? "").toLowerCase() === DONO_BUDGET;
+
+/** GET → { pode: boolean } — a tela mostra o cadeado aberto só para o dono. */
+export async function GET() {
+  const supa = await supaServer("approval");
+  const { data: { user } } = await supa.auth.getUser();
+  return NextResponse.json({ pode: ehDono(user?.email) });
+}
 
 export async function PUT(req: Request) {
   const supa = await supaServer("approval");
   const { data: { user } } = await supa.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!ehDono(user.email)) return NextResponse.json({ error: "🔒 O budget está trancado — só o Benny define." }, { status: 403 });
 
   let body: { empresa: string; codigo_projeto: number; valor_budget: number; observacao?: string; valor_budget_materiais?: number | null };
   try { body = await req.json(); }
@@ -21,9 +33,6 @@ export async function PUT(req: Request) {
   /* Budget de MATERIAIS (07/10/26): só a coluna própria; não mexe no valor_budget
      (custo total, teto do Fluxo). Linha que ainda não existe nasce só com ele. */
   if (body && "valor_budget_materiais" in body) {
-    // Só administrador (07/10/26, Benny): o budget de materiais é o da RC.
-    const perms = await loadPerms();
-    if (!perms?.is_admin) return NextResponse.json({ error: "Só administrador edita o budget de materiais (o normal é o total de materiais da RC)." }, { status: 403 });
     if (!body.empresa || !body.codigo_projeto) return NextResponse.json({ error: "empresa e codigo_projeto obrigatórios" }, { status: 400 });
     const vm = body.valor_budget_materiais == null ? null : Number(body.valor_budget_materiais);
     if (vm != null && (!Number.isFinite(vm) || vm < 0)) return NextResponse.json({ error: "valor deve ser número >= 0" }, { status: 400 });
@@ -73,6 +82,7 @@ export async function DELETE(req: Request) {
   const supa = await supaServer("approval");
   const { data: { user } } = await supa.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!ehDono(user.email)) return NextResponse.json({ error: "🔒 O budget está trancado — só o Benny define." }, { status: 403 });
 
   const url = new URL(req.url);
   const empresa = url.searchParams.get("empresa");

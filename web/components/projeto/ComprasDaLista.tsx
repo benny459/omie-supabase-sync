@@ -14,9 +14,8 @@
 //   FluxoCompras     — mês a mês: planejado × comprometido × pago
 //   situacaoPc       — a pílula de situação, com os nomes e cores do Compras
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { estadoPc } from "@/lib/situacao-pc";
-import { useUserPerms } from "@/components/UserPermsProvider";
 
 export type PcLinha = { pc: string; pedido_id: number; origem: string; fornecedor: string | null; etapa: string | null; aprov: string | null;
   previsao: string | null; nf: string | null; qtd?: number | null; valor_unit?: number | null; valor?: number | null;
@@ -62,7 +61,11 @@ export function KpisCompras({ d, restante, empresa, codigoProjeto, onRecarregar 
   const [erro, setErro] = useState<string | null>(null);
   /* O budget vem da RC; editar é só do administrador (07/10/26, Benny) — para projeto
      antigo cuja RC não veio do CRM. */
-  const admin = !!useUserPerms()?.is_admin;
+  /* 🔒 Cadeado (07/10/26, Benny): só ele destranca e define o budget. */
+  const [podeBudget, setPodeBudget] = useState(false);
+  const [aberto, setAberto] = useState(false);
+  useEffect(() => { fetch("/api/rc-projetos/budget", { cache: "no-store" }).then((r) => r.json()).then((j) => setPodeBudget(!!j.pode)).catch(() => {}); }, []);
+  const admin = podeBudget && aberto;
   const t = d.totais;
   const budget = t ? (t.budget_lista ?? t.budget_plano) : null;
   const comp = Number(t?.comprometido ?? 0);
@@ -95,14 +98,18 @@ export function KpisCompras({ d, restante, empresa, codigoProjeto, onRecarregar 
         <div>
           <span>Budget de materiais</span>
           {budgetEdit == null
-            ? <b>{brl(budget)} {admin && <button className="cdl-lk" title="Só administrador: para projeto cuja RC não veio do CRM" onClick={() => setBudgetEdit(budget != null ? String(budget).replace(".", ",") : "")}>editar</button>}</b>
+            ? <b>{brl(budget)}{" "}
+                <button type="button" className="cdl-lk" style={{ textDecoration: "none" }} disabled={!podeBudget}
+                  title={podeBudget ? (aberto ? "Trancar o budget" : "Destrancar para definir o budget") : "🔒 Budget trancado — só o Benny define"}
+                  onClick={() => { if (podeBudget) { setAberto((v) => !v); setBudgetEdit(null); } }}>{aberto ? "🔓" : "🔒"}</button>
+                {admin && <button className="cdl-lk" title="Definir o budget de materiais (projeto cuja RC não veio do CRM)" onClick={() => setBudgetEdit(budget != null ? String(budget).replace(".", ",") : "")}>editar</button>}</b>
             : <span className="cdl-row"><input className="cdl-in" autoFocus value={budgetEdit} onChange={(e) => setBudgetEdit(e.target.value)}
                 onKeyDown={(e) => { if (e.key === "Enter") salvarBudget(); if (e.key === "Escape") setBudgetEdit(null); }} />
                 <button className="cdl-btn pri" disabled={ocupado} onClick={salvarBudget}>ok</button>
                 <button className="cdl-btn" onClick={() => setBudgetEdit(null)}>×</button></span>}
           <small>{t?.budget_lista != null
             ? <>definido no painel{admin && t?.budget_plano != null && <> · <button className="cdl-lk" disabled={ocupado} onClick={() => void gravar(null)} title={`Volta ao total de materiais da RC (${brl(t.budget_plano)})`}>usar o da RC</button></>}</>
-            : t?.budget_plano != null ? "total de materiais da RC" : admin ? "sem RC — defina em editar" : "sem RC — peça ao administrador"}</small>
+            : t?.budget_plano != null ? "total de materiais da RC" : admin ? "sem RC — defina em editar" : "sem RC — só o Benny define (🔒)"}</small>
         </div>
         <div>
           <span>Lista prevista</span>
