@@ -11,7 +11,7 @@ export type Chave =
   | "estoque.acesso" | "estoque.ver_custos" | "estoque.ajustar" | "estoque.mesclar"
   | "estoque.senha_inventario" | "estoque.codigos" | "estoque.config_mov" | "estoque.aprovar_perdas"
   | "estoque.separar_projeto"
-  | "faturamento.acesso"
+  | "faturamento.acesso" | "faturamento.sem_proposta" | "faturamento.homologacao"
   | "financeiro.ver_pagar" | "financeiro.ver_receber" | "financeiro.editar_titulo"
   | "financeiro.baixar" | "financeiro.conciliar";
 
@@ -43,6 +43,8 @@ export const CATALOGO: ItemCatalogo[] = [
   { chave: "financeiro.baixar",         modulo: "financeiro", rotulo: "Baixar / estornar título",   descricao: "Registar pagamento ou recebimento de título do painel", padrao: "admin" },
   { chave: "financeiro.conciliar",      modulo: "financeiro", rotulo: "Conciliação bancária",       descricao: "Importar extrato OFX e casar com títulos",          padrao: "admin" },
   { chave: "faturamento.acesso",        modulo: "faturamento", rotulo: "Abrir e emitir no Faturamento", descricao: "Carteira de PV/OS, emissão de NF-e, recibo e registro de NFS-e", padrao: "admin" },
+  { chave: "faturamento.sem_proposta",  modulo: "faturamento", rotulo: "Emitir venda sem proposta do CRM", descricao: "PV/OS novo sem proposta, com motivo registrado", padrao: "admin" },
+  { chave: "faturamento.homologacao",   modulo: "faturamento", rotulo: "Emitir em homologação (teste)", descricao: "Forçar homologação: sai de teste, sem usar a numeração real", padrao: "admin" },
 ];
 
 export const MODULO_LABEL: Record<ModuloPerm, string> = { compras: "Compras", estoque: "Estoque", financeiro: "Financeiro", faturamento: "Faturamento" };

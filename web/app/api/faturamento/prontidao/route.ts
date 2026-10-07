@@ -38,6 +38,7 @@ export async function GET(req: NextRequest) {
     focus, focus_erro: focusErro, token_producao_env: tokenEnv,
     ultima_nfe_omie: ult?.[0] ?? null, conflito_numeracao: guarda ?? null,
     pode_mudar: q.email === DONO_PRODUCAO,
+    pode_sem_proposta: q.semProposta, pode_homologacao: q.homologacao,
   });
 }
 

@@ -9,7 +9,8 @@ import { permissoesDe } from "@/lib/acessos";
  *  ou admin. A chave de produção é só do Benny. */
 export const DONO_PRODUCAO = "benny@waterworks.com.br";
 
-export type QuemFat = { email: string; admin: boolean };
+/** semProposta / homologacao: admin ou permissão própria (Usuários e acessos → Faturamento). */
+export type QuemFat = { email: string; admin: boolean; semProposta: boolean; homologacao: boolean };
 
 export async function exigirFaturamento(): Promise<QuemFat | NextResponse> {
   const perms = await loadPerms();
@@ -21,7 +22,12 @@ export async function exigirFaturamento(): Promise<QuemFat | NextResponse> {
   }
   const supa = await supaServer("platform");
   const { data: { user } } = await supa.auth.getUser();
-  return { email: user?.email ?? "painel", admin: !!perms.is_admin };
+  const admin = !!perms.is_admin;
+  return {
+    email: user?.email ?? "painel", admin,
+    semProposta: admin || !!pode["faturamento.sem_proposta"],
+    homologacao: admin || !!pode["faturamento.homologacao"],
+  };
 }
 
 export function falha(e: unknown, status = 400) {

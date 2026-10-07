@@ -53,7 +53,7 @@ type Pront = {
   focus: { habilita_nfe?: boolean; certificado_valido_ate?: string } | null;
   focus_erro: string | null; token_producao_env: boolean;
   ultima_nfe_omie: { numero: string; serie: string; emissao: string } | null;
-  conflito_numeracao: string | null; pode_mudar: boolean;
+  conflito_numeracao: string | null; pode_mudar: boolean; pode_sem_proposta?: boolean; pode_homologacao?: boolean;
 };
 type Emissao = {
   id: number; empresa: string; ambiente: string; tipo: string; origem_tipo: string; origem_id: string | null; origem_rotulo?: string | null;
@@ -378,10 +378,10 @@ export default function TelaFaturamento() {
 
         {erro && <div className="alert bad" onClick={() => setErro(null)}>{erro}</div>}
         <Prontidao p={pront} empresa={empresa} aberto={verPront} onMudou={carregar} />
-        {lote && <LoteRecibos empresa={empresa} docs={lote} prod={prod} admin={!!pront?.pode_mudar} fechar={() => setLote(null)}
+        {lote && <LoteRecibos empresa={empresa} docs={lote} prod={prod} admin={!!pront?.pode_homologacao} fechar={() => setLote(null)}
           abrirFolha={(chave) => { const d = (docs ?? []).find((x) => x.chave === chave); setLote(null); if (d) abrirFolhaDe(d); }}
           onEmitido={() => { carregar(); setSel(new Set()); }} />}
-        <NovaEmissao config={config} aberto={nova} inicial={inicialNova} admin={!!pront?.pode_mudar} rascunhoId={rascNova}
+        <NovaEmissao config={config} aberto={nova} inicial={inicialNova} semProposta={!!pront?.pode_sem_proposta} homologacao={!!pront?.pode_homologacao} rascunhoId={rascNova}
           fechar={() => { setNova(false); setInicialNova(null); setRascNova(null); window.setTimeout(carregarRasc, 1500); }} avisar={avisar}
           onEmitido={() => { carregar(); carregarRasc(); }} />
 

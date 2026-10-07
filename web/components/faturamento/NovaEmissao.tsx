@@ -174,9 +174,9 @@ function acompanharEmFundo(id: number, avisar: (m: string) => void, onFim: () =>
   }, 5000);
 }
 
-export default function NovaEmissao({ config, aberto, fechar, avisar, onEmitido, inicial, admin, rascunhoId }: {
+export default function NovaEmissao({ config, aberto, fechar, avisar, onEmitido, inicial, semProposta, homologacao, rascunhoId }: {
   config: ConfigFat[]; aberto: boolean; fechar: () => void; avisar: (m: string) => void; onEmitido: () => void;
-  inicial?: Inicial | null; admin?: boolean;
+  inicial?: Inicial | null; semProposta?: boolean; homologacao?: boolean;
   /** Rascunho a continuar (05/10/26): restaura o estado salvo em orders.fat_rascunhos. */
   rascunhoId?: number | null;
 }) {
@@ -744,7 +744,7 @@ export default function NovaEmissao({ config, aberto, fechar, avisar, onEmitido,
     if (modo !== "novo" || teste || naoVenda) return null;
     if (!cliCodigo) return "Escolha o cliente pela busca do cadastro (nome, fantasia ou CNPJ/CPF) — o PV/OS novo precisa do código do cadastro.";
     if (!proposta.trim()) {
-      if (!admin) return "Escolha a proposta do CRM deste documento.";
+      if (!semProposta) return "Escolha a proposta do CRM deste documento.";
       if (!semProp) return "Escolha a proposta do CRM ou marque “sem proposta” e informe o motivo.";
       if (semPropMotivo.trim().length < 5) return "Informe o motivo de lançar sem proposta (mín. 5 caracteres).";
     }
@@ -1096,7 +1096,7 @@ export default function NovaEmissao({ config, aberto, fechar, avisar, onEmitido,
                 {chave.startsWith("os_omie:") && !teste && prod && <b>· Recibo nº {prox?.recibo ?? "…"}</b>}
                 {chave.startsWith("os_omie:") && teste && <span>· teste: numeração real não é usada</span>}
                 {!inicial && <button className="ne-lk" onClick={() => { setChave(null); setRotulo(null); setCarteira(null); }}>trocar</button>}</div>}
-              {admin && (!chave || chave.startsWith("os_omie:")) && (
+              {homologacao && (!chave || chave.startsWith("os_omie:")) && (
                 <label style={{ fontSize: 12, display: "flex", gap: 6, alignItems: "center", marginLeft: "auto", color: "var(--ww-text-muted)" }}>
                   <input type="checkbox" checked={teste} onChange={(e) => setTeste(e.target.checked)} /> Teste (forçar homologação)
                 </label>
@@ -1202,13 +1202,13 @@ export default function NovaEmissao({ config, aberto, fechar, avisar, onEmitido,
                     if (p) { setCli(clienteDaPessoa(p)); setVerCliente(false); } else setAviso("Não consegui abrir o cadastro escolhido");
                   }} />
                 </label>
-                {!teste && !proposta.trim() && admin && (
+                {!teste && !proposta.trim() && semProposta && (
                   <div className="ne-semprop">
-                    <label><input type="checkbox" checked={semProp} onChange={(e) => setSemProp(e.target.checked)} /> Sem proposta do CRM (admin)</label>
+                    <label><input type="checkbox" checked={semProp} onChange={(e) => setSemProp(e.target.checked)} /> Sem proposta do CRM</label>
                     {semProp && <input className="ne-in" placeholder="Motivo (obrigatório)" value={semPropMotivo} onChange={(e) => setSemPropMotivo(e.target.value)} />}
                   </div>
                 )}
-                {!teste && !proposta.trim() && !admin && <span className="ne-dica" style={{ alignSelf: "end" }}>A proposta do CRM é obrigatória para um PV/OS novo.</span>}
+                {!teste && !proposta.trim() && !semProposta && <span className="ne-dica" style={{ alignSelf: "end" }}>A proposta do CRM é obrigatória para um PV/OS novo.</span>}
               </div>
             )}
             {aviso && <div className="ne-aviso" onClick={() => setAviso(null)}>{aviso}</div>}

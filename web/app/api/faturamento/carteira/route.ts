@@ -55,7 +55,7 @@ export async function POST(req: NextRequest) {
   if (q instanceof NextResponse) return q;
   const b = (await req.json().catch(() => ({}))) as { chave?: string; acao?: string; empresa?: string; documento?: DocFat | null; forcar_homologacao?: boolean;
     /** PV/OS de projeto: parcelas do fechamento a faturar nesta nota (06/10/26). */ parcelas?: number[] | null };
-  if (b.forcar_homologacao && !q.admin) return falha("Só administradores podem forçar homologação", 403);
+  if (b.forcar_homologacao && !q.homologacao) return falha("Sem permissão para emitir em homologação (Usuários e acessos → Faturamento)", 403);
   const [tipo, idTxt] = String(b.chave ?? "").split(":");
   const id = Number(idTxt);
   const empresa = b.empresa || "SF";

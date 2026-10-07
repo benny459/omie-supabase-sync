@@ -35,7 +35,7 @@ export async function POST(req: NextRequest) {
   };
   try { body = await req.json(); } catch { return falha("JSON inválido"); }
   if (!body.documento) return falha("documento é obrigatório");
-  if (body.forcar_homologacao && !q.admin) return falha("Só administradores podem forçar homologação", 403);
+  if (body.forcar_homologacao && !q.homologacao) return falha("Sem permissão para emitir em homologação (Usuários e acessos → Faturamento)", 403);
   const tipo: TipoDoc = body.tipo ?? "nfe";
   let doc = body.documento;
   let origem: { tipo: OrigemTipo; id: string | null; rotulo: string | null } = {
@@ -58,7 +58,7 @@ export async function POST(req: NextRequest) {
       const proposta = String(n.proposta ?? "").trim();
       const motivo = String(n.sem_proposta_motivo ?? "").trim();
       if (!proposta) {
-        if (!q.admin) return falha("Escolha a proposta do CRM deste documento (só administrador lança sem proposta)", 403);
+        if (!q.semProposta) return falha("Escolha a proposta do CRM deste documento (sem permissão para lançar sem proposta)", 403);
         if (motivo.length < 5) return falha("Sem proposta do CRM: informe o motivo (mín. 5 caracteres)");
       }
       const c = doc.condicao ?? null;
