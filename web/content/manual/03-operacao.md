@@ -60,6 +60,8 @@ Tudo fica numa aba só: **Lista de materiais** (a antiga aba “Compras × lista
 
 **Resumo do projeto inteiro**: abaixo dos números, uma barra mostra numa escala só o **pago**, o **comprometido** (PCs), o **projetado** (comprometido + o que a lista ainda vai comprar) e a marca do **budget de materiais**; se o projetado passa do budget, aparece o alerta “estoura o budget de materiais em R$ X”. O mesmo projetado aparece no cartão do projeto na lista de Projetos (com o mesmo budget: o definido no painel, senão o do CRM). PCs escondidos (“Excluir PC”) não contam no comprometido nem no fluxo mensal.
 
+**Aprovação dos PCs do projeto (PJ…)**: não depende da alçada da área. O PC é aprovado quando o **fluxo do projeto está aprovado** e o **projeto inteiro cabe no budget de materiais** (comprometido + este PC ≤ budget). Se estourar, só um administrador aprova — os demais veem “estoura o budget do projeto em R$ X — fica pendente para os administradores”. A Aria aprova sozinha os PCs de projeto que cumprem essa mesma regra (histórico: “Aprovado automaticamente pela Aria”). Projetos-conta do Omie (41_VP, 47_CONTRATUAL…) seguem a regra de sempre.
+
 **Previsão do material**: é a do PC. Mudar a “Prev. material” na Operação › Projetos grava a previsão do próprio PC quando ele nasceu no painel; PC importado do Omie guarda a remarcação, e a folha do PC no Compras mostra “remarcada para dd/mm”.
 
 **Montar a lista** (**Minha lista**) — colunas: # · **RC** (selo pequeno: passe o mouse para ver o número, clique para abrir) · Equipamento · **Código** · Item · Qtd · Un · Necessário em · Valor unit. · **Projetado**, e à direita (fundo azul claro) **PC** · **Situação** · Fornecedor · **Comprado (PC)** · **Δ** · **💬**.

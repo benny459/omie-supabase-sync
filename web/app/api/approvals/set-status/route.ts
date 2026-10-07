@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+import { avaliarPcProjeto } from "@/lib/aprovacao-projeto";
+import { ehProjetoDeObra } from "@/lib/aprovacao-projeto-regra";
 import { supaServer } from "@/lib/supabase-server";
 import { supaAdmin } from "@/lib/supabase-admin";
 import { postWebexMessage, buildApprovalMarkdown } from "@/lib/webex";
@@ -138,10 +140,11 @@ export async function POST(req: Request) {
     const admin3 = supaAdmin();
     const { data: ped } = await admin3
       .schema("orders").from("pedidos_compra")
-      .select("ncod_proj")
+      .select("ncod_proj, cnumero")
       .eq("empresa", body.empresa).eq("ncod_ped", body.ncod_ped)
       .limit(1).maybeSingle();
     const codProj = (ped as { ncod_proj?: number | null } | null)?.ncod_proj ?? null;
+    const pcNum = (ped as { cnumero?: string | null } | null)?.cnumero ?? null;
 
     if (codProj) {
       const { data: fl } = await admin3
@@ -160,6 +163,25 @@ export async function POST(req: Request) {
           codigo_projeto: codProj,
           fluxo_status: f.status,
         }, { status: 400 });
+      }
+      /* 07/10/26 — aprovação por PROJETO (lib/aprovacao-projeto-regra): o projeto inteiro
+         tem de caber no budget de materiais (comprometido + este PC). Estourou → só
+         administrador aprova; os demais recebem o motivo e o PC fica pendente. */
+      const { data: pj } = await admin3.schema("finance").from("projetos").select("nome").eq("codigo", codProj).limit(1).maybeSingle();
+      if (pcNum && ehProjetoDeObra((pj as { nome?: string } | null)?.nome)) {
+        try {
+          const av = await avaliarPcProjeto(body.empresa, Number(codProj), String(pcNum), body.valorPc ?? null);
+          if (!av.aprova && av.estouro > 0) {
+            const { data: me2 } = await admin3.schema("platform").from("user_profiles").select("is_admin, role").eq("id", user.id).maybeSingle();
+            const adm = (me2 as { is_admin?: boolean; role?: string } | null);
+            if (!(adm?.is_admin === true || adm?.role === "admin")) {
+              return NextResponse.json({
+                error: `Este PC ${av.motivo} — fica pendente para os administradores.`,
+                code: "PROJETO_ESTOURA_BUDGET", codigo_projeto: codProj, estouro: av.estouro,
+              }, { status: 400 });
+            }
+          }
+        } catch { /* sem como avaliar o budget agora: segue a regra de antes (só o fluxo) */ }
       }
     }
   }

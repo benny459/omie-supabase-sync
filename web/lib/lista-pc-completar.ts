@@ -52,7 +52,12 @@ export async function completarPcs(d: DadosPcs, empresa = "SF", projeto?: number
     const escondidos = new Set(((exc.data ?? []) as { pc_numero: string }[]).map((x) => String(x.pc_numero)));
     const porPedido = new Map<number, string>(doProjeto.map((x) => [Number(x.pedido_id), x.numero]));
     let comp = 0;
-    for (const [id, num] of porPedido) if (!escondidos.has(num)) comp += Number(peds.get(id)?.valor) || 0;
+    const valores: Record<string, number> = {};
+    for (const [id, num] of porPedido) if (!escondidos.has(num)) {
+      const v = Number(peds.get(id)?.valor) || 0;
+      comp += v; valores[num] = Math.round(((valores[num] ?? 0) + v) * 100) / 100;
+    }
+    d.totais.pcs_valores = valores;
     d.totais.comprometido_itens = d.totais.comprometido;
     d.totais.comprometido = Math.round(comp * 100) / 100;
     d.totais.pcs_escondidos = [...escondidos];

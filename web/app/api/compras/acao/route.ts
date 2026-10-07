@@ -14,6 +14,8 @@ import { NextResponse } from "next/server";
 import { exigirCompras, rpc, erro, podeAprovar, posGravar, type Quem } from "@/lib/compras-server";
 import { supaAdmin } from "@/lib/supabase-admin";
 import { ordemEtapa, type Pedido } from "@/lib/compras";
+import { avaliarPcProjeto } from "@/lib/aprovacao-projeto";
+import { ehProjetoDeObra } from "@/lib/aprovacao-projeto-regra";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -112,8 +114,20 @@ async function aprovar(q: Quem, req: Request, ids: number[], status: string) {
     if (p.tipo !== "PC") { falhas.push({ num: p.num, erro: "requisição não é aprovada" }); continue; }
     if (p.origem === "omie") { doOmie.push(p); continue; }
     if (status === "aprovado") {
-      const nao = await podeAprovar(q, Number(p.valor) || 0);
-      if (nao) { falhas.push({ num: p.num, erro: nao }); continue; }
+      if (p.projCod && ehProjetoDeObra(p.proj)) {
+        /* 07/10/26 — PC de projeto: não passa pela alçada da área; quem libera é o
+           projeto (fluxo aprovado + cabe no budget de materiais). Estourou → só admin. */
+        if (!q.perms.is_admin && !q.pode["compras.aprovar"]) { falhas.push({ num: p.num, erro: "Sem permissão para aprovar compras" }); continue; }
+        try {
+          const av = await avaliarPcProjeto(p.emp, Number(p.projCod), p.num, Number(p.valor) || 0);
+          if (!av.aprova && !q.perms.is_admin && (av.estouro > 0 || (av.fluxoStatus != null && av.fluxoStatus !== "aprovado"))) {
+            falhas.push({ num: p.num, erro: `${av.motivo} — fica pendente para os administradores` }); continue;
+          }
+        } catch (e) { if (!q.perms.is_admin) { falhas.push({ num: p.num, erro: `não consegui conferir o budget do projeto: ${(e as Error).message}` }); continue; } }
+      } else {
+        const nao = await podeAprovar(q, Number(p.valor) || 0);
+        if (nao) { falhas.push({ num: p.num, erro: nao }); continue; }
+      }
     }
     okPainel.push(p.id!);
   }
