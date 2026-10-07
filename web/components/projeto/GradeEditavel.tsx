@@ -344,7 +344,7 @@ export default function GradeEditavel({
               {cols.map((c) => (
                 <th key={c.key} style={{ width: c.w, minWidth: c.w, ...(esq.has(c.key) ? fixo(esq.get(c.key)!, 21) : {}) }}
                     className={`p-1.5 text-[10px] uppercase tracking-wider font-semibold text-ww-textMuted whitespace-nowrap overflow-hidden text-ellipsis shadow-[0_1px_0_0_rgb(var(--color-ww-border))] ${
-                      c.alinhaDireita ? "text-right" : "text-left"} ${OPACO} ${c.classe ?? ""}`}>
+                      c.alinhaDireita ? "text-right" : "text-left"} ${OPACO} ${(c.classe ?? "").replace(/(^|\s)bg-\S+/g, " ")}`}>
                   {c.label}
                 </th>
               ))}

@@ -37,6 +37,7 @@
 // divergiriam no primeiro ajuste de regra.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import * as XLSX from "xlsx";
 import GradeEditavel, { linhaVazia, num, type ColunaGrade, type LinhaGrade, type SugestaoGrade } from "./GradeEditavel";
 import PcPickerModal, { type PcSearchResult } from "./PcPickerModal";
@@ -1071,7 +1072,9 @@ export default function MateriaisGrade({
       )}
 
       {/* Painel "Datas por grupo": uma linha por grupo. No celular vira folha de largura total. */}
-      {painelDatas && (
+      {/* Portal no body: no modo vidro o painel com desfoque vira o "bloco de referência"
+          de position:fixed e a folha abriria presa dentro da lista. */}
+      {painelDatas && createPortal(
         <div className="fixed inset-0 z-[120] bg-black/40 flex items-end sm:items-start justify-center sm:pt-[10vh]"
           onMouseDown={(e) => { if (e.target === e.currentTarget) setPainelDatas(false); }}>
           <div role="dialog" aria-label="Datas por grupo"
@@ -1130,7 +1133,7 @@ export default function MateriaisGrade({
             <p className="text-[10.5px] text-ww-textFaint">Nomes padrão em Cadastros › Grupos de equipamento. A lista é salva sozinha em instantes.</p>
           </div>
         </div>
-      )}
+      , document.body)}
 
       {marcadas.size > 0 && (
         <div className="flex items-center gap-2 flex-wrap px-3 py-2 rounded-lg border border-ww-accent/40 bg-ww-accentSoft text-[12px]">
@@ -1323,7 +1326,7 @@ export default function MateriaisGrade({
       {cmp && <ForaDaLista fora={cmp.fora_da_lista} empresa={empresa} />}
       {cmp && <FluxoCompras d={cmp} />}
 
-      {vincLinha && (() => {
+      {vincLinha && createPortal((() => {
         const l = linhas.find((x) => x._id === vincLinha);
         const sug = (sugTodas ?? []).filter((c) => `db${c.lista_id}` === vincLinha);
         return (
@@ -1359,15 +1362,15 @@ export default function MateriaisGrade({
               </div>
             </div>
           </div>);
-      })()}
+      })(), document.body)}
 
-      {picker && (
+      {picker && createPortal(
         <PcPickerModal empresa={empresa} codigoProjeto={codigoProjeto}
           title={vincBusca ? "Vincular a linha a um PC" : `Vincular ${marcadas.size} item(ns) a um PC`}
           onClose={() => { setPicker(false); setVincBusca(null); }} onConfirm={vincular} />
-      )}
+      , document.body)}
 
-      {seletor && seletorDados && (
+      {seletor && seletorDados && createPortal(
         <div className="ne-acerto-fundo" onMouseDown={(e) => { if (e.target === e.currentTarget) setSeletor(null); }}>
           <AcertoItemEstoque empresa={empresa} modo="lista"
             compra={{ n_cod_prod: 0, codigo: null, descricao: seletorDados.texto, unidade: null, ultimo_preco: seletorDados.custo ?? null, fornecedor: null, ncm: null }}
@@ -1379,7 +1382,7 @@ export default function MateriaisGrade({
             onFechar={() => setSeletor(null)}
             onEscolhido={(it) => void escolher(seletor, it)} />
         </div>
-      )}
+      , document.body)}
     </section>
   );
 }
