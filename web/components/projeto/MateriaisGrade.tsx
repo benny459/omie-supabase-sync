@@ -162,18 +162,18 @@ export default function MateriaisGrade({
   const cmpPorId = useMemo(() => new Map((cmp?.itens ?? []).map((l) => [`db${l.id}`, l])), [cmp]);
 
   /* ── A CP no projeto (07/10/26, Benny): RC e CP são a mesma coisa — a tela só fala
-     "CP". A CP é o plano: dá a ideia inicial e o budget; os itens entram na lista pelo
-     "Importar para a lista" ou pelo "Usar item da CP" da linha. Origem da linha = "CP"
-     (veio da CP — pelo vínculo com a CP em Compras ou pelo mesmo texto) ou "novo". */
+     "RC". A RC é o plano: dá a ideia inicial e o budget; os itens entram na lista pelo
+     "Importar para a lista" ou pelo "Usar item da RC" da linha. Origem da linha = "RC"
+     (veio da RC — pelo vínculo com a RC em Compras ou pelo mesmo texto) ou "novo". */
   const [cpBase, setCpBase] = useState<{ proposta: string | null; itens: ItemCpBase[] } | null>(null);
   const normT = (t: string | null | undefined) => String(t ?? "").trim().toLowerCase();
   const cpPorChave = useMemo(() => new Set((cpBase?.itens ?? []).map((i) => chaveItem(i.equipamento, i.item))), [cpBase]);
   const cpPorTexto = useMemo(() => new Set((cpBase?.itens ?? []).flatMap((i) => [normT(i.item), normT(textoCasar(i.item, i.modelo))])), [cpBase]);
   const origemCp = useCallback((l: Record<string, string>): string | null => {
     const c = cmpPorId.get(String(l._id ?? ""));
-    if (c?.rc) return `CP ${c.rc}`;
+    if (c?.rc) return `RC ${c.rc}`;
     if (!String(l.item ?? "").trim()) return null;
-    if (cpPorChave.has(chaveItem(l.equipamento, l.item)) || cpPorTexto.has(normT(l.item))) return cpBase?.proposta ? `CP da proposta ${cpBase.proposta}` : "CP";
+    if (cpPorChave.has(chaveItem(l.equipamento, l.item)) || cpPorTexto.has(normT(l.item))) return cpBase?.proposta ? `RC da proposta ${cpBase.proposta}` : "RC";
     return null;
   }, [cmpPorId, cpPorChave, cpPorTexto, cpBase]);
   /** Para cada item da CP, a linha da lista que o usa. Cada linha atende UM item da CP:
@@ -319,18 +319,18 @@ export default function MateriaisGrade({
      linha); PC + situação + vínculo numa coluna só, com "vincular" na própria linha;
      tudo numa linha só, com reticências, e as colunas até o Item presas ao rolar. */
   const COLS: ColunaGrade[] = useMemo(() => [
-    // Origem da linha: selo "CP" (veio da CP) — vazio = item novo, digitado na lista.
+    // Origem da linha: selo "RC" (veio da RC) — vazio = item novo, digitado na lista.
     { key: "_orig", label: "Orig.", w: 30, fixa: true,
-      dicaCab: "Origem da linha: CP = veio da composição de preço (CP) do projeto; vazio = item novo, digitado na lista.",
-      dica: (l) => origemCp(l) ?? (String(l.item ?? "").trim() ? "novo — não veio da CP" : undefined),
+      dicaCab: "Origem da linha: RC = veio da RC (composição de preço da proposta) do projeto; vazio = item novo, digitado na lista.",
+      dica: (l) => origemCp(l) ?? (String(l.item ?? "").trim() ? "novo — não veio da RC" : undefined),
       render: (l) => {
         const o = origemCp(l);
         if (!o) return null;
         const c = cmpPorId.get(l._id);
         return c?.rc
           ? <a target="_blank" rel="noreferrer" href={`/erp/compras?abrir=${c.rc}&tipo=RC&emp=${empresa}`}
-              className="inline-block px-0.5 rounded bg-emerald-500/20 text-[8.5px] font-bold text-emerald-700 dark:text-emerald-300 hover:text-ww-accent">CP</a>
-          : <span className="inline-block px-0.5 rounded bg-emerald-500/20 text-[8.5px] font-bold text-emerald-700 dark:text-emerald-300">CP</span>;
+              className="inline-block px-0.5 rounded bg-emerald-500/20 text-[8.5px] font-bold text-emerald-700 dark:text-emerald-300 hover:text-ww-accent">RC</a>
+          : <span className="inline-block px-0.5 rounded bg-emerald-500/20 text-[8.5px] font-bold text-emerald-700 dark:text-emerald-300">RC</span>;
       } },
     { key: "equipamento", label: "Equipamento", w: 88, fixa: true,
       dica: (l) => l.equipamento || undefined,
@@ -370,8 +370,8 @@ export default function MateriaisGrade({
         aoEscolher: (sg, linha) => camposDoCatalogo(sg.dados as Cat, "ok", [], linha.cat_valor_unit ?? ""),
       } },
     { key: "item",        label: "Item",        w: 224, fixa: true,
-      // "CP" na célula: usar um item da CP ainda não usado nesta linha (07/10/26)
-      acao: { rot: "CP", dica: "Usar item da CP nesta linha (os itens da CP que ainda não estão na lista)",
+      // "RC" na célula: usar um item da RC ainda não usado nesta linha (07/10/26)
+      acao: { rot: "RC", dica: "Usar item da RC nesta linha (os itens da RC que ainda não estão na lista)",
         classe: () => "text-emerald-700 dark:text-emerald-300 font-bold text-[9px]",
         fn: (l) => setUsarCpEm(l._id), mostrar: (l) => cpNaoUsados.length > 0 && !origemCp(l) },
       // Casado: mostra a descrição do item do catálogo; o texto original (que é a
@@ -421,17 +421,17 @@ export default function MateriaisGrade({
           : <span className="text-rose-600 dark:text-rose-400 font-bold">✕</span>;
       } },
     { key: "cat_valor_unit", label: "Valor unit.", w: 84, tipo: "moeda", alinhaDireita: true,
-      dicaCab: "Valor unitário estimado da linha. Vazio, vem do PC, senão do último preço do catálogo, senão do custo da CP (a origem aparece pequena na célula).",
+      dicaCab: "Valor unitário estimado da linha. Vazio, vem do PC, senão do último preço do catálogo, senão do custo da RC (a origem aparece pequena na célula).",
       marca: (l) => {
         const f = l._vu_fonte;
         if (!f || !String(l.cat_valor_unit ?? "").trim()) return null;
-        return { etiqueta: f === "pc" ? "PC" : f === "CP" ? "CP" : "cat.",
-          dica: f === "pc" ? "Preço unitário da linha do pedido de compra" : f === "CP" ? "Custo da composição de preço (CP) — sem compra anterior" : "Último preço pago (catálogo)" };
+        return { etiqueta: f === "pc" ? "PC" : f === "CP" ? "RC" : "cat.",
+          dica: f === "pc" ? "Preço unitário da linha do pedido de compra" : f === "CP" ? "Custo da RC (composição de preço da proposta) — sem compra anterior" : "Último preço pago (catálogo)" };
       } },
     // Projetado × Comprado (PC) × Δ — o que se esperava gastar, o que o PC custou e a diferença.
     { key: "_proj", label: "Projetado", w: 90, alinhaDireita: true,
       dicaCab: "Projetado = Qtd × Valor unit. da linha — quanto se espera gastar com este item.",
-      dica: (l) => (l._vu_fonte ? `Qtd × valor unit. (${l._vu_fonte === "pc" ? "do PC" : l._vu_fonte === "CP" ? "da CP" : "do catálogo"})` : "Qtd × valor unit."),
+      dica: (l) => (l._vu_fonte ? `Qtd × valor unit. (${l._vu_fonte === "pc" ? "do PC" : l._vu_fonte === "CP" ? "da RC" : "do catálogo"})` : "Qtd × valor unit."),
       calculada: (l) => {
         const t = num(l.qtd) * num(l.cat_valor_unit);
         return t ? brl(t) : "";
@@ -443,7 +443,7 @@ export default function MateriaisGrade({
         const c = cmpPorId.get(l._id);
         if (!c?.pcs.length) return l.pc_numero ? `PC ${l.pc_numero} (não encontrado no Compras)` : undefined;
         const v = c.vinculo_via;
-        const via = v === "rc" ? "pela CP" : v === "codigo" ? "pelo código" : v === "descricao" ? `pela descrição ${Math.round(Number(c.vinculo_score ?? 0) * 100)}%` : v === "manual" ? "manual" : "pelo nº do PC";
+        const via = v === "rc" ? "pela RC" : v === "codigo" ? "pelo código" : v === "descricao" ? `pela descrição ${Math.round(Number(c.vinculo_score ?? 0) * 100)}%` : v === "manual" ? "manual" : "pelo nº do PC";
         return `${c.pcs.map((p) => `PC ${p.pc}${p.fornecedor ? ` — ${p.fornecedor}` : ""}`).join("\n")}\nVínculo ${via}`;
       },
       render: (l) => {
@@ -485,7 +485,7 @@ export default function MateriaisGrade({
           if (!cmp) return l.pc_numero ? <span className="text-[10.5px] text-ww-textFaint">carregando…</span> : null;
           if (l.pc_numero && l._id.startsWith("db")) return (
             <button type="button" onClick={() => setVincLinha(l._id)} className="text-[10.5px] italic text-ww-accent hover:underline">sugestão · vincular</button>);
-          return c?.rc ? <span className="text-ww-textMuted text-[10.5px]" title={`CP ${c.rc} em Compras, ainda sem PC`}>na CP</span> : null;
+          return c?.rc ? <span className="text-ww-textMuted text-[10.5px]" title={`RC ${c.rc} em Compras, ainda sem PC`}>na RC</span> : null;
         }
         const st = estadoPc(c.pcs[0]);
         const pode = c.vinculo_via === "codigo" || c.vinculo_via === "descricao" || c.vinculo_via === "manual";
@@ -626,7 +626,7 @@ export default function MateriaisGrade({
   /* Depois de carregar (07/10/26): traz as compras do projeto e completa as linhas
      que chegaram "vazias" — código do Omie que já tem item nosso vira o item
      nosso (código novo); valor unit. vazio vem do PC, senão do último preço do
-     catálogo, senão do custo da CP (a estimativa da própria lista). O que muda
+     catálogo, senão do custo da RC (a estimativa da própria lista). O que muda
      é salvo sozinho, como qualquer edição. */
   const enriquecer = useCallback(async (rows: ItemRow[], pCompras?: Promise<DadosCompras | null>) => {
     const [dados, resolv, cpRes] = await Promise.all([
@@ -677,7 +677,7 @@ export default function MateriaisGrade({
     }));
     if (mudou) {
       setSujo(true);
-      setAviso(`${mudou} ajuste(s) automático(s) na lista: código do Omie trocado pelo item nosso e/ou valor unit. vazio preenchido (do PC, do catálogo ou da CP). A lista é salva sozinha em instantes.`);
+      setAviso(`${mudou} ajuste(s) automático(s) na lista: código do Omie trocado pelo item nosso e/ou valor unit. vazio preenchido (do PC, do catálogo ou da RC). A lista é salva sozinha em instantes.`);
     }
   }, [empresa, codigoProjeto, carregarCompras]);
   const enriquecerRef = useRef<typeof enriquecer | null>(null);
@@ -929,7 +929,7 @@ export default function MateriaisGrade({
         if (its) {
           const ok = its.filter((i) => i.casamento?.status === "ok").length;
           const man = its.filter((i) => i.casamento?.manual).length;
-          setAviso(`CP recasada com o catálogo: ${ok} de ${its.length} casado(s)${man ? ` (${man} por escolha sua)` : ""}.`);
+          setAviso(`RC recasada com o catálogo: ${ok} de ${its.length} casado(s)${man ? ` (${man} por escolha sua)` : ""}.`);
         }
         return;
       }
@@ -987,7 +987,7 @@ export default function MateriaisGrade({
     setImportarAberto(false);
     setSubAba("lista");
     const sem = novas.filter((l) => l._match === "sem").length;
-    setAviso(`${novas.length} item(ns) da CP adicionados à lista${sem ? ` · ${sem} sem código (âmbar — resolva no ⌕ do Código)` : ""}. A lista é salva sozinha em instantes.`);
+    setAviso(`${novas.length} item(ns) da RC adicionados à lista${sem ? ` · ${sem} sem código (âmbar — resolva no ⌕ do Código)` : ""}. A lista é salva sozinha em instantes.`);
   }, [cp, cpMarcados, usoCp, linhas]);
 
   /** Escolha no seletor: grava o de-para (texto → item nosso) e aplica na linha. */
@@ -1098,13 +1098,13 @@ export default function MateriaisGrade({
     finally { setRcsCarregando(false); }
   }, [postCompras]);
   const importarRc = useCallback(async (rcId: number) => {
-    if (sujo) { setErro("Há alterações não salvas — salve a lista antes de importar a CP."); return; }
+    if (sujo) { setErro("Há alterações não salvas — salve a lista antes de importar a RC."); return; }
     setOcupado(`rc${rcId}`);
     try {
       const j = await postCompras({ acao: "importar_rc", rc_id: rcId }) as { rc: string; novas: number; casados: number; ligadas: number };
-      setAviso(`CP ${j.rc}: ${j.novas} linha(s) nova(s) na lista, ${j.casados} já com o código do nosso estoque`
+      setAviso(`RC ${j.rc}: ${j.novas} linha(s) nova(s) na lista, ${j.casados} já com o código do nosso estoque`
         + (j.novas - j.casados > 0 ? ` e ${j.novas - j.casados} para resolver (âmbar — clique em ⌕ no Código)` : "")
-        + `${j.ligadas ? `; ${j.ligadas} já existente(s) ligada(s) à CP` : ""}. A CP fica como origem; os pedidos saem da lista.`);
+        + `${j.ligadas ? `; ${j.ligadas} já existente(s) ligada(s) à RC` : ""}. A RC fica como origem; os pedidos saem da lista.`);
       setRcsAbertas(null);
       setImportarAberto(false);
       await carregar();
@@ -1124,7 +1124,7 @@ export default function MateriaisGrade({
     if (!rc) { rcUrlFeito.current = true; return; }
     rcUrlFeito.current = true;
     const ids = linhas.filter((l) => l._id.startsWith("db") && cmpPorId.get(l._id)?.rc === rc && !cmpPorId.get(l._id)?.pcs.length && !String(l.pc_numero ?? "").trim()).map((l) => l._id);
-    if (!ids.length) { setAviso(`Nenhuma linha da lista vem da CP ${rc} sem PC — use “⤵ Importar para a lista” para trazer os itens dela.`); return; }
+    if (!ids.length) { setAviso(`Nenhuma linha da lista vem da RC ${rc} sem PC — use “⤵ Importar para a lista” para trazer os itens dela.`); return; }
     setMarcadas(new Set(ids));
     abrirGerarPc(ids);
   }, [cmp, carregouOk, linhas, cmpPorId, abrirGerarPc]);
@@ -1304,8 +1304,8 @@ export default function MateriaisGrade({
         </button>
         {cpBase?.proposta && (
           <button type="button" onClick={() => setSubAba("cp")} className="px-1.5 py-1 text-[10.5px] text-ww-textMuted hover:text-ww-text hover:underline"
-            title="Itens da CP (o plano original): quantos já estão na lista">
-            CP: {cpBase.itens.length} itens · {usoCp.size} já na lista
+            title="Itens da RC (o plano original): quantos já estão na lista">
+            RC: {cpBase.itens.length} itens · {usoCp.size} já na lista
           </button>
         )}
         <button type="button" onClick={() => abrirGerarPc(paraPc)} disabled={!!ocupado || !paraPc.length}
@@ -1314,7 +1314,7 @@ export default function MateriaisGrade({
           🧾 Gerar pedido de compra ({paraPc.length})
         </button>
         <button type="button" onClick={() => { setImportarAberto(true); void abrirTrazerRc(); }} disabled={!!ocupado}
-          title="Traz para a lista os itens da CP do projeto, já casados com o nosso catálogo (o que já está na lista fica apagado)"
+          title="Traz para a lista os itens da RC do projeto, já casados com o nosso catálogo (o que já está na lista fica apagado)"
           className="px-2 py-1 text-[11px] rounded-lg border border-emerald-500/60 text-emerald-800 dark:text-emerald-200 hover:bg-emerald-500/10 transition disabled:opacity-40">
           ⤵ Importar para a lista
         </button>
@@ -1503,10 +1503,10 @@ export default function MateriaisGrade({
         <SugestoesVinculo sugestoes={sugestoes} ocupado={ocupado} onConfirmar={(c) => void confirmarSugestao(c)} onFechar={() => setSugestoes(null)} />
       )}
 
-      {/* Lista × Itens da CP (07/10/26): a lista é o que se compra; a aba da CP é só o
+      {/* Lista × Itens da RC (07/10/26): a lista é o que se compra; a aba da RC é só o
           registro do plano original — o que entrou na lista e o que não foi usado. */}
       <div className="flex items-center gap-1 border-b border-ww-border">
-        {([["lista", `Lista (${validas.length})`], ["cp", `Itens da CP${cpBase ? ` (${cpBase.itens.length})` : ""}`]] as const).map(([k, rot]) => (
+        {([["lista", `Lista (${validas.length})`], ["cp", `Itens da RC${cpBase ? ` (${cpBase.itens.length})` : ""}`]] as const).map(([k, rot]) => (
           <button key={k} type="button" onClick={() => setSubAba(k)}
             className={`px-3 py-1.5 text-[11.5px] -mb-px border-b-2 transition ${
               subAba === k ? "border-ww-accent text-ww-text font-semibold" : "border-transparent text-ww-textMuted hover:text-ww-text"}`}>
@@ -1522,7 +1522,7 @@ export default function MateriaisGrade({
 
       {subAba === "cp" ? (
         <div className="space-y-2">
-          {!cpBase ? <p className="text-[11.5px] text-ww-textFaint py-3">Lendo a CP no CRM…</p>
+          {!cpBase ? <p className="text-[11.5px] text-ww-textFaint py-3">Lendo a RC no CRM…</p>
             : !cpBase.proposta ? (
               <p className="text-[12px] text-ww-textMuted py-3">
                 Este projeto não tem proposta ligada no CRM. No CRM, ligue a proposta ao projeto no fechamento (Recebimento → projeto do painel).
@@ -1537,8 +1537,8 @@ export default function MateriaisGrade({
                   <table className="w-full text-[11.5px] border-collapse">
                     <thead className="sticky top-0 bg-[rgb(var(--color-ww-panel))] text-ww-textMuted z-[1]">
                       <tr className="text-left">
-                        <th className="p-1.5">Equipamento</th><th className="p-1.5">Item da CP</th><th className="p-1.5 text-right">Qtd</th>
-                        <th className="p-1.5 text-right">Custo CP</th><th className="p-1.5 text-right">Total</th><th className="p-1.5">Na lista</th>
+                        <th className="p-1.5">Equipamento</th><th className="p-1.5">Item da RC</th><th className="p-1.5 text-right">Qtd</th>
+                        <th className="p-1.5 text-right">Custo RC</th><th className="p-1.5 text-right">Total</th><th className="p-1.5">Na lista</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -1560,15 +1560,15 @@ export default function MateriaisGrade({
                     </tbody>
                     <tfoot>
                       <tr className="border-t border-ww-border font-semibold">
-                        <td className="p-1.5" colSpan={4}>Plano (CP): {cpBase.itens.length} item(ns) · {usoCp.size} na lista · {cpBase.itens.length - usoCp.size} não usado(s)</td>
+                        <td className="p-1.5" colSpan={4}>Plano (RC): {cpBase.itens.length} item(ns) · {usoCp.size} na lista · {cpBase.itens.length - usoCp.size} não usado(s)</td>
                         <td className="p-1.5 text-right tabular-nums">{brl(plano)}</td>
-                        <td className="p-1.5 text-[11px] font-normal text-ww-textMuted">na lista: {brl(usado)} pelo custo da CP · {brl(projUsado)} projetado</td>
+                        <td className="p-1.5 text-[11px] font-normal text-ww-textMuted">na lista: {brl(usado)} pelo custo da RC · {brl(projUsado)} projetado</td>
                       </tr>
                     </tfoot>
                   </table>
                 </div>);
             })()}
-          <p className="text-[10.5px] text-ww-textFaint">A CP é o plano: daqui só se consulta. Os itens entram na lista pelo “⤵ Importar para a lista” ou pelo “CP” na célula do Item de uma linha.</p>
+          <p className="text-[10.5px] text-ww-textFaint">A RC é o plano: daqui só se consulta. Os itens entram na lista pelo “⤵ Importar para a lista” ou pelo “RC” na célula do Item de uma linha.</p>
         </div>
       ) : carregando
         ? <p className="text-[11.5px] text-ww-textFaint py-3">Carregando a lista…</p>
@@ -1691,10 +1691,10 @@ export default function MateriaisGrade({
       )}
       {usarCpEm && createPortal(
         <div className="fixed inset-0 z-[110] bg-black/40 flex items-end sm:items-start justify-center sm:pt-[10vh]" onMouseDown={(e) => { if (e.target === e.currentTarget) setUsarCpEm(null); }}>
-          <div role="dialog" aria-label="Usar item da CP" className="w-full sm:w-[min(720px,96vw)] max-h-[80vh] overflow-auto rounded-t-xl sm:rounded-xl border border-ww-border bg-[rgb(var(--color-ww-panel))] shadow-2xl p-3.5 space-y-2 text-[12px]">
+          <div role="dialog" aria-label="Usar item da RC" className="w-full sm:w-[min(720px,96vw)] max-h-[80vh] overflow-auto rounded-t-xl sm:rounded-xl border border-ww-border bg-[rgb(var(--color-ww-panel))] shadow-2xl p-3.5 space-y-2 text-[12px]">
             <div className="flex items-start gap-2">
-              <div><h4 className="text-[13px] font-semibold text-ww-text">Usar item da CP nesta linha</h4>
-                <p className="text-[11px] text-ww-textMuted">Itens da CP que ainda não estão na lista. A linha recebe descrição, qtd, equipamento e o custo da CP (se não tiver valor) e passa pelo catálogo.</p></div>
+              <div><h4 className="text-[13px] font-semibold text-ww-text">Usar item da RC nesta linha</h4>
+                <p className="text-[11px] text-ww-textMuted">Itens da RC que ainda não estão na lista. A linha recebe descrição, qtd, equipamento e o custo da RC (se não tiver valor) e passa pelo catálogo.</p></div>
               <button type="button" className="ml-auto text-ww-accent hover:underline" onClick={() => setUsarCpEm(null)}>fechar</button>
             </div>
             <input autoFocus placeholder="filtrar…" value={usarCpBusca} onChange={(e) => setUsarCpBusca(e.target.value)}
@@ -1706,24 +1706,24 @@ export default function MateriaisGrade({
                 <span className="flex-1 truncate" title={i.item}>{i.item}{i.modelo ? <span className="text-ww-textFaint"> · {i.modelo}</span> : null}</span>
                 <span className="tabular-nums text-ww-textMuted">{i.qtd ?? "—"} × {brl(i.custo_cp)}</span>
               </button>))}
-            {!cpNaoUsados.length && <p className="text-ww-textFaint">Todos os itens da CP já estão na lista.</p>}
+            {!cpNaoUsados.length && <p className="text-ww-textFaint">Todos os itens da RC já estão na lista.</p>}
           </div>
         </div>, document.body)}
       {importarAberto && createPortal(
         <div className="fixed inset-0 z-[110] bg-black/40 flex items-end sm:items-start justify-center sm:pt-[5vh]" onMouseDown={(e) => { if (e.target === e.currentTarget) setImportarAberto(false); }}>
           <div role="dialog" aria-label="Importar para a lista" className="w-full sm:w-[min(1100px,97vw)] max-h-[90vh] overflow-auto rounded-t-xl sm:rounded-xl border border-ww-border bg-[rgb(var(--color-ww-panel))] shadow-2xl p-3.5 space-y-2.5 text-[12px]">
             <div className="flex items-start gap-2">
-              <div><h4 className="text-[14px] font-semibold text-ww-text">Importar para a lista — itens da CP</h4>
-                <p className="text-[11px] text-ww-textMuted">Cada item da CP vem casado com o nosso catálogo (✓ certo · ⚠ conferir · sem correspondência). Resolva em “No catálogo”, marque o que entra e adicione. O que já está na lista fica apagado.</p></div>
+              <div><h4 className="text-[14px] font-semibold text-ww-text">Importar para a lista — itens da RC</h4>
+                <p className="text-[11px] text-ww-textMuted">Cada item da RC vem casado com o nosso catálogo (✓ certo · ⚠ conferir · sem correspondência). Resolva em “No catálogo”, marque o que entra e adicione. O que já está na lista fica apagado.</p></div>
               <button type="button" className="ml-auto text-ww-accent hover:underline" onClick={() => setImportarAberto(false)}>fechar</button>
             </div>
-            {/* CP já lançada em Compras (nº da CP): entra com o vínculo, para os PCs cobrirem a CP */}
+            {/* RC já lançada em Compras (nº da RC): entra com o vínculo, para os PCs cobrirem a RC */}
             {rcsAbertas && rcsAbertas.length > 0 && (
               <div className="rounded-lg border border-ww-border p-2.5 space-y-1">
-                <div className="text-[11.5px] font-semibold text-ww-text">CP lançada em Compras <small className="font-normal text-ww-textFaint">— traz os itens já ligados ao documento da CP (os PCs gerados pela lista ficam cobrindo a CP)</small></div>
+                <div className="text-[11.5px] font-semibold text-ww-text">RC lançada em Compras <small className="font-normal text-ww-textFaint">— traz os itens já ligados ao documento da RC (os PCs gerados pela lista ficam cobrindo a RC)</small></div>
                 {rcsAbertas.map((r) => (
                   <div key={r.id} className="flex items-center gap-2 border-t border-ww-border/60 pt-1.5">
-                    <div className="flex-1"><b>CP {r.num}</b> <span className="text-ww-textMuted">· {r.itens} item(ns), {r.na_lista} já na lista · {brl(r.valor)}</span></div>
+                    <div className="flex-1"><b>RC {r.num}</b> <span className="text-ww-textMuted">· {r.itens} item(ns), {r.na_lista} já na lista · {brl(r.valor)}</span></div>
                     <button type="button" disabled={!!ocupado} onClick={() => void importarRc(r.id)}
                       className="px-2 py-0.5 rounded border border-ww-accent text-ww-accent hover:bg-ww-accentSoft disabled:opacity-40">
                       {ocupado === `rc${r.id}` ? "…" : `Trazer ${r.itens - r.na_lista} (casando com o catálogo)`}
@@ -1732,8 +1732,8 @@ export default function MateriaisGrade({
               </div>
             )}
             <div className="space-y-2">
-          {cpCarregando && <p className="text-[11.5px] text-ww-textFaint py-3">Lendo a CP no CRM e casando com o catálogo…</p>}
-          {cpErro && <div className="p-2.5 rounded-lg border border-rose-500/40 bg-rose-500/10 text-[12px] text-rose-700 dark:text-rose-300">Não consegui trazer a CP: {cpErro}</div>}
+          {cpCarregando && <p className="text-[11.5px] text-ww-textFaint py-3">Lendo a RC no CRM e casando com o catálogo…</p>}
+          {cpErro && <div className="p-2.5 rounded-lg border border-rose-500/40 bg-rose-500/10 text-[12px] text-rose-700 dark:text-rose-300">Não consegui trazer a RC: {cpErro}</div>}
           {cp && !cp.proposta && (
             <p className="text-[12px] text-ww-textMuted py-3">
               Este projeto não tem proposta ligada no CRM. No CRM, ligue a proposta ao projeto no fechamento (Recebimento → projeto do painel).
@@ -1756,7 +1756,7 @@ export default function MateriaisGrade({
                 <span className="text-[10.5px] text-ww-textFaint">
                   {cp.itens.filter(casado).length} de {cp.itens.length} casado(s)
                 </span>
-                <button type="button" className="ml-auto text-[11px] text-ww-textMuted hover:text-ww-text" onClick={() => void carregarCp()}>↻ reler a CP</button>
+                <button type="button" className="ml-auto text-[11px] text-ww-textMuted hover:text-ww-text" onClick={() => void carregarCp()}>↻ reler a RC</button>
               </div>
               <div className="border border-ww-border rounded-lg overflow-auto" style={{ maxHeight: 480 }}>
                 <table className="w-full text-[11.5px] border-collapse">
@@ -1764,9 +1764,9 @@ export default function MateriaisGrade({
                     <tr className="text-left">
                       <th className="p-1.5 w-7"></th>
                       <th className="p-1.5">Equipamento</th>
-                      <th className="p-1.5">Item da CP</th>
+                      <th className="p-1.5">Item da RC</th>
                       <th className="p-1.5 text-right">Qtd</th>
-                      <th className="p-1.5 text-right">Custo CP</th>
+                      <th className="p-1.5 text-right">Custo RC</th>
                       <th className="p-1.5">No catálogo</th>
                       <th className="p-1.5 text-right">Últ. preço</th>
                       <th className="p-1.5">Fornecedor</th>
@@ -1817,7 +1817,7 @@ export default function MateriaisGrade({
               <p className="text-[10.5px] text-ww-textFaint">
                 Clique em “No catálogo” para resolver o que ficou ⚠ conferir ou sem correspondência (sugestões, busca, criar item nosso) —
                 a escolha fica gravada para o mesmo texto. Item sem código marcado entra “sem código” (âmbar) para resolver depois; desmarque
-                para pular. O valor vem do último preço pago; sem compra anterior, do custo da CP. Itens já na lista ficam apagados.
+                para pular. O valor vem do último preço pago; sem compra anterior, do custo da RC. Itens já na lista ficam apagados.
               </p>
             </>
           )}

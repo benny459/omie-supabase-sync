@@ -121,7 +121,7 @@ export function KpisCompras({ d, estimado, restante, linhas, empresa, codigoProj
           </div>);
       })()}
       <p className="cdl-nota">Projetado = comprometido nos PCs + estimado das linhas que ainda não têm PC. Margem = margem do fechamento ± a diferença entre o budget e o projetado.
-        Estimado de cada linha = valor unit. da linha, senão o último preço do catálogo, senão o custo da CP.</p>
+        Estimado de cada linha = valor unit. da linha, senão o último preço do catálogo, senão o custo da RC.</p>
       {erro && <div className="cdl-box cdl-err">{erro}</div>}
     </div>
   );
