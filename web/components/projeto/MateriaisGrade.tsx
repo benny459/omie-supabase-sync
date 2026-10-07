@@ -176,17 +176,24 @@ export default function MateriaisGrade({
     if (cpPorChave.has(chaveItem(l.equipamento, l.item)) || cpPorTexto.has(normT(l.item))) return cpBase?.proposta ? `CP da proposta ${cpBase.proposta}` : "CP";
     return null;
   }, [cmpPorId, cpPorChave, cpPorTexto, cpBase]);
-  /** Para cada item da CP, a linha da lista que o usa (mesma chave equip|item ou mesmo texto). */
+  /** Para cada item da CP, a linha da lista que o usa. Cada linha atende UM item da CP:
+   *  primeiro o mesmo equipamento + item; depois, só pelo texto, entre as linhas que
+   *  sobraram (o mesmo item em 3 equipamentos não é "usado" 3 vezes por uma linha só). */
   const usoCp = useMemo(() => {
     const m = new Map<number, LinhaGrade>();
-    const porChave = new Map<string, LinhaGrade>(), porTexto = new Map<string, LinhaGrade>();
-    for (const l of linhas) if (String(l.item ?? "").trim()) {
-      porChave.set(chaveItem(l.equipamento, l.item), l);
-      if (!porTexto.has(normT(l.item))) porTexto.set(normT(l.item), l);
-    }
-    (cpBase?.itens ?? []).forEach((i, k) => {
-      const l = porChave.get(chaveItem(i.equipamento, i.item)) ?? porTexto.get(normT(i.item)) ?? porTexto.get(normT(textoCasar(i.item, i.modelo)));
-      if (l) m.set(k, l);
+    const itens = cpBase?.itens ?? [];
+    const comItem = linhas.filter((l) => String(l.item ?? "").trim());
+    const tomadas = new Set<LinhaGrade>();
+    itens.forEach((i, k) => {
+      const ch = chaveItem(i.equipamento, i.item);
+      const l = comItem.find((x) => !tomadas.has(x) && chaveItem(x.equipamento, x.item) === ch);
+      if (l) { m.set(k, l); tomadas.add(l); }
+    });
+    itens.forEach((i, k) => {
+      if (m.has(k)) return;
+      const ts = new Set([normT(i.item), normT(textoCasar(i.item, i.modelo))]);
+      const l = comItem.find((x) => !tomadas.has(x) && ts.has(normT(x.item)));
+      if (l) { m.set(k, l); tomadas.add(l); }
     });
     return m;
   }, [linhas, cpBase]);
