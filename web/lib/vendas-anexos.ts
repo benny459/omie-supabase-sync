@@ -6,8 +6,10 @@ export type AnexoTipo = "oc_cliente" | "outro";
 
 export type VendaAnexo = {
   id: number; nome: string; tipo: AnexoTipo;
-  /** link externo (CRM, Drive…) ou, para arquivo do painel, URL assinada (1 h) gerada na leitura */
+  /** link externo (CRM, Drive…); null para arquivo do painel */
   url: string | null; arquivo_path: string | null;
+  /** arquivo do painel (bucket privado): URL assinada válida por 1 h, gerada na leitura */
+  url_assinada?: string | null;
   tamanho: number | null; mime: string | null; origem: "painel" | "crm"; por: string | null; em: string;
 };
 

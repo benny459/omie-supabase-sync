@@ -26,13 +26,14 @@ async function rpcOc<T>(fn: string, args: Record<string, unknown>): Promise<T> {
   return data as T;
 }
 
-/** Troca o caminho no bucket por uma URL assinada (1 h) — o bucket é privado. */
-async function assinar(anexos: VendaAnexo[]): Promise<VendaAnexo[]> {
-  const paths = anexos.filter((a) => a.arquivo_path && !a.url).map((a) => a.arquivo_path!) ;
+/** Arquivos do painel (bucket privado): acrescenta url_assinada (1 h). `url`
+ *  fica só para links externos (CRM, Drive…). */
+export async function assinar<T extends { arquivo_path?: string | null }>(anexos: T[]): Promise<(T & { url_assinada?: string | null })[]> {
+  const paths = anexos.filter((a) => a.arquivo_path).map((a) => a.arquivo_path!);
   if (!paths.length) return anexos;
   const { data } = await supaAdmin().storage.from(BUCKET_VENDAS_ANEXOS).createSignedUrls(paths, 3600);
   const m = new Map((data ?? []).map((s) => [s.path, s.signedUrl]));
-  return anexos.map((a) => (a.arquivo_path && !a.url ? { ...a, url: m.get(a.arquivo_path) ?? null } : a));
+  return anexos.map((a) => (a.arquivo_path ? { ...a, url_assinada: m.get(a.arquivo_path) ?? null } : a));
 }
 
 /** Nº da OC que está no espelho do Omie / nativo (sem a sql/110). */

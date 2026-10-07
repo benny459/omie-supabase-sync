@@ -19,7 +19,7 @@ import { NextResponse } from "next/server";
 import { rpc } from "@/lib/compras-server";
 import { crmAutorizado, documento, erro, naoAutorizado, salvarVenda } from "@/lib/vendas-server";
 import type { VendaItem, VendaParcela, VendaSalvar } from "@/lib/vendas";
-import { MigracaoPendente, anexoIncluir, anexosDoCorpo, ocDefinir, ocDoc } from "@/lib/vendas-anexos-server";
+import { MigracaoPendente, anexoIncluir, anexosDoCorpo, assinar, ocDefinir, ocDoc } from "@/lib/vendas-anexos-server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -64,7 +64,9 @@ export async function GET(req: Request) {
       const docs = await rpc<Record<string, unknown>[]>("vendas_da_proposta", { p_empresa: empresa, p_proposta: sp.get("proposta") });
       // Sem a sql/110 a função antiga não traz OC/anexos: completa aqui (poucos docs por proposta).
       return NextResponse.json(await Promise.all((docs ?? []).map(async (d) => {
-        if ("anexos" in d && "num_pedido_cliente" in d) return d;
+        if ("anexos" in d && "num_pedido_cliente" in d) {
+          return { ...d, anexos: await assinar((d.anexos ?? []) as { arquivo_path?: string | null }[]).catch(() => d.anexos) };
+        }
         const oc = await ocDoc(empresa, d.tipo as "PV" | "OS", String(d.numero)).catch(() => null);
         const nat = await documento(Number(d.id)).catch(() => null);
         return { ...d, num_pedido_cliente: nat?.num_pedido_cliente ?? oc?.num_pedido_cliente ?? null, anexos: oc?.anexos ?? [] };

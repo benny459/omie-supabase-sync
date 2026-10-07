@@ -203,8 +203,8 @@ export function OcAnexosPainel({ empresa, label, mostrarOc = true, onMudou }: {
               <li key={a.id} className="flex items-center gap-2 px-2.5 py-1.5">
                 <span aria-hidden>{a.arquivo_path ? "📄" : "🔗"}</span>
                 <div className="min-w-0 flex-1">
-                  {a.url
-                    ? <a href={a.url} target="_blank" rel="noopener noreferrer" className="font-medium text-ww-accent underline underline-offset-2 truncate block">{a.nome}</a>
+                  {(a.url ?? a.url_assinada)
+                    ? <a href={(a.url ?? a.url_assinada)!} target="_blank" rel="noopener noreferrer" className="font-medium text-ww-accent underline underline-offset-2 truncate block">{a.nome}</a>
                     : <span className="font-medium truncate block">{a.nome}</span>}
                   <div className="text-[10.5px] text-ww-textFaint truncate">
                     {a.tipo === "oc_cliente" && <b className="text-ww-text">OC do cliente · </b>}
