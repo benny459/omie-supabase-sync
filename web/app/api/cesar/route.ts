@@ -16,6 +16,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { supaServer } from "@/lib/supabase-server";
 import { canViewArea } from "@/lib/permissions";
+import { permissoesDe } from "@/lib/acessos";
 import { loadPerms } from "@/lib/require-area";
 import { createClient } from "@supabase/supabase-js";
 import { executar, tools, type CtxAcao } from "@/lib/cesar/ferramentas";
@@ -40,8 +41,11 @@ export async function POST(req: Request) {
   if (!user) return Response.json({ error: "Unauthorized" }, { status: 401 });
 
   const perms = await loadPerms();
-  if (!canViewArea(perms, "financeiro") && !canViewArea(perms, "bi")) {
-    return Response.json({ error: "Sem acesso" }, { status: 403 });
+  // 07/10/26 (Benny): quem tem acesso ao financeiro (Contas a pagar/receber, pela área ERP) também conversa com o Cesar.
+  const pode = perms ? await permissoesDe(perms).catch(() => null) : null;
+  const financeiroErp = canViewArea(perms, "erp") && !!(pode?.["financeiro.ver_pagar"] || pode?.["financeiro.ver_receber"]);
+  if (!canViewArea(perms, "financeiro") && !canViewArea(perms, "bi") && !financeiroErp) {
+    return Response.json({ error: "Sem acesso — o Cesar é para quem tem o Financeiro ou o BI (Usuários e acessos)" }, { status: 403 });
   }
 
   const chave = process.env.ANTHROPIC_API_KEY;

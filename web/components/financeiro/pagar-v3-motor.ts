@@ -378,17 +378,17 @@ export function montarPagarV3(o: Opts) {
   function buscarHist() {
     clearTimeout(histT);
     const termo = S.q;
-    if (termo.length < 3) { HIST = { q: "", itens: [], carregando: false }; renderHist(); return; }
-    HIST = { q: termo, itens: [], carregando: true }; renderHist();
+    if (termo.length < 3) { HIST = { q: "", itens: [], carregando: false }; renderBusca(); return; }
+    HIST = { q: termo, itens: [], carregando: true }; renderBusca();
     histT = setTimeout(async () => {
       try {
         const r = await fetch(`/api/financeiro/pagar?buscar=${encodeURIComponent(termo)}`, { cache: "no-store" });
         const j = await r.json(); if (!r.ok) throw new Error(j.error ?? "HTTP " + r.status);
-        if (S.q === termo) { HIST = { q: termo, itens: j.itens ?? [], carregando: false }; renderHist(); }
-      } catch (e) { if (S.q === termo) { HIST = { q: termo, itens: [], carregando: false, erro: e.message }; renderHist(); } }
+        if (S.q === termo) { HIST = { q: termo, itens: j.itens ?? [], carregando: false }; renderBusca(); }
+      } catch (e) { if (S.q === termo) { HIST = { q: termo, itens: [], carregando: false, erro: e.message }; renderBusca(); } }
     }, 350);
   }
-  function renderHist() {
+  function renderBusca() {
     const tb = q("tbl"); if (!tb) return;
     let el = q("tblHist");
     if (!el) { el = document.createElement("div"); el.id = "tblHist"; (tb.closest(".tbl") || tb).insertAdjacentElement("afterend", el); }
@@ -464,7 +464,7 @@ export function montarPagarV3(o: Opts) {
     qa("#tbl th[data-k]").forEach((h) => (h.onclick = () => { const key = h.dataset.k; S.sort = S.sort.k === key ? { k: key, dir: -S.sort.dir } : { k: key, dir: key === "v" ? -1 : 1 }; renderTable(); }));
     q("tblFoot").textContent = `${a.length} títulos · ${brl(sum(a))} · liberados ${brl(sum(a.filter((r) => ["ok", "dir"].includes(r.st))))}${a.length > 400 ? " · mostrando 400" : ""}`;
     q("tcTit").textContent = pre.length;
-    renderHist();
+    renderBusca();
     renderAbar();
   }
   async function programar(rs, cod) {
