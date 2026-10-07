@@ -100,7 +100,7 @@ Tudo fica numa aba só: **Lista de materiais** (a antiga aba “Compras × lista
 
 **Itens da RC**: só consulta — o registro do plano original (a RC dá a ideia inicial e o budget). Mostra cada item com qtd, custo e total, e se está **na lista** (com o código nosso e a linha) ou **não usado**, e o total do plano × o que está na lista. Os itens entram pelo **⤵ Importar itens da RC** (uma vez) ou pelo **RC** da linha.
 
-**Chega a tempo?** Ao lado de “Necessário em”, cada linha com data mostra **✓** (recebido ou chega com folga), **⚠** (em risco: chega com menos de 3 dias de folga, PC sem previsão, ou sem PC e o prazo médio do catálogo está apertado) ou **✕** (atrasado: chega depois, ou a data passou sem receber). A dica mostra “chega prev. dd/mm · necessário dd/mm · folga N dias” — sem PC, a chegada é estimada por hoje + prazo médio de entrega. Os filtros **⚠ Em risco** e **✕ Atrasados** ficam junto de Todas / Sem PC / Com PC, e cada grupo mostra quantas linhas estão em risco ou atrasadas (também no painel Datas por grupo).
+**Chega a tempo?** Ao lado de “Necessário em” fica a **Chegada prev.**: a previsão do PC, a data do recebimento (“recebido”) ou, sem PC, **≈ dd/mm** em itálico (hoje + prazo médio do catálogo). Quando a previsão do PC já passou e nada chegou, a data aparece em vermelho com **PC atrasado N d**. O sinal ao lado compara a chegada com a necessidade: **✓** chega com folga (3 dias ou mais), **⚠** menos de 3 dias de folga ou PC sem previsão, **✕** chega depois do necessário (ou o necessário passou sem receber). PC atrasado conta como “chega hoje” nessa conta — a dica explica, por exemplo: “chegada efetiva hoje (PC atrasado 19d) · necessário 15/10 · folga 8d → ✓”. Filtros **⚠ Em risco**, **✕ Atrasados** e **PC atrasado** junto de Todas / Sem PC / Com PC; cada grupo mostra quantas linhas estão em risco ou atrasadas (também no painel Datas por grupo).
 
 **Grupos de equipamento e “Necessário em”**: os chips acima da lista filtram por grupo e mostram a data do grupo (“necessário 31/10” ou “sem data”). **📅 Datas por grupo** abre o painel com um grupo por linha: data, quantas linhas têm **data própria**, a sugestão (entrega prevista da proposta) com **aplicar**, **Aplicar a todos os grupos sem data** e **≈ Nome** para usar o nome padrão do cadastro. A data do grupo preenche as linhas dele; linha nova herda. Filtros **Todas / Sem PC / Com PC** combinam com o grupo. A data da linha é a que vai para o pedido de compra (previsão) e para o fluxo.
 
@@ -110,7 +110,7 @@ Tudo fica numa aba só: **Lista de materiais** (a antiga aba “Compras × lista
 - **Fornecedor**: o do PC; sem PC, o sugerido pelo catálogo (em itálico) com entrega/fatura médias. **Comprado**: valor da linha do PC (**≠** quando a quantidade do PC difere da lista).
 - Linha ligada só pelo **número do PC** também mostra valor: o sistema acha a linha do item dentro do PC (código, senão descrição).
 - Marque as linhas e clique **🧾 Gerar pedido de compra**; **⇄ Vincular PCs automaticamente** liga as linhas aos PCs do projeto — o que sobrar fica com **+ vincular PC** na própria linha.
-- Abaixo da lista: **Comprado fora da lista** e o **Fluxo de compras do projeto** mês a mês.
+- Abaixo da lista: o **Fluxo de compras do projeto** mês a mês. Itens de PCs do projeto que nenhuma linha cobre: **⋯ › Ver PCs com itens fora da lista** (já contam no comprometido).
 
 **Cartão “Custo planejado”** (topo do projeto): a barra mostra a composição e a legenda traz o valor de cada parte — materiais, obra e despesas, em R$ e %.
 

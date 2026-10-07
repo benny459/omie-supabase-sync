@@ -143,13 +143,14 @@ export default function MateriaisGrade({
    *  com "Desfazer" até lá. `antes` = a grade antes de excluir. */
   const [remocao, setRemocao] = useState<{ n: number; comPc: number; antes: LinhaGrade[] } | null>(null);
   const remocaoRef = useRef(false);
+  const [foraAberto, setForaAberto] = useState(false);
   const [original, setOriginal] = useState(0);
   const [marcadas, setMarcadas] = useState<Set<string>>(new Set());
   const [picker, setPicker] = useState(false);
   const [equipFiltro, setEquipFiltro] = useState<string | null>(null);
   /** ?pc=N vindo de Projetos: só as linhas daquele PC (07/10/26). */
   const [filtroPcNum, setFiltroPcNum] = useState<string | null>(null);
-  const [filtroPc, setFiltroPc] = useState<"todas" | "sem_pc" | "com_pc" | "risco" | "atrasado">("todas");
+  const [filtroPc, setFiltroPc] = useState<"todas" | "sem_pc" | "com_pc" | "risco" | "atrasado" | "pc_atrasado">("todas");
   /** Rascunho não salvo encontrado neste navegador ao abrir (ms de quando foi feito). */
   const [rascunhoDe, setRascunhoDe] = useState<number | null>(null);
   const chaveRascunho = `painel.materiais.rascunho.${empresa}.${codigoProjeto}`;
@@ -411,17 +412,27 @@ export default function MateriaisGrade({
         if (l.data_necessaria !== g) return { classe: "bg-amber-500/10", dica: `Data própria — o grupo está em ${dia(g)}` };
         return null;
       } },
-    { key: "_ent", label: "", w: 22,
-      dicaCab: `Chega a tempo? ✓ recebido ou com folga · ⚠ em risco (menos de ${FOLGA_ENTREGA_DIAS} dias de folga, PC sem previsão ou só estimativa pelo prazo médio) · ✕ atrasado`,
-      dica: (l) => {
-        const sg = sinais.get(l._id);
-        if (!sg) return undefined;
-        return [sg.chegada ? `chega ${sg.estimada ? "estimado" : sg.motivo === "recebido" ? "recebido" : "prev."} ${dia(sg.chegada)}` : "sem previsão de chegada",
-          `necessário ${dia(l.data_necessaria)}`, sg.folga != null ? `folga ${sg.folga} dia(s)` : "", sg.motivo].filter(Boolean).join(" · ");
-      },
+    /* Chegada prevista (07/10/26, Benny): a data em que o item chega, ao lado do Necessário em,
+       e o sinal ✓/⚠/✕ compara as duas. "PC atrasado" (previsão do PC vencida sem chegar)
+       aparece aqui, na chegada — não como alarme da necessidade. */
+    { key: "_cheg", label: "Chegada prev.", w: 92,
+      dicaCab: "Quando o item chega: previsão do PC · data do recebimento · sem PC, ≈ hoje + prazo médio do catálogo. PC atrasado = a previsão do PC passou e nada chegou.",
+      dica: (l) => sinais.get(l._id)?.motivo,
       render: (l) => {
         const sg = sinais.get(l._id);
         if (!sg) return null;
+        if (sg.recebido) return <span className="text-[11px] leading-tight"><span className="text-teal-600 dark:text-teal-400">{sg.chegada ? dia(sg.chegada) : "✓"}</span><br /><small className="text-ww-textFaint">recebido</small></span>;
+        if (sg.previsaoPc && sg.pcAtrasadoDias > 0) return <span className="text-[11px] leading-tight"><span className="text-rose-600 dark:text-rose-400 font-semibold">{dia(sg.previsaoPc)}</span><br /><small className="text-rose-600 dark:text-rose-400">PC atrasado {sg.pcAtrasadoDias}d</small></span>;
+        if (sg.previsaoPc) return <span className="text-[11px]">{dia(sg.previsaoPc)}</span>;
+        if (sg.estimada && sg.chegada) return <span className="text-[11px] italic text-ww-textMuted">≈ {dia(sg.chegada)}</span>;
+        return <span className="text-[10.5px] text-ww-textFaint">PC sem prev.</span>;
+      } },
+    { key: "_ent", label: "", w: 22,
+      dicaCab: `Prazo × necessidade: ✓ chega com folga (≥ ${FOLGA_ENTREGA_DIAS} dias) · ⚠ menos de ${FOLGA_ENTREGA_DIAS} dias ou PC sem previsão · ✕ chega depois do necessário. PC atrasado conta como chegada hoje.`,
+      dica: (l) => sinais.get(l._id)?.motivo,
+      render: (l) => {
+        const sg = sinais.get(l._id);
+        if (!sg || !l.data_necessaria) return null;
         return sg.nivel === "ok" ? <span className="text-emerald-600 dark:text-emerald-400 font-bold">✓</span>
           : sg.nivel === "risco" ? <span className="text-amber-600 dark:text-amber-300 font-bold">⚠</span>
           : <span className="text-rose-600 dark:text-rose-400 font-bold">✕</span>;
@@ -727,6 +738,7 @@ export default function MateriaisGrade({
       if (filtroPcNum && !cmpPorId.get(l._id)?.pcs.some((p) => p.pc === filtroPcNum)) return false;
       if (filtroPc === "risco" && sinais.get(l._id)?.nivel !== "risco") return false;
       if (filtroPc === "atrasado" && sinais.get(l._id)?.nivel !== "atrasado") return false;
+      if (filtroPc === "pc_atrasado" && !((sinais.get(l._id)?.pcAtrasadoDias ?? 0) > 0)) return false;
       return true;
     }),
     [linhas, equipFiltro, filtroPc, temPc, sinais, filtroPcNum, cmpPorId]);
@@ -1278,6 +1290,7 @@ export default function MateriaisGrade({
   const nComPc = validas.filter(temPc).length;
   const nRisco = validas.filter((l) => sinais.get(l._id)?.nivel === "risco").length;
   const nAtraso = validas.filter((l) => sinais.get(l._id)?.nivel === "atrasado").length;
+  const nPcAtraso = validas.filter((l) => (sinais.get(l._id)?.pcAtrasadoDias ?? 0) > 0).length;
   const riscoGrupo = (k: string) => {
     const ls = validas.filter((l) => normGrupo(l.equipamento || "Geral") === k);
     return { risco: ls.filter((l) => sinais.get(l._id)?.nivel === "risco").length, atraso: ls.filter((l) => sinais.get(l._id)?.nivel === "atrasado").length };
@@ -1371,6 +1384,12 @@ export default function MateriaisGrade({
           <div className="absolute right-0 mt-1 z-30 min-w-[230px] rounded-lg border border-ww-border bg-[rgb(var(--color-ww-panel))] shadow-xl p-1 text-[11.5px]">
             <button type="button" onClick={(e) => { (e.currentTarget.closest("details") as HTMLDetailsElement).open = false; exportar(); }} disabled={!validas.length}
               className="block w-full text-left px-2 py-1.5 rounded hover:bg-ww-rowHover disabled:opacity-40">Exportar Excel</button>
+            {!!cmp?.fora_da_lista.length && (
+              <button type="button" onClick={(e) => { (e.currentTarget.closest("details") as HTMLDetailsElement).open = false; setSubAba("lista"); setForaAberto((v) => !v); }}
+                className="block w-full text-left px-2 py-1.5 rounded hover:bg-ww-rowHover"
+                title="Itens de PCs do projeto que nenhuma linha da lista cobre — já contam no comprometido">
+                {foraAberto ? "Esconder" : "Ver"} PCs com itens fora da lista <span className="text-ww-textFaint">({cmp.fora_da_lista.length})</span></button>
+            )}
             {!primeiraImportacao && (
               <button type="button" onClick={(e) => { (e.currentTarget.closest("details") as HTMLDetailsElement).open = false; setImportarAberto(true); void abrirTrazerRc(); }} disabled={!!ocupado}
                 className="block w-full text-left px-2 py-1.5 rounded hover:bg-ww-rowHover disabled:opacity-40"
@@ -1417,14 +1436,15 @@ export default function MateriaisGrade({
             📅 Datas por grupo{semDataComItens.length ? ` (${semDataComItens.length} sem data)` : ""}
           </button>
           <span className="ml-auto self-center flex items-center gap-1 text-[11px]">
-            {(["todas", "sem_pc", "com_pc", "risco", "atrasado"] as const).map((k) => (
+            {(["todas", "sem_pc", "com_pc", "risco", "atrasado", "pc_atrasado"] as const).map((k) => (
               <button key={k} type="button" onClick={() => setFiltroPc(k)}
-                title={k === "risco" ? `Chegada prevista com menos de ${FOLGA_ENTREGA_DIAS} dias de folga, PC sem previsão ou só estimativa` : k === "atrasado" ? "Chega depois do necessário, ou o necessário já passou sem receber" : undefined}
+                title={k === "risco" ? `Chegada com menos de ${FOLGA_ENTREGA_DIAS} dias de folga antes do necessário, ou PC sem previsão` : k === "atrasado" ? "Chega depois do necessário, ou o necessário já passou sem receber"
+                  : k === "pc_atrasado" ? "A previsão do PC já passou e o item não chegou (pode ainda estar dentro do necessário)" : undefined}
                 className={`px-2 py-0.5 rounded-full border transition ${filtroPc === k ? "border-ww-accent bg-ww-accent text-white"
-                  : k === "risco" && nRisco ? "border-amber-500/60 text-amber-700 dark:text-amber-300" : k === "atrasado" && nAtraso ? "border-rose-500/60 text-rose-600 dark:text-rose-400"
+                  : k === "risco" && nRisco ? "border-amber-500/60 text-amber-700 dark:text-amber-300" : (k === "atrasado" && nAtraso) || (k === "pc_atrasado" && nPcAtraso) ? "border-rose-500/60 text-rose-600 dark:text-rose-400"
                   : "border-ww-border text-ww-textMuted hover:text-ww-text"}`}>
                 {k === "todas" ? `Todas ${validas.length}` : k === "sem_pc" ? `Sem PC ${validas.length - nComPc}` : k === "com_pc" ? `Com PC ${nComPc}`
-                  : k === "risco" ? `⚠ Em risco ${nRisco}` : `✕ Atrasados ${nAtraso}`}
+                  : k === "risco" ? `⚠ Em risco ${nRisco}` : k === "atrasado" ? `✕ Atrasados ${nAtraso}` : `PC atrasado ${nPcAtraso}`}
               </button>))}
           </span>
         </div>
@@ -1660,7 +1680,9 @@ export default function MateriaisGrade({
             }}
             vazioMsg="Digite, cole do Excel ou use o botão de planilha acima." />}
 
-      {cmp && <ForaDaLista fora={cmp.fora_da_lista} empresa={empresa} />}
+      {/* "Comprado fora da lista" saiu da tela (07/10/26, Benny): só pelo ⋯ › PCs com itens fora da
+          lista, na aba Lista. O valor continua no comprometido do resumo (cada PC do projeto conta). */}
+      {cmp && foraAberto && subAba === "lista" && <ForaDaLista fora={cmp.fora_da_lista} empresa={empresa} />}
       {cmp && <FluxoCompras d={cmp} />}
 
       {comentLinha && createPortal((() => {

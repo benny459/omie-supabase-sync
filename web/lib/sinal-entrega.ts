@@ -4,11 +4,22 @@
 /** Folga (dias) antes da data necessária: chegar dentro dela já é risco. Mude aqui. */
 export const FOLGA_ENTREGA_DIAS = 3;
 
-export type SinalEntrega = { nivel: "ok" | "risco" | "atrasado"; chegada: string | null; estimada: boolean; folga: number | null; motivo: string };
+/** Dois conceitos separados (07/10/26, Benny — PJ361):
+ *  · nível (✓/⚠/✕) = PRAZO × NECESSIDADE: a chegada efetiva contra a data necessária;
+ *  · pcAtrasadoDias = o PC passou da própria previsão sem chegar (mostrado na célula da chegada).
+ *  Chegada efetiva: recebido → a data do recebimento; PC → max(previsão do PC, hoje) (previsão
+ *  vencida sem chegar = "chega hoje no melhor caso"); sem PC → hoje + prazo médio (estimada). */
+export type SinalEntrega = {
+  nivel: "ok" | "risco" | "atrasado"; chegada: string | null; estimada: boolean; folga: number | null; motivo: string;
+  /** previsão do PC (a data que o PC promete), quando há */ previsaoPc: string | null;
+  /** dias que o PC já passou da previsão sem chegar (0 = em dia) */ pcAtrasadoDias: number;
+  recebido: boolean;
+};
 
 const iso = (d: Date) => d.toISOString().slice(0, 10);
 const dias = (a: string, b: string) => Math.round((Date.parse(`${a}T12:00:00Z`) - Date.parse(`${b}T12:00:00Z`)) / 86400000);
 const addDias = (base: string, n: number) => { const d = new Date(`${base}T12:00:00Z`); d.setUTCDate(d.getUTCDate() + n); return iso(d); };
+const br = (d: string) => `${d.slice(8, 10)}/${d.slice(5, 7)}`;
 
 export function sinalEntrega(a: {
   necessario: string | null | undefined;
@@ -17,32 +28,38 @@ export function sinalEntrega(a: {
   prazoDias?: number | null; hoje?: string; folgaDias?: number;
 }): SinalEntrega | null {
   const nec = a.necessario && /^\d{4}-\d{2}-\d{2}/.test(a.necessario) ? a.necessario.slice(0, 10) : null;
-  if (!nec) return null;
   const hoje = a.hoje ?? iso(new Date());
-  const folga = a.folgaDias ?? FOLGA_ENTREGA_DIAS;
+  const folgaMin = a.folgaDias ?? FOLGA_ENTREGA_DIAS;
+  const prevPc = a.temPc && a.previsaoPc && /^\d{4}-\d{2}-\d{2}/.test(a.previsaoPc) ? a.previsaoPc.slice(0, 10) : null;
+  const base = { previsaoPc: prevPc, pcAtrasadoDias: 0, recebido: false };
   if (a.recebido || a.recebidoEm) {
     const ch = a.recebidoEm ? a.recebidoEm.slice(0, 10) : null;
-    return { nivel: "ok", chegada: ch, estimada: false, folga: ch ? dias(nec, ch) : null, motivo: "recebido" };
+    if (!nec) return null;
+    return { ...base, recebido: true, nivel: "ok", chegada: ch, estimada: false, folga: ch ? dias(nec, ch) : null, motivo: `recebido${ch ? ` em ${br(ch)}` : ""}` };
   }
-  let chegada: string | null = null, estimada = false;
+  let chegada: string | null = null, estimada = false, pcAtrasadoDias = 0, porque = "";
   if (a.temPc) {
-    if (!a.previsaoPc) {
-      if (dias(nec, hoje) < 0) return { nivel: "atrasado", chegada: null, estimada: false, folga: dias(nec, hoje), motivo: "necessário já passou e não foi recebido" };
-      return { nivel: "risco", chegada: null, estimada: false, folga: null, motivo: "PC sem previsão de entrega" };
+    if (!prevPc) {
+      if (!nec) return null;
+      if (dias(nec, hoje) < 0) return { ...base, nivel: "atrasado", chegada: null, estimada: false, folga: dias(nec, hoje), motivo: `necessário ${br(nec)} já passou e não foi recebido` };
+      return { ...base, nivel: "risco", chegada: null, estimada: false, folga: null, motivo: "PC sem previsão de entrega — não dá para saber se chega a tempo" };
     }
-    chegada = a.previsaoPc.slice(0, 10);
-    // previsão do PC já passou e nada chegou: a data não vale mais — risco (ou atraso, se a necessária também passou)
-    if (dias(chegada, hoje) < 0) {
-      if (dias(nec, hoje) < 0) return { nivel: "atrasado", chegada, estimada: false, folga: dias(nec, chegada), motivo: "necessário já passou e não foi recebido" };
-      return { nivel: "risco", chegada, estimada: false, folga: dias(nec, chegada), motivo: "previsão do PC vencida e ainda não recebido" };
-    }
+    if (dias(prevPc, hoje) < 0) {
+      pcAtrasadoDias = dias(hoje, prevPc);
+      chegada = hoje;
+      porque = `chegada efetiva hoje (PC atrasado ${pcAtrasadoDias}d, previsão era ${br(prevPc)})`;
+    } else { chegada = prevPc; porque = `chegada prev. ${br(prevPc)} (PC)`; }
   } else {
     chegada = addDias(hoje, Math.max(0, Number(a.prazoDias) || 0));
     estimada = true;
+    porque = `chegada ≈ ${br(chegada)} (sem PC: hoje + prazo médio de ${Math.max(0, Number(a.prazoDias) || 0)}d)`;
   }
+  if (!nec) return { ...base, pcAtrasadoDias, nivel: "ok", chegada, estimada, folga: null, motivo: porque };
   const f = dias(nec, chegada);
-  if (dias(nec, hoje) < 0) return { nivel: "atrasado", chegada, estimada, folga: f, motivo: "necessário já passou e não foi recebido" };
-  if (f < 0) return { nivel: "atrasado", chegada, estimada, folga: f, motivo: estimada ? "pelo prazo médio, não chega a tempo" : "previsão do PC depois da data necessária" };
-  if (f < folga) return { nivel: "risco", chegada, estimada, folga: f, motivo: estimada ? "sem PC e o prazo médio está apertado" : `chega com menos de ${folga} dias de folga` };
-  return { nivel: "ok", chegada, estimada, folga: f, motivo: estimada ? "estimativa pelo prazo médio" : "previsão do PC dentro do prazo" };
+  const r = (nivel: SinalEntrega["nivel"], sinal: string): SinalEntrega =>
+    ({ ...base, pcAtrasadoDias, nivel, chegada, estimada, folga: f, motivo: `${porque} · necessário ${br(nec)} · folga ${f}d → ${sinal}` });
+  if (dias(nec, hoje) < 0) return { ...r("atrasado", "✕"), motivo: `necessário ${br(nec)} já passou e não foi recebido` };
+  if (f < 0) return r("atrasado", "✕ chega depois do necessário");
+  if (f < folgaMin) return r("risco", `⚠ menos de ${folgaMin}d de folga`);
+  return r("ok", "✓");
 }
