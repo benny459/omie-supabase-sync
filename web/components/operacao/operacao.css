@@ -523,7 +523,7 @@
 .op .pcproj-itens{padding:4px 12px 8px 110px;display:flex;flex-direction:column;gap:2px;font-size:12px}
 .op .pcproj-itens > div{display:flex;justify-content:space-between;gap:10px}
 .op .pcproj-itens small{color:var(--ww-text-faint);white-space:nowrap}
-.op .pcproj-hd,.op .pcproj-pc{display:grid;grid-template-columns:64px minmax(0,1.4fr) minmax(0,.9fr) 96px 124px 124px 132px 120px 120px 76px;gap:10px;align-items:center;padding:7px 10px}
+.op .pcproj-hd,.op .pcproj-pc{display:grid;grid-template-columns:54px minmax(0,1fr) 92px 112px 118px 128px 92px 56px;gap:10px;align-items:center;padding:7px 10px}
 .op .pcproj-hd{font-size:11px;color:var(--ww-text-faint);text-transform:uppercase;letter-spacing:.06em;border-bottom:1px solid var(--ww-border)}
 .op .pcproj-pc + .pcproj-pc{border-top:1px dashed var(--ww-border)}
 .op .pcproj-pc > *{min-width:0}
@@ -551,7 +551,7 @@
 
 /* Vendas do projeto (PV/OS) — 07/10/26 */
 .op .pcproj-vendas{border:1px solid var(--ww-border);border-radius:10px;overflow:hidden}
-.op .pcproj-vendas .hd,.op .pcproj-vendas .ln{display:grid;grid-template-columns:100px minmax(0,1.3fr) 115px 50px 190px 190px 170px minmax(0,.6fr);gap:10px;align-items:center;padding:6px 10px;font-size:12px}
+.op .pcproj-vendas .hd,.op .pcproj-vendas .ln{display:grid;grid-template-columns:minmax(0,1fr) 96px 150px 150px 92px;gap:10px;align-items:center;padding:6px 10px;font-size:12px}
 .op .pcproj-vendas .hd{font-size:11px;color:var(--ww-text-faint);text-transform:uppercase;letter-spacing:.06em;border-bottom:1px solid var(--ww-border)}
 .op .pcproj-vendas .ln+.ln{border-top:1px solid color-mix(in srgb,var(--ww-border) 60%,transparent)}
 .op .pcproj-vendas .ln.tot{font-weight:600;background:var(--ww-panel-sunken)}
@@ -566,3 +566,25 @@
 .op .pcproj-vendas .vprev button{font-size:11px;color:var(--ww-text-faint);background:none;border:0;cursor:pointer}
 
 .op .fin.proj{grid-template-columns:1fr 1.1fr 1fr .9fr .9fr}
+
+/* Projeto aberto lado a lado (07/10/26): vendas | compras, como a linha aberta dos Avulsos */
+.op .pcproj-cq{container-type:inline-size}
+.op .pcproj-lados{display:grid;grid-template-columns:minmax(0,1fr);gap:10px;border-top:1px solid var(--ww-border-strong);padding-top:8px}
+@container (min-width:1240px){
+  .op .pcproj-lados{grid-template-columns:minmax(0,.92fr) minmax(0,1.08fr);gap:0}
+  .op .pcproj-lados > .vendas{border-right:1px solid var(--ww-border);padding-right:10px}
+  .op .pcproj-lados > .compras{padding-left:10px}
+}
+.op .pcproj-lados > .lado{min-width:0}
+.op .pcproj-lados .pcproj-bloco{margin:0}
+.op .pcproj-vendas .hd,.op .pcproj-vendas .ln{gap:8px;padding:6px 8px}
+.op .pcproj-vendas .ln{min-height:50px}
+.op .pcproj-vendas .doc{display:flex;flex-direction:column;gap:2px;min-width:0}
+.op .pcproj-vendas .doc small{font-size:11px;color:var(--ww-text-faint);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.op .pcproj-vendas .doc .omie,.op .pcproj-vendas .doc .oc{margin-left:5px}
+.op .pcproj-vendas .num{display:flex;flex-direction:column;align-items:flex-end}
+.op .pcproj-vendas .num small{font-size:10.5px;color:var(--ww-text-faint)}
+.op .pcproj-vendas .stv{display:flex;flex-direction:column;gap:2px}
+.op .pcproj-vendas .stv small{font-size:10.5px;color:var(--ww-text-faint)}
+.op .pcproj-vendas .vprev input{width:118px}
+.op .pcproj-pc .sitmat{display:flex;flex-direction:column;gap:3px;min-width:0}

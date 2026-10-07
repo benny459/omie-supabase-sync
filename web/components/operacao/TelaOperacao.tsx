@@ -1690,28 +1690,17 @@ function GruposPcProjeto({ compras, p, podeAprovar, podeEditar, ehAdmin, statusL
   return (
     <div className="pcproj">
       <ResumoBudgetProjeto empresa={empresa} codigo={proj.codProj} $={$} valorPv={p.valorPv} />
-      <VendasDoProjeto empresa={empresa} codigo={proj.codProj} $={$} valorPv={p.valorPv} podeEditar={podeEditar} />
-      {rcs.size > 0 && (
-        <div className="pcproj-bloco">
-          <div className="pcproj-tit">Itens da RC sem PC <small>— o que ainda falta comprar; o pedido sai da Lista de materiais, um por fornecedor</small></div>
-          {[...rcs.entries()].map(([rc, cs]) => (
-            <details key={rc} className="pcproj-rc">
-              <summary>
-                <a className="rcnum" href={linkCompras(rc, "RC", empresa)} onClick={(e) => e.stopPropagation()} title={`Abrir a RC ${rc} em Compras`}>RC {rc}</a>
-                <span className="desc">{cs.length} item(ns) sem PC</span>
-                <b className="num">{$(cs.reduce((a, c) => a + c.rcTotal, 0))}</b>
-                <a className="btn sm primary" href={lista(`rc=${encodeURIComponent(rc)}`)} onClick={(e) => e.stopPropagation()}
-                  title="Abre a Lista de materiais com os itens desta RC marcados e o gerador de pedido aberto">+ Gerar pedido de compra</a>
-              </summary>
-              <div className="pcproj-itens">{cs.map((c) => (
-                <div key={c.key}><span title={c.desc}>{c.desc}</span><small>{c.qtd} × {$(c.unit)} = {$(c.rcTotal)}</small></div>))}</div>
-            </details>
-          ))}
-        </div>
-      )}
-      <div className="pcproj-bloco">
-        <div className="pcproj-hd"><span>PC</span><span>Fornecedor</span><span>RC</span><span style={{ textAlign: "right" }}>Valor</span><span>Aprovação</span>
-          <span>Prev. material</span><span>Situação</span><span>Material</span><span>NF entrada</span><span /></div>
+      {/* 07/10/26 (Benny): sem RC nesta tela — RCs e o valor delas vivem na Lista de materiais,
+          e o "Gerar pedido de compra" também. Vendas (PV/OS) à esquerda e pedidos de compra à
+          direita, como a linha aberta dos Avulsos; em tela estreita, um embaixo do outro. */}
+      <div className="pcproj-cq"><div className="pcproj-lados">
+      <div className="lado vendas">
+        <VendasDoProjeto empresa={empresa} codigo={proj.codProj} $={$} valorPv={p.valorPv} podeEditar={podeEditar} />
+      </div>
+      <div className="lado compras pcproj-bloco">
+        <div className="pcproj-tit">Pedidos de compra</div>
+        <div className="pcproj-hd"><span>PC</span><span>Fornecedor</span><span style={{ textAlign: "right" }}>Valor</span><span>Aprovação</span>
+          <span>Prev. material</span><span>Situação · material</span><span>NF entrada</span><span /></div>
         {[...pcs.entries()].map(([pc, cs]) => {
           const c = cs[0];
           const todosRecebidos = cs.every((x) => x.estado === "recebido");
@@ -1721,14 +1710,12 @@ function GruposPcProjeto({ compras, p, podeAprovar, podeEditar, ehAdmin, statusL
           const mat = todosRecebidos ? { t: "Recebido", c: "recebido" } : !aprovado ? { t: "—", c: "" }
             : late ? { t: "Atrasado", c: "recusado" } : prev ? { t: "A caminho", c: "aprovado" } : { t: "Sem previsão", c: "pendente" };
           const st = situacao(cs);
-          const rcsDoPc = [...new Set(cs.map((x) => x.rcNumero).filter(Boolean))];
           const pendente = cs.some((x) => x.estado === "pendente");
           const valor = cs.find((x) => x.pcValor != null)?.pcValor ?? null;
           return (
             <div key={pc} className="pcproj-pc">
               <a className="pcnum" href={linkCompras(pc, "PC", empresa)} title={`Abrir o PC ${pc} em Compras`}>{pc}</a>
               <span className="desc" title={c.fornecedor}>{c.fornecedor || "—"}<small>{c.categoria}</small></span>
-              <span className="rcs">{rcsDoPc.length ? rcsDoPc.map((r) => <a key={r} className="rcchip" href={linkCompras(r, "RC", empresa)} title={`RC ${r} em Compras`}>RC {r}</a>) : <small style={{ color: "var(--ww-text-faint)" }}>fora da RC</small>}</span>
               <b className="num" style={{ textAlign: "right" }}>{valor != null ? $(valor) : "—"}</b>
               <span>{c.estado === "recebido" ? <span className="st aprovado">Aprovado</span>
                 : <SeletorStatusLote cs={cs} podeAprovar={podeAprovar} ehAdmin={ehAdmin} statusLote={statusLote} />}</span>
@@ -1740,8 +1727,8 @@ function GruposPcProjeto({ compras, p, podeAprovar, podeEditar, ehAdmin, statusL
                   : <span className={late ? "late" : ""}>{prev ? dBR(prev) : "—"}</span>}
                 {late && <small className="atraso">⚠ {-(diasAte(prev) ?? 0)}d de atraso</small>}
               </span>
-              <span><span className="sitpill" style={{ background: st.cor }} title={st.rot}>{st.rot}</span></span>
-              <MatPc cs={cs} auto={mat} podeEditar={podeEditar} marcarLote={marcarMaterialLote} />
+              <span className="sitmat"><span className="sitpill" style={{ background: st.cor }} title={st.rot}>{st.rot}</span>
+                <MatPc cs={cs} auto={mat} podeEditar={podeEditar} marcarLote={marcarMaterialLote} /></span>
               <NfEntrada cs={cs} late={late} aprovado={aprovado} />
               <span className="acts">
                 {pendente && podeAprovar && (
@@ -1758,6 +1745,7 @@ function GruposPcProjeto({ compras, p, podeAprovar, podeEditar, ehAdmin, statusL
         })}
         {!pcs.size && <div className="pcproj-vazio">Nenhum pedido de compra ainda — gere pela Lista de materiais.</div>}
       </div>
+      </div></div>
     </div>
   );
 }
@@ -1866,7 +1854,7 @@ function VendasDoProjeto({ empresa, codigo, $, valorPv, podeEditar }: { empresa:
       carregar();
     } catch (e) { setAviso(`Não gravou: ${(e as Error).message}`); } finally { setGravando(null); }
   };
-  const tit = <div className="pcproj-tit">Vendas do projeto (PV/OS) <small>— previsão inicial (do resumo financeiro) e nova previsão; a nova manda no Fluxo de caixa do projeto e na carteira do Faturamento</small></div>;
+  const tit = <div className="pcproj-tit" title="Previsão inicial (do resumo financeiro do projeto) e nova previsão — a nova manda no Fluxo de caixa do projeto e na carteira do Faturamento">Vendas (PV/OS) <small>— inicial → nova previsão</small></div>;
   if (erro) return <div className="pcproj-bloco">{tit}<small style={{ color: "var(--ww-text-faint)" }}>Não consegui ler as vendas: {erro}</small></div>;
   if (!docs) return <div className="pcproj-bloco">{tit}<small style={{ color: "var(--ww-text-faint)" }}>carregando…</small></div>;
   if (!docs.length) return null;
@@ -1877,16 +1865,15 @@ function VendasDoProjeto({ empresa, codigo, $, valorPv, podeEditar }: { empresa:
     <div className="pcproj-bloco">
       {tit}
       <div className="pcproj-vendas">
-        <div className="hd"><span>Documento</span><span>Evento / parcela</span><span style={{ textAlign: "right" }}>Valor</span><span style={{ textAlign: "right" }}>%</span>
-          <span>Faturamento</span><span>Recebimento</span><span>Situação</span><span>OC cliente</span></div>
+        <div className="hd"><span>Documento · evento</span><span style={{ textAlign: "right" }}>Valor</span><span>Faturamento</span><span>Recebimento</span><span>Situação</span></div>
         {docs.map((d) => (
           <div key={d.chave || d.rotulo} className="ln">
-            <span><a className="rcnum" href={`/faturamento?${new URLSearchParams({ abrir: d.chave, q: d.rotulo, emp: empresa })}`} title={`Abrir ${d.rotulo} no Faturamento${d.origem === "Omie" ? " (espelhado do Omie)" : ""}`}>{d.rotulo}</a>
-              {d.origem === "Omie" && <small style={{ color: "var(--ww-text-faint)", marginLeft: 4 }}>Omie</small>}</span>
-            <span title={d.evento ?? ""} style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-              {d.parcela ? <small style={{ color: "var(--ww-text-faint)" }}>parcela {d.parcela} · </small> : null}{(d.evento ?? "").replace(/^\s*\d+\s*·\s*/, "") || "—"}</span>
-            <b className="num" style={{ textAlign: "right" }}>{$(d.valor)}</b>
-            <span className="num" style={{ textAlign: "right", color: "var(--ww-text-muted)" }}>{total ? `${Math.round((d.valor / total) * 1000) / 10}%` : "—"}</span>
+            <span className="doc">
+              <span><a className="rcnum" href={`/faturamento?${new URLSearchParams({ abrir: d.chave, q: d.rotulo, emp: empresa })}`} title={`Abrir ${d.rotulo} no Faturamento${d.origem === "Omie" ? " (espelhado do Omie)" : ""}`}>{d.rotulo}</a>
+                {d.origem === "Omie" && <small className="omie">Omie</small>}{d.oc && <small className="oc" title="OC do cliente">OC {d.oc}</small>}</span>
+              <small title={d.evento ?? ""}>{d.parcela ? `parcela ${d.parcela} · ` : ""}{(d.evento ?? "").replace(/^\s*\d+\s*·\s*/, "") || "—"}</small>
+            </span>
+            <span className="num" style={{ textAlign: "right" }}><b>{$(d.valor)}</b><small>{total ? `${Math.round((d.valor / total) * 1000) / 10}%` : ""}</small></span>
             {d.faturado
               ? <span className="vprev"><small>inicial {isoBR(d.fat_inicial)}</small><b>faturado {isoBR(d.dt_fat)}</b>
                   {difD(d.dt_fat, d.fat_inicial) !== 0 && <em className={difD(d.dt_fat, d.fat_inicial) > 0 ? "atraso" : "adianta"}>{difD(d.dt_fat, d.fat_inicial) > 0 ? "+" : ""}{difD(d.dt_fat, d.fat_inicial)}d</em>}</span>
@@ -1896,14 +1883,13 @@ function VendasDoProjeto({ empresa, codigo, $, valorPv, podeEditar }: { empresa:
               : <DataPrev rotulo="recebimento" inicial={d.receb_inicial} nova={d.faturado ? null : d.receb_nova} atual={d.faturado ? d.titulo_venc : null}
                   editavel={ed && !!d.parcela && !d.recebido && (!d.faturado || pode.titulo)} ocupado={gravando === `${d.chave}|recebimento`}
                   onMudar={(v) => void mudar(d, "recebimento", v)} />}
-            <span>{d.recebido ? <span className="fb eq">Recebido</span>
-              : d.faturado ? <span className="fb up" style={{ background: "transparent" }}>Faturado{d.nf ? ` · ${d.tipo === "OS" ? "NF/recibo" : "NF"} ${d.nf}` : ""}</span>
+            <span className="stv">{d.recebido ? <span className="fb eq">Recebido</span>
+              : d.faturado ? <span className="fb up" style={{ background: "transparent" }} title={d.nf ? `${d.tipo === "OS" ? "NF/recibo" : "NF"} ${d.nf}` : ""}>Faturado</span>
               : <span className="fb mute">A faturar</span>}
-              {d.faturado && d.titulo_ref && <a href={`/financeiro/receber?q=${encodeURIComponent(d.nf ?? "")}`} style={{ marginLeft: 4, fontSize: 11 }} title="Título a receber">título</a>}</span>
-            <span style={{ color: "var(--ww-text-muted)" }}>{d.oc ?? "—"}</span>
+              {d.faturado && <small>{d.nf ? `${d.tipo === "OS" ? "NF/rec." : "NF"} ${d.nf}` : ""}{d.titulo_ref ? <> · <a href={`/financeiro/receber?q=${encodeURIComponent(d.nf ?? "")}`} title="Título a receber">título</a></> : null}</small>}</span>
           </div>))}
-        <div className="ln tot"><span>Total</span><span>{docs.length} documento(s)</span><b className="num" style={{ textAlign: "right" }}>{$(total)}</b><span />
-          <span style={{ gridColumn: "span 4", color: confere ? "var(--ww-text-faint)" : "#e11d48" }}>{confere ? "confere com o PV do projeto" : `PV do projeto ${$(valorPv)} — diferença ${$(total - valorPv)}`}</span></div>
+        <div className="ln tot"><span>Total · {docs.length} documento(s)</span><b className="num" style={{ textAlign: "right" }}>{$(total)}</b>
+          <span style={{ gridColumn: "span 3", color: confere ? "var(--ww-text-faint)" : "#e11d48" }}>{confere ? "confere com o PV do projeto" : `PV do projeto ${$(valorPv)} — diferença ${$(total - valorPv)}`}</span></div>
       </div>
       {aviso && <small style={{ display: "block", marginTop: 4, color: aviso.startsWith("Não") ? "#e11d48" : "var(--ww-text-muted)" }}>{aviso}</small>}
     </div>
