@@ -1652,15 +1652,15 @@ function GruposPcProjeto({ compras, p, podeAprovar, podeEditar, ehAdmin, statusL
       <ResumoBudgetProjeto empresa={empresa} codigo={proj.codProj} $={$} />
       {rcs.size > 0 && (
         <div className="pcproj-bloco">
-          <div className="pcproj-tit">RCs sem PC <small>— o que ainda falta comprar; o pedido sai da Lista de materiais, um por fornecedor</small></div>
+          <div className="pcproj-tit">Itens da CP sem PC <small>— o que ainda falta comprar; o pedido sai da Lista de materiais, um por fornecedor</small></div>
           {[...rcs.entries()].map(([rc, cs]) => (
             <details key={rc} className="pcproj-rc">
               <summary>
-                <a className="rcnum" href={linkCompras(rc, "RC", empresa)} onClick={(e) => e.stopPropagation()} title={`Abrir a RC ${rc} em Compras`}>RC {rc}</a>
+                <a className="rcnum" href={linkCompras(rc, "RC", empresa)} onClick={(e) => e.stopPropagation()} title={`Abrir a CP ${rc} em Compras`}>CP {rc}</a>
                 <span className="desc">{cs.length} item(ns) sem PC</span>
                 <b className="num">{$(cs.reduce((a, c) => a + c.rcTotal, 0))}</b>
                 <a className="btn sm primary" href={lista(`rc=${encodeURIComponent(rc)}`)} onClick={(e) => e.stopPropagation()}
-                  title="Abre a Lista de materiais com os itens desta RC marcados e o gerador de pedido aberto">+ Gerar pedido de compra</a>
+                  title="Abre a Lista de materiais com os itens desta CP marcados e o gerador de pedido aberto">+ Gerar pedido de compra</a>
               </summary>
               <div className="pcproj-itens">{cs.map((c) => (
                 <div key={c.key}><span title={c.desc}>{c.desc}</span><small>{c.qtd} × {$(c.unit)} = {$(c.rcTotal)}</small></div>))}</div>
@@ -1669,7 +1669,7 @@ function GruposPcProjeto({ compras, p, podeAprovar, podeEditar, ehAdmin, statusL
         </div>
       )}
       <div className="pcproj-bloco">
-        <div className="pcproj-hd"><span>PC</span><span>Fornecedor</span><span>RC</span><span style={{ textAlign: "right" }}>Valor</span><span>Aprovação</span>
+        <div className="pcproj-hd"><span>PC</span><span>Fornecedor</span><span>CP</span><span style={{ textAlign: "right" }}>Valor</span><span>Aprovação</span>
           <span>Prev. material</span><span>Situação</span><span>Material</span><span>NF entrada</span><span /></div>
         {[...pcs.entries()].map(([pc, cs]) => {
           const c = cs[0];
@@ -1687,7 +1687,7 @@ function GruposPcProjeto({ compras, p, podeAprovar, podeEditar, ehAdmin, statusL
             <div key={pc} className="pcproj-pc">
               <a className="pcnum" href={linkCompras(pc, "PC", empresa)} title={`Abrir o PC ${pc} em Compras`}>{pc}</a>
               <span className="desc" title={c.fornecedor}>{c.fornecedor || "—"}<small>{c.categoria}</small></span>
-              <span className="rcs">{rcsDoPc.length ? rcsDoPc.map((r) => <a key={r} className="rcchip" href={linkCompras(r, "RC", empresa)}>RC {r}</a>) : <small style={{ color: "var(--ww-text-faint)" }}>sem RC</small>}</span>
+              <span className="rcs">{rcsDoPc.length ? rcsDoPc.map((r) => <a key={r} className="rcchip" href={linkCompras(r, "RC", empresa)} title={`CP ${r} em Compras`}>CP {r}</a>) : <small style={{ color: "var(--ww-text-faint)" }}>fora da CP</small>}</span>
               <b className="num" style={{ textAlign: "right" }}>{valor != null ? $(valor) : "—"}</b>
               <span>{c.estado === "recebido" ? <span className="st aprovado">Aprovado</span>
                 : <SeletorStatusLote cs={cs} podeAprovar={podeAprovar} ehAdmin={ehAdmin} statusLote={statusLote} />}</span>

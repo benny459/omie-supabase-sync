@@ -120,7 +120,7 @@ export function KpisCompras({ d, estimado, restante, linhas, empresa, codigoProj
             {projetado > budget && <div className="cdl-alerta">⚠ O projetado estoura o budget de materiais em <b>{brl(projetado - budget)}</b>.</div>}
           </div>);
       })()}
-      <p className="cdl-nota">Projetado = comprometido nos PCs + estimado das linhas que ainda não têm RC/PC. Margem = margem do fechamento ± a diferença entre o budget e o projetado.
+      <p className="cdl-nota">Projetado = comprometido nos PCs + estimado das linhas que ainda não têm PC. Margem = margem do fechamento ± a diferença entre o budget e o projetado.
         Estimado de cada linha = valor unit. da linha, senão o último preço do catálogo, senão o custo da CP.</p>
       {erro && <div className="cdl-box cdl-err">{erro}</div>}
     </div>
@@ -174,7 +174,7 @@ export function FluxoCompras({ d }: { d: DadosCompras }) {
   return (
     <details className="cdl cdl-box">
       <summary style={{ cursor: "pointer" }}><b>Fluxo de compras do projeto</b> <span className="mut">— mês a mês</span></summary>
-      <p className="cdl-nota">Planejado = linhas ainda sem RC/PC, pela data necessária · Comprometido = parcelas dos pedidos de compra · Pago = saídas realizadas do projeto.</p>
+      <p className="cdl-nota">Planejado = linhas ainda sem PC, pela data necessária · Comprometido = parcelas dos pedidos de compra · Pago = saídas realizadas do projeto.</p>
       <div className="cdl-scroll"><table className="cdl-t"><thead><tr><th>Mês</th><th className="r">Planejado</th><th className="r">Comprometido</th><th className="r">Pago</th>
         <th className="r">Acum. planejado + comprometido</th><th className="r">Acum. pago</th><th className="r">vs budget</th></tr></thead>
         <tbody>{acumula.map((m) => {

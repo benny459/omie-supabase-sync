@@ -123,6 +123,7 @@ const chaveItem = (eq: string, item: string) =>
   `${String(eq || "Geral").trim().toLowerCase()}|${String(item).trim().toLowerCase()}`;
 const textoCasar = (item: string, modelo?: string | null) => [item, modelo].filter(Boolean).join(" ");
 
+type ItemCpBase = { equipamento: string; item: string; qtd: number | null; modelo: string | null; custo_cp: number | null };
 type GruposMeta = { cadastro: string[] | null; emUso: { nome: string; projetos: number }[];
   prazo: { data: string | null; fonte: string | null; grupos: string[] } };
 type Seletor = { alvo: "cp"; k: number } | { alvo: "lista"; id: string };
@@ -159,6 +160,40 @@ export default function MateriaisGrade({
   const [sugestoes, setSugestoes] = useState<CasamentoPc[] | null>(null);
   const [ocupado, setOcupado] = useState<string | null>(null);
   const cmpPorId = useMemo(() => new Map((cmp?.itens ?? []).map((l) => [`db${l.id}`, l])), [cmp]);
+
+  /* ── A CP no projeto (07/10/26, Benny): RC e CP são a mesma coisa — a tela só fala
+     "CP". A CP é o plano: dá a ideia inicial e o budget; os itens entram na lista pelo
+     "Importar para a lista" ou pelo "Usar item da CP" da linha. Origem da linha = "CP"
+     (veio da CP — pelo vínculo com a CP em Compras ou pelo mesmo texto) ou "novo". */
+  const [cpBase, setCpBase] = useState<{ proposta: string | null; itens: ItemCpBase[] } | null>(null);
+  const normT = (t: string | null | undefined) => String(t ?? "").trim().toLowerCase();
+  const cpPorChave = useMemo(() => new Set((cpBase?.itens ?? []).map((i) => chaveItem(i.equipamento, i.item))), [cpBase]);
+  const cpPorTexto = useMemo(() => new Set((cpBase?.itens ?? []).flatMap((i) => [normT(i.item), normT(textoCasar(i.item, i.modelo))])), [cpBase]);
+  const origemCp = useCallback((l: Record<string, string>): string | null => {
+    const c = cmpPorId.get(String(l._id ?? ""));
+    if (c?.rc) return `CP ${c.rc}`;
+    if (!String(l.item ?? "").trim()) return null;
+    if (cpPorChave.has(chaveItem(l.equipamento, l.item)) || cpPorTexto.has(normT(l.item))) return cpBase?.proposta ? `CP da proposta ${cpBase.proposta}` : "CP";
+    return null;
+  }, [cmpPorId, cpPorChave, cpPorTexto, cpBase]);
+  /** Para cada item da CP, a linha da lista que o usa (mesma chave equip|item ou mesmo texto). */
+  const usoCp = useMemo(() => {
+    const m = new Map<number, LinhaGrade>();
+    const porChave = new Map<string, LinhaGrade>(), porTexto = new Map<string, LinhaGrade>();
+    for (const l of linhas) if (String(l.item ?? "").trim()) {
+      porChave.set(chaveItem(l.equipamento, l.item), l);
+      if (!porTexto.has(normT(l.item))) porTexto.set(normT(l.item), l);
+    }
+    (cpBase?.itens ?? []).forEach((i, k) => {
+      const l = porChave.get(chaveItem(i.equipamento, i.item)) ?? porTexto.get(normT(i.item)) ?? porTexto.get(normT(textoCasar(i.item, i.modelo)));
+      if (l) m.set(k, l);
+    });
+    return m;
+  }, [linhas, cpBase]);
+  const cpNaoUsados = useMemo(() => (cpBase?.itens ?? []).map((i, k) => ({ i, k })).filter(({ k }) => !usoCp.has(k)), [cpBase, usoCp]);
+  /** Linha que está escolhendo "Usar item da CP". */
+  const [usarCpEm, setUsarCpEm] = useState<string | null>(null);
+  const [usarCpBusca, setUsarCpBusca] = useState("");
   const carregarCompras = useCallback(async () => {
     // até 3 tentativas: o banco às vezes estoura o tempo enquanto as MVs de compras atualizam
     for (let t = 0; t < 3; t++) {
@@ -277,16 +312,18 @@ export default function MateriaisGrade({
      linha); PC + situação + vínculo numa coluna só, com "vincular" na própria linha;
      tudo numa linha só, com reticências, e as colunas até o Item presas ao rolar. */
   const COLS: ColunaGrade[] = useMemo(() => [
-    // RC: selo pequeno logo depois do #; o número aparece na dica e o selo abre a RC.
-    { key: "_rc", label: "RC", w: 26, fixa: true,
-      dicaCab: "Requisição de compra (RC) da linha — passe o mouse para ver o número; clique para abrir.",
-      dica: (l) => { const c = cmpPorId.get(l._id); return c?.rc ? `RC ${c.rc}` : undefined; },
+    // Origem da linha: selo "CP" (veio da CP) — vazio = item novo, digitado na lista.
+    { key: "_orig", label: "Orig.", w: 30, fixa: true,
+      dicaCab: "Origem da linha: CP = veio da composição de preço (CP) do projeto; vazio = item novo, digitado na lista.",
+      dica: (l) => origemCp(l) ?? (String(l.item ?? "").trim() ? "novo — não veio da CP" : undefined),
       render: (l) => {
+        const o = origemCp(l);
+        if (!o) return null;
         const c = cmpPorId.get(l._id);
         return c?.rc
           ? <a target="_blank" rel="noreferrer" href={`/erp/compras?abrir=${c.rc}&tipo=RC&emp=${empresa}`}
-              className="inline-block px-0.5 rounded bg-slate-500/20 text-[8.5px] font-bold text-ww-textMuted hover:text-ww-accent">RC</a>
-          : null;
+              className="inline-block px-0.5 rounded bg-emerald-500/20 text-[8.5px] font-bold text-emerald-700 dark:text-emerald-300 hover:text-ww-accent">CP</a>
+          : <span className="inline-block px-0.5 rounded bg-emerald-500/20 text-[8.5px] font-bold text-emerald-700 dark:text-emerald-300">CP</span>;
       } },
     { key: "equipamento", label: "Equipamento", w: 88, fixa: true,
       dica: (l) => l.equipamento || undefined,
@@ -326,6 +363,10 @@ export default function MateriaisGrade({
         aoEscolher: (sg, linha) => camposDoCatalogo(sg.dados as Cat, "ok", [], linha.cat_valor_unit ?? ""),
       } },
     { key: "item",        label: "Item",        w: 224, fixa: true,
+      // "CP" na célula: usar um item da CP ainda não usado nesta linha (07/10/26)
+      acao: { rot: "CP", dica: "Usar item da CP nesta linha (os itens da CP que ainda não estão na lista)",
+        classe: () => "text-emerald-700 dark:text-emerald-300 font-bold text-[9px]",
+        fn: (l) => setUsarCpEm(l._id), mostrar: (l) => cpNaoUsados.length > 0 && !origemCp(l) },
       // Casado: mostra a descrição do item do catálogo; o texto original (que é a
       // chave da linha e do de-para) volta ao editar e fica na dica.
       exibir: (l) => (l.cat_ncod_prod && l._match !== "omie" && l._cat_desc ? l._cat_desc : null),
@@ -395,7 +436,7 @@ export default function MateriaisGrade({
         const c = cmpPorId.get(l._id);
         if (!c?.pcs.length) return l.pc_numero ? `PC ${l.pc_numero} (não encontrado no Compras)` : undefined;
         const v = c.vinculo_via;
-        const via = v === "rc" ? "pela RC" : v === "codigo" ? "pelo código" : v === "descricao" ? `pela descrição ${Math.round(Number(c.vinculo_score ?? 0) * 100)}%` : v === "manual" ? "manual" : "pelo nº do PC";
+        const via = v === "rc" ? "pela CP" : v === "codigo" ? "pelo código" : v === "descricao" ? `pela descrição ${Math.round(Number(c.vinculo_score ?? 0) * 100)}%` : v === "manual" ? "manual" : "pelo nº do PC";
         return `${c.pcs.map((p) => `PC ${p.pc}${p.fornecedor ? ` — ${p.fornecedor}` : ""}`).join("\n")}\nVínculo ${via}`;
       },
       render: (l) => {
@@ -437,7 +478,7 @@ export default function MateriaisGrade({
           if (!cmp) return l.pc_numero ? <span className="text-[10.5px] text-ww-textFaint">carregando…</span> : null;
           if (l.pc_numero && l._id.startsWith("db")) return (
             <button type="button" onClick={() => setVincLinha(l._id)} className="text-[10.5px] italic text-ww-accent hover:underline">sugestão · vincular</button>);
-          return c?.rc ? <span className="text-ww-textMuted text-[10.5px]">em RC</span> : null;
+          return c?.rc ? <span className="text-ww-textMuted text-[10.5px]" title={`CP ${c.rc} em Compras, ainda sem PC`}>na CP</span> : null;
         }
         const st = estadoPc(c.pcs[0]);
         const pode = c.vinculo_via === "codigo" || c.vinculo_via === "descricao" || c.vinculo_via === "manual";
@@ -502,7 +543,7 @@ export default function MateriaisGrade({
             💬{n > 0 && <span className="absolute -top-1.5 -right-2 min-w-[14px] px-0.5 rounded-full bg-ww-accent text-white text-[9px] font-bold leading-[14px] text-center">{n}</span>}
           </button>);
       } },
-  ], [empresa, cmp, cmpPorId, nomesPadrao, gruposMeta, abrirSeletorLista, PC, conversa, sinais]);
+  ], [empresa, cmp, cmpPorId, nomesPadrao, gruposMeta, abrirSeletorLista, PC, conversa, sinais, origemCp, cpNaoUsados]);
 
   /** A leitura inicial funcionou?
    *
@@ -590,10 +631,10 @@ export default function MateriaisGrade({
           body: JSON.stringify({ acao: "resolver", emp: empresa, ids }) }).then((x) => (x.ok ? x.json() : null)).catch(() => null);
         return r?.itens ? (r.itens as Record<string, Cat>) : null; // null = não deu para saber (não mexe em nada)
       })(),
-      rows.some((r) => r.cat_valor_unit == null)
-        ? fetch(`/api/rc-projetos/itens-cp?codigo_projeto=${codigoProjeto}&sem_casar=1`).then((x) => x.json()).catch(() => ({}))
-        : Promise.resolve({}),
+      // a CP da proposta (sem casar): estimativa de reserva, origem "CP" das linhas e a aba Itens da CP
+      fetch(`/api/rc-projetos/itens-cp?codigo_projeto=${codigoProjeto}&sem_casar=1`).then((x) => x.json()).catch(() => ({})),
     ]);
+    { const cr = cpRes as { proposta?: string | null; itens?: ItemCpBase[] }; setCpBase({ proposta: cr.proposta ?? null, itens: cr.itens ?? [] }); }
     const custoCp = new Map<string, number>();
     for (const i of ((cpRes as { itens?: { equipamento: string; item: string; custo_cp: number | null }[] }).itens ?? [])) {
       if (i.custo_cp != null) custoCp.set(chaveItem(i.equipamento, i.item), Number(i.custo_cp));
@@ -810,6 +851,33 @@ export default function MateriaisGrade({
     return novas;
   }, [empresa]);
 
+  /** "Usar item da CP" (07/10/26): a linha recebe o item da CP (texto, qtd, equipamento,
+   *  custo da CP se não houver valor) e passa pelo catálogo — ✓ sozinho ou fica para o ⌕. */
+  const usarItemCp = useCallback(async (rowId: string, k: number) => {
+    const it = cpBase?.itens[k];
+    if (!it) return;
+    setUsarCpEm(null);
+    const i = linhas.findIndex((x) => x._id === rowId);
+    if (i < 0) return;
+    const l = linhas[i];
+    const eq = it.equipamento || l.equipamento || "Geral";
+    const temValor = !!String(l.cat_valor_unit ?? "").trim();
+    const nova = { ...l, item: it.item, modelo: it.modelo ?? l.modelo ?? "", equipamento: eq,
+      qtd: it.qtd != null ? String(it.qtd) : l.qtd,
+      cat_ncod_prod: "", cat_codigo: "", _match: "", _alts: "", _cat_desc: "", _omie: "",
+      cat_valor_unit: temValor ? l.cat_valor_unit : (it.custo_cp != null ? moeda(it.custo_cp) : ""),
+      _vu_fonte: temValor ? (l._vu_fonte ?? "") : (it.custo_cp != null ? "CP" : ""),
+      data_necessaria: l.data_necessaria || (dataGrupoRef.current.get(normGrupo(eq)) ?? "") } as LinhaGrade;
+    const out = [...linhas]; out[i] = nova;
+    if (i === linhas.length - 1) out.push(vazia());
+    setLinhas(out);
+    setSujo(true);
+    try {
+      const [casada] = await casarLinhas([nova]);
+      setLinhas((atual) => atual.map((x) => (x._id === rowId ? { ...x, ...casada, _id: rowId } : x)));
+    } catch { /* fica sem código: resolve no ⌕ */ }
+  }, [cpBase, casarLinhas, linhas]);
+
   // ── Aba "Itens da CP" ───────────────────────────────────────────────────
   // A CP (composição de preço da proposta no CRM) fica SEPARADA da lista: é
   // referência, não compromisso. Quem monta escolhe o que entra — "meio
@@ -817,6 +885,8 @@ export default function MateriaisGrade({
   type ItemCp = { equipamento: string; item: string; qtd: number | null; modelo: string | null;
                   custo_cp: number | null; casamento: Casamento };
   const [subAba, setSubAba] = useState<"lista" | "cp">("lista");
+  /** "⤵ Importar para a lista" (07/10/26): itens da CP com o casamento automático. */
+  const [importarAberto, setImportarAberto] = useState(false);
   const [cp, setCp] = useState<{ proposta: string | null; itens: ItemCp[] } | null>(null);
   const [cpMarcados, setCpMarcados] = useState<Set<number>>(new Set());
   const [cpCarregando, setCpCarregando] = useState(false);
@@ -840,13 +910,13 @@ export default function MateriaisGrade({
       return null;
     } finally { setCpCarregando(false); }
   }, [codigoProjeto]);
-  useEffect(() => { if (subAba === "cp" && !cp && !cpCarregando) void carregarCp(); },
-    [subAba, cp, cpCarregando, carregarCp]);
+  useEffect(() => { if (importarAberto && !cp && !cpCarregando) void carregarCp(); },
+    [importarAberto, cp, cpCarregando, carregarCp]);
 
   const casarAgora = useCallback(async (baseColada?: LinhaGrade[]) => {
     setCasando(true); setErro(null);
     try {
-      if (subAba === "cp") {
+      if (importarAberto) {
         // a CP recasa inteira; escolha feita à mão (de-para) volta igual
         const its = await carregarCp();
         if (its) {
@@ -862,7 +932,7 @@ export default function MateriaisGrade({
       else if (!baseColada) setAviso("Todas as linhas já estão ligadas ao catálogo.");
     } catch (e) { setErro(`Não consegui casar com o catálogo: ${e instanceof Error ? e.message : String(e)}`); }
     finally { setCasando(false); }
-  }, [casarLinhas, linhas, subAba, carregarCp]);
+  }, [casarLinhas, linhas, importarAberto, carregarCp]);
 
   /** Depois de colar do Excel, casa sozinho — o paste chega ao estado no
    *  próximo render, então o efeito espera a lista nova. Linha colada sem data
@@ -885,7 +955,7 @@ export default function MateriaisGrade({
     const novas: LinhaGrade[] = [];
     for (const k of [...cpMarcados].sort((a, b) => a - b)) {
       const it = cp.itens[k];
-      if (!it || naLista.has(chaveItem(it.equipamento, it.item)) || !casado(it)) continue;
+      if (!it || usoCp.has(k)) continue;
       const c = it.casamento;
       const base: LinhaGrade = {
         ...vazia(), equipamento: it.equipamento, item: it.item,
@@ -893,19 +963,25 @@ export default function MateriaisGrade({
         // Sem compra anterior, o custo usado na CP é o melhor valor que há.
         cat_valor_unit: it.custo_cp != null ? moeda(it.custo_cp) : "",
         _vu_fonte: it.custo_cp != null ? "CP" : "",
-        observacao: `CP ${cp.proposta ?? ""}`.trim(),
         data_necessaria: dataGrupoRef.current.get(normGrupo(it.equipamento || "Geral")) ?? "",
       };
-      const campos = camposDoCatalogo(c.melhor!, "ok", [], base.cat_valor_unit);
-      novas.push({ ...base, ...campos, _vu_fonte: campos._vu_fonte || base._vu_fonte });
+      if (casado(it)) {
+        const campos = camposDoCatalogo(c.melhor!, "ok", [], base.cat_valor_unit);
+        novas.push({ ...base, ...campos, _vu_fonte: campos._vu_fonte || base._vu_fonte });
+      } else {
+        // sem item nosso certo: entra "sem código" (âmbar), com as sugestões guardadas para o ⌕
+        novas.push({ ...base, _match: "sem", _alts: c?.alternativas?.length ? JSON.stringify(c.alternativas) : "" });
+      }
     }
-    if (!novas.length) { setAviso("Nada novo para adicionar — os marcados já estão na lista ou ainda não foram casados."); return; }
+    if (!novas.length) { setAviso("Nada novo para adicionar — os marcados já estão na lista."); return; }
     setLinhas([...linhas.filter((l) => String(l.item ?? "").trim()), ...novas, vazia()]);
     setSujo(true);
     setCpMarcados(new Set());
+    setImportarAberto(false);
     setSubAba("lista");
-    setAviso(`${novas.length} item(ns) da CP adicionados à lista. A lista é salva sozinha em instantes.`);
-  }, [cp, cpMarcados, naLista, linhas]);
+    const sem = novas.filter((l) => l._match === "sem").length;
+    setAviso(`${novas.length} item(ns) da CP adicionados à lista${sem ? ` · ${sem} sem código (âmbar — resolva no ⌕ do Código)` : ""}. A lista é salva sozinha em instantes.`);
+  }, [cp, cpMarcados, usoCp, linhas]);
 
   /** Escolha no seletor: grava o de-para (texto → item nosso) e aplica na linha. */
   const escolher = useCallback(async (sel: Seletor, it: Escolhido) => {
@@ -1015,14 +1091,15 @@ export default function MateriaisGrade({
     finally { setRcsCarregando(false); }
   }, [postCompras]);
   const importarRc = useCallback(async (rcId: number) => {
-    if (sujo) { setErro("Há alterações não salvas — salve a lista antes de trazer a RC."); return; }
+    if (sujo) { setErro("Há alterações não salvas — salve a lista antes de importar a CP."); return; }
     setOcupado(`rc${rcId}`);
     try {
       const j = await postCompras({ acao: "importar_rc", rc_id: rcId }) as { rc: string; novas: number; casados: number; ligadas: number };
-      setAviso(`RC ${j.rc}: ${j.novas} linha(s) nova(s) na lista, ${j.casados} já com o código do nosso estoque`
+      setAviso(`CP ${j.rc}: ${j.novas} linha(s) nova(s) na lista, ${j.casados} já com o código do nosso estoque`
         + (j.novas - j.casados > 0 ? ` e ${j.novas - j.casados} para resolver (âmbar — clique em ⌕ no Código)` : "")
-        + `${j.ligadas ? `; ${j.ligadas} já existente(s) ligada(s) à RC` : ""}. A RC fica como origem; os pedidos saem da lista.`);
+        + `${j.ligadas ? `; ${j.ligadas} já existente(s) ligada(s) à CP` : ""}. A CP fica como origem; os pedidos saem da lista.`);
       setRcsAbertas(null);
+      setImportarAberto(false);
       await carregar();
     } catch (e) { setErro((e as Error).message); } finally { setOcupado(null); }
   }, [postCompras, sujo, carregar]);
@@ -1040,7 +1117,7 @@ export default function MateriaisGrade({
     if (!rc) { rcUrlFeito.current = true; return; }
     rcUrlFeito.current = true;
     const ids = linhas.filter((l) => l._id.startsWith("db") && cmpPorId.get(l._id)?.rc === rc && !cmpPorId.get(l._id)?.pcs.length && !String(l.pc_numero ?? "").trim()).map((l) => l._id);
-    if (!ids.length) { setAviso(`Nenhuma linha da lista vem da RC ${rc} sem PC — use “⤵ Trazer RC para a lista” para trazer os itens dela.`); return; }
+    if (!ids.length) { setAviso(`Nenhuma linha da lista vem da CP ${rc} sem PC — use “⤵ Importar para a lista” para trazer os itens dela.`); return; }
     setMarcadas(new Set(ids));
     abrirGerarPc(ids);
   }, [cmp, carregouOk, linhas, cmpPorId, abrirGerarPc]);
@@ -1097,7 +1174,7 @@ export default function MateriaisGrade({
         Total: num(l.qtd) * num(l.cat_valor_unit) || "",
         "Código": l.cat_codigo, "Fornecedor sugerido": l.cat_fornecedor,
         "Entrega (d)": l.cat_entrega_dias, "Fatura (d)": l.cat_fat_dias,
-        RC: c?.rc ?? "", PC: c?.pcs.map((p) => p.pc).join(", ") || l.pc_numero,
+        Origem: origemCp(l) ?? "novo", PC: c?.pcs.map((p) => p.pc).join(", ") || l.pc_numero,
         Fornecedor: c?.pcs.map((p) => p.fornecedor).filter(Boolean).join(", ") || l._fornecedor,
         Comprado: c?.valor_pc ?? "",
         Situação: c?.pcs.map((p) => situacaoPc(p).t).join(", ") ?? "",
@@ -1185,7 +1262,7 @@ export default function MateriaisGrade({
           <p className="text-[11px] text-ww-textMuted mt-0.5">
             Digite ou cole do Excel as colunas <strong>Equipamento · Item · Qtd · Un · Necessário em · Valor unit.</strong> (com a linha de cabeçalho, também <strong>Código, Modelo, PC e Observação</strong> — a observação vira comentário 💬).
             Ao digitar o Item, o catálogo sugere os <strong>itens do nosso estoque</strong> (código novo) com último preço, fornecedor e prazos;
-            à direita, o que já foi comprado: RC, pedido de compra, valor e situação.
+            à direita, o que já foi comprado: pedido de compra, valor e situação.
           </p>
         </div>
       </header>
@@ -1218,20 +1295,21 @@ export default function MateriaisGrade({
                      hover:bg-sky-100 dark:hover:bg-sky-900/50 transition disabled:opacity-40">
           {ocupado === "auto" ? "Vinculando…" : "⇄ Vincular PCs automaticamente"}
         </button>
-        <button type="button" onClick={() => void gerarRc()} disabled={!!ocupado || !paraRc.length}
-          title={paraRc.length ? "Cria a requisição de compra (RC) em Compras com as linhas marcadas sem RC/PC" : "Marque linhas sem RC/PC na caixinha da esquerda"}
-          className="px-2 py-1 text-[11px] rounded-lg border border-ww-accent text-ww-accent hover:bg-ww-accentSoft transition disabled:opacity-40">
-          {ocupado === "rc" ? "Gerando…" : `Gerar RC (${paraRc.length})`}
-        </button>
+        {cpBase?.proposta && (
+          <button type="button" onClick={() => setSubAba("cp")} className="px-1.5 py-1 text-[10.5px] text-ww-textMuted hover:text-ww-text hover:underline"
+            title="Itens da CP (o plano original): quantos já estão na lista">
+            CP: {cpBase.itens.length} itens · {usoCp.size} já na lista
+          </button>
+        )}
         <button type="button" onClick={() => abrirGerarPc(paraPc)} disabled={!!ocupado || !paraPc.length}
           title={paraPc.length ? "Gera os pedidos de compra (um por fornecedor) com as linhas marcadas sem PC" : "Marque linhas sem PC na caixinha da esquerda"}
           className="px-2 py-1 text-[11px] rounded-lg bg-ww-accent text-white font-semibold hover:brightness-110 transition disabled:opacity-40">
           🧾 Gerar pedido de compra ({paraPc.length})
         </button>
-        <button type="button" onClick={() => void abrirTrazerRc()} disabled={!!ocupado}
-          title="Traz para a lista os itens das RCs deste projeto que ainda não estão nela (a RC fica como origem)"
-          className="px-2 py-1 text-[11px] rounded-lg border border-ww-border text-ww-textMuted hover:text-ww-text hover:bg-ww-rowHover transition disabled:opacity-40">
-          ⤵ Trazer RC para a lista
+        <button type="button" onClick={() => { setImportarAberto(true); void abrirTrazerRc(); }} disabled={!!ocupado}
+          title="Traz para a lista os itens da CP do projeto, já casados com o nosso catálogo (o que já está na lista fica apagado)"
+          className="px-2 py-1 text-[11px] rounded-lg border border-emerald-500/60 text-emerald-800 dark:text-emerald-200 hover:bg-emerald-500/10 transition disabled:opacity-40">
+          ⤵ Importar para a lista
         </button>
         <span className="flex-1" />
         <button type="button" onClick={exportar} disabled={!validas.length}
@@ -1308,7 +1386,7 @@ export default function MateriaisGrade({
             <div className="flex items-start gap-2">
               <div className="min-w-0">
                 <h4 className="text-[13px] font-semibold text-ww-text">Necessário em — por grupo de equipamento</h4>
-                <p className="text-[11px] text-ww-textMuted">A data do grupo preenche “Necessário em” das linhas dele. Linha com outra data fica como <b>data própria</b> e não muda; linha nova do grupo herda a data. É a data que vai para a RC (data limite) e para o fluxo.</p>
+                <p className="text-[11px] text-ww-textMuted">A data do grupo preenche “Necessário em” das linhas dele. Linha com outra data fica como <b>data própria</b> e não muda; linha nova do grupo herda a data. É a data que vai para o pedido de compra (previsão de entrega) e para o fluxo.</p>
               </div>
               <button type="button" className="ml-auto text-[12px] text-ww-accent hover:underline" onClick={() => setPainelDatas(false)}>fechar</button>
             </div>
@@ -1373,11 +1451,6 @@ export default function MateriaisGrade({
             className="px-2.5 py-1 rounded-lg bg-ww-accent text-white text-[11.5px] font-semibold hover:brightness-110 transition">
             Vincular a um PC
           </button>
-          <button type="button" onClick={() => void gerarRc()} disabled={!paraRc.length || !!ocupado}
-            title={paraRc.length < marcadas.size ? `${marcadas.size - paraRc.length} marcada(s) já têm RC/PC e ficam de fora` : undefined}
-            className="px-2.5 py-1 rounded-lg border border-ww-accent text-ww-accent text-[11.5px] font-semibold hover:bg-ww-panel transition disabled:opacity-40">
-            Gerar RC ({paraRc.length})
-          </button>
           <button type="button" onClick={() => abrirGerarPc(paraPc)} disabled={!paraPc.length || !!ocupado}
             className="px-2.5 py-1 rounded-lg bg-ww-accent text-white text-[11.5px] font-semibold hover:brightness-110 transition disabled:opacity-40">
             🧾 Gerar pedido de compra ({paraPc.length})
@@ -1423,114 +1496,72 @@ export default function MateriaisGrade({
         <SugestoesVinculo sugestoes={sugestoes} ocupado={ocupado} onConfirmar={(c) => void confirmarSugestao(c)} onFechar={() => setSugestoes(null)} />
       )}
 
-      {/* Minha lista × Itens da CP: a CP é referência, a lista é o que se compra. */}
+      {/* Lista × Itens da CP (07/10/26): a lista é o que se compra; a aba da CP é só o
+          registro do plano original — o que entrou na lista e o que não foi usado. */}
       <div className="flex items-center gap-1 border-b border-ww-border">
-        {([["lista", `Minha lista (${validas.length})`], ["cp", `Itens da CP${cp ? ` (${cp.itens.length})` : ""}`]] as const).map(([k, rot]) => (
+        {([["lista", `Lista (${validas.length})`], ["cp", `Itens da CP${cpBase ? ` (${cpBase.itens.length})` : ""}`]] as const).map(([k, rot]) => (
           <button key={k} type="button" onClick={() => setSubAba(k)}
             className={`px-3 py-1.5 text-[11.5px] -mb-px border-b-2 transition ${
               subAba === k ? "border-ww-accent text-ww-text font-semibold" : "border-transparent text-ww-textMuted hover:text-ww-text"}`}>
             {rot}
           </button>
         ))}
-        {subAba === "cp" && cp?.proposta && (
+        {subAba === "cp" && cpBase?.proposta && (
           <span className="ml-auto text-[10.5px] text-ww-textFaint pb-1">
-            composição de preço da proposta <strong>{cp.proposta}</strong> · case cada item e marque o que vai usar
+            composição de preço da proposta <strong>{cpBase.proposta}</strong> · registro do plano original
           </span>
         )}
       </div>
 
       {subAba === "cp" ? (
         <div className="space-y-2">
-          {cpCarregando && <p className="text-[11.5px] text-ww-textFaint py-3">Lendo a CP no CRM e casando com o catálogo…</p>}
-          {cpErro && <div className="p-2.5 rounded-lg border border-rose-500/40 bg-rose-500/10 text-[12px] text-rose-700 dark:text-rose-300">Não consegui trazer a CP: {cpErro}</div>}
-          {cp && !cp.proposta && (
-            <p className="text-[12px] text-ww-textMuted py-3">
-              Este projeto não tem proposta ligada no CRM. No CRM, ligue a proposta ao projeto no fechamento (Recebimento → projeto do painel).
-            </p>
-          )}
-          {cp?.proposta && (
-            <>
-              <div className="flex items-center gap-2 flex-wrap">
-                <button type="button" onClick={adicionarDaCp} disabled={!cpMarcados.size}
-                  className="px-3 py-1 rounded-lg bg-ww-accent text-white text-[11.5px] font-semibold hover:brightness-110 transition disabled:opacity-40">
-                  Adicionar {cpMarcados.size || ""} à minha lista
-                </button>
-                <button type="button" className="text-[11px] text-ww-textMuted hover:text-ww-text"
-                  title="Marca os itens casados (✓ ou escolhidos) que ainda não estão na lista"
-                  onClick={() => setCpMarcados(new Set(cp.itens.map((it, k) => [it, k] as const)
-                    .filter(([it]) => casado(it) && !naLista.has(chaveItem(it.equipamento, it.item))).map(([, k]) => k)))}>
-                  marcar todos os que faltam
-                </button>
-                <button type="button" className="text-[11px] text-ww-textMuted hover:text-ww-text" onClick={() => setCpMarcados(new Set())}>limpar</button>
-                <span className="text-[10.5px] text-ww-textFaint">
-                  {cp.itens.filter(casado).length} de {cp.itens.length} casado(s)
-                </span>
-                <button type="button" className="ml-auto text-[11px] text-ww-textMuted hover:text-ww-text" onClick={() => void carregarCp()}>↻ reler a CP</button>
-              </div>
-              <div className="border border-ww-border rounded-lg overflow-auto" style={{ maxHeight: 480 }}>
-                <table className="w-full text-[11.5px] border-collapse">
-                  <thead className="sticky top-0 bg-ww-panel text-ww-textMuted z-[1]">
-                    <tr className="text-left">
-                      <th className="p-1.5 w-7"></th>
-                      <th className="p-1.5">Equipamento</th>
-                      <th className="p-1.5">Item da CP</th>
-                      <th className="p-1.5 text-right">Qtd</th>
-                      <th className="p-1.5 text-right">Custo CP</th>
-                      <th className="p-1.5">No catálogo</th>
-                      <th className="p-1.5 text-right">Últ. preço</th>
-                      <th className="p-1.5">Fornecedor</th>
-                      <th className="p-1.5">Entrega · Fatura</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {cp.itens.map((it, k) => {
-                      const ja = naLista.has(chaveItem(it.equipamento, it.item));
-                      const c = it.casamento;
-                      const m = c?.melhor;
-                      const st = c?.status ?? "sem";
-                      const ok = casado(it);
-                      return (
-                        <tr key={k} className={`border-t border-ww-border/50 ${ja ? "opacity-50" : ""}`}>
-                          <td className="p-1.5 text-center">
-                            {ja ? <span title="Já está na minha lista">✓</span>
-                              : <input type="checkbox" checked={cpMarcados.has(k)} disabled={!ok}
-                                  title={ok ? "Marcar para adicionar à minha lista" : "Case o item primeiro — clique em “No catálogo” e escolha (ou crie) o item nosso"}
-                                  className={ok ? "" : "cursor-not-allowed"}
-                                  onChange={() => setCpMarcados((prev) => { const n = new Set(prev); if (n.has(k)) n.delete(k); else n.add(k); return n; })} />}
-                          </td>
-                          <td className="p-1.5 text-ww-textMuted">{it.equipamento}</td>
-                          <td className="p-1.5 text-ww-text">{it.item}{it.modelo ? <span className="text-ww-textFaint"> · {it.modelo}</span> : null}</td>
-                          <td className="p-1.5 text-right tabular-nums">{it.qtd ?? "—"}</td>
-                          <td className="p-1.5 text-right tabular-nums">{brl(it.custo_cp)}</td>
-                          <td className="p-1.5">
-                            <button type="button" disabled={ja} onClick={() => setSeletor({ alvo: "cp", k })}
-                              className="text-left hover:underline disabled:no-underline max-w-[300px]"
-                              title={m ? `${m.codigo ?? ""} — ${m.descricao}${m.motivo ? ` (${m.motivo})` : ""} · clique para trocar` : "Clique para procurar, escolher ou criar o item nosso"}>
-                              {!m ? <span className="text-ww-textFaint">sem correspondência · <span className="text-ww-accent">escolher</span></span>
-                                : st === "ok"
-                                  ? <span className="text-ww-textMuted">{c.manual ? <span className="text-sky-700 dark:text-sky-300" title="Escolhido à mão (de-para)">✋ </span> : <span className="text-emerald-600 dark:text-emerald-400">✓ </span>}
-                                      <b className="text-ww-text">{m.codigo}</b> {m.descricao.length > 40 ? `${m.descricao.slice(0, 40)}…` : m.descricao}</span>
-                                  : <span className="text-amber-700 dark:text-amber-300">⚠ conferir · <b>{m.codigo}</b> {m.descricao.length > 34 ? `${m.descricao.slice(0, 34)}…` : m.descricao}</span>}
-                            </button>
-                          </td>
-                          <td className="p-1.5 text-right tabular-nums">{m ? brl(m.ultimo_preco) : "—"}</td>
-                          <td className="p-1.5 text-ww-textMuted">{m?.fornecedor ?? "—"}</td>
-                          <td className="p-1.5 text-ww-textMuted tabular-nums">
-                            {m ? `${m.entrega_dias != null ? `${m.entrega_dias}d` : "—"} · ${m.fat_dias != null ? `${m.fat_dias}d` : "—"}` : "—"}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-              <p className="text-[10.5px] text-ww-textFaint">
-                Só entra na lista o item casado (✓ automático ou ✋ escolhido). Clique em “No catálogo” para escolher entre as sugestões,
-                procurar outro item ou criar o item nosso — a escolha fica gravada para o mesmo texto. Ao adicionar, o valor vem do último
-                preço pago (sem compra anterior, o custo da CP).
-              </p>
-            </>
-          )}
+          {!cpBase ? <p className="text-[11.5px] text-ww-textFaint py-3">Lendo a CP no CRM…</p>
+            : !cpBase.proposta ? (
+              <p className="text-[12px] text-ww-textMuted py-3">
+                Este projeto não tem proposta ligada no CRM. No CRM, ligue a proposta ao projeto no fechamento (Recebimento → projeto do painel).
+              </p>)
+            : (() => {
+              const tot = (i: ItemCpBase) => (Number(i.qtd) || 0) * (Number(i.custo_cp) || 0);
+              const plano = cpBase.itens.reduce((a, i) => a + tot(i), 0);
+              const usado = cpBase.itens.reduce((a, i, k) => a + (usoCp.has(k) ? tot(i) : 0), 0);
+              const projUsado = [...usoCp.values()].reduce((a, l) => a + num(l.qtd) * num(l.cat_valor_unit), 0);
+              return (
+                <div className="border border-ww-border rounded-lg overflow-auto" style={{ maxHeight: 520 }}>
+                  <table className="w-full text-[11.5px] border-collapse">
+                    <thead className="sticky top-0 bg-[rgb(var(--color-ww-panel))] text-ww-textMuted z-[1]">
+                      <tr className="text-left">
+                        <th className="p-1.5">Equipamento</th><th className="p-1.5">Item da CP</th><th className="p-1.5 text-right">Qtd</th>
+                        <th className="p-1.5 text-right">Custo CP</th><th className="p-1.5 text-right">Total</th><th className="p-1.5">Na lista</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {cpBase.itens.map((i, k) => {
+                        const l = usoCp.get(k);
+                        const n = l ? validas.findIndex((x) => x._id === l._id) + 1 : 0;
+                        return (
+                          <tr key={k} className={`border-t border-ww-border/50 ${l ? "" : "opacity-60"}`}>
+                            <td className="p-1.5 text-ww-textMuted">{i.equipamento}</td>
+                            <td className="p-1.5 text-ww-text">{i.item}{i.modelo ? <span className="text-ww-textFaint"> · {i.modelo}</span> : null}</td>
+                            <td className="p-1.5 text-right tabular-nums">{i.qtd ?? "—"}</td>
+                            <td className="p-1.5 text-right tabular-nums">{brl(i.custo_cp)}</td>
+                            <td className="p-1.5 text-right tabular-nums">{brl(tot(i))}</td>
+                            <td className="p-1.5">{l
+                              ? <span className="text-emerald-700 dark:text-emerald-300">✓ na lista{l.cat_codigo ? <> · <b className="font-mono">{l.cat_codigo}</b></> : " · sem código"}{n ? <span className="text-ww-textFaint"> · linha {n}</span> : null}</span>
+                              : <span className="text-ww-textFaint">não usado</span>}</td>
+                          </tr>);
+                      })}
+                    </tbody>
+                    <tfoot>
+                      <tr className="border-t border-ww-border font-semibold">
+                        <td className="p-1.5" colSpan={4}>Plano (CP): {cpBase.itens.length} item(ns) · {usoCp.size} na lista · {cpBase.itens.length - usoCp.size} não usado(s)</td>
+                        <td className="p-1.5 text-right tabular-nums">{brl(plano)}</td>
+                        <td className="p-1.5 text-[11px] font-normal text-ww-textMuted">na lista: {brl(usado)} pelo custo da CP · {brl(projUsado)} projetado</td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>);
+            })()}
+          <p className="text-[10.5px] text-ww-textFaint">A CP é o plano: daqui só se consulta. Os itens entram na lista pelo “⤵ Importar para a lista” ou pelo “CP” na célula do Item de uma linha.</p>
         </div>
       ) : carregando
         ? <p className="text-[11.5px] text-ww-textFaint py-3">Carregando a lista…</p>
@@ -1651,24 +1682,139 @@ export default function MateriaisGrade({
           onFechar={() => setGerarPcLinhas(null)}
           onFeito={(nums) => { setGerarPcLinhas(null); setMarcadas(new Set()); setAviso(`Pedido(s) de compra criado(s): ${nums.map((n) => `PC ${n}`).join(", ")} — já ligados às linhas da lista; seguem para aprovação.`); void carregar(); onGravado?.(); }} />
       )}
-      {rcsAbertas && createPortal(
-        <div className="fixed inset-0 z-[120] bg-black/40 flex items-end sm:items-start justify-center sm:pt-[12vh]" onMouseDown={(e) => { if (e.target === e.currentTarget) setRcsAbertas(null); }}>
-          <div role="dialog" aria-label="Trazer RC para a lista" className="w-full sm:w-[min(560px,96vw)] max-h-[80vh] overflow-auto rounded-t-xl sm:rounded-xl border border-ww-border bg-[rgb(var(--color-ww-panel))] shadow-2xl p-3.5 space-y-2 text-[12px]">
+      {usarCpEm && createPortal(
+        <div className="fixed inset-0 z-[110] bg-black/40 flex items-end sm:items-start justify-center sm:pt-[10vh]" onMouseDown={(e) => { if (e.target === e.currentTarget) setUsarCpEm(null); }}>
+          <div role="dialog" aria-label="Usar item da CP" className="w-full sm:w-[min(720px,96vw)] max-h-[80vh] overflow-auto rounded-t-xl sm:rounded-xl border border-ww-border bg-[rgb(var(--color-ww-panel))] shadow-2xl p-3.5 space-y-2 text-[12px]">
             <div className="flex items-start gap-2">
-              <div><h4 className="text-[13px] font-semibold text-ww-text">Trazer RC para a lista</h4>
-                <p className="text-[11px] text-ww-textMuted">Os itens da RC entram como linhas da lista (a RC fica como origem e referência; a lista é quem manda).</p></div>
-              <button type="button" className="ml-auto text-ww-accent hover:underline" onClick={() => setRcsAbertas(null)}>fechar</button>
+              <div><h4 className="text-[13px] font-semibold text-ww-text">Usar item da CP nesta linha</h4>
+                <p className="text-[11px] text-ww-textMuted">Itens da CP que ainda não estão na lista. A linha recebe descrição, qtd, equipamento e o custo da CP (se não tiver valor) e passa pelo catálogo.</p></div>
+              <button type="button" className="ml-auto text-ww-accent hover:underline" onClick={() => setUsarCpEm(null)}>fechar</button>
             </div>
-            {rcsCarregando ? <p className="text-ww-textFaint">procurando as RCs do projeto…</p>
-              : !rcsAbertas.length ? <p className="text-ww-textFaint">Todas as RCs deste projeto já estão na lista.</p>
-              : rcsAbertas.map((r) => (
-                <div key={r.id} className="flex items-center gap-2 border-t border-ww-border/60 pt-1.5">
-                  <div className="flex-1"><b>RC {r.num}</b> <span className="text-ww-textMuted">· {r.itens} item(ns), {r.na_lista} já na lista · {brl(r.valor)}</span></div>
-                  <button type="button" disabled={!!ocupado} onClick={() => void importarRc(r.id)}
-                    className="px-2 py-0.5 rounded border border-ww-accent text-ww-accent hover:bg-ww-accentSoft disabled:opacity-40">
-                    {ocupado === `rc${r.id}` ? "…" : `Trazer ${r.itens - r.na_lista}`}
-                  </button>
-                </div>))}
+            <input autoFocus placeholder="filtrar…" value={usarCpBusca} onChange={(e) => setUsarCpBusca(e.target.value)}
+              className="w-full rounded-md border border-ww-border bg-transparent px-2 py-1 text-[12px] text-ww-text" />
+            {cpNaoUsados.filter(({ i }) => !usarCpBusca.trim() || normT(`${i.equipamento} ${i.item} ${i.modelo ?? ""}`).includes(normT(usarCpBusca))).map(({ i, k }) => (
+              <button key={k} type="button" onClick={() => void usarItemCp(usarCpEm, k)}
+                className="w-full text-left flex items-center gap-2 border-t border-ww-border/60 pt-1.5 hover:bg-ww-rowHover rounded px-1">
+                <span className="text-ww-textMuted w-32 truncate" title={i.equipamento}>{i.equipamento}</span>
+                <span className="flex-1 truncate" title={i.item}>{i.item}{i.modelo ? <span className="text-ww-textFaint"> · {i.modelo}</span> : null}</span>
+                <span className="tabular-nums text-ww-textMuted">{i.qtd ?? "—"} × {brl(i.custo_cp)}</span>
+              </button>))}
+            {!cpNaoUsados.length && <p className="text-ww-textFaint">Todos os itens da CP já estão na lista.</p>}
+          </div>
+        </div>, document.body)}
+      {importarAberto && createPortal(
+        <div className="fixed inset-0 z-[110] bg-black/40 flex items-end sm:items-start justify-center sm:pt-[5vh]" onMouseDown={(e) => { if (e.target === e.currentTarget) setImportarAberto(false); }}>
+          <div role="dialog" aria-label="Importar para a lista" className="w-full sm:w-[min(1100px,97vw)] max-h-[90vh] overflow-auto rounded-t-xl sm:rounded-xl border border-ww-border bg-[rgb(var(--color-ww-panel))] shadow-2xl p-3.5 space-y-2.5 text-[12px]">
+            <div className="flex items-start gap-2">
+              <div><h4 className="text-[14px] font-semibold text-ww-text">Importar para a lista — itens da CP</h4>
+                <p className="text-[11px] text-ww-textMuted">Cada item da CP vem casado com o nosso catálogo (✓ certo · ⚠ conferir · sem correspondência). Resolva em “No catálogo”, marque o que entra e adicione. O que já está na lista fica apagado.</p></div>
+              <button type="button" className="ml-auto text-ww-accent hover:underline" onClick={() => setImportarAberto(false)}>fechar</button>
+            </div>
+            {/* CP já lançada em Compras (nº da CP): entra com o vínculo, para os PCs cobrirem a CP */}
+            {rcsAbertas && rcsAbertas.length > 0 && (
+              <div className="rounded-lg border border-ww-border p-2.5 space-y-1">
+                <div className="text-[11.5px] font-semibold text-ww-text">CP lançada em Compras <small className="font-normal text-ww-textFaint">— traz os itens já ligados ao documento da CP (os PCs gerados pela lista ficam cobrindo a CP)</small></div>
+                {rcsAbertas.map((r) => (
+                  <div key={r.id} className="flex items-center gap-2 border-t border-ww-border/60 pt-1.5">
+                    <div className="flex-1"><b>CP {r.num}</b> <span className="text-ww-textMuted">· {r.itens} item(ns), {r.na_lista} já na lista · {brl(r.valor)}</span></div>
+                    <button type="button" disabled={!!ocupado} onClick={() => void importarRc(r.id)}
+                      className="px-2 py-0.5 rounded border border-ww-accent text-ww-accent hover:bg-ww-accentSoft disabled:opacity-40">
+                      {ocupado === `rc${r.id}` ? "…" : `Trazer ${r.itens - r.na_lista} (casando com o catálogo)`}
+                    </button>
+                  </div>))}
+              </div>
+            )}
+            <div className="space-y-2">
+          {cpCarregando && <p className="text-[11.5px] text-ww-textFaint py-3">Lendo a CP no CRM e casando com o catálogo…</p>}
+          {cpErro && <div className="p-2.5 rounded-lg border border-rose-500/40 bg-rose-500/10 text-[12px] text-rose-700 dark:text-rose-300">Não consegui trazer a CP: {cpErro}</div>}
+          {cp && !cp.proposta && (
+            <p className="text-[12px] text-ww-textMuted py-3">
+              Este projeto não tem proposta ligada no CRM. No CRM, ligue a proposta ao projeto no fechamento (Recebimento → projeto do painel).
+            </p>
+          )}
+          {cp?.proposta && (
+            <>
+              <div className="flex items-center gap-2 flex-wrap">
+                <button type="button" onClick={adicionarDaCp} disabled={!cpMarcados.size}
+                  className="px-3 py-1 rounded-lg bg-ww-accent text-white text-[11.5px] font-semibold hover:brightness-110 transition disabled:opacity-40">
+                  Adicionar {cpMarcados.size || ""} à lista
+                </button>
+                <button type="button" className="text-[11px] text-ww-textMuted hover:text-ww-text"
+                  title="Marca os itens casados (✓ ou escolhidos) que ainda não estão na lista"
+                  onClick={() => setCpMarcados(new Set(cp.itens.map((it, k) => [it, k] as const)
+                    .filter(([it, k]) => casado(it) && !usoCp.has(k)).map(([, k]) => k)))}>
+                  marcar os casados que faltam
+                </button>
+                <button type="button" className="text-[11px] text-ww-textMuted hover:text-ww-text" onClick={() => setCpMarcados(new Set())}>limpar</button>
+                <span className="text-[10.5px] text-ww-textFaint">
+                  {cp.itens.filter(casado).length} de {cp.itens.length} casado(s)
+                </span>
+                <button type="button" className="ml-auto text-[11px] text-ww-textMuted hover:text-ww-text" onClick={() => void carregarCp()}>↻ reler a CP</button>
+              </div>
+              <div className="border border-ww-border rounded-lg overflow-auto" style={{ maxHeight: 480 }}>
+                <table className="w-full text-[11.5px] border-collapse">
+                  <thead className="sticky top-0 bg-ww-panel text-ww-textMuted z-[1]">
+                    <tr className="text-left">
+                      <th className="p-1.5 w-7"></th>
+                      <th className="p-1.5">Equipamento</th>
+                      <th className="p-1.5">Item da CP</th>
+                      <th className="p-1.5 text-right">Qtd</th>
+                      <th className="p-1.5 text-right">Custo CP</th>
+                      <th className="p-1.5">No catálogo</th>
+                      <th className="p-1.5 text-right">Últ. preço</th>
+                      <th className="p-1.5">Fornecedor</th>
+                      <th className="p-1.5">Entrega · Fatura</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {cp.itens.map((it, k) => {
+                      const ja = usoCp.has(k);
+                      const c = it.casamento;
+                      const m = c?.melhor;
+                      const st = c?.status ?? "sem";
+                      const ok = casado(it);
+                      return (
+                        <tr key={k} className={`border-t border-ww-border/50 ${ja ? "opacity-50" : ""}`}>
+                          <td className="p-1.5 text-center">
+                            {ja ? <span title="Já está na lista">✓</span>
+                              : <input type="checkbox" checked={cpMarcados.has(k)}
+                                  title={ok ? "Adicionar à lista" : "Sem item nosso casado — entra como “sem código” (âmbar) para resolver depois; ou case agora em “No catálogo”"}
+                                  onChange={() => setCpMarcados((prev) => { const n = new Set(prev); if (n.has(k)) n.delete(k); else n.add(k); return n; })} />}
+                          </td>
+                          <td className="p-1.5 text-ww-textMuted">{it.equipamento}</td>
+                          <td className="p-1.5 text-ww-text">{it.item}{it.modelo ? <span className="text-ww-textFaint"> · {it.modelo}</span> : null}</td>
+                          <td className="p-1.5 text-right tabular-nums">{it.qtd ?? "—"}</td>
+                          <td className="p-1.5 text-right tabular-nums">{brl(it.custo_cp)}</td>
+                          <td className="p-1.5">
+                            <button type="button" disabled={ja} onClick={() => setSeletor({ alvo: "cp", k })}
+                              className="text-left hover:underline disabled:no-underline max-w-[300px]"
+                              title={m ? `${m.codigo ?? ""} — ${m.descricao}${m.motivo ? ` (${m.motivo})` : ""} · clique para trocar` : "Clique para procurar, escolher ou criar o item nosso"}>
+                              {!m ? <span className="text-ww-textFaint">sem correspondência · <span className="text-ww-accent">escolher</span></span>
+                                : st === "ok"
+                                  ? <span className="text-ww-textMuted">{c.manual ? <span className="text-sky-700 dark:text-sky-300" title="Escolhido à mão (de-para)">✋ </span> : <span className="text-emerald-600 dark:text-emerald-400">✓ </span>}
+                                      <b className="text-ww-text">{m.codigo}</b> {m.descricao.length > 40 ? `${m.descricao.slice(0, 40)}…` : m.descricao}</span>
+                                  : <span className="text-amber-700 dark:text-amber-300">⚠ conferir · <b>{m.codigo}</b> {m.descricao.length > 34 ? `${m.descricao.slice(0, 34)}…` : m.descricao}</span>}
+                            </button>
+                          </td>
+                          <td className="p-1.5 text-right tabular-nums">{m ? brl(m.ultimo_preco) : "—"}</td>
+                          <td className="p-1.5 text-ww-textMuted">{m?.fornecedor ?? "—"}</td>
+                          <td className="p-1.5 text-ww-textMuted tabular-nums">
+                            {m ? `${m.entrega_dias != null ? `${m.entrega_dias}d` : "—"} · ${m.fat_dias != null ? `${m.fat_dias}d` : "—"}` : "—"}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+              <p className="text-[10.5px] text-ww-textFaint">
+                Clique em “No catálogo” para resolver o que ficou ⚠ conferir ou sem correspondência (sugestões, busca, criar item nosso) —
+                a escolha fica gravada para o mesmo texto. Item sem código marcado entra “sem código” (âmbar) para resolver depois; desmarque
+                para pular. O valor vem do último preço pago; sem compra anterior, do custo da CP. Itens já na lista ficam apagados.
+              </p>
+            </>
+          )}
+            </div>
           </div>
         </div>, document.body)}
       {picker && createPortal(
