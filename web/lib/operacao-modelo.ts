@@ -161,8 +161,11 @@ export function compraDaLinha(r: AnyRow, pedidoId: string): Compra {
   const recebidoEm = dataMs(r.mt_data_recebimento_nf);
   const estado: Estado = !pc ? "sem_pc" : recebidoEm != null ? "recebido"
     : APROV(status) ? "aprovado" : RECUSA.has(status) ? "recusado" : "pendente";
-  const qtd = n(r.rc_qtd) || 1;
   const unit = n(r.rc_custo);
+  // 07/10/26 (PV1934): rc_qtd vazio virava "1" — quando o total da RC não bate com qtd × unitário, a quantidade é total ÷ unitário.
+  const totRc = n(r.rc_custo_total);
+  const qtdGravada = n(r.rc_qtd) || 1;
+  const qtd = unit > 0 && totRc > 0 && Math.abs(unit * qtdGravada - totRc) > 0.01 ? Math.round((totRc / unit) * 1000) / 1000 : qtdGravada;
   const rcTotal = unit * qtd;
   const pcValor = pc && r.valor_total != null ? n(r.valor_total) : null;
   const prevNova = dataMs(r.nova_prev_materiais);
