@@ -1708,7 +1708,7 @@ function GruposPcProjeto({ compras, p, podeAprovar, podeEditar, ehAdmin, statusL
       <div className="lado compras pcproj-bloco">
         <div className="pcproj-tit">Pedidos de compra</div>
         <div className="pcproj-hd"><span>PC</span><span>Fornecedor</span><span style={{ textAlign: "right" }}>Valor</span><span>Aprovação</span>
-          <span>Prev. material</span><span>Situação</span><span>NF entrada</span><span title="Comentários">💬</span><span /></div>
+          <span>Prev. material</span><span>Situação</span><span>NF entrada</span><span /><span title="Comentários">💬</span><span /></div>
         {[...pcs.entries()].map(([pc, cs]) => {
           const c = cs[0];
           const todosRecebidos = cs.every((x) => x.estado === "recebido");

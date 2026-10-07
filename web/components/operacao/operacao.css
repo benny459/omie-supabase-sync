@@ -523,7 +523,7 @@
 .op .pcproj-itens{padding:4px 12px 8px 110px;display:flex;flex-direction:column;gap:2px;font-size:12px}
 .op .pcproj-itens > div{display:flex;justify-content:space-between;gap:10px}
 .op .pcproj-itens small{color:var(--ww-text-faint);white-space:nowrap}
-.op .pcproj-hd,.op .pcproj-pc{display:grid;grid-template-columns:48px minmax(130px,1fr) 88px 106px 112px 104px 96px 34px 26px;gap:10px;align-items:center;padding:7px 10px}
+.op .pcproj-hd,.op .pcproj-pc{display:grid;grid-template-columns:44px minmax(150px,1fr) 92px 112px 126px 104px 118px 36px 24px 20px;gap:10px;align-items:center;padding:7px 10px}
 .op .pcproj-hd{font-size:11px;color:var(--ww-text-faint);text-transform:uppercase;letter-spacing:.06em;border-bottom:1px solid var(--ww-border)}
 .op .pcproj-pc + .pcproj-pc{border-top:1px dashed var(--ww-border)}
 .op .pcproj-pc > *{min-width:0}
@@ -625,3 +625,7 @@
 .pccoment .pe button:disabled{opacity:.5}
 .op .pcproj-pc .nf{min-width:0;overflow:hidden}
 .op .pcproj-pc .nf .st{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:inline-block}
+.op .pcproj-pc .nf .st.recebido{display:none}
+.op .pcproj-pc .nf{white-space:nowrap;text-overflow:ellipsis}
+.op .pcproj-pc input.in{min-width:0;width:100%}
+.op .pcproj-pc .acts{display:flex;gap:2px;justify-content:flex-end}
