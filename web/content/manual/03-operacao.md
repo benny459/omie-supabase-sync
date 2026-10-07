@@ -54,7 +54,7 @@ A lista de **pedidos de venda (PV/OS)** com as compras ligadas a cada um.
 
 ### Lista de materiais, compras e budget do projeto
 
-Tudo fica numa aba só: **Lista de materiais** (a antiga aba “Compras × lista” entrou nela; o atalho **🧾 Materiais × compras** da linha do projeto abre esta aba).
+Tudo fica numa aba só: **Lista de materiais** (a antiga aba “Compras × lista” entrou nela). Na linha do projeto, **📂 Abrir projeto** leva até ela.
 
 **No topo**: **Estimado da lista**, **Budget de materiais** (do CP/MC do CRM ou **editar**), **Comprometido (PCs)**, **Pago**, **Projetado × budget** (sobra/estoura) e a **Margem** contra a do fechamento. O estimado de cada linha é o **Valor unit.** da linha; vazio, o sistema preenche com o preço do **PC**, senão o **último preço do catálogo**, senão o **custo da CP** (a célula mostra de onde veio: “do PC”, “catálogo”, “da CP”).
 
@@ -64,7 +64,7 @@ Tudo fica numa aba só: **Lista de materiais** (a antiga aba “Compras × lista
 
 **Comprar pela lista**: marque as linhas sem PC e clique **🧾 Gerar pedido de compra** — abre uma folha com **um pedido por fornecedor** (o fornecedor sugerido de cada linha agrupa; dá para trocar), com preço, quantidade, categoria, condição e previsão (o “Necessário em” mais cedo do grupo) editáveis. **Simular** confere tudo sem gravar. Os PCs nascem pelo caminho de sempre do Compras (numeração, aprovação, avisos) e cada item já fica ligado à sua linha da lista. **⤵ Importar para a lista** traz os itens da **RC** (a composição de preço da proposta) que ainda não estão na lista, cada um já casado com o nosso catálogo: resolva o ⚠ conferir / sem correspondência em **No catálogo** (sugestões, busca, Criar item nosso), marque o que entra (sem código entra âmbar, para resolver depois; desmarque para pular) e adicione. Se a RC já foi lançada em Compras, os itens vêm ligados a ela. Numa linha, o **RC** na célula do Item usa um item da RC ainda não usado (descrição, qtd, equipamento e custo da RC, passando pelo catálogo). Item digitado ou buscado livremente é **novo**. Para subir a lista inteira de uma planilha (uma aba por equipamento), use **📋 Subir planilha** no canto da aba.
 
-> No projeto, **RC e RC (composição de preço) são a mesma coisa** e o nome usado é **RC**: os itens da RC são os da composição de preço da proposta; o nº mostrado é o do documento em Compras.
+> No projeto, **RC e CP (composição de preço) são a mesma coisa** e o nome usado é **RC**: os itens da RC são os da composição de preço da proposta; o nº mostrado é o do documento em Compras.
 
 **Projetos › pedido aberto**: em cima, o resumo do projeto e os **Itens da RC sem PC** (uma linha por RC, com **+ Gerar pedido de compra**, que abre a Lista de materiais com os itens da RC marcados e o gerador aberto); embaixo, **uma linha por PC** — nº do PC, fornecedor, RC que atende, valor, aprovação, Prev. material, situação (mesmas cores da lista), material, NF de entrada e **☰** para ver os itens daquele PC na Lista de materiais.
 
