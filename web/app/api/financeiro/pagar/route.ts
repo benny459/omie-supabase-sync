@@ -172,6 +172,15 @@ export async function GET(req: Request) {
     return dadosParaEditar(editar);
   }
 
+  // Busca em TODOS os títulos a pagar — pagos, vencidos antigos, cancelados (07/10/26)
+  const buscar = (u.searchParams.get("buscar") ?? "").trim();
+  if (buscar) {
+    if (buscar.length < 3) return NextResponse.json({ itens: [] });
+    const { data, error } = await fin().rpc("pagar_buscar", { p_q: buscar.slice(0, 80), p_lim: 400 });
+    if (error) return erroDb(error);
+    return NextResponse.json({ itens: data ?? [] }, { headers: { "Cache-Control": "no-store" } });
+  }
+
   const ciclo = u.searchParams.get("ciclo");
   if (ciclo) {
     if (!/^[op]:\d+$/.test(ciclo)) return NextResponse.json({ error: "ref inválida" }, { status: 400 });

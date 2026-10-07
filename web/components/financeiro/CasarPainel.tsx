@@ -87,7 +87,8 @@ export default function CasarPainel({ movimentoId, onFechar }: { movimentoId: nu
   const [vde, setVde] = useState(""); const [vate, setVate] = useState("");
   const [todas, setTodas] = useState(false);
   const [sel, setSel] = useState<Record<string, { valor: string; cand: { contraparte: string | null; documento: string | null; saldo: number } }>>({});
-  const [dif, setDif] = useState<"juros" | "desconto" | "parcial">("parcial");
+  // null = padrão pelo sinal: pagou a mais → juros/multa (07/10/26, Benny); títulos maiores → baixa parcial
+  const [difEscolha, setDif] = useState<"juros" | "desconto" | "parcial" | null>(null);
   const [aprender, setAprender] = useState(true);
   const buscaRef = useRef<HTMLInputElement>(null);
 
@@ -118,6 +119,7 @@ export default function CasarPainel({ movimentoId, onFechar }: { movimentoId: nu
   const restante = m ? Number(m.restante) : 0;
   const soma = useMemo(() => r2(Object.values(sel).reduce((s, x) => s + num(x.valor), 0)), [sel]);
   const diferenca = r2(restante - soma); // >0: movimento maior que os títulos; <0: títulos maiores
+  const dif = difEscolha ?? (diferenca > 0 ? "juros" : "parcial");
 
   function marcar(ref: string, cand: { contraparte: string | null; documento: string | null; saldo: number }, ligar: boolean) {
     setSel((s) => {
@@ -143,7 +145,7 @@ export default function CasarPainel({ movimentoId, onFechar }: { movimentoId: nu
     finally { setOcupado(false); }
   }
 
-  async function casar(itensDiretos?: { ref: string; valor: number }[]) {
+  async function casar(itensDiretos?: { ref: string; valor: number; juros?: number }[]) {
     if (!m) return;
     let itens: { ref: string; valor: number; juros?: number; desconto?: number }[];
     if (itensDiretos) itens = itensDiretos;
@@ -338,7 +340,11 @@ export default function CasarPainel({ movimentoId, onFechar }: { movimentoId: nu
           <button type="button" disabled={ocupado || restante <= 0.004 || (!Object.keys(sel).length && !d.candidatos.length)} style={btn(C.ok, true)}
             onClick={() => {
               if (Object.keys(sel).length) casar();
-              else { const c1 = d.candidatos[0]; if (c1) casar([{ ref: c1.ref, valor: Math.min(Number(c1.saldo), restante) }]); }
+              else {
+                const c1 = d.candidatos[0];
+                // pagou mais que o saldo do título (atraso): a sobra entra como juros/multa e o movimento fecha
+                if (c1) { const v = Math.min(Number(c1.saldo), restante), jur = r2(restante - v); casar([{ ref: c1.ref, valor: v, ...(jur >= 0.005 ? { juros: jur } : {}) }]); }
+              }
             }}>
             {ocupado ? "Casando…" : Object.keys(sel).length ? "Casar (Enter)" : "Casar com o 1º (Enter)"}
           </button>

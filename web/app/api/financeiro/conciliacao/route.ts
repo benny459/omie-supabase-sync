@@ -155,6 +155,10 @@ export async function POST(req: Request) {
                      ...(i.obs ? { obs: String(i.obs).slice(0, 300) } : {}) }));
     if (!itens.length) return NextResponse.json({ error: "Escolha ao menos um título" }, { status: 400 });
     r = await fin().rpc("conciliar_casar", { p_movimento_id: mov, p_itens: itens, p_aprender: b.aprender !== false, p_usuario: a.email });
+  } else if (b.acao === "juros_resto") {
+    // 07/10/26: movimento casado em parte (título pago com atraso) — o resto vira juros/multa da última baixa.
+    if (!a.pode["financeiro.baixar"]) return NextResponse.json({ error: "Sem permissão (financeiro.baixar)" }, { status: 403 });
+    r = await fin().rpc("conciliar_resto_juros", { p_movimento_id: mov, p_usuario: a.email });
   } else if (b.acao === "transferencia") {
     if (!a.pode["financeiro.baixar"]) return NextResponse.json({ error: "Sem permissão (financeiro.baixar)" }, { status: 403 });
     r = await fin().rpc("transferencia_marcar", { p_movimento_id: mov, p_par: b.par ? Number(b.par) : null, p_usuario: a.email });

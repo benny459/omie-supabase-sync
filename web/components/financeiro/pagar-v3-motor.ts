@@ -371,7 +371,38 @@ export function montarPagarV3(o: Opts) {
 
   /* TABELA DE PAGAMENTOS */
   const PER = { hoje: (r) => r.dias === 0, venc: (r) => r.dias < 0 && r.dias >= -60, amanha: (r) => r.dias === 1, d7: (r) => r.dias >= 0 && r.dias <= 7, d30: (r) => r.dias >= 0 && r.dias <= 30, tudo: (r) => r.dias >= -60 && r.dias <= 30 };
-  function tblBase() { const a = base(); return S.filter ? a.filter(S.filter.f) : a.filter(PER[S.per]); }
+  // Com busca digitada o período não corta: procurar "Anderson" acha também o vencido antigo e o de longo prazo (07/10/26).
+  function tblBase() { const a = base(); return S.filter ? a.filter(S.filter.f) : S.q ? a : a.filter(PER[S.per]); }
+  // Histórico da busca (servidor): pagos, cancelados e vencidos fora da janela carregada.
+  let HIST = { q: "", itens: [], carregando: false }, histT = 0;
+  function buscarHist() {
+    clearTimeout(histT);
+    const termo = S.q;
+    if (termo.length < 3) { HIST = { q: "", itens: [], carregando: false }; renderHist(); return; }
+    HIST = { q: termo, itens: [], carregando: true }; renderHist();
+    histT = setTimeout(async () => {
+      try {
+        const r = await fetch(`/api/financeiro/pagar?buscar=${encodeURIComponent(termo)}`, { cache: "no-store" });
+        const j = await r.json(); if (!r.ok) throw new Error(j.error ?? "HTTP " + r.status);
+        if (S.q === termo) { HIST = { q: termo, itens: j.itens ?? [], carregando: false }; renderHist(); }
+      } catch (e) { if (S.q === termo) { HIST = { q: termo, itens: [], carregando: false, erro: e.message }; renderHist(); } }
+    }, 350);
+  }
+  function renderHist() {
+    const tb = q("tbl"); if (!tb) return;
+    let el = q("tblHist");
+    if (!el) { el = document.createElement("div"); el.id = "tblHist"; (tb.closest(".tbl") || tb).insertAdjacentElement("afterend", el); }
+    if (!HIST.q) { el.innerHTML = ""; return; }
+    if (HIST.carregando) { el.innerHTML = `<div class="sub2" style="padding:12px 4px">Procurando “${esc(HIST.q)}” em todos os títulos (pagos e vencidos)…</div>`; return; }
+    if (HIST.erro) { el.innerHTML = `<div class="sub2" style="padding:12px 4px;color:#f87171">Busca no histórico falhou: ${esc(HIST.erro)}</div>`; return; }
+    const abertos = new Set(rows.filter((r) => !r.paid).map((r) => r.ref));
+    const it = HIST.itens.filter((x) => !abertos.has(x.ref) && empOk({ emp: x.emp }));
+    const SIT = { pago: ["Pago", "#22c55e"], atrasado: ["Vencido", "#f87171"], aberto: ["Em aberto", "#cbd5e1"], cancelado: ["Cancelado", "#94a3b8"] };
+    const dbr = (s) => (s ? new Date(String(s).slice(0, 10) + "T12:00:00").toLocaleDateString("pt-BR") : "—");
+    el.innerHTML = `<div style="margin-top:18px"><div style="display:flex;gap:10px;align-items:baseline;margin:0 4px 8px"><b>Histórico de “${esc(HIST.q)}”</b><span class="sub2">${it.length} título(s) fora da lista acima — pagos, cancelados e vencidos antigos · ${brl(it.reduce((s, x) => s + Number(x.valor || 0), 0))}${HIST.itens.length >= 400 ? " · mostrando os 400 mais próximos de hoje" : ""}</span></div>
+      ${it.length ? `<div class="tbl" style="max-height:520px"><table class="num"><thead><tr><th>Vencimento</th><th>Emp.</th><th>Fornecedor</th><th>Categoria</th><th>Documento</th><th>Situação</th><th class="r">Valor</th><th class="r">Saldo</th></tr></thead><tbody>${it.map((x) => { const s = SIT[x.situacao] || [x.situacao, "#cbd5e1"];
+        return `<tr><td>${dbr(x.venc)}</td><td><span class="emp ${esc(x.emp)}">${esc(x.emp)}</span></td><td style="font-weight:500">${esc(x.forn)}</td><td style="color:var(--tx2)">${esc(x.cat || "Sem categoria")}</td><td class="mono">${esc(x.doc || "—")}${x.parc ? ` <span class="sub2">· ${esc(x.parc)}</span>` : ""}</td><td><span style="color:${s[1]};font-weight:600">${s[0]}</span>${x.situacao === "pago" && x.pago_em ? `<div class="sub2">em ${dbr(x.pago_em)}</div>` : ""}</td><td class="r">${brl(Number(x.valor || 0))}</td><td class="r">${Number(x.saldo) > 0.004 ? brl(Number(x.saldo)) : "—"}</td></tr>`; }).join("")}</tbody></table></div>` : `<div class="sub2" style="padding:4px">Nada além do que está na lista acima.</div>`}</div>`;
+  }
   const nfLbl = (r) => (r.etapa ? (["60", "80"].includes(r.etapa) ? "Recebida" : r.etapa === "40" ? "Emitida" : "Sem NF") : r.tipo === "NFE" ? "NF-e (sem PC)" : "—");
   const COLV = { dias: (r) => r.d.toLocaleDateString("pt-BR"), emp: (r) => r.emp, forn: (r) => r.forn, cat: (r) => r.cat || "Sem categoria", pc: (r) => (r.pc ? "PC " + r.pc : "(sem PC)"), etapa: nfLbl, pst: (r) => PST[r.st].l, conta: (r) => r.conta, bank: (r) => (r.bank ? bankDesc(r.bank) : "(sem banco)") };
   const COLN = { dias: "Previsão", emp: "Empresa", forn: "Fornecedor", cat: "Categoria", pc: "Compra", etapa: "NF", pst: "Pagamento", conta: "Conta prevista", bank: "Banco p/ pagar", v: "Valor" };
@@ -433,6 +464,7 @@ export function montarPagarV3(o: Opts) {
     qa("#tbl th[data-k]").forEach((h) => (h.onclick = () => { const key = h.dataset.k; S.sort = S.sort.k === key ? { k: key, dir: -S.sort.dir } : { k: key, dir: key === "v" ? -1 : 1 }; renderTable(); }));
     q("tblFoot").textContent = `${a.length} títulos · ${brl(sum(a))} · liberados ${brl(sum(a.filter((r) => ["ok", "dir"].includes(r.st))))}${a.length > 400 ? " · mostrando 400" : ""}`;
     q("tcTit").textContent = pre.length;
+    renderHist();
     renderAbar();
   }
   async function programar(rs, cod) {
@@ -652,7 +684,9 @@ export function montarPagarV3(o: Opts) {
       else if (c.length) { const p = c.find((x) => x.r.id === m.pick) || c[0]; const r = p.r;
         right = `<div class="cand">${c.length > 1 ? `<select data-pick="${ix}">${c.map((x) => `<option value="${x.r.id}" ${x.r.id === m.pick ? "selected" : ""}>${esc(x.r.forn.slice(0, 30))} · ${x.r.emp} · venc ${dm(x.r.d)}</option>`).join("")}</select><span class="sub2">${c.length} títulos com o mesmo valor — confira</span>` : `<span class="f">${esc(r.forn)} <span class="score ${p.sc < 85 ? "mid" : ""}">${p.sc}%</span></span><span class="sub2">${r.emp} · venc. ${dm(r.d)} · ${esc(r.cat || "Sem categoria")} ${bank && r.emp !== bank.emp ? '<span style="color:#f59e0b">· título de ' + r.emp + " pago por conta " + bank.emp + "</span>" : ""}</span>`}</div>`;
         act = `<button class="btn sm" data-ign="${ix}" data-mot="Ignorado manualmente">Ignorar</button><button class="btn ok sm" data-ok="${ix}">Conciliar</button>`; }
-      else { right = `<span class="sub2">Nenhum título em aberto com este valor${m.casado > 0 ? ` (restam ${brl(-m.v - m.casado)})` : ""}</span>`; act = `<button class="btn sm" data-ign="${ix}" data-mot="Sem título — lançar despesa">Lançar despesa</button>`; }
+      else { right = `<span class="sub2">Nenhum título em aberto com este valor${m.casado > 0 ? ` (restam ${brl(-m.v - m.casado)})` : ""}</span>`; act = `<button class="btn sm" data-ign="${ix}" data-mot="Sem título — lançar despesa">Lançar despesa</button>`;
+        // casado em parte (pagou com atraso): o resto vira juros/multa do título já casado (07/10/26)
+        if (m.casado > 0 && PODE.baixar) act += `<button class="btn ok sm" data-jur="${ix}" title="Lança a diferença como juros/multa no título já casado e fecha o movimento">Resto ${brl(-m.v - m.casado)} como juros</button>`; }
       if (est === "new") act = `<button class="btn sm" data-casar="${ix}" title="Casar: buscar título por nome, CNPJ, NF, PV/OS, valor ou vencimento (Omie + painel)">Casar…</button>` + act;
       return `<div class="mrow ${est === "done" ? "done" : est === "ign" ? "ign" : ""}"><span class="num">${dm(new Date(m.data + "T00:00:00"))}</span><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(m.memo)}">${esc(m.memo)}</span><span class="num" style="text-align:right;font-weight:650;color:${m.v < 0 ? "#f87171" : "#22c55e"}">${brl(m.v)}</span><span class="arr">→</span>${right}<span class="acts">${act}</span></div>`;
     }).join("")}</div>`}`;
@@ -671,6 +705,14 @@ export function montarPagarV3(o: Opts) {
     el.querySelectorAll("[data-casar]").forEach((b) => (b.onclick = () => window.dispatchEvent(new CustomEvent("conc:casar", { detail: { movimentoId: MOV[+b.dataset.casar].id } }))));
     el.querySelectorAll("[data-ign]").forEach((b) => (b.onclick = async () => { const m = MOV[+b.dataset.ign]; try { await api({ acao: "ignorar", movimento_id: m.id, ignorar: true, motivo: b.dataset.mot }); await carregarMov(); render(); } catch (e) { toast(e.message, true); } }));
     el.querySelectorAll("[data-reat]").forEach((b) => (b.onclick = async () => { const m = MOV[+b.dataset.reat]; try { await api({ acao: "ignorar", movimento_id: m.id, ignorar: false }); await carregarMov(); render(); } catch (e) { toast(e.message, true); } }));
+    el.querySelectorAll("[data-jur]").forEach((b) => (b.onclick = async () => {
+      const m = MOV[+b.dataset.jur]; b.disabled = true;
+      try {
+        const r = await fetch("/api/financeiro/conciliacao", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ acao: "juros_resto", movimento_id: m.id }) });
+        const j = await r.json(); if (!r.ok) throw new Error(j.error ?? "HTTP " + r.status);
+        toast(`Juros/multa de ${brl(Number(j.juros))} lançados em ${j.contraparte ?? "título"} — movimento conciliado`); await recarregarTudo();
+      } catch (e) { b.disabled = false; toast(e.message, true); }
+    }));
     el.querySelectorAll("[data-undo]").forEach((b) => (b.onclick = async () => { const m = MOV[+b.dataset.undo]; try { await api({ acao: "desfazer", movimento_id: m.id }); toast("Conciliação desfeita — baixas estornadas"); await recarregarTudo(); } catch (e) { toast(e.message, true); } }));
     el.querySelectorAll("[data-pick]").forEach((s) => (s.onchange = () => { MOV[+s.dataset.pick].pick = +s.value; renderConc(); }));
   }
@@ -726,7 +768,7 @@ export function montarPagarV3(o: Opts) {
   seg("empSeg", "emp", () => { S.rkOpen = null; }); seg("agMode", "agMode", () => (S.agSel = 0)); seg("vcEmp", "vcEmp", () => { S.vcCut = null; S.rkOpen = null; });
   seg("vcRange", "vcRange", () => { S.vcCut = null; S.rkOpen = null; }, 1); seg("rkDim", "rkDim", () => (S.rkOpen = null));
   seg("tPer", "per", () => { S.filter = null; S.kpi = null; S.st = "all"; });
-  q("q").oninput = (e) => { S.q = e.target.value.trim().toLowerCase(); render(); };
+  q("q").oninput = (e) => { S.q = e.target.value.trim().toLowerCase(); render(); buscarHist(); };
 
   render();
   (async () => { await carregar(); await Promise.all([carregarMov(), carregarBaixas()]); if (vivo) render(); })();
