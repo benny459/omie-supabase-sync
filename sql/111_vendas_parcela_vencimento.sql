@@ -1,4 +1,4 @@
--- 108 · Previsão de recebimento (vencimento) de uma parcela de PV/OS nativo (07/10/26, Benny).
+-- 111 · Previsão de recebimento (vencimento) de uma parcela de PV/OS nativo (07/10/26, Benny).
 --
 -- Operação › Projetos › "Vendas do projeto (PV/OS)": cada parcela tem a previsão de
 -- faturamento (a da carteira do Faturamento — orders.fat_previsao_override, sql/72) e a
@@ -9,7 +9,7 @@
 -- (Financeiro › Receber › Editar, sql/80), e a tela usa esse caminho.
 --
 -- Até esta função existir, a tela muda só a data da parcela no Fluxo de caixa do
--- projeto (approval.projeto_plano_parcela.dt_ajustada) e avisa que falta a sql/108.
+-- projeto (approval.projeto_plano_parcela.dt_ajustada) e avisa que falta a sql/111.
 
 create or replace function orders.vendas_parcela_vencimento(p_parcela bigint, p_vencimento date, p_por text default null)
 returns jsonb language plpgsql security definer set search_path to '' as $$

@@ -9,7 +9,7 @@
 //                 o prazo: se o recebimento não tinha nova previsão, ele anda junto.
 //   recebimento → approval.projeto_plano_parcela.dt_ajustada (o ajuste que a reimportação
 //                 do CRM preserva e que manda no Fluxo de caixa do projeto); e mais:
-//                 nativo ainda não faturado → vendas.parcelas.vencimento (sql/108);
+//                 nativo ainda não faturado → vendas.parcelas.vencimento (sql/111);
 //                 faturado → vencimento do título a receber (Financeiro › Editar, sql/80).
 // O Omie nunca é escrito.
 
@@ -108,7 +108,7 @@ export async function POST(req: Request) {
     } else if (doc.parcela_id && alvo) {
       const { error } = await supaAdmin().schema("orders").rpc("vendas_parcela_vencimento", { p_parcela: doc.parcela_id, p_vencimento: alvo, p_por: email });
       if (error) avisos.push(/vendas_parcela_vencimento|function/.test(error.message)
-        ? "a parcela do PV/OS ainda não guarda a data (falta aplicar a sql/108) — o fluxo de caixa já usa a nova"
+        ? "a parcela do PV/OS ainda não guarda a data (falta aplicar a sql/111) — o fluxo de caixa já usa a nova"
         : `parcela do PV/OS: ${error.message}`);
     }
     if (!(await gravarReceb(data))) avisos.push("sem parcela do plano ligada — o Fluxo de caixa não tem onde mudar");
