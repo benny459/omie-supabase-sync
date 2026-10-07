@@ -4,6 +4,7 @@
 import { NextResponse } from "next/server";
 import { supaServer } from "@/lib/supabase-server";
 import { fetchBudgetsDoCrm } from "@/lib/crm-fechamento";
+import { supaAdmin } from "@/lib/supabase-admin";
 
 export const runtime = "nodejs";
 
@@ -101,9 +102,20 @@ export async function GET(req: Request) {
       if (r) { r.budget_custos = Number(b.valor_budget); r.origem = "painel"; }
       else { const n = { key: k, budget_custos: Number(b.valor_budget), valor_total_projeto: null, resultado_bruto_esperado: null, resultado_bruto_esperado_pct: null, origem: "painel" }; rows.push(n); porKey.set(k, n); }
     }
+    // linha com nº de PC digitado só sai do "projetado" se esse PC existe de fato (igual à
+    // Lista de materiais — sugestão que não casou com nenhum PC continua a comprar)
+    const linhasIts = (its.data ?? []) as { empresa: string; codigo_projeto: number; qtd: number | null; cat_valor_unit: number | null; pc_numero: string | null }[];
+    const nums = [...new Set(linhasIts.flatMap((i) => String(i.pc_numero ?? "").split(",").map((x) => `${i.empresa}|${x.trim()}`)).filter((x) => !x.endsWith("|")))].slice(0, 400);
+    const existe = new Set<string>();
+    await Promise.all(nums.map(async (k) => {
+      const [emp, num] = k.split("|");
+      const { data } = await supaAdmin().schema("orders").rpc("compras_id_por_numero", { p_empresa: emp, p_numero: num, p_tipo: "PC" });
+      if (data) existe.add(k);
+    }));
     const est = new Map<string, number>();
-    for (const i of ((its.data ?? []) as { empresa: string; codigo_projeto: number; qtd: number | null; cat_valor_unit: number | null; pc_numero: string | null }[])) {
-      if (String(i.pc_numero ?? "").trim()) continue;
+    for (const i of linhasIts) {
+      const pcs = String(i.pc_numero ?? "").split(",").map((x) => x.trim()).filter(Boolean);
+      if (pcs.some((n) => existe.has(`${i.empresa}|${n}`))) continue;
       const k = `${i.empresa}|${i.codigo_projeto}`;
       est.set(k, (est.get(k) ?? 0) + (Number(i.qtd) || 0) * (Number(i.cat_valor_unit) || 0));
     }

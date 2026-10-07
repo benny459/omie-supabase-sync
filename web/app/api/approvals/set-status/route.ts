@@ -147,13 +147,17 @@ export async function POST(req: Request) {
     const pcNum = (ped as { cnumero?: string | null } | null)?.cnumero ?? null;
 
     if (codProj) {
+      // 07/10/26 (Benny): projeto de obra (PJ) não exige mais o fluxo aprovado para aprovar
+      // PC — o Benny aprova o fluxo à parte; vale só o budget (abaixo).
+      const { data: pj } = await admin3.schema("finance").from("projetos").select("nome").eq("codigo", codProj).limit(1).maybeSingle();
+      const deObra = ehProjetoDeObra((pj as { nome?: string } | null)?.nome);
       const { data: fl } = await admin3
         .schema("approval").from("projeto_fluxo")
         .select("status, versao")
         .eq("empresa", body.empresa).eq("codigo_projeto", codProj)
         .maybeSingle();
       const f = fl as { status?: string; versao?: number } | null;
-      if (f && f.status !== "aprovado") {
+      if (f && f.status !== "aprovado" && !deObra) {
         const comoEsta = f.status === "pendente" ? "está aguardando aprovação"
                        : f.status === "rejeitado" ? "foi rejeitado"
                        : "ainda está em rascunho";
@@ -167,8 +171,7 @@ export async function POST(req: Request) {
       /* 07/10/26 — aprovação por PROJETO (lib/aprovacao-projeto-regra): o projeto inteiro
          tem de caber no budget de materiais (comprometido + este PC). Estourou → só
          administrador aprova; os demais recebem o motivo e o PC fica pendente. */
-      const { data: pj } = await admin3.schema("finance").from("projetos").select("nome").eq("codigo", codProj).limit(1).maybeSingle();
-      if (pcNum && ehProjetoDeObra((pj as { nome?: string } | null)?.nome)) {
+      if (pcNum && deObra) {
         try {
           const av = await avaliarPcProjeto(body.empresa, Number(codProj), String(pcNum), body.valorPc ?? null);
           if (!av.aprova && av.estouro > 0) {

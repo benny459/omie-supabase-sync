@@ -11,9 +11,9 @@ test("estoura o budget: pendente com o valor do estouro", () => {
   const d = regraProjeto({ fluxoStatus: "aprovado", budget: 60879.25, comprometidoOutros: 61590.02, valorPc: 1000 });
   assert.equal(d.aprova, false); assert.equal(d.estouro, 1710.77); assert.match(d.motivo, /estoura o budget do projeto em R\$\s?1\.710,77/);
 });
-test("fluxo não aprovado não libera, mesmo dentro do budget", () => {
-  assert.equal(regraProjeto({ fluxoStatus: "pendente", budget: 100000, comprometidoOutros: 0, valorPc: 10 }).aprova, false);
-  assert.match(regraProjeto({ fluxoStatus: null, budget: 100000, comprometidoOutros: 0, valorPc: 10 }).motivo, /não foi lançado/);
+test("fluxo não é condição: pendente ou sem fluxo, dentro do budget, aprova", () => {
+  assert.equal(regraProjeto({ fluxoStatus: "pendente", budget: 100000, comprometidoOutros: 0, valorPc: 10 }).aprova, true);
+  assert.equal(regraProjeto({ fluxoStatus: null, budget: 100000, comprometidoOutros: 0, valorPc: 10 }).aprova, true);
 });
 test("sem budget não aprova sozinho", () => {
   assert.equal(regraProjeto({ fluxoStatus: "aprovado", budget: null, comprometidoOutros: 0, valorPc: 10 }).aprova, false);

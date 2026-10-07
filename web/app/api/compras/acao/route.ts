@@ -120,7 +120,7 @@ async function aprovar(q: Quem, req: Request, ids: number[], status: string) {
         if (!q.perms.is_admin && !q.pode["compras.aprovar"]) { falhas.push({ num: p.num, erro: "Sem permissão para aprovar compras" }); continue; }
         try {
           const av = await avaliarPcProjeto(p.emp, Number(p.projCod), p.num, Number(p.valor) || 0);
-          if (!av.aprova && !q.perms.is_admin && (av.estouro > 0 || (av.fluxoStatus != null && av.fluxoStatus !== "aprovado"))) {
+          if (!q.perms.is_admin && av.estouro > 0) {
             falhas.push({ num: p.num, erro: `${av.motivo} — fica pendente para os administradores` }); continue;
           }
         } catch (e) { if (!q.perms.is_admin) { falhas.push({ num: p.num, erro: `não consegui conferir o budget do projeto: ${(e as Error).message}` }); continue; } }

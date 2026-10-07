@@ -1,20 +1,21 @@
 // Aprovação de PC de PROJETO — regra pura (07/10/26, decisão do Benny).
 //
-// PC de projeto não vai para o aprovador da área: quem libera as compras do
-// projeto é o FLUXO aprovado ("Aprovar o fluxo é o que libera a aprovação dos
-// pedidos de compra deste projeto"), desde que o projeto inteiro caiba no budget
+// PC de projeto não vai para o aprovador da área: quem tem a permissão de aprovar
+// compras do projeto (Marcelo) aprova, desde que o projeto inteiro caiba no budget
 // de materiais. Não há comparação item a item (nem PC × RC, nem PC × lista).
-//   aprova  ⇔ fluxo aprovado  E  comprometido (sem este PC) + este PC ≤ budget × (1 + tolerância)
-//   senão   → fica pendente para os administradores, com o motivo.
-// Usada na aprovação manual (Operação/Projetos e Compras) e pela Aria.
+//   aprova  ⇔ comprometido (sem este PC) + este PC ≤ budget × (1 + tolerância)
+//   estourou → só administrador aprova, com "estoura o budget do projeto em R$ X".
+// O fluxo aprovado NÃO é condição (EXIGE_FLUXO_APROVADO = false, 07/10/26).
+// Usada na aprovação manual (Operação/Projetos e Compras). A Aria não aprova PC de projeto.
 // Testada em scripts/testes/aprovacao-projeto.test.ts.
 
 /** Só projeto de obra (PJ…) segue esta regra. "41_VP", "47_CONTRATUAL", "45_GARANTIA" e
  *  afins são projetos-conta do Omie: continuam com a regra de sempre (alçada / avulsos). */
 export const ehProjetoDeObra = (nome: string | null | undefined) => /^\s*PJ\s*\d/i.test(String(nome ?? ""));
 
-/** Fluxo de caixa do projeto tem de estar aprovado. */
-export const EXIGE_FLUXO_APROVADO = true;
+/** Fluxo de caixa do projeto tem de estar aprovado? (07/10/26, Benny: NÃO — ele aprova o
+ *  fluxo à parte; quem aprova os PCs do projeto é o Marcelo, dentro do budget.) */
+export const EXIGE_FLUXO_APROVADO = false;
 /** Folga sobre o budget de materiais (0 = nenhuma). Ex.: 0.05 = 5%. */
 export const TOLERANCIA_BUDGET = 0;
 

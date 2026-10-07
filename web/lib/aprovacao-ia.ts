@@ -7,15 +7,12 @@
 // de Brasília), pelo botão "Aprovação automática (IA)" em Compras e pelo Cesar.
 // Idempotente: só toca o que continua pendente; nunca reaprova nem desfaz.
 //
-// PC de PROJETO (07/10/26, decisão do Benny): a mesma regra da aprovação manual
-// de projeto — fluxo aprovado e o projeto inteiro cabendo no budget de materiais
-// (lib/aprovacao-projeto-regra). Sem comparação item a item. Estourou ou sem fluxo
-// aprovado → fica pendente para os administradores, com o motivo no log.
+// PC de projeto de obra (PJ): a Aria NÃO aprova (07/10/26, Benny) — fica com o Marcelo,
+// pela regra do budget do projeto (lib/aprovacao-projeto-regra).
 // Nada é gravado no Omie.
 import { randomUUID } from "node:crypto";
 import { rpc, posGravar } from "@/lib/compras-server";
 import { postWebexMessage, buildApprovalMarkdown } from "@/lib/webex";
-import { contextoProjeto, avaliarComContexto } from "@/lib/aprovacao-projeto";
 import { ehProjetoDeObra } from "@/lib/aprovacao-projeto-regra";
 
 export const AGENTE_IA = "Aria";
@@ -32,39 +29,8 @@ export type LinhaRodada = CandidatoIA & { decisao: "aprovado" | "elegivel" | "pu
 /** Só os PCs ainda pendentes (os já decididos ficam fora da lista e do log). */
 export async function candidatosIA(dias = 30): Promise<CandidatoIA[]> {
   const todos = await rpc<CandidatoIA[]>("compras_auto_aprov_candidatos", { p_dias: dias });
-  const avulsos = (todos ?? []).filter((c) => c.pendente);
-  const jaTem = new Set(avulsos.map((c) => `${c.empresa}|${c.pc}`));
-  const projeto = await candidatosProjetoIA(dias).catch(() => [] as CandidatoIA[]);
-  return [...avulsos, ...projeto.filter((c) => !jaTem.has(`${c.empresa}|${c.pc}`))];
-}
-
-type PedLista = { id: number; tipo: string; num: string; emp: string; aprov: string; proj?: string | null; emissao?: string | null };
-type PedCompleto = { id: number; num: string; emp: string; origem: string; projCod?: number | null; proj?: string | null; forn?: string | null;
-  parc?: string | null; pv?: string | null; valor?: number | null; ncodPed?: number | null; emissao?: string | null; aprov?: string | null };
-
-/** PCs de projeto pendentes nos últimos `dias`, avaliados pela regra do projeto. */
-export async function candidatosProjetoIA(dias = 30): Promise<CandidatoIA[]> {
-  const desde = new Date(Date.now() - dias * 86400000).toISOString().slice(0, 10);
-  const lista = ((await rpc<PedLista[]>("compras_lista", { p_desde: desde })) ?? [])
-    .filter((p) => p.tipo === "PC" && (p.aprov === "aguardando" || p.aprov === "nao_solicitada") && ehProjetoDeObra(p.proj)
-      && (!p.emissao || p.emissao >= desde));
-  const ctxs = new Map<string, Awaited<ReturnType<typeof contextoProjeto>>>();
-  const out: CandidatoIA[] = [];
-  for (const l of lista.slice(0, 80)) {
-    const p = await rpc<PedCompleto | null>("compras_pedido", { p_id: l.id }).catch(() => null);
-    if (!p?.projCod) continue;
-    const chave = `${p.emp}|${p.projCod}`;
-    let ctx = ctxs.get(chave);
-    if (!ctx) { ctx = await contextoProjeto(p.emp, Number(p.projCod)); ctxs.set(chave, ctx); }
-    const av = avaliarComContexto(ctx, p.num, Number(p.valor) || 0);
-    out.push({
-      empresa: p.emp, pc: p.num, pedido_id: p.id, origem: p.origem, ncods: p.ncodPed ? [Number(p.ncodPed)] : [],
-      fornecedor: p.forn ?? null, valor_pc: av.valorPc, cmp_pc: av.total, cmp_rc: av.teto, base: "projeto",
-      condicao: p.parc ?? null, faturada: false, pv_os: p.pv ?? null, projeto: p.proj ?? null, incluido: p.emissao ?? null,
-      pendente: true, elegivel: av.aprova, motivo: av.aprova ? av.motivo : `projeto: ${av.motivo}`,
-    });
-  }
-  return out;
+  // 07/10/26 (Benny): a Aria NÃO aprova PC de projeto de obra (PJ) — quem aprova é o Marcelo.
+  return (todos ?? []).filter((c) => c.pendente && !ehProjetoDeObra(c.projeto));
 }
 
 /** Simula (aplicar=false) ou aprova os elegíveis. Sempre grava o log da rodada. */

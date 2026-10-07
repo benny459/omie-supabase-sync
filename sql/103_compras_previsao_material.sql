@@ -7,7 +7,7 @@
 -- • PC importado do Omie: a previsão do Omie fica intocada (nada vai ao Omie); a remarcação
 --   continua no campo "Nova prev. materiais" da aprovação (approvals.custom_fields.s4b87bk9),
 --   que o Compras passa a mostrar ao lado da previsão do Omie.
--- Histórico em compras.historico. Migração p103_compras_previsao_material — aplicar após o OK.
+-- Histórico em compras.historico. Aplicada em 07/10/26 como migração p103_compras_previsao_material.
 
 create or replace function orders.compras_previsao_salvar(p_empresa text, p_numero text, p_previsao date, p_por text)
 returns jsonb language plpgsql security definer set search_path = '' as $$
