@@ -294,7 +294,7 @@ export default function NovaEmissao({ config, aberto, fechar, avisar, onEmitido,
     setTransp({ modalidade: 9 }); setRet({ iss_retido: false }); setPedidoCli(""); setObs(""); setInfoContrib("");
     setHist(null); setPre(null); setAviso(null); setCliCodigo(""); setProposta(""); setBase(hoje());
     setNfRef(null); setNfBusca(""); setNfLista(null); setMotivo(""); setCliProjeto(""); setGeraCob(false);
-    setFormaPorParcela(false); setItBusca(null); setItSug(null); setDicas({});
+    setFormaPorParcela(false); setItBusca(null); setItSug(null); setDicas({}); setParcelaDoc(null); setParcsProj(null);
   }
 
   /** Preenche a folha a partir de um PV/OS da carteira (gaveta ou "Faturar um existente"). */
@@ -819,7 +819,7 @@ export default function NovaEmissao({ config, aberto, fechar, avisar, onEmitido,
     return {
       v: 1, empresa, tipo, modo, cliCodigo, semProp, semPropMotivo, chave, rotulo, cli, itens, proposta, base, cond, forma,
       parcs, formaPorParcela, conta, categoria, projeto, centro, vendedor, contrato, desconto, frete, outras, transp, ret,
-      pedidoCli, obs, infoContrib, operacao, nfRef, motivo, cliProjeto, geraCob, criado,
+      pedidoCli, obs, infoContrib, operacao, nfRef, motivo, cliProjeto, geraCob, criado, parcelaDoc, parcsProj,
     };
   }
   type EstadoRasc = ReturnType<typeof estadoRascunho>;
@@ -836,6 +836,18 @@ export default function NovaEmissao({ config, aberto, fechar, avisar, onEmitido,
     setVendedor(p.vendedor ?? ""); setContrato(p.contrato ?? ""); setDesconto(p.desconto ?? 0); setFrete(p.frete ?? 0); setOutras(p.outras ?? 0);
     if (p.transp) setTransp(p.transp); if (p.ret) setRet(p.ret); setPedidoCli(p.pedidoCli ?? ""); setObs(p.obs ?? ""); setInfoContrib(p.infoContrib ?? "");
     setNfRef(p.nfRef ?? null); setMotivo(p.motivo ?? ""); setCliProjeto(p.cliProjeto ?? ""); setGeraCob(!!p.geraCob);
+    setParcelaDoc(p.parcelaDoc ?? null); setParcsProj(p.parcsProj ?? null);
+    // Rascunho de projeto salvo antes de guardar a parcela (07/10/26): busca as parcelas do fechamento
+    // de novo — sem elas a emissão não sabe qual parcela a nota fatura.
+    if (p.chave && !p.parcelaDoc) {
+      const chaveR = p.chave;
+      fetch("/api/faturamento/carteira", { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ empresa: p.empresa ?? empresa, chave: chaveR, acao: "doc" }) }).then((x) => x.json()).then((r) => {
+        if (!r?.parcelas_projeto?.length || !r.documento) return;
+        iniRef.current = { chave: chaveR, documento: r.documento, rotulo: p.rotulo ?? undefined, parcelas_projeto: r.parcelas_projeto } as Inicial;
+        setParcsProj(r.parcelas_projeto); setParcelaDoc(r.documento.parcela_doc ?? null);
+      }).catch(() => null);
+    }
   }
   const temConteudo = () => !!(cli.nome || itens.some((i) => i.descricao));
   async function salvarRascunho(silencioso = false): Promise<boolean> {
@@ -951,7 +963,7 @@ export default function NovaEmissao({ config, aberto, fechar, avisar, onEmitido,
     const seg = Math.round((agora - tx.inicio) / 1000);
     const msg = String(tx.erro ?? e.mensagem ?? "");
     const dica = mal ? dicaRejeicao(`${e.focus_status ?? ""} ${msg}`) : null;
-    const recibo = e.tipo === "recibo" || osCriada;
+    const recibo = e.tipo === "recibo" || (!e.tipo && tipo === "recibo") || osCriada;
     return (
       <div className="ne-fundo" onClick={(ev) => { if (ev.target === ev.currentTarget) sair(); }}>
         <div className="ne-folha" role="dialog" aria-label="Transmissão">
