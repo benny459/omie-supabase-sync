@@ -447,7 +447,10 @@ function Dica({ c, active, payload, label }: {
   };
   return (
     <div style={{ background: c.surface, border: `1px solid ${c.gridline}`, borderRadius: 8, padding: "8px 10px", fontSize: 11.5, color: c.ink, boxShadow: "0 6px 20px rgba(0,0,0,.12)" }}>
-      <div style={{ color: c.inkMuted, fontSize: 10.5, marginBottom: 4 }}>{label}</div>
+      {/* o rótulo do recharts vem como índice (dois eixos X) — usa o do período */}
+      <div style={{ color: c.inkMuted, fontSize: 10.5, marginBottom: 4 }}>
+        {/^\d{2}\/\d{2}$/.test(l.x) ? `semana de ${l.x}` : l.x}
+      </div>
       <table style={{ fontVariantNumeric: "tabular-nums" }}>
         <thead>
           <tr style={{ color: c.inkFaint, fontSize: 10 }}>
