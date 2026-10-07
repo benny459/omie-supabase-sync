@@ -64,9 +64,26 @@ export async function montar(empresa: string, codigo: number): Promise<{ docs: V
     ...((pvs.data ?? []) as { codigo_pedido: number }[]).map((p) => Number(p.codigo_pedido)),
     ...((oss.data ?? []) as { codigo_os: string }[]).map((o) => Number(o.codigo_os)),
   ].filter((c) => Number.isFinite(c) && c > BASE);
-  const nativos = (await Promise.all([...new Set(codsNat)].map(async (c) =>
-    (await adm.schema("orders").rpc("vendas_documento", { p_id: c - BASE })).data as Record<string, unknown> | null)))
-    .filter((d): d is Record<string, unknown> => !!d && d.status !== "cancelado");
+  /* 07/10/26 (perf): o resto em UMA rodada paralela — documentos nativos, previsões corrigidas
+     (override da carteira) e títulos a receber das NFs (numa consulta só). */
+  const chavesPrev = [
+    ...[...new Set(codsNat)].map((c) => `venda:${c - BASE}`),
+    ...((pvs.data ?? []) as { codigo_pedido: number }[]).filter((p) => Number(p.codigo_pedido) < BASE).map((p) => `pv_omie:${p.codigo_pedido}`),
+    ...((oss.data ?? []) as { codigo_os: string }[]).filter((o) => !(Number(o.codigo_os) >= BASE)).map((o) => `os_omie:${o.codigo_os}`),
+  ];
+  const nfsPrev = [...new Set(((omie.data ?? []) as { num_nfe: string | null; faturado: boolean }[])
+    .filter((v) => v.num_nfe).flatMap((v) => [String(v.num_nfe), dig(v.num_nfe)]).filter(Boolean))];
+  const lista = nfsPrev.map((n) => `"${n.replace(/"/g, "")}"`).join(",");
+  const consultaTit = () => adm.schema("finance").from("v_receber_bruto")
+    .select("id, numero_documento, numero_documento_fiscal, vencimento, valor_documento, val_aberto, status_titulo")
+    .eq("empresa", empresa).or(`numero_documento_fiscal.in.(${lista}),numero_documento.in.(${lista})`).limit(500);
+  const [natRaw, ovRes, titRes0] = await Promise.all([
+    Promise.all([...new Set(codsNat)].map(async (c) =>
+      (await adm.schema("orders").rpc("vendas_documento", { p_id: c - BASE })).data as Record<string, unknown> | null)),
+    chavesPrev.length ? adm.schema("orders").from("fat_previsao_override").select("chave, previsao").in("chave", chavesPrev) : Promise.resolve({ data: [], error: null }),
+    nfsPrev.length ? consultaTit() : Promise.resolve({ data: [], error: null }),
+  ]);
+  const nativos = natRaw.filter((d): d is Record<string, unknown> => !!d && d.status !== "cancelado");
 
   const docs: VendaProjeto[] = [];
   const vistos = new Set<string>();
@@ -103,10 +120,8 @@ export async function montar(empresa: string, codigo: number): Promise<{ docs: V
     });
   }
   // Nova previsão de faturamento = a da carteira (override)
-  const chaves = docs.map((d) => d.chave).filter(Boolean);
-  if (chaves.length) {
-    const { data } = await adm.schema("orders").from("fat_previsao_override").select("chave, previsao").in("chave", chaves);
-    const ov = new Map(((data ?? []) as { chave: string; previsao: string }[]).map((o) => [o.chave, dia(o.previsao)]));
+  {
+    const ov = new Map(((ovRes.data ?? []) as { chave: string; previsao: string }[]).map((o) => [o.chave, dia(o.previsao)]));
     for (const d of docs) d.fat_nova = ov.get(d.chave) ?? null;
   }
   // Parcela do plano de cada documento: nativo pelo nº do evento; senão mesmo valor, na ordem das datas
@@ -128,13 +143,17 @@ export async function montar(empresa: string, codigo: number): Promise<{ docs: V
      "vencimento indisponível" — nunca outra data no lugar. */
   const fats = docs.filter((d) => d.faturado && d.nf);
   if (fats.length) {
-    const nfs = [...new Set(fats.flatMap((d) => [String(d.nf), dig(d.nf)]).filter(Boolean))];
-    const lista = nfs.map((n) => `"${n.replace(/"/g, "")}"`).join(",");
-    const consulta = () => adm.schema("finance").from("v_receber_bruto")
-      .select("id, numero_documento, numero_documento_fiscal, vencimento, valor_documento, val_aberto, status_titulo")
-      .eq("empresa", empresa).or(`numero_documento_fiscal.in.(${lista}),numero_documento.in.(${lista})`).limit(500);
-    let r = await consulta();
-    if (r.error) r = await consulta();
+    let r = titRes0 as { data: unknown; error: unknown };
+    // NF que não veio na lista do espelho (nativo recém-faturado): consulta de novo com todas
+    const faltam = fats.some((d) => !nfsPrev.includes(dig(d.nf)) && !nfsPrev.includes(String(d.nf)));
+    if (r.error || faltam) {
+      const todas = [...new Set([...nfsPrev, ...fats.flatMap((d) => [String(d.nf), dig(d.nf)])].filter(Boolean))].map((n) => `"${n.replace(/"/g, "")}"`).join(",");
+      const de = () => adm.schema("finance").from("v_receber_bruto")
+        .select("id, numero_documento, numero_documento_fiscal, vencimento, valor_documento, val_aberto, status_titulo")
+        .eq("empresa", empresa).or(`numero_documento_fiscal.in.(${todas}),numero_documento.in.(${todas})`).limit(500);
+      r = await de();
+      if (r.error) r = await de();
+    }
     if (r.error) { for (const d of fats) d.titulo_indisponivel = true; }
     else {
       const ts = ((r.data ?? []) as TituloRow[]).filter((t) => !["EXCLUIDO", "CANCELADO"].includes(String(t.status_titulo ?? "")));

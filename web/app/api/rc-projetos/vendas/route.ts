@@ -33,8 +33,8 @@ export async function GET(req: Request) {
   const codigo = Number(u.searchParams.get("codigo"));
   if (!Number.isFinite(codigo) || codigo <= 0) return NextResponse.json({ error: "codigo obrigatório" }, { status: 400 });
   try {
-    const { docs } = await montar(empresa, codigo);
-    const perms = await loadPerms();
+    // em paralelo: a montagem e as permissões
+    const [{ docs }, perms] = await Promise.all([montar(empresa, codigo), loadPerms()]);
     const pode: Record<string, boolean> = perms ? await permissoesDe(perms) : {};
     const admin = !!perms?.is_admin;
     return NextResponse.json({
