@@ -7,6 +7,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { ehNativo, idDoCodigo } from "@/lib/vendas";
+import { OcAnexosPainel } from "@/components/vendas/OcAnexos";
 
 type Row = Record<string, unknown>;
 type Item = {
@@ -375,7 +376,7 @@ export default function ErpListaView({ modulo }: { modulo: "vendas" | "compras" 
       {drawer && (
         <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setDrawer(null)}>
           <div onClick={e => e.stopPropagation()}
-               className="bg-ww-panel border border-ww-border rounded-xl shadow-2xl max-w-3xl w-full p-5 space-y-3 max-h-[88vh] flex flex-col">
+               className="bg-ww-panel border border-ww-border rounded-xl shadow-2xl max-w-3xl w-full p-5 space-y-3 max-h-[88vh] flex flex-col overflow-y-auto">
             <div className="flex items-start justify-between">
               <div>
                 <h3 className="font-semibold text-ww-text text-[14px]">
@@ -393,6 +394,12 @@ export default function ErpListaView({ modulo }: { modulo: "vendas" | "compras" 
               </div>
               <button onClick={() => setDrawer(null)} className="text-ww-textFaint hover:text-ww-text text-xl leading-none">×</button>
             </div>
+            {modulo === "vendas" && /^(PV|OS)\d+$/i.test(String(drawer.label ?? "")) && (
+              <details className="border border-ww-border rounded-lg px-3 py-2" open>
+                <summary className="cursor-pointer text-[12px] font-semibold text-ww-text">OC do cliente e anexos</summary>
+                <div className="mt-2"><OcAnexosPainel empresa={String(drawer.empresa ?? "SF")} label={String(drawer.label)} /></div>
+              </details>
+            )}
             <div className="overflow-y-auto border border-ww-border rounded-lg">
               <table className="w-full text-[12px]">
                 <thead>

@@ -110,6 +110,14 @@ Tudo fica numa aba só: **Lista de materiais** (a antiga aba “Compras × lista
 
 > **Atenção:** a numeração é única e sequencial (próximo PV e próxima OS). Não crie PV/OS no Omie — o número pode repetir.
 
+### OC do cliente e anexos do PV/OS
+
+- O cartão do pedido (Avulsos, nas vistas **Lista** e **✎ Edição**) mostra, embaixo do cliente, o **nº da OC do cliente** (ex.: **OC 4500931962**) e o clipe **📎** com quantos anexos o PV/OS tem.
+- Clique no **📎** para ver os anexos, **subir arquivo** (PDF, imagem, Office, e-mail — até 25 MB) ou **colar um link**. Marque se o anexo é a **OC do cliente** ou **outro**. O **✕** remove.
+- Na mesma janela dá para **corrigir o nº da OC**. Em PV/OS do Omie o número fica guardado no painel — **o Omie não é alterado**. Em PV/OS do painel, o nº também se edita no campo **Pedido / OC do cliente** do documento.
+- A OC e os anexos que entram pelo **CRM** aparecem aqui sozinhos (origem "CRM").
+- Os mesmos anexos aparecem em **ERP → Vendas** (gaveta do documento), no detalhe do PV/OS do painel (bloco **Anexos**) e no **Faturamento**.
+
 ## Perguntas frequentes
 
 **Não acho um pedido em Avulsos.** Confira a aba (Em aberto/Faturados/Todos) e limpe os filtros rápidos.

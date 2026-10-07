@@ -5,7 +5,7 @@ icone: 🧾
 area: erp
 rotas: /faturamento
 caminhos: web/components/faturamento, web/app/(app)/faturamento, web/app/api/faturamento, web/lib/faturamento
-atualizado: 2026-10-06
+atualizado: 2026-10-07
 ---
 
 > **Atenção:** a **NF-e da SF está em PRODUÇÃO** — o que você emitir é documento fiscal real. A numeração é sequencial e automática (NF-e, recibo, PV e OS continuam de onde o Omie parou). **Não emita mais NF-e nem recibo pelo Omie.**
@@ -22,6 +22,7 @@ atualizado: 2026-10-06
 - Visões: **Lista, Kanban, Emissões, NFS-e registradas**. Filtro rápido **Previsão atrasada** e **OS sem NFS-e**.
 - Clique num documento para abrir a gaveta. Ela mostra **o que vai sair na nota**: destinatário completo (CNPJ, IE, endereço, município/IBGE, e-mail, com **editar cadastro**), recebimento (condição, forma de pagamento, conta, parcelas com datas e valores, instrução de Pix/banco), operação (natureza, CFOP, frete/transportadora, OC, projeto, vendedor), itens com NCM e CFOP e as **informações complementares exatamente como saem**. Pendências (falta IE, CEP, IBGE, e-mail, NCM, forma de pagamento) aparecem no topo.
 - A gaveta também traz as notas (DANFE, XML, recibo — inclusive os antigos do Omie), recebimento e histórico.
+- **OC do cliente e anexos:** na coluna Cliente aparece **OC nº** (ou "sem OC") e o clipe **📎** com o número de anexos — clique para ver ou anexar. Na gaveta, a seção **OC do cliente e anexos** permite corrigir o nº da OC (nos do Omie fica guardado no painel, sem mexer no Omie), subir arquivo ou colar link.
 
 > **Importante:** não existe mais "Emitir" direto na lista ou na gaveta. O botão é **Revisar e emitir**: abre a folha completa já preenchida, onde você confere e edita tudo antes de emitir.
 

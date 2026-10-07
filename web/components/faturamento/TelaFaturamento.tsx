@@ -9,6 +9,7 @@ import RegistrarNfse from "@/components/faturamento/RegistrarNfse";
 import ContratosRecorrentes from "@/components/faturamento/ContratosRecorrentes";
 import LoteRecibos from "@/components/faturamento/LoteRecibos";
 import { baixarPdfs, baixarZip, pdfDoLink, type Baixado } from "@/lib/faturamento/baixar";
+import { OcAnexosPainel, OcChip, useOcResumo } from "@/components/vendas/OcAnexos";
 import "./faturamento.css";
 
 /* Faturamento PV & OS (05/10/2026) — conceito do mockup do Benny
@@ -30,7 +31,8 @@ type Nf = {
 };
 type Doc = {
   chave: string; codigo: number | string; tipo: "PV" | "OS"; rotulo: string; origem: string; etapa: string | null;
-  cliente: string | null; oc: string | null; valor: number; emissao: string | null; faturado: number;
+  cliente: string | null; oc: string | null; valor: number;
+  /** nº de anexos do PV/OS (sql/110) — sobreposto no cliente */ anexos?: number; emissao: string | null; faturado: number;
   nfs: Nf[]; pend: string[]; emite: boolean; emite_motivo?: string; descricao?: string | null;
   itens?: { desc: string | null; qtd: number | null; vt: number | null }[];
   /** OS: aceita NFS-e da prefeitura registrada no painel (sql/59). */
@@ -126,7 +128,7 @@ const MESES = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julh
 const EMPRESAS: Record<string, string> = { SF: "SafeWater", WW: "WaterWorks", CD: "CD" };
 
 export default function TelaFaturamento() {
-  const [docs, setDocs] = useState<Doc[] | null>(null);
+  const [docsBrutos, setDocs] = useState<Doc[] | null>(null);
   const [config, setConfig] = useState<ConfigFat[]>([]);
   const [pront, setPront] = useState<Pront | null>(null);
   const [emissoes, setEmissoes] = useState<Emissao[] | null>(null);
@@ -166,12 +168,21 @@ export default function TelaFaturamento() {
   const [lote, setLote] = useState<Doc[] | null>(null);
   const [secao, setSecao] = useState<"carteira" | "contratos">("carteira");
 
+  // OC do cliente guardada no painel e 📎 anexos (sql/110): sobrepõe a OC da
+  // carteira (que só conhece a do Omie / do documento nativo).
+  const ocItens = useMemo(() => (docsBrutos ?? []).map((d) => ({ empresa, label: d.rotulo })), [docsBrutos, empresa]);
+  const ocMapa = useOcResumo(ocItens);
+  const docs = useMemo(() => docsBrutos && (ocMapa.size ? docsBrutos.map((d) => {
+    const r = ocMapa.get(`${empresa}|${d.rotulo.toUpperCase()}`);
+    return r ? { ...d, oc: r.num_pedido_cliente ?? d.oc, anexos: r.anexos } : d;
+  }) : docsBrutos), [docsBrutos, ocMapa, empresa]);
+
   // Contas a receber de cada documento (sql/72) — carregadas depois da lista, em lotes.
   const [rec, setRec] = useState<Record<string, RecRes>>({});
   useEffect(() => {
-    if (!docs?.length) return;
+    if (!docsBrutos?.length) return;
     let vivo = true;
-    const labels = [...new Set(docs.map((d) => d.rotulo))];
+    const labels = [...new Set(docsBrutos.map((d) => d.rotulo))];
     const lotes: string[][] = [];
     for (let i = 0; i < labels.length; i += 80) lotes.push(labels.slice(i, i + 80));
     lotes.forEach((ls) => {
@@ -179,7 +190,7 @@ export default function TelaFaturamento() {
         .then((r) => (r.ok ? r.json() : {})).then((j) => { if (vivo) setRec((o) => ({ ...o, ...(j as Record<string, RecRes>) })); }).catch(() => null);
     });
     return () => { vivo = false; };
-  }, [docs, empresa]);
+  }, [docsBrutos, empresa]);
 
   const avisar = useCallback((m: string) => { setToast(m); window.setTimeout(() => setToast((t) => (t === m ? null : t)), 4200); }, []);
 
@@ -496,7 +507,7 @@ export default function TelaFaturamento() {
           </div>
         )}
 
-        {view === "list" && (docs ? <Lista rows={ordenados} sel={sel} setSel={setSel} sort={sort} setSort={setSort} abrir={setAberto} ocupado={ocupado} agir={agir} prod={prod} registrar={(d) => setRegNfse([d.chave])} salvarPrevisao={salvarPrevisao} rec={rec} revisar={abrirFolhaDe} rasc={rascChaves} /> : null)}
+        {view === "list" && (docs ? <Lista rows={ordenados} sel={sel} setSel={setSel} sort={sort} setSort={setSort} abrir={setAberto} ocupado={ocupado} agir={agir} prod={prod} registrar={(d) => setRegNfse([d.chave])} salvarPrevisao={salvarPrevisao} rec={rec} revisar={abrirFolhaDe} rasc={rascChaves} empresa={empresa} /> : null)}
         {view === "kanban" && (docs ? <Kanban rows={filtrados} abrir={setAberto} /> : null)}
         {view === "emissoes" && <Emissoes lista={emissoes} q={q} onMudou={carregar} avisar={avisar} />}
         {view === "nfse" && <NfseRegistradas empresa={empresa} q={q} onMudou={carregar} avisar={avisar} />}
@@ -728,8 +739,8 @@ function Acoes({ d, ocupado, abrir, prod, registrar, revisar }: { d: Doc; ocupad
   </>;
 }
 
-function Lista({ rows, sel, setSel, sort, setSort, abrir, ocupado, agir, prod, registrar, salvarPrevisao, rec, revisar, rasc }: {
-  rows: Doc[]; sel: Set<string>; setSel: (s: Set<string>) => void; sort: { k: string; d: 1 | -1 }; setSort: (s: { k: string; d: 1 | -1 }) => void;
+function Lista({ rows, sel, setSel, sort, setSort, abrir, ocupado, agir, prod, registrar, salvarPrevisao, rec, revisar, rasc, empresa }: {
+  empresa: string; rows: Doc[]; sel: Set<string>; setSel: (s: Set<string>) => void; sort: { k: string; d: 1 | -1 }; setSort: (s: { k: string; d: 1 | -1 }) => void;
   abrir: (k: string) => void; ocupado: string | null; agir: (d: Doc, a: "prevoo" | "ensaio" | "emitir") => unknown; prod: boolean; registrar: (d: Doc) => void;
   salvarPrevisao: (d: Doc, data: string | null) => void; rec: Record<string, RecRes>; revisar: (d: Doc) => void; rasc?: Map<string, number>;
 }) {
@@ -775,7 +786,8 @@ function Lista({ rows, sel, setSel, sort, setSort, abrir, ocupado, agir, prod, r
                 <td>
                   <div className="cli" title={limpo(d.razao ?? d.cliente ?? "")}>{limpo(d.fantasia || d.cliente || d.razao || "—")}
                     {d.razao && d.fantasia && limpo(d.razao) !== limpo(d.fantasia) && <small className="razao">{limpo(d.razao)}</small>}
-                    <small>{d.oc ? `OC ${d.oc}` : <span style={{ color: "var(--f-warn)" }}>sem OC</span>}{d.descricao ? ` · ${d.descricao}` : ""}</small>
+                    <small>{d.oc ? `OC ${d.oc}` : <span style={{ color: "var(--f-warn)" }}>sem OC</span>}{" "}<OcChip empresa={empresa} label={d.rotulo} mostrarOc={false} compacto
+                      resumo={{ label: d.rotulo, num_pedido_cliente: d.oc, oc_origem: null, anexos: d.anexos ?? 0, anexos_oc: 0 }} />{d.descricao ? ` · ${d.descricao}` : ""}</small>
                   </div>
                   {st !== "fat" && d.pend.map((p) => <div className="flag" key={p}>⚠ {p}</div>)}
                   {st === "rej" && rej && <div className="flag bad">✕ {rej.msg ?? "rejeitada"}</div>}
@@ -940,6 +952,10 @@ function Gaveta({ d, r, empresa, prod, ocupado, agir, fechar, avisar, onMudou, r
         <div className="db">
           {st !== "fat" && d.pend.map((p) => <div className="alert" key={p}>⚠ {p} — resolva no cadastro antes de emitir.</div>)}
           {!d.emite && st !== "fat" && <div className="alert info">{d.emite_motivo}</div>}
+          <details style={{ margin: "10px 0" }} open={!d.oc || !!d.anexos}>
+            <summary style={{ cursor: "pointer", fontWeight: 650 }}>OC do cliente e anexos{d.anexos ? ` · 📎 ${d.anexos}` : ""}{d.oc ? ` · OC ${d.oc}` : " · sem OC"}</summary>
+            <div style={{ marginTop: 8 }}><OcAnexosPainel empresa={empresa} label={d.rotulo} /></div>
+          </details>
           {d.nfs.filter((n) => n.fonte === "painel" && (n.status === "rejeitada" || n.status === "erro")).slice(-1).map((n) => (
             <div className="alert bad" key={n.id}>✕ {n.msg ?? "Rejeitada"}</div>
           ))}

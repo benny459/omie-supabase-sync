@@ -118,8 +118,10 @@ function materiaisDoLote(r: AnyRow): { tom: Tom; rotulo: string; pct: number; su
 
 export default function ListaPedidos({
   pedidos, dinheiro, empresa, abrirTudo, onLoteClick, extra, onEditar, limiteInicial = 150,
-  valorDoPedido, larguraId = 104, rotuloId,
+  valorDoPedido, larguraId = 104, rotuloId, infoCliente,
 }: {
+  /** Linha a mais sob o cliente (Avulsos: OC do cliente · 📎 anexos). */
+  infoCliente?: (p: Pedido) => React.ReactNode;
   /** Rótulo do identificador (PCs: "PC 7289" em vez de "7289"). */
   rotuloId?: (p: Pedido) => string;
   /** Valor à direita do cartão. Default: valor do PV (Projetos somam os PVs). */
@@ -202,6 +204,11 @@ export default function ListaPedidos({
                 <span style={{ display: "block", fontSize: "var(--text-chip)", color: "var(--ww-text-faint)" }}>
                   {s(p.head.pv_data_previsao) ? `previsão limite ${s(p.head.pv_data_previsao)}` : "sem previsão"}
                 </span>
+                {infoCliente && (
+                  <span style={{ display: "flex", minWidth: 0, fontSize: "var(--text-chip)", color: "var(--ww-text-2)", marginTop: 2 }}>
+                    {infoCliente(p)}
+                  </span>
+                )}
               </span>
               <PipelineRail states={p.rail} />
               <span style={{ display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center" }}>

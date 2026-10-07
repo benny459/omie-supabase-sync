@@ -37,6 +37,8 @@ import LinhaDoTempo from "./navy/LinhaDoTempo";
 import KpisNavy from "./navy/KpisNavy";
 import { SegmentedControl } from "./navy/primitivos";
 import { AtribuicaoModal } from "./AtribuirClienteView";
+import { OcChip, useOcResumo } from "./vendas/OcAnexos";
+import type { OcResumo } from "@/lib/vendas-anexos";
 import { Virtuoso, type VirtuosoHandle } from "react-virtuoso";
 
 type AnyRow = Record<string, unknown>;
@@ -1488,6 +1490,11 @@ export default function BoldAvulsosView({
     modulo === "projetos" ? "project" :
     modulo === "pcs"      ? "pc"      : "pvos";
   const buckets = useMemo(() => buildBuckets(filtered, groupBy), [filtered, groupBy]);
+  // OC do cliente e 📎 anexos (sql/110) — só buckets de PV/OS (Avulsos e afins).
+  const ocItens = useMemo(() => buckets
+    .filter((b) => /^(PV|OS)\d+$/i.test(b.pv_os_label))
+    .map((b) => ({ empresa: String(b.rows[0]?.empresa ?? "SF"), label: b.pv_os_label })), [buckets]);
+  const ocMapa = useOcResumo(ocItens);
 
   /* Vistas Navy (Lista, Tabela, Linha do tempo, Kanban) — mesmas regras da
      recriação Navy (lib/navy-pedidos): um PC é um PC em todas as vistas. */
@@ -1909,6 +1916,7 @@ export default function BoldAvulsosView({
               onToggleAlarme={toggleAlarme}
               cronogramaMap={cronogramaMap}
               budgetMap={budgetMap}
+              ocMapa={ocMapa}
               pcsEscondidos={escondidosPorProjeto.get(b.pv_os_label) ?? []}
               onEscondidosMudou={carregarEscondidos}
               atribuicaoMap={atribuicaoMap}
@@ -2240,6 +2248,11 @@ export default function BoldAvulsosView({
                 setOpenBuckets((prev) => new Set(prev).add(pd.pv_os_label));
                 trocarVista("edicao");
               }}
+              infoCliente={modulo !== "pcs" ? (pd) => {
+                if (!/^(PV|OS)\d+$/i.test(pd.pv_os_label)) return null;
+                const emp = String(pd.head?.empresa ?? "SF");
+                return <OcChip empresa={emp} label={pd.pv_os_label} resumo={ocMapa.get(`${emp.toUpperCase()}|${pd.pv_os_label.toUpperCase()}`)} compacto />;
+              } : undefined}
               larguraId={modulo === "projetos" ? 230 : modulo === "pcs" ? 120 : 104}
               rotuloId={modulo === "pcs" ? (pd) => `PC ${pd.pv_os_label}` : undefined}
               valorDoPedido={modulo === "pcs" ? (pd) => pd.lotes.reduce((a, r) => a + (Number(r.valor_total ?? 0) || 0), 0)
@@ -2453,8 +2466,10 @@ function BucketCard({
   bucket, modulo, isAdmin, userCanApprove, userCanEdit, open, onToggle, onRowClick, onStatusClick, selected, toggleSel, visibleGroups, onEnsureOpen, optimisticStatus, canViewValues = true, canViewMargin = true, todayStartMs, alarmesActive, onToggleAlarme, cronogramaMap, budgetMap,
   aguardandoLiberacao = false, userCanReleasePv = false, onToggleLiberacao,
   pcsEscondidos = [], onEscondidosMudou,
-  atribuicaoMap, onAtribuicaoClick,
+  atribuicaoMap, onAtribuicaoClick, ocMapa,
 }: {
+  /** OC do cliente e nº de anexos por "EMPRESA|PV1968" (sql/110). */
+  ocMapa?: Map<string, OcResumo>;
   bucket: Bucket;
   modulo: "avulsos" | "projetos" | "pcs";
   isAdmin: boolean;
@@ -3072,6 +3087,12 @@ function BucketCard({
                     </div>
                     <div className="text-[11.5px] text-ww-textMuted mt-0.5 truncate">{bucket.cliente ?? "—"}</div>
                     <div className="text-[11.5px] text-ww-textFaint mt-0.5 font-mono truncate">{bucket.projeto ?? "—"}</div>
+                    {/^(PV|OS)\d+$/i.test(bucket.pv_os_label) && (
+                      <div className="text-[11px] text-ww-textMuted mt-0.5 flex min-w-0">
+                        <OcChip empresa={empBucket} label={bucket.pv_os_label}
+                          resumo={ocMapa?.get(`${empBucket.toUpperCase()}|${bucket.pv_os_label.toUpperCase()}`)} />
+                      </div>
+                    )}
                   </>
                 )}
               </>

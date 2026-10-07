@@ -8,6 +8,7 @@ import type { DocFat } from "@/lib/faturamento/montar";
 import { FORMAS_RECEBIMENTO, STATUS_VENDA, type VendaDoc, type VendaItem, type VendaSalvar } from "@/lib/vendas";
 import { BuscaPessoa, BuscaProposta } from "@/components/vendas/BuscasCrmCadastro";
 import { BotaoNovoProjeto } from "@/components/cadastros/NovoProjetoRapido";
+import { OcAnexosPainel } from "@/components/vendas/OcAnexos";
 
 /* PV / OS nativo do painel (P1, 05/10/26): cria, edita, cancela e emite a NF
    (motor da Focus, P5). Os documentos que o CRM cria pelo caminho nativo
@@ -343,6 +344,9 @@ export default function TelaVendaDoc({ id }: { id: number | null }) {
                 dir={<span title={e.mensagem ?? ""}>{e.status}</span>} />
             ))}
             <Mudo><a style={lk} href="/faturamento">Abrir Faturamento</a></Mudo>
+          </Bloco>
+          <Bloco titulo="Anexos (OC do cliente e outros)">
+            <OcAnexosPainel empresa={doc.empresa} label={doc.label} mostrarOc={false} />
           </Bloco>
           <Bloco titulo="Histórico">
             {doc.historico.map((h) => (
