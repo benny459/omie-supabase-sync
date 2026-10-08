@@ -1,7 +1,8 @@
 // Agente de compras — lotes do projeto (08/10/26, spec F; sql/129).
 //   GET  ?empresa=SF&codigo=…[&sim=1][&janela=N] → { lotes (propostos + agendados/gerados, com
 //        motivo e caixa), janela, pendente? }
-//   POST { acao, empresa, codigo, … }  (exige acesso a Compras)
+//   POST { acao, empresa, codigo, … }  (exige acesso a Compras: exigirCompras, a mesma trava de
+//        /api/compras/pedido, que cria/edita PC — a spec dizia canEdit(compras,pedido), que não existe)
 //        agendar  { lote: { forn, base, pedir, motivo, itens[] } }  → no dia o cron cria o PC e avisa
 //        mover    { id, data }       · cancelar { id }       · gerado { id, pedido_num }
 //        janela   { janela }         (janela de consolidação da empresa, 0–60 dias)

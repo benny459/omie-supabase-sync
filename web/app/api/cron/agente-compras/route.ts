@@ -2,11 +2,13 @@
 // vercel.json). 08/10/26, spec F; sql/129.
 //   (a) recalcula os lotes propostos de cada projeto com item sem PC perto do "comprar até";
 //   (b) lote AGENDADO com data de pedir = hoje (ou já passada): cria o PC pelo mesmo caminho do
-//       "Gerar pedido de compra" da lista (aguardando aprovação), marca o lote "gerado" e avisa;
+//       "Gerar pedido de compra" da lista — EM RASCUNHO (etapa Pedido de Compra, "aprovação não
+//       solicitada": alguém revisa e envia para aprovação) —, marca o lote "gerado" e avisa;
 //       item que ganhou PC fora do lote sai dele antes; sem fornecedor/categoria certos, avisa
 //       em vez de gerar;
 //   (c) lote agendado para AMANHÃ: lembrete (uma vez);
-//   (d) lote proposto atrasado há 2 dias sem ação: escalona ao admin (uma vez, no 2º dia).
+//   (d) lote proposto atrasado há ≥ 2 dias sem ação: escalona ao admin uma vez; depois no máximo
+//       um lembrete por semana (ultimo_aviso da linha-marcador, sql/143; sem ela, regra sem estado).
 // Avisos no Webex (mensagem direta: COMPRAS_ALERTA_EMAILS; admin: COMPRAS_ADMIN_EMAILS).
 // Telegram não está ligado no painel.
 // Manual: /api/cron/agente-compras?secret=<CRON_SECRET>[&simular=1][&avisar=1][&hoje=AAAA-MM-DD]
@@ -16,8 +18,8 @@
 //   agendado para hoje (para conferir o PC que o agente montaria, sem agendar nada).
 import { NextRequest, NextResponse } from "next/server";
 import { supaAdmin } from "@/lib/supabase-admin";
-import { lotesDoProjeto, gerarPcDoLote, salvarLote, avisarWebex } from "@/lib/agente-compras";
-import { hojeIso, somaDias } from "@/lib/planejamento-compras";
+import { lotesDoProjeto, gerarPcDoLote, salvarLote, avisarWebex, escalonamentosAnotados, anotarEscalonamento } from "@/lib/agente-compras";
+import { hojeIso, somaDias, decidirEscalonamento, chaveLote } from "@/lib/planejamento-compras";
 import { loadPerms } from "@/lib/require-area";
 
 export const runtime = "nodejs";
@@ -68,6 +70,7 @@ export async function GET(req: NextRequest) {
       for (const p of (pj ?? []) as { empresa: string; codigo: number; nome: string }[]) nomes.set(`${p.empresa}|${p.codigo}`, p.nome);
     } }
 
+  const anotados = await escalonamentosAnotados(); // null = sql/143 pendente
   const gerados: string[] = [], lembretes: string[] = [], escalar: string[] = [], problemas: string[] = [];
   const detalhe: Record<string, unknown>[] = [];
   for (const [k, p] of projetos) {
@@ -103,7 +106,8 @@ export async function GET(req: NextRequest) {
         }
         const num = g.pedidos[0]?.num ? `PC ${g.pedidos[0].num}` : "PC";
         if (!simular && g.pedidos[0]) await salvarLote({ acao: "gerado", id: a.id, pedido_num: String(g.pedidos[0].num ?? ""), pedido_id: g.pedidos[0].id ?? null }, "agente");
-        gerados.push(`**${nome}** · ${simular ? "(simulação) " : ""}${num} ${lote.forn} · ${lote.itens.length} item(ns) · ${brl(lote.valor)} — aguardando aprovação em [Compras › Aprovações PC](${URL_PAINEL}/pcs)`);
+        const abrirPc = g.pedidos[0]?.num ? `${URL_PAINEL}/erp/compras?abrir=${g.pedidos[0].num}&tipo=PC&emp=${p.empresa}` : `${URL_PAINEL}/erp/compras`;
+        gerados.push(`**${nome}** · ${simular ? "(simulação) " : ""}${num} rascunho criado — ${lote.forn} · ${lote.itens.length} item(ns) · ${brl(lote.valor)} — revise e envie para aprovação: [abrir o PC](${abrirPc})`);
         detalhe.push({ projeto: nome, lote: a.id, acao: simular ? "geraria PC" : "gerou PC", pedido: g.pedidos[0] ?? null,
           itens_lote: lote.itens.map((x) => x.id), itens_pc: lote.itens.filter((x) => !x.temPc).map((x) => x.id),
           corpo: simular ? g.corpo : undefined, removidos_do_lote: sairam });
@@ -113,22 +117,27 @@ export async function GET(req: NextRequest) {
         detalhe.push({ projeto: nome, lote: a.id, acao: "lembrete" });
       }
     }
-    // (d) proposto atrasado há 2 dias sem ação → admin (uma vez)
-    for (const l of r.lotes.filter((x) => x.status === "proposto" && x.base === somaDias(hoje, -2))) {
-      escalar.push(`**${nome}** · ${l.forn}: ${l.itens.length} item(ns), ${brl(l.valor)} — devia ter sido pedido em ${d2(l.base)} e ninguém agiu (chega ≈ ${d2(somaDias(hoje, l.prazo))}) — [abrir](${link})`);
-      detalhe.push({ projeto: nome, lote: l.chave, acao: "escalonado" });
+    // (d) proposto atrasado há ≥ 2 dias sem ação → admin (uma vez; depois no máximo 1 lembrete/semana)
+    for (const l of r.lotes.filter((x) => x.status === "proposto")) {
+      const k = `${p.empresa}|${p.codigo}|${chaveLote(l.semFornecedor ? "" : l.forn, l.base)}`;
+      const dec = decidirEscalonamento(l, hoje, anotados ? (anotados.get(k) ?? null) : undefined);
+      if (!dec) continue;
+      escalar.push(`**${nome}** · ${l.forn}: ${l.itens.length} item(ns), ${brl(l.valor)} — devia ter sido pedido em ${d2(l.base)} (${dec.diasAtraso} dias atrás) e ninguém agiu${dec.acao === "lembrete" ? " · lembrete semanal" : ""} (pedindo hoje chega ≈ ${d2(somaDias(hoje, l.prazo))}) — [abrir](${link})`);
+      if (!simular && avisar) await anotarEscalonamento({ empresa: p.empresa, codigo_projeto: p.codigo, fornecedor: l.semFornecedor ? null : l.forn, data_base: l.base, aviso: `escalado:${hoje}` });
+      detalhe.push({ projeto: nome, lote: l.chave, acao: dec.acao === "escalar" ? "escalonado" : "lembrete semanal (escalonado)", dias_atraso: dec.diasAtraso,
+        memoria: anotados ? (anotados.get(k) ?? "nunca avisado") : "sem memória (sql/143 pendente)", itens: l.itens.length });
     }
   }
 
   const avisos: Record<string, unknown> = {};
   if (avisar) {
     const md = [
-      gerados.length ? `**🧾 Agente de compras — PC(s) criados hoje (${d2(hoje)})**\n\n${gerados.map((x) => `- ${x}`).join("\n")}` : "",
+      gerados.length ? `**🧾 Agente de compras — PC(s) rascunho criados hoje (${d2(hoje)})**\n\n${gerados.map((x) => `- ${x}`).join("\n")}` : "",
       lembretes.length ? `**🔔 Amanhã o agente cria estes PCs**\n\n${lembretes.map((x) => `- ${x}`).join("\n")}` : "",
       problemas.length ? `**⚠️ Precisa de você**\n\n${problemas.map((x) => `- ${x}`).join("\n")}` : "",
     ].filter(Boolean).join("\n\n");
     if (md) avisos.compras = await avisarWebex(md, "compras");
-    if (escalar.length) avisos.admin = await avisarWebex(`**⏰ Lotes de compra atrasados há 2 dias sem ação**\n\n${escalar.map((x) => `- ${x}`).join("\n")}`, "admin");
+    if (escalar.length) avisos.admin = await avisarWebex(`**⏰ Lotes de compra atrasados há 2 dias ou mais sem ação**\n\n${escalar.map((x) => `- ${x}`).join("\n")}`, "admin");
   }
-  return NextResponse.json({ ok: true, hoje, simular, projetos: projetos.size, gerados, lembretes, escalonados: escalar, problemas, avisos, detalhe });
+  return NextResponse.json({ ok: true, hoje, simular, memoria_escalonamento: anotados ? "sql/143" : "sem estado (sql/143 pendente)", projetos: projetos.size, gerados, lembretes, escalonados: escalar, problemas, avisos, detalhe });
 }

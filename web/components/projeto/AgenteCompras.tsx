@@ -3,7 +3,7 @@
 // ✨ Agente de compras (08/10/26, spec F) — dentro da etapa ③ da Lista de materiais.
 // Monta os lotes (um PC por fornecedor por data) com lib/planejamento-compras.montarLotes —
 // a mesma função do servidor e do cron —, explica cada data, confere o caixa contra os
-// recebimentos das vendas e deixa AGENDAR: no dia, o cron cria o PC (aguardando aprovação)
+// recebimentos das vendas e deixa AGENDAR: no dia, o cron cria o PC em rascunho (você revisa e envia para aprovação)
 // e avisa no Webex. Janela e "simular comprar tudo hoje" recalculam na hora, sem gravar.
 
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -72,7 +72,7 @@ export default function AgenteCompras({ empresa, codigo, itens, forcados, podeGe
   };
   const agendar = (l: Lote) => post({ acao: "agendar", lote: { forn: l.semFornecedor ? null : l.forn, base: l.base, pedir: l.pedir, motivo: motivosIa.get(l.chave) ?? l.motivo,
     itens: l.itens.map((x) => x.id.replace(/^db/, "")) } }, l.chave,
-    `Agendado: em ${d2(l.pedir)} o agente cria o PC de ${l.forn} (aguardando aprovação) e avisa no Webex; na véspera, um lembrete.`);
+    `Agendado: em ${d2(l.pedir)} o agente cria o PC rascunho de ${l.forn} (revise e envie para aprovação) e avisa no Webex; na véspera, um lembrete.`);
   const conferir = async (l: Lote) => {
     setOcupado(`c${l.chave}`); setMsg(null);
     try {
@@ -103,7 +103,7 @@ export default function AgenteCompras({ empresa, codigo, itens, forcados, podeGe
     <div className="rounded-xl border border-ww-accent/45 bg-gradient-to-b from-ww-accentSoft to-transparent p-3 space-y-2.5" data-agente>
       <div className="flex items-center gap-3 flex-wrap">
         <b className="text-[13.5px] text-ww-text">✨ Agente de compras</b>
-        <span className="text-[11px] text-ww-textMuted flex-1 min-w-[260px]">monta os lotes: junta itens do mesmo fornecedor cujas datas de pedir caem na mesma janela, confere o caixa (recebimentos das vendas) e, agendado, cria o PC no dia e avisa. Você só aprova.</span>
+        <span className="text-[11px] text-ww-textMuted flex-1 min-w-[260px]">monta os lotes: junta itens do mesmo fornecedor cujas datas de pedir caem na mesma janela, confere o caixa (recebimentos das vendas) e, agendado, cria o PC rascunho no dia e avisa. Você revisa e envia para aprovação.</span>
         <label className="text-[11px] text-ww-textMuted flex items-center gap-1.5">janela de consolidação
           <input type="number" min={0} max={60} value={janela} data-janela onChange={(e) => setJanela(Math.max(0, Math.min(60, Number(e.target.value) || 0)))}
             className="w-14 bg-transparent border border-ww-border rounded px-1.5 py-0.5 text-right text-[12px] text-ww-text" /> dias</label>
@@ -143,7 +143,7 @@ export default function AgenteCompras({ empresa, codigo, itens, forcados, podeGe
                       className="px-2 py-0.5 rounded bg-ww-accent text-white text-[11px] font-semibold hover:brightness-110 disabled:opacity-40">🧾 Gerar PC{l.atrasado ? " agora" : ""}</button>
                     {l.status !== "agendado"
                       ? <button type="button" disabled={!!ocupado || pendente || sim} onClick={() => void agendar(l)} data-agendar
-                          title={`No dia ${d2(l.pedir)} o agente cria o PC (aguardando aprovação) e avisa no Webex; na véspera, um lembrete`}
+                          title={`No dia ${d2(l.pedir)} o agente cria o PC em rascunho (revise e envie para aprovação) e avisa no Webex; na véspera, um lembrete`}
                           className="px-2 py-0.5 rounded border border-ww-border text-[11px] hover:border-ww-accent disabled:opacity-40">{ocupado === l.chave ? "…" : `🔔 Agendar p/ ${d2(l.pedir)}`}</button>
                       : <button type="button" disabled={!!ocupado} onClick={() => void post({ acao: "cancelar", id: l.id }, l.chave, "Agendamento cancelado — os itens voltam para os lotes propostos.")}
                           className="px-2 py-0.5 rounded border border-ww-border text-[11px] hover:border-rose-400">cancelar agendamento</button>}

@@ -94,11 +94,13 @@ O novo valor passa a valer em Operação (Vendas avulsas / Projetos), na fila de
 
 ## Pedidos criados pelo agente de compras (projetos)
 
-Na **Lista de materiais** de um projeto (etapa Planejamento), o **✨ Agente de compras** junta os itens do mesmo fornecedor em lotes, cada um com a data certa de pedir. Um lote **agendado** vira pedido de compra sozinho no dia, às 07:00, pelo mesmo caminho do “Gerar pedido de compra” da lista: fornecedor do cadastro, a última categoria e condição usadas com ele, e previsão = o primeiro “necessário em”. O pedido entra **aguardando aprovação** e aparece aqui e em **Aprovações PC**, como qualquer outro. Avisos pelo Webex:
-- no dia, a lista dos PCs criados;
+Na **Lista de materiais** de um projeto (etapa Planejamento), o **✨ Agente de compras** junta os itens do mesmo fornecedor em lotes, cada um com a data certa de pedir. Um lote **agendado** vira pedido de compra sozinho no dia, às 07:00, pelo mesmo caminho do “Gerar pedido de compra” da lista: fornecedor do cadastro, a última categoria e condição usadas com ele, e previsão = o primeiro “necessário em”. O pedido entra **em rascunho** — etapa **Pedido de Compra**, “Aprovação não solicitada” —: revise e use **Solicitar aprovação** para mandá-lo à aprovação. Avisos pelo Webex:
+- no dia, a lista dos PCs rascunho criados (“PC rascunho criado, revise e envie para aprovação”), com o link para abrir cada um;
 - na véspera, um lembrete;
 - quando o agente não consegue gerar (fornecedor não achado com o mesmo nome no cadastro, ou sem categoria usada antes), avisa em vez de gerar;
-- lote que passou 2 dias da data sem ninguém agir vai para o administrador.
+- lote que está **2 dias ou mais** atrasado sem ninguém agir (nem agendar nem gerar) vai para o administrador **uma vez**; enquanto continuar parado, no máximo um lembrete por semana.
+
+Itens do mesmo fornecedor escrito de jeitos diferentes (“ACQUA IMPORT”, “Acqua Import”, com ou sem acento) caem no **mesmo lote**; o cartão mostra o nome mais usado nas linhas.
 
 **Prazos por fornecedor** (⏱, na mesma etapa): o prazo de entrega usado no planejamento. Vazio = vale o histórico, a média entre o pedido e a NF de entrada.
 

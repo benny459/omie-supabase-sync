@@ -726,7 +726,7 @@ export default function MateriaisGrade({
         if (!pl) return null;
         if (!pl.comprarAte || pl.status === "compc") return <span className="text-ww-textFaint">—</span>;
         const cls = pl.status === "atrasado" ? "text-rose-600 dark:text-rose-400" : pl.status === "agora" ? "text-amber-700 dark:text-amber-300" : "text-emerald-700 dark:text-emerald-400";
-        return <span className="text-[11px] leading-tight"><b className="tabular-nums text-ww-text">{dia(pl.comprarAte)}</b><br /><small className={cls}>{pl.texto}{pl.estimado ? " · est." : ""}</small></span>;
+        return <span className="text-[11px] leading-tight"><b className="tabular-nums text-ww-text">{dia(pl.comprarAte)}</b><br /><small className={cls}>{pl.texto}{pl.estimado ? <abbr className="no-underline" title={`prazo estimado (${pl.prazo}d) — sem prazo do fornecedor nem do item`}> · est.</abbr> : ""}</small></span>;
       } },
     /* Chegada prevista (07/10/26, Benny): a data em que o item chega, ao lado do Necessário em,
        e o sinal ✓/⚠/✕ compara as duas. "PC atrasado" (previsão do PC vencida sem chegar)
@@ -1328,6 +1328,45 @@ export default function MateriaisGrade({
     }, 700);
     return () => { vivo = false; window.clearTimeout(t); };
   }, [carregouOk, carregando, chaveAuto, empresa, sugTentativa]);
+
+  /* Alternativas da sugestão PENDENTE depois do F5 (spec B.6): a sugestão é gravada, mas as 2–3
+     alternativas (`_alts`) só vivem na tela — recarregar as perdia. Recalcula em lote, pelo
+     mesmo casamento, só o `_alts`: a melhor sugestão gravada NÃO muda e a lista não fica suja. */
+  const altsTentadasRef = useRef<Set<string>>(new Set());
+  const alvoAlts = useMemo(() => linhas.filter((l) => l._match === "sug" && l._sug_status === "pendente" && !l._alts
+    && String(l.item ?? "").trim() && !altsTentadasRef.current.has(`${l._id}|${textoCasar(l.item, l.modelo)}`)), [linhas]);
+  const chaveAlts = alvoAlts.map((l) => `${l._id}|${textoCasar(l.item, l.modelo)}`).join("\n");
+  useEffect(() => {
+    if (!carregouOk || carregando || !chaveAlts) return;
+    let vivo = true;
+    const t = window.setTimeout(async () => {
+      const alvo = linhasRef.current.filter((l) => l._match === "sug" && l._sug_status === "pendente" && !l._alts
+        && String(l.item ?? "").trim() && !altsTentadasRef.current.has(`${l._id}|${textoCasar(l.item, l.modelo)}`)).slice(0, 200);
+      if (!alvo.length) return;
+      const textos = alvo.map((l) => textoCasar(l.item, l.modelo));
+      try {
+        const r = await fetch("/api/catalogo/projeto", { method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ acao: "casar", emp: empresa, textos, custos: alvo.map(() => null) }) });
+        const j = (await r.json().catch(() => ({}))) as { casamentos?: Casamento[] };
+        if (!vivo || !r.ok || !j.casamentos) return;
+        alvo.forEach((l, k) => altsTentadasRef.current.add(`${l._id}|${textos[k]}`));
+        const porId = new Map<string, { txt: string; alts: Cat[] }>();
+        alvo.forEach((l, k) => {
+          const c = j.casamentos![k];
+          const sug = lerSug(l);
+          const alts = [c?.melhor, ...(c?.alternativas ?? [])].filter((x): x is Cat => !!x && !!x.ncod_prod && Number(x.ncod_prod) !== Number(sug?.ncod_prod));
+          if (alts.length) porId.set(l._id, { txt: textos[k], alts: alts.slice(0, 3) });
+        });
+        if (!porId.size) return;
+        setLinhas((atual) => atual.map((l) => {
+          const x = porId.get(l._id);
+          if (!x || l._match !== "sug" || l._alts || textoCasar(l.item, l.modelo) !== x.txt) return l;
+          return { ...l, _alts: JSON.stringify(x.alts) };
+        }));
+      } catch { /* sem alternativas: a sugestão gravada continua; buscar no estoque segue disponível */ }
+    }, 900);
+    return () => { vivo = false; window.clearTimeout(t); };
+  }, [carregouOk, carregando, chaveAlts, empresa]);
 
   /** Casa com o catálogo (itens NOSSOS) as linhas com texto e sem código nosso. Aceita
    *  sozinho só o que é de-para gravado ou muito parecido; o resto vira SUGESTÃO.

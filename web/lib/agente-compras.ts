@@ -112,6 +112,19 @@ export async function salvarLote(p: Record<string, unknown>, por: string) {
   return data as { ok: boolean; id?: string };
 }
 
+/** Memória do escalonamento dos lotes propostos (sql/143): chave `${empresa}|${projeto}|${chaveLote}` →
+ *  ultimo_aviso. `null` = migração pendente (o cron usa a regra sem estado). */
+export async function escalonamentosAnotados(): Promise<Map<string, string | null> | null> {
+  const { data, error } = await orders().rpc("lotes_escalonamentos");
+  if (error) return null;
+  return new Map(((data ?? []) as { empresa: string; codigo_projeto: number; fornecedor_norm: string; data_base: string; ultimo_aviso: string | null }[])
+    .map((r) => [`${r.empresa}|${Number(r.codigo_projeto)}|${r.fornecedor_norm || "sem"}|${String(r.data_base).slice(0, 10)}`, r.ultimo_aviso]));
+}
+export async function anotarEscalonamento(p: { empresa: string; codigo_projeto: number; fornecedor: string | null; data_base: string; aviso: string }) {
+  const { error } = await orders().rpc("lotes_escalonar", { p });
+  return !error;
+}
+
 const lista = (v: string | undefined, padrao = "benny@waterworks.com.br") => (v || padrao).split(/[,;\s]+/).map((x) => x.trim()).filter(Boolean);
 
 /** Aviso no Webex (o canal que o painel já usa para Compras: mensagem direta para as pessoas

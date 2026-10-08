@@ -127,3 +127,47 @@ test("data de planilha importada: número de série com fração da hora vira o 
   assert.equal(dataParaIso("46345.99947916667"), "2026-11-20");
   assert.equal(dataParaIso("46346"), "2026-11-20");
 });
+
+// ── Gaps da spec F (08/10/26): fornecedor normalizado e escalonamento ──
+import { decidirEscalonamento, chaveLote } from "../../web/lib/planejamento-compras";
+test("F: mesmo fornecedor com caixa/acento/espaço diferentes cai num lote só (nome mais usado)", () => {
+  const its: ItemLote[] = [["A", "ACQUA IMPORT"], ["B", "Acqua  Import"], ["C", " ACQUA IMPORT "], ["D", "Sprîngway"], ["E", "SPRINGWAY"]]
+    .map(([id, forn]) => ({ id, item: id, qtd: 1, un: "un", vu: 10, fornecedor: forn, necessario: "2026-11-10", temPc: false,
+      plano: planejarItem({ necessario: "2026-11-10", temPc: false, fornecedor: forn, prazos: pz, hoje }) }));
+  const ls = montarLotes(its, { janela: 10, hoje });
+  assert.equal(ls.length, 2);
+  const a = ls.find((l) => l.itens.some((x) => x.id === "A"))!;
+  assert.deepEqual(a.itens.map((x) => x.id).sort(), ["A", "B", "C"]);
+  assert.equal(a.forn, "ACQUA IMPORT");
+  assert.equal(a.chave, chaveLote("acqua import", a.base));
+  const s = ls.find((l) => l.itens.some((x) => x.id === "D"))!;
+  assert.equal(s.itens.length, 2);
+});
+test("F: escalonamento — atrasado ≥ 2 dias sem ação escala uma vez, depois no máximo 1 lembrete por semana", () => {
+  const l = { status: "proposto" as const, base: "2026-10-01" };
+  // 1 dia de atraso: ainda não
+  assert.equal(decidirEscalonamento(l, "2026-10-02", null), null);
+  // 2 dias: escala
+  assert.deepEqual(decidirEscalonamento(l, "2026-10-03", null), { acao: "escalar", diasAtraso: 2 });
+  // lote que já chegou MUITO atrasado (nunca passou pelo dia 2) também escala
+  assert.deepEqual(decidirEscalonamento(l, "2026-10-08", null), { acao: "escalar", diasAtraso: 7 });
+  // já escalado ontem: não repete; 7 dias depois: lembrete
+  assert.equal(decidirEscalonamento(l, "2026-10-09", "escalado:2026-10-08"), null);
+  assert.equal(decidirEscalonamento(l, "2026-10-14", "escalado:2026-10-08"), null);
+  assert.deepEqual(decidirEscalonamento(l, "2026-10-15", "escalado:2026-10-08"), { acao: "lembrete", diasAtraso: 14 });
+  // agendado/gerado não escala
+  assert.equal(decidirEscalonamento({ ...l, status: "agendado" }, "2026-10-08", null), null);
+  // sem memória (sql/143 pendente): 2º dia e de 7 em 7
+  assert.equal(decidirEscalonamento(l, "2026-10-03", undefined)?.acao, "escalar");
+  assert.equal(decidirEscalonamento(l, "2026-10-04", undefined), null);
+  assert.equal(decidirEscalonamento(l, "2026-10-10", undefined)?.acao, "lembrete");
+});
+test("F: escalonamento com data simulada sobre os lotes do mockup (hoje 08/10 → ACQUA atrasada desde 06/10)", () => {
+  const ls = montarLotes(itensMock, { janela: 10, hoje });
+  const esc = ls.map((l) => ({ l, d: decidirEscalonamento(l, hoje, null) })).filter((x) => x.d);
+  assert.deepEqual(esc.map((x) => `${x.l.forn}|${x.l.base}|${x.d!.acao}`), ["ACQUA IMPORT|2026-10-06|escalar"]);
+  // dia 10/10: a ACQUA já escalada em 08/10 não repete; sem a memória, voltaria a avisar
+  const a10 = montarLotes(itensMock, { janela: 10, hoje: "2026-10-10" }).find((l) => l.forn === "ACQUA IMPORT" && l.base === "2026-10-06")!;
+  assert.equal(decidirEscalonamento(a10, "2026-10-10", "escalado:2026-10-08"), null);
+  assert.equal(decidirEscalonamento(a10, "2026-10-10", null)?.acao, "escalar");
+});

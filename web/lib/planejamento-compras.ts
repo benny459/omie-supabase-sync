@@ -27,7 +27,7 @@ export type PrazoFornecedor = { norm: string; nome: string; historico: number | 
 /** item_manual = ajustado na célula Prazo da linha (sql/141); manual = ⏱ do fornecedor. */
 export type FontePrazo = "item_manual" | "manual" | "item" | "historico" | "estimado";
 export const ROTULO_FONTE: Record<FontePrazo, string> = {
-  item_manual: "ajustado no item", manual: "fornecedor (manual)", item: "item (catálogo)", historico: "histórico", estimado: "estimado",
+  item_manual: "ajustado no item", manual: "fornecedor (manual)", item: "item (catálogo)", historico: "histórico", estimado: "prazo estimado",
 };
 
 const iso = (d: Date) => d.toISOString().slice(0, 10);
@@ -122,6 +122,33 @@ const brl0 = (v: number) => v.toLocaleString("pt-BR", { style: "currency", curre
 
 export function chaveLote(forn: string, base: string) { return `${normFornecedor(forn) || "sem"}|${base}`; }
 
+/** O nome a exibir de um grupo de fornecedor: o mais usado nas linhas (empate: ordem alfabética). */
+function nomeExibicao(nomes: Map<string, number>): string {
+  return [...nomes.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))[0]?.[0] ?? SEM_FORNECEDOR;
+}
+
+// ── Escalonamento (spec F): lote PROPOSTO atrasado sem ação há ≥ 2 dias vai ao admin uma vez;
+// depois, no máximo um lembrete por semana enquanto ninguém agir. O que já foi avisado fica em
+// compras.lote_planejado.ultimo_aviso ("escalado:AAAA-MM-DD", linha-marcador do lote proposto,
+// sql/143). Sem essa memória (migração pendente), cai na regra sem estado: avisa no 2º dia de
+// atraso e de 7 em 7 dias depois disso.
+export const ESCALAR_APOS_DIAS = 2;
+export const REESCALAR_CADA_DIAS = 7;
+export type Escalonamento = { acao: "escalar" | "lembrete"; diasAtraso: number } | null;
+/** `ultimoAviso`: string/null = memória disponível (null = nunca avisado); undefined = sem memória. */
+export function decidirEscalonamento(l: { status: Lote["status"]; base: string }, hoje: string, ultimoAviso: string | null | undefined): Escalonamento {
+  if (l.status !== "proposto") return null;
+  const diasAtraso = difDias(hoje, l.base);
+  if (diasAtraso < ESCALAR_APOS_DIAS) return null;
+  if (ultimoAviso === undefined) {
+    const n = diasAtraso - ESCALAR_APOS_DIAS;
+    return n % REESCALAR_CADA_DIAS !== 0 ? null : { acao: n === 0 ? "escalar" : "lembrete", diasAtraso };
+  }
+  const m = /^escalado:(\d{4}-\d{2}-\d{2})$/.exec(ultimoAviso ?? "");
+  if (!m) return { acao: "escalar", diasAtraso };
+  return difDias(hoje, m[1]) >= REESCALAR_CADA_DIAS ? { acao: "lembrete", diasAtraso } : null;
+}
+
 /** Monta os lotes (propostos + persistidos) com motivo e caixa. Puro. */
 export function montarLotes(itens: ItemLote[], o: {
   janela?: number; hoje?: string; simAgora?: boolean; persistidos?: LotePersistido[]; recebimentos?: Recebimento[];
@@ -136,9 +163,18 @@ export function montarLotes(itens: ItemLote[], o: {
 
   type Cru = { forn: string; base: string; itens: ItemLote[]; id: string | null; status: Lote["status"]; pedirFixo: string | null; motivoGravado: string | null; pedidoNum: string | null };
   const crus: Cru[] = [];
-  const porForn = new Map<string, ItemLote[]>();
-  for (const x of abertos) { const f = x.fornecedor?.trim() || SEM_FORNECEDOR; porForn.set(f, [...(porForn.get(f) ?? []), x]); }
-  for (const [forn, xs] of porForn) {
+  // Agrupa pelo nome NORMALIZADO (o mesmo de approval._norm_item / fornecedor_norm): "Acqua
+  // Import" e "ACQUA IMPORT " são a mesma empresa e vão no mesmo lote. Exibe o nome mais usado.
+  const porForn = new Map<string, { nomes: Map<string, number>; xs: ItemLote[] }>();
+  for (const x of abertos) {
+    const nome = x.fornecedor?.trim() || "";
+    const k = normFornecedor(nome) || SEM_FORNECEDOR;
+    const g = porForn.get(k) ?? { nomes: new Map<string, number>(), xs: [] };
+    if (nome) g.nomes.set(nome, (g.nomes.get(nome) ?? 0) + 1);
+    g.xs.push(x); porForn.set(k, g);
+  }
+  for (const [k, { nomes, xs }] of porForn) {
+    const forn = k === SEM_FORNECEDOR ? SEM_FORNECEDOR : nomeExibicao(nomes);
     xs.sort((a, b) => a.plano.comprarAte!.localeCompare(b.plano.comprarAte!) || a.id.localeCompare(b.id));
     let cur: Cru | null = null;
     for (const x of xs) {
