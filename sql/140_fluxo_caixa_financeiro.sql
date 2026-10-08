@@ -93,7 +93,8 @@ pag_o as (
          round((coalesce(t.val_aberto, t.valor_documento) - coalesce(pb.v, 0))::numeric, 2) valor,
          t.codigo_categoria cat, coalesce(nullif(t.contraparte, ''), t.contraparte_razao, '(sem nome)') contraparte,
          coalesce(nullif(t.numero_documento_fiscal, ''), nullif(t.numero_documento, '')) doc,
-         (t.origem = 'RPTP' and coalesce(t.numero_documento_fiscal, '') = '' and coalesce(t.codigo_barras, '') = '' and coalesce(t.chave_nfe, '') = '') prov
+         (t.origem = 'RPTP' and coalesce(t.numero_documento_fiscal, '') = '' and coalesce(t.codigo_barras, '') = '' and coalesce(t.chave_nfe, '') = ''
+          and not exists (select 1 from finance.provisao_confirmacoes c where c.empresa = t.empresa and c.cod_titulo = t.cod_titulo and c.desfeito_em is null)) prov  -- sql/141
     from finance.v_titulos_omie_bruto t
     left join pb on pb.cod_titulo = t.cod_titulo
     left join finance.previsao_override po on po.cod_titulo = t.cod_titulo
@@ -104,7 +105,7 @@ pag_p as (
   select 'p:' || v.pagar_id ref, v.empresa, nullif(regexp_replace(coalesce(v.cod_cc::text, ''), '\D', '', 'g'), '')::bigint cod_cc, coalesce(v.previsao::date, v.vencimento::date) data,
          round(v.val_aberto::numeric, 2) valor, v.codigo_categoria cat, coalesce(nullif(v.contraparte, ''), '(sem nome)') contraparte,
          coalesce(nullif(v.numero_documento_fiscal, ''), nullif(v.numero_documento, '')) doc,
-         (pp.serie_id is not null and coalesce(pp.nf_numero, '') = '' and coalesce(pp.documento, '') = '') prov
+         finance.natureza_valor_painel(pp) = 'provisionado' prov  -- sql/141: valor estimado / série sem documento, menos confirmadas
     from finance.v_pagar_previsto v join finance.pagar_previsto pp on pp.id = v.pagar_id
    where not coalesce(v.quitado, false) and v.val_aberto > 0.004
 ),
