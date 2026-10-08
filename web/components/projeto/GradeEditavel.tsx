@@ -408,7 +408,9 @@ export default function GradeEditavel({
               ? { position: "fixed" as const, left, bottom: window.innerHeight - r.top + 2, width: largura, zIndex: 300, maxHeight: Math.min(320, r.top - 8) }
               : { position: "fixed" as const, left, top: r.bottom + 2, width: largura, zIndex: 300, maxHeight: Math.min(320, embaixo - 8) };
           })()}
-          className="overflow-auto rounded-lg border border-ww-border bg-ww-panel shadow-2xl text-[11.5px]"
+          role="listbox"
+          // Opaco também no modo vidro (08/10/26): a lista ficava transparente sobre a grade.
+          className="overflow-auto rounded-lg border border-ww-border bg-[rgb(var(--color-ww-panel))] shadow-2xl text-[11.5px]"
           onMouseDown={(e) => e.preventDefault()}>
           {ac.itens.map((s, i) => (
             <button key={s.chave} type="button" onClick={() => escolherAc(s)}
