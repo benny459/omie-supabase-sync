@@ -78,7 +78,7 @@ function doServidor(p: Pedido): Pedido {
 }
 
 export default function FolhaPedido({
-  id, tipoNovo, fromRC, refs, emp, onClose, onSalvo, onReceber, onDuplicar, onImprimir, toast, onAbrir,
+  id, tipoNovo, fromRC, refs, emp, onClose, onSalvo, onReceber, onDuplicar, onImprimir, toast, onAbrir, onAjustePc,
 }: {
   id: number | null; tipoNovo?: "RC" | "PC"; fromRC?: number | null; refs: Refs | null; emp: string;
   onClose: () => void; onSalvo: (id: number, msg: string, abrirPcDaRc?: number) => void;
@@ -86,6 +86,8 @@ export default function FolhaPedido({
   toast: (m: string, erro?: boolean) => void;
   /** Abre outro pedido na folha (ex.: o PC recém-gerado a partir desta RC). */
   onAbrir?: (id: number) => void;
+  /** Cancelar pedido / Devolver material (sql/146) — os modais vivem na tela do Compras. */
+  onAjustePc?: (acao: "cancelar" | "devolver", d: { emp: string; num: string; forn?: string; valor?: number }) => void;
 }) {
   const [D, setD] = useState<Pedido | null>(null);
   // Cadastro do fornecedor por cima da folha e respostas por e-mail ainda não lidas (06/10/26).
@@ -1031,6 +1033,10 @@ export default function FolhaPedido({
                 {D.id && !isRC && <button className="btn" style={{ borderColor: "#06B6D4" }} onClick={() => onImprimir(D.id!)}>🖨 Imprimir / PDF / enviar ao fornecedor</button>}
                 {D.id && !isRC && D.aprov === "aprovado" && <button className="btn ghost" title="Lança um título a pagar (Pix/depósito) ligado a este PC; as parcelas do PC descontam o adiantado"
                   onClick={() => setAntecipar(true)}>💸 Pagamento antecipado</button>}
+                {D.id && !isRC && onAjustePc && D.aprov === "aprovado" && <button className="btn ghost" title="O PC continua ativo; o devolvido sai da conta do projeto e as linhas da Lista voltam a sem PC"
+                  onClick={() => onAjustePc("devolver", { emp: D.emp, num: D.num })}>↩ Devolver material</button>}
+                {D.id && !isRC && onAjustePc && <button className="btn ghost" style={{ color: "#BE123C" }} title={D.origem === "omie" ? "PC do Omie: cancela só no painel — cancele também no Omie" : "Cancela o pedido, com motivo; as linhas da Lista voltam a sem PC"}
+                  onClick={() => onAjustePc("cancelar", { emp: D.emp, num: D.num, forn: D.forn, valor: Number((D as { valor?: number }).valor) || undefined })}>🚫 Cancelar pedido</button>}
                 {antecipar && D.id && <PagamentoAntecipado pedidoId={D.id} fechar={() => setAntecipar(false)} />}
               </div></section>
               {!ro && (

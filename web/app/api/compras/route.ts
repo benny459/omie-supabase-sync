@@ -3,6 +3,7 @@
 // (compras.casar_nfs_focus — idempotente) para o selo "NF chegou" aparecer.
 import { NextResponse } from "next/server";
 import { exigirCompras, rpc, erro, valoresSePuder } from "@/lib/compras-server";
+import { lerAjustes, devolvidoPorPc } from "@/lib/pc-ajustes";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -26,12 +27,20 @@ export async function GET(req: Request) {
       rpc("compras_conciliar_previsoes").catch(() => null),
       rpc("compras_publicar_rcs").catch(() => null),
     ]);
-    const [pedidos, nfSug, nfsPorPedido, semPedido] = await Promise.all([
+    const [pedidosBrutos, nfSug, nfsPorPedido, semPedido, ajustes] = await Promise.all([
       rpc("compras_lista", { p_desde: desde }),
       rpc("compras_nfs_sugeridas"),
       rpc("compras_nfs_por_pedido"),
       rpc("compras_nfs_sem_pedido", { p_empresa: "SF" }),
+      lerAjustes({}),
     ]);
+    /* sql/146: PC do Omie cancelado no painel sai da lista (o do painel já sai por
+       cancelado = true); devolução marca o pedido para a pílula "Devolução" e o filtro. */
+    const canc = new Set(ajustes.cancelados.map((c) => `${c.empresa}|${c.numero}`));
+    const dev = devolvidoPorPc(ajustes.devolucoes);
+    const pedidos = ((pedidosBrutos ?? []) as { tipo: string; emp: string; num: string }[])
+      .filter((p) => p.tipo !== "PC" || !canc.has(`${p.emp}|${p.num}`))
+      .map((p) => { const d = p.tipo === "PC" ? dev.get(`${p.emp}|${p.num}`) : undefined; return d ? { ...p, devolucao: d.tipo, devolvido: d.valor } : p; });
     return NextResponse.json({ ...valoresSePuder(q, { pedidos, nfSug, nfsPorPedido, semPedido }), desde, pode: q.pode });
   } catch (e) { return erro(e); }
 }

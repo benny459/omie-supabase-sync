@@ -3,6 +3,7 @@ import "server-only";
 import { supaAdmin } from "@/lib/supabase-admin";
 import { acharLinhaPc, valorLinhaPc, deHtml, type LinhaPc } from "@/lib/lista-pc-linha";
 import { estadoPc } from "@/lib/situacao-pc";
+import { lerAjustes, devolvidoPorPc, valorLiquido, fatorDevolucao, type ResumoDev } from "@/lib/pc-ajustes";
 
 /* 07/10/26 (PJ361): linha ligada só pelo NÚMERO do PC vinha sem valor, quantidade
    nem recebimento — Comprado "—" até em pedido recebido. Aqui cada PC citado
@@ -12,7 +13,7 @@ import { estadoPc } from "@/lib/situacao-pc";
 type PcJ = { pc: string; pedido_id: number; fornecedor: string | null; qtd?: number | null; valor_unit?: number | null;
   valor?: number | null; qtd_recebida?: number | null; via: string; dt_rec?: string | null; casado_por?: string | null; etapa?: string | null; aprov?: string | null;
   dt_fat?: string | null; enviado_em?: string | null; aprov_por?: string | null; aprov_em?: string | null; cancelado?: boolean | null;
-  previsao?: string | null; previsao_pc?: string | null };
+  previsao?: string | null; previsao_pc?: string | null; devolucao?: "total" | "parcial" | null };
 type ItemJ = { id: string; item: string; modelo: string | null; codigo: string | null; pcs: PcJ[]; valor_pc: number | null; fornecedor: string | null };
 export type DadosPcs = { itens: ItemJ[]; fora_da_lista: { fornecedor: string | null; pc?: string }[]; totais?: Record<string, unknown> } & Record<string, unknown>;
 type PedJ = { dtRec?: string | null; etapa?: string | null; aprov?: string | null; dtFat?: string | null; enviadoEm?: string | null;
@@ -60,16 +61,30 @@ export async function completarPcs(d: DadosPcs, empresa = "SF", projeto?: number
     d.totais.budget_fluxo = d.totais.budget_lista ?? null;
     d.totais.budget_lista = manual != null ? Number(manual) : null;
   }
+  /* Cancelar / devolver (sql/146): PC cancelado sai das linhas da lista (a linha volta a
+     "sem PC") e o valor devolvido sai do comprometido, da barra e do fluxo. */
+  const citados = [...new Set([...doProjeto.map((x) => x.numero), ...d.itens.flatMap((l) => l.pcs.map((p) => String(p.pc)))])];
+  const [excAll, ajustes] = await Promise.all([
+    citados.length ? supaAdmin().schema("platform").from("excluded_pc").select("*").eq("empresa", empresa).in("pc_numero", citados) : Promise.resolve({ data: [] }),
+    citados.length ? lerAjustes({ empresa, numeros: citados }) : Promise.resolve({ cancelados: [], devolucoes: [] }),
+  ]);
+  const cancelados = new Set(((excAll.data ?? []) as { pc_numero: string; tipo?: string }[]).filter((x) => x.tipo === "cancelado").map((x) => String(x.pc_numero)));
+  const devPc = new Map<string, ResumoDev>([...devolvidoPorPc(ajustes.devolucoes)].map(([k, v]) => [k.split("|")[1], v]));
+  for (const l of d.itens) {
+    if (cancelados.size) l.pcs = l.pcs.filter((p) => !cancelados.has(String(p.pc)));
+    for (const p of l.pcs) { const dv = devPc.get(String(p.pc)); if (dv) p.devolucao = dv.tipo; }
+  }
   if (projeto && d.totais) {
     const nums = [...new Set(doProjeto.map((x) => x.numero))];
-    const exc = nums.length ? await supaAdmin().schema("platform").from("excluded_pc").select("pc_numero").eq("empresa", empresa).in("pc_numero", nums) : { data: [] };
-    const escondidos = new Set(((exc.data ?? []) as { pc_numero: string }[]).map((x) => String(x.pc_numero)));
+    const escondidos = new Set(((excAll.data ?? []) as { pc_numero: string }[]).map((x) => String(x.pc_numero)).filter((n) => nums.includes(n)));
     const porPedido = new Map<number, string>(doProjeto.map((x) => [Number(x.pedido_id), x.numero]));
-    let comp = 0, aprovado = 0, pendente = 0, outros = 0;
+    let comp = 0, aprovado = 0, pendente = 0, outros = 0, devolvido = 0;
     const valores: Record<string, number> = {};
     for (const [id, num] of porPedido) if (!escondidos.has(num)) {
       const ped = peds.get(id);
-      const v = Number(ped?.valor) || 0;
+      const bruto = Number(ped?.valor) || 0;
+      const v = valorLiquido(bruto, devPc.get(num));
+      devolvido += bruto - v;
       comp += v; valores[num] = Math.round(((valores[num] ?? 0) + v) * 100) / 100;
       // Resumo da lista (07/10/26): PCs aprovados × aguardando aprovação
       const e = estadoPc({ etapa: ped?.etapa, aprov: ped?.aprov, cancelado: ped?.cancelado, dt_rec: ped?.dtRec, dt_fat: ped?.dtFat, enviado_em: ped?.enviadoEm }).chave;
@@ -81,6 +96,8 @@ export async function completarPcs(d: DadosPcs, empresa = "SF", projeto?: number
     d.totais.pcs_aprovado = r2(aprovado);
     d.totais.pcs_pendente = r2(pendente);
     d.totais.pcs_outros = r2(outros);
+    d.totais.pcs_devolvido = r2(devolvido);
+    d.totais.pcs_cancelados = [...cancelados].filter((n) => nums.includes(n));
     d.totais.pcs_valores = valores;
     d.totais.comprometido_itens = d.totais.comprometido;
     d.totais.comprometido = Math.round(comp * 100) / 100;
@@ -89,15 +106,17 @@ export async function completarPcs(d: DadosPcs, empresa = "SF", projeto?: number
     // fluxo mensal: tira as parcelas dos PCs escondidos (mesma regra do SQL: vencimento
     // da parcela, senão previsão/emissão do PC, com o valor da parcela ou do pedido)
     const fluxo = (d.fluxo ?? []) as { mes: string | null; comprometido: number }[];
-    if (escondidos.size && fluxo.length) {
+    if ((escondidos.size || devPc.size) && fluxo.length) {
       const mesDe = (dt?: string | null) => (dt && /^\d{4}-\d{2}/.test(dt) ? `${dt.slice(0, 7)}-01` : null);
       for (const [id, num] of porPedido) {
-        if (!escondidos.has(num)) continue;
+        // escondido/cancelado sai inteiro; devolvido sai na proporção do que voltou
+        const tira = escondidos.has(num) ? 1 : 1 - fatorDevolucao(Number(peds.get(id)?.valor) || 0, devPc.get(num));
+        if (!(tira > 0)) continue;
         const ped = peds.get(id);
         if (!ped) continue;
-        const partes = ped.parcelas?.length
+        const partes = (ped.parcelas?.length
           ? ped.parcelas.map((pa) => ({ mes: mesDe(pa.venc ?? ped.previsao ?? ped.emissao), v: Number(pa.valor) || 0 }))
-          : [{ mes: mesDe(ped.previsao ?? ped.emissao), v: Number(ped.valor) || 0 }];
+          : [{ mes: mesDe(ped.previsao ?? ped.emissao), v: Number(ped.valor) || 0 }]).map((x) => ({ ...x, v: x.v * tira }));
         for (const pt of partes) {
           const m = fluxo.find((f) => f.mes === pt.mes);
           if (m) m.comprometido = Math.round((Number(m.comprometido) - pt.v) * 100) / 100;

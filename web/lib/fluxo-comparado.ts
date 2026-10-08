@@ -35,6 +35,7 @@ import "server-only";
 import { supaAdmin } from "@/lib/supabase-admin";
 import { montar, dia, difDias } from "@/lib/vendas-projeto";
 import { estadoPc } from "@/lib/situacao-pc";
+import { lerAjustes, devolvidoPorPc, fatorDevolucao } from "@/lib/pc-ajustes";
 
 export type EvFluxo = {
   tipo: "entrada" | "saida";
@@ -222,6 +223,8 @@ export async function montarFluxoComparado(empresa: string, codigo: number, quem
     numsPc.length ? adm.schema("platform").from("excluded_pc").select("pc_numero").eq("empresa", empresa).in("pc_numero", numsPc) : Promise.resolve({ data: [] }),
   ]);
   const escondidos = new Set(((exc.data ?? []) as { pc_numero: string }[]).map((x) => String(x.pc_numero)));
+  // devolução de material (sql/146): a saída do PC encolhe na proporção do que voltou
+  const devPc = numsPc.length ? devolvidoPorPc((await lerAjustes({ empresa, numeros: numsPc })).devolucoes) : new Map();
   // previsão remarcada na Operação ("Nova prev. materiais") vence a do PC — mesma regra da Lista
   const ncods = peds.map((p) => Number(p?.ncodPed)).filter((x) => x > 0);
   const novaPrev = new Map<number, string>();
@@ -239,16 +242,18 @@ export async function montarFluxoComparado(empresa: string, codigo: number, quem
     if (p.num && escondidos.has(String(p.num))) continue;
     const e = estadoPc({ etapa: p.etapa, aprov: p.aprov, cancelado: p.cancelado, dt_rec: p.dtRec, dt_fat: p.dtFat, enviado_em: p.enviadoEm }).chave;
     if (e === "cancelado" || e === "reprovado") continue;
+    const fdev = fatorDevolucao(Number(p.valor) || 0, devPc.get(`${empresa}|${String(p.num ?? "").trim()}`));
+    if (!(fdev > 0)) continue;   // devolvido por inteiro: não sai mais nada do caixa
     pcsValidos.add(Number(p.id));
-    const rot = `PC ${p.num ?? p.id}${p.forn ? ` · ${p.forn}` : ""}`;
+    const rot = `PC ${p.num ?? p.id}${p.forn ? ` · ${p.forn}` : ""}${fdev < 1 ? " (descontada a devolução)" : ""}`;
     const parcs = (p.parcelas ?? []).filter((x) => Number(x.valor) > 0);
     if (parcs.length) {
-      parcs.forEach((x, i) => saiPend.push({ tipo: "saida", data: dia(x.venc) ?? dia(p.previsao) ?? dia(p.emissao), valor: Number(x.valor) || 0,
+      parcs.forEach((x, i) => saiPend.push({ tipo: "saida", data: dia(x.venc) ?? dia(p.previsao) ?? dia(p.emissao), valor: r2((Number(x.valor) || 0) * fdev),
         descricao: parcs.length > 1 ? `${rot} (${i + 1}/${parcs.length})` : rot, origem: "pc", status: "previsto", ref: String(p.num ?? p.id), prioridade: 0 }));
     } else {
       const base = novaPrev.get(Number(p.ncodPed)) ?? dia(p.previsao) ?? dia(p.emissao);
       const dias = diasCondicao(condMap.get(String(p.parc ?? "")), p.parc);
-      const total = Number(p.valor) || 0;
+      const total = r2((Number(p.valor) || 0) * fdev);
       const parte = Math.floor((total / dias.length) * 100) / 100;
       dias.forEach((dd, i) => saiPend.push({ tipo: "saida", data: base ? somaDias(base, dd) : null,
         valor: i === dias.length - 1 ? r2(total - parte * (dias.length - 1)) : parte,

@@ -174,11 +174,14 @@ function acompanharEmFundo(id: number, avisar: (m: string) => void, onFim: () =>
   }, 5000);
 }
 
-export default function NovaEmissao({ config, aberto, fechar, avisar, onEmitido, inicial, semProposta, homologacao, rascunhoId }: {
+export default function NovaEmissao({ config, aberto, fechar, avisar, onEmitido, inicial, semProposta, homologacao, rascunhoId, devolucaoInicial }: {
   config: ConfigFat[]; aberto: boolean; fechar: () => void; avisar: (m: string) => void; onEmitido: () => void;
   inicial?: Inicial | null; semProposta?: boolean; homologacao?: boolean;
   /** Rascunho a continuar (05/10/26): restaura o estado salvo em orders.fat_rascunhos. */
   rascunhoId?: number | null;
+  /** "Emitir NF de devolução" vindo da devolução de um PC (08/10/26, sql/146): abre a NF-e de
+   *  devolução (de compra) com a busca da NF de entrada e o motivo preenchidos — não emite. */
+  devolucaoInicial?: { nf?: string | null; motivo?: string | null; pc?: string | null } | null;
 }) {
   const ativas = config.filter((c) => c.ativo);
   const [empresa, setEmpresa] = useState(ativas[0]?.empresa ?? "SF");
@@ -368,6 +371,12 @@ export default function NovaEmissao({ config, aberto, fechar, avisar, onEmitido,
         window.setTimeout(() => { rascUltimo.current = JSON.stringify(estadoRef.current()); rascCarregando.current = false; conferirRascunho(p, rr.atualizado_em); }, 600);
       }).catch(() => { rascCarregando.current = false; });
     } else if (inicial) aplicarInicial(inicial);
+    else if (devolucaoInicial) {
+      limparFolha(); setTipo("nfe"); setModo("novo"); setChave(null); setRotulo(null); setOperacao("devolucao");
+      if (devolucaoInicial.nf) setNfBusca(devolucaoInicial.nf);
+      setMotivo(devolucaoInicial.motivo || "Mercadoria em desacordo com o pedido");
+      if (devolucaoInicial.pc) setObs(`Devolução referente ao pedido de compra ${devolucaoInicial.pc}`);
+    }
     else { limparFolha(); setOperacao("venda"); setTipo("nfe"); setModo("novo"); setChave(null); setRotulo(null); }
     if (inicial?.secao) {
       if (inicial.secao === "cliente") setVerCliente(true);

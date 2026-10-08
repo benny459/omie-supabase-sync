@@ -159,11 +159,37 @@ Tudo fica numa aba só: **Lista de materiais** (a antiga aba “Compras × lista
 
 **Comprar e acompanhar**:
 - **PC**: o número do pedido em destaque (clique abre o pedido). Número digitado na lista que não está vinculado aparece como **sug. 6405** (tracejado) — é só sugestão: clique para vincular.
-- **Situação ⓘ**: o estado real do pedido (aprovação + etapa), com as mesmas cores no painel inteiro (lista, Compras e /pcs): 🟧 **Aguardando aprovação** · 🟦 **Aprovado** · **Enviado ao fornecedor** (anil) · **Faturado** (roxo, NF emitida, a caminho) · **Recebido** / **Recebido parcial** (verde-água) · 🟩 **Conferido** · 🟥 **Reprovado / Cancelado**. A dica traz a data do estado, a NF e quem aprovou; **✕** desfaz vínculo por código, descrição ou manual. Linha sem PC mostra **+ vincular**: itens de PC do projeto parecidos com a linha (**Vincular**) ou **Procurar PC por número ou fornecedor**.
+- **Situação ⓘ**: o estado real do pedido (aprovação + etapa), com as mesmas cores no painel inteiro (lista, Compras e /pcs): 🟧 **Aguardando aprovação** · 🟦 **Aprovado** · **Enviado ao fornecedor** (anil) · **Faturado** (roxo, NF emitida, a caminho) · **Recebido** / **Recebido parcial** (verde-água) · 🟩 **Conferido** · **Devolução total / parcial** (lilás acinzentado) · 🟥 **Reprovado / Cancelado**. A dica traz a data do estado, a NF e quem aprovou; **✕** desfaz vínculo por código, descrição ou manual. Linha sem PC mostra **+ vincular**: itens de PC do projeto parecidos com a linha (**Vincular**) ou **Procurar PC por número ou fornecedor**.
 - **Fornecedor**: o do PC; sem PC, o sugerido pelo catálogo (em itálico) com entrega/fatura médias. **Comprado**: valor da linha do PC (**≠** quando a quantidade do PC difere da lista).
 - Linha ligada só pelo **número do PC** também mostra valor: o sistema acha a linha do item dentro do PC (código, senão descrição).
 - Marque as linhas e clique **🧾 Gerar pedido de compra**; **⇄ Vincular PCs automaticamente** liga as linhas aos PCs do projeto — o que sobrar fica com **+ vincular PC** na própria linha.
 - Abaixo da lista: o **Fluxo de compras do projeto** mês a mês. Itens de PCs do projeto que nenhuma linha cobre: **⋯ › Ver PCs com itens fora da lista** (já contam no comprometido).
+
+### Como faço para cancelar um pedido de compra do projeto
+
+Em **Projetos**, abra o projeto e, na tabela **Pedidos de compra**, escolha **Cancelar pedido** no seletor **Aprovação** do PC — ou **⋯ › 🚫 Cancelar pedido…**. (Admin, aprovador ou comprador.)
+
+1. A janela já mostra **o que vai acontecer** antes de gravar (o sistema simula no banco e desfaz): quantas linhas da Lista de materiais voltam a **sem PC**.
+2. Escreva o **motivo** (obrigatório) e confirme. Fica gravado quem cancelou e quando.
+3. O PC **sai da tabela**, do **comprometido**, da **barra de budget**, da **margem real** e do **fluxo de caixa** do projeto. As linhas da Lista ligadas a ele voltam a **sem PC**, com um comentário 💬 contando o motivo — dá para gerar um PC novo para elas pelo **🧾 Gerar pedido de compra** de sempre.
+4. **PC que veio do Omie**: o painel **não escreve no Omie**. Ele fica cancelado **só no painel** (como o “Excluir PC”) e a janela avisa: **cancele também no Omie**.
+5. **PC criado no painel**: fica cancelado também no **Compras**.
+
+No fim da tabela de PCs aparece **▸ Cancelados / devolvidos (N)**, recolhido: PC, motivo, quem, quando e quantas linhas foram liberadas. **Desfazer cancelamento** (só admin) devolve o PC às contas e religa as linhas que continuam livres.
+
+“Recusado” e “Rejeitado por validade” continuam como antes: o PC fica na tabela (como recusa a resolver), fora da margem real. **Cancelar** é a saída definitiva. **Excluir PC** (esconder) continua existindo para PC que nem devia estar no projeto e volta pelo menu **PCs escondidos**; o PC cancelado não aparece ali.
+
+### Como faço para registrar uma devolução de material ao fornecedor
+
+Na tabela de PCs do projeto: **⋯ › ↩ Devolver material…** (ou no **Compras**, no menu do pedido e na folha do PC).
+
+1. Informe a **quantidade devolvida** de cada item (**tudo** preenche o que resta; **devolver tudo** marca o pedido inteiro). O total que sai do projeto aparece embaixo, e a janela diz se a devolução é **total** ou **parcial**.
+2. Escreva o **motivo** e, se já existir, o **nº e a data da NF de devolução**.
+3. Confirme. O **PC continua ativo**: a situação passa a **Devolução total / parcial**. O **valor devolvido** sai do comprometido, do budget, da margem e do fluxo de caixa.
+4. Na Lista de materiais, as linhas desses itens voltam a **sem PC** pela quantidade devolvida: quantidade inteira → a linha é desligada do PC; só parte → a linha fica com o que ficou e nasce uma linha **“· repor (devolução PC …)”** com a quantidade devolvida, sem PC, pronta para um pedido novo. Cada linha ganha um comentário 💬.
+5. **emitir NF de devolução ↗** abre o **Faturamento** com a **NF-e de devolução (de compra)** já escolhida, a NF de entrada procurada e o motivo — **não emite nada sozinho**; confira e emita por lá.
+
+A devolução também fica em **Cancelados / devolvidos**; **desfazer** (só admin) volta a quantidade às linhas e o valor ao projeto.
 
 **Cartão “Custo planejado”** (topo do projeto): a barra mostra a composição e a legenda traz o valor de cada parte — materiais, obra e despesas, em R$ e %.
 
