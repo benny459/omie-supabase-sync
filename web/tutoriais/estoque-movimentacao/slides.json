@@ -1,0 +1,53 @@
+{
+ "titulo": "Movimentação de estoque — entradas, saídas e como lançar",
+ "passos": [
+  {
+   "img": "img/01.png",
+   "fala": "Aqui é a lista de itens do estoque. O saldo de cada item é o que veio do Omie mais o que foi lançado no painel. Quando há material separado para projeto, a coluna mostra o disponível e o separado."
+  },
+  {
+   "img": "img/02.png",
+   "fala": "Em Estoque, Movimentação, fica tudo o que entrou e saiu, dia a dia. Neste filtro você escolhe ver as notas que vêm do Omie, as movimentações lançadas aqui no painel, ou as duas juntas."
+  },
+  {
+   "img": "img/03.png",
+   "fala": "As entradas e saídas por nota fiscal entram sozinhas: a nota de compra dá entrada, e a nota de venda ou de remessa dá saída. Hoje elas vêm do Omie. Cada linha mostra o item, a nota, o cliente ou projeto, a quantidade e o saldo depois."
+  },
+  {
+   "img": "img/04.png",
+   "fala": "Tudo o que não tem nota a gente lança aqui, em mais Nova movimentação: material que sai para obra, que volta da obra, transferência de local, consumo interno, perda e devolução ao fornecedor."
+  },
+  {
+   "img": "img/05.png",
+   "fala": "Primeiro, o tipo. São seis: saída para obra ou projeto, retorno de obra, transferência entre locais, consumo interno, perda ou avaria, que precisa de aprovação, e devolução ao fornecedor."
+  },
+  {
+   "img": "img/06.png",
+   "fala": "Depois, quem pediu o material, que é obrigatório. Na saída e no retorno de obra, informe também o cliente ou o projeto. Se digitar o PV ou a OS, cliente e projeto já vêm preenchidos. Na devolução ao fornecedor, o PC é obrigatório."
+  },
+  {
+   "img": "img/07.png",
+   "fala": "A justificativa também é obrigatória. Escolha da lista, por exemplo instalação, manutenção ou garantia, ou escreva ao lado. E em Sai de ou Entra em, o local do estoque."
+  },
+  {
+   "img": "img/08.png",
+   "fala": "Nos itens, digite o código ou o nome e a quantidade. Dá para lançar vários de uma vez: mais linha, ou Colar do Excel com código e quantidade. Se faltar saldo, o painel avisa, mas não impede."
+  },
+  {
+   "img": "img/09.png",
+   "fala": "Conferido, clique em Lançar movimentação. O saldo muda na hora, ao custo médio atual. A perda fica aguardando a aprovação do administrador. Se errar, o administrador cancela o lançamento e o saldo volta."
+  },
+  {
+   "img": "img/10.png",
+   "fala": "Para obra de projeto, use Separar para projeto. Separar reserva o material e tira do disponível, mas o saldo total não muda. Depois você devolve ao estoque o que sobrou, ou consome no projeto: só o consumo baixa o saldo e lança o custo no projeto."
+  },
+  {
+   "img": "img/11.png",
+   "fala": "Para ver a história de um item, abra a ficha dele e a aba Movimentação: em cima, o que foi lançado no painel; embaixo, o gráfico do saldo ao longo do tempo e o Kardex, nota por nota. Dá para exportar o Kardex."
+  },
+  {
+   "img": "img/12.png",
+   "fala": "E quando a contagem física não bate com o sistema, o acerto é pelo inventário: com a senha de inventário, em Ajustar saldo você informa a contagem e o motivo, e o painel lança a diferença. Resumindo: nota entra sozinha, o resto se lança em Nova movimentação, e a contagem se acerta no inventário."
+  }
+ ]
+}

@@ -27,8 +27,11 @@ export default function ManualConteudo({ corpo }: { corpo: string }) {
             return <a href={href} target={externo ? "_blank" : undefined} rel={externo ? "noreferrer" : undefined}>{children}</a>;
           },
           img: ({ src, alt }) => (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={typeof src === "string" ? src : undefined} alt={alt ?? ""} className="mn-img" loading="lazy" />
+            // ![legenda](/manual-video/x.mp4) vira player — tutoriais em vídeo (08/10/26, web/tutoriais/)
+            typeof src === "string" && /\.(mp4|webm)$/i.test(src)
+              ? <video src={src} controls preload="metadata" className="mn-img" aria-label={alt ?? "vídeo"} />
+              // eslint-disable-next-line @next/next/no-img-element
+              : <img src={typeof src === "string" ? src : undefined} alt={alt ?? ""} className="mn-img" loading="lazy" />
           ),
           table: ({ children }) => <div className="mn-tabela"><table>{children}</table></div>,
         }}

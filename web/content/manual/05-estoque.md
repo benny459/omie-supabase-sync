@@ -5,7 +5,7 @@ icone: 📦
 area: erp
 rotas: /estoque
 caminhos: web/components/navy/estoque, web/components/navy/tela/TelaEstoqueNavy.tsx, web/app/(app)/estoque, web/app/api/estoque
-atualizado: 2026-10-06
+atualizado: 2026-10-08
 ---
 
 ## Itens e ficha do item
@@ -17,11 +17,20 @@ atualizado: 2026-10-06
 
 ## Movimentação
 
-Em **Estoque → Movimentação**, lance entradas, saídas, transferências e ajustes, informando cliente, projeto e solicitante.
+![Vídeo: movimentação de estoque](/manual-video/estoque-movimentacao.mp4)
+
+*Vídeo (3 min): entradas e saídas por nota, como lançar uma movimentação, separação para projeto, Kardex do item e ajuste de inventário.*
+
+Em **Estoque → Movimentação** fica tudo o que entrou e saiu, dia a dia. O filtro escolhe **NF do Omie + internas**, **Só NF do Omie (automáticas)** ou **Só internas (lançadas aqui)**.
+
+- **Entradas e saídas por nota** entram sozinhas (hoje vêm do Omie): nota de compra dá entrada; venda e remessa dão saída.
+- **+ Nova movimentação** lança o que não tem nota, um ou vários itens de uma vez. Tipos: **Saída para obra/projeto**, **Retorno de obra**, **Transferência entre locais**, **Consumo interno**, **Perda / avaria / descarte** (fica aguardando aprovação do administrador) e **Devolução ao fornecedor** (exige o PC). Obrigatórios: quem pediu, justificativa e, na saída/retorno de obra, cliente ou projeto (o **PV / OS** preenche os dois). O saldo muda na hora, ao custo médio atual (o CMC não muda); falta de saldo só gera aviso. Errou? O administrador **cancela** o lançamento e o saldo volta.
+- **Ficha do item › Movimentação**: o que foi lançado no painel, o gráfico do saldo ao longo do tempo e o Kardex (**Exportar Kardex**).
+- **Contagem diferente do sistema**: ajuste pelo inventário — com a senha de inventário, **Ajustar saldo** na ficha (contagem + motivo; o painel lança a diferença).
 
 ## Como faço para separar material para um projeto (em lote)
 
-1. Vá em **Estoque → Movimentação → + Separar material** (“Separação de material para projeto”).
+1. Vá em **Estoque → Movimentação → Separar p/ projeto** (“Separação de material para projeto”) — ou, no projeto, aba **Materiais separados › + Separar material**.
 2. Busque o **projeto** pelo código (ex.: PJ364) ou nome e informe **quem pediu**.
 3. A tela traz os itens das RCs/PCs do projeto com **Necessário, Já separado e Disponível**. A quantidade vem sugerida — ajuste se precisar, ou **Colar do Excel** (código;qtd).
 4. Itens em falta aparecem destacados; use **Abrir Compras (RC) ↗** para pedir.

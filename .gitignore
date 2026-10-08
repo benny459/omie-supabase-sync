@@ -42,3 +42,5 @@ web/tutoriais/*/video/
 web/tutoriais/*/*.mp4
 web/tutoriais/*/marcas.json
 web/tutoriais/*/legendas.srt
+web/tutoriais/*/partes/
+web/tutoriais/*/img/
