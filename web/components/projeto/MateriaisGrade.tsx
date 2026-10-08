@@ -184,7 +184,8 @@ export default function MateriaisGrade({
   const [equipFiltro, setEquipFiltro] = useState<string | null>(null);
   /** ?pc=N vindo de Projetos: só as linhas daquele PC (07/10/26). */
   const [filtroPcNum, setFiltroPcNum] = useState<string | null>(null);
-  const [filtroPc, setFiltroPc] = useState<"todas" | "sem_pc" | "com_pc" | "risco" | "atrasado" | "pc_atrasado" | "sug">("todas");
+  /** Filtros da lista (08/10/26, spec B.4): Todos · Com sugestão · Sem código · Sem PC · Em risco/atrasados. */
+  const [filtroPc, setFiltroPc] = useState<"todas" | "sug" | "sem_cod" | "sem_pc" | "risco">("todas");
   /** Rascunho não salvo encontrado neste navegador ao abrir (ms de quando foi feito). */
   const [rascunhoDe, setRascunhoDe] = useState<number | null>(null);
   const chaveRascunho = `painel.materiais.rascunho.${empresa}.${codigoProjeto}`;
@@ -307,7 +308,6 @@ export default function MateriaisGrade({
   /** Linha sem PC com o "vincular" aberto (sugestões de vínculo + busca de PC). */
   const [vincLinha, setVincLinha] = useState<string | null>(null);
   const [vincBusca, setVincBusca] = useState<string[] | null>(null);
-  const [painelDatas, setPainelDatas] = useState(false);
 
   // ── 💬 Comentários das linhas (sql/101; antes era a coluna Observação) ──
   type Coment = { id: number | string; autor: string; texto: string; criado_em: string; origem?: string };
@@ -872,20 +872,28 @@ export default function MateriaisGrade({
   const comPc = validas.filter((l) => String(l.pc_numero ?? "").trim()).length;
   const temPc = useCallback((l: LinhaGrade) => !!cmpPorId.get(l._id)?.pcs.length || !!String(l.pc_numero ?? "").trim(), [cmpPorId]);
 
-  const visiveis = useMemo(
-    () => linhas.filter((l) => {
+  const visiveis = useMemo(() => {
+    const vis = linhas.filter((l) => {
       if (!l.item?.trim()) return true; // a linha em branco do fim fica sempre
       if (equipFiltro && normGrupo(l.equipamento || "Geral") !== equipFiltro) return false;
-      if (filtroPc === "com_pc" && !temPc(l)) return false;
       if (filtroPc === "sem_pc" && temPc(l)) return false;
       if (filtroPcNum && !cmpPorId.get(l._id)?.pcs.some((p) => p.pc === filtroPcNum)) return false;
-      if (filtroPc === "risco" && sinais.get(l._id)?.nivel !== "risco") return false;
-      if (filtroPc === "atrasado" && sinais.get(l._id)?.nivel !== "atrasado") return false;
-      if (filtroPc === "pc_atrasado" && !((sinais.get(l._id)?.pcAtrasadoDias ?? 0) > 0)) return false;
+      if (filtroPc === "risco") {
+        const sg = sinais.get(l._id);
+        if (!(sg && (sg.nivel === "risco" || sg.nivel === "atrasado" || sg.pcAtrasadoDias > 0))) return false;
+      }
       if (filtroPc === "sug" && l._match !== "sug") return false;
+      if (filtroPc === "sem_cod" && !(semCodigoNosso(l) && l._match !== "sug")) return false;
       return true;
-    }),
-    [linhas, equipFiltro, filtroPc, temPc, sinais, filtroPcNum, cmpPorId]);
+    });
+    /* Agrupadas por equipamento (spec B.3: a data do grupo fica no cabeçalho do grupo, na
+       própria grade). Ordem dos grupos = a da 1ª aparição; dentro do grupo, a ordem de sempre;
+       a linha em branco fica no fim. */
+    const ordem = new Map<string, number>();
+    for (const l of vis) if (l.item?.trim()) { const k = normGrupo(l.equipamento || "Geral"); if (!ordem.has(k)) ordem.set(k, ordem.size); }
+    const pos = (l: LinhaGrade) => (l.item?.trim() ? ordem.get(normGrupo(l.equipamento || "Geral"))! : Number.MAX_SAFE_INTEGER);
+    return vis.map((l, i) => ({ l, i })).sort((a, b) => pos(a.l) - pos(b.l) || a.i - b.i).map((x) => x.l);
+  }, [linhas, equipFiltro, filtroPc, temPc, sinais, filtroPcNum, cmpPorId]);
 
   const salvar = useCallback(async (confirmarRemocao = false, silencioso = false) => {
     const versaoInicio = versaoRef.current;
@@ -1182,7 +1190,10 @@ export default function MateriaisGrade({
   // caminho andado" sem colocar na lista o que não vai ser comprado.
   type ItemCp = { equipamento: string; item: string; qtd: number | null; modelo: string | null;
                   custo_cp: number | null; casamento: Casamento };
-  const [subAba, setSubAba] = useState<"lista" | "cp">("lista");
+  /** Etapas (08/10/26, spec B.1): ① Itens da RC · ② Lista de materiais · ③ Planejamento.
+   *  Abre em ② quando a lista já tem itens; senão em ① (de onde a lista nasce). */
+  const [subAba, setSubAba] = useState<"rc" | "lista" | "plan">("lista");
+  const etapaInicialFeita = useRef(false);
   /** "⤵ Importar para a lista" (07/10/26): itens da CP com o casamento automático. */
   const [importarAberto, setImportarAberto] = useState(false);
   const [cp, setCp] = useState<{ proposta: string | null; itens: ItemCp[] } | null>(null);
@@ -1546,6 +1557,61 @@ export default function MateriaisGrade({
     return { risco: ls.filter((l) => sinais.get(l._id)?.nivel === "risco").length, atraso: ls.filter((l) => sinais.get(l._id)?.nivel === "atrasado").length };
   };
 
+  /* Etapa inicial (spec B.1): projeto sem lista abre em ① Itens da RC; com lista, em ②. */
+  useEffect(() => {
+    if (etapaInicialFeita.current || !carregouOk || carregando) return;
+    etapaInicialFeita.current = true;
+    setSubAba(validas.length ? "lista" : "rc");
+  }, [carregouOk, carregando, validas.length]);
+
+  /** Linha nova no topo (do grupo filtrado, se houver), com o foco na coluna pedida. */
+  const novaLinhaNoTopo = useCallback((col: string) => {
+    setSubAba("lista"); setFiltroPc("todas"); setFiltroPcNum(null);
+    const nova = { ...vazia(), equipamento: equipFiltro ? (grupos.find((g) => g.k === equipFiltro)?.nome ?? "") : "" } as LinhaGrade;
+    setLinhas((ls) => [nova, ...ls]);
+    const ci = COLS.filter((c) => !c.calculada && !c.render).findIndex((c) => c.key === col);
+    setTimeout(() => (document.querySelector(`[data-cel="0-${Math.max(0, ci)}"]`) as HTMLInputElement | null)?.focus(), 80);
+  }, [equipFiltro, grupos, COLS]);
+
+  /** "+ Adicionar itens ▾" (spec B.2 / D). */
+  const menuAdicionar: { rot: string; sub: string; fn: () => void }[] = [
+    { rot: "🔎 Escolher do estoque / catálogo", sub: "digite código ou descrição na linha nova — o catálogo sugere", fn: () => novaLinhaNoTopo("cat_codigo") },
+    { rot: "📋 Colar do Excel", sub: "clique numa célula da grade e cole (Ctrl+V) — 10, 15 linhas de uma vez",
+      fn: () => { setSubAba("lista"); setAviso("Clique na célula onde começa a colagem (ou em qualquer lugar da grade) e cole com Ctrl+V. Sem cabeçalho: Código · Item · Qtd · Un · Necessário em · Valor unit."); setTimeout(() => (document.querySelector(`[data-cel="${Math.max(0, visiveis.length - 1)}-0"]`) as HTMLInputElement | null)?.focus(), 80); } },
+    { rot: "✏️ Linha em branco", sub: "digitar à mão (Enter na última linha também cria outra)", fn: () => novaLinhaNoTopo("item") },
+  ];
+  /** "⋯" (spec B.2): tudo o que saiu da barra continua aqui. */
+  const menuMais: { rot: string; dica?: string; off?: boolean; fn: () => void }[] = [
+    { rot: casando ? "⚡ Casando…" : "⚡ Casar com o catálogo de novo", off: casando || salvando, dica: "Só nas linhas sem código (as recusadas ficam de fora)", fn: () => void casarAgora() },
+    { rot: "⚠ Revisar sugestões de código", off: !nSug, fn: () => { setSugMarc(new Set(validas.filter((l) => l._match === "sug").map((l) => l._id))); setRevisarSug(true); } },
+    { rot: ocupado === "auto" ? "⇄ Vinculando…" : "⇄ Vincular PCs automaticamente", off: salvando || !!ocupado, dica: "Procura, nos pedidos de compra deste projeto, o item de cada linha — e grava o vínculo", fn: () => void vincularAuto() },
+    { rot: ocupado === "sug" ? "Procurando…" : "Ver sugestões de vínculo com PCs", off: !!ocupado, dica: "Linhas parecidas com itens dos PCs do projeto, para você confirmar (também no “+ vincular” de cada linha)", fn: () => void verSugestoes() },
+    { rot: "Exportar Excel", off: !validas.length, fn: exportar },
+    { rot: salvando ? "Salvando…" : "Salvar agora", off: salvando || !carregouOk, fn: () => void salvar() },
+    ...(cmp?.fora_da_lista.length ? [{ rot: `${foraAberto ? "Esconder" : "Ver"} PCs com itens fora da lista (${cmp.fora_da_lista.length})`, dica: "Itens de PCs do projeto que nenhuma linha da lista cobre — já contam no comprometido", fn: () => setForaAberto((v) => !v) }] : []),
+  ];
+
+  /** Cabeçalho do grupo na grade (spec B.3): nome, itens e a data "necessário em" do grupo,
+   *  editável aqui mesmo — muda as linhas que herdam (as de data própria ficam). */
+  const cabecalhoGrupo = (k: string, ls: LinhaGrade[]) => {
+    const g = grupos.find((x) => x.k === k);
+    const padrao = g && nomesPadrao.length ? nomePadrao(g.nome, nomesPadrao) : null;
+    const rg = riscoGrupo(k);
+    return (<>
+      <b className="text-ww-text">{g?.nome ?? (ls[0]?.equipamento || "Geral")}</b>
+      <span className="text-ww-textFaint">{ls.length} {ls.length === 1 ? "item" : "itens"}</span>
+      <span className="text-ww-textMuted">· necessário em</span>
+      <input type="date" value={g?.data ?? ""} onChange={(e) => definirDataGrupo(k, e.target.value)} data-grupo-data={k}
+        title="Muda a data de todos os itens do grupo que herdam (os de data própria ficam)"
+        className={`bg-transparent border rounded px-1 py-0 text-[11.5px] text-ww-text ${g?.data ? "border-ww-border" : "border-amber-500/70"}`} />
+      {g && g.proprias > 0 && <span className="text-amber-700 dark:text-amber-300 text-[10.5px]">{g.proprias} com data própria</span>}
+      {!g?.data && sugestaoData && <button type="button" className="text-[10.5px] text-ww-accent hover:underline" title={gruposMeta?.prazo.fonte ?? ""} onClick={() => definirDataGrupo(k, sugestaoData)}>aplicar {dia(sugestaoData)} (entrega prevista)</button>}
+      {rg.risco > 0 && <span className="text-amber-700 dark:text-amber-300 text-[10.5px]">⚠ {rg.risco} em risco</span>}
+      {rg.atraso > 0 && <span className="text-rose-600 dark:text-rose-400 text-[10.5px]">✕ {rg.atraso} atrasada(s)</span>}
+      {padrao && g && padrao !== g.nome && <button type="button" className="text-[10.5px] text-amber-700 dark:text-amber-300 hover:underline" title={`Trocar pelo nome padrão do cadastro: ${padrao}`} onClick={() => renomearGrupo(k, padrao)}>≈ {padrao}</button>}
+    </>);
+  };
+
   // ── Seletor aberto ──────────────────────────────────────────────────────
   const seletorDados = useMemo(() => {
     if (!seletor) return null;
@@ -1571,12 +1637,13 @@ export default function MateriaisGrade({
             Lista de materiais
           </h3>
           <p className="text-[11px] text-ww-textMuted mt-0.5">
-            Importe os itens da RC uma vez, ajuste a lista (incluir/excluir/casar com o nosso código) e gere os pedidos de compra a partir dela.{" "}
-            <span className="cursor-help text-ww-textFaint" title={"Digite ou cole do Excel as colunas Equipamento · Item · Qtd · Un · Necessário em · Valor unit.\nCom a linha de cabeçalho, também Código, Modelo, PC e Observação (a observação vira comentário).\nAo digitar o Item, o catálogo sugere os itens do nosso estoque com último preço, fornecedor e prazos.\nÀ direita de cada linha: o pedido de compra, o valor e a situação.\nOs pedidos de compra se acompanham em Operação › Projetos (por PC) e aqui, item a item."}>ⓘ</span>
+            ① confira os itens da RC e leve-os para a lista · ② ajuste a lista (códigos, datas) e gere os pedidos de compra · ③ veja quando pedir cada item.
+            {" "}<a href={`/projetos?${new URLSearchParams({ empresa, abrir: String(codigoProjeto) })}`} className="text-ww-accent hover:underline"
+              title="Vendas (PV/OS) e as previsões de faturamento e recebimento ficam no cartão do projeto em Operação › Projetos">vendas e datas de faturamento em Operação › Projetos →</a>{" "}
+            <span className="cursor-help text-ww-textFaint" title={"Na grade: digite, ou cole do Excel com Ctrl+V a partir da célula selecionada.\nSem cabeçalho a ordem é Código · Item · Qtd · Un · Necessário em · Valor unit.\nCom a linha de cabeçalho, também Equipamento, Modelo, PC e Observação (a observação vira comentário).\nAo digitar o Item ou o Código, o catálogo sugere os itens do nosso estoque com último preço, fornecedor e prazos.\nÀ direita de cada linha: o pedido de compra, o valor e a situação."}>ⓘ</span>
           </p>
         </div>
       </header>
-      <VendasFaixa empresa={empresa} codigo={codigoProjeto} />
 
       {/* Quanto vou gastar — KPIs que eram da aba "Compras × lista". */}
       {cmp && (
@@ -1585,62 +1652,147 @@ export default function MateriaisGrade({
       )}
       {cmpErro && !cmp && <p className="text-[11px] text-rose-600">Compras do projeto indisponíveis: {cmpErro}</p>}
 
-      {/* Barra de ações */}
+      {/* As três etapas (08/10/26, spec B.1) — a lista nasce da RC e termina no planejamento. */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+        {([
+          ["rc", `① Itens da RC${cpBase ? ` (${cpBase.itens.length})` : ""}`, "vêm do CRM · conferir e levar para a lista"],
+          ["lista", `② Lista de materiais (${validas.length})`, "o que vamos comprar de fato · códigos, datas, PCs"],
+          ["plan", "③ Planejamento de compras", "quando pedir cada item para chegar no prazo"],
+        ] as const).map(([k, rot, sub]) => (
+          <button key={k} type="button" onClick={() => setSubAba(k)} data-etapa={k}
+            className={`text-left rounded-lg border px-3 py-2 transition ${subAba === k ? "border-ww-accent bg-ww-accentSoft" : "border-ww-border bg-ww-rowHover/40 hover:border-ww-accent/60"}`}>
+            <b className={`block text-[12.5px] ${subAba === k ? "text-ww-text" : "text-ww-textMuted"}`}>{rot}</b>
+            <small className="block text-[10.5px] text-ww-textFaint mt-0.5">{sub}</small>
+          </button>
+        ))}
+      </div>
+
+      {erro && (
+        <div className="p-2.5 rounded-lg border border-rose-500/40 bg-rose-500/10 text-[12px] text-rose-700 dark:text-rose-300">
+          <strong>Erro:</strong> {erro}
+        </div>
+      )}
+      {aviso && (
+        <div className="p-2.5 rounded-lg border border-emerald-500/40 bg-emerald-500/10 text-[12px] text-emerald-700 dark:text-emerald-300">
+          {aviso}
+        </div>
+      )}
+      {rascunhoDe != null && (
+        <div className="flex items-center gap-3 flex-wrap p-2.5 rounded-lg border border-amber-500/50 bg-amber-500/15 text-[12px] text-amber-900 dark:text-amber-100">
+          <span>
+            <strong>Lista NÃO salva recuperada</strong> — feita neste navegador em{" "}
+            {new Date(rascunhoDe).toLocaleString("pt-BR")}. Ainda não está no sistema: confira e clique em <strong>Salvar lista</strong>.
+          </span>
+          <button type="button" onClick={descartarRascunho}
+            className="ml-auto text-[11px] underline opacity-80 hover:opacity-100">descartar rascunho</button>
+        </div>
+      )}
+
+      {subAba === "rc" && (
+        <div className="space-y-2">
+          {!cpBase ? <p className="text-[11.5px] text-ww-textFaint py-3">Lendo a RC no CRM…</p>
+            : !cpBase.proposta ? (
+              <p className="text-[12px] text-ww-textMuted py-3">
+                Este projeto não tem proposta ligada no CRM. No CRM, ligue a proposta ao projeto no fechamento (Recebimento → projeto do painel).
+              </p>)
+            : (() => {
+              const tot = (i: ItemCpBase) => (Number(i.qtd) || 0) * (Number(i.custo_cp) || 0);
+              const plano = cpBase.itens.reduce((a, i) => a + tot(i), 0);
+              const usado = cpBase.itens.reduce((a, i, k) => a + (usoCp.has(k) ? tot(i) : 0), 0);
+              const projUsado = [...usoCp.values()].reduce((a, l) => a + num(l.qtd) * num(l.cat_valor_unit), 0);
+              const naoUsados = cpBase.itens.map((_, k) => k).filter((k) => !usoCp.has(k));
+              let grp = "";
+              return (
+                <>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-[11px] text-ww-textMuted">Itens da proposta <b className="font-mono text-ww-text">{cpBase.proposta}</b> (composição de preço — o plano e o budget). Os que já estão na lista aparecem com ✓.</span>
+                  <button type="button" onClick={() => levarParaLista(naoUsados)} disabled={!naoUsados.length}
+                    title="Abre o importar com os itens que faltam marcados — cada um já casado com o nosso catálogo"
+                    className="ml-auto px-2.5 py-1 text-[11.5px] rounded-lg bg-ww-accent text-white font-semibold hover:brightness-110 transition disabled:opacity-40">
+                    ⤵ Levar para a lista os que faltam ({naoUsados.length})
+                  </button>
+                </div>
+                <div className="border border-ww-border rounded-lg overflow-auto" style={{ maxHeight: 560 }}>
+                  <table className="w-full text-[11.5px] border-collapse">
+                    <thead className="sticky top-0 bg-[rgb(var(--color-ww-panel))] text-ww-textMuted z-[1]">
+                      <tr className="text-left">
+                        <th className="p-1.5 w-8">#</th><th className="p-1.5">Equipamento</th><th className="p-1.5">Item da RC</th><th className="p-1.5 text-right">Qtd</th>
+                        <th className="p-1.5 text-right">Custo RC</th><th className="p-1.5 text-right">Total</th><th className="p-1.5">Na lista</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {cpBase.itens.map((i, k) => {
+                        const l = usoCp.get(k);
+                        const n = l ? validas.findIndex((x) => x._id === l._id) + 1 : 0;
+                        const cab = grp !== i.equipamento ? <tr key={`g${k}`} className="bg-ww-rowHover/70"><td colSpan={7} className="px-2 py-1 text-[11px] font-semibold text-ww-textMuted">{i.equipamento || "Geral"}</td></tr> : null;
+                        grp = i.equipamento;
+                        return [cab, (
+                          <tr key={k} className={`border-t border-ww-border/50 ${l ? "" : "opacity-70"}`}>
+                            <td className="p-1.5 text-ww-textFaint tabular-nums">{k + 1}</td>
+                            <td className="p-1.5 text-ww-textMuted">{i.equipamento}</td>
+                            <td className="p-1.5 text-ww-text">{i.item}{i.modelo ? <span className="text-ww-textFaint"> · {i.modelo}</span> : null}</td>
+                            <td className="p-1.5 text-right tabular-nums">{i.qtd ?? "—"}</td>
+                            <td className="p-1.5 text-right tabular-nums">{brl(i.custo_cp)}</td>
+                            <td className="p-1.5 text-right tabular-nums">{brl(tot(i))}</td>
+                            <td className="p-1.5">{l
+                              ? <span className="text-emerald-700 dark:text-emerald-300">✓ na lista{l.cat_codigo ? <> · <b className="font-mono">{l.cat_codigo}</b></> : " · sem código"}{n ? <span className="text-ww-textFaint"> · linha {n}</span> : null}</span>
+                              : <button type="button" className="px-1.5 rounded border border-emerald-500/50 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-500/10"
+                                  title="Levar este item para a lista (casa com o catálogo no importar)" onClick={() => levarParaLista([k])}>→ lista</button>}</td>
+                          </tr>)];
+                      })}
+                    </tbody>
+                    <tfoot>
+                      <tr className="border-t border-ww-border font-semibold">
+                        <td className="p-1.5" colSpan={5}>Plano (RC): {cpBase.itens.length} item(ns) · {usoCp.size} na lista · {cpBase.itens.length - usoCp.size} não usado(s)</td>
+                        <td className="p-1.5 text-right tabular-nums">{brl(plano)}</td>
+                        <td className="p-1.5 text-[11px] font-normal text-ww-textMuted">na lista: {brl(usado)} pelo custo da RC · {brl(projUsado)} projetado</td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+                </>);
+            })()}
+          <p className="text-[10.5px] text-ww-textFaint">A RC é a referência e a origem do budget de materiais — aqui só se lê. Leve um item com “→ lista” ou todos com “⤵ Levar para a lista os que faltam” (casam com o nosso código antes de entrar). Na etapa ② você exclui, inclui e casa.</p>
+        </div>
+      )}
+
+      {subAba === "lista" && (<>
+      {/* Barra da lista (spec B.2): adicionar · gerar PC · ⋯, e à direita as sugestões pendentes. */}
       <div className="flex items-center gap-2 flex-wrap">
-        <button type="button" onClick={() => void casarAgora()} disabled={salvando || casando}
-          title="Liga cada linha ao item do nosso estoque: último preço pago, fornecedor e prazos médios. Escolhas feitas à mão não mudam."
-          className="px-2 py-1 text-[11px] rounded-lg border border-emerald-400 dark:border-emerald-700
-                     bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-200
-                     hover:bg-emerald-100 dark:hover:bg-emerald-900/50 transition disabled:opacity-40">
-          {casando ? "…" : "⚡ Casar com o catálogo"}
+        <details className="relative" data-menu="adicionar">
+          <summary className="list-none cursor-pointer px-2.5 py-1 text-[11.5px] rounded-lg bg-ww-accent text-white font-semibold hover:brightness-110 select-none">+ Adicionar itens ▾</summary>
+          <div className="absolute left-0 mt-1 z-30 min-w-[290px] rounded-lg border border-ww-border bg-[rgb(var(--color-ww-panel))] shadow-xl p-1 text-[11.5px]">
+            {menuAdicionar.map((m) => (
+              <button key={m.rot} type="button" onClick={(e) => { (e.currentTarget.closest("details") as HTMLDetailsElement).open = false; m.fn(); }}
+                className="block w-full text-left px-2 py-1.5 rounded hover:bg-ww-rowHover">
+                {m.rot}<small className="block text-[10.5px] text-ww-textFaint">{m.sub}</small>
+              </button>))}
+          </div>
+        </details>
+        <button type="button" onClick={() => abrirGerarPc(paraPc)} disabled={!!ocupado || !paraPc.length}
+          title={paraPc.length ? "Gera os pedidos de compra (um por fornecedor) com as linhas marcadas sem PC" : "Marque linhas sem PC na caixinha da esquerda"}
+          className="px-2.5 py-1 text-[11.5px] rounded-lg border border-ww-accent/70 text-ww-accent font-semibold hover:bg-ww-accentSoft transition disabled:opacity-40">
+          🧾 Gerar pedido de compra ({paraPc.length} marcado{paraPc.length === 1 ? "" : "s"})
         </button>
-        {nSug > 0 && (
-          <button type="button" onClick={() => { setSugMarc(new Set(validas.filter((l) => l._match === "sug").map((l) => l._id))); setRevisarSug(true); }}
-            title="Ver cada sugestão por extenso, trocar pela outra candidata e aceitar as marcadas"
-            className="px-2 py-1 text-[11px] rounded-lg bg-amber-500 text-white font-semibold hover:brightness-110 transition">
-            ⚠ Revisar sugestões ({nSug})
-          </button>
-        )}
-        {nSug > 0 && (
-          <button type="button" onClick={() => void aceitarSugestoes(validas.filter((l) => l._match === "sug").map((l) => l._id))}
-            title={`Confirma as ${nSug} sugestões de código (⚠ âmbar). Dá para desfazer logo depois.`}
-            className="px-2 py-1 text-[11px] rounded-lg border border-amber-500/70 text-amber-800 dark:text-amber-200 font-semibold hover:bg-amber-500/10 transition">
-            ✓ Aceitar todas as sugestões ({nSug})
-          </button>
-        )}
-        <span className="text-[10.5px] text-ww-textFaint" title="Códigos da lista">✓ {nCod} · ⚠ {nSug} sugestão · ⌕ {nSemCod} sem código{sugBuscando ? " · buscando sugestões…" : ""}</span>
+        <span className="flex-1" />
+        {nSug > 0
+          ? <button type="button" onClick={() => { setSugMarc(new Set(validas.filter((l) => l._match === "sug").map((l) => l._id))); setRevisarSug(true); }}
+              title="Revisar cada sugestão por extenso, trocar pela outra candidata e aceitar as marcadas"
+              className="text-[11px] font-semibold text-amber-700 dark:text-amber-300 hover:underline">⚠ {nSug} sugestão(ões) de código pendente(s)</button>
+          : <span className="text-[10.5px] text-ww-textFaint" title="Códigos da lista">✓ {nCod} com código · ⌕ {nSemCod} sem código</span>}
+        {sugBuscando && <span className="text-[10.5px] text-ww-textFaint">buscando sugestões…</span>}
         {sugErro && (
           <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full border border-rose-500/50 bg-rose-500/10 text-[10.5px] text-rose-700 dark:text-rose-300" title={sugErro}>
             Não consegui buscar sugestões
             <button type="button" className="underline font-semibold" onClick={() => { setSugErro(null); setSugTentativa((n) => n + 1); }}>tentar de novo</button>
           </span>)}
-        <button type="button" onClick={() => void verSugestoes()} disabled={!!ocupado}
-          title="Mostra as linhas parecidas com itens dos pedidos de compra do projeto, para você confirmar"
-          className="px-2 py-1 text-[11px] rounded-lg border border-ww-border text-ww-textMuted hover:text-ww-text hover:bg-ww-rowHover transition disabled:opacity-40">
-          {ocupado === "sug" ? "…" : "Ver sugestões de vínculo"}
-        </button>
-        <button type="button" onClick={() => void vincularAuto()} disabled={salvando || !!ocupado}
-          title="Procura, nos pedidos de compra deste projeto, o item que corresponde a cada linha — e grava o vínculo"
-          className="px-2 py-1 text-[11px] rounded-lg border border-sky-400 dark:border-sky-700
-                     bg-sky-50 dark:bg-sky-950/40 text-sky-800 dark:text-sky-200
-                     hover:bg-sky-100 dark:hover:bg-sky-900/50 transition disabled:opacity-40">
-          {ocupado === "auto" ? "Vinculando…" : "⇄ Vincular PCs automaticamente"}
-        </button>
-        <button type="button" onClick={() => abrirGerarPc(paraPc)} disabled={!!ocupado || !paraPc.length}
-          title={paraPc.length ? "Gera os pedidos de compra (um por fornecedor) com as linhas marcadas sem PC" : "Marque linhas sem PC na caixinha da esquerda"}
-          className="px-2 py-1 text-[11px] rounded-lg bg-ww-accent text-white font-semibold hover:brightness-110 transition disabled:opacity-40">
-          🧾 Gerar pedido de compra ({paraPc.length})
-        </button>
-        {/* Importar da RC o que falta (07/10/26, Benny): sempre à vista na barra da Lista. N = itens
-            da RC "não usado"; abre o importar com eles marcados (casam com o catálogo antes). */}
-        {!!cpBase?.itens.length && (
-          <button type="button" onClick={() => levarParaLista(cpNaoUsados.map((x) => x.k))} disabled={!!ocupado || !cpNaoUsados.length}
-            title={cpNaoUsados.length ? "Abre o importar com os itens da RC que ainda não estão na lista, já casados com o nosso catálogo" : "A lista já tem todos os itens da RC"}
-            className="px-2 py-1 text-[11px] rounded-lg border border-emerald-500/60 text-emerald-800 dark:text-emerald-200 font-semibold hover:bg-emerald-500/10 transition disabled:opacity-50 disabled:font-normal">
-            {cpNaoUsados.length ? `⤵ Importar da RC o que falta (${cpNaoUsados.length})` : "⤵ lista já tem todos os itens da RC"}
+        {nSug > 0 && (
+          <button type="button" onClick={() => void aceitarSugestoes(validas.filter((l) => l._match === "sug").map((l) => l._id))}
+            title={`Confirma as ${nSug} sugestões de código. Dá para desfazer logo depois.`}
+            className="px-2 py-1 text-[11px] rounded-lg border border-amber-500/70 text-amber-800 dark:text-amber-200 font-semibold hover:bg-amber-500/10 transition">
+            ✓ Aceitar todas as sugestões
           </button>
         )}
-        <span className="flex-1" />
         {sujo && !salvando && !semAutosave && remocao == null && (
           <span className="text-[10.5px] text-ww-textFaint">salvando…</span>)}
         {salvando && <span className="text-[10.5px] text-ww-textFaint">salvando…</span>}
@@ -1656,139 +1808,37 @@ export default function MateriaisGrade({
             {salvando ? "…" : "Salvar lista"}
           </button>
         )}
-        <details className="relative">
+        <details className="relative" data-menu="mais">
           <summary className="list-none cursor-pointer px-2 py-1 text-[12px] rounded-lg border border-ww-border text-ww-textMuted hover:text-ww-text hover:bg-ww-rowHover" title="Mais ações">⋯</summary>
-          <div className="absolute right-0 mt-1 z-30 min-w-[230px] rounded-lg border border-ww-border bg-[rgb(var(--color-ww-panel))] shadow-xl p-1 text-[11.5px]">
-            <button type="button" onClick={(e) => { (e.currentTarget.closest("details") as HTMLDetailsElement).open = false; exportar(); }} disabled={!validas.length}
-              className="block w-full text-left px-2 py-1.5 rounded hover:bg-ww-rowHover disabled:opacity-40">Exportar Excel</button>
-            {!!cmp?.fora_da_lista.length && (
-              <button type="button" onClick={(e) => { (e.currentTarget.closest("details") as HTMLDetailsElement).open = false; setSubAba("lista"); setForaAberto((v) => !v); }}
-                className="block w-full text-left px-2 py-1.5 rounded hover:bg-ww-rowHover"
-                title="Itens de PCs do projeto que nenhuma linha da lista cobre — já contam no comprometido">
-                {foraAberto ? "Esconder" : "Ver"} PCs com itens fora da lista <span className="text-ww-textFaint">({cmp.fora_da_lista.length})</span></button>
-            )}
+          <div className="absolute right-0 mt-1 z-30 min-w-[260px] rounded-lg border border-ww-border bg-[rgb(var(--color-ww-panel))] shadow-xl p-1 text-[11.5px]">
+            {menuMais.map((m) => (
+              <button key={m.rot} type="button" disabled={m.off} onClick={(e) => { (e.currentTarget.closest("details") as HTMLDetailsElement).open = false; m.fn(); }}
+                className="block w-full text-left px-2 py-1.5 rounded hover:bg-ww-rowHover disabled:opacity-40" title={m.dica}>
+                {m.rot}
+              </button>))}
           </div>
         </details>
       </div>
 
-      {/* Grupos de equipamento (07/10/26, 2ª versão): só chips de filtro, cada um com a
-          data do grupo embaixo; as datas se editam no painel "Datas por grupo". */}
       {filtroPcNum && (
         <div className="flex items-center gap-2 rounded-lg border border-ww-accent/50 bg-ww-accentSoft px-2.5 py-1.5 text-[11.5px]">
           <span>Mostrando só as linhas do <b className="font-mono">PC {filtroPcNum}</b></span>
           <button type="button" className="ml-auto text-ww-accent hover:underline" onClick={() => setFiltroPcNum(null)}>ver a lista toda</button>
         </div>
       )}
-      {grupos.length > 0 && (
-        <div className="flex items-start gap-1.5 flex-wrap">
-          <button type="button" onClick={() => setEquipFiltro(null)}
-            className={`px-2.5 py-1 rounded-md border text-left transition ${
-              !equipFiltro ? "border-ww-accent bg-ww-accentSoft" : "border-ww-border hover:bg-ww-rowHover"}`}>
-            <span className={`block text-[11.5px] font-semibold ${!equipFiltro ? "text-ww-accent" : "text-ww-text"}`}>Todos <span className="tabular-nums font-normal opacity-70">{validas.length}</span></span>
-            <span className="block text-[9.5px] text-ww-textFaint">todos os grupos</span>
-          </button>
-          {grupos.map((g) => (
-            <button key={g.k} type="button" onClick={() => setEquipFiltro(equipFiltro === g.k ? null : g.k)}
-              title={g.proprias ? `${g.proprias} linha(s) com data própria` : undefined}
-              className={`px-2.5 py-1 rounded-md border text-left transition max-w-[220px] ${
-                equipFiltro === g.k ? "border-ww-accent bg-ww-accentSoft" : "border-ww-border hover:bg-ww-rowHover"}`}>
-              <span className={`block text-[11.5px] font-semibold truncate ${equipFiltro === g.k ? "text-ww-accent" : "text-ww-text"}`}>
-                {g.nome} <span className="tabular-nums font-normal opacity-70">{g.n}</span>
-              </span>
-              <span className={`block text-[9.5px] tabular-nums ${g.data ? "text-ww-textFaint" : "text-amber-700 dark:text-amber-300"}`}>
-                {g.data ? `necessário ${dia(g.data).slice(0, 5)}` : "sem data"}{g.proprias ? ` · ${g.proprias} própria(s)` : ""}
-                {riscoGrupo(g.k).risco > 0 && <span className="text-amber-700 dark:text-amber-300"> · ⚠{riscoGrupo(g.k).risco}</span>}
-                {riscoGrupo(g.k).atraso > 0 && <span className="text-rose-600 dark:text-rose-400"> · ✕{riscoGrupo(g.k).atraso}</span>}
-              </span>
-            </button>
-          ))}
-          <button type="button" onClick={() => setPainelDatas(true)}
-            className="self-center px-2 py-1 text-[11px] rounded-lg border border-ww-border text-ww-textMuted hover:text-ww-text hover:bg-ww-rowHover">
-            📅 Datas por grupo{semDataComItens.length ? ` (${semDataComItens.length} sem data)` : ""}
-          </button>
-          <span className="ml-auto self-center flex items-center gap-1 text-[11px]">
-            {(["todas", "sem_pc", "com_pc", "risco", "atrasado", "pc_atrasado", ...(nSug ? ["sug"] as const : [])] as const).map((k) => (
-              <button key={k} type="button" onClick={() => setFiltroPc(k)}
-                title={k === "risco" ? `Chegada com menos de ${FOLGA_ENTREGA_DIAS} dias de folga antes do necessário, ou PC sem previsão` : k === "atrasado" ? "Chega depois do necessário, ou o necessário já passou sem receber"
-                  : k === "pc_atrasado" ? "A previsão do PC já passou e o item não chegou (pode ainda estar dentro do necessário)" : undefined}
-                className={`px-2 py-0.5 rounded-full border transition ${filtroPc === k ? "border-ww-accent bg-ww-accent text-white"
-                  : k === "risco" && nRisco ? "border-amber-500/60 text-amber-700 dark:text-amber-300" : (k === "atrasado" && nAtraso) || (k === "pc_atrasado" && nPcAtraso) ? "border-rose-500/60 text-rose-600 dark:text-rose-400"
-                  : "border-ww-border text-ww-textMuted hover:text-ww-text"}`}>
-                {k === "todas" ? `Todas ${validas.length}` : k === "sem_pc" ? `Sem PC ${validas.length - nComPc}` : k === "com_pc" ? `Com PC ${nComPc}`
-                  : k === "risco" ? `⚠ Em risco ${nRisco}` : k === "atrasado" ? `✕ Atrasados ${nAtraso}` : k === "sug" ? `Sugestões a aceitar ${nSug}` : `PC atrasado ${nPcAtraso}`}
-              </button>))}
-          </span>
-        </div>
-      )}
-
-      {/* Painel "Datas por grupo": uma linha por grupo. No celular vira folha de largura total. */}
-      {/* Portal no body: no modo vidro o painel com desfoque vira o "bloco de referência"
-          de position:fixed e a folha abriria presa dentro da lista. */}
-      {painelDatas && createPortal(
-        <div className="fixed inset-0 z-[120] bg-black/40 flex items-end sm:items-start justify-center sm:pt-[10vh]"
-          onMouseDown={(e) => { if (e.target === e.currentTarget) setPainelDatas(false); }}>
-          <div role="dialog" aria-label="Datas por grupo"
-            className="w-full sm:w-[min(760px,96vw)] max-h-[85vh] overflow-auto rounded-t-xl sm:rounded-xl border border-ww-border bg-[rgb(var(--color-ww-panel))] shadow-2xl p-3.5 space-y-2.5">
-            <div className="flex items-start gap-2">
-              <div className="min-w-0">
-                <h4 className="text-[13px] font-semibold text-ww-text">Necessário em — por grupo de equipamento</h4>
-                <p className="text-[11px] text-ww-textMuted">A data do grupo preenche “Necessário em” das linhas dele. Linha com outra data fica como <b>data própria</b> e não muda; linha nova do grupo herda a data. É a data que vai para o pedido de compra (previsão de entrega) e para o fluxo.</p>
-              </div>
-              <button type="button" className="ml-auto text-[12px] text-ww-accent hover:underline" onClick={() => setPainelDatas(false)}>fechar</button>
-            </div>
-            {sugestaoData && (
-              <div className="flex items-center gap-2 flex-wrap rounded-lg border border-ww-border px-2.5 py-1.5 text-[11.5px]">
-                <span className="text-ww-textMuted">Sugestão: <b className="text-ww-text">{dia(sugestaoData)}</b> — {gruposMeta?.prazo.fonte}</span>
-                <button type="button" disabled={!semDataComItens.length}
-                  className="ml-auto px-2 py-0.5 rounded border border-ww-accent text-ww-accent hover:bg-ww-accentSoft disabled:opacity-40"
-                  onClick={() => semDataComItens.forEach((g) => definirDataGrupo(g.k, sugestaoData))}>
-                  Aplicar a todos os grupos sem data ({semDataComItens.length})
-                </button>
-              </div>
-            )}
-            <div className="overflow-x-auto">
-            <table className="w-full text-[11.5px]">
-              <thead><tr className="text-left text-[10px] uppercase tracking-wider text-ww-textMuted">
-                <th className="py-1 pr-2">Grupo</th><th className="py-1 pr-2 text-right">Itens</th><th className="py-1 pr-2">Necessário em</th>
-                <th className="py-1 pr-2">Data própria</th><th className="py-1 pr-2">Entrega</th><th className="py-1">Sugestão</th>
-              </tr></thead>
-              <tbody>
-                {grupos.map((g) => {
-                  const padrao = nomesPadrao.length ? nomePadrao(g.nome, nomesPadrao) : null;
-                  return (
-                    <tr key={g.k} className="border-t border-ww-border/60">
-                      <td className="py-1.5 pr-2">
-                        <span className="font-semibold text-ww-text">{g.nome}</span>
-                        {padrao && padrao !== g.nome && (
-                          <button type="button" className="ml-1.5 text-[10.5px] text-amber-700 dark:text-amber-300 hover:underline"
-                            title={`Trocar pelo nome padrão do cadastro: ${padrao}`} onClick={() => renomearGrupo(g.k, padrao)}>≈ {padrao}</button>
-                        )}
-                      </td>
-                      <td className="py-1.5 pr-2 text-right tabular-nums">{g.n}</td>
-                      <td className="py-1.5 pr-2">
-                        <input type="date" value={g.data ?? ""} onChange={(e) => definirDataGrupo(g.k, e.target.value)}
-                          className="bg-transparent border border-ww-border rounded px-1 py-0.5 text-[11.5px] text-ww-text" />
-                      </td>
-                      <td className="py-1.5 pr-2 tabular-nums">{g.proprias ? <span className="text-amber-700 dark:text-amber-300">{g.proprias} linha(s)</span> : <span className="text-ww-textFaint">—</span>}</td>
-                      <td className="py-1.5 pr-2 tabular-nums whitespace-nowrap">
-                        {riscoGrupo(g.k).risco > 0 && <span className="text-amber-700 dark:text-amber-300 mr-1.5">⚠ {riscoGrupo(g.k).risco} em risco</span>}
-                        {riscoGrupo(g.k).atraso > 0 && <span className="text-rose-600 dark:text-rose-400">✕ {riscoGrupo(g.k).atraso} atrasada(s)</span>}
-                        {!riscoGrupo(g.k).risco && !riscoGrupo(g.k).atraso && <span className="text-ww-textFaint">—</span>}
-                      </td>
-                      <td className="py-1.5">
-                        {sugestaoData && g.data !== sugestaoData
-                          ? <button type="button" className="text-ww-accent hover:underline" onClick={() => definirDataGrupo(g.k, sugestaoData)}>aplicar {dia(sugestaoData)}</button>
-                          : <span className="text-ww-textFaint">—</span>}
-                      </td>
-                    </tr>);
-                })}
-              </tbody>
-            </table>
-            </div>
-            <p className="text-[10.5px] text-ww-textFaint">Nomes padrão em Cadastros › Grupos de equipamento. A lista é salva sozinha em instantes.</p>
-          </div>
-        </div>
-      , document.body)}
+      {/* 5 filtros (spec B.4) */}
+      <div className="flex items-center gap-1 flex-wrap text-[11px]">
+        {(["todas", "sug", "sem_cod", "sem_pc", "risco"] as const).map((k) => (
+          <button key={k} type="button" onClick={() => setFiltroPc(k)} data-filtro={k}
+            title={k === "risco" ? `Chega com menos de ${FOLGA_ENTREGA_DIAS} dias de folga, depois do necessário, ou o PC está atrasado` : undefined}
+            className={`px-2.5 py-0.5 rounded-full border transition ${filtroPc === k ? "border-ww-accent bg-ww-accentSoft text-ww-text"
+              : k === "risco" && (nRisco + nAtraso + nPcAtraso) ? "border-rose-500/50 text-rose-600 dark:text-rose-400"
+              : k === "sug" && nSug ? "border-amber-500/60 text-amber-700 dark:text-amber-300"
+              : "border-ww-border text-ww-textMuted hover:text-ww-text"}`}>
+            {k === "todas" ? `Todos ${validas.length}` : k === "sug" ? `⚠ Com sugestão ${nSug}` : k === "sem_cod" ? `⌕ Sem código ${nSemCod}`
+              : k === "sem_pc" ? `Sem PC ${validas.length - nComPc}` : `Em risco / atrasados ${validas.filter((l) => { const sg = sinais.get(l._id); return !!sg && (sg.nivel !== "ok" || sg.pcAtrasadoDias > 0); }).length}`}
+          </button>))}
+      </div>
 
       {marcadas.size > 0 && (
         <div className="flex items-center gap-2 flex-wrap px-3 py-2 rounded-lg border border-ww-accent/40 bg-ww-accentSoft text-[12px]">
@@ -1816,26 +1866,6 @@ export default function MateriaisGrade({
         </div>
       )}
 
-      {erro && (
-        <div className="p-2.5 rounded-lg border border-rose-500/40 bg-rose-500/10 text-[12px] text-rose-700 dark:text-rose-300">
-          <strong>Erro:</strong> {erro}
-        </div>
-      )}
-      {aviso && (
-        <div className="p-2.5 rounded-lg border border-emerald-500/40 bg-emerald-500/10 text-[12px] text-emerald-700 dark:text-emerald-300">
-          {aviso}
-        </div>
-      )}
-      {rascunhoDe != null && (
-        <div className="flex items-center gap-3 flex-wrap p-2.5 rounded-lg border border-amber-500/50 bg-amber-500/15 text-[12px] text-amber-900 dark:text-amber-100">
-          <span>
-            <strong>Lista NÃO salva recuperada</strong> — feita neste navegador em{" "}
-            {new Date(rascunhoDe).toLocaleString("pt-BR")}. Ainda não está no sistema: confira e clique em <strong>Salvar lista</strong>.
-          </span>
-          <button type="button" onClick={descartarRascunho}
-            className="ml-auto text-[11px] underline opacity-80 hover:opacity-100">descartar rascunho</button>
-        </div>
-      )}
       {aceiteDesfazer && (
         <div className="flex items-center gap-3 flex-wrap p-2 rounded-lg border border-emerald-500/40 bg-emerald-500/10 text-[12px] text-emerald-800 dark:text-emerald-200">
           <span>{aceiteDesfazer.n} sugestão(ões) aceita(s) — viraram código confirmado.</span>
@@ -1864,112 +1894,23 @@ export default function MateriaisGrade({
         <SugestoesVinculo sugestoes={sugestoes} ocupado={ocupado} onConfirmar={(c) => void confirmarSugestao(c)} onFechar={() => setSugestoes(null)} />
       )}
 
-      {/* Lista × Itens da RC (07/10/26): a lista é o que se compra; a aba da RC é só o
-          registro do plano original — o que entrou na lista e o que não foi usado. */}
-      <div className="flex items-center gap-1 border-b border-ww-border">
-        {([["lista", `Lista (${validas.length})`], ["cp", `Itens da RC${cpBase ? ` (${cpBase.itens.length})` : ""}`]] as const).map(([k, rot]) => (
-          <button key={k} type="button" onClick={() => setSubAba(k)}
-            className={`px-3 py-1.5 text-[11.5px] -mb-px border-b-2 transition ${
-              subAba === k ? "border-ww-accent text-ww-text font-semibold" : "border-transparent text-ww-textMuted hover:text-ww-text"}`}>
-            {rot}
-          </button>
-        ))}
-        {subAba === "lista" && !carregando && (
-          <button type="button" onClick={() => {
-              const nova = { ...vazia(), equipamento: equipFiltro ? (grupos.find((g) => g.k === equipFiltro)?.nome ?? "") : "" } as LinhaGrade;
-              setLinhas((ls) => [nova, ...ls]);
-              setTimeout(() => (document.querySelector('[data-cel^="0-"]') as HTMLInputElement | null)?.focus(), 50);
-            }}
-            className="ml-auto mb-1 px-2 py-0.5 text-[11px] rounded-lg border border-ww-accent/60 text-ww-accent font-semibold hover:bg-ww-accentSoft transition">
-            + Adicionar linha
-          </button>
-        )}
-        {subAba === "cp" && cpBase?.proposta && (
-          <span className="ml-auto text-[10.5px] text-ww-textFaint pb-1">
-            composição de preço da proposta <strong>{cpBase.proposta}</strong> · registro do plano original
-          </span>
-        )}
-      </div>
-
-      {subAba === "cp" ? (
-        <div className="space-y-2">
-          {!cpBase ? <p className="text-[11.5px] text-ww-textFaint py-3">Lendo a RC no CRM…</p>
-            : !cpBase.proposta ? (
-              <p className="text-[12px] text-ww-textMuted py-3">
-                Este projeto não tem proposta ligada no CRM. No CRM, ligue a proposta ao projeto no fechamento (Recebimento → projeto do painel).
-              </p>)
-            : (() => {
-              const tot = (i: ItemCpBase) => (Number(i.qtd) || 0) * (Number(i.custo_cp) || 0);
-              const plano = cpBase.itens.reduce((a, i) => a + tot(i), 0);
-              const usado = cpBase.itens.reduce((a, i, k) => a + (usoCp.has(k) ? tot(i) : 0), 0);
-              const projUsado = [...usoCp.values()].reduce((a, l) => a + num(l.qtd) * num(l.cat_valor_unit), 0);
-              const naoUsados = cpBase.itens.map((_, k) => k).filter((k) => !usoCp.has(k));
-              return (
-                <>
-                {naoUsados.length > 0 && (
-                  <div className="flex items-center gap-2 mb-1.5">
-                    <button type="button" onClick={() => levarParaLista(naoUsados)}
-                      className="px-2.5 py-1 text-[11.5px] rounded-lg bg-ww-accent text-white font-semibold hover:brightness-110 transition">
-                      ⤴ Exportar para a lista os que faltam ({naoUsados.length})
-                    </button>
-                    <span className="text-[10.5px] text-ww-textFaint">abre o importar com eles marcados — confira o código de cada um antes de adicionar</span>
-                  </div>
-                )}
-                <div className="border border-ww-border rounded-lg overflow-auto" style={{ maxHeight: 520 }}>
-                  <table className="w-full text-[11.5px] border-collapse">
-                    <thead className="sticky top-0 bg-[rgb(var(--color-ww-panel))] text-ww-textMuted z-[1]">
-                      <tr className="text-left">
-                        <th className="p-1.5">Equipamento</th><th className="p-1.5">Item da RC</th><th className="p-1.5 text-right">Qtd</th>
-                        <th className="p-1.5 text-right">Custo RC</th><th className="p-1.5 text-right">Total</th><th className="p-1.5">Na lista</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {cpBase.itens.map((i, k) => {
-                        const l = usoCp.get(k);
-                        const n = l ? validas.findIndex((x) => x._id === l._id) + 1 : 0;
-                        return (
-                          <tr key={k} className={`border-t border-ww-border/50 ${l ? "" : "opacity-60"}`}>
-                            <td className="p-1.5 text-ww-textMuted">{i.equipamento}</td>
-                            <td className="p-1.5 text-ww-text">{i.item}{i.modelo ? <span className="text-ww-textFaint"> · {i.modelo}</span> : null}</td>
-                            <td className="p-1.5 text-right tabular-nums">{i.qtd ?? "—"}</td>
-                            <td className="p-1.5 text-right tabular-nums">{brl(i.custo_cp)}</td>
-                            <td className="p-1.5 text-right tabular-nums">{brl(tot(i))}</td>
-                            <td className="p-1.5">{l
-                              ? <span className="text-emerald-700 dark:text-emerald-300">✓ na lista{l.cat_codigo ? <> · <b className="font-mono">{l.cat_codigo}</b></> : " · sem código"}{n ? <span className="text-ww-textFaint"> · linha {n}</span> : null}</span>
-                              : <span className="text-ww-textFaint">não usado <button type="button" className="ml-1 px-1.5 rounded border border-emerald-500/50 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-500/10"
-                                  title="Levar este item para a lista (casa com o catálogo no modal)" onClick={() => levarParaLista([k])}>→ lista</button></span>}</td>
-                          </tr>);
-                      })}
-                    </tbody>
-                    <tfoot>
-                      <tr className="border-t border-ww-border font-semibold">
-                        <td className="p-1.5" colSpan={4}>Plano (RC): {cpBase.itens.length} item(ns) · {usoCp.size} na lista · {cpBase.itens.length - usoCp.size} não usado(s)</td>
-                        <td className="p-1.5 text-right tabular-nums">{brl(plano)}</td>
-                        <td className="p-1.5 text-[11px] font-normal text-ww-textMuted">na lista: {brl(usado)} pelo custo da RC · {brl(projUsado)} projetado</td>
-                      </tr>
-                    </tfoot>
-                  </table>
-                </div>
-                </>);
-            })()}
-          <p className="text-[10.5px] text-ww-textFaint">A RC é a referência e a origem do budget de materiais. O que não está na lista aparece como “não usado”: leve um item com “→ lista” ou todos com “⤴ Exportar para a lista os que faltam” (casam com o nosso código antes de entrar). Na lista você exclui, inclui e casa.</p>
-        </div>
-      ) : carregando
+      {carregando
         ? <p className="text-[11.5px] text-ww-textFaint py-3">Carregando a lista…</p>
-        : <GradeEditavel cols={COLS} linhas={visiveis}
-            colarExtras={[{ label: "Modelo", key: "modelo" }, { label: "PC", key: "pc_numero" }, { label: "PC nº", key: "pc_numero" }, { label: "Observação", key: "observacao" }, { label: "Obs", key: "observacao" }]}
+        : <GradeEditavel cols={COLS} linhas={visiveis} botaoLinha={false}
+            grupo={{ de: (l) => (String(l.item ?? "").trim() ? normGrupo(l.equipamento || "Geral") : null), cab: cabecalhoGrupo }}
+            colarExtras={[{ label: "Equipamento", key: "equipamento" }, { label: "Grupo", key: "equipamento" }, { label: "Modelo", key: "modelo" }, { label: "PC", key: "pc_numero" }, { label: "PC nº", key: "pc_numero" }, { label: "Observação", key: "observacao" }, { label: "Obs", key: "observacao" }]}
             aoColar={() => setCasarAposColar(true)}
             onChange={(l) => {
               // Com filtro ativo, o que volta é só o pedaço visível — recompõe
               // com o resto para não apagar o que está escondido.
-              if (equipFiltro || filtroPc !== "todas") {
+              if (equipFiltro || filtroPc !== "todas" || filtroPcNum) {
                 const ids = new Set(visiveis.map((x) => x._id));
                 const ocultas = linhas.filter((x) => x.item?.trim() && !ids.has(x._id));
                 setLinhas([...ocultas, ...l]);
               } else setLinhas(l);
               setSujo(true);
             }}
-            altura={520}
+            altura={560}
             aoRemover={(id) => excluirLinhas([id])}
             selecao={{
               marcadas,
@@ -1979,12 +1920,20 @@ export default function MateriaisGrade({
                 ? new Set(visiveis.filter((l) => l._id.startsWith("db")).map((l) => l._id))
                 : new Set()),
             }}
-            vazioMsg="Digite, cole do Excel ou use o botão de planilha acima." />}
+            vazioMsg="Digite, cole do Excel (Ctrl+V) ou use + Adicionar itens." />}
 
       {/* "Comprado fora da lista" saiu da tela (07/10/26, Benny): só pelo ⋯ › PCs com itens fora da
-          lista, na aba Lista. O valor continua no comprometido do resumo (cada PC do projeto conta). */}
-      {cmp && foraAberto && subAba === "lista" && <ForaDaLista fora={cmp.fora_da_lista} empresa={empresa} />}
+          lista. O valor continua no comprometido do resumo (cada PC do projeto conta). */}
+      {cmp && foraAberto && <ForaDaLista fora={cmp.fora_da_lista} empresa={empresa} />}
       {cmp && <FluxoCompras d={cmp} />}
+      </>)}
+
+      {subAba === "plan" && (
+        <div className="rounded-lg border border-ww-border p-3 text-[12px] text-ww-textMuted">
+          O planejamento de compras por item (comprar até = necessário em − prazo do fornecedor − folga) chega na próxima versão.
+          Por enquanto, a coluna <b>Chegada prev.</b> e o filtro <b>Em risco / atrasados</b> da etapa ② mostram o que está apertado.
+        </div>
+      )}
 
       {comentLinha && createPortal((() => {
         const l = linhas.find((x) => x._id === comentLinha);
@@ -2300,31 +2249,5 @@ export default function MateriaisGrade({
         </div>
       , document.body)}
     </section>
-  );
-}
-
-/** Faixa só de leitura com os PV/OS do projeto (07/10/26, Benny procura as vendas na página
- *  do projeto): nº, valor e previsão de faturamento; as datas se mudam em Operação › Projetos. */
-function VendasFaixa({ empresa, codigo }: { empresa: string; codigo: number }) {
-  const [docs, setDocs] = useState<{ chave: string; rotulo: string; valor: number; fat_inicial: string | null; fat_nova: string | null; faturado: boolean; dt_fat: string | null; recebido: boolean }[] | null>(null);
-  useEffect(() => {
-    fetch(`/api/rc-projetos/vendas?empresa=${encodeURIComponent(empresa)}&codigo=${codigo}`, { cache: "no-store" })
-      .then((r) => r.json()).then((j) => setDocs(j.docs ?? [])).catch(() => setDocs([]));
-  }, [empresa, codigo]);
-  if (!docs?.length) return null;
-  const d2 = (v: string | null) => (v ? `${v.slice(8, 10)}/${v.slice(5, 7)}` : "—");
-  const tot = docs.reduce((a, d) => a + d.valor, 0);
-  return (
-    <div className="flex items-center gap-1.5 flex-wrap text-[11px] rounded-lg border border-ww-border bg-ww-panel px-2.5 py-1.5">
-      <span className="text-ww-textMuted font-semibold mr-1">Vendas (PV/OS) {brl(tot)}:</span>
-      {docs.map((d) => (
-        <a key={d.chave || d.rotulo} href={`/faturamento?${new URLSearchParams({ abrir: d.chave, q: d.rotulo, emp: empresa })}`}
-          className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded border border-ww-border hover:border-ww-accent"
-          title={d.faturado ? `faturado em ${d2(d.dt_fat)}${d.recebido ? " · recebido" : ""}` : `previsão de faturamento ${d2(d.fat_nova ?? d.fat_inicial)}${d.fat_nova ? ` (inicial ${d2(d.fat_inicial)})` : ""}`}>
-          <b className="font-mono">{d.rotulo}</b><span className="tabular-nums">{brl(d.valor)}</span>
-          <span className={d.faturado ? "text-teal-600 dark:text-teal-400" : "text-ww-textMuted"}>{d.faturado ? (d.recebido ? "recebido" : "faturado") : `fat. ${d2(d.fat_nova ?? d.fat_inicial)}`}</span>
-        </a>))}
-      <a href={`/projetos?${new URLSearchParams({ empresa, abrir: String(codigo) })}`} className="ml-auto text-ww-accent hover:underline" title="As previsões (faturamento e recebimento) se mudam em Operação › Projetos, no projeto aberto">mudar datas em Operação › Projetos →</a>
-    </div>
   );
 }

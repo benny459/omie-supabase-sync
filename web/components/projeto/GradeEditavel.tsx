@@ -16,7 +16,7 @@
 // centenas de linhas e cinco colunas. Uma dependência nova custaria mais em
 // bundle e em manutenção do que o teclado que ela resolveria.
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
 /** Uma sugestão do autocompletar. `dados` volta intacto para aoEscolher. */
@@ -108,8 +108,14 @@ export const brl = (v: number) =>
 
 export default function GradeEditavel({
   cols, linhas, onChange, altura = 340, vazioMsg = "Digite, cole do Excel ou suba a planilha.",
-  selecao, aoColar, colarExtras = [], aoRemover,
+  selecao, aoColar, colarExtras = [], aoRemover, botaoLinha = true, grupo,
 }: {
+  /** Botão "+ linha" do rodapé. A lista de materiais não usa (08/10/26, spec B.2): a grade
+   *  já cria a linha nova ao digitar/Enter na última. */
+  botaoLinha?: boolean;
+  /** Linhas de cabeçalho de grupo (08/10/26, spec B.3): antes de cada mudança de `de(linha)`
+   *  entra uma linha larga com `cab(chave, linhas do grupo)`. `de` = null não abre grupo. */
+  grupo?: { de: (l: LinhaGrade) => string | null; cab: (chave: string, linhas: LinhaGrade[]) => React.ReactNode };
   /** Quem usa decide como remover (ex.: lista de materiais com "Desfazer"). Sem isso, tira da grade. */
   aoRemover?: (id: string) => void;
   /** Colunas que não aparecem na grade mas entram no colar COM cabeçalho (ex.: Modelo, PC). */
@@ -361,8 +367,19 @@ export default function GradeEditavel({
             </tr>
           </thead>
           <tbody>
-            {linhas.map((linha, li) => (
-              <tr key={linha._k || linha._id} className="viz-row group">
+            {linhas.map((linha, li) => {
+              const gk = grupo ? grupo.de(linha) : null;
+              const abreGrupo = gk != null && (li === 0 || grupo!.de(linhas[li - 1]) !== gk);
+              return (<Fragment key={linha._k || linha._id}>
+              {abreGrupo && (
+                <tr className="viz-grp">
+                  <td colSpan={(selecao ? 1 : 0) + 1 + cols.length + 1} className="p-0 border-b border-ww-border/60 bg-ww-rowHover/70">
+                    <div style={{ position: "sticky", left: 0 }} className="inline-flex items-center gap-2 px-2 py-1 text-[11.5px]">
+                      {grupo!.cab(gk!, linhas.filter((x) => grupo!.de(x) === gk))}
+                    </div>
+                  </td>
+                </tr>)}
+              <tr className="viz-row group">
                 {selecao && (
                   <td style={esq.size ? fixo(0, 5) : undefined} className={`p-1 text-center border-b border-ww-border/40 ${esq.size ? OPACO : ""}`}>
                     {selecao.podeMarcar(linha) && (
@@ -454,15 +471,16 @@ export default function GradeEditavel({
                   </button>
                 </td>
               </tr>
-            ))}
+              </Fragment>);
+            })}
           </tbody>
         </table>
       </div>
       <div className="px-2 py-1.5 border-t border-ww-border bg-ww-panel flex items-center gap-3">
-        <button type="button" onClick={() => onChange([...linhas, linhaVazia(cols)])}
+        {botaoLinha && <button type="button" onClick={() => onChange([...linhas, linhaVazia(cols)])}
           className="text-[11px] text-ww-accent hover:underline font-semibold">
           + linha
-        </button>
+        </button>}
         <span className="text-[10.5px] text-ww-textFaint">
           {linhas.filter((l) => cols.some((c) => !c.calculada && !c.render && l[c.key]?.trim())).length} preenchida(s)
           · Tab/Enter navega · <strong>Ctrl+V cola do Excel</strong> a partir da célula selecionada
