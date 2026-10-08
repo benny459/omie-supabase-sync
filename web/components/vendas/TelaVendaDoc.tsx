@@ -72,7 +72,7 @@ export default function TelaVendaDoc({ id }: { id: number | null }) {
     setForm({
       id: d.id, empresa: d.empresa, tipo: d.tipo, cliente_codigo: d.cliente_codigo ?? "", proposta: d.proposta,
       previsao: d.previsao, condicao_codigo: d.condicao_codigo, qtd_parcelas: d.qtd_parcelas,
-      projeto_codigo: d.projeto_codigo, categoria_codigo: d.categoria_codigo, vendedor_codigo: d.vendedor_codigo,
+      projeto_codigo: d.projeto_codigo, categoria_codigo: d.categoria_codigo, vendedor_codigo: d.vendedor_codigo, servico_incluso: (d as { servico_incluso?: boolean | null }).servico_incluso ?? null,
       conta_codigo: d.conta_codigo, forma_recebimento: d.forma_recebimento ?? null, observacoes: d.observacoes, obs_nf: d.obs_nf, num_pedido_cliente: d.num_pedido_cliente,
       contato: d.contato, valor_desconto: d.valor_desconto, valor_frete: d.valor_frete,
       itens: d.itens.map((i) => ({ codigo: i.codigo, ncod_prod: i.ncod_prod, descricao: i.descricao, unidade: i.unidade,
@@ -147,6 +147,7 @@ export default function TelaVendaDoc({ id }: { id: number | null }) {
     if (!form) return;
     if (!form.projeto_codigo) { setErro("Escolha o projeto (obrigatório) — ou crie com “+ Novo”."); return; }
     if (!form.categoria_codigo) { setErro("Escolha a categoria de receita (obrigatória)."); return; }
+    if (form.tipo !== "OS" && form.servico_incluso == null) { setErro("Responda: vai ter serviço da nossa equipe (instalação, visita)? Se sim, o pedido vira Mix e a área de Serviços é avisada."); return; }
     setOcupado(true); setErro(null); setOk(null);
     const r = await fetch("/api/vendas", { method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ ...form, itens: form.itens.filter((i) => i.descricao.trim()),
@@ -284,11 +285,25 @@ export default function TelaVendaDoc({ id }: { id: number | null }) {
             {op.categorias.map((c) => <option key={c.codigo} value={c.codigo}>{c.codigo} · {c.descricao}</option>)}
           </select>
         </Campo>
-        <Campo rot="Vendedor" largura={2}>
-          <select style={input} disabled={!editavel} value={form.vendedor_codigo != null ? String(form.vendedor_codigo) : ""} onChange={(e) => setF("vendedor_codigo", e.target.value || null)}>
-            <option value="">—</option>
-            {(op.vendedores ?? []).map((v) => <option key={v.codigo} value={v.codigo}>{v.nome}</option>)}
-          </select>
+        {/* Tipo da venda pela pergunta (sql/145): OS = serviço; PV com serviço da equipe = Mix (vai para a área de
+            Serviços); PV só material = Mercantil. O servidor grava o tipo — aqui só a resposta. */}
+        <Campo rot={form.tipo === "OS" ? "Serviço da nossa equipe" : "Vai ter serviço da nossa equipe? *"} largura={2}>
+          {form.tipo === "OS" ? (
+            <div style={{ ...input, display: "flex", alignItems: "center", gap: 6, opacity: 0.85 }}>☑ Sim — OS é serviço · tipo <b>Serviços</b></div>
+          ) : (
+            <div style={{ display: "flex", gap: 6 }}>
+              {([[true, "Sim — instalação/visita", "Mix"], [false, "Não — só material", "Mercantil"]] as const).map(([v, rot, tipo]) => (
+                <button key={String(v)} type="button" disabled={!editavel} onClick={() => setF("servico_incluso", v)}
+                  title={v ? "Vira Mix: a área de Serviços passa a ver o pedido para agendar" : "Fica Mercantil: só entrega de material"}
+                  style={{ ...input, flex: 1, cursor: editavel ? "pointer" : "default", textAlign: "left",
+                    borderColor: form.servico_incluso === v ? "var(--ww-brand, #3b82f6)" : undefined,
+                    background: form.servico_incluso === v ? "color-mix(in srgb, var(--ww-brand, #3b82f6) 14%, transparent)" : undefined,
+                    fontWeight: form.servico_incluso === v ? 600 : 400 }}>
+                  {form.servico_incluso === v ? "◉" : "○"} {rot} <span style={{ opacity: 0.7 }}>· {tipo}</span>
+                </button>
+              ))}
+            </div>
+          )}
         </Campo>
         <Campo rot="Pedido / OC do cliente"><input style={input} disabled={!editavel} value={form.num_pedido_cliente ?? ""} onChange={(e) => setF("num_pedido_cliente", e.target.value)} /></Campo>
         <Campo rot="Contato"><input style={input} disabled={!editavel} value={form.contato ?? ""} onChange={(e) => setF("contato", e.target.value)} /></Campo>

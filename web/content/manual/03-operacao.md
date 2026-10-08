@@ -173,6 +173,18 @@ Tudo fica numa aba só: **Lista de materiais** (a antiga aba “Compras × lista
 - Em **ERP → Vendas** você vê os PV/OS do painel e do Omie. Admins veem a chave **“CRM cria PV/OS: no Omie / no painel”**.
 - **Novo PV/OS** pelo painel: precisa estar ligado a uma **proposta do CRM** (busca pelo número, cliente ou título). Só admin pode marcar “sem proposta”, com motivo.
 
+### Vai ter serviço da nossa equipe? (Mix / Mercantil / Serviços)
+
+No PV a pergunta **“Vai ter serviço da nossa equipe?”** é obrigatória — sem resposta o pedido não grava. Ela existe porque às vezes a instalação não está na proposta, mas é o nosso pessoal que vai fazer.
+
+| Resposta | Tipo da venda | O que acontece |
+|---|---|---|
+| **Sim — instalação/visita** | **Mix** | o pedido aparece no **Painel de Vendas** do app de Serviços para gerar a OS e agendar; entram os alarmes de serviço |
+| **Não — só material** | **Mercantil** | só entrega de material |
+| OS (só serviço) | **Serviços** | já vem marcado — a OS é serviço |
+
+Para corrigir um PV já criado (ex.: era Mix e ficou Mercantil): abra o pedido em **ERP → Vendas**, troque a resposta para **Sim** e clique **Gravar** (só enquanto o pedido está aberto). O antigo campo “Vendedor” era isto — o tipo da venda.
+
 > **Atenção:** a numeração é única e sequencial (próximo PV e próxima OS). Não crie PV/OS no Omie — o número pode repetir.
 
 ### OC do cliente e anexos do PV/OS

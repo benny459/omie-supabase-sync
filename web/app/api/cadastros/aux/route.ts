@@ -58,6 +58,13 @@ export async function POST(req: Request) {
     if (!REGISTROS.has(String(body.registro ?? ""))) return NextResponse.json({ error: "Cadastro desconhecido" }, { status: 400 });
     // Criar mesmo havendo um parecido: só administrador, com motivo (fica no histórico).
     if (!q.perms.is_admin) { delete body.forcar; delete body.forcarMotivo; }
-    return NextResponse.json(await rpcCad("cad_aux_salvar", { p: body, p_por: q.email }));
+    const salvo = await rpcCad<Record<string, unknown>>("cad_aux_salvar", { p: body, p_por: q.email });
+    // Serviço novo/editado: garante o item nativo da família SV (código SV00xx), como o CRM já fazia (08/10/26).
+    if (body.registro === "servicos" && salvo?.codigo) {
+      const nat = await supaAdmin().schema("orders").rpc("servico_nativo_garantir", {
+        p_empresa: String(body.empresa ?? salvo.empresa ?? "SF"), p_codigo: String(salvo.codigo), p_por: q.email });
+      if (!nat.error && nat.data) return NextResponse.json({ ...salvo, item_nativo: nat.data });
+    }
+    return NextResponse.json(salvo);
   } catch (e) { return erroCad(e); }
 }

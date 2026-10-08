@@ -61,6 +61,7 @@ export type VendaSalvar = {
   id?: number; empresa?: string; tipo?: "PV" | "OS"; cliente_codigo: number | string;
   proposta?: string | null; previsao?: string | null; condicao_codigo?: string | null; qtd_parcelas?: number | null;
   projeto_codigo?: string | null; categoria_codigo?: string | null; vendedor_codigo?: string | null;
+  servico_incluso?: boolean | null; // sql/145: define Mix/Mercantil/Serviços
   conta_codigo?: string | null; forma_recebimento?: string | null; condicao_descricao?: string | null;
   cenario_impostos?: string | null; consumidor_final?: string | null;
   observacoes?: string | null; obs_nf?: string | null; num_pedido_cliente?: string | null; contato?: string | null;
