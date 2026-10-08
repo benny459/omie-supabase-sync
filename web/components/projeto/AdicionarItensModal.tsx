@@ -12,7 +12,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { lerColagem, type AlvoColar } from "@/lib/colar-grade";
+import { lerColagem, ALVOS_LISTA, POSICIONAIS_LISTA } from "@/lib/colar-grade";
 
 export type ItemCatalogo = {
   ncod_prod: number; codigo: string | null; descricao: string; unidade: string | null;
@@ -34,20 +34,11 @@ const numBR = (v: string) => {
   return Number.isFinite(n) ? n : 0;
 };
 
-const ALVOS: AlvoColar[] = [
-  { label: "Código", key: "cat_codigo" }, { label: "Cod", key: "cat_codigo" }, { label: "Item", key: "item" }, { label: "Descrição", key: "item" },
-  { label: "Qtd", key: "qtd" }, { label: "Quantidade", key: "qtd" }, { label: "Un", key: "un" }, { label: "Unidade", key: "un" },
-  { label: "Necessário em", key: "data_necessaria", tipo: "data" }, { label: "Data", key: "data_necessaria", tipo: "data" },
-  { label: "Valor unit.", key: "cat_valor_unit" }, { label: "Valor", key: "cat_valor_unit" }, { label: "Valor unitário", key: "cat_valor_unit" },
-  { label: "Grupo", key: "equipamento" }, { label: "Equipamento", key: "equipamento" },
-];
-const POSICIONAIS: AlvoColar[] = [
-  { label: "Código", key: "cat_codigo" }, { label: "Item", key: "item" }, { label: "Qtd", key: "qtd" }, { label: "Un", key: "un" },
-  { label: "Necessário em", key: "data_necessaria", tipo: "data" }, { label: "Valor unit.", key: "cat_valor_unit" },
-];
+const ALVOS = ALVOS_LISTA;
+const POSICIONAIS = POSICIONAIS_LISTA;
 
-export default function AdicionarItensModal({ empresa, grupos, modoInicial, onAdicionar, onFechar, textoInicial, arquivo }: {
-  empresa: string; grupos: Grupo[]; modoInicial: "cat" | "colar";
+export default function AdicionarItensModal({ empresa, codigoProjeto, grupos, modoInicial, onAdicionar, onFechar, textoInicial, arquivo }: {
+  empresa: string; codigoProjeto?: number; grupos: Grupo[]; modoInicial: "cat" | "colar";
   /** "Importar planilha" (08/10/26): o conteúdo do arquivo já lido, como se tivesse sido colado. */
   textoInicial?: string; arquivo?: string | null;
   onAdicionar: (linhas: LinhaNova[], modo: "cat" | "colar") => void; onFechar: () => void;
@@ -195,7 +186,7 @@ export default function AdicionarItensModal({ empresa, grupos, modoInicial, onAd
             <small className="block text-ww-textFaint">Marque vários (a busca pode mudar — os marcados ficam) e ajuste a quantidade. Cada item entra já com código, fornecedor e prazo do catálogo e com a data do grupo.</small>
           </>) : (<>
             {arquivo && <p className="text-[11.5px] px-2 py-1 rounded-md bg-ww-accentSoft text-ww-text" data-importado>📄 Importado de <b>{arquivo}</b> — confira a prévia abaixo antes de adicionar (dá para editar o texto).</p>}
-            <small className="block text-ww-textMuted">Cole direto do Excel. Com cabeçalho as colunas vão pelo nome (Código, Item, Qtd, Un, Necessário em, Valor unit., Grupo); sem cabeçalho a ordem é <b>Código · Item · Qtd · Un · Necessário em · Valor unit.</b> (Código pode ficar vazio). Datas em dd/mm/aaaa são aceitas. <a className="text-ww-accent hover:underline" href={`/api/rc-projetos/modelo?emp=${encodeURIComponent(empresa)}`}>⬇ modelo Excel com nossos códigos</a></small>
+            <small className="block text-ww-textMuted">Cole direto do Excel. Com cabeçalho as colunas vão pelo nome (Código, Item, Qtd, Un, Necessário em, Valor unit., Grupo); sem cabeçalho a ordem é <b>Código · Item · Qtd · Un · Necessário em · Valor unit.</b> (Código pode ficar vazio). Datas em dd/mm/aaaa são aceitas. Do modelo, copie a aba Lista inteira (com o cabeçalho) ou use Importar planilha. <a className="text-ww-accent hover:underline" href={`/api/rc-projetos/modelo?emp=${encodeURIComponent(empresa)}${codigoProjeto ? `&projeto=${encodeURIComponent(String(codigoProjeto))}` : ""}`}>⬇ modelo Excel com nossos códigos</a></small>
             <textarea value={txt} onChange={(e) => setTxt(e.target.value)} rows={7} autoFocus
               placeholder={"E02045\tCREPINA SUPERIOR\t2\tun\t30/10/2026\t40\n\tMANOMETRO C/CONEXAO LAT.0-7\t1\tun\t30/10/2026\t57,70"}
               className="w-full rounded-lg border border-ww-border bg-transparent px-2.5 py-2 font-mono text-[12px] text-ww-text outline-none focus:ring-1 focus:ring-ww-accent" />

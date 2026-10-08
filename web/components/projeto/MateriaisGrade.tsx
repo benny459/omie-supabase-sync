@@ -39,6 +39,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import * as XLSX from "xlsx";
+import { arquivoParaTexto } from "@/lib/ler-planilha";
 import GradeEditavel, { linhaVazia, num, type ColunaGrade, type LinhaGrade, type SugestaoGrade } from "./GradeEditavel";
 import PcPickerModal, { type PcSearchResult } from "./PcPickerModal";
 import GerarPcDaLista, { type LinhaParaPc } from "./GerarPcDaLista";
@@ -183,23 +184,9 @@ const ESCALAS = [0.88, 1, 1.12, 1.25];
 const CHAVE_COLUNAS = "painel.materiais.colunasOcultas";
 const CHAVE_ESCALA = "painel.materiais.escala";
 
-/** "Importar planilha (.xlsx/.csv)" (08/10/26): o arquivo vira o mesmo texto que o colar do Excel
- *  lê (TAB entre colunas). Aba "Lista" (a do modelo) se existir; senão a primeira. Data que vem
- *  como número de série do Excel é convertida pelo leitor do colar (lib/colar-grade). */
+/** "Importar planilha (.xlsx/.csv)": o arquivo vira o texto do colar do Excel (lib/ler-planilha). */
 async function lerPlanilha(f: File): Promise<string> {
-  const buf = await f.arrayBuffer();
-  const daGrade = (wb: XLSX.WorkBook) => {
-    const nome = wb.SheetNames.find((n) => /^lista/i.test(n.trim())) ?? wb.SheetNames[0];
-    const rows = XLSX.utils.sheet_to_json<unknown[]>(wb.Sheets[nome], { header: 1, raw: true, blankrows: false, defval: "" });
-    return rows.map((r) => r.map((v) => (v == null ? "" : String(v).replace(/[\t\r\n]+/g, " "))).join("\t")).join("\n");
-  };
-  if (/\.(csv|txt)$/i.test(f.name)) {
-    const t = new TextDecoder("utf-8").decode(buf).replace(/^\uFEFF/, "");
-    const l1 = t.split(/\r?\n/)[0] ?? "";
-    if (l1.includes("\t") || l1.includes(";")) return t;
-    return daGrade(XLSX.read(t, { type: "string", raw: true }));
-  }
-  return daGrade(XLSX.read(buf, { type: "array" }));
+  return arquivoParaTexto(f.name, await f.arrayBuffer());
 }
 
 const dm = (iso: string | null | undefined) => (iso ? new Date(iso).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" }) : "");
@@ -2119,8 +2106,8 @@ export default function MateriaisGrade({
     { rot: "🔎 Escolher do estoque / catálogo", sub: "busca por código ou descrição, marca vários", fn: () => setAddModal("cat") },
     { rot: "📋 Colar do Excel", sub: "cola 10, 15 linhas de uma vez, com ou sem cabeçalho", fn: () => setAddModal("colar") },
     { rot: "📄 Importar planilha (.xlsx/.csv)", sub: "lê o arquivo como o colar do Excel e mostra a prévia antes de adicionar", fn: () => arquivoRef.current?.click() },
-    { rot: "⬇ Baixar modelo Excel com nossos códigos", sub: "aba Lista para preencher + aba Códigos do estoque (para PROCV)",
-      fn: () => { window.location.href = `/api/rc-projetos/modelo?emp=${encodeURIComponent(empresa)}`; } },
+    { rot: "⬇ Baixar modelo Excel com nossos códigos", sub: "digite na 1ª coluna e escolha o item na lista — o resto se preenche sozinho",
+      fn: () => { window.location.href = `/api/rc-projetos/modelo?emp=${encodeURIComponent(empresa)}&projeto=${encodeURIComponent(String(codigoProjeto))}`; } },
   ];
   /** Linhas do modal "Adicionar itens" → grade. As sem código passam pelo casamento automático. */
   const adicionarLinhasNovas = useCallback((novas: LinhaNova[], modo: "cat" | "colar") => {
@@ -2677,7 +2664,7 @@ export default function MateriaisGrade({
       <input ref={arquivoRef} type="file" accept=".xlsx,.xls,.csv,.txt" hidden data-importar-arquivo
         onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; if (f) void abrirArquivo(f); }} />
       {addModal && (
-        <AdicionarItensModal key={importado?.nome ?? addModal} empresa={empresa} modoInicial={addModal}
+        <AdicionarItensModal key={importado?.nome ?? addModal} empresa={empresa} codigoProjeto={codigoProjeto} modoInicial={addModal}
           textoInicial={importado?.texto} arquivo={importado?.nome ?? null}
           grupos={[...gruposChips].sort((a, b) => Number(b.k === equipFiltro) - Number(a.k === equipFiltro)).map((g) => ({ k: g.k, nome: g.nome, data: g.data }))}
           onAdicionar={adicionarLinhasNovas} onFechar={() => { setAddModal(null); setImportado(null); }} />
