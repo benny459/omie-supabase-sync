@@ -6,6 +6,9 @@ import { loadPerms } from "@/lib/require-area";
 import { canViewArea, type UserPerms } from "@/lib/permissions";
 import { permissoesDe, semValores } from "@/lib/acessos";
 import type { Chave } from "@/lib/acessos-catalogo";
+import { motivoSemPermissao, type DecisaoAcao, type EntradaPermissao } from "@/lib/aprovacao-permissao";
+import { avaliarPcProjeto } from "@/lib/aprovacao-projeto";
+import { ehProjetoDeObra } from "@/lib/aprovacao-projeto-regra";
 
 // O schema compras não é exposto no PostgREST: tudo passa por funções
 // orders.compras_* (security definer, só service_role). Estas rotas validam
@@ -38,19 +41,29 @@ export function erro(e: unknown) {
   return NextResponse.json({ error: msg }, { status: 400 });
 }
 
-/** Quem pode aprovar compra: admin, ou papel no módulo PCs com can_approve
- *  e dentro da alçada (approval_ceiling_brl). O teto semanal fica com a rota
- *  de aprovação do Omie (set-status), que já o calcula. */
-export async function podeAprovar(q: Quem, valor: number): Promise<string | null> {
-  if (q.perms.is_admin) return null;
-  if (!q.pode["compras.aprovar"]) return "Sem permissão para aprovar compras";
+/** Alçada individual no módulo PCs (approval_ceiling_brl); null = sem limite. */
+async function tetoPcs(uid: string | null): Promise<number | null> {
   const { data } = await supaAdmin().schema("platform").from("user_module_roles")
-    .select("approval_ceiling_brl").eq("user_id", q.uid ?? "").eq("modulo", "pcs").maybeSingle();
-  const r = data as { approval_ceiling_brl?: number | null } | null;
-  if (r?.approval_ceiling_brl != null && valor > Number(r.approval_ceiling_brl)) {
-    return `Acima da sua alçada (R$ ${Number(r.approval_ceiling_brl).toLocaleString("pt-BR", { minimumFractionDigits: 2 })})`;
+    .select("approval_ceiling_brl").eq("user_id", uid ?? "").eq("modulo", "pcs").maybeSingle();
+  const t = (data as { approval_ceiling_brl?: number | null } | null)?.approval_ceiling_brl;
+  return t != null ? Number(t) : null;
+}
+
+/** Pode decidir a aprovação deste PC do painel (aprovar, reprovar, devolver para aguardando)?
+ *  null = pode; senão o motivo. A MESMA regra para as três (lib/aprovacao-permissao):
+ *  admin; ou compras.aprovar + alçada; PC de projeto de obra: compras.aprovar e, se o
+ *  projeto estoura o budget de materiais, só admin. */
+export async function motivoNaoDecide(q: Quem, p: { emp: string; num: string; valor: number; projCod: number | null; proj: string | null }, acao: DecisaoAcao): Promise<string | null> {
+  const ehAdmin = q.perms.is_admin;
+  const temPermissao = !!q.pode["compras.aprovar"];
+  if (ehAdmin || !temPermissao) return motivoSemPermissao({ ehAdmin, temPermissao, valor: null, teto: null }, acao);
+  if (p.projCod && ehProjetoDeObra(p.proj)) {
+    let projeto: EntradaPermissao["projeto"];
+    try { projeto = await avaliarPcProjeto(p.emp, Number(p.projCod), p.num, Number(p.valor) || 0); }
+    catch { projeto = "indisponivel"; }
+    return motivoSemPermissao({ ehAdmin, temPermissao, valor: Number(p.valor) || 0, teto: null, projeto }, acao);
   }
-  return null;
+  return motivoSemPermissao({ ehAdmin, temPermissao, valor: Number(p.valor) || 0, teto: await tetoPcs(q.uid) }, acao);
 }
 
 /** Depois de gravar: previsões a pagar do pedido e RCs nos baldes de PV/OS

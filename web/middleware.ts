@@ -29,10 +29,25 @@ export async function middleware(request: NextRequest) {
     },
   );
 
-  const { data: { user } } = await supabase.auth.getUser();
+  // 08/10/26 — getClaims() em vez de getUser(): o projeto assina os JWT com chave
+  // ASSIMÉTRICA (ES256, JWKS em /auth/v1/.well-known/jwks.json), então a assinatura é
+  // conferida aqui mesmo, com a chave pública em cache (10 min, por instância) — sem a ida
+  // ao Supabase Auth a cada request. Token vencido: getClaims chama getSession, que renova
+  // a sessão pelo refresh token e grava os cookies novos (setAll acima), como antes.
+  // O que ele NÃO vê é sessão revogada antes de o token vencer (≤ 1 h): por isso as rotas
+  // que gravam continuam a validar com getUser() no servidor (loadPerms, exigirCompras,
+  // set-status…). Aqui é só o porteiro: quem não tem sessão vai para o /login.
+  const { data: claimsData } = await supabase.auth.getClaims();
+  const claims = claimsData?.claims ?? null;
+  const user = claims?.sub ? { id: claims.sub, user_metadata: (claims.user_metadata ?? {}) as Record<string, unknown> } : null;
 
   const { pathname } = request.nextUrl;
   const isPublic = PUBLIC_PATHS.some(p => pathname === p || pathname.startsWith(p + "/"));
+
+  // API sem sessão: 401 em JSON (o fetch da tela trata), não o HTML do /login.
+  if (!user && !isPublic && pathname.startsWith("/api/")) {
+    return NextResponse.json({ error: "Sessão expirada — entre de novo" }, { status: 401 });
+  }
 
   if (!user && !isPublic) {
     const url = request.nextUrl.clone();

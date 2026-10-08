@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { avaliarPcProjeto } from "@/lib/aprovacao-projeto";
+import { permsAprovacao, motivoNaoDecideLinha } from "@/lib/aprovacao-permissao-server";
 import { ehProjetoDeObra } from "@/lib/aprovacao-projeto-regra";
 import { supaServer } from "@/lib/supabase-server";
 import { supaAdmin } from "@/lib/supabase-admin";
@@ -33,6 +33,19 @@ export async function POST(req: Request) {
 
   if (!body.empresa || body.ncod_ped == null || !body.status) {
     return NextResponse.json({ error: "empresa, ncod_ped, status obrigatórios" }, { status: 400 });
+  }
+
+  // 08/10/26 (Benny): só pode reprovar quem aprova. Qualquer mudança de status — aprovar,
+  // Não aprovado, Rejeitado por validade, N/A, Pré-seleção, devolver para Pendente — exige a
+  // MESMA permissão de aprovar (can_approve no módulo + alçada; PC de projeto de obra que
+  // estoura o budget: só admin). Só pôr "Pendente" numa compra sem decisão fica livre.
+  // Regra única em lib/aprovacao-permissao (a mesma do Compras).
+  {
+    const perms = await permsAprovacao(user.id);
+    if (!perms) return NextResponse.json({ error: "Sem perfil no painel" }, { status: 403 });
+    const nao = await motivoNaoDecideLinha(perms,
+      { empresa: body.empresa, ncod_ped: Number(body.ncod_ped), modulo: body.modulo ?? "avulsos", valorPc: body.valorPc ?? null }, body.status);
+    if (nao) return NextResponse.json({ error: nao, code: "SEM_PERMISSAO_APROVAR" }, { status: 403 });
   }
 
   // Gate admin-only pra CANCELAR_PEDIDO
@@ -144,7 +157,6 @@ export async function POST(req: Request) {
       .eq("empresa", body.empresa).eq("ncod_ped", body.ncod_ped)
       .limit(1).maybeSingle();
     const codProj = (ped as { ncod_proj?: number | null } | null)?.ncod_proj ?? null;
-    const pcNum = (ped as { cnumero?: string | null } | null)?.cnumero ?? null;
 
     if (codProj) {
       // 07/10/26 (Benny): projeto de obra (PJ) não exige mais o fluxo aprovado para aprovar
@@ -168,24 +180,8 @@ export async function POST(req: Request) {
           fluxo_status: f.status,
         }, { status: 400 });
       }
-      /* 07/10/26 — aprovação por PROJETO (lib/aprovacao-projeto-regra): o projeto inteiro
-         tem de caber no budget de materiais (comprometido + este PC). Estourou → só
-         administrador aprova; os demais recebem o motivo e o PC fica pendente. */
-      if (pcNum && deObra) {
-        try {
-          const av = await avaliarPcProjeto(body.empresa, Number(codProj), String(pcNum), body.valorPc ?? null);
-          if (!av.aprova && av.estouro > 0) {
-            const { data: me2 } = await admin3.schema("platform").from("user_profiles").select("is_admin, role").eq("id", user.id).maybeSingle();
-            const adm = (me2 as { is_admin?: boolean; role?: string } | null);
-            if (!(adm?.is_admin === true || adm?.role === "admin")) {
-              return NextResponse.json({
-                error: `Este PC ${av.motivo} — fica pendente para os administradores.`,
-                code: "PROJETO_ESTOURA_BUDGET", codigo_projeto: codProj, estouro: av.estouro,
-              }, { status: 400 });
-            }
-          }
-        } catch { /* sem como avaliar o budget agora: segue a regra de antes (só o fluxo) */ }
-      }
+      /* 07/10/26 — aprovação por PROJETO: estourou o budget de materiais → só admin. Desde
+         08/10/26 essa checagem vive em motivoNaoDecideLinha (lá em cima), a mesma para reprovar. */
     }
   }
 

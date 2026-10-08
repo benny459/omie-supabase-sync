@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { supaServer } from "@/lib/supabase-server";
 import { supaAdmin } from "@/lib/supabase-admin";
 import { postWebexMessage, buildApprovalMarkdown } from "@/lib/webex";
+import { permsAprovacao, motivoNaoDecideLinha } from "@/lib/aprovacao-permissao-server";
 
 export const runtime = "nodejs";
 
@@ -96,9 +97,15 @@ export async function POST(req: Request) {
   }
 
   // Upserts em paralelo (RLS valida cada um — admin/aprovador)
+  // 08/10/26: só pode reprovar quem aprova — a MESMA checagem do set-status, linha a linha
+  // (can_approve no módulo, alçada, projeto que estoura o budget → só admin).
+  const perms = await permsAprovacao(user.id);
+  if (!perms) return NextResponse.json({ error: "Sem perfil no painel" }, { status: 403 });
   const results = await Promise.all(body.rows.map(async (r) => {
     const trava = bloqueados.get(`${r.empresa}|${r.ncod_ped}`);
     if (trava) return { empresa: r.empresa, ncod_ped: r.ncod_ped, ok: false, error: trava };
+    const nao = await motivoNaoDecideLinha(perms, { empresa: r.empresa, ncod_ped: Number(r.ncod_ped), modulo: r.modulo ?? "avulsos", valorPc: r.valorPc ?? null }, body.status);
+    if (nao) return { empresa: r.empresa, ncod_ped: r.ncod_ped, ok: false, error: nao };
 
     const patch = becomingApproved
       ? { ...patchBase, valor_aprovado: r.valorPc ?? null }

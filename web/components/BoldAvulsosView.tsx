@@ -17,6 +17,7 @@ import { useUserPerms } from "./UserPermsProvider";
 import { canApprove, canEdit, canReleasePv, canViewValues, canViewMargin, type BlockKey } from "@/lib/permissions";
 import EditableCell from "./EditableCell";
 import EditableStatusCell from "./EditableStatusCell";
+import { SO_QUEM_APROVA } from "@/lib/aprovacao-permissao";
 import RcExcelDropZone from "./RcExcelDropZone";
 // RcProjetoUploadButton, RcProjetoItensBlock e ProjetoEtapasBlock vivem na
 // sub-página /projetos/:codigo/materiais. Aqui só o Fluxo Financeiro (upload
@@ -3763,7 +3764,7 @@ function Cell({
   // Status pill clicável (popover)
   if (col.format === "status") {
     return (
-      <BoldStatusButton row={effectiveRow}
+      <BoldStatusButton row={effectiveRow} modulo={modulo}
         onClick={(e) => { e.stopPropagation(); onStatusClick(e.currentTarget.getBoundingClientRect()); }} />
     );
   }
@@ -5228,15 +5229,18 @@ function InkUnderline({ value, placeholder }: { value: string; placeholder?: str
 // Status pill (clicável)
 // ─────────────────────────────────────────────────────────────────────────
 
-function BoldStatusButton({ row, onClick }: { row: AnyRow; onClick: (e: React.MouseEvent<HTMLButtonElement>) => void }) {
+function BoldStatusButton({ row, modulo, onClick }: { row: AnyRow; modulo: string; onClick: (e: React.MouseEvent<HTMLButtonElement>) => void }) {
   const status = String(row.status ?? "PENDENTE");
   const meta = STATUS_META[status] ?? STATUS_META.PENDENTE;
   const short = STATUS_SHORT[status] ?? meta.label;
+  // 08/10/26: só quem aprova muda o status (aprovar ou reprovar) — o servidor também barra.
+  const pode = canApprove(useUserPerms(), String(row.modulo || modulo) as "avulsos");
   return (
-    <button onClick={onClick} type="button"
-      className={`inline-flex items-center gap-1 px-2 py-0.5 rounded font-mono text-[11.5px] font-semibold uppercase tracking-[0.4px] justify-self-start ${meta.tone} hover:brightness-110 transition`}>
+    <button onClick={pode ? onClick : (e) => e.stopPropagation()} type="button" aria-disabled={!pode}
+      title={pode ? undefined : `Só quem aprova pode aprovar ou reprovar (${SO_QUEM_APROVA})`}
+      className={`inline-flex items-center gap-1 px-2 py-0.5 rounded font-mono text-[11.5px] font-semibold uppercase tracking-[0.4px] justify-self-start ${meta.tone} ${pode ? "hover:brightness-110" : "cursor-not-allowed"} transition`}>
       {short}
-      <span className="opacity-50 text-[9px]">▾</span>
+      {pode && <span className="opacity-50 text-[9px]">▾</span>}
     </button>
   );
 }

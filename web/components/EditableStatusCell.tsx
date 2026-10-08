@@ -5,6 +5,8 @@ import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { STATUS_META, STATUS_ORDER } from "@/lib/columns";
 import { useUserPerms } from "./UserPermsProvider";
+import { canApprove } from "@/lib/permissions";
+import { SO_QUEM_APROVA } from "@/lib/aprovacao-permissao";
 
 // Status que só admin pode aplicar — protegido também na API route.
 const ADMIN_ONLY_STATUS = new Set(["CANCELAR_PEDIDO"]);
@@ -101,6 +103,16 @@ export default function EditableStatusCell({
   }
 
   const meta = STATUS_META[value] ?? STATUS_META.PENDENTE;
+  // 08/10/26: só quem aprova muda o status (aprovar ou reprovar); o servidor também barra.
+  const pode = canApprove(currentUser, modulo as "avulsos");
+  if (!pode) {
+    return (
+      <span title={`Só quem aprova pode aprovar ou reprovar (${SO_QUEM_APROVA})`}
+        className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-bold whitespace-nowrap cursor-not-allowed ${meta.tone}`}>
+        {meta.label}
+      </span>
+    );
+  }
 
   return (
     <>

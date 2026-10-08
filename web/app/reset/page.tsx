@@ -41,6 +41,9 @@ export default function ResetPage() {
     setLoading(true); setMsg(null);
     const supa = supaBrowser();
     const { error } = await supa.auth.updateUser({ password: pw1, data: { must_change_password: false } });
+    // O porteiro (middleware) lê a marca do próprio token (getClaims, 08/10/26): renova a
+    // sessão para o token novo já vir sem must_change_password — senão voltaria ao /reset.
+    if (!error) await supa.auth.refreshSession().catch(() => null);
     setLoading(false);
     if (error) { setMsg({ kind: "err", text: error.message }); return; }
     setMsg({ kind: "ok", text: "Senha alterada com sucesso. Redirecionando…" });

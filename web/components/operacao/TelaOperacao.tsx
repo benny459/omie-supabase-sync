@@ -36,6 +36,7 @@ import {
 } from "@/lib/operacao-modelo";
 import { chaveRentab, type RentabResumo } from "@/lib/rentabilidade";
 import { mudarStatus, mudarStatusEmMassa, salvarCampo, CAMPOS, type Modulo } from "@/lib/approvals-write";
+import { SO_QUEM_APROVA } from "@/lib/aprovacao-permissao";
 import { buildBuckets, BucketTotals, projetoDoBucket, LinkAbrirProjeto, type Bucket, type BudgetSummary } from "../BoldAvulsosView";
 import KpisNavy from "../navy/KpisNavy";
 import LinhaDoTempo from "../navy/LinhaDoTempo";
@@ -1607,7 +1608,7 @@ export function SeletorStatus({ c, podeAprovar, ehAdmin, setStatus }: {
 }) {
   if (c.estado === "sem_pc") return <span className="st sem_pc">Sem PC</span>;
   if (c.estado === "recebido") return <span className="st recebido" title={`NF de entrada ${c.nfFornecedor || ""} · ${dBR(c.recebidoEm)}`}>Recebido</span>;
-  if (!podeAprovar) return <span className={`st ${c.estado}`}>{ESTADO_LABEL[c.estado]}</span>;
+  if (!podeAprovar) return <span className={`st ${c.estado}`} title={`Só quem aprova pode aprovar ou reprovar (${SO_QUEM_APROVA})`}>{ESTADO_LABEL[c.estado]}</span>;
   const atual = c.statusCodigo || "PENDENTE";
   return (
     <select className={`stsel ${c.estado}`} value={atual} onClick={(e) => e.stopPropagation()}
@@ -2658,7 +2659,7 @@ function SeletorStatusLote({ cs, podeAprovar, ehAdmin, statusLote }: {
   cs: Compra[]; podeAprovar: boolean; ehAdmin: boolean; statusLote: (lista: Compra[], status: string) => void;
 }) {
   const c = cs.find((x) => x.estado === "recusado") ?? cs.find((x) => x.estado === "pendente") ?? cs[0];
-  if (!podeAprovar) return <span className={`st ${c.estado}`}>{ESTADO_LABEL[c.estado]}</span>;
+  if (!podeAprovar) return <span className={`st ${c.estado}`} title={`Só quem aprova pode aprovar ou reprovar (${SO_QUEM_APROVA})`}>{ESTADO_LABEL[c.estado]}</span>;
   const atual = c.statusCodigo || "PENDENTE";
   return (
     <select className={`stsel ${c.estado}`} value={atual} onChange={(e) => statusLote(cs, e.target.value)}>

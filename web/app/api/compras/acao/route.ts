@@ -11,11 +11,10 @@
 // etapa_manual. Nada aqui chama o Omie.
 import { postWebexMessage, buildApprovalMarkdown } from "@/lib/webex";
 import { NextResponse } from "next/server";
-import { exigirCompras, rpc, erro, podeAprovar, posGravar, type Quem } from "@/lib/compras-server";
+import { exigirCompras, rpc, erro, motivoNaoDecide, posGravar, type Quem } from "@/lib/compras-server";
 import { supaAdmin } from "@/lib/supabase-admin";
 import { ordemEtapa, type Pedido } from "@/lib/compras";
-import { avaliarPcProjeto } from "@/lib/aprovacao-projeto";
-import { ehProjetoDeObra } from "@/lib/aprovacao-projeto-regra";
+import { aprovPainelExigeAprovador, acaoDoStatus } from "@/lib/aprovacao-permissao";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -113,21 +112,12 @@ async function aprovar(q: Quem, req: Request, ids: number[], status: string) {
   for (const p of pedidos) {
     if (p.tipo !== "PC") { falhas.push({ num: p.num, erro: "requisição não é aprovada" }); continue; }
     if (p.origem === "omie") { doOmie.push(p); continue; }
-    if (status === "aprovado") {
-      if (p.projCod && ehProjetoDeObra(p.proj)) {
-        /* 07/10/26 — PC de projeto: não passa pela alçada da área; quem libera é o
-           projeto (fluxo aprovado + cabe no budget de materiais). Estourou → só admin. */
-        if (!q.perms.is_admin && !q.pode["compras.aprovar"]) { falhas.push({ num: p.num, erro: "Sem permissão para aprovar compras" }); continue; }
-        try {
-          const av = await avaliarPcProjeto(p.emp, Number(p.projCod), p.num, Number(p.valor) || 0);
-          if (!q.perms.is_admin && av.estouro > 0) {
-            falhas.push({ num: p.num, erro: `${av.motivo} — fica pendente para os administradores` }); continue;
-          }
-        } catch (e) { if (!q.perms.is_admin) { falhas.push({ num: p.num, erro: `não consegui conferir o budget do projeto: ${(e as Error).message}` }); continue; } }
-      } else {
-        const nao = await podeAprovar(q, Number(p.valor) || 0);
-        if (nao) { falhas.push({ num: p.num, erro: nao }); continue; }
-      }
+    /* 08/10/26 (Benny): só pode reprovar quem aprova. Aprovar, "não aprovado" e devolver um
+       aprovado para "aguardando" passam pela MESMA checagem (lib/aprovacao-permissao), com a
+       regra do projeto (estourou o budget → só admin). Pedir aprovação continua livre. */
+    if (aprovPainelExigeAprovador(p.aprov, status)) {
+      const nao = await motivoNaoDecide(q, { emp: p.emp, num: p.num, valor: Number(p.valor) || 0, projCod: p.projCod, proj: p.proj }, acaoDoStatus(status));
+      if (nao) { falhas.push({ num: p.num, erro: nao }); continue; }
     }
     okPainel.push(p.id!);
   }

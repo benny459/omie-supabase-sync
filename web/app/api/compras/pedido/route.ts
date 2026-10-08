@@ -1,7 +1,9 @@
 // GET  /api/compras/pedido?id=  — pedido completo (folha)
 // POST /api/compras/pedido      — incluir/alterar (só o que nasceu no painel)
 import { NextResponse } from "next/server";
-import { exigirCompras, rpc, erro, posGravar, valoresSePuder } from "@/lib/compras-server";
+import { exigirCompras, rpc, erro, posGravar, valoresSePuder, motivoNaoDecide } from "@/lib/compras-server";
+import { aprovPainelExigeAprovador } from "@/lib/aprovacao-permissao";
+import type { Pedido } from "@/lib/compras";
 import { supaAdmin } from "@/lib/supabase-admin";
 
 export const runtime = "nodejs";
@@ -90,6 +92,15 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: true, simulado: true, tipo: body.tipo, itens: itens.length, body });
   }
   try {
+    // "Salvar e solicitar aprovação" num PC JÁ aprovado devolve-o para aguardando: é decisão
+    // de quem aprova (08/10/26 — só pode reprovar quem aprova; lib/aprovacao-permissao).
+    if (body.id && body.novaAprov === "aguardando") {
+      const atual = await rpc<Pedido | null>("compras_pedido", { p_id: Number(body.id) });
+      if (atual && atual.tipo === "PC" && aprovPainelExigeAprovador(atual.aprov, "aguardando")) {
+        const nao = await motivoNaoDecide(q, { emp: atual.emp, num: atual.num, valor: Number(atual.valor) || 0, projCod: atual.projCod, proj: atual.proj }, "reprovar");
+        if (nao) return NextResponse.json({ error: nao }, { status: 403 });
+      }
+    }
     const r = await rpc<{ id: number; num: string }>("compras_salvar", { p: body, p_por: q.email, p_uid: q.uid });
     const ligadas = body.tipo === "PC" ? await ligarLista(r, body, itens, q.email) : 0;
     await posGravar(r.id, String(body.tipo));
