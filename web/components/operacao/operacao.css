@@ -524,9 +524,9 @@
 .op .pcproj-itens > div{display:flex;justify-content:space-between;gap:10px}
 .op .pcproj-itens small{color:var(--ww-text-faint);white-space:nowrap}
 /* 08/10/26 (2ª volta): colunas dos PCs medidas para caber em ~740px (projeto aberto ao lado das vendas
-   numa tela de ~1430px): 40+fornecedor+84+88+110+100+90+36+20+16 + 9×5 de vão + 12 de margem ≤ 738 (fornecedor ≥ 80). Mais
+   numa tela de ~1430px): 40+fornecedor+92+88+110+100+90+36+20+16 + 9×5 de vão + 12 de margem ≤ 738 (fornecedor ≥ 80). Mais
    espaço (compras ≥ 860px) → volta às colunas folgadas; ver @container pccompras abaixo. */
-.op .pcproj-hd,.op .pcproj-pc{display:grid;grid-template-columns:40px minmax(80px,1fr) 84px 88px 110px 100px 90px 36px 20px 16px;gap:5px;align-items:center;padding:7px 6px}
+.op .pcproj-hd,.op .pcproj-pc{display:grid;grid-template-columns:40px minmax(80px,1fr) 92px 88px 110px 100px 90px 36px 20px 16px;gap:5px;align-items:center;padding:7px 6px}
 .op .pcproj-hd{font-size:11px;color:var(--ww-text-faint);text-transform:uppercase;letter-spacing:.06em;border-bottom:1px solid var(--ww-border)}
 .op .pcproj-pc + .pcproj-pc{border-top:1px dashed var(--ww-border)}
 .op .pcproj-pc > *{min-width:0}
@@ -690,3 +690,6 @@
 .op .pa-bar .seg button:disabled{opacity:.45;cursor:not-allowed}
 .op .pa-bar .pa-dica{font-size:12px;color:var(--ww-text-faint)}
 .op .pvid-l1 > button[aria-pressed]{margin-right:3px;vertical-align:1px}
+/* projeto sem PC: só o aviso, sem o cabeçalho de colunas (que não cabe no lado estreito) */
+.op .pcproj-lados > .compras:has(.pcproj-vazio) .pcproj-hd{display:none}
+.op .pcproj-pc b.num{white-space:nowrap;font-variant-numeric:tabular-nums}
