@@ -53,6 +53,9 @@ import { normGrupo, dataDoGrupo, aplicarDataGrupo, nomePadrao } from "@/lib/grup
 import { estadoPc, dicaEstadoPc, LEGENDA_SITUACAO } from "@/lib/situacao-pc";
 import { sinalEntrega, FOLGA_ENTREGA_DIAS, type SinalEntrega } from "@/lib/sinal-entrega";
 import { textoCasar, SUG_MIN } from "@/lib/texto-casar";
+import { planejarItem, prazoEfetivo, normFornecedor, type PrazoFornecedor, type PlanoItem } from "@/lib/planejamento-compras";
+import PlanejamentoCompras, { resumoPlano, type ItemPlano } from "./PlanejamentoCompras";
+import PrazosFornecedorModal from "./PrazosFornecedorModal";
 
 type ItemRow = {
   id: string; equipamento: string | null; item: string;
@@ -285,6 +288,18 @@ export default function MateriaisGrade({
   }, [linhas]);
   const dataGrupoRef = useRef(dataGrupo);
 
+  /** Prazo de entrega por fornecedor (spec E): histórico × manual (⏱ Prazos por fornecedor). */
+  const [prazos, setPrazos] = useState<Map<string, PrazoFornecedor>>(new Map());
+  const [prazosAberto, setPrazosAberto] = useState(false);
+  const carregarPrazos = useCallback(async () => {
+    try {
+      const j = await fetch(`/api/compras/fornecedor-prazo?emp=${encodeURIComponent(empresa)}`, { cache: "no-store" }).then((x) => x.json()) as
+        { fornecedores?: { norm: string; nome: string; historico: number | null; manual: number | null }[] };
+      setPrazos(new Map((j.fornecedores ?? []).map((f) => [f.norm, { norm: f.norm, nome: f.nome, historico: f.historico, manual: f.manual }])));
+    } catch { /* sem prazos: vale o do item e os 15 dias */ }
+  }, [empresa]);
+  useEffect(() => { void carregarPrazos(); }, [carregarPrazos]);
+
   /** Sinal de entrega de cada linha: a compra chega a tempo do "Necessário em"? (07/10/26) */
   const sinais = useMemo(() => {
     const m = new Map<string, SinalEntrega | null>();
@@ -297,11 +312,12 @@ export default function MateriaisGrade({
         necessario: l.data_necessaria || null,
         recebidoEm: p?.dt_rec ?? null, recebido: !!p && ((Number(p.qtd_recebida) || 0) > 0 || p.etapa === "60" || p.etapa === "80"),
         temPc: !!c?.pcs.length, previsaoPc: p?.previsao ?? null,
-        prazoDias: l.cat_entrega_dias ? Number(l.cat_entrega_dias) : null,
+        // sem PC: hoje + prazo EFETIVO (manual do fornecedor → item → histórico → 15d, spec E)
+        prazoDias: prazoEfetivo({ prazoItem: l.cat_entrega_dias ? Number(l.cat_entrega_dias) : null, fornecedor: l.cat_fornecedor, prazos }).prazo,
       }));
     }
     return m;
-  }, [linhas, cmpPorId, cmp]);
+  }, [linhas, cmpPorId, cmp, prazos]);
   dataGrupoRef.current = dataGrupo;
 
   // ── Seletor de item do catálogo (linha da CP ou da lista) ────────────────
@@ -413,6 +429,10 @@ export default function MateriaisGrade({
      coluna Catálogo virou o ícone ao lado do código; sem Modelo (o dado continua na
      linha); PC + situação + vínculo numa coluna só, com "vincular" na própria linha;
      tudo numa linha só, com reticências, e as colunas até o Item presas ao rolar. */
+  const planoDaLinha = useCallback((l: Record<string, string>) => (String(l.item ?? "").trim()
+    ? planejarItem({ necessario: l.data_necessaria || null, temPc: !!cmpPorId.get(l._id)?.pcs.length || !!String(l.pc_numero ?? "").trim(),
+        prazoItem: l.cat_entrega_dias ? Number(l.cat_entrega_dias) : null, fornecedor: l.cat_fornecedor, prazos })
+    : null), [cmpPorId, prazos]);
   const COLS: ColunaGrade[] = useMemo(() => [
     // Origem da linha: selo "RC" (veio da RC) — vazio = item novo, digitado na lista.
     { key: "_orig", label: "Orig.", w: 30, fixa: true,
@@ -523,6 +543,30 @@ export default function MateriaisGrade({
         if (l.data_necessaria !== g) return { classe: "bg-amber-500/10", dica: `Data própria — o grupo está em ${dia(g)}` };
         return null;
       } },
+    { key: "cat_valor_unit", label: "Valor unit.", w: 84, tipo: "moeda", alinhaDireita: true,
+      dicaCab: "Valor unitário estimado da linha. Vazio, vem do PC, senão do último preço do catálogo, senão do custo da RC (a origem aparece pequena na célula).",
+      marca: (l) => {
+        const f = l._vu_fonte;
+        if (!f || !String(l.cat_valor_unit ?? "").trim()) return null;
+        return { etiqueta: f === "pc" ? "PC" : f === "CP" ? "RC" : "cat.",
+          dica: f === "pc" ? "Preço unitário da linha do pedido de compra" : f === "CP" ? "Custo da RC (composição de preço da proposta) — sem compra anterior" : "Último preço pago (catálogo)" };
+      } },
+    /* Comprar até (08/10/26, spec E): necessário em − prazo efetivo − folga. Sem PC: ✕ atrasado,
+       ⚠ comprar agora (até 7 dias), ✓ em N dias. Com PC vale o sinal de entrega do PC. */
+    { key: "_comprar", label: "Comprar até", w: 96,
+      dicaCab: `Comprar até = necessário em − prazo do fornecedor − ${FOLGA_ENTREGA_DIAS} dias de folga. Prazo: o ajustado em ⏱ Prazos por fornecedor, senão o do item no catálogo, senão o histórico do fornecedor, senão 15 dias (estimado).`,
+      dica: (l) => {
+        const pl = planoDaLinha(l);
+        if (!pl || !pl.comprarAte) return undefined;
+        const fonte = pl.fonte === "manual" ? "ajustado para o fornecedor" : pl.fonte === "item" ? "do item (catálogo)" : pl.fonte === "historico" ? "histórico do fornecedor" : "estimado (sem fornecedor/histórico)";
+        return `prazo ${pl.prazo}d — ${fonte} · folga ${FOLGA_ENTREGA_DIAS}d${pl.prazo > 60 && pl.fonte !== "manual" ? " · ⚠ prazo alto — confira em ⏱ Prazos por fornecedor" : ""}`;
+      },
+      render: (l) => {
+        const pl = planoDaLinha(l);
+        if (!pl || !pl.comprarAte || pl.status === "compc") return <span className="text-ww-textFaint">—</span>;
+        const cls = pl.status === "atrasado" ? "text-rose-600 dark:text-rose-400" : pl.status === "agora" ? "text-amber-700 dark:text-amber-300" : "text-emerald-700 dark:text-emerald-400";
+        return <span className="text-[11px] leading-tight"><b className="tabular-nums text-ww-text">{dia(pl.comprarAte)}</b><br /><small className={cls}>{pl.texto}{pl.estimado ? " · est." : ""}</small></span>;
+      } },
     /* Chegada prevista (07/10/26, Benny): a data em que o item chega, ao lado do Necessário em,
        e o sinal ✓/⚠/✕ compara as duas. "PC atrasado" (previsão do PC vencida sem chegar)
        aparece aqui, na chegada — não como alarme da necessidade. */
@@ -547,14 +591,6 @@ export default function MateriaisGrade({
         return sg.nivel === "ok" ? <span className="text-emerald-600 dark:text-emerald-400 font-bold">✓</span>
           : sg.nivel === "risco" ? <span className="text-amber-600 dark:text-amber-300 font-bold">⚠</span>
           : <span className="text-rose-600 dark:text-rose-400 font-bold">✕</span>;
-      } },
-    { key: "cat_valor_unit", label: "Valor unit.", w: 84, tipo: "moeda", alinhaDireita: true,
-      dicaCab: "Valor unitário estimado da linha. Vazio, vem do PC, senão do último preço do catálogo, senão do custo da RC (a origem aparece pequena na célula).",
-      marca: (l) => {
-        const f = l._vu_fonte;
-        if (!f || !String(l.cat_valor_unit ?? "").trim()) return null;
-        return { etiqueta: f === "pc" ? "PC" : f === "CP" ? "RC" : "cat.",
-          dica: f === "pc" ? "Preço unitário da linha do pedido de compra" : f === "CP" ? "Custo da RC (composição de preço da proposta) — sem compra anterior" : "Último preço pago (catálogo)" };
       } },
     // Projetado × Comprado (PC) × Δ — o que se esperava gastar, o que o PC custou e a diferença.
     { key: "_proj", label: "Projetado", w: 90, alinhaDireita: true,
@@ -635,8 +671,9 @@ export default function MateriaisGrade({
         const c = cmpPorId.get(l._id);
         const f = c?.pcs.map((p) => p.fornecedor).filter(Boolean)[0];
         if (f) return <span className="text-ww-text">{f}</span>;
-        if (l.cat_fornecedor) return <span className="text-ww-textMuted italic">{l.cat_fornecedor}</span>;
-        return <span className="text-ww-textFaint">—</span>;
+        const pl = planoDaLinha(l);
+        if (l.cat_fornecedor) return <span className="text-ww-textMuted italic">{l.cat_fornecedor}{pl ? <small className="not-italic text-ww-textFaint"> · {pl.prazo}d</small> : null}</span>;
+        return <span className="text-ww-textFaint">— <small>(prazo estimado {pl?.prazo ?? 15}d)</small></span>;
       } },
     { key: "_comprado", label: "Comprado (PC)", w: 96, alinhaDireita: true, classe: PC,
       dicaCab: "Comprado (PC) = valor da linha deste item no pedido de compra (qtd × preço do PC, com IPI/ST e desconto).",
@@ -678,7 +715,7 @@ export default function MateriaisGrade({
             💬{n > 0 && <span className="absolute -top-1.5 -right-2 min-w-[14px] px-0.5 rounded-full bg-ww-accent text-white text-[9px] font-bold leading-[14px] text-center">{n}</span>}
           </button>);
       } },
-  ], [empresa, cmp, cmpPorId, nomesPadrao, gruposMeta, abrirSeletorLista, PC, conversa, sinais, origemCp, cpNaoUsados, aceitarSugestoes, recusarSugestao, temSug]);
+  ], [empresa, cmp, cmpPorId, nomesPadrao, gruposMeta, abrirSeletorLista, PC, conversa, sinais, origemCp, cpNaoUsados, aceitarSugestoes, recusarSugestao, temSug, planoDaLinha]);
 
   /** A leitura inicial funcionou?
    *
@@ -874,17 +911,35 @@ export default function MateriaisGrade({
   const validas = useMemo(() => linhas.filter((l) => String(l.item ?? "").trim()), [linhas]);
   const comPc = validas.filter((l) => String(l.pc_numero ?? "").trim()).length;
   const temPc = useCallback((l: LinhaGrade) => !!cmpPorId.get(l._id)?.pcs.length || !!String(l.pc_numero ?? "").trim(), [cmpPorId]);
+  /** Planejamento por item (spec E): comprar até e status, recalculado a cada edição. */
+  const planos = useMemo(() => {
+    const m = new Map<string, PlanoItem>();
+    for (const l of validas) m.set(l._id, planejarItem({ necessario: l.data_necessaria || null, temPc: temPc(l),
+      prazoItem: l.cat_entrega_dias ? Number(l.cat_entrega_dias) : null, fornecedor: l.cat_fornecedor, prazos }));
+    return m;
+  }, [validas, temPc, prazos]);
+  const itensPlano: ItemPlano[] = useMemo(() => validas.map((l) => ({
+    id: l._id, item: l._cat_desc || l.item, qtd: num(l.qtd), un: l.un || "", vu: num(l.cat_valor_unit),
+    fornecedor: l.cat_fornecedor || null, necessario: l.data_necessaria || null, temPc: temPc(l),
+    pcAtrasa: sinais.get(l._id)?.nivel === "atrasado" && temPc(l), plano: planos.get(l._id)!,
+  })), [validas, temPc, planos, sinais]);
+  const resumoP = useMemo(() => resumoPlano(itensPlano), [itensPlano]);
 
+  /** Em risco / atrasados: chegada apertada ou atrasada, PC atrasado, ou (sem PC) já devia
+   *  ter comprado / comprar nos próximos 7 dias (spec E). */
+  const emRisco = useCallback((l: LinhaGrade) => {
+    const sg = sinais.get(l._id);
+    if (sg && (sg.nivel === "risco" || sg.nivel === "atrasado" || sg.pcAtrasadoDias > 0)) return true;
+    const pl = planoDaLinha(l);
+    return !!pl && (pl.status === "atrasado" || pl.status === "agora");
+  }, [sinais, planoDaLinha]);
   const visiveis = useMemo(() => {
     const vis = linhas.filter((l) => {
       if (!l.item?.trim()) return true; // a linha em branco do fim fica sempre
       if (equipFiltro && normGrupo(l.equipamento || "Geral") !== equipFiltro) return false;
       if (filtroPc === "sem_pc" && temPc(l)) return false;
       if (filtroPcNum && !cmpPorId.get(l._id)?.pcs.some((p) => p.pc === filtroPcNum)) return false;
-      if (filtroPc === "risco") {
-        const sg = sinais.get(l._id);
-        if (!(sg && (sg.nivel === "risco" || sg.nivel === "atrasado" || sg.pcAtrasadoDias > 0))) return false;
-      }
+      if (filtroPc === "risco" && !emRisco(l)) return false;
       if (filtroPc === "sug" && l._match !== "sug") return false;
       if (filtroPc === "sem_cod" && !(semCodigoNosso(l) && l._match !== "sug")) return false;
       return true;
@@ -896,7 +951,7 @@ export default function MateriaisGrade({
     for (const l of vis) if (l.item?.trim()) { const k = normGrupo(l.equipamento || "Geral"); if (!ordem.has(k)) ordem.set(k, ordem.size); }
     const pos = (l: LinhaGrade) => (l.item?.trim() ? ordem.get(normGrupo(l.equipamento || "Geral"))! : Number.MAX_SAFE_INTEGER);
     return vis.map((l, i) => ({ l, i })).sort((a, b) => pos(a.l) - pos(b.l) || a.i - b.i).map((x) => x.l);
-  }, [linhas, equipFiltro, filtroPc, temPc, sinais, filtroPcNum, cmpPorId]);
+  }, [linhas, equipFiltro, filtroPc, temPc, emRisco, filtroPcNum, cmpPorId]);
 
   const salvar = useCallback(async (confirmarRemocao = false, silencioso = false) => {
     const versaoInicio = versaoRef.current;
@@ -1691,12 +1746,22 @@ export default function MateriaisGrade({
       )}
       {cmpErro && !cmp && <p className="text-[11px] text-rose-600">Compras do projeto indisponíveis: {cmpErro}</p>}
 
+      {/* KPI "Comprar esta semana" (spec E): sem PC, já devia ter comprado + comprar nos próximos 7 dias. */}
+      {resumoP.nSemana > 0 && (
+        <button type="button" onClick={() => setSubAba("plan")} data-kpi-semana
+          className="flex items-center gap-3 flex-wrap w-full text-left rounded-lg border border-amber-500/50 bg-amber-500/10 px-3 py-1.5 text-[12px] hover:border-amber-500">
+          <span className="text-[10.5px] uppercase tracking-wider text-amber-800 dark:text-amber-200">Comprar esta semana</span>
+          <b className="text-[15px] tabular-nums text-ww-text">{brl(resumoP.semana)}</b>
+          <span className="text-ww-textMuted">{resumoP.atr.length ? `${resumoP.atr.length} item(ns) atrasado(s)` : ""}{resumoP.atr.length && resumoP.ag.length ? " · " : ""}{resumoP.ag.length ? `${resumoP.ag.length} para os próximos 7 dias` : ""}</span>
+          <span className="ml-auto text-ww-accent text-[11px]">ver planejamento →</span>
+        </button>)}
+
       {/* As três etapas (08/10/26, spec B.1) — a lista nasce da RC e termina no planejamento. */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
         {([
           ["rc", `① Itens da RC${cpBase ? ` (${cpBase.itens.length})` : ""}`, "vêm do CRM · conferir e levar para a lista"],
           ["lista", `② Lista de materiais (${validas.length})`, "o que vamos comprar de fato · códigos, datas, PCs"],
-          ["plan", "③ Planejamento de compras", "quando pedir cada item para chegar no prazo"],
+          ["plan", `③ Planejamento de compras${resumoP.nSemana ? ` (${resumoP.nSemana} para agir)` : ""}`, "quando pedir cada item para chegar no prazo"],
         ] as const).map(([k, rot, sub]) => (
           <button key={k} type="button" onClick={() => setSubAba(k)} data-etapa={k}
             className={`text-left rounded-lg border px-3 py-2 transition ${subAba === k ? "border-ww-accent bg-ww-accentSoft" : "border-ww-border bg-ww-rowHover/40 hover:border-ww-accent/60"}`}>
@@ -1875,7 +1940,7 @@ export default function MateriaisGrade({
               : k === "sug" && nSug ? "border-amber-500/60 text-amber-700 dark:text-amber-300"
               : "border-ww-border text-ww-textMuted hover:text-ww-text"}`}>
             {k === "todas" ? `Todos ${validas.length}` : k === "sug" ? `⚠ Com sugestão ${nSug}` : k === "sem_cod" ? `⌕ Sem código ${nSemCod}`
-              : k === "sem_pc" ? `Sem PC ${validas.length - nComPc}` : `Em risco / atrasados ${validas.filter((l) => { const sg = sinais.get(l._id); return !!sg && (sg.nivel !== "ok" || sg.pcAtrasadoDias > 0); }).length}`}
+              : k === "sem_pc" ? `Sem PC ${validas.length - nComPc}` : `Em risco / atrasados ${validas.filter(emRisco).length}`}
           </button>))}
       </div>
 
@@ -1968,10 +2033,21 @@ export default function MateriaisGrade({
       </>)}
 
       {subAba === "plan" && (
-        <div className="rounded-lg border border-ww-border p-3 text-[12px] text-ww-textMuted">
-          O planejamento de compras por item (comprar até = necessário em − prazo do fornecedor − folga) chega na próxima versão.
-          Por enquanto, a coluna <b>Chegada prev.</b> e o filtro <b>Em risco / atrasados</b> da etapa ② mostram o que está apertado.
-        </div>
+        <PlanejamentoCompras itens={itensPlano} podeGerar={!sujo} onAbrirPrazos={() => setPrazosAberto(true)}
+          onGerarPc={(ids) => abrirGerarPc(ids.filter((id) => id.startsWith("db")))} />
+      )}
+      {prazosAberto && (
+        <PrazosFornecedorModal empresa={empresa} prazos={prazos}
+          daLista={[...validas.filter((l) => l.cat_fornecedor && !temPc(l)).reduce((m, l) => m.set(l.cat_fornecedor, (m.get(l.cat_fornecedor) ?? 0) + 1), new Map<string, number>())]
+            .map(([nome, itens]) => ({ nome, itens })).sort((a, b) => b.itens - a.itens)}
+          onFechar={() => setPrazosAberto(false)}
+          onSalvo={(alt) => {
+            // reflete na hora (o planejamento recalcula) e relê do servidor
+            setPrazos((m) => { const n = new Map(m); for (const a of alt) { const k = normFornecedor(a.nome); const p = n.get(k); n.set(k, { norm: k, nome: p?.nome ?? a.nome, historico: p?.historico ?? null, manual: a.manual }); } return n; });
+            setPrazosAberto(false);
+            setAviso(`Prazos salvos (${alt.length}) — o planejamento foi recalculado.`);
+            void carregarPrazos();
+          }} />
       )}
 
       {comentLinha && createPortal((() => {
