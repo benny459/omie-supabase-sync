@@ -92,6 +92,10 @@ Logo acima dos projetos, uma linha de texto: quantos são, **ordenado por** (nº
 
 ### Lista de materiais, compras e budget do projeto
 
+![Vídeo: lista de materiais da RC à compatibilização e ao Excel](/manual-video/lista-materiais-rc.mp4)
+
+*Vídeo (8 min): a tela de Projetos (filtros, trilho de etapas, prazo, venda × compras, ★ ativos), levar os itens da RC para a lista, compatibilizar os códigos com o estoque, equipamentos e “necessário em”, colar do Excel, subir planilha e excluir a lista.*
+
 Tudo fica numa aba só: **Lista de materiais** (a antiga aba “Compras × lista” entrou nela). Na linha do projeto, **📂 Abrir projeto** leva até ela.
 
 **O caminho em três etapas** — um controle segmentado no topo da aba, com a contagem dentro de cada botão (**Itens da RC 60 · Lista 62 · Planejamento 7 para agir**) e uma dica de uma linha ao lado: **Itens da RC** — a **RC** (composição de preço da proposta) é a referência e a origem do **budget de materiais**; só leitura, com **→ lista** em cada item e **⤵ Levar para a lista os que faltam (N)**. **Lista** — o que se compra de fato: exclua itens da RC que não vão, inclua os novos, compatibilize com o nosso código, defina as datas e gere os **pedidos de compra**. **Planejamento** — quando pedir cada item. Projeto sem lista abre em Itens da RC; com lista, em Lista. Os PCs se acompanham em **Operação › Projetos** (por PC) e aqui, item a item; o link **vendas e datas em Operação › Projetos →** (à direita das etapas) abre o cartão do projeto lá.
