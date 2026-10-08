@@ -52,14 +52,30 @@ A lista de **pedidos de venda (PV/OS)** com as compras ligadas a cada um.
 2. Acima das abas fica o **painel do projeto** (valor fechado, barra de budget e **Comprar esta semana** — ver abaixo). As abas seguem a ordem do trabalho, sem numeração: **Resumo · Lista de materiais · Materiais separados · Fluxo de caixa**.
 3. Na lista de projetos, um selo mostra **“N itens separados · R$ · x% da lista”** quando já há material separado — clique para ir direto à aba.
 
+### A lista de projetos
+
+Acima da lista há só **duas faixas**:
+- **Topo**: título e contagem, **★ Projetos ativos**, **⚙ Ativos**, a busca (**⌘K**) e a visão (**Lista · Tabela · Kanban · Linha do tempo**). No **•••**: PCs escondidos, **📊 Mostrar os indicadores** (os KPIs ficam escondidos por padrão; a escolha fica gravada), log de alterações e a tela antiga.
+- **Barra de filtros** (um cartão só): **Mostrar** ★ Só ativos | Todos · **Situação** Em aberto | Faturados | Todos · **Período** (Tudo · 7 dias · 30 dias · Vence em 7d · Vencidos) e, na segunda linha, **Atenção**: chips com uma **bolinha na cor da gravidade** — vermelho = atraso (venda em atraso, compra em atraso, recusados, sem NF há +5d), âmbar = aprovação/serviço (minha aprovação, serviço em atraso), cinza = “sem” (sem PC, sem OS) — com a contagem. Os chips combinam entre si. Os menos usados (material recebido sem NF, parcial, em estoque e cada status de serviço) e os filtros de venda/compra (tipo, etapa, fornecedor, categoria…) ficam em **≡ Mais filtros**. **Visões salvas ▾** guarda e aplica combinações. Com **Minha aprovação** marcado aparece **✓ Aprovar todas**.
+
+Logo acima dos projetos, uma linha de texto: quantos são, **ordenado por** (nº do projeto, emissão, cliente, prazo, etapas, serviço, venda ou compras; ↓/↑ inverte), **expandir todos · recolher** e a **legenda das cores do trilho** (concluído · em andamento · atrasado · não iniciado). Em **Todos**, os ★ ativos vêm primeiro.
+
+**Cada projeto é uma linha**:
+- **Identidade**: ☆/★, nome, 💬 anotações, cliente · emissão · nº de compras e as etiquetas (etapa da venda em azul, tipo, NF de saída, proposta do CRM ↗, OC; “PV incompleto”, “defasado Omie”, “material sem NF” quando houver).
+- **Trilho de etapas**: PV · RC · PC · Aprov · Mat · Serv · NF · Pago · Receb — verde concluído, âmbar em andamento, vermelho atrasado, cinza não iniciado, tracejado não se aplica (passe o mouse em cada uma). Embaixo, **agora:** a etapa travada e o que falta (vermelho quando atrasada) e o **serviço** numa pílula (aguardando OS, status da OS, ⚠ dias de atraso), com o nº da OS ↗ ou **gerar OS ↗**.
+- **Prazo**: a data da venda em destaque, com **Nd de folga** ou **Nd atrasado** em vermelho.
+- **Financeiro em duas barras + margem**: **Venda** (barra azul; a parte faturada em verde, com “% faturado”) e **Compras** (o budget de materiais é o contorno tracejado; PCs aprovados em azul e aguardando aprovação em âmbar; valor vermelho quando passa do budget). Embaixo, **margem projetada** e **real**. Os valores aparecem em “k” (R$ 743k); o valor completo fica ao passar o mouse.
+
+**Clique no projeto** para abrir no lugar: **📂 Abrir projeto**, **+ Nova linha** e **🗑 Excluir projeto** em cima; depois **um** bloco de budget com a mesma barra do cabeçalho do projeto (aprovados · aguardando · a comprar · estoura, com a marca “budget”) e, à direita, **Venda** e **Resultado esp.**; embaixo, **Vendas (PV/OS)** × **Pedidos de compra**.
+
 ### Projetos ativos (★)
 
 - **⚙ Ativos** (topo de **Operação › Projetos**): abre a lista de **todos os projetos**, do mais novo para o mais antigo, cada um com uma caixa de marcar. Marque os projetos **em andamento, em que se está atuando**; há **busca**, **Marcar todos** / **Desmarcar todos** (valem para o que a busca mostra) e **só marcados**. Nada grava até **Salvar** — e a seleção vale para todo mundo.
 - Ao lado, o botão **★ Projetos ativos (N)** lista os projetos marcados como ativos, **do maior PJ para o menor**, com o cliente. Digite para buscar; **Enter** ou clique abre o cartão do projeto já expandido (projeto sem venda/compra na lista abre a página do projeto).
-- Ao lado, **★ Só ativos | Todos**: por padrão a lista mostra **só os ativos**; **Todos** mostra o resto. A escolha fica gravada no seu navegador. Enquanto nenhum projeto estiver marcado, aparecem todos.
+- Na barra de filtros, **Mostrar ★ Só ativos | Todos**: por padrão a lista mostra **só os ativos**; **Todos** mostra o resto. A escolha fica gravada no seu navegador. Enquanto nenhum projeto estiver marcado, aparecem todos.
 - Atalhos para marcar ou desmarcar um projeto só: a **☆/★** ao lado do nome do projeto (no cartão), no menu ★ (digitando, aparecem também os não marcados, com ☆) ou no cabeçalho da página do projeto. Dá para **desfazer** pelo aviso que aparece embaixo.
 - A marca é **a mesma para todo mundo** (é do projeto, não da pessoa). Marca quem edita projetos ou é administrador.
-- A lista de projetos vem, por padrão, **em ordem decrescente de PJ** (clique no cabeçalho “projeto” ou “emissão” para mudar).
+- A lista de projetos vem, por padrão, **em ordem decrescente de PJ** (mude em **ordenado por**, logo acima dos projetos).
 - Na página do projeto, o mesmo menu **★ Projetos ativos** fica no cabeçalho para pular de um projeto ativo para outro.
 
 ### Resumo e Fluxo de caixa do projeto
@@ -96,18 +112,18 @@ Tudo fica numa aba só: **Lista de materiais** (a antiga aba “Compras × lista
 
 > No projeto, **RC e CP (composição de preço) são a mesma coisa** e o nome usado é **RC**: os itens da RC são os da composição de preço da proposta; o nº mostrado é o do documento em Compras.
 
-**Margens do projeto** (na linha do projeto e no projeto aberto, lado a lado):
+**Margens do projeto** (na linha do projeto, embaixo das barras):
 - **Margem projetada** = (PV − budget de materiais da RC) ÷ PV.
 - **Margem real** = (PV − PCs aprovados) ÷ PV — cada PC uma vez; passe o mouse para ver como fica se os PCs aguardando aprovação forem aprovados.
 - O antigo **M.B.** somava os PCs **e** os itens da RC sem PC; no projeto os PCs saem da Lista sem ligar à RC, e a mesma compra contava duas vezes (o PJ361 aparecia com −16%). Nos Avulsos o M.B. continua como era. No bloco de budget do projeto, **Result. esp.** é o resultado esperado do fechamento do CRM (venda − materiais − mão de obra − despesas) — não é a margem de materiais.
 
-**Vendas (PV/OS)** (no projeto aberto, à esquerda): os PV/OS gerados para o projeto — nº (abre no Faturamento) e **parcela N** na mesma linha, o evento embaixo, valor e % do total (a soma confere com o PV do projeto), situação (a faturar / faturado com NF ou recibo / recebido) e OC do cliente. Em **faturamento** e **recebimento**, em cima fica sempre a **data vigente** (a nova previsão, ou a inicial quando não mudou) — clique nela para mudar. Embaixo: **= inicial** quando não mudou; se mudou, o campo fica com borda âmbar e aparece **inicial ~~dd/mm/aaaa~~ +Nd** (+N vermelho = atrasou, −N verde = adiantou). A **previsão inicial** vem do resumo financeiro do projeto e não muda. Escolher de novo a data inicial (ou clicar **↺**) apaga a nova previsão. Já faturado: em cima “dd/mm/aaaa faturado”.
+**Vendas (PV/OS)** (no projeto aberto, à esquerda): os PV/OS gerados para o projeto — nº (abre no Faturamento) e **parcela N** na mesma linha, o evento embaixo, valor e % do total (a soma confere com o PV do projeto), situação (a faturar / faturado com NF ou recibo / recebido) e OC do cliente. Em **faturamento** e **recebimento**, em cima fica sempre a **data vigente** (a nova previsão, ou a inicial quando não mudou) — clique nela para mudar. Embaixo: **= inicial** quando não mudou; se mudou, o campo fica com borda âmbar e aparece **inicial ~~dd/mm/aaaa~~ +Nd** (+N vermelho = atrasou, −N verde = adiantou). A **previsão inicial** vem do resumo financeiro do projeto e não muda. Escolher de novo a data inicial (ou clicar **↺**) apaga a nova previsão. Já faturado: em cima “dd/mm/aaaa faturado”; a inicial riscada só aparece embaixo se a data foi outra.
 - A nova previsão de **faturamento** é a mesma da carteira do Faturamento (“Previsão fat.”). Mudá-la leva o recebimento junto (mesmo prazo), se o recebimento não tiver nova previsão própria — um aviso no canto da tela confirma.
 - Do projeto (aba Lista de materiais), **mudar datas em Operação › Projetos →** abre esta tela já com o cartão do projeto aberto.
 - A nova previsão de **recebimento** é a data da parcela no **Fluxo de caixa** do projeto (a reimportação do CRM não apaga). Já faturado: muda o vencimento do título a receber (precisa de “Editar título” no Financeiro). ↺ volta à inicial.
 - PV/OS antigos do Omie aparecem com as datas do Omie; o Omie nunca é alterado.
 
-**Projetos › projeto aberto**: em cima, o resumo (budget de materiais, projetado, comprometido, pago e as margens **projetada** × **real**). Embaixo, lado a lado como na linha aberta dos Avulsos (em tela estreita, um embaixo do outro): à esquerda **Vendas (PV/OS)** — ver acima — e à direita **Pedidos de compra**, uma linha por PC: nº (abre o PC), fornecedor, valor, aprovação, Prev. material (atraso em vermelho), **situação** (uma pílula, cores do Compras), NF de entrada e **💬** (comentários do PC, com quem escreveu e quando — ficam no histórico do pedido no Compras). No **⋯**: todos os campos do PC, **Ver itens na Lista de materiais** e a marcação do material à mão. Esta tela não mostra RC: as RCs, o valor delas e o **Gerar pedido de compra** ficam na **Lista de materiais**.
+**Projetos › projeto aberto**: em cima, as ações e o bloco de budget (barra aprovados · aguardando · a comprar · estoura, com a marca “budget”; budget de materiais, lista prevista, PCs e pago na linha de cima; **Venda** e **Resultado esp.** à direita — as margens ficam na linha do projeto). Embaixo, lado a lado como na linha aberta dos Avulsos (em tela estreita, um embaixo do outro): à esquerda **Vendas (PV/OS)** — ver acima — e à direita **Pedidos de compra**, uma linha por PC: nº (abre o PC), fornecedor, valor, aprovação, Prev. material (atraso em vermelho), **situação** (uma pílula, cores do Compras), NF de entrada e **💬** (comentários do PC, com quem escreveu e quando — ficam no histórico do pedido no Compras). No **⋯**: todos os campos do PC, **Ver itens na Lista de materiais** e a marcação do material à mão. Esta tela não mostra RC: as RCs, o valor delas e o **Gerar pedido de compra** ficam na **Lista de materiais**.
 
 **Previsão do material**: é a do PC. Mudar a “Prev. material” na Operação › Projetos grava a previsão do próprio PC quando ele nasceu no painel (com registro no histórico do PC); PC importado do Omie guarda a remarcação, e a folha do PC no Compras mostra “remarcada para dd/mm”.
 
