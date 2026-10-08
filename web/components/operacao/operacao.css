@@ -523,7 +523,7 @@
 .op .pcproj-itens{padding:4px 12px 8px 110px;display:flex;flex-direction:column;gap:2px;font-size:12px}
 .op .pcproj-itens > div{display:flex;justify-content:space-between;gap:10px}
 .op .pcproj-itens small{color:var(--ww-text-faint);white-space:nowrap}
-.op .pcproj-hd,.op .pcproj-pc{display:grid;grid-template-columns:44px minmax(150px,1fr) 92px 112px 126px 104px 118px 36px 24px 20px;gap:10px;align-items:center;padding:7px 10px}
+.op .pcproj-hd,.op .pcproj-pc{display:grid;grid-template-columns:40px minmax(120px,1fr) 88px 104px 120px 122px 104px 36px 22px 18px;gap:8px;align-items:center;padding:7px 8px}
 .op .pcproj-hd{font-size:11px;color:var(--ww-text-faint);text-transform:uppercase;letter-spacing:.06em;border-bottom:1px solid var(--ww-border)}
 .op .pcproj-pc + .pcproj-pc{border-top:1px dashed var(--ww-border)}
 .op .pcproj-pc > *{min-width:0}
@@ -551,7 +551,7 @@
 
 /* Vendas do projeto (PV/OS) — 07/10/26 */
 .op .pcproj-vendas{border:1px solid var(--ww-border);border-radius:10px;overflow:hidden}
-.op .pcproj-vendas .hd,.op .pcproj-vendas .ln{display:grid;grid-template-columns:minmax(120px,1fr) 96px 130px 130px 78px;gap:10px;align-items:center;padding:6px 10px;font-size:12px}
+.op .pcproj-vendas .hd,.op .pcproj-vendas .ln{display:grid;grid-template-columns:minmax(120px,1fr) 92px 124px 124px 76px;gap:10px;align-items:center;padding:6px 10px;font-size:12px}
 .op .pcproj-vendas .hd{font-size:11px;color:var(--ww-text-faint);text-transform:uppercase;letter-spacing:.06em;border-bottom:1px solid var(--ww-border)}
 .op .pcproj-vendas .ln+.ln{border-top:1px solid color-mix(in srgb,var(--ww-border) 60%,transparent)}
 .op .pcproj-vendas .ln.tot{font-weight:600;background:var(--ww-panel-sunken)}
@@ -569,7 +569,10 @@
 .op .pcproj-cq{container-type:inline-size}
 .op .pcproj-lados{display:grid;grid-template-columns:minmax(0,1fr);gap:10px;border-top:1px solid var(--ww-border-strong);padding-top:8px}
 @container (min-width:1240px){
-  .op .pcproj-lados{grid-template-columns:minmax(0,1.25fr) minmax(0,.75fr);gap:0}
+  /* 08/10/26: vendas só precisa do que cabe (4–6 parcelas); compras leva o resto — projeto com 15 PCs
+     perdia colunas. Sem PC nenhum, vendas volta a ficar com mais espaço. */
+  .op .pcproj-lados{grid-template-columns:minmax(540px,.78fr) minmax(0,1.22fr);gap:0}
+  .op .pcproj-lados:has(> .compras .pcproj-vazio){grid-template-columns:minmax(0,1.25fr) minmax(0,.75fr)}
   .op .pcproj-lados > .vendas{border-right:1px solid var(--ww-border);padding-right:10px}
   .op .pcproj-lados > .compras{padding-left:10px}
 }
