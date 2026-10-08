@@ -62,6 +62,7 @@ export function montarPagarV3(o: Opts) {
   const empOk = (r, e = S.emp) => e === "ALL" || r.emp === e;
   const qOk = (r) => !S.q || [r.forn, r.cat, r.proj, r.doc, r.conta, r.pc, r.nf, r.cnpj].join(" ").toLowerCase().includes(S.q);
   const open_ = () => rows.filter((r) => !r.paid);
+  const isProv = (r) => r?.prv?.nat === "provisionado";
   const base = () => open_().filter((r) => empOk(r) && qOk(r));
   const badge = (s) => `<span class="bdg ${PST[s].c}">${PST[s].l}</span>`;
   const bankOf = (cod) => BANKS.find((b) => b.cod === cod);
@@ -102,6 +103,8 @@ export function montarPagarV3(o: Opts) {
       const prog = j.prog ?? {};
       const PREV = j.prev ?? {}, ENV = j.env ?? {}, SERIE = j.serie ?? {}, NOMES = j.nomes ?? {}, CATPC = j.catpc ?? {}, AJ = j.ajustes ?? {};
       EXCL = j.excl ?? []; const EX = new Set(EXCL);
+      // provisionado × real (sql/141): ref → {nat, serie, ult, media3, conf}
+      const PROVM = await fetch("/api/financeiro/provisao", { cache: "no-store" }).then((x) => (x.ok ? x.json() : {})).then((x) => x.provisoes ?? {}).catch(() => ({}));
       FERIADOS = new Set(j.feriados ?? []);
       const sel = new Set([...S.sel].map((i) => rows[i]?.ref).filter(Boolean));
       rows = (j.rows ?? []).map((x, i) => {
@@ -115,8 +118,10 @@ export function montarPagarV3(o: Opts) {
           vd, repr: !!(pv && pv[1]), env: ENV[x[0]] ?? null, serie: SERIE[x[0]] ?? null, aj: AJ[x[0]] ?? null, nfdoc: x[24] ? String(x[24]).replace(/^0+/, "") : "",
           excl: EX.has(x[0]), ...(() => { const n = NOMES[x[1] + "|" + x[23]]; const raz = (n && n[1]) || x[4] || ""; const fan = n && n[0]; const catH = !x[5] && x[13] ? CATPC[x[1] + "|" + String(x[13]).split(",")[0].trim()] : null;
             return { forn: fan || curto(raz), razao: raz, cat: x[5] || catH || "", catHer: !!catH }; })(),
-          bank: prog[x[0]] != null ? Number(prog[x[0]]) : def };
+          bank: prog[x[0]] != null ? Number(prog[x[0]]) : def, prv: PROVM[x[0]] ?? null };
       });
+      // provisionado vencendo em ≤ 7 dias sem documento = "Aguardando NF" (entra em Bloqueados p/ pagar)
+      rows.forEach((x) => { if (isProv(x) && x.dias <= 7 && x.st === "dir") x.st = "nf"; });
       S.sel = new Set(rows.filter((r) => sel.has(r.ref)).map((r) => r.id));
       if (S.ofxBank == null) {
         const cands = BANKS.filter((b) => ["CC", "CA", "PG"].includes(b.tipo));
@@ -161,6 +166,7 @@ export function montarPagarV3(o: Opts) {
       { id: "d30", l: "Próx. 30 dias", f: (r) => r.dias >= 0 && r.dias <= 30, acc: "var(--sf)" },
       { id: "d90", l: "Próx. 90 dias", f: (r) => r.dias >= 0 && r.dias <= 90, acc: "var(--violet)" },
       { id: "bloq", l: "Bloqueados p/ pagar · 30d", f: (r) => r.dias >= -60 && r.dias <= 30 && ["bloq", "sempc", "nf"].includes(r.st), acc: "var(--orange)" },
+      { id: "prov7", l: "Vencendo em 7 dias sem documento", f: (r) => isProv(r) && r.dias >= -60 && r.dias <= 7, acc: "#a855f7" },
     ];
     let h = "";
     for (const s of sets) {
@@ -442,9 +448,12 @@ export function montarPagarV3(o: Opts) {
     renderExcl();
     const pre = tblRows();
     const cnt = (x) => pre.filter((r) => r.st === x).length;
-    q("tSt").innerHTML = `<button data-v="all" class="${S.st === "all" ? "on" : ""}">Todos<span class="c">${pre.length}</span></button>` + ["ok", "dir", "nf", "sempc", "bloq"].map((x) => (cnt(x) ? `<button data-v="${x}" class="${S.st === x ? "on" : ""}"><span class="dot" style="background:${{ ok: "#4ade80", dir: "#cbd5e1", nf: "#fbbf24", sempc: "#fdba74", bloq: "#f87171" }[x]}"></span>${PST[x].l}<span class="c">${cnt(x)}</span></button>` : "")).join("");
+    const nProv = pre.filter(isProv).length, nProv7 = pre.filter((x) => isProv(x) && x.dias <= 7).length;
+    q("tSt").innerHTML = `<button data-v="all" class="${S.st === "all" ? "on" : ""}">Todos<span class="c">${pre.length}</span></button>` + ["ok", "dir", "nf", "sempc", "bloq"].map((x) => (cnt(x) ? `<button data-v="${x}" class="${S.st === x ? "on" : ""}"><span class="dot" style="background:${{ ok: "#4ade80", dir: "#cbd5e1", nf: "#fbbf24", sempc: "#fdba74", bloq: "#f87171" }[x]}"></span>${PST[x].l}<span class="c">${cnt(x)}</span></button>` : "")).join("")
+      + (nProv ? `<button data-v="prov" class="${S.st === "prov" ? "on" : ""}" title="Recorrências e contas estimadas ainda sem documento"><span class="dot" style="background:#a855f7"></span>Provisionados<span class="c">${nProv}</span></button>` : "")
+      + (nProv7 ? `<button data-v="prov7" class="${S.st === "prov7" ? "on" : ""}"><span class="dot" style="background:#a855f7"></span>Provisionados vencendo em 7d<span class="c">${nProv7}</span></button>` : "");
     qa("#tSt button").forEach((b) => (b.onclick = () => { S.st = b.dataset.v; renderTable(); }));
-    const a0 = S.st === "all" ? pre : pre.filter((r) => r.st === S.st);
+    const a0 = S.st === "all" ? pre : S.st === "prov" ? pre.filter(isProv) : S.st === "prov7" ? pre.filter((x) => isProv(x) && x.dias <= 7) : pre.filter((r) => r.st === S.st);
     const a = S.exOnly ? a0.filter((r) => r.excl) : a0;
     const { k: sk, dir } = S.sort;
     a.sort((x, y) => { let p, qq; if (sk === "pst") { p = PORD.indexOf(x.st); qq = PORD.indexOf(y.st); if (p === qq) return y.v - x.v; } else if (sk === "bank") { p = bankDesc(x.bank); qq = bankDesc(y.bank); } else { p = x[sk]; qq = y[sk]; } return (typeof p === "number" ? p - qq : String(p ?? "").localeCompare(String(qq ?? ""))) * dir; });
@@ -459,14 +468,18 @@ export function montarPagarV3(o: Opts) {
     q("tbl").innerHTML = `<thead><tr>${H.map(([key, l, r], i) => (i === 0 ? `<th style="width:30px;cursor:default">${PODE.baixar ? `<input type="checkbox" class="ck" id="ckAll" ${allSel ? "checked" : ""}>` : ""}</th>` : `<th class="${r ? "r" : ""}" ${key ? `data-k="${key}"` : ""}>${l}${sk === key && key ? (dir > 0 ? " ↑" : " ↓") : ""}${key ? `<button class="fbtn ${(key === "v" ? S.cfv.min != null || S.cfv.max != null : !!S.cf[key]) ? "on" : ""}" data-f="${key}" title="Filtrar">▾</button>` : ""}</th>`)).join("")}</tr></thead><tbody>${show.map((r) => {
       const compra = r.pc ? `<span class="mono">PC ${esc(r.pc)}</span><div class="sub2">${r.fase ? esc(FASE[r.fase] ?? r.fase) : r.apr === "PENDENTE" || !r.apr ? '<span style="color:#f87171">aprovação pendente</span>' : r.apr === "APROVADO_FAT_DIRETO" ? "aprovado · fat. direto" : "aprovado" + (r.aprov ? " · " + esc(String(r.aprov).split("@")[0]) : "")}</div>` : '<span class="sub2">—</span>';
       const nf = r.etapa ? `<span style="color:${["60", "80"].includes(r.etapa) ? "#22c55e" : "#f59e0b"}">${["60", "80"].includes(r.etapa) ? "Recebida" : r.etapa === "40" ? "Emitida" : "Sem NF"}</span>${r.nfdoc || r.nf ? `<div class="sub2 mono" title="${esc(r.nf ? "NFs do PC: " + r.nf : "")}">NF ${esc(r.nfdoc || String(r.nf).split(",")[0].replace(/^0+/, ""))}${r.parc ? " · parc " + esc(r.parc) : ""}</div>` : ""}` : r.tipo === "NFE" ? '<span class="sub2">NF-e (sem PC)</span>' : '<span class="sub2">—</span>';
-      return `<tr data-id="${r.id}" class="${S.sel.has(r.id) ? "sel" : ""}"><td>${PODE.baixar ? `<input type="checkbox" class="ck" data-id="${r.id}" ${S.sel.has(r.id) ? "checked" : ""}>` : ""}</td>
+      const pv = r.prv, prov = isProv(r);
+      const pvSub = pv && pv.serie ? `<div class="sub2">${prov ? "recorrência " + esc(pv.serie) : ""}${pv.ult ? `${prov ? " · " : ""}último real: NF ${esc(String(pv.ult.nf || "—").replace(/^0+(?=\d)/, ""))} · ${dm(new Date(String(pv.ult.data).slice(0, 10) + "T00:00:00"))}` : ""}</div>` : "";
+      return `<tr data-id="${r.id}" class="${S.sel.has(r.id) ? "sel" : ""} ${prov ? "row-prov" : ""}"><td>${PODE.baixar ? `<input type="checkbox" class="ck" data-id="${r.id}" ${S.sel.has(r.id) ? "checked" : ""}>` : ""}</td>
       <td class="${r.dias < 0 ? "od" : r.dias === 0 ? "td" : ""}">${dm(r.d)} <span class="sub2">${r.dias < 0 ? r.dias + "d" : r.dias === 0 ? "hoje" : "+" + r.dias + "d"}</span>${+r.d !== +r.vd || r.repr ? `<div class="sub2" title="Vencimento do documento${r.repr ? " · previsão reprogramada" : ""}">venc ${dm(r.vd)}${r.repr ? ' · <span style="color:#a78bfa">reprog.</span>' : ""}</div>` : ""}</td>
-      <td><span class="emp ${r.emp}">${r.emp}</span></td><td title="${esc(r.razao || r.forn)}" style="font-weight:500">${esc(r.forn)}${r.razao && r.razao !== r.forn ? `<div class="sub2" style="max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(r.razao)}</div>` : ""}</td><td class="${r.cat ? "" : "nocat"}" style="color:var(--tx2)" title="${r.catHer ? "Categoria herdada do pedido de compra" : ""}">${esc(r.cat || "Sem categoria")}${r.catHer ? '<div class="sub2">do PC</div>' : ""}</td>
-      <td>${compra}</td><td>${nf}</td><td>${r.excl ? '<span class="bdg b-bloq" title="Este título já não existe no Omie (foi refeito/excluído lá) — não pagar">Excluído no Omie</span>' : badge(r.st)}</td><td><select class="bsel ${r.bank ? (r.bank !== r.cod_cc ? "chg" : "") : "need"}" data-bk="${r.id}" title="Conta prevista no Omie: ${esc(r.conta)}" ${PODE.baixar ? "" : "disabled"}><option value="">Escolher banco…</option>${bankGroupsHtml(r.emp, r.bank)}</select>${interco(r, r.bank) ? `<div class="sub2" style="color:#a78bfa" title="Título da ${r.emp} pago por conta da ${interco(r, r.bank)} — fica registado como intercompany">pago pela ${interco(r, r.bank)}</div>` : ""}${r.env ? `<div class="sub2" style="color:#38bdf8" title="Arquivo de remessa #${r.env.id} gerado em ${new Date(r.env.em).toLocaleString("pt-BR")}">↗ enviado ${esc(r.env.banco)} · pagto ${dm(new Date(r.env.data + "T00:00:00"))}</div>` : ""}</td><td class="r" style="font-weight:650">${brl(r.v)}${r.aj?.novo?.valor != null ? `<div class="sub2" title="Valor ajustado no painel">ajustado · orig. ${brl(Number(r.aj.orig?.valor ?? 0))}</div>` : ""}</td>
-      <td class="r" style="white-space:nowrap">${PODE.editar ? `<button class="btn sm" data-ed="${r.id}" title="Editar título (valor, vencimento, categoria…)">✎</button> ` : ""}${PODE.baixar ? `<button class="btn sm" data-bx="${r.id}">Baixar</button>` : ""}</td></tr>`;
+      <td><span class="emp ${r.emp}">${r.emp}</span></td><td title="${esc(r.razao || r.forn)}" style="font-weight:500">${esc(r.forn)}${r.razao && r.razao !== r.forn ? `<div class="sub2" style="max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(r.razao)}</div>` : ""}${pvSub}</td><td class="${r.cat ? "" : "nocat"}" style="color:var(--tx2)" title="${r.catHer ? "Categoria herdada do pedido de compra" : ""}">${esc(r.cat || "Sem categoria")}${r.catHer ? '<div class="sub2">do PC</div>' : ""}</td>
+      <td>${compra}</td><td>${nf}</td><td>${r.excl ? '<span class="bdg b-bloq" title="Este título já não existe no Omie (foi refeito/excluído lá) — não pagar">Excluído no Omie</span>' : badge(r.st)}${prov ? '<div style="margin-top:4px"><span class="bdg b-prov" title="Valor estimado — ainda sem NF/boleto. Confirme com o documento quando chegar.">◌ PROVISIONADO</span></div>' : pv?.conf ? `<div style="margin-top:4px"><span class="bdg b-real" title="Confirmado com documento no painel">✓ REAL</span> <span class="sub2">${esc(pv.conf.doc)}</span>${Math.abs(Number(pv.conf.valor_prov) - r.vdoc) > 0.01 ? `<div class="sub2">provisão era ${brl(Number(pv.conf.valor_prov))}</div>` : ""}</div>` : ""}</td><td><select class="bsel ${r.bank ? (r.bank !== r.cod_cc ? "chg" : "") : "need"}" data-bk="${r.id}" title="Conta prevista no Omie: ${esc(r.conta)}" ${PODE.baixar ? "" : "disabled"}><option value="">Escolher banco…</option>${bankGroupsHtml(r.emp, r.bank)}</select>${interco(r, r.bank) ? `<div class="sub2" style="color:#a78bfa" title="Título da ${r.emp} pago por conta da ${interco(r, r.bank)} — fica registado como intercompany">pago pela ${interco(r, r.bank)}</div>` : ""}${r.env ? `<div class="sub2" style="color:#38bdf8" title="Arquivo de remessa #${r.env.id} gerado em ${new Date(r.env.em).toLocaleString("pt-BR")}">↗ enviado ${esc(r.env.banco)} · pagto ${dm(new Date(r.env.data + "T00:00:00"))}</div>` : ""}</td><td class="r" style="font-weight:650${prov ? ";color:#a855f7" : ""}">${brl(r.v)}${prov && pv?.media3 ? `<div class="sub2">média 3 últimas ${brl(Number(pv.media3))}</div>` : ""}${r.aj?.novo?.valor != null ? `<div class="sub2" title="Valor ajustado no painel">ajustado · orig. ${brl(Number(r.aj.orig?.valor ?? 0))}</div>` : ""}</td>
+      <td class="r" style="white-space:nowrap">${prov && PODE.editar ? `<button class="btn sm pri" data-cf="${r.id}" title="Informar a NF/boleto e o valor real">Confirmar com NF</button> ` : ""}${pv?.conf && PODE.editar ? `<button class="btn sm" data-desf="${r.id}" title="Desfazer a confirmação (volta a provisionado)">desfazer</button> ` : ""}${PODE.editar ? `<button class="btn sm" data-ed="${r.id}" title="Editar título (valor, vencimento, categoria…)">✎</button> ` : ""}${PODE.baixar ? `<button class="btn sm" data-bx="${r.id}">Baixar</button>` : ""}</td></tr>`;
     }).join("")}</tbody>`;
     qa("#tbl tbody tr").forEach((tr) => (tr.onclick = (e) => { if (e.target.classList.contains("ck") || e.target.tagName === "SELECT" || e.target.tagName === "OPTION") return; openDrawer(+tr.dataset.id); }));
     qa("#tbl [data-ed]").forEach((b) => (b.onclick = (e) => { e.stopPropagation(); o.onEditar(rows[+b.dataset.ed].ref); }));
+    qa("#tbl [data-cf]").forEach((b) => (b.onclick = (e) => { e.stopPropagation(); abrirConfirmar(rows[+b.dataset.cf]); }));
+    qa("#tbl [data-desf]").forEach((b) => (b.onclick = (e) => { e.stopPropagation(); desfazerConf(rows[+b.dataset.desf]); }));
     qa("#tbl tbody .ck").forEach((cx) => (cx.onchange = () => { const id = +cx.dataset.id; cx.checked ? S.sel.add(id) : S.sel.delete(id); cx.closest("tr").classList.toggle("sel", cx.checked); renderAbar(); }));
     const ckAll = q("ckAll"); if (ckAll) ckAll.onchange = (e) => { show.forEach((r) => (e.target.checked ? S.sel.add(r.id) : S.sel.delete(r.id))); renderTable(); };
     qa("#tbl .bsel").forEach((x) => { x.onclick = (e) => e.stopPropagation(); x.onchange = () => programar([rows[+x.dataset.bk]], x.value ? +x.value : null); });
@@ -536,12 +549,75 @@ export function montarPagarV3(o: Opts) {
       <div style="display:flex;gap:16px;flex-wrap:wrap;margin-top:8px;font-size:12px"><span>Total das NFs <b>${brl(Number(T.valor || 0))}</b></span><span>Pago <b style="color:#22c55e">${brl(Number(T.pago || 0))}</b></span><span>Em aberto <b>${brl(Number(T.aberto || 0))}</b></span>${T.excluidos ? `<span class="sub2">${T.excluidos} título(s) antigo(s) excluído(s) no Omie, fora da conta</span>` : ""}</div>`;
   }
 
+  /* ── Provisionado × Real (sql/141): confirmar com NF / desfazer ── */
+  function abrirConfirmar(r) {
+    if (!r) return; const pv = r.prv || {}; const media = Number(pv.media3) || 0;
+    const ehCod = r.ref.startsWith("o:"); const tipoSug = /PJ|Contab|Honor|Servi/i.test(r.cat) ? "NFSE" : "BOL";
+    md.innerHTML = `<div class="dh"><div><div class="sub2" style="text-transform:uppercase;letter-spacing:.06em">Confirmar provisão</div><h3 style="margin:2px 0 0">${esc(r.forn)}</h3>
+      <div class="sub2" style="margin-top:3px">${r.emp} · ${esc(r.cat || "Sem categoria")} · provisionado <b style="color:#a855f7">${brl(r.v)}</b> para ${dm(r.vd)}${pv.serie ? " · recorrência " + esc(pv.serie) : ""}</div></div><button class="btn" id="mX" style="height:34px">✕</button></div>
+      <div class="dbody"><div class="frm">
+        <label>Tipo de documento<select id="fTipo">${[["NFSE", "NFS-e"], ["NFE", "NF-e"], ["BOL", "Boleto / fatura"], ["REC", "Recibo"], ["DAS", "Guia (DAS/DARF/GPS)"]].map(([v, l]) => `<option value="${v}" ${v === tipoSug ? "selected" : ""}>${l}</option>`).join("")}</select></label>
+        <label>Nº do documento *<input id="fNum" placeholder="ex.: 257"></label>
+        <label>Valor real (R$) *<input id="fVal" class="num" value="${fmt(r.v)}"></label>
+        <label>Vencimento real<input type="date" id="fVenc" value="${iso(r.vd)}"></label>
+        <label class="full">Código de barras / linha digitável / chave NF-e (opcional)<input id="fBar" placeholder="44–48 dígitos"></label>
+      </div>
+      <div id="fDiff"></div>
+      <div id="fEscopo" style="display:none;margin-top:10px"><div class="sub2" style="font-weight:600;margin-bottom:6px">A diferença vale para…</div>
+        <label class="ovr"><input type="radio" name="esc" value="esta" checked> <span><b>Só esta parcela</b> — consumo variável (energia, água, telefonia). As próximas continuam com o valor provisionado.</span></label>
+        <label class="ovr"><input type="radio" name="esc" value="proximas"> <span><b>Esta e as próximas provisões da série</b> — reajuste / novo valor fixo. Só mexe nas futuras ainda sem documento.</span></label>
+        <label class="ovr"><input type="radio" name="esc" value="media"> <span><b>Próximas pela média das últimas 3 reais</b> — para consumo: a provisão vira a média dos 3 últimos documentos.</span></label>
+      </div></div>
+      <div class="df"><button class="btn" id="mC">Cancelar</button><button class="btn ok" id="mOk">Confirmar e marcar como real</button></div>`;
+    ov.classList.add("on"); md.classList.add("on");
+    q("mX").onclick = q("mC").onclick = closeAll;
+    const diff = () => {
+      const v = num(q("fVal").value), d = v - r.v, p = r.v ? (d / r.v) * 100 : 0;
+      if (Math.abs(d) < 0.005) { q("fDiff").innerHTML = `<div class="verdict ok" style="margin-top:10px"><b>Valor igual ao provisionado</b><span>Só o documento será registrado.</span></div>`; q("fEscopo").style.display = "none"; return; }
+      const forte = Math.abs(p) > 10;
+      q("fDiff").innerHTML = `<div class="verdict ${forte ? "bloq" : "ok"}" style="margin-top:10px"><b>Diferença de ${d > 0 ? "+" : ""}${brl(d)} (${p > 0 ? "+" : ""}${p.toFixed(1).replace(".", ",")}%)</b><span>${forte ? "<b>Acima da tolerância de 10%</b> — o motivo é obrigatório e fica na auditoria." : "Dentro da tolerância (10%)."}${media ? " Média das 3 últimas reais: " + brl(media) + "." : ""}</span></div>${forte ? '<div class="frm" style="margin-top:8px"><label class="full">Motivo *<input id="fMot" placeholder="ex.: reajuste anual IPCA / consumo maior em setembro"></label></div>' : ""}`;
+      q("fEscopo").style.display = pv.serie ? "" : "none";
+    };
+    q("fVal").oninput = diff; diff(); setTimeout(() => q("fNum")?.focus(), 50);
+    q("mOk").onclick = async () => {
+      const numDoc = q("fNum").value.trim(); const v = num(q("fVal").value);
+      if (!numDoc) { toast("Informe o nº do documento", true); q("fNum").focus(); return; }
+      if (!(v > 0)) { toast("Valor inválido", true); return; }
+      const m = q("fMot"); if (m && !m.value.trim()) { toast("Informe o motivo da diferença", true); m.focus(); return; }
+      const esc_ = root.querySelector("input[name=esc]:checked")?.value || "esta";
+      const bar = q("fBar").value.replace(/\D/g, ""); const tipo = q("fTipo").value;
+      q("mOk").disabled = true;
+      try {
+        const rr = await fetch("/api/financeiro/provisao", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({
+          acao: "confirmar", empresa: r.emp, ...(ehCod ? { cod_titulo: Number(r.ref.slice(2)) } : { pagar_id: Number(r.ref.slice(2)) }),
+          tipo_doc: tipo, numero_doc: numDoc, valor_real: v, venc_real: q("fVenc").value || null,
+          ...(bar.length === 44 && tipo === "NFE" ? { chave_nfe: bar } : bar ? { codigo_barras: bar } : {}),
+          escopo: esc_, motivo: m ? m.value.trim() : null }) });
+        const j = await rr.json(); if (!rr.ok) throw new Error(j.error ?? "HTTP " + rr.status);
+        closeAll(); toast("Confirmado como real" + (j.proximas ? ` · ${j.proximas} próxima(s) provisão(ões) ajustada(s) para ${brl(Number(j.valor_proximas))}` : ""));
+        await recarregarTudo();
+      } catch (e) { toast(e.message, true); q("mOk").disabled = false; }
+    };
+  }
+  async function desfazerConf(r) {
+    const c = r?.prv?.conf; if (!c) return;
+    md.innerHTML = `<div class="dh"><div><h3 style="margin:0">Desfazer confirmação</h3><div class="sub2" style="margin-top:3px">${esc(r.forn)} · ${esc(c.doc)} — volta a provisionado (e as próximas parcelas ajustadas, se houver)</div></div><button class="btn" id="mX" style="height:34px">✕</button></div>
+      <div class="df"><button class="btn" id="mC">Cancelar</button><button class="btn" id="mOk" style="color:var(--red)">Desfazer</button></div>`;
+    ov.classList.add("on"); md.classList.add("on"); q("mX").onclick = q("mC").onclick = closeAll;
+    q("mOk").onclick = async () => { q("mOk").disabled = true;
+      try { const rr = await fetch("/api/financeiro/provisao", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ acao: "desfazer", id: c.id }) });
+        const j = await rr.json(); if (!rr.ok) throw new Error(j.error ?? "HTTP " + rr.status); closeAll(); toast("Confirmação desfeita — voltou a provisionado"); await recarregarTudo();
+      } catch (e) { toast(e.message, true); q("mOk").disabled = false; } };
+  }
+
   function openDrawer(id) {
     const r = rows[id]; if (!r) return; hideTip();
     const st = r.dias < 0 ? `<span class="neg">Vencido há ${-r.dias} dias</span>` : r.dias === 0 ? '<span style="color:#f59e0b">Vence hoje</span>' : `Vence em ${r.dias} dias`;
     const blocked = !["ok", "dir"].includes(r.st);
+    const provD = isProv(r);
     dr.innerHTML = `<div class="dh"><div><span class="emp ${r.emp}">${r.emp}</span> <span class="sub2" style="margin-left:6px">${EN[r.emp]}</span><h3>${esc(r.forn)}</h3><div style="font-size:12px">${st} · ${badge(r.st)}</div></div><button class="btn" id="dX" style="height:34px">✕</button></div>
     <div class="dbody">
+      ${provD ? `<div class="box" style="margin-bottom:12px;border:1px dashed #a855f7;background:color-mix(in srgb,#a855f7 7%,transparent)"><h4 style="color:#a855f7">◌ Provisionado — valor estimado, sem documento</h4><div class="sub2">${r.prv?.serie ? "Recorrência " + esc(r.prv.serie) : "Conta estimada"}${r.prv?.ult ? " · último real: NF " + esc(String(r.prv.ult.nf || "—")) + " · " + dm(new Date(String(r.prv.ult.data).slice(0, 10) + "T00:00:00")) : ""}${r.prv?.media3 ? " · média das 3 últimas " + brl(Number(r.prv.media3)) : ""}. Antes de pagar, confirme com a NF/boleto e o valor real.</div>${PODE.editar ? '<div style="margin-top:8px"><button class="btn sm pri" id="dConf">Confirmar com NF</button></div>' : ""}</div>` : ""}
       <div class="verdict ${r.st}"><b>${r.st === "ok" || r.st === "dir" ? "Pode pagar" : "Não pagar ainda"}</b><span>${PST[r.st].d}${r.div ? ' <br><span style="color:#f59e0b">⚠ Este PC tem registros de aprovação divergentes na base — conferir.</span>' : ""}</span></div>
       <div class="box" id="dCiclo" style="margin-bottom:12px"><h4>Ciclo do pagamento</h4><div class="sub2">carregando…</div></div>
       ${flowHtml(r)}
@@ -567,6 +643,7 @@ export function montarPagarV3(o: Opts) {
           <label class="full">Observação<input id="bObs" placeholder="Ex.: PIX, comprovante no Drive"></label>
         </div>
         ${blocked ? `<label class="ovr"><input type="checkbox" id="bOvr" class="ck"> <span>Pagar mesmo assim — registro a justificativa abaixo (fica no histórico de auditoria)</span></label>` : ""}
+        ${provD && o.admin ? `<label class="ovr"><input type="checkbox" id="bOvrProv" class="ck"> <span>Administrador: baixar sem documento — justificativa obrigatória na Observação</span></label>` : ""}
         <div class="tot"><span style="color:var(--tx2)">Total debitado no banco</span><b class="num" id="bTot" style="font-size:17px"></b></div>
         <div id="bPart" style="font-size:12px;color:#f59e0b;margin-top:6px"></div>
         <div class="origem">${r.orig === "o" ? "Título do Omie: a baixa fica registada no painel e vale em todo o painel (BI, fluxo de caixa, fichas) como PAGO. O Omie não é mais atualizado." : "Previsão de PC do painel: a baixa vai para o livro de baixas e para a conciliação."}</div>
@@ -612,10 +689,16 @@ export function montarPagarV3(o: Opts) {
     };
     ["bVal", "bDesc", "bJur", "bMul", "bBanco", "bObs"].forEach((x) => (q(x).oninput = calc)); if (q("bOvr")) q("bOvr").onchange = calc; calc();
     q("dSel").onclick = () => { S.sel.has(id) ? S.sel.delete(id) : S.sel.add(id); closeAll(); renderTable(); };
+    if (q("dConf")) q("dConf").onclick = () => { closeAll(); abrirConfirmar(r); };
     q("dOk").onclick = async () => {
+      if (provD) {
+        const pula = q("bOvrProv")?.checked;
+        if (!pula) { toast("Provisionado: confirme com a NF/boleto antes de baixar"); closeAll(); abrirConfirmar(r); return; }
+        if ((q("bObs").value || "").trim().length < 5) { toast("Escreva a justificativa na Observação (baixa sem documento)", true); return; }
+      }
       const v = num(q("bVal").value); q("dOk").disabled = true;
       try {
-        await api({ acao: "baixar", data: q("bData").value, lote: false, itens: [{ ref: r.ref, valor: v, cod_cc: +q("bBanco").value, desconto: num(q("bDesc").value), juros: num(q("bJur").value), multa: num(q("bMul").value), forcar: blocked, obs: q("bObs").value }] });
+        await api({ acao: "baixar", data: q("bData").value, lote: false, itens: [{ ref: r.ref, valor: v, cod_cc: +q("bBanco").value, desconto: num(q("bDesc").value), juros: num(q("bJur").value), multa: num(q("bMul").value), forcar: blocked || provD, obs: (provD ? "[baixa sem documento — provisão] " : "") + q("bObs").value }] });
         const bn = bankDesc(+q("bBanco").value); closeAll(); if (v >= r.v - 0.005) r.paid = true; else r.v = +(r.v - v).toFixed(2); render(); toast(`Baixa registrada · ${r.forn.slice(0, 28)} · ${brl(v)} · ${bn}`);
         S.sel.delete(id); await recarregarTudo();
       } catch (e) { toast(e.message, true); q("dOk").disabled = false; }
@@ -644,7 +727,7 @@ export function montarPagarV3(o: Opts) {
   }
   q("abarGo").onclick = () => openBatch();
   function openBatch() {
-    const all = rows.filter((r) => S.sel.has(r.id) && !r.paid); const sel = all.filter((r) => ["ok", "dir"].includes(r.st)); const out = all.filter((r) => !["ok", "dir"].includes(r.st));
+    const all = rows.filter((r) => S.sel.has(r.id) && !r.paid); const sel = all.filter((r) => ["ok", "dir"].includes(r.st) && !isProv(r)); const out = all.filter((r) => !["ok", "dir"].includes(r.st) || isProv(r));
     const groups = EMPS.filter((e) => sel.some((r) => r.emp === e));
     md.innerHTML = `<div class="dh"><div><h3 style="margin:0">Baixa em lote</h3><div class="sub2" style="margin-top:3px">${sel.length} títulos · ${brl(sum(sel))} · valor integral</div></div><button class="btn" id="mX" style="height:34px">✕</button></div>
     <div class="dbody">

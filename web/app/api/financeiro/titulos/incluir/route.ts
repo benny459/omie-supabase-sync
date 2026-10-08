@@ -50,7 +50,16 @@ type Body = {
   /** só gera um nº de documento único (PG-SF-AAMM-000001), sem incluir nada */
   acao?: "gerar_documento";
   recorrencia?: { freq: string; n?: number | null; ate?: string | null; sem_fim?: boolean; dia_fixo?: number | null; valor_modo?: "por_ocorrencia" | "dividir" } | null;
+  /** valor estimado (provisão, sql/141): a conta nasce PROVISIONADA até ter documento */
+  valor_estimado?: boolean;
 };
+
+/** marca as contas do painel recém-criadas como valor estimado (provisão) */
+async function marcarEstimado(r: { id?: number | null; serie_id?: string | number | null }) {
+  const q = supaAdmin().schema("finance").from("pagar_previsto").update({ valor_estimado: true });
+  if (r.serie_id) await q.eq("serie_id", r.serie_id);
+  else if (r.id) await q.eq("id", r.id);
+}
 
 export async function POST(req: Request) {
   const perms = await loadPerms();
@@ -135,6 +144,7 @@ async function incluirPagarNativo(body: Body, empresa: string, previsaoISO: stri
     p_usuario: user?.email ?? "?",
   });
   if (error) return NextResponse.json({ error: (error.message ?? "Erro").replace(/^.*?ERROR:\s*/, "") }, { status: 422 });
+  if (body.valor_estimado) await marcarEstimado({ id: (data as { id?: number } | null)?.id ?? null });
   return NextResponse.json({ ok: true, id: (data as { id?: number } | null)?.id ?? null });
 }
 
@@ -223,5 +233,6 @@ async function incluirSerie(body: Body, tipo: "pagar" | "receber", empresa: stri
     p_usuario: user?.email ?? "?",
   });
   if (error) return NextResponse.json({ error: (error.message ?? "Erro").replace(/^.*?ERROR:\s*/, "") }, { status: 422 });
+  if (body.valor_estimado && tipo === "pagar") await marcarEstimado({ serie_id: (data as { serie_id?: string } | null)?.serie_id ?? null });
   return NextResponse.json({ ok: true, serie: data });
 }

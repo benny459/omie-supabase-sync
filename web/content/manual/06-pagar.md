@@ -4,7 +4,7 @@ resumo: Agenda, bancos, pode-pagar, editar título, reprogramar previsão, baixa
 icone: 💸
 area: erp
 rotas: /financeiro/pagar
-caminhos: web/components/financeiro/TelaPagarV3.tsx, web/components/financeiro/pagar-v3-motor.ts, web/components/financeiro/RemessaC6.tsx, web/components/financeiro/SerieDialog.tsx, web/components/financeiro/EditarTituloModal.tsx, web/lib/financeiro-editar.ts, web/components/NovoTituloModal.tsx, web/app/api/financeiro/pagar
+caminhos: web/components/financeiro/TelaPagarV3.tsx, web/components/financeiro/pagar-v3-motor.ts, web/components/financeiro/RemessaC6.tsx, web/components/financeiro/SerieDialog.tsx, web/components/financeiro/EditarTituloModal.tsx, web/lib/financeiro-editar.ts, web/components/NovoTituloModal.tsx, web/app/api/financeiro/pagar, web/app/api/financeiro/provisao, sql/141_provisao_confirmar.sql
 atualizado: 2026-10-08
 ---
 
@@ -119,3 +119,33 @@ Digitando um nome, documento, NF ou CNPJ (3 letras ou mais), a lista **Em aberto
 ## Nº da NF e data de emissão
 
 No detalhe do título aparecem **Nº da NF** e **Emissão**. Em **Editar título…** dá para informar os dois — em título do Omie a alteração vale no painel (o Omie não é escrito) e continua valendo depois de cada sincronização.
+
+## Provisionado × Real
+
+Conta **provisionada** é uma estimativa: ainda não tem documento (NF, boleto ou chave). Exemplos: aluguel, salário PJ e honorários lançados por recorrência antes de a nota chegar.
+
+| Selo | Quando |
+|---|---|
+| **◌ PROVISIONADO** (roxo, linha hachurada) | recorrência do Omie sem NF/boleto/chave, recorrência do painel sem documento, ou conta lançada com **Valor estimado** |
+| **✓ REAL** (verde) | tem documento, ou foi **confirmada com NF** |
+
+- O cartão **Vencendo em 7 dias sem documento** e os botões **Provisionados** / **Provisionados vencendo em 7d** filtram essas contas.
+- Na linha aparece a recorrência, o **último valor real** e a **média das 3 últimas**.
+
+### Confirmar com NF
+
+1. Na linha (ou no detalhe), clique **Confirmar com NF**.
+2. Informe tipo (NF-e, NFS-e, boleto, recibo), número, valor, vencimento e, se houver, o código de barras.
+3. Se o valor diferir mais de **10%** da provisão, escreva o motivo.
+4. Escolha o alcance: **Só esta parcela** (consumo variável), **Esta e as próximas provisões da série** (reajuste — só mexe nas futuras sem documento) ou **Próximas pela média das últimas 3 reais**.
+5. Salve: a conta vira **✓ REAL** e mostra "provisão era R$ …". **desfazer** volta tudo como estava.
+
+Nada é gravado no Omie — a confirmação fica no painel, por cima do título.
+
+### Baixa de provisionado
+
+Conta provisionada **não pode ser baixada** nem entrar no pagamento em lote: confirme com a NF antes. O administrador pode forçar marcando **Administrador: baixar sem documento** e escrevendo o motivo na Observação (fica registrado na observação).
+
+### Nova conta com valor estimado
+
+No **+ Nova conta**, a caixa **Valor estimado (provisão)** marca a conta (ou a série recorrente) como provisionada. Recorrências já vêm com ela ligada.

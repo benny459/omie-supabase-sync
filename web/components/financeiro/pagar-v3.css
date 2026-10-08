@@ -334,3 +334,9 @@ html:not(.dark) .cp3 .ent,html:not(.dark) .cp3 .kpi.green .v{color:#15803d}
 html:not(.dark) .cp3 .b-cobrar{color:#dc2626}html:not(.dark) .cp3 .b-prom{color:#b45309}html:not(.dark) .cp3 .b-reneg{color:#6d28d9}
 html:not(.dark) .cp3 .b-bol{color:#15803d}html:not(.dark) .cp3 .b-nfs{color:#1d4ed8}html:not(.dark) .cp3 .b-semb{color:#c2410c}
 html:not(.dark) .cp3 .hist.g{color:#15803d}html:not(.dark) .cp3 .hist.m{color:#b45309}html:not(.dark) .cp3 .hist.b{color:#dc2626}
+/* Provisionado × Real (08/10/26, sql/141) */
+.cp3 .b-prov{background:color-mix(in srgb,#a855f7 16%,transparent);color:#a855f7;border:1px dashed #a855f7}
+.cp3 .b-real{background:color-mix(in srgb,#22c55e 14%,transparent);color:#22c55e}
+.cp3 tr.row-prov td{background-image:repeating-linear-gradient(135deg,transparent 0 8px,color-mix(in srgb,#a855f7 6%,transparent) 8px 16px)}
+.cp3 .kpis{grid-template-columns:repeat(7,1fr)}
+@media (max-width:1180px){.cp3 .kpis{grid-template-columns:repeat(3,1fr)}}

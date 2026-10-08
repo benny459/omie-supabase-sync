@@ -123,6 +123,8 @@ export default function NovoTituloModal({
   const [barrasAviso, setBarrasAviso] = useState<string | null>(null);
   const [gerandoDoc, setGerandoDoc] = useState(false);
   const [obs, setObs] = useState(inicial?.obs ?? "");
+  // valor estimado (provisão, 08/10/26): vem marcado em recorrência e no "lançar" do simulador do fluxo
+  const [estimadoEsc, setEstimado] = useState<boolean | null>(inicial ? true : null);
   // Recorrência (sql/73): gera uma série de contas a partir do 1º vencimento.
   const [recFreq, setRecFreq] = useState(inicial?.recorrencia && inicial.recorrencia > 1 ? "mensal" : "");
   const [recModo, setRecModo] = useState<"n" | "ate" | "sem_fim">("n");
@@ -205,6 +207,7 @@ export default function NovoTituloModal({
           tipo, empresa,
           codigo_cliente_fornecedor: contraparte.codigo_cliente_omie,
           valor_documento: v,
+          valor_estimado: tipo === "pagar" ? (estimadoEsc ?? !!recFreq) : undefined,
           data_vencimento: vencimento,
           data_previsao: previsao || undefined,
           recorrencia: recFreq ? {
@@ -345,6 +348,12 @@ export default function NovoTituloModal({
         </div>
 
         <div className="border border-ww-border rounded-lg p-3 space-y-2">
+          {tipo === "pagar" && (
+            <label className="flex items-start gap-2 text-[12.5px] text-ww-text" title="A conta nasce PROVISIONADA: entra no fluxo de caixa como estimativa e, quando chegar a NF/boleto, você confirma com o documento e o valor real">
+              <input type="checkbox" className="mt-0.5" checked={estimadoEsc ?? !!recFreq} onChange={(e) => setEstimado(e.target.checked)} />
+              <span><b>Valor estimado (provisão)</b> — ainda sem documento; vira real quando você confirmar com a NF/boleto</span>
+            </label>
+          )}
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className={labelCls}>Recorrência</label>
