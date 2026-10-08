@@ -116,6 +116,11 @@ export default function TelaCompras() {
     } catch (e) { setErro((e as Error).message); }
   }, [historico]);
   useEffect(() => { carregar(); }, [carregar]);
+  // ?pedido=<id>: chega do PCs Standalone (PC nativo) já com a folha aberta.
+  useEffect(() => {
+    const id = Number(new URLSearchParams(window.location.search).get("pedido"));
+    if (id > 0) setFolha({ id });
+  }, []);
   // Link direto (06/10/26): /erp/compras?abrir=7346&tipo=RC&emp=SF abre a folha
   // daquele pedido/requisição — usado pelos chips de RC/PC em Operação.
   useEffect(() => {

@@ -207,6 +207,14 @@ A devolução também fica em **Cancelados / devolvidos**; **desfazer** (só adm
 
 **Cartão “Custo planejado”** (topo do projeto): a barra mostra a composição e a legenda traz o valor de cada parte — materiais, obra e despesas, em R$ e %.
 
+## PCs Standalone
+
+Em **/pcs** ficam os pedidos de compra que não pertencem a projeto nem a pedido de venda: o projeto **não** começa com **PJ**, **não** é **40_VS** nem **41_VP**, e o PC não tem PV/OS. É a mesma regra que separa Projetos, Standby e Avulsos.
+
+- A lista abre **dos mais recentes para os mais antigos**, pela data de inclusão. No mesmo dia, o número maior vem primeiro.
+- Entram tanto os PCs que vieram do Omie quanto os criados na tela **Compras** do painel (por exemplo, um PC de 47_CONTRATUAL lançado pela compradora). O PC do Compras aparece até 10 minutos depois de criado.
+- Ao clicar num PC criado no Compras, o painel abre a **folha desse pedido no Compras**. A aprovação e as edições dele são feitas lá. O **Aprovar em lote** daqui ignora esses PCs.
+
 ## Pedidos · PV/OS
 
 - **PV** = venda de produtos (sai NF-e). **OS** = serviço (sai recibo ou NFS-e).

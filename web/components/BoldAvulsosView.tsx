@@ -403,7 +403,11 @@ export function buildBuckets(rows: AnyRow[], groupBy: GroupBy): Bucket[] {
     // Cada bucket = 1 PC. Mais recentes primeiro (30/09/2026): em ordem
     // crescente a tela abria nos PCs 2, 3, 4 de anos atrás. Sem número vai
     // para o fim.
+    // 08/10/2026: pela data de inclusão primeiro — o número nem sempre segue a
+    // data (PC do Compras reservado antes e emitido dias depois).
     return [...map.values()].sort((a, b) => {
+      const da = dataMaisRecenteDaLinha(a.rows[0]), db = dataMaisRecenteDaLinha(b.rows[0]);
+      if (da !== db) return db - da;
       const na = numericSortKey(a.pv_os_label), nb = numericSortKey(b.pv_os_label);
       const fa = Number.isFinite(na) ? na : -1, fb = Number.isFinite(nb) ? nb : -1;
       return fb - fa;
@@ -413,6 +417,14 @@ export function buildBuckets(rows: AnyRow[], groupBy: GroupBy): Bucket[] {
   return [...map.values()].sort((a, b) =>
     numericSortKey(a.pv_os_label) - numericSortKey(b.pv_os_label)
   );
+}
+
+/** PC nativo do Compras (source compras_painel) → abre /erp/compras na folha dele. */
+function abrirNoCompras(r: AnyRow): boolean {
+  if (r.source !== "compras_painel") return false;
+  const id = Number((r.custom_fields as { compras_id?: number } | null)?.compras_id ?? 0);
+  window.location.assign(id > 0 ? `/erp/compras?pedido=${id}` : "/erp/compras");
+  return true;
 }
 
 // A data mais nova de uma linha (inclusão ou emissão do PV), em ms; 0 se não há.
@@ -914,6 +926,9 @@ export default function BoldAvulsosView({
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [openBuckets, setOpenBuckets] = useState<Set<string>>(new Set());
   const [drawerItem, setDrawerItem] = useState<(AnyRow & { _bucket?: Bucket }) | null>(null);
+  // Linha que é PC nativo do Compras (sql/148): abre a folha do pedido lá —
+  // drawer e status daqui gravam na aprovação do Omie, que não vale para ele.
+  const abrirLinha = (r: AnyRow & { _bucket?: Bucket }) => { if (!abrirNoCompras(r)) setDrawerItem(r); };
   const [statusPopover, setStatusPopover] = useState<{ rowKey: string; row: AnyRow; anchor: DOMRect } | null>(null);
   // Optimistic status updates: muda na UI imediato, antes do server confirmar
   const [optimisticStatus, setOptimisticStatus] = useState<Record<string, string>>({});
@@ -1793,7 +1808,7 @@ export default function BoldAvulsosView({
 
   async function batchApprove(status: string) {
     if (selected.size === 0) return;
-    const rowsBatch = [...selected].map((k) => {
+    const rowsBatch = [...selected].filter((k) => Number(k.split("|")[1]) > 0).map((k) => {
       const [empresa, ncodStr, valorStr] = k.split("|");
       return { empresa, ncod_ped: Number(ncodStr), modulo, valorPc: valorStr ? Number(valorStr) : null };
     });
@@ -1903,8 +1918,8 @@ export default function BoldAvulsosView({
               userCanEdit={userCanEdit}
               open={openBuckets.has(b.pv_os_label)}
               onToggle={() => toggleBucket(b.pv_os_label)}
-              onRowClick={(row) => setDrawerItem({ ...row, _bucket: b })}
-              onStatusClick={(rowKey, row, anchor) => setStatusPopover({ rowKey, row, anchor })}
+              onRowClick={(row) => abrirLinha({ ...row, _bucket: b })}
+              onStatusClick={(rowKey, row, anchor) => { if (!abrirNoCompras(row)) setStatusPopover({ rowKey, row, anchor }); }}
               selected={selected}
               toggleSel={toggleSel}
               visibleGroups={allGroups}
@@ -2229,7 +2244,7 @@ export default function BoldAvulsosView({
               dinheiro={(v) => gateBRL(v, userCanViewValues)}
               empresa={String(pedidosNavy[0]?.head?.empresa ?? "SF")}
               abrirTudo={null}
-              onLoteClick={(r) => setDrawerItem({ ...r })}
+              onLoteClick={(r) => abrirLinha({ ...r })}
               extra={modulo === "projetos" ? (pd) => {
                 const b = bucketPorLabel.get(pd.pv_os_label);
                 if (!b) return null;
@@ -2274,7 +2289,7 @@ export default function BoldAvulsosView({
           <LinhaDoTempo
             buckets={bucketsNavy}
             formatarValor={(v) => gateBRL(v, userCanViewValues)}
-            onLoteClick={(r) => setDrawerItem({ ...r })}
+            onLoteClick={(r) => abrirLinha({ ...r })}
             acaoBucket={modulo === "projetos" ? (b) => {
               const orig = bucketPorLabel.get(b.pv_os_label);
               const p = orig ? projetoDoBucket(modulo, orig) : null;
@@ -2296,7 +2311,7 @@ export default function BoldAvulsosView({
           <KanbanRaias
             buckets={bucketsNavy}
             formatarValor={(v) => gateBRL(v, userCanViewValues)}
-            onLoteClick={(r) => setDrawerItem({ ...r })}
+            onLoteClick={(r) => abrirLinha({ ...r })}
             acaoBucket={modulo === "projetos" ? (b) => {
               const orig = bucketPorLabel.get(b.pv_os_label);
               const p = orig ? projetoDoBucket(modulo, orig) : null;
