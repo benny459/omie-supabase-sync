@@ -66,7 +66,7 @@ export default function MenuLote(a: AcoesLote) {
   const pz = numero(val);
   return (<>
     <button ref={btn} type="button" data-lote-menu aria-haspopup="menu" aria-expanded={aberto} onClick={() => (aberto ? fechar() : setAberto(true))}
-      className="shrink-0 px-2 py-0.5 rounded-md border border-ww-accent bg-[rgb(var(--color-ww-panel))] text-[11.5px] font-semibold text-ww-text hover:bg-ww-accentSoft">
+      className="shrink-0 inline-flex items-center gap-1 h-8 px-3 rounded-lg bg-white text-ww-accent text-[13px] font-semibold shadow-sm hover:bg-white/90 transition">
       ✎ Alterar em lote ▾
     </button>
     {aberto && btn.current && (

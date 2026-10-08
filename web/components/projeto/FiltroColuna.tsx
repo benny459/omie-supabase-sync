@@ -106,8 +106,8 @@ export function BotaoFiltro({ colKey, rotulo, tipo, filtro, ordemDir, valores, o
     <button ref={btn} type="button" data-filtro-col={colKey} aria-label={`Filtrar ${rotulo}`} aria-haspopup="menu" aria-expanded={aberto}
       title={ativo ? `Filtro ativo em ${rotulo} — clique para mudar` : ordemDir ? `Ordenado por ${rotulo}` : `Filtrar / ordenar ${rotulo}`}
       onClick={(e) => { e.stopPropagation(); setAberto((v) => !v); }}
-      className={`shrink-0 inline-flex items-center justify-center min-w-[15px] h-[15px] rounded text-[9px] leading-none transition ${
-        ativo ? "bg-ww-accent text-white" : ordemDir ? "bg-[rgb(var(--color-ww-panel))] text-ww-accent" : `bg-[rgb(var(--color-ww-panel))] text-ww-textMuted hover:text-ww-text ${aberto ? "" : "opacity-0 group-hover/th:opacity-100 focus:opacity-100"}`}`}>
+      className={`shrink-0 inline-flex items-center justify-center min-w-[16px] h-[16px] rounded text-[10px] leading-none transition ${
+        ativo ? "bg-ww-accent text-white shadow-[0_0_0_2px_rgb(var(--color-ww-accent)/0.25)]" : ordemDir ? "bg-[rgb(var(--color-ww-panel))] text-ww-accent" : `bg-[rgb(var(--color-ww-panel))] text-ww-textMuted hover:text-ww-text ${aberto ? "" : "opacity-40 group-hover/th:opacity-100 focus:opacity-100"}`}`}>
       {ordemDir === 1 ? "▲" : ordemDir === -1 ? "▼" : ""}{ativo ? "⏷" : !ordemDir ? "▾" : ""}
     </button>
     {aberto && btn.current && (

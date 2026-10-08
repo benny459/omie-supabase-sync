@@ -200,6 +200,19 @@ async function lerPlanilha(f: File): Promise<string> {
 }
 
 /** Ícone "planilha Excel" (folha verde com X), inline. */
+/* Barras acima da grade (08/10/26, Benny: "aumentar um pouco a fonte… mais claro e clean").
+   Ferramentas = botões fantasma de 32px; barra de seleção = fundo de acento sólido. */
+const BT_FERR = "shrink-0 inline-flex items-center gap-1.5 h-8 px-2.5 rounded-lg text-[13px] text-ww-text2 hover:text-ww-text hover:bg-ww-rowHover cursor-pointer whitespace-nowrap transition";
+const BT_SEL = "shrink-0 inline-flex items-center gap-1 h-8 px-3 rounded-lg text-[13px] whitespace-nowrap transition disabled:opacity-45 disabled:cursor-not-allowed";
+/** Container queries das barras: rótulos opcionais somem quando a barra fica estreita. */
+const CSS_BARRAS = `
+.mg-barras{container-type:inline-size}
+@container (max-width: 1040px){ .mg-rot-opc{display:none} }
+@keyframes mgSalvo{0%,45%{color:rgb(var(--color-ww-okText))}100%{color:rgb(var(--color-ww-textFaint))}}
+.mg-salvo{animation:mgSalvo 4s ease forwards}
+@media (prefers-reduced-motion: reduce){.mg-salvo{animation:none;color:rgb(var(--color-ww-textFaint))}}
+`;
+
 function IconeExcel() {
   return (
     <svg aria-hidden width="15" height="15" viewBox="0 0 24 24" className="shrink-0">
@@ -305,6 +318,9 @@ export default function MateriaisGrade({
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const [aviso, setAviso] = useState<string | null>(null);
+  /** Hora do último salvamento automático (08/10/26): indicador pequeno na linha das etapas,
+   *  em vez da faixa verde "Salvo automaticamente às…" ocupando uma linha inteira. */
+  const [salvoEm, setSalvoEm] = useState<string | null>(null);
   const [sujo, setSujo] = useState(false);
   /** Exclusão pedida pelo 🗑 (07/10/26): grava sozinha depois de alguns segundos,
    *  com "Desfazer" até lá. `antes` = a grade antes de excluir. */
@@ -327,6 +343,13 @@ export default function MateriaisGrade({
    *  se ninguém mexeu enquanto ele gravava. */
   const versaoRef = useRef(0);
   useEffect(() => { versaoRef.current += 1; }, [linhas]);
+  /* Aviso verde some sozinho (08/10/26): antes o "Salvo automaticamente" o substituía em
+     segundos; agora que o salvo virou indicador pequeno, o aviso sai por tempo (ou no ✕). */
+  useEffect(() => {
+    if (!aviso) return;
+    const t = setTimeout(() => setAviso(null), 15000);
+    return () => clearTimeout(t);
+  }, [aviso]);
 
   // ── Compras do projeto (antiga aba "Compras × lista") ────────────────────
   const [cmp, setCmp] = useState<DadosCompras | null>(null);
@@ -1299,7 +1322,7 @@ export default function MateriaisGrade({
           void carregarCompras();
           return;
         }
-        setAviso(`Salvo automaticamente às ${new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}.`);
+        setSalvoEm(new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }));
         void carregarCompras();
         return;
       }
@@ -2421,9 +2444,10 @@ export default function MateriaisGrade({
 
   return (
     <section className="viz-panel bg-ww-panel border border-ww-border rounded-xl p-3.5 min-w-0 space-y-2.5">
-      <style>{CSS_CDL}</style>
-      {/* Etapas = controle segmentado compacto (spec B.2 v3), numa linha só, com a contagem dentro. */}
-      <div className="flex items-center gap-3 flex-wrap">
+      <style>{CSS_CDL}{CSS_BARRAS}</style>
+      {/* Linha 1 (08/10/26, Benny: "mais claro e clean"): etapas · ⓘ · estado do salvamento ·
+          Excel (só na Lista) · link para Operação. A dica longa foi para o ⓘ. */}
+      <div className="mg-barras flex items-center gap-2.5 flex-wrap" data-linha-etapas>
         <div className="inline-flex rounded-[10px] border border-ww-border overflow-hidden bg-ww-rowHover/50" role="tablist" data-etapas>
           {([
             ["rc", "Itens da RC", cpBase ? String(cpBase.itens.length) : ""],
@@ -2431,21 +2455,51 @@ export default function MateriaisGrade({
             ["plan", "Planejamento", resumoP.nSemana ? `${resumoP.nSemana} para agir` : ""],
           ] as const).map(([k, rot, n], i) => (
             <button key={k} type="button" role="tab" aria-selected={subAba === k} onClick={() => setSubAba(k)} data-etapa={k}
-              className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 text-[12.5px] transition ${i ? "border-l border-ww-border" : ""} ${
-                subAba === k ? "bg-ww-accent text-white font-semibold" : "text-ww-textMuted hover:text-ww-text"}`}>
-              {rot}{n && <span className={`text-[11px] ${subAba === k ? "opacity-90" : "opacity-80"}`}>{n}</span>}
+              className={`inline-flex items-center gap-1.5 h-8 px-3.5 text-[13.5px] transition ${i ? "border-l border-ww-border" : ""} ${
+                subAba === k ? "bg-ww-accent text-white font-semibold" : "text-ww-textMuted hover:text-ww-text hover:bg-ww-rowHover"}`}>
+              {rot}{n && <span className={`text-[12px] tabular-nums ${subAba === k ? "opacity-90" : "opacity-75"}`}>{n}</span>}
             </button>))}
         </div>
-        <span className="text-[11.5px] text-ww-textMuted">
-          {subAba === "rc" ? "vêm do CRM · conferir e levar para a lista"
-            : subAba === "lista" ? "o que vamos comprar de fato · códigos, datas, PCs · clique num equipamento para filtrar"
-            : "quando pedir cada item para chegar no prazo · o agente monta os lotes"}
-        </span>
-        <span className="ml-auto text-[11px] text-ww-textMuted">
-          <a href={`/projetos?${new URLSearchParams({ empresa, abrir: String(codigoProjeto) })}`} className="text-ww-accent hover:underline"
-            title="Vendas (PV/OS) e as previsões de faturamento e recebimento ficam no cartão do projeto em Operação › Projetos">vendas e datas em Operação › Projetos →</a>{" "}
-          <span className="cursor-help text-ww-textFaint" title={"Na grade: digite, ou cole do Excel com Ctrl+V a partir da célula selecionada.\nSem cabeçalho a ordem é Código · Item · Qtd · Un · Necessário em · Valor unit.\nCom a linha de cabeçalho, também Equipamento, Modelo, PC e Observação (a observação vira comentário).\nAo digitar o Item ou o Código, o catálogo sugere os itens do nosso estoque com último preço, fornecedor e prazos.\nÀ direita de cada linha: o pedido de compra, o valor e a situação."}>ⓘ</span>
-        </span>
+        <span className="cursor-help inline-flex items-center justify-center w-6 h-6 rounded-full text-[13px] text-ww-textFaint hover:text-ww-text hover:bg-ww-rowHover" data-dica-etapa
+          title={(subAba === "rc" ? "Itens da RC: vêm do CRM — conferir e levar para a lista."
+            : subAba === "lista" ? "Lista: o que vamos comprar de fato — códigos, datas, PCs. Clique num equipamento para filtrar."
+            : "Planejamento: quando pedir cada item para chegar no prazo — o agente monta os lotes.")
+            + "\n\nNa grade: digite, ou cole do Excel com Ctrl+V a partir da célula selecionada.\nSem cabeçalho a ordem é Código · Item · Qtd · Un · Necessário em · Valor unit.\nCom a linha de cabeçalho, também Equipamento, Modelo, PC e Observação (a observação vira comentário).\nAo digitar o Item ou o Código, o catálogo sugere os itens do nosso estoque com último preço, fornecedor e prazos.\nÀ direita de cada linha: o pedido de compra, o valor e a situação."}>ⓘ</span>
+        {/* Estado do salvamento: pequeno, na linha (spec C.6 continua: parado = vermelho + Salvar). */}
+        {sujo && semAutosave && !salvando ? (
+          <span className="inline-flex items-center gap-1.5" data-salvo="parado">
+            <span className="inline-flex items-center gap-1.5 h-7 px-2.5 rounded-full border border-rose-500/50 bg-rose-500/10 text-[12px] font-medium text-rose-700 dark:text-rose-300"
+              title="Enquanto isto estiver aqui, as mudanças NÃO vão para o sistema sozinhas">
+              <i aria-hidden className="w-1.5 h-1.5 rounded-full bg-rose-500" /> não está salvando: {semAutosave}
+            </span>
+            {semAutosave !== "a lista não carregou" && (
+              <button type="button" onClick={() => void salvar()}
+                className="h-7 px-3 text-[12.5px] rounded-lg bg-ww-accent text-white font-semibold hover:brightness-110 transition">Salvar lista</button>)}
+          </span>
+        ) : salvando || (sujo && remocao == null) ? (
+          <span className="inline-flex items-center gap-1.5 text-[12px] text-amber-700 dark:text-amber-300" data-salvo="salvando">
+            <i aria-hidden className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" /> salvando…
+          </span>
+        ) : salvoEm ? (
+          <span key={salvoEm} className="mg-salvo inline-flex items-center gap-1 text-[12px]" data-salvo="ok" title={`Salvo automaticamente às ${salvoEm}`}>
+            ✓ salvo {salvoEm}
+          </span>
+        ) : null}
+        <span className="flex-1" />
+        {subAba === "lista" && (<>
+          <a href={urlModelo} data-baixar-modelo download aria-label="Baixar modelo Excel"
+            title={"Baixar modelo Excel — com os nossos códigos: na 1ª coluna digite e escolha o item, preencha Qtd, data e grupo.\nDepois suba o arquivo aqui ao lado ou copie as colunas azuis (B:H) e cole numa linha em branco (Ctrl+V)."}
+            className={`${BT_FERR} border border-ww-border hover:border-emerald-600/70 hover:bg-emerald-600/5`}>
+            <IconeExcel /><span aria-hidden className="text-[11px] -ml-0.5 text-ww-textMuted">⬇</span><span className="mg-rot-opc">Modelo</span>
+          </a>
+          <button type="button" data-subir-lista onClick={() => arquivoRef.current?.click()} aria-label="Subir lista preenchida"
+            title={"Subir lista preenchida (.xlsx do modelo, ou qualquer planilha/CSV com Código, Item, Qtd…).\nMostra a prévia antes de adicionar; itens sem código passam pela compatibilização."}
+            className={`${BT_FERR} border border-ww-border hover:border-emerald-600/70 hover:bg-emerald-600/5`}>
+            <IconeExcel /><span aria-hidden className="text-[11px] -ml-0.5 text-ww-textMuted">⬆</span><span className="mg-rot-opc">Subir lista</span>
+          </button>
+        </>)}
+        <a href={`/projetos?${new URLSearchParams({ empresa, abrir: String(codigoProjeto) })}`} className="text-[12px] text-ww-accent hover:underline whitespace-nowrap"
+          title="Vendas (PV/OS) e as previsões de faturamento e recebimento ficam no cartão do projeto em Operação › Projetos">vendas e datas →</a>
       </div>
       {cmpErro && !cmp && <p className="text-[11px] text-rose-600">Compras do projeto indisponíveis: {cmpErro}</p>}
 
@@ -2455,8 +2509,9 @@ export default function MateriaisGrade({
         </div>
       )}
       {aviso && (
-        <div className="p-2.5 rounded-lg border border-emerald-500/40 bg-emerald-500/10 text-[12px] text-emerald-700 dark:text-emerald-300">
-          {aviso}
+        <div className="flex items-start gap-2 px-3 py-2 rounded-lg border border-emerald-500/40 bg-emerald-500/10 text-[13px] text-emerald-700 dark:text-emerald-300" role="status">
+          <span className="flex-1">{aviso}</span>
+          <button type="button" onClick={() => setAviso(null)} aria-label="Fechar aviso" className="shrink-0 -my-0.5 px-1.5 rounded opacity-70 hover:opacity-100">✕</button>
         </div>
       )}
       {rascunhoDe != null && (
@@ -2540,11 +2595,11 @@ export default function MateriaisGrade({
 
       {subAba === "lista" && (<>
       {/* Equipamentos = chips coloridos + toolbar única à direita (spec B.2/B.3 v3). */}
-      <div className="flex items-center gap-2 flex-wrap" data-chips>
-        <div className="flex items-center gap-1.5 flex-wrap">
+      <div className="mg-barras flex items-center gap-x-3 gap-y-2 flex-wrap" data-chips>
+        <div className="flex items-center gap-1.5 flex-wrap min-w-0">
           <button type="button" onClick={() => setEquipFiltro(null)} data-grupo-chip=""
-            className={`inline-flex items-center gap-1.5 pl-2.5 pr-2.5 py-1 rounded-full border text-[12px] transition ${!equipFiltro ? "border-ww-textMuted bg-ww-rowHover text-ww-text" : "border-ww-border text-ww-textMuted hover:text-ww-text"}`}>
-            <b className="font-medium text-ww-text">Todos</b><span className="text-[11px] opacity-80">{validas.length}</span>
+            className={`inline-flex items-center gap-1.5 h-8 px-3 rounded-full border text-[13px] transition ${!equipFiltro ? "border-ww-textMuted bg-ww-rowHover text-ww-text" : "border-ww-border text-ww-textMuted hover:text-ww-text"}`}>
+            <b className="font-medium text-ww-text">Todos</b><span className="text-[12px] tabular-nums opacity-75">{validas.length}</span>
           </button>
           {gruposChips.map((g) => {
             const cor = corGrupo(g.k);
@@ -2553,38 +2608,34 @@ export default function MateriaisGrade({
             return (
               <button key={g.k} type="button" data-grupo-chip={g.k} onClick={() => setEquipFiltro(on ? null : g.k)}
                 title={`${g.nome}${g.data ? ` · necessário em ${dia(g.data)}` : ""}${al ? ` · ${al} atrasado(s)/em risco` : ""} — clique para filtrar`}
-                className={`inline-flex items-center gap-1.5 pl-2 pr-2.5 py-1 rounded-full border text-[12px] transition ${on ? "text-ww-text" : "border-ww-border bg-ww-rowHover/50 text-ww-textMuted hover:text-ww-text"}`}
+                className={`inline-flex items-center gap-1.5 h-8 pl-2.5 pr-3 rounded-full border text-[13px] transition ${on ? "text-ww-text" : "border-ww-border bg-ww-rowHover/50 text-ww-textMuted hover:text-ww-text"}`}
                 style={on ? { borderColor: cor, background: `color-mix(in srgb, ${cor} 14%, transparent)` } : undefined}>
                 <i aria-hidden className="inline-block w-[9px] h-[9px] rounded-full" style={{ background: cor }} />
-                <b className="font-medium text-ww-text">{g.nome}</b><span className="text-[11px] opacity-80">{g.n}</span>
-                {al > 0 && <span className="text-[11px] font-semibold text-rose-600 dark:text-rose-400">✕{al}</span>}
+                <b className="font-medium text-ww-text">{g.nome}</b><span className="text-[12px] tabular-nums opacity-75">{g.n}</span>
+                {al > 0 && <span className="text-[12px] font-semibold text-rose-600 dark:text-rose-400">✕{al}</span>}
               </button>);
           })}
           <button type="button" data-novo-grupo onClick={() => setNovoGrupo({ nome: "", data: "" })}
             title={marcadas.size ? `Cria um equipamento novo com os ${marcadas.size} item(ns) marcados` : "Cria um equipamento (grupo) novo na lista"}
-            className="inline-flex items-center px-2.5 py-1 rounded-full border border-dashed border-ww-accent/70 text-[12px] text-ww-accent hover:bg-ww-accentSoft">+ equipamento</button>
+            className="inline-flex items-center h-8 px-3 rounded-full border border-dashed border-ww-accent/70 text-[13px] text-ww-accent hover:bg-ww-accentSoft">+ equipamento</button>
         </div>
         <span className="flex-1" />
-        <a href={urlModelo} data-baixar-modelo download
-          title={"Baixa o modelo Excel com os nossos códigos: na 1ª coluna digite e escolha o item, preencha Qtd, data e grupo.\nDepois suba o arquivo aqui ao lado ou copie as colunas azuis (B:H) e cole numa linha em branco (Ctrl+V)."}
-          className="inline-flex items-center gap-1.5 px-2.5 py-1 text-[12px] rounded-lg border border-ww-border text-ww-text hover:border-emerald-600/70 hover:bg-emerald-600/5">
-          <IconeExcel /> ⬇ Baixar modelo
-        </a>
-        <button type="button" data-subir-lista onClick={() => arquivoRef.current?.click()}
-          title={"Sobe a lista preenchida (.xlsx do modelo, ou qualquer planilha/CSV com Código, Item, Qtd…).\nMostra a prévia antes de adicionar; itens sem código passam pela compatibilização."}
-          className="inline-flex items-center gap-1.5 px-2.5 py-1 text-[12px] rounded-lg border border-ww-border text-ww-text hover:border-emerald-600/70 hover:bg-emerald-600/5">
-          <IconeExcel /> ⬆ Subir lista preenchida
-        </button>
+        {/* Ferramentas (08/10/26): botões "fantasma", mais leves que os filtros à esquerda. */}
+        <div className="flex items-center gap-1 flex-wrap justify-end" data-ferramentas>
         <button type="button" data-compat-toggle onClick={() => setColSugManual(colSugAberta ? false : true)}
-          title="Mostra/oculta a coluna de compatibilização com o estoque. Ela abre sozinha quando há item sem código."
-          className={`px-2.5 py-1 text-[12px] rounded-lg border transition ${colSugAberta ? "border-amber-500/70 text-amber-800 dark:text-amber-200 bg-amber-500/10" : "border-ww-border text-ww-text hover:border-ww-accent"}`}>
-          {colSugAberta ? "⚡ ocultar compatibilização" : `⚡ Compatibilizar (${pendentesSug.length})`}
+          title={colSugAberta ? "Oculta a coluna de compatibilização com o estoque (ela some sozinha quando todos os itens têm código)"
+            : "Mostra a coluna de compatibilização com o estoque. Ela abre sozinha quando há item sem código."}
+          className={`${BT_FERR} ${colSugAberta ? "bg-amber-500/10 text-amber-800 dark:text-amber-200" : ""}`}>
+          ⚡ {colSugAberta ? "Ocultar compatibilização" : "Compatibilizar"}
+          {pendentesSug.length > 0 && (
+            <span className="ml-0.5 inline-flex items-center h-5 px-1.5 rounded-full bg-amber-500/20 text-[11.5px] font-semibold text-amber-800 dark:text-amber-200 tabular-nums" data-sem-codigo>
+              {pendentesSug.length} sem código</span>)}
         </button>
         {/* Colunas ▾ e tamanho da letra (08/10/26): por pessoa, neste navegador. */}
         <details className="relative" data-menu="colunas">
-          <summary className="list-none cursor-pointer px-2.5 py-1 text-[12px] rounded-lg border border-ww-border text-ww-text hover:border-ww-accent select-none"
+          <summary className={`list-none select-none ${BT_FERR}`}
             title="Mostrar / esconder colunas da grade">Colunas{ocultas.size ? ` (${ocultas.size} oculta${ocultas.size > 1 ? "s" : ""})` : ""} ▾</summary>
-          <div role="menu" className="absolute right-0 mt-1 z-30 w-[230px] rounded-lg border border-ww-border bg-[rgb(var(--color-ww-panel))] shadow-xl p-1.5 text-[11.5px]">
+          <div role="menu" className="absolute right-0 mt-1 z-30 w-[240px] rounded-lg border border-ww-border bg-[rgb(var(--color-ww-panel))] shadow-xl p-1.5 text-[13px]">
             {COLS.filter((c) => !COLUNAS_FIXAS.has(c.key)).map((c) => (
               <label key={c.key} className="flex items-center gap-2 px-1.5 py-1 rounded hover:bg-ww-rowHover cursor-pointer" data-col-toggle={c.key}>
                 <input type="checkbox" checked={!ocultas.has(c.key)}
@@ -2597,14 +2648,14 @@ export default function MateriaisGrade({
             </div>
           </div>
         </details>
-        <div className="inline-flex rounded-lg border border-ww-border overflow-hidden text-[11.5px]" data-fonte title="Tamanho da letra da grade">
-          <button type="button" onClick={() => mudarEscala(escIdx - 1)} disabled={escIdx === 0} className="px-2 py-1 hover:bg-ww-rowHover disabled:opacity-35" data-fonte-menos>A−</button>
-          <button type="button" onClick={() => mudarEscala(1)} className="px-1.5 py-1 border-x border-ww-border tabular-nums text-ww-textMuted hover:bg-ww-rowHover" title="Tamanho normal" data-fonte-normal>{Math.round(ESCALAS[escIdx] * 100)}%</button>
-          <button type="button" onClick={() => mudarEscala(escIdx + 1)} disabled={escIdx === ESCALAS.length - 1} className="px-2 py-1 hover:bg-ww-rowHover disabled:opacity-35 font-semibold" data-fonte-mais>A+</button>
+        <div className="inline-flex items-center h-8 rounded-lg overflow-hidden text-[13px] text-ww-text2" data-fonte title="Tamanho da letra da grade">
+          <button type="button" onClick={() => mudarEscala(escIdx - 1)} disabled={escIdx === 0} className="h-8 px-2 rounded-lg hover:bg-ww-rowHover disabled:opacity-35" data-fonte-menos aria-label="Diminuir letra da grade">A−</button>
+          <button type="button" onClick={() => mudarEscala(1)} className="h-8 px-1 rounded-lg tabular-nums text-[12px] text-ww-textMuted hover:bg-ww-rowHover" title="Tamanho normal" data-fonte-normal>{Math.round(ESCALAS[escIdx] * 100)}%</button>
+          <button type="button" onClick={() => mudarEscala(escIdx + 1)} disabled={escIdx === ESCALAS.length - 1} className="h-8 px-2 rounded-lg hover:bg-ww-rowHover disabled:opacity-35 font-semibold" data-fonte-mais aria-label="Aumentar letra da grade">A+</button>
         </div>
         <details className="relative" data-menu="mais">
-          <summary className="list-none cursor-pointer px-2 py-1 text-[12px] rounded-lg text-ww-textMuted hover:text-ww-text hover:bg-ww-rowHover" title="Mais ações">⋯</summary>
-          <div role="menu" className="absolute right-0 mt-1 z-30 min-w-[260px] rounded-lg border border-ww-border bg-[rgb(var(--color-ww-panel))] shadow-xl p-1 text-[11.5px]">
+          <summary className={`list-none select-none ${BT_FERR} px-2.5 text-[16px] leading-none`} title="Mais ações" aria-label="Mais ações">⋯</summary>
+          <div role="menu" className="absolute right-0 mt-1 z-30 min-w-[260px] rounded-lg border border-ww-border bg-[rgb(var(--color-ww-panel))] shadow-xl p-1 text-[13px]">
             {menuMais.map((m) => (
               <button key={m.rot} type="button" disabled={m.off} onClick={(e) => { (e.currentTarget.closest("details") as HTMLDetailsElement).open = false; m.fn(); }}
                 className="block w-full text-left px-2 py-1.5 rounded hover:bg-ww-rowHover disabled:opacity-40" title={m.dica}>
@@ -2612,14 +2663,15 @@ export default function MateriaisGrade({
               </button>))}
           </div>
         </details>
+        </div>
       </div>
 
       {/* Barra de seleção (spec B.4 v3): só com itens marcados. Numa linha só (08/10/26): o que é
           mudar campo foi para "✎ Alterar em lote ▾". */}
       {marcadas.size > 0 && (
-        <div className="flex items-center gap-2 flex-nowrap whitespace-nowrap overflow-x-auto px-2.5 py-1.5 rounded-[10px] border border-ww-accent bg-ww-accentSoft text-[12px]" data-selbar>
-          <span className="shrink-0" data-sel-n><b className="text-ww-text">{marcadas.size}</b> marcados{(() => { const vis = new Set(visiveis.map((l) => l._id)); const fora = marcadasLinhas.filter((l) => !vis.has(l._id)).length;
-            return fora ? <span className="text-ww-textMuted" title="Marcadas antes de filtrar — as ações valem para elas também"> ({fora} fora do filtro)</span> : null; })()}</span>
+        <div className="mg-barras mg-selbar flex items-center gap-x-2 gap-y-1.5 flex-wrap px-3 py-1.5 min-h-[44px] rounded-[10px] bg-ww-accent text-white text-[13px] shadow-[0_4px_14px_rgb(var(--color-ww-accent)/0.28)]" data-selbar role="toolbar" aria-label="Ações nos itens marcados">
+          <span className="shrink-0 mr-1 whitespace-nowrap" data-sel-n><b className="text-[15px] font-bold tabular-nums">{marcadas.size}</b> marcados{(() => { const vis = new Set(visiveis.map((l) => l._id)); const fora = marcadasLinhas.filter((l) => !vis.has(l._id)).length;
+            return fora ? <span className="text-white/75" title="Marcadas antes de filtrar — as ações valem para elas também"> ({fora} fora do filtro)</span> : null; })()}</span>
           <MenuLote n={marcadasLinhas.length} ocupado={loteOcupado}
             alcance={{
               prazo: prazoCfg?.pode && prazoCfg.ativo ? marcadasLinhas.filter((l) => l._id.startsWith("db")).length : 0,
@@ -2662,28 +2714,32 @@ export default function MateriaisGrade({
             onCopiar={() => void copiarMarcadas()} />
           <button type="button" data-testid="btn-comprar-agora" onClick={() => { loteGerandoRef.current = null; abrirGerarPc(paraPc); }} disabled={!paraPc.length || !!ocupado}
             title={paraPc.length ? "Gera os pedidos de compra (um por fornecedor) com as linhas marcadas sem PC" : "As marcadas já têm PC"}
-            className="shrink-0 px-2 py-0.5 rounded-md bg-ww-accent text-white text-[11.5px] font-semibold hover:brightness-110 transition disabled:opacity-40">
+            className={`${BT_SEL} font-semibold bg-white/15 border border-white/40 hover:bg-white/25`}>
             🧾 Comprar agora{paraPc.length !== marcadas.size ? ` (${paraPc.length})` : ""}
           </button>
           <button type="button" disabled={!paraPc.length} data-planejar
             onClick={() => { setForcados(new Set(paraPc)); setSubAba("plan"); setAviso(`${paraPc.length} item(ns) enviados ao agente — os lotes com eles ficam destacados.`); setMarcadas(new Set());
               setTimeout(() => document.querySelector("[data-agente]")?.scrollIntoView({ behavior: "smooth", block: "start" }), 120); }}
             title="O agente coloca os itens marcados num lote com a data certa de pedir (um PC por fornecedor por data)"
-            className="shrink-0 px-2 py-0.5 rounded-md border border-ww-border bg-[rgb(var(--color-ww-panel))] text-[11.5px] text-ww-text hover:border-ww-accent disabled:opacity-40">
-            ✨ Planejar com o agente
+            className={`${BT_SEL} font-semibold bg-white/15 border border-white/40 hover:bg-white/25`}>
+            ✨ Planejar<span className="mg-rot-opc">&nbsp;com o agente</span>
           </button>
-          <select value="" data-mover onChange={(e) => { const v = e.target.value; if (v === "__novo") setNovoGrupo({ nome: "", data: "" }); else if (v) moverParaGrupo(v); }}
-            className="shrink-0 max-w-[170px] rounded-md border border-ww-border bg-[rgb(var(--color-ww-panel))] px-1.5 py-0.5 text-[11.5px] text-ww-text">
-            <option value="">mover para equipamento…</option>
+          <span aria-hidden className="mx-1 h-5 w-px bg-white/30" />
+          <span className="inline-flex items-center gap-1 flex-wrap" data-sel-secundarias>
+          <select value="" data-mover aria-label="Mover para equipamento" onChange={(e) => { const v = e.target.value; if (v === "__novo") setNovoGrupo({ nome: "", data: "" }); else if (v) moverParaGrupo(v); }}
+            className="shrink-0 max-w-[190px] h-8 rounded-lg border border-white/30 bg-transparent px-2 text-[13px] text-white hover:bg-white/10 cursor-pointer [&>option]:text-slate-900 [&>option]:bg-white">
+            <option value="">↦ mover para equipamento…</option>
             {gruposChips.map((g) => <option key={g.k} value={g.nome}>{g.nome}</option>)}
             <option value="__novo">+ novo equipamento…</option>
           </select>
           <button type="button" onClick={() => setPicker(true)} title="Ligar as marcadas a um pedido de compra que já existe"
-            className="shrink-0 px-2 py-0.5 rounded-md text-[11.5px] text-ww-textMuted hover:text-ww-text hover:bg-ww-rowHover">⇄ vincular a um PC</button>
-          <button type="button" onClick={() => excluirLinhas([...marcadas])}
-            className="shrink-0 px-2 py-0.5 rounded-md text-[11.5px] text-ww-textMuted hover:text-rose-500 hover:bg-rose-500/10">🗑 Excluir</button>
+            className={`${BT_SEL} text-white/90 hover:bg-white/15`}>⇄ vincular a um PC</button>
+          <button type="button" onClick={() => excluirLinhas([...marcadas])} data-sel-excluir
+            className={`${BT_SEL} font-semibold bg-rose-600 text-white hover:bg-rose-500`}>🗑 Excluir</button>
+          </span>
           <span className="flex-1" />
-          <button type="button" onClick={() => setMarcadas(new Set())} className="shrink-0 text-[11px] text-ww-textMuted hover:text-ww-text">limpar</button>
+          <button type="button" onClick={() => setMarcadas(new Set())} data-sel-limpar title="Desmarcar todos"
+            className={`${BT_SEL} text-white/90 hover:bg-white/15`}>✕ limpar</button>
         </div>
       )}
       {loteDesf && (
@@ -2702,53 +2758,38 @@ export default function MateriaisGrade({
         </div>
       )}
       {/* Filtros = segmentado pequeno "mostrar" (spec B.5 v3) — sem cor de grupo. */}
-      <div className="flex items-center gap-2 flex-wrap text-[11.5px]">
-        <span className="text-[11px] text-ww-textMuted">mostrar</span>
-        <div className="inline-flex rounded-lg border border-ww-border overflow-hidden" data-filtros>
+      {marcadas.size === 0 && (
+      <div className="mg-barras flex items-center gap-2 flex-wrap text-[13px]" data-linha-filtros>
+        <span className="text-[12.5px] text-ww-textMuted">Mostrar:</span>
+        <div className="inline-flex rounded-lg border border-ww-border overflow-hidden flex-wrap" data-filtros>
           {(["todas", "sem_cod", "sem_pc", "risco", "prazo"] as const).map((k, i) => {
             const n = k === "sem_cod" ? nSemCod : k === "sem_pc" ? validas.length - nComPc : k === "risco" ? validas.filter(emRisco).length : k === "prazo" ? nPrazoAlt : null;
             return (
               <button key={k} type="button" onClick={() => setFiltroPc(k)} data-filtro={k}
                 title={k === "risco" ? `Sem PC e já devia ter comprado ou comprar nos próximos 7 dias; ou chega com menos de ${FOLGA_ENTREGA_DIAS} dias de folga, depois do necessário, ou o PC está atrasado`
                   : k === "prazo" ? "Itens com o prazo de entrega ajustado à mão na coluna Prazo (dias) — borda âmbar, ↺ volta ao automático" : undefined}
-                className={`px-2.5 py-0.5 transition ${i ? "border-l border-ww-border" : ""} ${filtroPc === k ? "bg-[rgb(var(--color-ww-panel))] text-ww-text shadow-[inset_0_0_0_1px_rgb(var(--color-ww-accent))]" : k === "risco" ? "text-rose-600 dark:text-rose-400" : k === "prazo" ? "text-amber-700 dark:text-amber-300" : "text-ww-textMuted hover:text-ww-text"}`}>
+                className={`h-8 px-3 transition whitespace-nowrap ${i ? "border-l border-ww-border" : ""} ${filtroPc === k ? "bg-[rgb(var(--color-ww-panel))] text-ww-text shadow-[inset_0_0_0_1px_rgb(var(--color-ww-accent))]" : k === "risco" ? "text-rose-600 dark:text-rose-400" : k === "prazo" ? "text-amber-700 dark:text-amber-300" : "text-ww-textMuted hover:text-ww-text"}`}>
                 {k === "todas" ? "Todos" : k === "sem_cod" ? "⌕ Sem código" : k === "sem_pc" ? "Sem PC" : k === "risco" ? "✕ Atrasados / em risco" : "⏱ Prazo alterado"}
-                {n != null && <span className="ml-1 text-[10.5px] opacity-80">{n}</span>}
+                {n != null && <span className="ml-1.5 text-[12px] tabular-nums opacity-75">{n}</span>}
               </button>);
           })}
         </div>
         {(nFiltrosCol > 0 || ordem) && (
           <button type="button" data-limpar-filtros onClick={() => { setFiltrosCol({}); setOrdem(null); }}
             title={[...Object.keys(filtrosCol).map((k) => `filtro em ${ROTULO_COLUNA[k] ?? k}`), ordem ? `ordenado por ${ROTULO_COLUNA[ordem.key] ?? ordem.key}` : ""].filter(Boolean).join(" · ")}
-            className="px-2 py-0.5 rounded-lg border border-ww-accent text-ww-accent text-[11px] font-semibold hover:bg-ww-accentSoft">
+            className="inline-flex items-center h-8 px-3 rounded-full border border-ww-accent bg-ww-accentSoft text-ww-accent text-[12.5px] font-semibold hover:bg-ww-accent hover:text-white transition">
             ✕ Limpar filtros{nFiltrosCol ? ` (${nFiltrosCol})` : ""}{ordem ? " e ordem" : ""}
           </button>)}
-        {(nFiltrosCol > 0 || filtroPc !== "todas" || equipFiltro) && <span className="text-[10.5px] text-ww-textMuted tabular-nums" data-contagem>{nVisiveis} de {validas.length} linhas</span>}
+        {(nFiltrosCol > 0 || filtroPc !== "todas" || equipFiltro) && <span className="text-[12px] text-ww-textMuted tabular-nums" data-contagem>{nVisiveis} de {validas.length} linhas</span>}
         <span className="flex-1" />
-        {sugBuscando && <span className="text-[10.5px] text-ww-textFaint">buscando sugestões…</span>}
+        {sugBuscando && <span className="text-[12px] text-ww-textFaint">buscando sugestões…</span>}
         {sugErro && (
-          <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full border border-rose-500/50 bg-rose-500/10 text-[10.5px] text-rose-700 dark:text-rose-300" title={sugErro}>
+          <span className="inline-flex items-center gap-1.5 h-7 px-2.5 rounded-full border border-rose-500/50 bg-rose-500/10 text-[12px] text-rose-700 dark:text-rose-300" title={sugErro}>
             Não consegui buscar sugestões
             <button type="button" className="underline font-semibold" onClick={() => { setSugErro(null); setSugTentativa((n) => n + 1); }}>tentar de novo</button>
           </span>)}
-        {colSugAberta && pendentesSug.length > 0
-          ? <span className="text-[11px] font-semibold text-amber-700 dark:text-amber-300">⚠ {pendentesSug.length} item(ns) sem código — compatibilize na coluna âmbar; ela some quando terminar</span>
-          : <span className="text-[10.5px] text-ww-textFaint">✓ {nCod} com código · ⌕ {nSemCod} sem código</span>}
-        {sujo && !salvando && !semAutosave && remocao == null && <span className="text-[10.5px] text-ww-textFaint">salvando…</span>}
-        {salvando && <span className="text-[10.5px] text-ww-textFaint">salvando…</span>}
-        {/* Salvamento automático parado: diz por quê e oferece o botão (spec C.6) */}
-        {sujo && semAutosave && !salvando && (
-          <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full border border-amber-500/60 bg-amber-500/10 text-[10.5px] text-amber-800 dark:text-amber-200"
-            title="Enquanto isto estiver aqui, as mudanças NÃO vão para o sistema sozinhas">
-            ⚠ não está salvando: {semAutosave}
-          </span>)}
-        {sujo && semAutosave && semAutosave !== "a lista não carregou" && (
-          <button type="button" onClick={() => void salvar()} disabled={salvando}
-            className="px-2.5 py-0.5 text-[11.5px] rounded-lg border border-ww-accent bg-ww-accent text-white font-semibold hover:brightness-110 transition">
-            {salvando ? "…" : "Salvar lista"}
-          </button>
-        )}
       </div>
+      )}
 
       {aceiteDesfazer && (
         <div className="flex items-center gap-3 flex-wrap p-2 rounded-lg border border-emerald-500/40 bg-emerald-500/10 text-[12px] text-emerald-800 dark:text-emerald-200">
