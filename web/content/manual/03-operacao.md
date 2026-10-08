@@ -52,6 +52,15 @@ A lista de **pedidos de venda (PV/OS)** com as compras ligadas a cada um.
 2. As abas seguem a ordem do trabalho: **1 Resumo · 2 Lista de materiais · 3 Materiais separados · 4 Fluxo de caixa**.
 3. Na lista de projetos, um selo mostra **“N itens separados · R$ · x% da lista”** quando já há material separado — clique para ir direto à aba.
 
+### Projetos ativos (★)
+
+- No topo de **Operação › Projetos**, o botão **★ Projetos ativos (N)** lista os projetos marcados como ativos, **do maior PJ para o menor**, com o cliente. Digite para buscar; **Enter** ou clique abre o cartão do projeto já expandido (projeto sem venda/compra na lista abre a página do projeto).
+- Ao lado, **★ Só ativos | Todos**: por padrão a lista mostra **só os ativos**; **Todos** mostra o resto. A escolha fica gravada no seu navegador. Enquanto nenhum projeto estiver marcado, aparecem todos.
+- Para marcar ou desmarcar: clique na **☆/★** ao lado do nome do projeto (no cartão), no menu (digitando, aparecem também os não marcados, com ☆) ou no cabeçalho da página do projeto. Dá para **desfazer** pelo aviso que aparece embaixo.
+- A marca é **a mesma para todo mundo** (é do projeto, não da pessoa). Marca quem edita projetos ou é administrador.
+- A lista de projetos vem, por padrão, **em ordem decrescente de PJ** (clique no cabeçalho “projeto” ou “emissão” para mudar).
+- Na página do projeto, o mesmo menu **★ Projetos ativos** fica no cabeçalho para pular de um projeto ativo para outro.
+
 ### Resumo e Fluxo de caixa do projeto
 
 **1 Resumo** mostra só o **fechamento do CRM**: no topo a proposta (OPJ…), o cliente e o **valor fechado** em destaque (com as saídas previstas e a sobra), os botões **▦ Baixar CP/MC Excel**, **⟳ Gerar atualizado** e **abrir no CRM ↗**; embaixo, os blocos **Projeto** (início, prazo, entrega prevista, quando saem mão de obra e despesas), **Por conta de quem** (frete, deslocamento, instalação e impostos — selo âmbar = por nossa conta), **Custos considerados** (materiais da RC, mão de obra, frete, demais despesas, total e a barra de composição) e **Recebimento** (parcelas com faturamento → pagamento). Projeto sem fechamento no CRM mostra as premissas do plano.
@@ -158,5 +167,7 @@ Tudo fica numa aba só: **Lista de materiais** (a antiga aba “Compras × lista
 ## Perguntas frequentes
 
 **Não acho um pedido em Avulsos.** Confira a aba (Em aberto/Faturados/Todos) e limpe os filtros rápidos.
+
+**Não acho um projeto em Projetos.** A lista abre em **★ Só ativos** — clique em **Todos**, ou procure pelo menu **★ Projetos ativos** (digitando, ele também acha os não marcados).
 
 **A margem não aparece.** A M.B. só é calculada quando o pedido tem compras (PCs) ligadas.

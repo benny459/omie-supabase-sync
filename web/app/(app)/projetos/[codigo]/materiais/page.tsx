@@ -5,6 +5,7 @@
 import Link from "next/link";
 import { supaServer } from "@/lib/supabase-server";
 import ProjetoWorkspace from "@/components/projeto/ProjetoWorkspace";
+import { ProjetoAtivosCabecalho } from "@/components/projeto/ProjetosAtivosMenu";
 
 export const dynamic = "force-dynamic";
 
@@ -97,7 +98,8 @@ export default async function ProjetoMateriaisPage({
             libera a aprovação dos pedidos de compra deste projeto.
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          <ProjetoAtivosCabecalho empresa={empresa} codigo={codigoProjeto} nome={projetoNome || `Projeto ${codigoProjeto}`} cliente={cliente || null} />
           <Link href="/projetos"
             className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-md text-[12px] font-semibold border border-ww-border bg-ww-panel hover:bg-ww-rowHover text-ww-text transition">
             ← Voltar

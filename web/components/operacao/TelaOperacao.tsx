@@ -47,6 +47,7 @@ import { AtribuicaoModal } from "../AtribuirClienteView";
 import { supaBrowser } from "@/lib/supabase";
 import { estadoPc } from "@/lib/situacao-pc";
 import GradeOperacao from "./GradeOperacao";
+import ProjetosAtivosMenu, { EstrelaAtivo, chaveProjeto, useProjetosAtivos, type ItemMenu } from "../projeto/ProjetosAtivosMenu";
 import { OcChip, useOcResumo } from "../vendas/OcAnexos";
 import type { OcResumo } from "@/lib/vendas-anexos";
 
@@ -113,7 +114,8 @@ export default function TelaOperacao({ modulo, title, rows: rowsIniciais, parcia
   const [periodo, setPeriodo] = useState<Periodo>("tudo");
   /* Ordem da lista: mais novo primeiro; clicar no cabeçalho reordena, de novo
      inverte (como no Excel). Gravada por módulo e nas visões salvas (06/10/26). */
-  const [ordem, setOrdemSt] = useState<Ordem>(ORDEM_PADRAO);
+  /* Projetos: do maior PJ para o menor (08/10/26, Benny — "em ordem decrescente"). */
+  const [ordem, setOrdemSt] = useState<Ordem>(modulo === "projetos" ? { k: "pedido", d: -1 } : ORDEM_PADRAO);
   const [filtros, setFiltros] = useState<Filtros>({});
   /* Filtros rápidos marcados — vários ao mesmo tempo; cada um estreita a
      lista (E). Vazio = todos. (pedido do Benny, 01/10/2026) */
@@ -211,11 +213,30 @@ export default function TelaOperacao({ modulo, title, rows: rowsIniciais, parcia
   const groupBy = modulo === "projetos" ? "project" : modulo === "pcs" ? "pc" : "pvos";
   const buckets = useMemo(() => buildBuckets(rows, groupBy), [rows, groupBy]);
   const pedidos = useMemo(() => buckets.map((b) => montarPedido(b as never, modulo)), [buckets, modulo]);
+  /* ★ Projetos ativos (08/10/26, Benny): "apontar em ordem decrescente os projetos ativos, para
+     que traga a princípio apenas aqueles que determinei como ativos". Marca compartilhada
+     (approval.rc_projetos_budget.ativo, sql/130). "Só ativos" é o padrão e fica gravado por
+     pessoa no navegador; sem nenhum projeto marcado (ou antes da sql/130) mostra todos. */
+  const pa = useProjetosAtivos(modulo === "projetos");
+  const [soAtivos, setSoAtivosSt] = useState(true);
+  useEffect(() => {
+    if (modulo !== "projetos") return;
+    try { if (localStorage.getItem("op:projetos:soAtivos") === "0") setSoAtivosSt(false); } catch { /* */ }
+  }, [modulo]);
+  const setSoAtivos = (v: boolean, gravar = true) => { setSoAtivosSt(v); if (gravar) try { localStorage.setItem("op:projetos:soAtivos", v ? "1" : "0"); } catch { /* */ } };
+  const projDe = useCallback((p: Pedido) => {
+    const r = p.bucket.rows.find((x) => Number(x.codigo_projeto ?? x.pv_codigo_projeto ?? 0) > 0);
+    return r ? { empresa: (s(r.empresa) || "SF").toUpperCase(), codigo: Number(r.codigo_projeto ?? r.pv_codigo_projeto) } : null;
+  }, []);
+  const ehAtivo = useCallback((p: Pedido) => { const k = projDe(p); return !!k && pa.chaves.has(chaveProjeto(k.empresa, k.codigo)); }, [projDe, pa.chaves]);
+  const filtroAtivos = modulo === "projetos" && soAtivos && pa.disponivel === true && pa.chaves.size > 0;
+  const pedidosBase = useMemo(() => (filtroAtivos ? pedidos.filter(ehAtivo) : pedidos), [pedidos, filtroAtivos, ehAtivo]);
+  const nAtivosNaLista = useMemo(() => (modulo === "projetos" ? pedidos.filter(ehAtivo).length : 0), [pedidos, ehAtivo, modulo]);
   /* ?abrir=<código do projeto>&empresa=SF (08/10/26, spec A.6): vindo do projeto
      ("mudar datas em Operação › Projetos"), abre o cartão já expandido e rola até ele. */
   const abrirFeito = useRef(false);
   useEffect(() => {
-    if (abrirFeito.current || modulo !== "projetos" || !pedidos.length) return;
+    if (abrirFeito.current || modulo !== "projetos" || !pedidos.length || pa.disponivel === null) return;
     const qs = new URLSearchParams(window.location.search);
     const cod = Number(qs.get("abrir") || 0);
     if (!cod) { abrirFeito.current = true; return; }
@@ -224,9 +245,10 @@ export default function TelaOperacao({ modulo, title, rows: rowsIniciais, parcia
     if (!alvo) return; // os faturados chegam em segundo plano — tenta de novo quando chegarem
     abrirFeito.current = true;
     if (alvo.faturado) setEscopo("todos");
+    if (!ehAtivo(alvo)) setSoAtivosSt(false); // projeto fora dos ativos: mostra todos (sem gravar a preferência)
     setAbertos((x) => new Set(x).add(alvo.id));
     setTimeout(() => document.querySelector(`[data-pid="${CSS.escape(alvo.id)}"]`)?.scrollIntoView({ behavior: "smooth", block: "start" }), 350);
-  }, [pedidos, modulo]);
+  }, [pedidos, modulo, ehAtivo, pa.disponivel]);
   /* De que proposta do CRM veio cada PV/OS (06/10/26, Benny) — chip na linha que
      abre a proposta no CRM do portal. Mapa por empresa: { PV1967: "OPS0610261008" }. */
   const [propostas, setPropostas] = useState<Record<string, string>>({});
@@ -310,12 +332,12 @@ export default function TelaOperacao({ modulo, title, rows: rowsIniciais, parcia
   }, [modulo, rowsIniciais]);
 
   // ── filtros ───────────────────────────────────────────────────────────
-  const noScope = useMemo(() => pedidos.filter((p) => noEscopo(p, escopo)), [pedidos, escopo]);
+  const noScope = useMemo(() => pedidosBase.filter((p) => noEscopo(p, escopo)), [pedidosBase, escopo]);
   const contagem = useMemo(() => {
     const soma = (a: Pedido[]) => a.reduce((x, p) => x + p.valorPv, 0);
-    const ab = pedidos.filter((p) => !p.faturado), fa = pedidos.filter((p) => p.faturado);
-    return { aberto: [ab.length, soma(ab)], faturado: [fa.length, soma(fa)], todos: [pedidos.length, soma(pedidos)] } as const;
-  }, [pedidos]);
+    const ab = pedidosBase.filter((p) => !p.faturado), fa = pedidosBase.filter((p) => p.faturado);
+    return { aberto: [ab.length, soma(ab)], faturado: [fa.length, soma(fa)], todos: [pedidosBase.length, soma(pedidosBase)] } as const;
+  }, [pedidosBase]);
   const temFiltroCompra = !!((filtros.estado && filtros.estado !== "sem_pc") || filtros.fornecedor || filtros.categoria) || marcados.includes("minha");
   /* Uma função só decide quem aparece — a lista E os contadores dos botões
      usam ela (01/10/2026: contavam por conta própria e divergiam do filtro).
@@ -557,6 +579,42 @@ export default function TelaOperacao({ modulo, title, rows: rowsIniciais, parcia
     });
   };
 
+  /* Menu "★ Projetos ativos": todos os projetos da lista (os ativos marcados) + ativos que não têm
+     PV/PC aqui (só o nome do cadastro). Escolher abre o cartão já expandido e rola até ele. */
+  const itensMenu = useMemo<ItemMenu[]>(() => {
+    if (modulo !== "projetos") return [];
+    const m = new Map<string, ItemMenu>();
+    for (const p of pedidos) {
+      const k = projDe(p); if (!k) continue;
+      const ch = chaveProjeto(k.empresa, k.codigo);
+      if (!m.has(ch)) m.set(ch, { empresa: k.empresa, codigo: k.codigo, nome: p.id, cliente: p.cliente || null, ativo: pa.chaves.has(ch) });
+    }
+    for (const a of pa.lista) {
+      const ch = chaveProjeto(a.empresa, a.codigo_projeto);
+      if (!m.has(ch)) m.set(ch, { empresa: a.empresa, codigo: a.codigo_projeto, nome: a.nome || `Projeto ${a.codigo_projeto}`, cliente: a.cliente, ativo: true });
+    }
+    return [...m.values()];
+  }, [modulo, pedidos, projDe, pa.chaves, pa.lista]);
+  const irPara = (it: ItemMenu) => {
+    const alvo = pedidos.find((p) => { const k = projDe(p); return !!k && k.empresa === it.empresa && k.codigo === it.codigo; });
+    if (!alvo) { window.location.href = `/projetos/${it.codigo}/materiais?empresa=${encodeURIComponent(it.empresa)}`; return; }
+    if (filtroAtivos && !it.ativo) setSoAtivosSt(false);
+    if (!noEscopo(alvo, escopo)) setEscopo("todos");
+    // busca/filtros que esconderiam o projeto saem do caminho
+    if (!visiveis.some((x) => x.p.id === alvo.id)) { setMarcados([]); setQ(""); setPeriodo("tudo"); setFiltros({}); }
+    setLimite((l) => Math.max(l, pedidos.length));
+    if (vista !== "lista") trocarVista("lista");
+    setAbertos((x) => new Set(x).add(alvo.id));
+    setTimeout(() => document.querySelector(`[data-pid="${CSS.escape(alvo.id)}"]`)?.scrollIntoView({ behavior: "smooth", block: "start" }), 300);
+  };
+  const alternarAtivo = (it: ItemMenu, ativo: boolean) => {
+    void pa.alternar({ empresa: it.empresa, codigo_projeto: it.codigo, nome: it.nome, cliente: it.cliente ?? null }, ativo)
+      .then((erro) => mostrar(erro ? { msg: `Não foi possível ${ativo ? "marcar" : "desmarcar"} ${it.nome}: ${erro}`, erro: true }
+        : { msg: ativo ? `★ ${it.nome} marcado como ativo` : `${it.nome} saiu dos ativos`,
+            desfazer: () => { void pa.alternar({ empresa: it.empresa, codigo_projeto: it.codigo, nome: it.nome, cliente: it.cliente ?? null }, !ativo); } }));
+  };
+  const podeMarcarAtivo = podeEditar || ehAdmin;
+
   // ── render ────────────────────────────────────────────────────────────
   const rotulo = modulo === "projetos" ? "projeto" : modulo === "pcs" ? "PC" : "pedido";
   const nomeId = (p: Pedido) => (modulo === "pcs" ? `PC ${p.id}` : p.id);
@@ -604,6 +662,26 @@ export default function TelaOperacao({ modulo, title, rows: rowsIniciais, parcia
           </div>
         </div>
       </div>
+
+      {/* ── ★ projetos ativos (08/10/26) ── */}
+      {modulo === "projetos" && (
+        <div className="pa-bar" onClick={(e) => e.stopPropagation()}>
+          <ProjetosAtivosMenu itens={itensMenu} onEscolher={irPara} onAlternar={alternarAtivo} pode={podeMarcarAtivo} disponivel={pa.disponivel} />
+          {pa.disponivel === true && (
+            <div className="seg" role="group" aria-label="Quais projetos mostrar">
+              <button className={soAtivos && pa.chaves.size > 0 ? "on" : ""} disabled={pa.chaves.size === 0}
+                title={pa.chaves.size ? "Mostra só os projetos marcados com ★" : "Nenhum projeto marcado com ★ ainda"}
+                onClick={() => setSoAtivos(true)}>★ Só ativos <b>{nAtivosNaLista}</b></button>
+              <button className={!filtroAtivos ? "on" : ""} onClick={() => setSoAtivos(false)} title="Mostra todos os projetos">Todos <b>{pedidos.length}</b></button>
+            </div>
+          )}
+          <span className="pa-dica">
+            {pa.disponivel === false ? "Marcação de projetos ativos ainda não ligada no banco — mostrando todos."
+              : pa.disponivel && pa.chaves.size === 0 ? "Nenhum projeto marcado ainda — use a ☆ ao lado do nome do projeto (ou no menu) para marcar os ativos."
+              : filtroAtivos ? "Mostrando só os projetos marcados com ★ · ordem: maior PJ primeiro" : pa.disponivel ? "Mostrando todos os projetos · ☆ ao lado do nome marca como ativo" : ""}
+          </span>
+        </div>
+      )}
 
       {/* ── escopo ── */}
       <div className="scope">
@@ -801,7 +879,12 @@ export default function TelaOperacao({ modulo, title, rows: rowsIniciais, parcia
               incluirPc={(rc, itens, numero) => incluirPc(p, rc, itens, numero)}
               gerarPc={(rc, itens) => setGerarPcDe({ p, rc, itens })}
               filtrarRapida={(r) => { setMarcados((m) => (m.includes(r) ? m : [...m, r])); window.scrollTo({ top: 0, behavior: "smooth" }); }}
-              notas={notas[p.id] ?? []} abrirNotas={() => setNotasDe(p)} marcarMaterial={marcarMaterial} marcarMaterialLote={marcarMaterialLote} />
+              notas={notas[p.id] ?? []} abrirNotas={() => setNotasDe(p)} marcarMaterial={marcarMaterial} marcarMaterialLote={marcarMaterialLote}
+              estrela={modulo === "projetos" && pa.disponivel === true ? (() => {
+                const k = projDe(p); if (!k) return null;
+                const it: ItemMenu = { empresa: k.empresa, codigo: k.codigo, nome: p.id, cliente: p.cliente || null, ativo: ehAtivo(p) };
+                return { ativo: it.ativo, pode: podeMarcarAtivo, alternar: () => alternarAtivo(it, !it.ativo) };
+              })() : null} />
           ))}
           {visiveis.length > limite && (
             <div style={{ textAlign: "center", margin: 14 }}>
@@ -1298,6 +1381,8 @@ function CartaoPedido(props: {
   propostas?: string[];
   /** OC do cliente e anexos de cada PV/OS do cartão (sql/110). */
   ocs?: { label: string; r?: OcResumo }[];
+  /** ★ projeto ativo (só Projetos, 08/10/26). */
+  estrela?: { ativo: boolean; pode: boolean; alternar: () => void } | null;
 }) {
   const { p, compras, modulo, aberto, $ } = props;
   const d = diasAte(p.lim);
@@ -1307,7 +1392,7 @@ function CartaoPedido(props: {
       <div className="pvh" onClick={props.onToggle}>
         <span className="chev">▸</span>
         <div className="pvid">
-          <span className="pvid-l1">{props.nomeId}<Balao notas={props.notas} onAbrir={props.abrirNotas} /></span>
+          <span className="pvid-l1">{props.estrela && <EstrelaAtivo ativo={props.estrela.ativo} pode={props.estrela.pode} onAlternar={props.estrela.alternar} />}{props.nomeId}<Balao notas={props.notas} onAbrir={props.abrirNotas} /></span>
           <small title={modulo === "pcs" ? "Data de emissão do PC" : modulo === "projetos" ? "Emissão do PV/OS mais antigo do projeto" : "Data de emissão do PV/OS no Omie"}>
             {p.emissao ? <>emitido <b>{dBR(p.emissao).replace(/\/(\d{2})(\d{2})$/, "/$2")}</b></> : "emissão —"}
           </small>
@@ -1887,7 +1972,7 @@ function DataPrev({ inicial, nova, atual, editavel, ocupado, onMudar, rotulo }: 
         {editavel && temOverride ? <button type="button" className="undo" title="Voltar à previsão inicial" onClick={() => onMudar(null)}>↺</button> : null}
       </span>
       {mudou
-        ? <span className="ini" title={`Previsão inicial de ${rotulo} (resumo financeiro do projeto) — não muda`}>inicial <s>{isoBR(inicial)}</s>
+        ? <span className="ini" title={`Previsão inicial de ${rotulo} (resumo financeiro do projeto) — não muda`}><span className="ini-w">inicial </span><s>{isoBR(inicial)}</s>
             <em className={desvio > 0 ? "atraso" : "adianta"} title="desvio da previsão vigente contra a inicial">{desvio > 0 ? `+${desvio}` : desvio}d</em></span>
         : <span className="ini dim" title={`Previsão inicial de ${rotulo} (resumo financeiro do projeto)`}>{inicial ? "= inicial" : "sem previsão inicial"}</span>}
     </span>
@@ -1944,9 +2029,9 @@ function VendasDoProjeto({ empresa, codigo, $, valorPv, podeEditar }: { empresa:
             </span>
             <span className="num" style={{ textAlign: "right" }}><b>{$(d.valor)}</b><small>{total ? `${Math.round((d.valor / total) * 1000) / 10}%` : ""}</small></span>
             {d.faturado
-              ? <span className="vprev"><span className="atual"><b className="fixo">{isoBR(d.dt_fat)}</b><small className="fat">faturado</small></span>
+              ? <span className="vprev"><span className="atual"><b className="fixo">{isoBR(d.dt_fat)}</b><small className="fat" title="Data em que foi faturado">fat.</small></span>
                   {d.fat_inicial && d.dt_fat && difD(d.dt_fat, d.fat_inicial) !== 0
-                    ? <span className="ini">inicial <s>{isoBR(d.fat_inicial)}</s><em className={difD(d.dt_fat, d.fat_inicial) > 0 ? "atraso" : "adianta"}>{difD(d.dt_fat, d.fat_inicial) > 0 ? "+" : ""}{difD(d.dt_fat, d.fat_inicial)}d</em></span>
+                    ? <span className="ini" title="Previsão inicial de faturamento — riscada quando mudou"><span className="ini-w">inicial </span><s>{isoBR(d.fat_inicial)}</s><em className={difD(d.dt_fat, d.fat_inicial) > 0 ? "atraso" : "adianta"}>{difD(d.dt_fat, d.fat_inicial) > 0 ? "+" : ""}{difD(d.dt_fat, d.fat_inicial)}d</em></span>
                     : <span className="ini dim">= inicial</span>}</span>
               : <DataPrev rotulo="faturamento" inicial={d.fat_inicial} nova={d.fat_nova} editavel={ed && !!d.chave} ocupado={gravando === `${d.chave}|faturamento`} onMudar={(v) => void mudar(d, "faturamento", v)} />}
             {d.faturado && !d.titulo_ref

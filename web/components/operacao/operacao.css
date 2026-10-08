@@ -523,7 +523,10 @@
 .op .pcproj-itens{padding:4px 12px 8px 110px;display:flex;flex-direction:column;gap:2px;font-size:12px}
 .op .pcproj-itens > div{display:flex;justify-content:space-between;gap:10px}
 .op .pcproj-itens small{color:var(--ww-text-faint);white-space:nowrap}
-.op .pcproj-hd,.op .pcproj-pc{display:grid;grid-template-columns:40px minmax(120px,1fr) 88px 104px 120px 122px 104px 36px 22px 18px;gap:8px;align-items:center;padding:7px 8px}
+/* 08/10/26 (2ª volta): colunas dos PCs medidas para caber em ~740px (projeto aberto ao lado das vendas
+   numa tela de ~1430px): 40+fornecedor+84+88+110+100+90+36+20+16 + 9×5 de vão + 12 de margem ≤ 738 (fornecedor ≥ 80). Mais
+   espaço (compras ≥ 860px) → volta às colunas folgadas; ver @container pccompras abaixo. */
+.op .pcproj-hd,.op .pcproj-pc{display:grid;grid-template-columns:40px minmax(80px,1fr) 84px 88px 110px 100px 90px 36px 20px 16px;gap:5px;align-items:center;padding:7px 6px}
 .op .pcproj-hd{font-size:11px;color:var(--ww-text-faint);text-transform:uppercase;letter-spacing:.06em;border-bottom:1px solid var(--ww-border)}
 .op .pcproj-pc + .pcproj-pc{border-top:1px dashed var(--ww-border)}
 .op .pcproj-pc > *{min-width:0}
@@ -571,7 +574,7 @@
 @container (min-width:1240px){
   /* 08/10/26: vendas só precisa do que cabe (4–6 parcelas); compras leva o resto — projeto com 15 PCs
      perdia colunas. Sem PC nenhum, vendas volta a ficar com mais espaço. */
-  .op .pcproj-lados{grid-template-columns:minmax(540px,.78fr) minmax(0,1.22fr);gap:0}
+  .op .pcproj-lados{grid-template-columns:minmax(550px,.72fr) minmax(0,1.28fr);gap:0}
   .op .pcproj-lados:has(> .compras .pcproj-vazio){grid-template-columns:minmax(0,1.25fr) minmax(0,.75fr)}
   .op .pcproj-lados > .vendas{border-right:1px solid var(--ww-border);padding-right:10px}
   .op .pcproj-lados > .compras{padding-left:10px}
@@ -658,3 +661,32 @@
 .op .pcproj-vendas .vprev .ini{line-height:14px}
 .op .pcproj-vendas .stv{min-width:0;gap:1px}
 .op .pcproj-vendas .stv small{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;line-height:14px}
+
+/* 08/10/26 (2ª volta) — tudo cabe sem cortar coluna:
+   • vendas: 86+84+116+116+70 + 4×8 + 16 = 522 ≤ 550 do lado esquerdo;
+   • PCs: Situação e NF entrada quebram em duas linhas em vez de sumir; data com menos respiro;
+   • compras com folga (≥ 860px) volta ao grid largo. */
+@media (min-width:1101px){
+  .op .pcproj-vendas .hd,.op .pcproj-vendas .ln{grid-template-columns:minmax(86px,1fr) 84px 116px 116px 70px}
+  .op .pcproj-vendas .ln.tot{grid-template-columns:auto 96px 1fr}
+  /* "inicial" por extenso não cabe com o desvio ao lado: a data riscada + desvio já dizem (title explica) */
+  .op .pcproj-vendas .vprev .ini-w{display:none}
+}
+.op .pcproj-vendas .vprev input{width:106px}
+.op .pcproj-vendas .vprev .atual{max-width:100%;overflow:hidden}
+.op .pcproj-lados > .compras{container:pccompras / inline-size}
+.op .pcproj-pc input.in{padding:0 4px}
+.op .pcproj-pc .sitpill{white-space:normal;line-height:1.25;overflow-wrap:anywhere}
+.op .pcproj-pc .nf{white-space:normal;display:flex;flex-direction:column;gap:1px;line-height:1.25}
+.op .pcproj-pc .nf .st{white-space:normal;line-height:1.2;text-align:left}
+.op .pcproj-pc .nf small{font-size:10.5px;color:var(--ww-text-muted);overflow-wrap:anywhere}
+.op .pcproj-pc .stsel{padding-left:8px;padding-right:20px;background-position:right 6px center;text-overflow:ellipsis}
+@media (min-width:1101px){@container pccompras (min-width:860px){
+  .op .pcproj-hd,.op .pcproj-pc{grid-template-columns:44px minmax(150px,1fr) 92px 112px 126px 112px 112px 36px 24px 20px;gap:10px;padding:7px 10px}
+}}
+
+/* ★ Projetos ativos (08/10/26): barra compacta acima das abas Em aberto/Faturados */
+.op .pa-bar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:6px 0 12px}
+.op .pa-bar .seg button:disabled{opacity:.45;cursor:not-allowed}
+.op .pa-bar .pa-dica{font-size:12px;color:var(--ww-text-faint)}
+.op .pvid-l1 > button[aria-pressed]{margin-right:3px;vertical-align:1px}
