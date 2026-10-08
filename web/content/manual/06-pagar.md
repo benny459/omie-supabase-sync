@@ -135,7 +135,7 @@ Conta **provisionada** é uma estimativa: ainda não tem documento (NF, boleto o
 ### Confirmar com NF
 
 1. Na linha (ou no detalhe), clique **Confirmar com NF**.
-2. Informe tipo (NF-e, NFS-e, boleto, recibo), número, valor, vencimento e, se houver, o código de barras.
+2. Informe tipo (NF-e, NFS-e, boleto, recibo), número, **data de emissão** (obrigatória, não pode ser futura), valor, vencimento e, se houver, o código de barras. A data de emissão fica gravada no título — aparece no detalhe e ao lado do selo ✓ REAL ("emitida 06/10/2026").
 3. Se o valor diferir mais de **10%** da provisão, escreva o motivo.
 4. Escolha o alcance: **Só esta parcela** (consumo variável), **Esta e as próximas provisões da série** (reajuste — só mexe nas futuras sem documento) ou **Próximas pela média das últimas 3 reais**.
 5. Salve: a conta vira **✓ REAL** e mostra "provisão era R$ …". **desfazer** volta tudo como estava.
@@ -144,7 +144,7 @@ Nada é gravado no Omie — a confirmação fica no painel, por cima do título.
 
 ### Sugestão automática
 
-Quando chega uma NF (NF-e ou NFS-e, captada pela Focus) do **mesmo CNPJ**, emitida entre 35 dias antes e 15 dias depois do vencimento, com valor até 50% diferente, e que ainda não está em nenhum outro título, a linha mostra **✦ NFS-e 3601 encontrada — confirmar?**. Clicar abre o **Confirmar com NF** já preenchido com tipo, número, valor e chave — confira e salve. A sugestão nunca confirma sozinha.
+Quando chega uma NF (NF-e ou NFS-e, captada pela Focus) do **mesmo CNPJ**, emitida entre 35 dias antes e 15 dias depois do vencimento, com valor até 50% diferente, e que ainda não está em nenhum outro título, a linha mostra **✦ NFS-e 3601 encontrada — confirmar?**. Clicar abre o **Confirmar com NF** já preenchido com tipo, número, data de emissão, valor e chave — confira e salve. A sugestão nunca confirma sozinha.
 
 ### Baixa de provisionado
 

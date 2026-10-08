@@ -1,7 +1,7 @@
 // Provisionado × Real (08/10/26 — financeiro-fluxo-v3-SPEC, P1). Ver sql/141.
 // GET → mapa ref → { nat: provisionado|real, serie, ult {nf,data}, media3, conf } dos títulos
 //       recorrentes / estimados em aberto (Títulos a Pagar desenha selo, média e botão)
-// POST { acao: "confirmar", empresa, cod_titulo | pagar_id, tipo_doc, numero_doc, valor_real, venc_real?, codigo_barras?, chave_nfe?, escopo, motivo? }
+// POST { acao: "confirmar", empresa, cod_titulo | pagar_id, tipo_doc, numero_doc, valor_real, venc_real?, emissao (obrigatória), codigo_barras?, chave_nfe?, escopo, motivo? }
 //      { acao: "desfazer", id }
 // Permissão: financeiro.editar_titulo (a mesma do "+ Nova conta"). Erro da regra → 422 com a mensagem.
 import { NextResponse } from "next/server";
