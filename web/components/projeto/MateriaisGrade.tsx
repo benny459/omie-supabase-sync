@@ -2177,7 +2177,7 @@ function VendasFaixa({ empresa, codigo }: { empresa: string; codigo: number }) {
           <b className="font-mono">{d.rotulo}</b><span className="tabular-nums">{brl(d.valor)}</span>
           <span className={d.faturado ? "text-teal-600 dark:text-teal-400" : "text-ww-textMuted"}>{d.faturado ? (d.recebido ? "recebido" : "faturado") : `fat. ${d2(d.fat_nova ?? d.fat_inicial)}`}</span>
         </a>))}
-      <a href="/projetos" className="ml-auto text-ww-accent hover:underline" title="As previsões (faturamento e recebimento) se mudam em Operação › Projetos, no projeto aberto">mudar datas em Operação › Projetos →</a>
+      <a href={`/projetos?${new URLSearchParams({ empresa, abrir: String(codigo) })}`} className="ml-auto text-ww-accent hover:underline" title="As previsões (faturamento e recebimento) se mudam em Operação › Projetos, no projeto aberto">mudar datas em Operação › Projetos →</a>
     </div>
   );
 }

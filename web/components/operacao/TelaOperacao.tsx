@@ -211,6 +211,22 @@ export default function TelaOperacao({ modulo, title, rows: rowsIniciais, parcia
   const groupBy = modulo === "projetos" ? "project" : modulo === "pcs" ? "pc" : "pvos";
   const buckets = useMemo(() => buildBuckets(rows, groupBy), [rows, groupBy]);
   const pedidos = useMemo(() => buckets.map((b) => montarPedido(b as never, modulo)), [buckets, modulo]);
+  /* ?abrir=<código do projeto>&empresa=SF (08/10/26, spec A.6): vindo do projeto
+     ("mudar datas em Operação › Projetos"), abre o cartão já expandido e rola até ele. */
+  const abrirFeito = useRef(false);
+  useEffect(() => {
+    if (abrirFeito.current || modulo !== "projetos" || !pedidos.length) return;
+    const qs = new URLSearchParams(window.location.search);
+    const cod = Number(qs.get("abrir") || 0);
+    if (!cod) { abrirFeito.current = true; return; }
+    const emp = (qs.get("empresa") || "").toUpperCase();
+    const alvo = pedidos.find((p) => p.bucket.rows.some((r) => Number(r.codigo_projeto ?? r.pv_codigo_projeto ?? 0) === cod && (!emp || s(r.empresa).toUpperCase() === emp)));
+    if (!alvo) return; // os faturados chegam em segundo plano — tenta de novo quando chegarem
+    abrirFeito.current = true;
+    if (alvo.faturado) setEscopo("todos");
+    setAbertos((x) => new Set(x).add(alvo.id));
+    setTimeout(() => document.querySelector(`[data-pid="${CSS.escape(alvo.id)}"]`)?.scrollIntoView({ behavior: "smooth", block: "start" }), 350);
+  }, [pedidos, modulo]);
   /* De que proposta do CRM veio cada PV/OS (06/10/26, Benny) — chip na linha que
      abre a proposta no CRM do portal. Mapa por empresa: { PV1967: "OPS0610261008" }. */
   const [propostas, setPropostas] = useState<Record<string, string>>({});
@@ -1287,7 +1303,7 @@ function CartaoPedido(props: {
   const d = diasAte(p.lim);
   const empresa = s(p.bucket.rows[0]?.empresa) || "SF";
   return (
-    <div className={`pv ${aberto ? "open" : ""} ${p.faturado ? "isfat" : ""} ${!p.faturado && p.flags.some((f) => f.t === "pode faturar") ? "podefat" : ""}`}>
+    <div data-pid={p.id} className={`pv ${aberto ? "open" : ""} ${p.faturado ? "isfat" : ""} ${!p.faturado && p.flags.some((f) => f.t === "pode faturar") ? "podefat" : ""}`}>
       <div className="pvh" onClick={props.onToggle}>
         <span className="chev">▸</span>
         <div className="pvid">
@@ -1843,23 +1859,37 @@ type VendaDoc = {
 };
 const isoBR = (v: string | null | undefined) => (v ? dBR(Date.parse(`${v}T12:00:00`)) : "—");
 const difD = (a: string | null, b: string | null) => (a && b ? Math.round((Date.parse(`${a}T12:00:00`) - Date.parse(`${b}T12:00:00`)) / 86400000) : 0);
-/** Previsão inicial (só leitura) + nova (editável, vazia = inicial) + desvio em dias. */
+/** Previsão de faturamento/recebimento (08/10/26, spec A): em cima a data VIGENTE (nova ou
+ *  inicial — o campo nunca fica vazio), editável no lugar; embaixo a inicial riscada com o
+ *  desvio em dias quando mudou, ou "= inicial". Escolher de novo a inicial apaga a nova. */
 function DataPrev({ inicial, nova, atual, editavel, ocupado, onMudar, rotulo }: {
   inicial: string | null; nova: string | null; atual?: string | null; editavel: boolean; ocupado: boolean;
   onMudar: (v: string | null) => void; rotulo: string;
 }) {
   const vigente = atual ?? nova ?? inicial;
   const desvio = difD(vigente, inicial);
+  const mudou = !!vigente && !!inicial && desvio !== 0;
+  const temOverride = !!nova || (!!atual && atual !== inicial);
+  const enviar = (v: string | null) => {
+    const alvo = !v || v === inicial ? null : v;
+    if (alvo === (nova ?? (atual && atual !== inicial ? atual : null))) return;
+    onMudar(alvo);
+  };
   return (
     <span className="vprev">
-      <small title={`Previsão inicial de ${rotulo} (resumo financeiro do projeto) — não muda`}>inicial {isoBR(inicial)}</small>
-      {editavel
-        ? <input type="date" key={`${vigente}`} defaultValue={nova ?? atual ?? ""} disabled={ocupado} placeholder="= inicial"
-            title={`Nova previsão de ${rotulo} — vazia = igual à inicial. Muda o Fluxo de caixa do projeto.`}
-            onBlur={(e) => { const v = e.currentTarget.value || null; if (v !== (nova ?? atual ?? null)) onMudar(v); }} />
-        : <b>{nova || atual ? isoBR(vigente) : "= inicial"}</b>}
-      {desvio !== 0 && <em className={desvio > 0 ? "atraso" : "adianta"} title="desvio da nova previsão contra a inicial">{desvio > 0 ? `+${desvio}` : desvio}d</em>}
-      {editavel && (nova || (atual && atual !== inicial)) ? <button type="button" title="Voltar à inicial" onClick={() => onMudar(null)}>↺</button> : null}
+      <span className="atual">
+        {editavel
+          ? <input type="date" key={`${vigente}`} defaultValue={vigente ?? ""} disabled={ocupado} className={mudou ? "mudou" : ""}
+              title={`Previsão de ${rotulo} vigente — clique para mudar; escolher a inicial (${isoBR(inicial)}) volta à inicial. Muda o Fluxo de caixa do projeto.`}
+              onBlur={(e) => enviar(e.currentTarget.value || null)}
+              onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); }} />
+          : <b className="fixo">{isoBR(vigente)}</b>}
+        {editavel && temOverride ? <button type="button" className="undo" title="Voltar à previsão inicial" onClick={() => onMudar(null)}>↺</button> : null}
+      </span>
+      {mudou
+        ? <span className="ini" title={`Previsão inicial de ${rotulo} (resumo financeiro do projeto) — não muda`}>inicial <s>{isoBR(inicial)}</s>
+            <em className={desvio > 0 ? "atraso" : "adianta"} title="desvio da previsão vigente contra a inicial">{desvio > 0 ? `+${desvio}` : desvio}d</em></span>
+        : <span className="ini dim" title={`Previsão inicial de ${rotulo} (resumo financeiro do projeto)`}>{inicial ? "= inicial" : "sem previsão inicial"}</span>}
     </span>
   );
 }
@@ -1869,6 +1899,8 @@ function VendasDoProjeto({ empresa, codigo, $, valorPv, podeEditar }: { empresa:
   const [erro, setErro] = useState<string | null>(null);
   const [aviso, setAviso] = useState<string | null>(null);
   const [gravando, setGravando] = useState<string | null>(null);
+  const [toastV, setToastV] = useState<string | null>(null);
+  useEffect(() => { if (!toastV) return; const t = setTimeout(() => setToastV(null), 4500); return () => clearTimeout(t); }, [toastV]);
   const carregar = useCallback(() => {
     fetch(`/api/rc-projetos/vendas?empresa=${encodeURIComponent(empresa)}&codigo=${codigo}`, { cache: "no-store" })
       .then((r) => r.json()).then((j) => { if (j.error) setErro(j.error); else { setErro(null); setDocs(j.docs ?? []); setPode(j.pode ?? { editar: false, titulo: false }); } })
@@ -1882,7 +1914,11 @@ function VendasDoProjeto({ empresa, codigo, $, valorPv, podeEditar }: { empresa:
         body: JSON.stringify({ empresa, codigo, chave: d.chave, campo, data }) });
       const j = await r.json();
       if (!r.ok) throw new Error(j.error ?? r.statusText);
-      setAviso(`${d.rotulo}: previsão de ${campo} ${data ? isoBR(data) : "de volta à inicial"}${(j.avisos ?? []).length ? ` · ${(j.avisos as string[]).join(" · ")}` : ""} · Fluxo de caixa${campo === "faturamento" ? " e carteira do Faturamento" : ""} atualizados.`);
+      const avs = (j.avisos ?? []) as string[];
+      setAviso(`${d.rotulo}: previsão de ${campo} ${data ? isoBR(data) : "de volta à inicial"}${avs.length ? ` · ${avs.join(" · ")}` : ""} · Fluxo de caixa${campo === "faturamento" ? " e carteira do Faturamento" : ""} atualizados.`);
+      setToastV(avs.some((a) => a.includes("andou junto"))
+        ? `${d.rotulo}: faturamento ${data ? isoBR(data) : "de volta à inicial"} — o recebimento andou junto, mantendo o prazo`
+        : `${d.rotulo}: previsão de ${campo} ${data ? isoBR(data) : "de volta à inicial"} · a inicial continua guardada`);
       carregar();
     } catch (e) { setAviso(`Não gravou: ${(e as Error).message}`); } finally { setGravando(null); }
   };
@@ -1901,20 +1937,24 @@ function VendasDoProjeto({ empresa, codigo, $, valorPv, podeEditar }: { empresa:
         {docs.map((d) => (
           <div key={d.chave || d.rotulo} className="ln">
             <span className="doc">
-              <span><a className="rcnum" href={`/faturamento?${new URLSearchParams({ abrir: d.chave, q: d.rotulo, emp: empresa })}`} title={`Abrir ${d.rotulo} no Faturamento${d.origem === "Omie" ? " (espelhado do Omie)" : ""}`}>{d.rotulo}</a>
+              <span className="l1"><a className="rcnum" href={`/faturamento?${new URLSearchParams({ abrir: d.chave, q: d.rotulo, emp: empresa })}`} title={`Abrir ${d.rotulo} no Faturamento${d.origem === "Omie" ? " (espelhado do Omie)" : ""}`}>{d.rotulo}</a>
+                {d.parcela ? <small className="parc">parcela {d.parcela}</small> : null}
                 {d.origem === "Omie" && <small className="omie">Omie</small>}{d.oc && <small className="oc" title="OC do cliente">OC {d.oc}</small>}</span>
-              <small title={d.evento ?? ""}>{d.parcela ? `parcela ${d.parcela} · ` : ""}{(d.evento ?? "").replace(/^\s*\d+\s*·\s*/, "") || "—"}</small>
+              <small title={d.evento ?? ""}>{(d.evento ?? "").replace(/^\s*\d+\s*·\s*/, "") || "—"}</small>
             </span>
             <span className="num" style={{ textAlign: "right" }}><b>{$(d.valor)}</b><small>{total ? `${Math.round((d.valor / total) * 1000) / 10}%` : ""}</small></span>
             {d.faturado
-              ? <span className="vprev"><small>inicial {isoBR(d.fat_inicial)}</small><b>faturado {isoBR(d.dt_fat)}</b>
-                  {difD(d.dt_fat, d.fat_inicial) !== 0 && <em className={difD(d.dt_fat, d.fat_inicial) > 0 ? "atraso" : "adianta"}>{difD(d.dt_fat, d.fat_inicial) > 0 ? "+" : ""}{difD(d.dt_fat, d.fat_inicial)}d</em>}</span>
+              ? <span className="vprev"><span className="atual"><b className="fixo">{isoBR(d.dt_fat)}</b><small className="fat">faturado</small></span>
+                  {d.fat_inicial && d.dt_fat && difD(d.dt_fat, d.fat_inicial) !== 0
+                    ? <span className="ini">inicial <s>{isoBR(d.fat_inicial)}</s><em className={difD(d.dt_fat, d.fat_inicial) > 0 ? "atraso" : "adianta"}>{difD(d.dt_fat, d.fat_inicial) > 0 ? "+" : ""}{difD(d.dt_fat, d.fat_inicial)}d</em></span>
+                    : <span className="ini dim">= inicial</span>}</span>
               : <DataPrev rotulo="faturamento" inicial={d.fat_inicial} nova={d.fat_nova} editavel={ed && !!d.chave} ocupado={gravando === `${d.chave}|faturamento`} onMudar={(v) => void mudar(d, "faturamento", v)} />}
             {d.faturado && !d.titulo_ref
-              ? <span className="vprev"><small>inicial {isoBR(d.receb_inicial)}</small>
+              ? <span className="vprev"><span className="atual">
                   {d.titulo_indisponivel
                     ? <b className="text-amber-600" title="A consulta do título a receber falhou agora — recarregue">vencimento indisponível</b>
                     : <b title="título não encontrado — veja em Financeiro › Receber">—</b>}</span>
+                  <span className="ini dim">inicial {isoBR(d.receb_inicial)}</span></span>
               : <DataPrev rotulo="recebimento" inicial={d.receb_inicial} nova={d.faturado ? null : d.receb_nova} atual={d.faturado ? d.titulo_venc : null}
                   editavel={ed && !!d.parcela && !d.recebido && (!d.faturado || pode.titulo)} ocupado={gravando === `${d.chave}|recebimento`}
                   onMudar={(v) => void mudar(d, "recebimento", v)} />}
@@ -1923,10 +1963,14 @@ function VendasDoProjeto({ empresa, codigo, $, valorPv, podeEditar }: { empresa:
               : <span className="fb mute">A faturar</span>}
               {d.faturado && <small>{d.nf ? `${d.tipo === "OS" ? "NF/rec." : "NF"} ${d.nf}` : ""}{d.titulo_ref ? <> · <a href={`/financeiro/receber?q=${encodeURIComponent(d.nf ?? "")}`} title="Título a receber">título</a></> : null}</small>}</span>
           </div>))}
-        <div className="ln tot"><span>Total · {docs.length} documento(s)</span><b className="num" style={{ textAlign: "right" }}>{$(total)}</b>
-          <span style={{ gridColumn: "span 3", color: confere ? "var(--ww-text-faint)" : "#e11d48" }}>{confere ? "confere com o PV do projeto" : `PV do projeto ${$(valorPv)} — diferença ${$(total - valorPv)}`}</span></div>
+        <div className="ln tot"><span>Total · {docs.length} {docs.length === 1 ? "documento" : "documentos"}</span><b className="num" style={{ textAlign: "right" }}>{$(total)}</b>
+          <span className="confere" style={{ color: confere ? "var(--ww-text-faint)" : "#e11d48" }}>{confere ? "confere com o PV do projeto" : `PV do projeto ${$(valorPv)} — diferença ${$(total - valorPv)}`}</span></div>
       </div>
       {aviso && <small style={{ display: "block", marginTop: 4, color: aviso.startsWith("Não") ? "#e11d48" : "var(--ww-text-muted)" }}>{aviso}</small>}
+      {/* o cartão tem container-type (vira bloco de contenção do position:fixed) — o aviso vai para o body */}
+      {toastV && typeof document !== "undefined" && createPortal(
+        <div role="status" style={{ position: "fixed", left: 24, bottom: 24, zIndex: 90, background: "var(--ww-text)", color: "var(--ww-bg)", borderRadius: 10, padding: "10px 14px", fontSize: 13, fontWeight: 500, boxShadow: "0 8px 24px rgba(0,0,0,.25)" }}>{toastV}</div>,
+        document.body)}
     </div>
   );
 }

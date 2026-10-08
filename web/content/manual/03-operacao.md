@@ -5,7 +5,7 @@ icone: 📋
 area: operacao
 rotas: /avulsos, /projetos, /pcs, /erp/vendas
 caminhos: web/components/BoldAvulsosView.tsx, web/components/projeto, web/components/operacao, web/app/(app)/avulsos, web/app/(app)/projetos, web/app/(app)/pcs, web/app/(app)/erp/vendas, web/components/vendas
-atualizado: 2026-10-07
+atualizado: 2026-10-08
 ---
 
 ## Avulsos
@@ -90,8 +90,9 @@ Tudo fica numa aba só: **Lista de materiais** (a antiga aba “Compras × lista
 - **Margem real** = (PV − PCs aprovados) ÷ PV — cada PC uma vez; passe o mouse para ver como fica se os PCs aguardando aprovação forem aprovados.
 - O antigo **M.B.** somava os PCs **e** os itens da RC sem PC; no projeto os PCs saem da Lista sem ligar à RC, e a mesma compra contava duas vezes (o PJ361 aparecia com −16%). Nos Avulsos o M.B. continua como era. No bloco de budget do projeto, **Result. esp.** é o resultado esperado do fechamento do CRM (venda − materiais − mão de obra − despesas) — não é a margem de materiais.
 
-**Vendas (PV/OS)** (no projeto aberto, à esquerda): os PV/OS gerados para o projeto — nº (abre no Faturamento), evento/parcela, valor e % do total (a soma confere com o PV do projeto), situação (a faturar / faturado com NF ou recibo / recebido) e OC do cliente. Para cada um, **faturamento** e **recebimento** têm a **previsão inicial** (do resumo financeiro do projeto — não muda) e a **nova previsão** (editável; vazia = igual à inicial), com o **desvio** em dias (+N vermelho, −N verde).
-- A nova previsão de **faturamento** é a mesma da carteira do Faturamento (“Previsão fat.”). Mudá-la leva o recebimento junto (mesmo prazo), se o recebimento não tiver nova previsão própria.
+**Vendas (PV/OS)** (no projeto aberto, à esquerda): os PV/OS gerados para o projeto — nº (abre no Faturamento) e **parcela N** na mesma linha, o evento embaixo, valor e % do total (a soma confere com o PV do projeto), situação (a faturar / faturado com NF ou recibo / recebido) e OC do cliente. Em **faturamento** e **recebimento**, em cima fica sempre a **data vigente** (a nova previsão, ou a inicial quando não mudou) — clique nela para mudar. Embaixo: **= inicial** quando não mudou; se mudou, o campo fica com borda âmbar e aparece **inicial ~~dd/mm/aaaa~~ +Nd** (+N vermelho = atrasou, −N verde = adiantou). A **previsão inicial** vem do resumo financeiro do projeto e não muda. Escolher de novo a data inicial (ou clicar **↺**) apaga a nova previsão. Já faturado: em cima “dd/mm/aaaa faturado”.
+- A nova previsão de **faturamento** é a mesma da carteira do Faturamento (“Previsão fat.”). Mudá-la leva o recebimento junto (mesmo prazo), se o recebimento não tiver nova previsão própria — um aviso no canto da tela confirma.
+- Do projeto (aba Lista de materiais), **mudar datas em Operação › Projetos →** abre esta tela já com o cartão do projeto aberto.
 - A nova previsão de **recebimento** é a data da parcela no **Fluxo de caixa** do projeto (a reimportação do CRM não apaga). Já faturado: muda o vencimento do título a receber (precisa de “Editar título” no Financeiro). ↺ volta à inicial.
 - PV/OS antigos do Omie aparecem com as datas do Omie; o Omie nunca é alterado.
 
