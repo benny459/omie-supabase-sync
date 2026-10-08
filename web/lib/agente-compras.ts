@@ -48,13 +48,17 @@ export async function itensDoProjeto(empresa: string, codigo: number, prazos: Ma
     .select("id, item, qtd, un, cat_valor_unit, cat_fornecedor, data_necessaria, pc_numero, pc_item_id, cat_entrega_dias, cat_codigo")
     .eq("empresa", empresa).eq("codigo_projeto", codigo);
   if (error) throw new Error(error.message);
+  // prazo ajustado no item (sql/141): à parte, para seguir funcionando sem a migração
+  const man = await supaAdmin().schema("approval").from("rc_projetos_itens").select("id, prazo_dias_manual")
+    .eq("empresa", empresa).eq("codigo_projeto", codigo).not("prazo_dias_manual", "is", null);
+  const prazoMan = new Map(((man.error ? [] : man.data ?? []) as { id: string; prazo_dias_manual: number }[]).map((x) => [x.id, x.prazo_dias_manual]));
   return ((data ?? []) as Linha[]).map((l) => {
     const temPc = !!String(l.pc_numero ?? "").trim() || l.pc_item_id != null;
     const fornecedor = l.cat_fornecedor ? deHtml(l.cat_fornecedor) : null;
     return {
       id: l.id, item: l.item, qtd: Number(l.qtd) || 0, un: l.un ?? "", vu: Number(l.cat_valor_unit) || 0, fornecedor,
       necessario: l.data_necessaria ? String(l.data_necessaria).slice(0, 10) : null, temPc,
-      plano: planejarItem({ necessario: l.data_necessaria, temPc, prazoItem: l.cat_entrega_dias, fornecedor, prazos, hoje }),
+      plano: planejarItem({ necessario: l.data_necessaria, temPc, prazoItem: l.cat_entrega_dias, prazoManualItem: prazoMan.get(l.id) ?? null, fornecedor, prazos, hoje }),
     };
   });
 }

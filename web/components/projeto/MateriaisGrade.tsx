@@ -53,7 +53,7 @@ import { normGrupo, dataDoGrupo, aplicarDataGrupo, nomePadrao } from "@/lib/grup
 import { estadoPc, dicaEstadoPc, LEGENDA_SITUACAO } from "@/lib/situacao-pc";
 import { sinalEntrega, FOLGA_ENTREGA_DIAS, type SinalEntrega } from "@/lib/sinal-entrega";
 import { textoCasar, SUG_MIN } from "@/lib/texto-casar";
-import { planejarItem, prazoEfetivo, normFornecedor, type PrazoFornecedor, type PlanoItem } from "@/lib/planejamento-compras";
+import { planejarItem, prazoEfetivo, prazoAuto, normFornecedor, ROTULO_FONTE, type PrazoFornecedor, type PlanoItem, type FontePrazo } from "@/lib/planejamento-compras";
 import PlanejamentoCompras, { resumoPlano, type ItemPlano } from "./PlanejamentoCompras";
 import PrazosFornecedorModal from "./PrazosFornecedorModal";
 import AgenteCompras from "./AgenteCompras";
@@ -164,6 +164,116 @@ const chaveItem = (eq: string, item: string) =>
   `${String(eq || "Geral").trim().toLowerCase()}|${String(item).trim().toLowerCase()}`;
 
 type ItemCpBase = { equipamento: string; item: string; qtd: number | null; modelo: string | null; custo_cp: number | null };
+
+/** Grupo da linha na grade: com item, o equipamento; linha em branco criada num grupo ("+ linha",
+ *  "inserir linha abaixo", "+ equipamento") guarda o grupo em `_grp` e fica dentro dele. */
+const grupoDe = (l: LinhaGrade): string | null =>
+  (String(l.item ?? "").trim() ? normGrupo(l.equipamento || "Geral") : (l._grp || null));
+const emBranco = (l: LinhaGrade) => !String(l.item ?? "").trim() && !String(l.cat_codigo ?? "").trim();
+
+/** Colunas que não dá para esconder (08/10/26) e o nome de cada uma no menu "Colunas ▾". */
+const COLUNAS_FIXAS = new Set(["item", "qtd"]);
+const ROTULO_COLUNA: Record<string, string> = {
+  _orig: "Origem (RC)", equipamento: "Equipamento", cat_codigo: "Código", un: "Un", data_necessaria: "Necessário em",
+  cat_valor_unit: "Valor unit.", _prazo: "Prazo (dias)", _comprar: "Comprar até", _cheg: "Chegada prev.", _ent: "Sinal ✓/⚠/✕",
+  _proj: "Projetado", _pc: "PC", _sit: "Situação", _forn: "Fornecedor", _comprado: "Comprado (PC)", _delta: "Δ", _obs: "💬 Comentários",
+};
+/** Tamanho da letra da grade (A− / A / A+ / A++). */
+const ESCALAS = [0.88, 1, 1.12, 1.25];
+const CHAVE_COLUNAS = "painel.materiais.colunasOcultas";
+const CHAVE_ESCALA = "painel.materiais.escala";
+
+/** "Importar planilha (.xlsx/.csv)" (08/10/26): o arquivo vira o mesmo texto que o colar do Excel
+ *  lê (TAB entre colunas). Aba "Lista" (a do modelo) se existir; senão a primeira. Data que vem
+ *  como número de série do Excel é convertida pelo leitor do colar (lib/colar-grade). */
+async function lerPlanilha(f: File): Promise<string> {
+  const buf = await f.arrayBuffer();
+  const daGrade = (wb: XLSX.WorkBook) => {
+    const nome = wb.SheetNames.find((n) => /^lista/i.test(n.trim())) ?? wb.SheetNames[0];
+    const rows = XLSX.utils.sheet_to_json<unknown[]>(wb.Sheets[nome], { header: 1, raw: true, blankrows: false, defval: "" });
+    return rows.map((r) => r.map((v) => (v == null ? "" : String(v).replace(/[\t\r\n]+/g, " "))).join("\t")).join("\n");
+  };
+  if (/\.(csv|txt)$/i.test(f.name)) {
+    const t = new TextDecoder("utf-8").decode(buf).replace(/^\uFEFF/, "");
+    const l1 = t.split(/\r?\n/)[0] ?? "";
+    if (l1.includes("\t") || l1.includes(";")) return t;
+    return daGrade(XLSX.read(t, { type: "string", raw: true }));
+  }
+  return daGrade(XLSX.read(buf, { type: "array" }));
+}
+
+const dm = (iso: string | null | undefined) => (iso ? new Date(iso).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" }) : "");
+const ETIQUETA_FONTE: Record<FontePrazo, { t: string; cls: string }> = {
+  item_manual: { t: "ajust.", cls: "text-amber-700 dark:text-amber-300 font-semibold" },
+  manual: { t: "forn. manual", cls: "text-sky-700 dark:text-sky-300" },
+  item: { t: "item", cls: "text-ww-textMuted" },
+  historico: { t: "histórico", cls: "text-ww-textMuted" },
+  estimado: { t: "estimado", cls: "text-ww-textFaint italic" },
+};
+
+/** Célula "Prazo (dias)" (08/10/26): o prazo usado no "Comprar até", com a origem. O compras ajusta
+ *  por item (sql/141): a célula ajustada fica com borda âmbar, o automático riscado ("21d → 10d"),
+ *  quem/quando na dica e ↺ para voltar ao automático. Vazio ou igual ao automático = volta também. */
+function CelPrazo({ efetivo, auto, man, por, em, editavel, bloqueio, onSalvar }: {
+  efetivo: { prazo: number; fonte: FontePrazo }; auto: { prazo: number; fonte: FontePrazo };
+  man: boolean; por?: string; em?: string; editavel: boolean; bloqueio?: string; onSalvar: (v: number | null) => void;
+}) {
+  const [ed, setEd] = useState<string | null>(null);
+  const confirmar = () => {
+    if (ed == null) return;
+    const t = ed.trim(); setEd(null);
+    if (t === "") { if (man) onSalvar(null); return; }
+    const n = Math.round(Number(t.replace(",", ".")));
+    if (!Number.isFinite(n) || n < 0 || n > 365) return;
+    if (n === auto.prazo) { if (man) onSalvar(null); return; }
+    if (man && n === efetivo.prazo) return;
+    onSalvar(n);
+  };
+  if (ed != null) return (
+    <input autoFocus type="number" min={0} max={365} value={ed} data-prazo-input
+      onChange={(e) => setEd(e.target.value)} onBlur={confirmar}
+      onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); confirmar(); } else if (e.key === "Escape") setEd(null); }}
+      title="Dias de entrega só deste item · Enter grava · Esc cancela · vazio volta ao automático"
+      className="w-full rounded border border-ww-accent bg-ww-accentSoft px-1 py-0.5 text-right text-[12px] tabular-nums text-ww-text outline-none" />);
+  const tag = ETIQUETA_FONTE[efetivo.fonte];
+  const dica = man
+    ? `Prazo ajustado neste item: ${efetivo.prazo} dias${por ? ` — alterado por ${por.split("@")[0]}${em ? ` em ${dm(em)}` : ""}` : ""}\nAutomático: ${auto.prazo} dias (${ROTULO_FONTE[auto.fonte]})${editavel ? "\nClique para mudar · ↺ volta ao automático" : ""}`
+    : `Prazo considerado: ${efetivo.prazo} dias — ${ROTULO_FONTE[efetivo.fonte]}${editavel ? "\nClique para ajustar só este item" : bloqueio ? `\n${bloqueio}` : ""}`;
+  return (
+    <span className={`inline-flex items-center gap-1 max-w-full leading-tight ${man ? "rounded-md border border-amber-500/80 bg-amber-500/10 px-1 py-px" : ""}`}
+      data-prazo={man ? "alterado" : efetivo.fonte} title={dica}>
+      <span role={editavel ? "button" : undefined} tabIndex={editavel ? 0 : undefined}
+        onClick={editavel ? () => setEd(String(efetivo.prazo)) : undefined}
+        onKeyDown={editavel ? (e) => { if (e.key === "Enter") setEd(String(efetivo.prazo)); } : undefined}
+        className={`min-w-0 text-[11px] ${editavel ? "cursor-pointer hover:underline decoration-dotted underline-offset-2" : ""}`}>
+        <b className={`tabular-nums ${man ? "text-amber-800 dark:text-amber-200" : "text-ww-text"}`}>{efetivo.prazo}d</b>
+        <br />{man && <s className="text-[9.5px] text-ww-textFaint tabular-nums mr-1" title={`automático: ${auto.prazo}d`}>{auto.prazo}d</s>}<small className={`text-[9.5px] ${tag.cls}`}>{tag.t}</small>
+      </span>
+      {man && editavel && (
+        <button type="button" data-prazo-reverter onClick={(e) => { e.stopPropagation(); onSalvar(null); }}
+          title={`Voltar ao automático (${auto.prazo}d, ${ROTULO_FONTE[auto.fonte]})`}
+          className="shrink-0 text-[12px] leading-none text-amber-700 dark:text-amber-300 hover:text-ww-accent">↺</button>)}
+    </span>);
+}
+
+/** Fim de cada grupo na grade (08/10/26): "+ linha" e "+ [3] linhas" inserem linhas em branco
+ *  NO grupo, com o foco na primeira; e a dica do colar. */
+function RodapeGrupo({ onInserir }: { onInserir: (n: number) => void }) {
+  const [n, setN] = useState(3);
+  return (<>
+    <button type="button" data-mais-linha onClick={() => onInserir(1)} className="text-ww-accent hover:underline font-semibold">＋ linha</button>
+    <span className="text-ww-textFaint">·</span>
+    <span className="inline-flex items-center gap-1">
+      <button type="button" data-mais-linhas onClick={() => onInserir(n)} className="text-ww-accent hover:underline font-semibold">＋</button>
+      <input type="number" min={1} max={50} value={n} data-qtd-linhas aria-label="quantas linhas"
+        onChange={(e) => setN(Math.max(1, Math.min(50, Number(e.target.value) || 1)))}
+        onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); onInserir(n); } }}
+        className="w-10 rounded border border-ww-border bg-transparent px-1 py-0 text-right text-[11px] text-ww-text" />
+      <button type="button" onClick={() => onInserir(n)} className="text-ww-accent hover:underline font-semibold">linhas</button>
+    </span>
+    <span className="text-ww-textFaint">· ou cole do Excel numa linha em branco (Ctrl+V) — entra neste grupo</span>
+  </>);
+}
 type GruposMeta = { cadastro: string[] | null; cores?: Record<string, string> | null; emUso: { nome: string; projetos: number }[];
   prazo: { data: string | null; fonte: string | null; grupos: string[] } };
 type Seletor = { alvo: "cp"; k: number } | { alvo: "lista"; id: string };
@@ -200,7 +310,7 @@ export default function MateriaisGrade({
   const [filtroPcNum, setFiltroPcNum] = useState<string | null>(null);
   /** Filtros da lista (spec B.5 v3): Todos · Sem código · Sem PC · Atrasados/em risco ("Com sugestão"
    *  saiu: a coluna "Compatibilizar com o estoque" resolve isso). */
-  const [filtroPc, setFiltroPc] = useState<"todas" | "sem_cod" | "sem_pc" | "risco">("todas");
+  const [filtroPc, setFiltroPc] = useState<"todas" | "sem_cod" | "sem_pc" | "risco" | "prazo">("todas");
   /** Rascunho não salvo encontrado neste navegador ao abrir (ms de quando foi feito). */
   const [rascunhoDe, setRascunhoDe] = useState<number | null>(null);
   const chaveRascunho = `painel.materiais.rascunho.${empresa}.${codigoProjeto}`;
@@ -316,6 +426,37 @@ export default function MateriaisGrade({
   }, [empresa]);
   useEffect(() => { void carregarPrazos(); }, [carregarPrazos]);
 
+  /* Prazo ajustado POR ITEM (08/10/26 — sql/141). `pode` = acesso a Compras (o mesmo do ⏱ por
+     fornecedor); `ativo` = migração aplicada. Sem ela, a célula só mostra o prazo. */
+  const [prazoCfg, setPrazoCfg] = useState<{ pode: boolean; ativo: boolean } | null>(null);
+  useEffect(() => {
+    fetch("/api/rc-projetos/prazo", { cache: "no-store" }).then((x) => x.json())
+      .then((j: { pode?: boolean; ativo?: boolean }) => setPrazoCfg({ pode: !!j.pode, ativo: !!j.ativo }))
+      .catch(() => setPrazoCfg({ pode: false, ativo: false }));
+  }, []);
+  const prazoDe = useCallback((l: Record<string, string>) => {
+    const base = { prazoItem: l.cat_entrega_dias ? Number(l.cat_entrega_dias) : null, fornecedor: l.cat_fornecedor, prazos };
+    return { efetivo: prazoEfetivo({ ...base, prazoManualItem: l._prazo_man }), auto: prazoAuto(base) };
+  }, [prazos]);
+  const salvarPrazo = useCallback(async (id: string, v: number | null) => {
+    const antes = linhasRef.current.find((l) => l._id === id);
+    if (!antes || !id.startsWith("db")) return;
+    const volta = (l: LinhaGrade) => ({ ...l, _prazo_man: antes._prazo_man ?? "", _prazo_por: antes._prazo_por ?? "", _prazo_em: antes._prazo_em ?? "" });
+    // reflete na hora (comprar até, sinal, planejamento); o servidor confirma quem e quando
+    setLinhas((ls) => ls.map((l) => (l._id === id ? { ...l, _prazo_man: v == null ? "" : String(v), _prazo_por: v == null ? "" : "você", _prazo_em: v == null ? "" : new Date().toISOString() } : l)));
+    try {
+      const r = await fetch("/api/rc-projetos/prazo", { method: "PUT", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ empresa, codigo_projeto: codigoProjeto, id: id.slice(2), prazo_dias: v }) });
+      const j = (await r.json().catch(() => ({}))) as { error?: string; prazo_dias_manual?: number | null; prazo_por?: string | null; prazo_em?: string | null };
+      if (!r.ok) throw new Error(j.error ?? r.statusText);
+      setLinhas((ls) => ls.map((l) => (l._id === id ? { ...l, _prazo_man: j.prazo_dias_manual == null ? "" : String(j.prazo_dias_manual), _prazo_por: j.prazo_por ?? "", _prazo_em: j.prazo_em ?? "" } : l)));
+      setAviso(v == null ? "Prazo do item voltou ao automático — comprar até recalculado." : `Prazo do item ajustado para ${v} dias — comprar até recalculado.`);
+    } catch (e) {
+      setLinhas((ls) => ls.map((l) => (l._id === id ? volta(l) : l)));
+      setErro(`Não consegui gravar o prazo do item: ${(e as Error).message}`);
+    }
+  }, [empresa, codigoProjeto]);
+
   /** Sinal de entrega de cada linha: a compra chega a tempo do "Necessário em"? (07/10/26) */
   const sinais = useMemo(() => {
     const m = new Map<string, SinalEntrega | null>();
@@ -329,7 +470,8 @@ export default function MateriaisGrade({
         recebidoEm: p?.dt_rec ?? null, recebido: !!p && ((Number(p.qtd_recebida) || 0) > 0 || p.etapa === "60" || p.etapa === "80"),
         temPc: !!c?.pcs.length, previsaoPc: p?.previsao ?? null,
         // sem PC: hoje + prazo EFETIVO (manual do fornecedor → item → histórico → 15d, spec E)
-        prazoDias: prazoEfetivo({ prazoItem: l.cat_entrega_dias ? Number(l.cat_entrega_dias) : null, fornecedor: l.cat_fornecedor, prazos }).prazo,
+        ...(() => { const e = prazoEfetivo({ prazoItem: l.cat_entrega_dias ? Number(l.cat_entrega_dias) : null, prazoManualItem: l._prazo_man, fornecedor: l.cat_fornecedor, prazos });
+          return { prazoDias: e.prazo, prazoFonte: ROTULO_FONTE[e.fonte] }; })(),
       }));
     }
     return m;
@@ -449,7 +591,7 @@ export default function MateriaisGrade({
      tudo numa linha só, com reticências, e as colunas até o Item presas ao rolar. */
   const planoDaLinha = useCallback((l: Record<string, string>) => (String(l.item ?? "").trim()
     ? planejarItem({ necessario: l.data_necessaria || null, temPc: !!cmpPorId.get(l._id)?.pcs.length || !!String(l.pc_numero ?? "").trim(),
-        prazoItem: l.cat_entrega_dias ? Number(l.cat_entrega_dias) : null, fornecedor: l.cat_fornecedor, prazos })
+        prazoItem: l.cat_entrega_dias ? Number(l.cat_entrega_dias) : null, prazoManualItem: l._prazo_man, fornecedor: l.cat_fornecedor, prazos })
     : null), [cmpPorId, prazos]);
   const COLS: ColunaGrade[] = useMemo(() => [
     // Origem da linha: selo "RC" (veio da RC) — vazio = item novo, digitado na lista.
@@ -517,6 +659,8 @@ export default function MateriaisGrade({
       // Casado: mostra a descrição do item do catálogo; o texto original (que é a
       // chave da linha e do de-para) volta ao editar e fica na dica.
       exibir: (l) => (l.cat_ncod_prod && l._match !== "omie" && l._cat_desc ? l._cat_desc : null),
+      // linha em branco: a dica de que dá para colar do Excel ali (entra no grupo da linha)
+      placeholder: (l) => (String(l.item ?? "").trim() ? undefined : "digite ou cole do Excel aqui (Ctrl+V)"),
       dica: (l) => [l._cat_desc && l._cat_desc !== l.item ? `Texto original: ${l.item}` : l.item, l.modelo ? `Modelo: ${l.modelo}` : ""].filter(Boolean).join(" · ") || undefined,
       limpaAoEditar: CAT_CAMPOS,
       autocompletar: {
@@ -553,19 +697,34 @@ export default function MateriaisGrade({
         return { etiqueta: f === "pc" ? "PC" : f === "CP" ? "RC" : "cat.",
           dica: f === "pc" ? "Preço unitário da linha do pedido de compra" : f === "CP" ? "Custo da RC (composição de preço da proposta) — sem compra anterior" : "Último preço pago (catálogo)" };
       } },
+    /* Prazo (dias) (08/10/26, Benny: "marcar o prazo médio considerado em dias de chegada dos itens
+       da lista … deixar o compras alterar e mostrar aonde houve alteração"). É a base do Comprar até. */
+    { key: "_prazo", label: "Prazo (dias)", w: 84,
+      dicaCab: `Prazo (dias) = prazo de entrega considerado para o item — é a base do Comprar até:\nComprar até = Necessário em − Prazo − ${FOLGA_ENTREGA_DIAS} dias de folga.\nDe onde vem: ajustado no item (borda âmbar; ↺ volta ao automático) › fornecedor (⏱ Prazos por fornecedor) › item no catálogo › histórico do fornecedor › 15 dias (estimado).${prazoCfg?.pode && prazoCfg.ativo ? "\nClique na célula para ajustar só aquele item." : ""}`,
+      render: (l) => {
+        if (!String(l.item ?? "").trim()) return null;
+        const { efetivo, auto } = prazoDe(l);
+        const man = String(l._prazo_man ?? "").trim() !== "";
+        const db = l._id.startsWith("db");
+        const bloqueio = !prazoCfg ? undefined : !prazoCfg.ativo ? "Ajuste por item aguarda a migração sql/141"
+          : !prazoCfg.pode ? "Só quem tem acesso a Compras ajusta o prazo" : !db ? "Salve a linha (em instantes) para ajustar o prazo" : undefined;
+        return <CelPrazo efetivo={efetivo} auto={auto} man={man} por={l._prazo_por} em={l._prazo_em}
+          editavel={!!prazoCfg?.pode && prazoCfg.ativo && db} bloqueio={bloqueio} onSalvar={(v) => void salvarPrazo(l._id, v)} />;
+      } },
     /* Comprar até (08/10/26, spec E): necessário em − prazo efetivo − folga. Sem PC: ✕ atrasado,
        ⚠ comprar agora (até 7 dias), ✓ em N dias. Com PC vale o sinal de entrega do PC. */
     { key: "_comprar", label: "Comprar até", w: 96,
-      dicaCab: `Comprar até = necessário em − prazo do fornecedor − ${FOLGA_ENTREGA_DIAS} dias de folga. Prazo: o ajustado em ⏱ Prazos por fornecedor, senão o do item no catálogo, senão o histórico do fornecedor, senão 15 dias (estimado).`,
+      dicaCab: `Comprar até = Necessário em − Prazo (dias, a coluna ao lado) − ${FOLGA_ENTREGA_DIAS} dias de folga. Prazo: o ajustado no item, senão o de ⏱ Prazos por fornecedor, senão o do item no catálogo, senão o histórico do fornecedor, senão 15 dias (estimado).`,
       dica: (l) => {
         const pl = planoDaLinha(l);
         if (!pl || !pl.comprarAte) return undefined;
-        const fonte = pl.fonte === "manual" ? "ajustado para o fornecedor" : pl.fonte === "item" ? "do item (catálogo)" : pl.fonte === "historico" ? "histórico do fornecedor" : "estimado (sem fornecedor/histórico)";
-        return `prazo ${pl.prazo}d — ${fonte} · folga ${FOLGA_ENTREGA_DIAS}d${pl.prazo > 60 && pl.fonte !== "manual" ? " · ⚠ prazo alto — confira em ⏱ Prazos por fornecedor" : ""}`;
+        const fonte = ROTULO_FONTE[pl.fonte];
+        return `${dia(l.data_necessaria)} − ${pl.prazo}d (${fonte}) − ${FOLGA_ENTREGA_DIAS}d de folga = ${dia(pl.comprarAte)}${pl.prazo > 60 && pl.fonte !== "manual" && pl.fonte !== "item_manual" ? " · ⚠ prazo alto — confira" : ""}`;
       },
       render: (l) => {
         const pl = planoDaLinha(l);
-        if (!pl || !pl.comprarAte || pl.status === "compc") return <span className="text-ww-textFaint">—</span>;
+        if (!pl) return null;
+        if (!pl.comprarAte || pl.status === "compc") return <span className="text-ww-textFaint">—</span>;
         const cls = pl.status === "atrasado" ? "text-rose-600 dark:text-rose-400" : pl.status === "agora" ? "text-amber-700 dark:text-amber-300" : "text-emerald-700 dark:text-emerald-400";
         return <span className="text-[11px] leading-tight"><b className="tabular-nums text-ww-text">{dia(pl.comprarAte)}</b><br /><small className={cls}>{pl.texto}{pl.estimado ? " · est." : ""}</small></span>;
       } },
@@ -717,7 +876,7 @@ export default function MateriaisGrade({
             💬{n > 0 && <span className="absolute -top-1.5 -right-2 min-w-[14px] px-0.5 rounded-full bg-ww-accent text-white text-[9px] font-bold leading-[14px] text-center">{n}</span>}
           </button>);
       } },
-  ], [empresa, cmp, cmpPorId, nomesPadrao, gruposMeta, abrirSeletorLista, PC, conversa, sinais, origemCp, cpNaoUsados, planoDaLinha]);
+  ], [empresa, cmp, cmpPorId, nomesPadrao, gruposMeta, abrirSeletorLista, PC, conversa, sinais, origemCp, cpNaoUsados, planoDaLinha, prazoDe, prazoCfg, salvarPrazo]);
 
   /** A leitura inicial funcionou?
    *
@@ -737,7 +896,7 @@ export default function MateriaisGrade({
       const supa = supaBrowser();
       const approval = supa.schema("approval" as never);
       // a sugestão gravada (sql/127) vem da tabela, em paralelo — sem a migração, segue sem ela
-      const [itens, sugs] = await Promise.all([
+      const [itens, sugs, prazosMan] = await Promise.all([
         approval.from("v_rc_projetos_itens")
           .select("id, equipamento, item, qtd, modelo, observacao, pc_numero, nome_fornecedor, dt_previsao, nova_prev_materiais, mt_data_recebimento_nf, pc_etapa_texto, cat_ncod_prod, cat_codigo, cat_valor_unit, cat_fornecedor, cat_entrega_dias, cat_fat_dias, un, data_necessaria")
           .eq("empresa", empresa).eq("codigo_projeto", codigoProjeto)
@@ -745,8 +904,13 @@ export default function MateriaisGrade({
         approval.from("rc_projetos_itens")
           .select("id, sug_ncod_prod, sug_codigo, sug_descricao, sug_fornecedor, sug_score, sug_status")
           .eq("empresa", empresa).eq("codigo_projeto", codigoProjeto).not("sug_status", "is", null),
+        // prazo ajustado no item (sql/141) — à parte também: sem a migração, segue sem ele
+        approval.from("rc_projetos_itens")
+          .select("id, prazo_dias_manual, prazo_por, prazo_em")
+          .eq("empresa", empresa).eq("codigo_projeto", codigoProjeto).not("prazo_dias_manual", "is", null),
       ]);
       const sugPorId = new Map(((sugs.error ? [] : sugs.data ?? []) as SugRow[]).map((x) => [x.id, x]));
+      const prazoPorId = new Map(((prazosMan.error ? [] : prazosMan.data ?? []) as { id: string; prazo_dias_manual: number; prazo_por: string | null; prazo_em: string | null }[]).map((x) => [x.id, x]));
       // Sem marcar a carga como OK, a tela fica indistinguível de "projeto
       // vazio" — e foi assim que salvar por cima apagou lista alheia.
       if (itens.error) { setErro(itens.error.message); setCarregouOk(false); return; }
@@ -786,6 +950,7 @@ export default function MateriaisGrade({
           cat_valor_unit: moeda(r.cat_valor_unit), cat_fornecedor: deHtml(s(r.cat_fornecedor)),
           cat_entrega_dias: s(r.cat_entrega_dias), cat_fat_dias: s(r.cat_fat_dias),
           _match: r.cat_ncod_prod ? "ok" : "", _alts: "", _vu_fonte: "",
+          _prazo_man: s(prazoPorId.get(r.id)?.prazo_dias_manual), _prazo_por: s(prazoPorId.get(r.id)?.prazo_por), _prazo_em: s(prazoPorId.get(r.id)?.prazo_em),
           ...gravada, ...omiePend, ...manter,
         }); }) as LinhaGrade[],
         vazia(),
@@ -918,7 +1083,7 @@ export default function MateriaisGrade({
   const planos = useMemo(() => {
     const m = new Map<string, PlanoItem>();
     for (const l of validas) m.set(l._id, planejarItem({ necessario: l.data_necessaria || null, temPc: temPc(l),
-      prazoItem: l.cat_entrega_dias ? Number(l.cat_entrega_dias) : null, fornecedor: l.cat_fornecedor, prazos }));
+      prazoItem: l.cat_entrega_dias ? Number(l.cat_entrega_dias) : null, prazoManualItem: l._prazo_man, fornecedor: l.cat_fornecedor, prazos }));
     return m;
   }, [validas, temPc, prazos]);
   const itensPlano: ItemPlano[] = useMemo(() => validas.map((l) => ({
@@ -938,7 +1103,9 @@ export default function MateriaisGrade({
   }, [sinais, planoDaLinha]);
   const visiveis = useMemo(() => {
     const vis = linhas.filter((l) => {
-      if (!l.item?.trim()) return true; // a linha em branco do fim fica sempre
+      // linha em branco fica sempre (a de um grupo, só quando o grupo está à vista)
+      if (!l.item?.trim()) return !(equipFiltro && l._grp && l._grp !== equipFiltro);
+      if (filtroPc === "prazo" && !String(l._prazo_man ?? "").trim()) return false;
       if (equipFiltro && normGrupo(l.equipamento || "Geral") !== equipFiltro) return false;
       if (filtroPc === "sem_pc" && temPc(l)) return false;
       if (filtroPcNum && !cmpPorId.get(l._id)?.pcs.some((p) => p.pc === filtroPcNum)) return false;
@@ -950,8 +1117,8 @@ export default function MateriaisGrade({
        própria grade). Ordem dos grupos = a da 1ª aparição; dentro do grupo, a ordem de sempre;
        a linha em branco fica no fim. */
     const ordem = new Map<string, number>();
-    for (const l of vis) if (l.item?.trim()) { const k = normGrupo(l.equipamento || "Geral"); if (!ordem.has(k)) ordem.set(k, ordem.size); }
-    const pos = (l: LinhaGrade) => (l.item?.trim() ? ordem.get(normGrupo(l.equipamento || "Geral"))! : Number.MAX_SAFE_INTEGER);
+    for (const l of vis) { const k = grupoDe(l); if (k != null && !ordem.has(k)) ordem.set(k, ordem.size); }
+    const pos = (l: LinhaGrade) => { const k = grupoDe(l); return k != null ? ordem.get(k)! : Number.MAX_SAFE_INTEGER; };
     return vis.map((l, i) => ({ l, i })).sort((a, b) => pos(a.l) - pos(b.l) || a.i - b.i).map((x) => x.l);
   }, [linhas, equipFiltro, filtroPc, temPc, emRisco, filtroPcNum, cmpPorId]);
 
@@ -1092,7 +1259,7 @@ export default function MateriaisGrade({
     const alvo = new Set(ids);
     const sai = linhas.filter((l) => alvo.has(l._id) && String(l.item ?? "").trim());
     const resto = linhas.filter((l) => !alvo.has(l._id));
-    if (!resto.some((l) => !String(l.item ?? "").trim())) resto.push(vazia());
+    if (!resto.some((l) => !String(l.item ?? "").trim() && !l._grp)) resto.push(vazia());
     setLinhas(resto);
     setMarcadas((p) => { const n = new Set(p); for (const id of ids) n.delete(id); return n; });
     if (!sai.length) return;
@@ -1571,6 +1738,8 @@ export default function MateriaisGrade({
         Total: num(l.qtd) * num(l.cat_valor_unit) || "",
         "Código": l.cat_codigo, "Fornecedor sugerido": l.cat_fornecedor,
         "Entrega (d)": l.cat_entrega_dias, "Fatura (d)": l.cat_fat_dias,
+        "Prazo (d)": prazoDe(l).efetivo.prazo, "Prazo — origem": ROTULO_FONTE[prazoDe(l).efetivo.fonte],
+        "Comprar até": planoDaLinha(l)?.comprarAte ?? "",
         Origem: origemCp(l) ?? "novo", PC: c?.pcs.map((p) => p.pc).join(", ") || l.pc_numero,
         Fornecedor: c?.pcs.map((p) => p.fornecedor).filter(Boolean).join(", ") || l._fornecedor,
         Comprado: c?.valor_pc ?? "",
@@ -1580,7 +1749,7 @@ export default function MateriaisGrade({
     });
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(dados), "Materiais");
     XLSX.writeFile(wb, `materiais-projeto-${codigoProjeto}.xlsx`);
-  }, [validas, codigoProjeto, cmpPorId, conversa]);
+  }, [validas, codigoProjeto, cmpPorId, conversa, prazoDe, planoDaLinha]);
 
   const alternar = useCallback((id: string, _i: number, _shift: boolean) => {
     setMarcadas((p) => { const n = new Set(p); if (n.has(id)) n.delete(id); else n.add(id); return n; });
@@ -1627,6 +1796,7 @@ export default function MateriaisGrade({
   const nComPc = validas.filter(temPc).length;
   const nSemCod = validas.filter(semCodigoNosso).length;
   const nCod = validas.length - nSemCod;
+  const nPrazoAlt = validas.filter((l) => String(l._prazo_man ?? "").trim() !== "").length;
   const riscoGrupo = (k: string) => {
     const ls = validas.filter((l) => normGrupo(l.equipamento || "Geral") === k);
     return { risco: ls.filter((l) => sinais.get(l._id)?.nivel === "risco").length, atraso: ls.filter((l) => sinais.get(l._id)?.nivel === "atrasado").length };
@@ -1660,6 +1830,31 @@ export default function MateriaisGrade({
 
   // ── "+ equipamento" e "mover para equipamento" (spec B.2 / B.4 v3) ─────────
   const [novoGrupo, setNovoGrupo] = useState<{ nome: string; data: string } | null>(null);
+  /** Foco na célula Item de uma linha (pelo id — o índice muda com o agrupamento). */
+  const focarLinha = (id: string) => {
+    const el = document.querySelector<HTMLInputElement>(`input[data-lid="${id}"][data-col="item"]`);
+    el?.focus(); el?.scrollIntoView({ block: "nearest" });
+  };
+  /** "+ linha", "+ [N] linhas" (fim do grupo) e "inserir linha abaixo" (08/10/26): N linhas em branco
+   *  DENTRO do grupo — com o nome e a data do grupo —, no fim dele ou logo abaixo de `depoisDe`.
+   *  Linha em branco não vai para o banco: só conta quando ganha item. */
+  const inserirLinhas = useCallback((k: string, n: number, depoisDe?: string) => {
+    const qtd = Math.max(1, Math.min(50, Math.round(n) || 1));
+    const atual = linhasRef.current;
+    const nome = grupos.find((g) => g.k === k)?.nome ?? gruposNovos.find((g) => g.k === k)?.nome
+      ?? atual.find((l) => grupoDe(l) === k)?.equipamento ?? "Geral";
+    const data = dataGrupoRef.current.get(k) ?? gruposNovos.find((g) => g.k === k)?.data ?? "";
+    const novas = Array.from({ length: qtd }, () => ({ ...vazia(), equipamento: nome, data_necessaria: data || "", _grp: k }) as LinhaGrade);
+    setLinhas((ls) => {
+      let pos = depoisDe ? ls.findIndex((l) => l._id === depoisDe) : -1;
+      if (pos < 0) for (let i = ls.length - 1; i >= 0; i--) if (grupoDe(ls[i]) === k) { pos = i; break; }
+      if (pos < 0) pos = Math.max(-1, ls.length - 2);
+      const out = [...ls];
+      out.splice(pos + 1, 0, ...novas);
+      return out;
+    });
+    setTimeout(() => focarLinha(novas[0]._id), 80);
+  }, [grupos, gruposNovos]);
   const criarGrupo = useCallback(() => {
     if (!novoGrupo) return;
     const nome = novoGrupo.nome.trim().replace(/\s+/g, " ");
@@ -1675,10 +1870,11 @@ export default function MateriaisGrade({
     } else {
       // grupo novo sem itens: aparece como chip e ganha uma linha vazia, pronta para digitar
       setGruposNovos((gs) => (gs.some((g) => g.k === k) ? gs : [...gs, { k, nome, data: data || null }]));
-      setLinhas((ls) => [{ ...vazia(), equipamento: nome, data_necessaria: data } as LinhaGrade, ...ls]);
-      setAviso(`Equipamento "${nome}" criado — digite os itens na linha nova (ou use + Adicionar itens).`);
-      // as linhas em branco ficam no fim da grade: a nova é a penúltima (a última é a vazia de sempre)
-      setTimeout(() => { const cs = [...document.querySelectorAll<HTMLInputElement>('[data-cel$="-2"]')]; cs[cs.length - 2]?.focus(); }, 150);
+      // grupo novo sem itens: uma linha em branco DENTRO dele (com `_grp`), antes da linha vazia do fim
+      const nova = { ...vazia(), equipamento: nome, data_necessaria: data, _grp: k } as LinhaGrade;
+      setLinhas((ls) => { const out = [...ls]; const ult = out.length && emBranco(out[out.length - 1]) && !out[out.length - 1]._grp ? out.length - 1 : out.length; out.splice(ult, 0, nova); return out; });
+      setAviso(`Equipamento "${nome}" criado — digite ou cole do Excel na linha nova (ou use ＋ linhas no fim do grupo).`);
+      setTimeout(() => focarLinha(nova._id), 150);
     }
     setFiltroPc("todas"); setEquipFiltro(k); setNovoGrupo(null);
   }, [novoGrupo, marcadas]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -1770,7 +1966,7 @@ export default function MateriaisGrade({
   const SEL = "max-w-[230px] min-w-0 rounded-md border border-amber-500/50 bg-[rgb(var(--color-ww-panel))] px-1 py-0.5 text-[11px] text-ww-text";
   const BT = "shrink-0 w-[22px] h-[22px] rounded-md border border-ww-border text-[12px] leading-none";
   const colunaSug: ColunaGrade = useMemo(() => ({
-    key: "_compat", label: "Compatibilizar com o estoque", w: 372, fixa: true,
+    key: "_compat", label: "Compatibilizar com o estoque", w: 320, fixa: true,
     classe: "border-x border-dashed border-amber-500/50",
     fundo: "color-mix(in srgb, rgb(var(--color-ww-panel)) 87%, #f5b547)",
     dicaCab: "Coluna provisória: aparece sozinha quando há item sem código do nosso estoque e some quando todos estão resolvidos. ✓ aceita o item selecionado (ensina o de-para) · ✕ = não é item nosso.",
@@ -1830,11 +2026,28 @@ export default function MateriaisGrade({
         </span>);
     },
   }), [colSugManual, aceitarMelhores, altsCod, candidatas, melhorDe, abrirSeletorLista, tirarCodigo, reverRecusa, aceitarEscolhas, recusarSugestao, sugBuscando]); // eslint-disable-line react-hooks/exhaustive-deps
-  const colunasGrade = useMemo(() => {
+  /* Colunas ocultas e tamanho da letra (08/10/26, Benny): por pessoa, neste navegador. Lidos depois
+     de montar (no servidor não há localStorage — evita a tela piscar diferente). */
+  const [ocultas, setOcultas] = useState<Set<string>>(new Set());
+  const [escIdx, setEscIdx] = useState(1);
+  useEffect(() => {
+    try {
+      const c = JSON.parse(window.localStorage.getItem(CHAVE_COLUNAS) ?? "[]");
+      if (Array.isArray(c)) setOcultas(new Set(c.filter((k) => typeof k === "string" && !COLUNAS_FIXAS.has(k))));
+      const bruto = window.localStorage.getItem(CHAVE_ESCALA);
+      const e = bruto == null ? NaN : Number(bruto);
+      if (Number.isInteger(e) && e >= 0 && e < ESCALAS.length) setEscIdx(e);
+    } catch { /* storage bloqueado: padrão */ }
+  }, []);
+  const mudarOcultas = (n: Set<string>) => { setOcultas(n); try { window.localStorage.setItem(CHAVE_COLUNAS, JSON.stringify([...n])); } catch { /* */ } };
+  const mudarEscala = (i: number) => { const v = Math.max(0, Math.min(ESCALAS.length - 1, i)); setEscIdx(v); try { window.localStorage.setItem(CHAVE_ESCALA, String(v)); } catch { /* */ } };
+  /** Todas as colunas (inclusive as ocultas): o colar por posição segue esta ordem. */
+  const colunasTodas = useMemo(() => {
     if (!colSugAberta) return COLS;
     const i = COLS.findIndex((c) => c.key === "cat_codigo");
     return [...COLS.slice(0, i + 1), colunaSug, ...COLS.slice(i + 1)];
   }, [COLS, colSugAberta, colunaSug]);
+  const colunasGrade = useMemo(() => colunasTodas.filter((c) => c.key === "_compat" || !ocultas.has(c.key)), [colunasTodas, ocultas]);
 
   // ── Painel do topo ao vivo e "ver planejamento →" ───────────────────────────
   useEffect(() => {
@@ -1852,9 +2065,21 @@ export default function MateriaisGrade({
 
   /** "+ Adicionar itens ▾" (spec B.2 / D). */
   const [addModal, setAddModal] = useState<"cat" | "colar" | null>(null);
+  /** "Importar planilha": o arquivo lido vira o texto do "Colar do Excel" (mesmo leitor, mesma prévia). */
+  const arquivoRef = useRef<HTMLInputElement>(null);
+  const [importado, setImportado] = useState<{ nome: string; texto: string } | null>(null);
+  const abrirArquivo = useCallback(async (f: File) => {
+    try {
+      const texto = await lerPlanilha(f);
+      if (!texto.trim()) throw new Error("o arquivo está vazio");
+      setImportado({ nome: f.name, texto });
+      setAddModal("colar");
+    } catch (e) { setErro(`Não consegui ler ${f.name}: ${(e as Error).message}`); }
+  }, []);
   const menuAdicionar: { rot: string; sub: string; fn: () => void }[] = [
     { rot: "🔎 Escolher do estoque / catálogo", sub: "busca por código ou descrição, marca vários", fn: () => setAddModal("cat") },
     { rot: "📋 Colar do Excel", sub: "cola 10, 15 linhas de uma vez, com ou sem cabeçalho", fn: () => setAddModal("colar") },
+    { rot: "📄 Importar planilha (.xlsx/.csv)", sub: "lê o arquivo como o colar do Excel e mostra a prévia antes de adicionar", fn: () => arquivoRef.current?.click() },
     { rot: "⬇ Baixar modelo Excel com nossos códigos", sub: "aba Lista para preencher + aba Códigos do estoque (para PROCV)",
       fn: () => { window.location.href = `/api/rc-projetos/modelo?emp=${encodeURIComponent(empresa)}`; } },
   ];
@@ -1869,7 +2094,7 @@ export default function MateriaisGrade({
     });
     setLinhas((ls) => [...ls.filter((l) => String(l.item ?? "").trim()), ...rows, vazia()]);
     setSujo(true);
-    setAddModal(null);
+    setAddModal(null); setImportado(null);
     setSubAba("lista"); setFiltroPc("todas"); setFiltroPcNum(null);
     const semCod = rows.filter((r) => !r.cat_ncod_prod).length;
     const inval = novas.filter((n) => n.codigo_invalido).length;
@@ -1892,10 +2117,11 @@ export default function MateriaisGrade({
     const g = grupos.find((x) => x.k === k);
     const padrao = g && nomesPadrao.length ? nomePadrao(g.nome, nomesPadrao) : null;
     const rg = riscoGrupo(k);
+    const n = ls.filter((l) => String(l.item ?? "").trim()).length;
     return (<>
       <i aria-hidden className="inline-block w-[9px] h-[9px] rounded-full" style={{ background: corGrupo(k) }} />
       <b className="text-ww-text">{g?.nome ?? (ls[0]?.equipamento || "Geral")}</b>
-      <span className="text-ww-textFaint">{ls.length} {ls.length === 1 ? "item" : "itens"}</span>
+      <span className="text-ww-textFaint">{n} {n === 1 ? "item" : "itens"}</span>
       <span className="text-ww-textMuted">· necessário em</span>
       <input type="date" value={g?.data ?? ""} onChange={(e) => definirDataGrupo(k, e.target.value)} data-grupo-data={k}
         title="Muda a data de todos os itens do grupo que herdam (os de data própria ficam)"
@@ -2085,6 +2311,28 @@ export default function MateriaisGrade({
           className={`px-2.5 py-1 text-[12px] rounded-lg border transition ${colSugAberta ? "border-amber-500/70 text-amber-800 dark:text-amber-200 bg-amber-500/10" : "border-ww-border text-ww-text hover:border-ww-accent"}`}>
           {colSugAberta ? "⚡ ocultar compatibilização" : `⚡ Compatibilizar (${pendentesSug.length})`}
         </button>
+        {/* Colunas ▾ e tamanho da letra (08/10/26): por pessoa, neste navegador. */}
+        <details className="relative" data-menu="colunas">
+          <summary className="list-none cursor-pointer px-2.5 py-1 text-[12px] rounded-lg border border-ww-border text-ww-text hover:border-ww-accent select-none"
+            title="Mostrar / esconder colunas da grade">Colunas{ocultas.size ? ` (${ocultas.size} oculta${ocultas.size > 1 ? "s" : ""})` : ""} ▾</summary>
+          <div className="absolute right-0 mt-1 z-30 w-[230px] rounded-lg border border-ww-border bg-[rgb(var(--color-ww-panel))] shadow-xl p-1.5 text-[11.5px]">
+            {COLS.filter((c) => !COLUNAS_FIXAS.has(c.key)).map((c) => (
+              <label key={c.key} className="flex items-center gap-2 px-1.5 py-1 rounded hover:bg-ww-rowHover cursor-pointer" data-col-toggle={c.key}>
+                <input type="checkbox" checked={!ocultas.has(c.key)}
+                  onChange={(e) => { const n = new Set(ocultas); if (e.target.checked) n.delete(c.key); else n.add(c.key); mudarOcultas(n); }} />
+                {ROTULO_COLUNA[c.key] ?? c.label}
+              </label>))}
+            <div className="flex items-center gap-2 border-t border-ww-border mt-1 pt-1.5 px-1.5">
+              <span className="text-[10.5px] text-ww-textFaint">Item e Qtd ficam sempre</span>
+              <button type="button" className="ml-auto text-[11px] text-ww-accent hover:underline" data-col-restaurar onClick={() => mudarOcultas(new Set())}>restaurar padrão</button>
+            </div>
+          </div>
+        </details>
+        <div className="inline-flex rounded-lg border border-ww-border overflow-hidden text-[11.5px]" data-fonte title="Tamanho da letra da grade">
+          <button type="button" onClick={() => mudarEscala(escIdx - 1)} disabled={escIdx === 0} className="px-2 py-1 hover:bg-ww-rowHover disabled:opacity-35" data-fonte-menos>A−</button>
+          <button type="button" onClick={() => mudarEscala(1)} className="px-1.5 py-1 border-x border-ww-border tabular-nums text-ww-textMuted hover:bg-ww-rowHover" title="Tamanho normal" data-fonte-normal>{Math.round(ESCALAS[escIdx] * 100)}%</button>
+          <button type="button" onClick={() => mudarEscala(escIdx + 1)} disabled={escIdx === ESCALAS.length - 1} className="px-2 py-1 hover:bg-ww-rowHover disabled:opacity-35 font-semibold" data-fonte-mais>A+</button>
+        </div>
         <details className="relative" data-menu="mais">
           <summary className="list-none cursor-pointer px-2 py-1 text-[12px] rounded-lg text-ww-textMuted hover:text-ww-text hover:bg-ww-rowHover" title="Mais ações">⋯</summary>
           <div className="absolute right-0 mt-1 z-30 min-w-[260px] rounded-lg border border-ww-border bg-[rgb(var(--color-ww-panel))] shadow-xl p-1 text-[11.5px]">
@@ -2144,13 +2392,14 @@ export default function MateriaisGrade({
       <div className="flex items-center gap-2 flex-wrap text-[11.5px]">
         <span className="text-[11px] text-ww-textMuted">mostrar</span>
         <div className="inline-flex rounded-lg border border-ww-border overflow-hidden" data-filtros>
-          {(["todas", "sem_cod", "sem_pc", "risco"] as const).map((k, i) => {
-            const n = k === "sem_cod" ? nSemCod : k === "sem_pc" ? validas.length - nComPc : k === "risco" ? validas.filter(emRisco).length : null;
+          {(["todas", "sem_cod", "sem_pc", "risco", "prazo"] as const).map((k, i) => {
+            const n = k === "sem_cod" ? nSemCod : k === "sem_pc" ? validas.length - nComPc : k === "risco" ? validas.filter(emRisco).length : k === "prazo" ? nPrazoAlt : null;
             return (
               <button key={k} type="button" onClick={() => setFiltroPc(k)} data-filtro={k}
-                title={k === "risco" ? `Sem PC e já devia ter comprado ou comprar nos próximos 7 dias; ou chega com menos de ${FOLGA_ENTREGA_DIAS} dias de folga, depois do necessário, ou o PC está atrasado` : undefined}
-                className={`px-2.5 py-0.5 transition ${i ? "border-l border-ww-border" : ""} ${filtroPc === k ? "bg-[rgb(var(--color-ww-panel))] text-ww-text shadow-[inset_0_0_0_1px_rgb(var(--color-ww-accent))]" : k === "risco" ? "text-rose-600 dark:text-rose-400" : "text-ww-textMuted hover:text-ww-text"}`}>
-                {k === "todas" ? "Todos" : k === "sem_cod" ? "⌕ Sem código" : k === "sem_pc" ? "Sem PC" : "✕ Atrasados / em risco"}
+                title={k === "risco" ? `Sem PC e já devia ter comprado ou comprar nos próximos 7 dias; ou chega com menos de ${FOLGA_ENTREGA_DIAS} dias de folga, depois do necessário, ou o PC está atrasado`
+                  : k === "prazo" ? "Itens com o prazo de entrega ajustado à mão na coluna Prazo (dias) — borda âmbar, ↺ volta ao automático" : undefined}
+                className={`px-2.5 py-0.5 transition ${i ? "border-l border-ww-border" : ""} ${filtroPc === k ? "bg-[rgb(var(--color-ww-panel))] text-ww-text shadow-[inset_0_0_0_1px_rgb(var(--color-ww-accent))]" : k === "risco" ? "text-rose-600 dark:text-rose-400" : k === "prazo" ? "text-amber-700 dark:text-amber-300" : "text-ww-textMuted hover:text-ww-text"}`}>
+                {k === "todas" ? "Todos" : k === "sem_cod" ? "⌕ Sem código" : k === "sem_pc" ? "Sem PC" : k === "risco" ? "✕ Atrasados / em risco" : "⏱ Prazo alterado"}
                 {n != null && <span className="ml-1 text-[10.5px] opacity-80">{n}</span>}
               </button>);
           })}
@@ -2211,8 +2460,11 @@ export default function MateriaisGrade({
 
       {carregando
         ? <p className="text-[11.5px] text-ww-textFaint py-3">Carregando a lista…</p>
-        : <GradeEditavel cols={colunasGrade} linhas={visiveis} botaoLinha={false} herdarNoColar={["equipamento"]}
-            grupo={{ de: (l) => (String(l.item ?? "").trim() ? normGrupo(l.equipamento || "Geral") : null), cab: cabecalhoGrupo, cor: corGrupo }}
+        : <GradeEditavel cols={colunasGrade} colsTodas={colunasTodas} linhas={visiveis} botaoLinha={false} herdarNoColar={["equipamento", "_grp"]}
+            cabecalhoNaPagina ajustarLargura escala={ESCALAS[escIdx]} linhaEmBranco={emBranco}
+            acoesLinha={(l) => (String(l.item ?? "").trim() || l._grp ? [{ rot: "＋", dica: "Inserir linha abaixo (no mesmo grupo)",
+              fn: () => inserirLinhas(grupoDe(l) ?? normGrupo(l.equipamento || "Geral"), 1, l._id) }] : [])}
+            grupo={{ de: grupoDe, cab: cabecalhoGrupo, cor: corGrupo, rodape: (k) => <RodapeGrupo onInserir={(n) => inserirLinhas(k, n)} /> }}
             corLinha={(l) => (String(l.item ?? "").trim() || l.equipamento ? corGrupo(normGrupo(l.equipamento || "Geral")) : null)}
             colarExtras={[{ label: "Equipamento", key: "equipamento" }, { label: "Grupo", key: "equipamento" }, { label: "Modelo", key: "modelo" }, { label: "PC", key: "pc_numero" }, { label: "PC nº", key: "pc_numero" }, { label: "Observação", key: "observacao" }, { label: "Obs", key: "observacao" }]}
             aoColar={() => setCasarAposColar(true)}
@@ -2221,12 +2473,11 @@ export default function MateriaisGrade({
               // com o resto para não apagar o que está escondido.
               if (equipFiltro || filtroPc !== "todas" || filtroPcNum) {
                 const ids = new Set(visiveis.map((x) => x._id));
-                const ocultas = linhas.filter((x) => x.item?.trim() && !ids.has(x._id));
-                setLinhas([...ocultas, ...l]);
+                const foraDaVista = linhas.filter((x) => (x.item?.trim() || x._grp) && !ids.has(x._id));
+                setLinhas([...foraDaVista, ...l]);
               } else setLinhas(l);
               setSujo(true);
             }}
-            altura={560}
             aoRemover={(id) => excluirLinhas([id])}
             selecao={{
               marcadas,
@@ -2246,9 +2497,12 @@ export default function MateriaisGrade({
 
       {subAba === "plan" && (
         <PlanejamentoCompras itens={itensPlano} podeGerar={!sujo} onAbrirPrazos={() => setPrazosAberto(true)}
+          onVerNaLista={() => { setSubAba("lista"); setEquipFiltro(null); setFiltroPc("risco"); }}
           onGerarPc={(ids) => { loteGerandoRef.current = null; abrirGerarPc(ids.filter((id) => id.startsWith("db"))); }}>
-          <AgenteCompras empresa={empresa} codigo={codigoProjeto} itens={itensPlano} forcados={forcados} podeGerar={!sujo} recarregarToken={recargas}
-            onGerarPc={(ids, loteId) => { loteGerandoRef.current = loteId; abrirGerarPc(ids.filter((id) => id.startsWith("db"))); }} />
+          {(filtroIds) => (
+            <AgenteCompras empresa={empresa} codigo={codigoProjeto} itens={itensPlano} forcados={forcados} podeGerar={!sujo} recarregarToken={recargas}
+              filtroIds={filtroIds}
+              onGerarPc={(ids, loteId) => { loteGerandoRef.current = loteId; abrirGerarPc(ids.filter((id) => id.startsWith("db"))); }} />)}
         </PlanejamentoCompras>
       )}
       {prazosAberto && (
@@ -2381,10 +2635,13 @@ export default function MateriaisGrade({
             </div>
           </div>
         </div>, document.body)}
+      <input ref={arquivoRef} type="file" accept=".xlsx,.xls,.csv,.txt" hidden data-importar-arquivo
+        onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; if (f) void abrirArquivo(f); }} />
       {addModal && (
-        <AdicionarItensModal empresa={empresa} modoInicial={addModal}
+        <AdicionarItensModal key={importado?.nome ?? addModal} empresa={empresa} modoInicial={addModal}
+          textoInicial={importado?.texto} arquivo={importado?.nome ?? null}
           grupos={[...gruposChips].sort((a, b) => Number(b.k === equipFiltro) - Number(a.k === equipFiltro)).map((g) => ({ k: g.k, nome: g.nome, data: g.data }))}
-          onAdicionar={adicionarLinhasNovas} onFechar={() => setAddModal(null)} />
+          onAdicionar={adicionarLinhasNovas} onFechar={() => { setAddModal(null); setImportado(null); }} />
       )}
       {gerarPcLinhas && (
         <GerarPcDaLista empresa={empresa} codigoProjeto={codigoProjeto} linhas={gerarPcLinhas}

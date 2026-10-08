@@ -31,7 +31,7 @@ const brl = (v: number | null | undefined) =>
 const pct = (v: number) => `${v.toFixed(1).replace(".", ",")}%`;
 
 type LinhaView = { id: string; qtd: number | null; cat_valor_unit: number | null; data_necessaria: string | null;
-  cat_fornecedor: string | null; cat_entrega_dias: number | null; pc_numero: string | null };
+  cat_fornecedor: string | null; cat_entrega_dias: number | null; pc_numero: string | null; prazo_dias_manual?: number | null };
 
 export default function PainelProjeto({
   empresa, codigoProjeto, plano, teto, chave, vivo, onVerPlanejamento,
@@ -70,7 +70,12 @@ export default function PainelProjeto({
         const { data, error } = await supaBrowser().schema("approval" as never).from("v_rc_projetos_itens")
           .select("id, qtd, cat_valor_unit, data_necessaria, cat_fornecedor, cat_entrega_dias, pc_numero")
           .eq("empresa", empresa).eq("codigo_projeto", codigoProjeto);
-        if (!error && vivoEf) setLinhas((data ?? []) as LinhaView[]);
+        if (error || !vivoEf) return;
+        // prazo ajustado no item (sql/141): à parte, para seguir funcionando sem a migração
+        const man = await supaBrowser().schema("approval" as never).from("rc_projetos_itens").select("id, prazo_dias_manual")
+          .eq("empresa", empresa).eq("codigo_projeto", codigoProjeto).not("prazo_dias_manual", "is", null);
+        const pm = new Map(((man.error ? [] : man.data ?? []) as { id: string; prazo_dias_manual: number }[]).map((x) => [String(x.id), x.prazo_dias_manual]));
+        if (vivoEf) setLinhas(((data ?? []) as LinhaView[]).map((l) => ({ ...l, prazo_dias_manual: pm.get(String(l.id)) ?? null })));
       } catch { /* sem as linhas, o tile mostra traço */ }
     })();
     return () => { vivoEf = false; };
@@ -94,7 +99,7 @@ export default function PainelProjeto({
       const temPc = !!c?.pcs.length || !!String(l.pc_numero ?? "").trim();
       if (!c?.rc && !c?.pcs.length) restante += v;
       if (temPc || !l.data_necessaria) continue;
-      const p = planejarItem({ necessario: l.data_necessaria, temPc, prazoItem: l.cat_entrega_dias, fornecedor: l.cat_fornecedor, prazos });
+      const p = planejarItem({ necessario: l.data_necessaria, temPc, prazoItem: l.cat_entrega_dias, prazoManualItem: l.prazo_dias_manual, fornecedor: l.cat_fornecedor, prazos });
       if (p.status === "atrasado") { nAtr++; semana += v; } else if (p.status === "agora") { nAg++; semana += v; }
     }
     return { restante, semana, nAtr, nAg };
