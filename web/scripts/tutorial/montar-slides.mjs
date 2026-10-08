@@ -18,6 +18,10 @@ if (!caminho) { console.error("uso: --roteiro tutoriais/<slug>/slides.json"); pr
 const VOZ = process.env.TUTORIAL_VOZ || "pt-BR-AntonioNeural";
 const EDGE = process.env.EDGE_TTS_BIN || (existsSync(join(homedir(), "Library/Python/3.9/bin/edge-tts")) ? join(homedir(), "Library/Python/3.9/bin/edge-tts") : "edge-tts");
 const PAUSA = 0.6; // segundos de respiro depois de cada fala
+const VOZ_EN = process.env.TUTORIAL_VOZ_EN || "en-US-AndrewMultilingualNeural";
+// palavras ditas em inglês (voz americana encaixada na frase): "budget" soa "bâdjet", não "budjé"
+const INGLES = /\b(budget)\b/gi;
+const W = Number(process.env.TUTORIAL_W || 1920), H = Number(process.env.TUTORIAL_H || 1200);
 
 const dir = dirname(caminho), slug = basename(dir);
 const roteiro = JSON.parse(readFileSync(caminho, "utf8"));
@@ -28,18 +32,15 @@ const partes = []; const srt = []; let t = 0;
 for (const [i, p] of roteiro.passos.entries()) {
   const n = String(i + 1).padStart(2, "0");
   const mp3 = join(dir, "audio", `${n}.mp3`);
-  if (!existsSync(mp3) || args.includes("--refazer-voz")) {
-    const r = spawnSync(EDGE, ["--voice", VOZ, "--rate", "+4%", "--text", p.fala, "--write-media", mp3], { stdio: "inherit" });
-    if (r.status) throw new Error(`edge-tts falhou no passo ${i + 1}`);
-  }
+  if (!existsSync(mp3) || args.includes("--refazer-voz")) falar(p.fala, mp3, join(dir, "audio", `${n}`));
   const dur = duracao(mp3) + PAUSA;
   const img = resolve(dir, p.img);
   if (!existsSync(img)) throw new Error(`passo ${i + 1}: imagem não encontrada: ${img}`);
   const mp4 = join(dir, "partes", `${n}.mp4`);
   // imagem parada pelo tempo da fala (+ respiro), ajustada a 1440×900 sem distorcer
   execFileSync("ffmpeg", ["-y", "-loglevel", "error", "-loop", "1", "-i", img, "-i", mp3,
-    "-filter_complex", `[0:v]scale=1440:900:force_original_aspect_ratio=decrease,pad=1440:900:(ow-iw)/2:(oh-ih)/2:color=0x0c1830,format=yuv420p,fps=30[v];[1:a]apad=pad_dur=${PAUSA}[a]`,
-    "-map", "[v]", "-map", "[a]", "-t", dur.toFixed(3), "-c:v", "libx264", "-preset", "medium", "-crf", "20", "-c:a", "aac", "-ar", "48000", "-ac", "2", mp4]);
+    "-filter_complex", `[0:v]scale=${W}:${H}:force_original_aspect_ratio=decrease:flags=lanczos,pad=${W}:${H}:(ow-iw)/2:(oh-ih)/2:color=0x0c1830,format=yuv420p,fps=30[v];[1:a]apad=pad_dur=${PAUSA}[a]`,
+    "-map", "[v]", "-map", "[a]", "-t", dur.toFixed(3), "-c:v", "libx264", "-preset", "slow", "-crf", "16", "-tune", "stillimage", "-c:a", "aac", "-b:a", "192k", "-ar", "48000", "-ac", "2", mp4]);
   partes.push(mp4);
   srt.push(`${i + 1}\n${ts(t)} --> ${ts(t + dur - PAUSA)}\n${p.fala}\n`);
   t += dur;
@@ -55,6 +56,26 @@ execFileSync("ffmpeg", ["-y", "-loglevel", "error", "-f", "concat", "-safe", "0"
   "-map", "0:v", "-map", "0:a", "-map", "1:s", "-c:v", "copy", "-c:a", "copy", "-c:s", "mov_text",
   "-metadata:s:s:0", "language=por", "-metadata", `title=${roteiro.titulo || slug}`, "-movflags", "+faststart", out]);
 console.log(`✓ vídeo: ${out} (${t.toFixed(0)}s)`);
+
+/** Fala em pt-BR; as palavras de INGLES saem na voz americana e são emendadas na frase. */
+function falar(texto, mp3, base) {
+  const tts = (voz, t, out) => {
+    const r = spawnSync(EDGE, ["--voice", voz, "--rate", "+4%", "--text", t, "--write-media", out], { stdio: "inherit" });
+    if (r.status) throw new Error(`edge-tts falhou: ${t.slice(0, 40)}`);
+  };
+  const partes = texto.split(INGLES).filter((t) => t && /[\p{L}\p{N}]/u.test(t));
+  if (partes.length === 1) return tts(VOZ, texto, mp3);
+  const arqs = partes.map((t, k) => {
+    const out = `${base}-p${k}.mp3`;
+    INGLES.lastIndex = 0;
+    if (new RegExp(`^${INGLES.source}$`, "i").test(t.trim())) tts(VOZ_EN, t.trim(), out); else tts(VOZ, t.trim(), out);
+    return out;
+  });
+  const lista = `${base}-lista.txt`;
+  writeFileSync(lista, arqs.map((f) => `file '${resolve(f)}'`).join("\n"));
+  // reamostra tudo igual antes de juntar (as duas vozes vêm no mesmo formato, mas por garantia)
+  execFileSync("ffmpeg", ["-y", "-loglevel", "error", "-f", "concat", "-safe", "0", "-i", lista, "-ar", "24000", "-ac", "1", "-c:a", "libmp3lame", "-q:a", "2", mp3]);
+}
 
 function duracao(f) { return parseFloat(execFileSync("ffprobe", ["-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", f]).toString()); }
 function ts(s) { const ms = Math.round(s * 1000); return new Date(ms).toISOString().substr(11, 8) + "," + String(ms % 1000).padStart(3, "0"); }
