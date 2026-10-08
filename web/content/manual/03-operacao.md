@@ -94,7 +94,7 @@ Logo acima dos projetos, uma linha de texto: quantos são, **ordenado por** (nº
 
 ![Vídeo: lista de materiais da RC à compatibilização e ao Excel](/manual-video/lista-materiais-rc.mp4)
 
-*Vídeo (8 min): a tela de Projetos (filtros, trilho de etapas, prazo, venda × compras, ★ ativos), levar os itens da RC para a lista, compatibilizar os códigos com o estoque, equipamentos e “necessário em”, colar do Excel, subir planilha e excluir a lista.*
+*Vídeo (11 min): a tela de Projetos (filtros, trilho de etapas, prazo, venda × compras, ★ ativos), levar os itens da RC para a lista, compatibilizar os códigos com o estoque (✓ aceitar as melhores, ocultar a coluna), equipamentos e “necessário em”, colar do Excel, subir planilha, comprar (Comprar agora → Simular → Gerar), o Planejamento com o agente de compras e excluir a lista.*
 
 Tudo fica numa aba só: **Lista de materiais** (a antiga aba “Compras × lista” entrou nela). Na linha do projeto, **📂 Abrir projeto** leva até ela.
 

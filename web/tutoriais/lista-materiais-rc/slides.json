@@ -1,120 +1,160 @@
 {
- "titulo": "Lista de materiais: da RC à compatibilização e ao Excel",
+ "titulo": "Lista de materiais: da RC à compra e ao planejamento",
  "passos": [
   {
-   "img": "img/01.png",
+   "img": "img2/01.png",
    "fala": "Este é o painel de projetos, em Operação, Projetos. Cada linha é um projeto, com a venda, as compras, o andamento e o prazo. Vamos entender a tela e depois montar uma lista de materiais."
   },
   {
-   "img": "img/02.png",
+   "img": "img2/02.png",
    "fala": "Na primeira faixa de filtros: Mostrar só os projetos ativos ou todos; a situação, em aberto ou faturados; e o período, como os próximos sete dias ou os vencidos."
   },
   {
-   "img": "img/03.png",
+   "img": "img2/03.png",
    "fala": "Na faixa Atenção, cada chip filtra um problema, com a quantidade. Bolinha vermelha é atraso, como venda ou compra em atraso; âmbar é aprovação ou serviço; cinza é o que falta, como projeto sem PC ou sem OS. Os chips se combinam."
   },
   {
-   "img": "img/04.png",
+   "img": "img2/04.png",
    "fala": "Este trilho mostra em que etapa o projeto está: pedido de venda, RC, pedido de compra, aprovação, material, serviço, nota fiscal, pagamento e recebimento. Verde é concluído, âmbar em andamento, vermelho atrasado e cinza não iniciado. Passando o mouse, cada etapa explica o detalhe."
   },
   {
-   "img": "img/05.png",
+   "img": "img2/05.png",
    "fala": "Embaixo, em agora, o sistema diz onde o projeto está travado e o que falta fazer. No Senerp, falta emitir o pedido de compra. Ao lado, a situação do serviço, aqui aguardando a OS, com o atalho para gerar."
   },
   {
-   "img": "img/06.png",
+   "img": "img2/06.png",
    "fala": "No meio, a data prometida na venda. Embaixo, quantos dias de folga ainda temos, ou, em vermelho, quantos dias de atraso."
   },
   {
-   "img": "img/07.png",
+   "img": "img2/07.png",
    "fala": "À direita, o financeiro. A barra de venda mostra o valor vendido e a parte já faturada. A de compras mostra os pedidos aprovados e aguardando, contra o budget de materiais, que é o contorno tracejado. Embaixo, a margem projetada e a margem real."
   },
   {
-   "img": "img/08.png",
+   "img": "img2/08.png",
    "fala": "A estrela marca os projetos ativos, aqueles em que estamos atuando. A marca vale para todo mundo. O botão Projetos ativos, lá em cima, lista os marcados para pular direto para um deles, e o Ativos com a engrenagem marca vários de uma vez. O filtro Só ativos mostra apenas esses."
   },
   {
-   "img": "img/09.png",
+   "img": "img2/09.png",
    "fala": "Aqui você troca a vista: lista, tabela, kanban ou linha do tempo. Clicando no projeto, ele abre na própria lista, com o botão Abrir projeto. É lá que fica a lista de materiais. Vamos abrir o Senerp."
   },
   {
-   "img": "img/10.png",
+   "img": "img2/10.png",
    "fala": "No topo do projeto: o valor fechado da venda; o budget de materiais, que vem da RC, com a barra do que já foi comprado contra esse budget; e quanto precisamos comprar nesta semana. Esses números acompanham a lista enquanto você monta."
   },
   {
-   "img": "img/11.png",
+   "img": "img2/11.png",
    "fala": "A lista de materiais tem três etapas. Itens da RC: o que foi orçado na proposta, só para consulta. Lista: o que vamos comprar de fato. E Planejamento: quando pedir cada item. Hoje a lista do Senerp está vazia, e a RC tem sessenta itens."
   },
   {
-   "img": "img/12.png",
+   "img": "img2/12.png",
    "fala": "Para começar a lista a partir da RC, a gente clica em Levar para a lista os que faltam. Dá também para levar um item só, pelo botão lista ao lado de cada linha."
   },
   {
-   "img": "img/13.png",
+   "img": "img2/13.png",
    "fala": "Abre a conferência com todos os itens da RC marcados. Na coluna No catálogo, cada item já vem casado com o nosso estoque: check verde é certo, a mãozinha é uma escolha feita antes, o alerta é uma sugestão para conferir, e sem correspondência é quando nada parecido foi achado. Aqui foram 48 de 60."
   },
   {
-   "img": "img/14.png",
+   "img": "img2/14.png",
    "fala": "Desmarque o que não vai ser comprado. O que estiver sem código entra assim mesmo, em âmbar, para resolver na lista. Conferido, clique em Adicionar à lista."
   },
   {
-   "img": "img/15.png",
+   "img": "img2/15.png",
    "fala": "Pronto: os sessenta itens da RC entraram na lista, já separados por equipamento, com o selo RC na coluna de origem. A lista salva sozinha, e o horário aparece aqui. Se aparecer um aviso de que não está salvando, é só clicar em Salvar lista. Doze itens ficaram sem código."
   },
   {
-   "img": "img/16.png",
+   "img": "img2/16.png",
    "fala": "Repare na barra do budget: a lista prevista estourou. O culpado é a linha três. Na RC era material filtrante diverso, seiscentas unidades a um real e sessenta, mas ficou casado com um kit hidráulico de quase catorze mil reais. Por isso vale sempre conferir os códigos: clicando no ícone ao lado do código, você troca o item."
   },
   {
-   "img": "img/17.png",
+   "img": "img2/17.png",
    "fala": "Os itens sem código aparecem nesta coluna âmbar, com a melhor sugestão do estoque já selecionada e a nota de semelhança. Mas confira: na linha doze, a RC pede a válvula F74A3 de dez metros cúbicos por hora, e a sugestão é uma F63C1 de quatro. Está errada."
   },
   {
-   "img": "img/18.png",
+   "img": "img2/18.png",
    "fala": "Então a gente abre a lista da linha e escolhe a certa: a FE0053, válvula Runxin N74A3 de dez metros cúbicos. Depois clica no check. O código vai para a linha, e o sistema aprende: da próxima vez esse texto já casa sozinho."
   },
   {
-   "img": "img/19.png",
+   "img": "img2/19.png",
    "fala": "Na linha doze o código já foi para a linha. Já na linha vinte e dois, a sugestão veio certa, a mesma válvula N74A3. Aí é só clicar no check. Quando um item não é nosso, o x marca como não é item nosso, e o sistema para de sugerir."
   },
   {
-   "img": "img/20.png",
+   "img": "img2/20.png",
    "fala": "Quando aparece nenhuma parecida no estoque, abra a lista da linha: tem buscar no estoque, para procurar por nome ou código, e criar item novo no estoque. E no cabeçalho da coluna há o aceitar as melhores, que aceita todas as sugestões de uma vez. Só use quando conferir que estão certas, como vimos na linha doze."
   },
   {
-   "img": "img/21.png",
+   "img": "img2/21.png",
+   "fala": "No cabeçalho da coluna âmbar ficam dois botões. Aceitar as melhores aceita, de uma vez, a sugestão selecionada em todas as linhas pendentes; depois aparece um Desfazer. Use quando já conferiu que as sugestões estão certas. E ocultar esconde a coluna, quando você quer ver a lista inteira."
+  },
+  {
+   "img": "img2/22.png",
+   "fala": "Clicando em ocultar, a coluna some e a lista fica mais larga. Para trazer de volta, use o botão Compatibilizar na barra, com a quantidade de itens sem código. Aberto por aqui, ele mostra também as linhas que já têm código, para trocar ou tirar o código de alguma."
+  },
+  {
+   "img": "img2/23.png",
    "fala": "Os chips coloridos são os equipamentos do projeto, que vieram da RC: abrandador, filtro de carvão, multimeios, looping e a osmose. Clicando num chip, a lista mostra só aquele equipamento. O mais equipamento cria um grupo novo, e dá para mover itens marcados de um grupo para outro."
   },
   {
-   "img": "img/22.png",
+   "img": "img2/24.png",
    "fala": "Cada grupo começa com um cabeçalho. Em necessário em, você diz quando precisa ter aquele material na obra, ou clica em aplicar, para usar a entrega prevista da proposta. Essa data vai para todas as linhas do grupo, e é com ela que o planejamento calcula quando comprar."
   },
   {
-   "img": "img/23.png",
+   "img": "img2/25.png",
    "fala": "Para trazer itens de uma planilha, copie as linhas no Excel, com código, item, quantidade, unidade, necessário em e valor, e cole numa linha em branco da grade, com Ctrl V. As linhas entram no grupo onde você colou. Vamos colar três filtros."
   },
   {
-   "img": "img/24.png",
+   "img": "img2/26.png",
    "fala": "Pronto: as três linhas entraram neste grupo, com código, item, quantidade, data e valor, e a lista salvou sozinha. Se um código colado não for do nosso estoque, a linha entra sem código e vai para a compatibilização, como vimos antes."
   },
   {
-   "img": "img/25.png",
+   "img": "img2/27.png",
    "fala": "Também dá para subir uma planilha inteira. Em Modelo, você baixa o Excel pronto, com a aba Lista para preencher e a aba Códigos com os itens do nosso estoque. Preenchida a planilha, clique em Subir lista e escolha o arquivo, xlsx ou csv."
   },
   {
-   "img": "img/26.png",
+   "img": "img2/28.png",
    "fala": "Antes de entrar na lista, aparece a prévia. O sistema leu as três linhas e reconheceu os três códigos do nosso estoque. Repare que o valor vazio da planilha veio do último preço, e o fornecedor do cadastro. A coluna grupo manda cada linha para o seu equipamento, aqui um grupo novo, Osmose Reversa."
   },
   {
-   "img": "img/27.png",
+   "img": "img2/29.png",
    "fala": "Conferido, é só clicar em Adicionar à lista. Se precisar, dá para corrigir o texto ali em cima antes. As linhas entram no grupo indicado e a lista salva sozinha."
   },
   {
-   "img": "img/28.png",
+   "img": "img2/30.png",
+   "fala": "Agora, a compra. Filtre o equipamento que vai comprar, aqui o filtro de carvão, e marque os itens pela caixa do cabeçalho, ou um a um. Aparece a barra azul com oito marcados."
+  },
+  {
+   "img": "img2/31.png",
+   "fala": "Clique em Comprar agora. O sistema monta os pedidos de compra com os itens marcados que ainda não têm PC, um pedido para cada fornecedor."
+  },
+  {
+   "img": "img2/32.png",
+   "fala": "Abre a folha Gerar pedido de compra pela lista: um pedido para cada fornecedor sugerido pelo catálogo, com categoria, condição de pagamento e a previsão, que é o necessário em do grupo. Preço e quantidade dão para ajustar, e o item desmarcado fica de fora. Quando o fornecedor não vem sugerido, como no primeiro pedido, é só buscar pelo nome ou CNPJ."
+  },
+  {
+   "img": "img2/33.png",
+   "fala": "Antes de gerar, clique em Simular. Ele passa pelas mesmas conferências, sem criar nada. Aqui ele avisou que o primeiro pedido está sem fornecedor. É só escolher o fornecedor, ou desmarcar esses itens para comprar depois."
+  },
+  {
+   "img": "img2/34.png",
+   "fala": "Agora a simulação deu certo: três pedidos, com seis linhas, e nada foi gravado. Estando tudo certo, clique em Gerar. Os pedidos nascem pelo caminho normal do Compras, com número e aprovação, e cada item fica ligado à sua linha da lista. Neste vídeo não vamos gerar, para não criar pedidos de verdade."
+  },
+  {
+   "img": "img2/35.png",
+   "fala": "Na etapa Planejamento, o sistema calcula quando pedir cada item: comprar até é o necessário em, menos o prazo de entrega do fornecedor, menos três dias de folga. As caixas mostram o que já devia ter sido comprado, o que comprar nos próximos sete dias, o que está dentro do prazo e o que já tem PC. Clicando numa caixa, a tela filtra."
+  },
+  {
+   "img": "img2/36.png",
+   "fala": "O agente de compras monta os lotes: junta os itens do mesmo fornecedor cujas datas de pedir caem na mesma janela, e pede tudo junto, na data do mais apertado. Cada cartão mostra o fornecedor, quando pedir, quando chega, a explicação, os itens, o valor e se o caixa do projeto aguenta naquela data."
+  },
+  {
+   "img": "img2/37.png",
+   "fala": "Em cada lote: Gerar PC agora abre a mesma folha de pedido que vimos. Agendar deixa o agente criar o PC em rascunho no dia certo, às sete da manhã, e avisar no Webex. Mover para muda a data, e conferir PC mostra o pedido que seria criado. Lá em cima, a janela de consolidação define quantos dias o agente junta num pedido só."
+  },
+  {
+   "img": "img2/38.png",
    "fala": "Por fim, para deixar a lista limpa para você montar: marque a caixa do cabeçalho, que seleciona todas as linhas. Aparece a barra azul com as ações em lote, como comprar agora, mover de equipamento e excluir. Clique em Excluir."
   },
   {
-   "img": "img/29.png",
+   "img": "img2/39.png",
    "fala": "As linhas saíram e a lista voltou a zero. Por alguns segundos dá para desfazer; depois grava sozinho, e o que foi excluído fica em Itens removidos, recuperável. Agora é com você: leve os itens da RC, confira os códigos, defina as datas e complete com o Excel."
   }
  ]
