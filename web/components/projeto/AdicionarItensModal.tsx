@@ -1,6 +1,6 @@
 "use client";
 
-// "Adicionar itens à lista" (08/10/26, spec D) — um modal, duas abas:
+// "Adicionar itens à lista" (08/10/26, spec D) — um modal, dois modos (sem abas desde 08/10/26: "cat" pelo ⋯ da lista, "colar" = prévia do ⬆ Subir lista preenchida):
 //   • Do estoque / catálogo: busca por código ou descrição, marca vários com a quantidade,
 //     grupo-alvo no topo. Cada item entra já com código, fornecedor e prazo do catálogo.
 //   • Colar do Excel: o MESMO parser do Ctrl+V da grade (lib/colar-grade). Sem cabeçalho a
@@ -12,7 +12,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { lerColagem, type AlvoColar } from "@/lib/colar-grade";
+import { lerColagem, ALVOS_LISTA, POSICIONAIS_LISTA } from "@/lib/colar-grade";
 
 export type ItemCatalogo = {
   ncod_prod: number; codigo: string | null; descricao: string; unidade: string | null;
@@ -34,25 +34,16 @@ const numBR = (v: string) => {
   return Number.isFinite(n) ? n : 0;
 };
 
-const ALVOS: AlvoColar[] = [
-  { label: "Código", key: "cat_codigo" }, { label: "Cod", key: "cat_codigo" }, { label: "Item", key: "item" }, { label: "Descrição", key: "item" },
-  { label: "Qtd", key: "qtd" }, { label: "Quantidade", key: "qtd" }, { label: "Un", key: "un" }, { label: "Unidade", key: "un" },
-  { label: "Necessário em", key: "data_necessaria", tipo: "data" }, { label: "Data", key: "data_necessaria", tipo: "data" },
-  { label: "Valor unit.", key: "cat_valor_unit" }, { label: "Valor", key: "cat_valor_unit" }, { label: "Valor unitário", key: "cat_valor_unit" },
-  { label: "Grupo", key: "equipamento" }, { label: "Equipamento", key: "equipamento" },
-];
-const POSICIONAIS: AlvoColar[] = [
-  { label: "Código", key: "cat_codigo" }, { label: "Item", key: "item" }, { label: "Qtd", key: "qtd" }, { label: "Un", key: "un" },
-  { label: "Necessário em", key: "data_necessaria", tipo: "data" }, { label: "Valor unit.", key: "cat_valor_unit" },
-];
+const ALVOS = ALVOS_LISTA;
+const POSICIONAIS = POSICIONAIS_LISTA;
 
-export default function AdicionarItensModal({ empresa, grupos, modoInicial, onAdicionar, onFechar, textoInicial, arquivo }: {
-  empresa: string; grupos: Grupo[]; modoInicial: "cat" | "colar";
+export default function AdicionarItensModal({ empresa, codigoProjeto, grupos, modoInicial, onAdicionar, onFechar, textoInicial, arquivo }: {
+  empresa: string; codigoProjeto?: number; grupos: Grupo[]; modoInicial: "cat" | "colar";
   /** "Importar planilha" (08/10/26): o conteúdo do arquivo já lido, como se tivesse sido colado. */
   textoInicial?: string; arquivo?: string | null;
   onAdicionar: (linhas: LinhaNova[], modo: "cat" | "colar") => void; onFechar: () => void;
 }) {
-  const [modo, setModo] = useState(modoInicial);
+  const modo = modoInicial; // "cat" pelo ⋯, "colar" = prévia do arquivo subido (08/10/26: sem abas)
   const NOVO = "__novo__";
   const [grupoSel, setGrupoSel] = useState(grupos[0]?.nome ?? "Geral");
   const [grupoNovo, setGrupoNovo] = useState("");
@@ -149,14 +140,11 @@ export default function AdicionarItensModal({ empresa, grupos, modoInicial, onAd
       <div role="dialog" aria-label="Adicionar itens à lista" data-modal="adicionar"
         className="w-full sm:w-[min(920px,96vw)] max-h-[90vh] flex flex-col rounded-t-xl sm:rounded-xl border border-ww-border bg-[rgb(var(--color-ww-panel))] shadow-2xl text-[12px]">
         <div className="flex items-center gap-2 px-4 py-3 border-b border-ww-border">
-          <h4 className="text-[14px] font-semibold text-ww-text">{arquivo ? "Importar planilha" : "Adicionar itens à lista"}</h4>
+          <h4 className="text-[14px] font-semibold text-ww-text">{modo === "colar" ? (arquivo ? "Subir lista preenchida" : "Colar linhas") : "Escolher vários do estoque"}</h4>
           <button type="button" className="ml-auto text-ww-textMuted hover:text-ww-text" onClick={onFechar}>✕</button>
         </div>
         <div className="px-4 py-3 overflow-auto space-y-2.5">
           <div className="flex items-center gap-1.5 flex-wrap">
-            {([["cat", "Do estoque / catálogo"], ["colar", "Colar do Excel"]] as const).map(([k, rot]) => (
-              <button key={k} type="button" onClick={() => setModo(k)} data-aba-modal={k}
-                className={`px-3 py-1.5 rounded-lg border ${modo === k ? "border-ww-accent bg-ww-accentSoft text-ww-text" : "border-ww-border text-ww-textMuted hover:text-ww-text"}`}>{rot}</button>))}
             <span className="ml-auto flex items-center gap-1.5">
               <span className="text-ww-textMuted">Grupo:</span>
               <select value={grupoSel} onChange={(e) => setGrupoSel(e.target.value)}
@@ -195,7 +183,7 @@ export default function AdicionarItensModal({ empresa, grupos, modoInicial, onAd
             <small className="block text-ww-textFaint">Marque vários (a busca pode mudar — os marcados ficam) e ajuste a quantidade. Cada item entra já com código, fornecedor e prazo do catálogo e com a data do grupo.</small>
           </>) : (<>
             {arquivo && <p className="text-[11.5px] px-2 py-1 rounded-md bg-ww-accentSoft text-ww-text" data-importado>📄 Importado de <b>{arquivo}</b> — confira a prévia abaixo antes de adicionar (dá para editar o texto).</p>}
-            <small className="block text-ww-textMuted">Cole direto do Excel. Com cabeçalho as colunas vão pelo nome (Código, Item, Qtd, Un, Necessário em, Valor unit., Grupo); sem cabeçalho a ordem é <b>Código · Item · Qtd · Un · Necessário em · Valor unit.</b> (Código pode ficar vazio). Datas em dd/mm/aaaa são aceitas. <a className="text-ww-accent hover:underline" href={`/api/rc-projetos/modelo?emp=${encodeURIComponent(empresa)}`}>⬇ modelo Excel com nossos códigos</a></small>
+            <small className="block text-ww-textMuted">Colunas pelo nome do cabeçalho (Código, Item, Qtd, Un, Necessário em, Valor unit., Grupo); sem cabeçalho, nessa ordem. Itens sem código passam pela compatibilização. Para colar direto, use Ctrl+V numa linha em branco da grade.</small>
             <textarea value={txt} onChange={(e) => setTxt(e.target.value)} rows={7} autoFocus
               placeholder={"E02045\tCREPINA SUPERIOR\t2\tun\t30/10/2026\t40\n\tMANOMETRO C/CONEXAO LAT.0-7\t1\tun\t30/10/2026\t57,70"}
               className="w-full rounded-lg border border-ww-border bg-transparent px-2.5 py-2 font-mono text-[12px] text-ww-text outline-none focus:ring-1 focus:ring-ww-accent" />

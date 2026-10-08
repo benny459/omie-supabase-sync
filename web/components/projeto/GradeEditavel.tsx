@@ -119,7 +119,7 @@ export const brl = (v: number) =>
 
 export default function GradeEditavel({
   cols, linhas, onChange, altura = 340, vazioMsg = "Digite, cole do Excel ou suba a planilha.",
-  selecao, aoColar, colarExtras = [], aoRemover, botaoLinha = true, grupo, herdarNoColar = [], corLinha,
+  selecao, aoColar, colarExtras = [], colarPosExtras = [], aoRemover, botaoLinha = true, grupo, herdarNoColar = [], corLinha,
   colsTodas, acoesLinha, escala = 1, ajustarLargura = false, cabecalhoNaPagina = false, linhaEmBranco,
   filtroCab, rodapeInfo,
 }: {
@@ -159,6 +159,8 @@ export default function GradeEditavel({
   aoRemover?: (id: string) => void;
   /** Colunas que não aparecem na grade mas entram no colar COM cabeçalho (ex.: Modelo, PC). */
   colarExtras?: { label: string; key: string }[];
+  /** Posições a mais no colar SEM cabeçalho, depois das colunas editáveis (ex.: o Grupo, 7ª do bloco do modelo Excel). */
+  colarPosExtras?: { label: string; key: string }[];
   /** Chamado depois de um paste que trouxe linhas (ex.: casar com o catálogo). */
   aoColar?: () => void;
   cols: ColunaGrade[];
@@ -205,7 +207,7 @@ export default function GradeEditavel({
     // Colunas ocultas pelo usuário continuam no colar: a ordem por posição é a da grade inteira.
     const todasEd = (colsTodas ?? cols).filter((c) => !c.calculada && !c.render);
     const alvosNome = [...todasEd, ...colarExtras.map((x) => ({ ...x, tipo: todasEd.find((e) => e.key === x.key)?.tipo }))];
-    const posicionais = todasEd.filter((e) => !e.pularNoColar);
+    const posicionais = [...todasEd.filter((e) => !e.pularNoColar), ...colarPosExtras.map((x) => ({ ...x, tipo: todasEd.find((e) => e.key === x.key)?.tipo }))];
     const vaziaEm = (l: LinhaGrade | undefined) => !l || (linhaEmBranco ? linhaEmBranco(l) : cols.every((c) => c.calculada || c.render || !String(l[c.key] ?? "").trim()));
     const inserir = vaziaEm(linhas[li]);
     let ini = Math.max(0, posicionais.findIndex((e) => e.key === editaveis[ci]?.key));
@@ -238,7 +240,7 @@ export default function GradeEditavel({
     }
     onChange(novas);
     aoColar?.();
-  }, [linhas, cols, colsTodas, editaveis, onChange, aoColar, colarExtras, herdarNoColar, linhaEmBranco]);
+  }, [linhas, cols, colsTodas, editaveis, onChange, aoColar, colarExtras, colarPosExtras, herdarNoColar, linhaEmBranco]);
 
   /** Paste capturado no CONTÊINER: o navegador entrega o evento ao input, e
    *  tratar só lá faria o bloco inteiro cair numa célula. */

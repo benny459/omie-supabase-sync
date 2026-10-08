@@ -39,6 +39,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import * as XLSX from "xlsx";
+import { arquivoParaTexto } from "@/lib/ler-planilha";
+import { POSICIONAIS_EXTRAS_GRADE } from "@/lib/colar-grade";
 import GradeEditavel, { linhaVazia, num, type ColunaGrade, type LinhaGrade, type SugestaoGrade } from "./GradeEditavel";
 import PcPickerModal, { type PcSearchResult } from "./PcPickerModal";
 import GerarPcDaLista, { type LinhaParaPc } from "./GerarPcDaLista";
@@ -192,23 +194,21 @@ const ESCALAS = [0.88, 1, 1.12, 1.25];
 const CHAVE_COLUNAS = "painel.materiais.colunasOcultas";
 const CHAVE_ESCALA = "painel.materiais.escala";
 
-/** "Importar planilha (.xlsx/.csv)" (08/10/26): o arquivo vira o mesmo texto que o colar do Excel
- *  lê (TAB entre colunas). Aba "Lista" (a do modelo) se existir; senão a primeira. Data que vem
- *  como número de série do Excel é convertida pelo leitor do colar (lib/colar-grade). */
+/** "Importar planilha (.xlsx/.csv)": o arquivo vira o texto do colar do Excel (lib/ler-planilha). */
 async function lerPlanilha(f: File): Promise<string> {
-  const buf = await f.arrayBuffer();
-  const daGrade = (wb: XLSX.WorkBook) => {
-    const nome = wb.SheetNames.find((n) => /^lista/i.test(n.trim())) ?? wb.SheetNames[0];
-    const rows = XLSX.utils.sheet_to_json<unknown[]>(wb.Sheets[nome], { header: 1, raw: true, blankrows: false, defval: "" });
-    return rows.map((r) => r.map((v) => (v == null ? "" : String(v).replace(/[\t\r\n]+/g, " "))).join("\t")).join("\n");
-  };
-  if (/\.(csv|txt)$/i.test(f.name)) {
-    const t = new TextDecoder("utf-8").decode(buf).replace(/^\uFEFF/, "");
-    const l1 = t.split(/\r?\n/)[0] ?? "";
-    if (l1.includes("\t") || l1.includes(";")) return t;
-    return daGrade(XLSX.read(t, { type: "string", raw: true }));
-  }
-  return daGrade(XLSX.read(buf, { type: "array" }));
+  return arquivoParaTexto(f.name, await f.arrayBuffer());
+}
+
+/** Ícone "planilha Excel" (folha verde com X), inline. */
+function IconeExcel() {
+  return (
+    <svg aria-hidden width="15" height="15" viewBox="0 0 24 24" className="shrink-0">
+      <path d="M7 2h9l5 5v13a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2z" fill="#21A366" />
+      <path d="M16 2v5h5" fill="#107C41" />
+      <rect x="2" y="7" width="11" height="11" rx="1.5" fill="#107C41" />
+      <path d="M4.6 9.5h1.9l1.1 2 1.1-2h1.9l-2 3 2.1 3.1H8.8l-1.2-2.1-1.2 2.1H4.5l2.1-3.1z" fill="#fff" />
+      <path d="M14.5 10.5h4M14.5 13.5h4M14.5 16.5h4" stroke="#fff" strokeWidth="1.2" strokeLinecap="round" />
+    </svg>);
 }
 
 const dm = (iso: string | null | undefined) => (iso ? new Date(iso).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" }) : "");
@@ -2329,9 +2329,9 @@ export default function MateriaisGrade({
     setSubAba(validas.length ? "lista" : "rc");
   }, [carregouOk, carregando, validas.length]);
 
-  /** "+ Adicionar itens ▾" (spec B.2 / D). */
+  /** Modal "Adicionar itens": "cat" = escolher vários do estoque (⋯); "colar" = prévia do arquivo subido. */
   const [addModal, setAddModal] = useState<"cat" | "colar" | null>(null);
-  /** "Importar planilha": o arquivo lido vira o texto do "Colar do Excel" (mesmo leitor, mesma prévia). */
+  /** "Subir lista preenchida": o arquivo lido vira o texto do colar (mesmo leitor, mesma prévia). */
   const arquivoRef = useRef<HTMLInputElement>(null);
   const [uploadAntigo, setUploadAntigo] = useState(false);
   const [importado, setImportado] = useState<{ nome: string; texto: string } | null>(null);
@@ -2343,13 +2343,10 @@ export default function MateriaisGrade({
       setAddModal("colar");
     } catch (e) { setErro(`Não consegui ler ${f.name}: ${(e as Error).message}`); }
   }, []);
-  const menuAdicionar: { rot: string; sub: string; fn: () => void }[] = [
-    { rot: "🔎 Escolher do estoque / catálogo", sub: "busca por código ou descrição, marca vários", fn: () => setAddModal("cat") },
-    { rot: "📋 Colar do Excel", sub: "cola 10, 15 linhas de uma vez, com ou sem cabeçalho", fn: () => setAddModal("colar") },
-    { rot: "📄 Importar planilha (.xlsx/.csv)", sub: "lê o arquivo como o colar do Excel e mostra a prévia antes de adicionar", fn: () => arquivoRef.current?.click() },
-    { rot: "⬇ Baixar modelo Excel com nossos códigos", sub: "aba Lista para preencher + aba Códigos do estoque (para PROCV)",
-      fn: () => { window.location.href = `/api/rc-projetos/modelo?emp=${encodeURIComponent(empresa)}`; } },
-  ];
+  /** Barra (08/10/26, Benny): dois botões Excel diretos no lugar do "+ Adicionar itens ▾".
+   *  Colar continua nativo na grade (Ctrl+V numa linha em branco); o catálogo com marcação
+   *  múltipla ficou no ⋯. */
+  const urlModelo = `/api/rc-projetos/modelo?emp=${encodeURIComponent(empresa)}&projeto=${encodeURIComponent(String(codigoProjeto))}`;
   /** Linhas do modal "Adicionar itens" → grade. As sem código passam pelo casamento automático. */
   const adicionarLinhasNovas = useCallback((novas: LinhaNova[], modo: "cat" | "colar") => {
     const rows: LinhaGrade[] = novas.map((n) => {
@@ -2369,6 +2366,7 @@ export default function MateriaisGrade({
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
   /** "⋯" (spec B.2): tudo o que saiu da barra continua aqui. */
   const menuMais: { rot: string; dica?: string; off?: boolean; fn: () => void }[] = [
+    { rot: "🔎 Escolher vários do estoque (com quantidade)", dica: "Busca no nosso estoque, marca vários itens com a quantidade e adiciona de uma vez ao grupo escolhido", fn: () => setAddModal("cat") },
     { rot: ocupado === "auto" ? "⇄ Vinculando…" : "⇄ Vincular PCs automaticamente", off: salvando || !!ocupado, dica: "Procura, nos pedidos de compra deste projeto, o item de cada linha — e grava o vínculo", fn: () => void vincularAuto() },
     { rot: ocupado === "sug" ? "Procurando…" : "Ver sugestões de vínculo com PCs", off: !!ocupado, dica: "Linhas parecidas com itens dos PCs do projeto, para você confirmar (também no “+ vincular” de cada linha)", fn: () => void verSugestoes() },
     { rot: "Exportar Excel", off: !validas.length, fn: () => exportar() },
@@ -2567,16 +2565,16 @@ export default function MateriaisGrade({
             className="inline-flex items-center px-2.5 py-1 rounded-full border border-dashed border-ww-accent/70 text-[12px] text-ww-accent hover:bg-ww-accentSoft">+ equipamento</button>
         </div>
         <span className="flex-1" />
-        <details className="relative" data-menu="adicionar">
-          <summary className="list-none cursor-pointer px-2.5 py-1 text-[12px] rounded-lg bg-ww-accent text-white font-semibold hover:brightness-110 select-none">+ Adicionar itens ▾</summary>
-          <div role="menu" className="absolute right-0 mt-1 z-30 min-w-[290px] rounded-lg border border-ww-border bg-[rgb(var(--color-ww-panel))] shadow-xl p-1 text-[11.5px]">
-            {menuAdicionar.map((m) => (
-              <button key={m.rot} type="button" onClick={(e) => { (e.currentTarget.closest("details") as HTMLDetailsElement).open = false; m.fn(); }}
-                className="block w-full text-left px-2 py-1.5 rounded hover:bg-ww-rowHover">
-                {m.rot}<small className="block text-[10.5px] text-ww-textFaint">{m.sub}</small>
-              </button>))}
-          </div>
-        </details>
+        <a href={urlModelo} data-baixar-modelo download
+          title={"Baixa o modelo Excel com os nossos códigos: na 1ª coluna digite e escolha o item, preencha Qtd, data e grupo.\nDepois suba o arquivo aqui ao lado ou copie as colunas azuis (B:H) e cole numa linha em branco (Ctrl+V)."}
+          className="inline-flex items-center gap-1.5 px-2.5 py-1 text-[12px] rounded-lg border border-ww-border text-ww-text hover:border-emerald-600/70 hover:bg-emerald-600/5">
+          <IconeExcel /> ⬇ Baixar modelo
+        </a>
+        <button type="button" data-subir-lista onClick={() => arquivoRef.current?.click()}
+          title={"Sobe a lista preenchida (.xlsx do modelo, ou qualquer planilha/CSV com Código, Item, Qtd…).\nMostra a prévia antes de adicionar; itens sem código passam pela compatibilização."}
+          className="inline-flex items-center gap-1.5 px-2.5 py-1 text-[12px] rounded-lg border border-ww-border text-ww-text hover:border-emerald-600/70 hover:bg-emerald-600/5">
+          <IconeExcel /> ⬆ Subir lista preenchida
+        </button>
         <button type="button" data-compat-toggle onClick={() => setColSugManual(colSugAberta ? false : true)}
           title="Mostra/oculta a coluna de compatibilização com o estoque. Ela abre sozinha quando há item sem código."
           className={`px-2.5 py-1 text-[12px] rounded-lg border transition ${colSugAberta ? "border-amber-500/70 text-amber-800 dark:text-amber-200 bg-amber-500/10" : "border-ww-border text-ww-text hover:border-ww-accent"}`}>
@@ -2794,6 +2792,7 @@ export default function MateriaisGrade({
             grupo={{ de: grupoDe, cab: cabecalhoGrupo, cor: corGrupo, rodape: (k) => <RodapeGrupo onInserir={(n) => inserirLinhas(k, n)} /> }}
             corLinha={(l) => (String(l.item ?? "").trim() || l.equipamento ? corGrupo(normGrupo(l.equipamento || "Geral")) : null)}
             colarExtras={[{ label: "Equipamento", key: "equipamento" }, { label: "Grupo", key: "equipamento" }, { label: "Modelo", key: "modelo" }, { label: "PC", key: "pc_numero" }, { label: "PC nº", key: "pc_numero" }, { label: "Observação", key: "observacao" }, { label: "Obs", key: "observacao" }]}
+            colarPosExtras={POSICIONAIS_EXTRAS_GRADE}
             aoColar={() => setCasarAposColar(true)}
             onChange={(l) => {
               // Com filtro ativo, o que volta é só o pedaço visível — recompõe
@@ -2814,7 +2813,7 @@ export default function MateriaisGrade({
                 ? new Set(visiveis.filter((l) => l._id.startsWith("db")).map((l) => l._id))
                 : new Set()),
             }}
-            vazioMsg="Digite, cole do Excel (Ctrl+V) ou use + Adicionar itens." />}
+            vazioMsg="Digite, cole do Excel (Ctrl+V) ou suba a lista preenchida do modelo." />}
 
       {/* "Comprado fora da lista" saiu da tela (07/10/26, Benny): só pelo ⋯ › PCs com itens fora da
           lista. O valor continua no comprometido do resumo (cada PC do projeto conta). */}
@@ -2968,7 +2967,7 @@ export default function MateriaisGrade({
       <input ref={arquivoRef} type="file" accept=".xlsx,.xls,.csv,.txt" hidden data-importar-arquivo
         onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; if (f) void abrirArquivo(f); }} />
       {addModal && (
-        <AdicionarItensModal key={importado?.nome ?? addModal} empresa={empresa} modoInicial={addModal}
+        <AdicionarItensModal key={importado?.nome ?? addModal} empresa={empresa} codigoProjeto={codigoProjeto} modoInicial={addModal}
           textoInicial={importado?.texto} arquivo={importado?.nome ?? null}
           grupos={[...gruposChips].sort((a, b) => Number(b.k === equipFiltro) - Number(a.k === equipFiltro)).map((g) => ({ k: g.k, nome: g.nome, data: g.data }))}
           onAdicionar={adicionarLinhasNovas} onFechar={() => { setAddModal(null); setImportado(null); }} />
