@@ -12,6 +12,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useUserPerms } from "../UserPermsProvider";
 import { canEdit } from "@/lib/permissions";
 
@@ -55,7 +56,21 @@ export function useProjetosAtivos(ligado = true) {
     } catch (e) { setLista(antes); return String(e); }
   }, [lista]);
 
-  return { disponivel, lista, chaves, alternar, erro, recarregar: carregar };
+  /** Salva a seleção do painel ⚙ Ativos de uma vez (só o que mudou). */
+  const salvarLote = useCallback(async (mudancas: (ProjetoAtivoInfo & { ativo: boolean })[]): Promise<string | null> => {
+    if (!mudancas.length) return null;
+    try {
+      const r = await fetch("/api/rc-projetos/ativos", {
+        method: "PUT", headers: { "content-type": "application/json" },
+        body: JSON.stringify({ itens: mudancas.map((m) => ({ empresa: m.empresa, codigo_projeto: m.codigo_projeto, ativo: m.ativo })) }),
+      });
+      const j = await r.json().catch(() => ({}));
+      await carregar();
+      return r.ok ? null : (j.error ?? r.statusText);
+    } catch (e) { await carregar(); return String(e); }
+  }, [carregar]);
+
+  return { disponivel, lista, chaves, alternar, salvarLote, erro, recarregar: carregar };
 }
 
 /** ★ ativo / ☆ marcar — para no clique (o cabeçalho do cartão abre/fecha). */
@@ -77,6 +92,15 @@ export function EstrelaAtivo({ ativo, pode, onAlternar, tamanho = 15 }: {
 }
 
 export type ItemMenu = { empresa: string; codigo: number; nome: string; cliente?: string | null; ativo: boolean };
+
+/** Do maior PJ para o menor; sem número de PJ, por código (mais novo primeiro), no fim. */
+export const ordenar = (a: ItemMenu[]) => [...a].sort((x, y) => {
+  const nx = numeroPj(x.nome), ny = numeroPj(y.nome);
+  if (nx != null && ny != null && nx !== ny) return ny - nx;
+  if (nx != null && ny == null) return -1;
+  if (nx == null && ny != null) return 1;
+  return y.codigo - x.codigo;
+});
 
 export default function ProjetosAtivosMenu({ itens, onEscolher, onAlternar, pode, disponivel, atual, direita = false }: {
   /** Todos os projetos conhecidos (os ativos vêm marcados); só os ativos se a tela não conhece os outros. */
@@ -104,13 +128,6 @@ export default function ProjetosAtivosMenu({ itens, onEscolher, onAlternar, pode
     return () => document.removeEventListener("mousedown", fora);
   }, [aberto]);
 
-  const ordenar = (a: ItemMenu[]) => [...a].sort((x, y) => {
-    const nx = numeroPj(x.nome), ny = numeroPj(y.nome);
-    if (nx != null && ny != null && nx !== ny) return ny - nx;
-    if (nx != null && ny == null) return -1;
-    if (nx == null && ny != null) return 1;
-    return y.codigo - x.codigo;
-  });
   const qq = q.trim().toLowerCase();
   const casa = (it: ItemMenu) => !qq || `${it.nome} ${it.cliente ?? ""} ${it.empresa}`.toLowerCase().includes(qq);
   const ativos = useMemo(() => ordenar(itens.filter((i) => i.ativo)), [itens]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -205,5 +222,100 @@ export function ProjetoAtivosCabecalho({ empresa, codigo, nome, cliente }: { emp
         onAlternar={(it, ativo) => { void pa.alternar({ empresa: it.empresa, codigo_projeto: it.codigo, nome: it.nome, cliente: it.cliente ?? null }, ativo).then((e) => { if (e) setAviso(e); }); }} />
       {aviso && <span className="text-[11.5px] text-ww-critText">{aviso}</span>}
     </div>
+  );
+}
+
+/**
+ * ⚙ Ativos (08/10/26, Benny): painel com TODOS os projetos, do mais novo para o mais antigo, cada
+ * um com caixa de marcar; "Marcar todos" / "Desmarcar todos" (valem para o que a busca mostra) e
+ * busca. Nada grava até "Salvar" — e a seleção vale para todo mundo.
+ */
+export function PainelAtivos({ itens, pode, onSalvar, onFechar }: {
+  itens: ItemMenu[]; pode: boolean;
+  onSalvar: (mudancas: ItemMenu[]) => Promise<string | null>;
+  onFechar: () => void;
+}) {
+  const [marc, setMarc] = useState<Set<string>>(() => new Set(itens.filter((i) => i.ativo).map((i) => chaveProjeto(i.empresa, i.codigo))));
+  const [q, setQ] = useState("");
+  const [soMarcados, setSoMarcados] = useState(false);
+  const [salvando, setSalvando] = useState(false);
+  const [erro, setErro] = useState<string | null>(null);
+  const busca = useRef<HTMLInputElement>(null);
+  useEffect(() => { setTimeout(() => busca.current?.focus(), 0); }, []);
+  useEffect(() => {
+    const h = (e: KeyboardEvent) => { if (e.key === "Escape") onFechar(); };
+    window.addEventListener("keydown", h); return () => window.removeEventListener("keydown", h);
+  }, [onFechar]);
+
+  const todos = useMemo(() => ordenar(itens), [itens]);
+  const qq = q.trim().toLowerCase();
+  const vis = todos.filter((it) => (!qq || `${it.nome} ${it.cliente ?? ""} ${it.empresa}`.toLowerCase().includes(qq))
+    && (!soMarcados || marc.has(chaveProjeto(it.empresa, it.codigo))));
+  const mudancas = todos.filter((it) => marc.has(chaveProjeto(it.empresa, it.codigo)) !== it.ativo)
+    .map((it) => ({ ...it, ativo: !it.ativo }));
+  const alterna = (k: string) => setMarc((m) => { const n = new Set(m); if (n.has(k)) n.delete(k); else n.add(k); return n; });
+  const emMassa = (ligar: boolean) => setMarc((m) => { const n = new Set(m); for (const it of vis) { const k = chaveProjeto(it.empresa, it.codigo); if (ligar) n.add(k); else n.delete(k); } return n; });
+  const salvar = async () => {
+    setSalvando(true); setErro(null);
+    const e = await onSalvar(mudancas);
+    setSalvando(false);
+    if (e) setErro(e); else onFechar();
+  };
+
+  if (typeof document === "undefined") return null;
+  // portal no body: fora do .op (estilos de botão) e de qualquer container-type que prenda o fixed
+  return createPortal(
+    <div className="fixed inset-0 z-[120] flex items-start justify-center pt-[8vh] bg-black/40" onMouseDown={(e) => { if (e.target === e.currentTarget) onFechar(); }}>
+      <div role="dialog" aria-label="Projetos ativos" className="w-[min(640px,94vw)] max-h-[84vh] flex flex-col rounded-xl border border-ww-border bg-ww-panel shadow-2xl text-ww-text">
+        <div className="px-4 pt-3 pb-2 border-b border-ww-border">
+          <div className="flex items-center gap-2">
+            <h2 className="text-[15px] font-semibold flex-1">⚙ Projetos ativos</h2>
+            <span className="text-[12px] text-ww-textMuted">{marc.size} de {todos.length} marcados</span>
+            <button type="button" onClick={onFechar} className="ml-2 text-ww-textMuted hover:text-ww-text text-[16px] leading-none" title="Fechar (Esc)">✕</button>
+          </div>
+          <p className="text-[12px] text-ww-textMuted mt-0.5">Marque os projetos em andamento, em que você está atuando. A lista de Projetos abre só com eles; a seleção vale para todo mundo.</p>
+          <div className="flex items-center gap-2 mt-2 flex-wrap">
+            <input ref={busca} value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar projeto ou cliente…"
+              className="flex-1 min-w-[180px] h-[32px] px-2.5 rounded-md border border-ww-border bg-transparent text-[12.5px] outline-none focus:border-ww-accent" />
+            <button type="button" disabled={!pode} onClick={() => emMassa(true)}
+              className="h-[32px] px-2.5 rounded-md border border-ww-border text-[12px] hover:bg-ww-rowHover disabled:opacity-50">Marcar todos{qq ? ` (${vis.length})` : ""}</button>
+            <button type="button" disabled={!pode} onClick={() => emMassa(false)}
+              className="h-[32px] px-2.5 rounded-md border border-ww-border text-[12px] hover:bg-ww-rowHover disabled:opacity-50">Desmarcar todos{qq ? ` (${vis.length})` : ""}</button>
+            <label className="inline-flex items-center gap-1.5 text-[12px] text-ww-textMuted cursor-pointer select-none">
+              <input type="checkbox" checked={soMarcados} onChange={(e) => setSoMarcados(e.target.checked)} /> só marcados
+            </label>
+          </div>
+        </div>
+        <div className="flex-1 overflow-auto px-2 py-1.5">
+          {vis.map((it) => {
+            const k = chaveProjeto(it.empresa, it.codigo);
+            const on = marc.has(k);
+            const mudou = on !== it.ativo;
+            return (
+              <label key={k} className={`flex items-center gap-2.5 px-2 py-1.5 rounded-md cursor-pointer hover:bg-ww-rowHover ${mudou ? "bg-ww-accentSoft/40" : ""}`}>
+                <input type="checkbox" checked={on} disabled={!pode} onChange={() => alterna(k)} className="w-[15px] h-[15px] accent-amber-500" />
+                <span className="min-w-0 flex-1">
+                  <span className="block text-[12.5px] font-semibold truncate">{it.nome}</span>
+                  {(it.cliente || it.empresa !== "SF") && <span className="block text-[11px] text-ww-textMuted truncate">{[it.cliente, it.empresa !== "SF" ? it.empresa : ""].filter(Boolean).join(" · ")}</span>}
+                </span>
+                {mudou && <span className="text-[10.5px] text-ww-textMuted shrink-0">{on ? "vai entrar" : "vai sair"}</span>}
+              </label>
+            );
+          })}
+          {!vis.length && <p className="px-2 py-3 text-[12px] text-ww-textMuted">Nenhum projeto{qq ? ` com “${q}”` : ""}.</p>}
+        </div>
+        <div className="flex items-center gap-2 px-4 py-2.5 border-t border-ww-border">
+          <span className="text-[12px] text-ww-textMuted flex-1">
+            {erro ? <span className="text-ww-critText">Não salvou: {erro}</span>
+              : !pode ? "Só quem edita projetos (ou administrador) marca os ativos."
+              : mudancas.length ? `${mudancas.length} alteraç${mudancas.length === 1 ? "ão" : "ões"} por salvar` : "Nenhuma alteração"}
+          </span>
+          <button type="button" onClick={onFechar} className="h-[32px] px-3 rounded-md border border-ww-border text-[12.5px] hover:bg-ww-rowHover">Cancelar</button>
+          <button type="button" disabled={!pode || !mudancas.length || salvando} onClick={() => void salvar()}
+            className="h-[32px] px-3.5 rounded-md bg-ww-accent text-ww-onAccent text-[12.5px] font-semibold disabled:opacity-50">{salvando ? "Salvando…" : "Salvar"}</button>
+        </div>
+      </div>
+    </div>,
+    document.body,
   );
 }

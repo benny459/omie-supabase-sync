@@ -54,9 +54,10 @@ A lista de **pedidos de venda (PV/OS)** com as compras ligadas a cada um.
 
 ### Projetos ativos (★)
 
-- No topo de **Operação › Projetos**, o botão **★ Projetos ativos (N)** lista os projetos marcados como ativos, **do maior PJ para o menor**, com o cliente. Digite para buscar; **Enter** ou clique abre o cartão do projeto já expandido (projeto sem venda/compra na lista abre a página do projeto).
+- **⚙ Ativos** (topo de **Operação › Projetos**): abre a lista de **todos os projetos**, do mais novo para o mais antigo, cada um com uma caixa de marcar. Marque os projetos **em andamento, em que se está atuando**; há **busca**, **Marcar todos** / **Desmarcar todos** (valem para o que a busca mostra) e **só marcados**. Nada grava até **Salvar** — e a seleção vale para todo mundo.
+- Ao lado, o botão **★ Projetos ativos (N)** lista os projetos marcados como ativos, **do maior PJ para o menor**, com o cliente. Digite para buscar; **Enter** ou clique abre o cartão do projeto já expandido (projeto sem venda/compra na lista abre a página do projeto).
 - Ao lado, **★ Só ativos | Todos**: por padrão a lista mostra **só os ativos**; **Todos** mostra o resto. A escolha fica gravada no seu navegador. Enquanto nenhum projeto estiver marcado, aparecem todos.
-- Para marcar ou desmarcar: clique na **☆/★** ao lado do nome do projeto (no cartão), no menu (digitando, aparecem também os não marcados, com ☆) ou no cabeçalho da página do projeto. Dá para **desfazer** pelo aviso que aparece embaixo.
+- Atalhos para marcar ou desmarcar um projeto só: a **☆/★** ao lado do nome do projeto (no cartão), no menu ★ (digitando, aparecem também os não marcados, com ☆) ou no cabeçalho da página do projeto. Dá para **desfazer** pelo aviso que aparece embaixo.
 - A marca é **a mesma para todo mundo** (é do projeto, não da pessoa). Marca quem edita projetos ou é administrador.
 - A lista de projetos vem, por padrão, **em ordem decrescente de PJ** (clique no cabeçalho “projeto” ou “emissão” para mudar).
 - Na página do projeto, o mesmo menu **★ Projetos ativos** fica no cabeçalho para pular de um projeto ativo para outro.
