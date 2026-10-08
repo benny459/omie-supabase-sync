@@ -340,3 +340,6 @@ html:not(.dark) .cp3 .hist.g{color:#15803d}html:not(.dark) .cp3 .hist.m{color:#b
 .cp3 tr.row-prov td{background-image:repeating-linear-gradient(135deg,transparent 0 8px,color-mix(in srgb,#a855f7 6%,transparent) 8px 16px)}
 .cp3 .kpis{grid-template-columns:repeat(7,1fr)}
 @media (max-width:1180px){.cp3 .kpis{grid-template-columns:repeat(3,1fr)}}
+.cp3 .sugnf{all:unset;cursor:pointer;font-size:11px;font-weight:600;color:#c4b5fd;background:color-mix(in srgb,#a855f7 12%,transparent);border:1px solid color-mix(in srgb,#a855f7 45%,transparent);border-radius:999px;padding:2px 8px;white-space:nowrap}
+html:not(.dark) .cp3 .sugnf{color:#7c3aed}
+.cp3 .sugnf:hover{background:color-mix(in srgb,#a855f7 22%,transparent)}

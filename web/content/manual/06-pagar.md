@@ -142,6 +142,10 @@ Conta **provisionada** é uma estimativa: ainda não tem documento (NF, boleto o
 
 Nada é gravado no Omie — a confirmação fica no painel, por cima do título.
 
+### Sugestão automática
+
+Quando chega uma NF (NF-e ou NFS-e, captada pela Focus) do **mesmo CNPJ**, emitida entre 35 dias antes e 15 dias depois do vencimento, com valor até 50% diferente, e que ainda não está em nenhum outro título, a linha mostra **✦ NFS-e 3601 encontrada — confirmar?**. Clicar abre o **Confirmar com NF** já preenchido com tipo, número, valor e chave — confira e salve. A sugestão nunca confirma sozinha.
+
 ### Baixa de provisionado
 
 Conta provisionada **não pode ser baixada** nem entrar no pagamento em lote: confirme com a NF antes. O administrador pode forçar marcando **Administrador: baixar sem documento** e escrevendo o motivo na Observação (fica registrado na observação).
