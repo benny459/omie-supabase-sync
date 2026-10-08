@@ -110,6 +110,7 @@ export function podeAbrirRota(user: UserPerms | null | undefined, href: string):
   if (href.startsWith("/erp/compras")) return p["compras.acesso"] !== false;
   if (href.startsWith("/estoque")) return p["estoque.acesso"] !== false;
   if (href.startsWith("/financeiro/pagar")) return p["financeiro.ver_pagar"] !== false;
+  if (href.startsWith("/financeiro/fluxo")) return p["financeiro.ver_fluxo"] !== false && (p["financeiro.ver_pagar"] !== false || p["financeiro.ver_receber"] !== false);
   if (href.startsWith("/financeiro/receber")) return p["financeiro.ver_receber"] !== false;
   if (href.startsWith("/faturamento")) return p["faturamento.acesso"] === true || user?.is_admin === true;
   if (href.startsWith("/financeiro/conciliacao")) return p["financeiro.conciliar"] === true;

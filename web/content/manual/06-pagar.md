@@ -5,7 +5,7 @@ icone: 💸
 area: erp
 rotas: /financeiro/pagar
 caminhos: web/components/financeiro/TelaPagarV3.tsx, web/components/financeiro/pagar-v3-motor.ts, web/components/financeiro/RemessaC6.tsx, web/components/financeiro/SerieDialog.tsx, web/components/financeiro/EditarTituloModal.tsx, web/lib/financeiro-editar.ts, web/components/NovoTituloModal.tsx, web/app/api/financeiro/pagar
-atualizado: 2026-10-06
+atualizado: 2026-10-08
 ---
 
 **Financeiro → Títulos a Pagar** junta os títulos do Omie (até o corte) e as contas nascidas no painel (previsões de PC e contas lançadas aqui).
@@ -107,3 +107,15 @@ A aba de conciliação desta tela mostra só as **saídas (contas a pagar)** da 
 ## Pagamento antecipado de pedido de compra
 
 O botão **💸 Antecipar PC** (no topo) pede o nº do pedido e abre o lançamento do adiantamento (Pix ou depósito, com os dados do cadastro do fornecedor). O título nasce com o nº **PC 7356-ANT**, aparece aqui e pode ir no arquivo C6. As parcelas do pedido descontam o valor adiantado, então a conta não aparece duas vezes. Detalhes em **Compras › Pagamento antecipado**.
+
+## O que já foi pago (aba ✓ Pagos)
+
+Ao lado de **Em aberto**, a aba **✓ Pagos** mostra tudo o que já foi pago — títulos do Omie e baixas feitas no painel —, pela data do pagamento. Escolha o período (este mês, mês passado, 7/30/90 dias, ano ou livre); no topo aparecem o total, os juros/multa e quantos foram pagos com atraso. A busca e a empresa do topo também filtram aqui. **CSV** exporta.
+
+## Busca em todo o histórico
+
+Digitando um nome, documento, NF ou CNPJ (3 letras ou mais), a lista **Em aberto** ignora o período e mostra todos os títulos em aberto que combinam; logo abaixo aparece o **Histórico** com os pagos, cancelados e vencidos antigos. Uma linha acima do histórico mostra os filtros que estão valendo (empresa, filtros de coluna).
+
+## Nº da NF e data de emissão
+
+No detalhe do título aparecem **Nº da NF** e **Emissão**. Em **Editar título…** dá para informar os dois — em título do Omie a alteração vale no painel (o Omie não é escrito) e continua valendo depois de cada sincronização.

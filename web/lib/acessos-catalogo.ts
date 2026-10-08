@@ -12,7 +12,7 @@ export type Chave =
   | "estoque.senha_inventario" | "estoque.codigos" | "estoque.config_mov" | "estoque.aprovar_perdas"
   | "estoque.separar_projeto"
   | "faturamento.acesso" | "faturamento.sem_proposta" | "faturamento.homologacao"
-  | "financeiro.ver_pagar" | "financeiro.ver_receber" | "financeiro.editar_titulo"
+  | "financeiro.ver_pagar" | "financeiro.ver_receber" | "financeiro.editar_titulo" | "financeiro.ver_fluxo"
   | "financeiro.baixar" | "financeiro.conciliar";
 
 /** Como o padrão (sem escolha explícita) é calculado — reproduz o que cada um podia fazer até hoje. */
@@ -40,6 +40,7 @@ export const CATALOGO: ItemCatalogo[] = [
   { chave: "financeiro.ver_pagar",      modulo: "financeiro", rotulo: "Ver contas a pagar",         descricao: "Títulos a Pagar",                                  padrao: "erp" },
   { chave: "financeiro.ver_receber",    modulo: "financeiro", rotulo: "Ver contas a receber",       descricao: "Títulos a Receber",                                padrao: "erp" },
   { chave: "financeiro.editar_titulo",  modulo: "financeiro", rotulo: "Incluir / excluir título",   descricao: "Criar ou excluir títulos",                         padrao: "erp" },
+  { chave: "financeiro.ver_fluxo",      modulo: "financeiro", rotulo: "Ver fluxo de caixa",         descricao: "Aba Fluxo de Caixa (por empresa, bancos unificados, cenários) — precisa também ver pagar ou receber", padrao: "erp" },
   { chave: "financeiro.baixar",         modulo: "financeiro", rotulo: "Baixar / estornar título",   descricao: "Registar pagamento ou recebimento de título do painel", padrao: "admin" },
   { chave: "financeiro.conciliar",      modulo: "financeiro", rotulo: "Conciliação bancária",       descricao: "Importar extrato OFX e casar com títulos",          padrao: "admin" },
   { chave: "faturamento.acesso",        modulo: "faturamento", rotulo: "Abrir e emitir no Faturamento", descricao: "Carteira de PV/OS, emissão de NF-e, recibo e registro de NFS-e", padrao: "admin" },

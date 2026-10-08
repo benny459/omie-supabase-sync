@@ -95,13 +95,15 @@ function hojeISO() {
 }
 
 export default function NovoTituloModal({
-  tipo, onClose, onCreated,
+  tipo, onClose, onCreated, inicial,
 }: {
   tipo: "pagar" | "receber";
   onClose: () => void;
   onCreated: () => void;
+  /** pré-preenchimento (08/10/26 — "lançar" um evento do simulador do Fluxo de Caixa) */
+  inicial?: { empresa?: string; valor?: number; vencimento?: string; obs?: string; recorrencia?: number };
 }) {
-  const [empresa, setEmpresa] = useState("SF");
+  const [empresa, setEmpresa] = useState(inicial?.empresa ?? "SF");
   const [q, setQ] = useState("");
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [buscando, setBuscando] = useState(false);
@@ -110,8 +112,8 @@ export default function NovoTituloModal({
   const [contas, setContas] = useState<Conta[]>([]);
   const [projetos, setProjetos] = useState<Projeto[]>([]);
 
-  const [valor, setValor] = useState("");
-  const [vencimento, setVencimento] = useState(hojeISO());
+  const [valor, setValor] = useState(inicial?.valor ? inicial.valor.toFixed(2).replace(".", ",") : "");
+  const [vencimento, setVencimento] = useState(inicial?.vencimento ?? hojeISO());
   const [previsao, setPrevisao] = useState("");
   const [categoria, setCategoria] = useState("");
   const [conta, setConta] = useState("");
@@ -120,11 +122,11 @@ export default function NovoTituloModal({
   const [barras, setBarras] = useState("");
   const [barrasAviso, setBarrasAviso] = useState<string | null>(null);
   const [gerandoDoc, setGerandoDoc] = useState(false);
-  const [obs, setObs] = useState("");
+  const [obs, setObs] = useState(inicial?.obs ?? "");
   // Recorrência (sql/73): gera uma série de contas a partir do 1º vencimento.
-  const [recFreq, setRecFreq] = useState("");
+  const [recFreq, setRecFreq] = useState(inicial?.recorrencia && inicial.recorrencia > 1 ? "mensal" : "");
   const [recModo, setRecModo] = useState<"n" | "ate" | "sem_fim">("n");
-  const [recN, setRecN] = useState("12");
+  const [recN, setRecN] = useState(inicial?.recorrencia && inicial.recorrencia > 1 ? String(inicial.recorrencia) : "12");
   const [recAte, setRecAte] = useState("");
   const [recDia, setRecDia] = useState("");
   const [recValor, setRecValor] = useState<"por_ocorrencia" | "dividir">("por_ocorrencia");

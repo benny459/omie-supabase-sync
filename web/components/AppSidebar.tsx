@@ -340,6 +340,21 @@ export const FINANCEIRO: NavItem[] = [
       </svg>
     ),
   },
+  {
+    // Fluxo de Caixa do Financeiro (08/10/26 — financeiro-fluxo-v3): por empresa,
+    // bancos unificados, cenários. Quem vê: financeiro.ver_fluxo + pagar ou receber.
+    href: "/financeiro/fluxo",
+    area: "erp",
+    grupo: "financeiro",
+    label: "Fluxo de Caixa",
+    tone: "text-sky-600",
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className="w-5 h-5" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M3 17l5-5 4 3 8-8"/>
+        <path d="M15 7h5v5M3 21h18"/>
+      </svg>
+    ),
+  },
   // Cadastros próprios (05/10/26): clientes e fornecedores vivem no painel e
   // abastecem todas as plataformas (cadastro único, sem duplicados — sql/57).
   // Desde 05/10/26 são um módulo próprio na barra (Cadastros), não itens do Financeiro.
