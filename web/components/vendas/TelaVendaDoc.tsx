@@ -292,10 +292,10 @@ export default function TelaVendaDoc({ id }: { id: number | null }) {
             <div style={{ ...input, display: "flex", alignItems: "center", gap: 6, opacity: 0.85 }}>☑ Sim — OS é serviço · tipo <b>Serviços</b></div>
           ) : (
             <div style={{ display: "flex", gap: 6 }}>
-              {([[true, "Sim — instalação/visita", "Mix"], [false, "Não — só material", "Mercantil"]] as const).map(([v, rot, tipo]) => (
+              {([[true, "Sim", "Mix"], [false, "Não", "Mercantil"]] as const).map(([v, rot, tipo]) => (
                 <button key={String(v)} type="button" disabled={!editavel} onClick={() => setF("servico_incluso", v)}
                   title={v ? "Vira Mix: a área de Serviços passa a ver o pedido para agendar" : "Fica Mercantil: só entrega de material"}
-                  style={{ ...input, flex: 1, cursor: editavel ? "pointer" : "default", textAlign: "left",
+                  style={{ ...input, flex: 1, cursor: editavel ? "pointer" : "default", textAlign: "left", whiteSpace: "nowrap",
                     borderColor: form.servico_incluso === v ? "var(--ww-brand, #3b82f6)" : undefined,
                     background: form.servico_incluso === v ? "color-mix(in srgb, var(--ww-brand, #3b82f6) 14%, transparent)" : undefined,
                     fontWeight: form.servico_incluso === v ? 600 : 400 }}>

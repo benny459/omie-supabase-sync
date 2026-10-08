@@ -179,8 +179,8 @@ No PV a pergunta **“Vai ter serviço da nossa equipe?”** é obrigatória —
 
 | Resposta | Tipo da venda | O que acontece |
 |---|---|---|
-| **Sim — instalação/visita** | **Mix** | o pedido aparece no **Painel de Vendas** do app de Serviços para gerar a OS e agendar; entram os alarmes de serviço |
-| **Não — só material** | **Mercantil** | só entrega de material |
+| **Sim** (instalação, visita) | **Mix** | o pedido aparece no **Painel de Vendas** do app de Serviços para gerar a OS e agendar; entram os alarmes de serviço |
+| **Não** (só material) | **Mercantil** | só entrega de material |
 | OS (só serviço) | **Serviços** | já vem marcado — a OS é serviço |
 
 Para corrigir um PV já criado (ex.: era Mix e ficou Mercantil): abra o pedido em **ERP → Vendas**, troque a resposta para **Sim** e clique **Gravar** (só enquanto o pedido está aberto). O antigo campo “Vendedor” era isto — o tipo da venda.
