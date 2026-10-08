@@ -2470,7 +2470,7 @@ export default function MateriaisGrade({
           <span className="inline-flex items-center gap-1.5" data-salvo="parado">
             <span className="inline-flex items-center gap-1.5 h-7 px-2.5 rounded-full border border-rose-500/50 bg-rose-500/10 text-[12px] font-medium text-rose-700 dark:text-rose-300"
               title="Enquanto isto estiver aqui, as mudanças NÃO vão para o sistema sozinhas">
-              <i aria-hidden className="w-1.5 h-1.5 rounded-full bg-rose-500" /> não está salvando: {semAutosave}
+              <i aria-hidden className="shrink-0 w-1.5 h-1.5 rounded-full bg-rose-500" /> <span className="max-w-[300px] truncate">não está salvando: {semAutosave}</span>
             </span>
             {semAutosave !== "a lista não carregou" && (
               <button type="button" onClick={() => void salvar()}
@@ -2485,7 +2485,7 @@ export default function MateriaisGrade({
             ✓ salvo {salvoEm}
           </span>
         ) : null}
-        <span className="flex-1" />
+        <span className="ml-auto inline-flex items-center gap-2 shrink-0" data-linha-etapas-dir>
         {subAba === "lista" && (<>
           <a href={urlModelo} data-baixar-modelo download aria-label="Baixar modelo Excel"
             title={"Baixar modelo Excel — com os nossos códigos: na 1ª coluna digite e escolha o item, preencha Qtd, data e grupo.\nDepois suba o arquivo aqui ao lado ou copie as colunas azuis (B:H) e cole numa linha em branco (Ctrl+V)."}
@@ -2500,6 +2500,7 @@ export default function MateriaisGrade({
         </>)}
         <a href={`/projetos?${new URLSearchParams({ empresa, abrir: String(codigoProjeto) })}`} className="text-[12px] text-ww-accent hover:underline whitespace-nowrap"
           title="Vendas (PV/OS) e as previsões de faturamento e recebimento ficam no cartão do projeto em Operação › Projetos">vendas e datas →</a>
+        </span>
       </div>
       {cmpErro && !cmp && <p className="text-[11px] text-rose-600">Compras do projeto indisponíveis: {cmpErro}</p>}
 
@@ -2621,7 +2622,7 @@ export default function MateriaisGrade({
         </div>
         <span className="flex-1" />
         {/* Ferramentas (08/10/26): botões "fantasma", mais leves que os filtros à esquerda. */}
-        <div className="flex items-center gap-1 flex-wrap justify-end" data-ferramentas>
+        <div className="ml-auto flex items-center gap-1 flex-wrap justify-end" data-ferramentas>
         <button type="button" data-compat-toggle onClick={() => setColSugManual(colSugAberta ? false : true)}
           title={colSugAberta ? "Oculta a coluna de compatibilização com o estoque (ela some sozinha quando todos os itens têm código)"
             : "Mostra a coluna de compatibilização com o estoque. Ela abre sozinha quando há item sem código."}
@@ -2722,7 +2723,7 @@ export default function MateriaisGrade({
               setTimeout(() => document.querySelector("[data-agente]")?.scrollIntoView({ behavior: "smooth", block: "start" }), 120); }}
             title="O agente coloca os itens marcados num lote com a data certa de pedir (um PC por fornecedor por data)"
             className={`${BT_SEL} font-semibold bg-white/15 border border-white/40 hover:bg-white/25`}>
-            ✨ Planejar<span className="mg-rot-opc">&nbsp;com o agente</span>
+            ✨ Planejar<span className="mg-rot-opc">com o agente</span>
           </button>
           <span aria-hidden className="mx-1 h-5 w-px bg-white/30" />
           <span className="inline-flex items-center gap-1 flex-wrap" data-sel-secundarias>
