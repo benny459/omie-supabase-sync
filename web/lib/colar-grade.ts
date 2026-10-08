@@ -31,8 +31,9 @@ export function dataParaIso(v: string): string {
     return d.toISOString().slice(0, 10);
   }
   // número de série do Excel (dias desde 1899-12-30), quando a célula de data vem crua
-  if (/^\d{5}$/.test(t)) {
-    const d = new Date(Date.UTC(1899, 11, 30) + Number(t) * 86400000);
+  // (planilha importada: pode vir com a fração da hora, ex. 46345.9994 — arredonda para o dia)
+  if (/^\d{5}(\.\d+)?$/.test(t)) {
+    const d = new Date(Date.UTC(1899, 11, 30) + Math.round(Number(t)) * 86400000);
     return d.toISOString().slice(0, 10);
   }
   return "";

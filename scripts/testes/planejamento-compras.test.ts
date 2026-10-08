@@ -1,7 +1,7 @@
 // cd web && npx tsx --test ../scripts/testes/planejamento-compras.test.ts
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { planejarItem, normFornecedor, type PrazoFornecedor } from "../../web/lib/planejamento-compras";
+import { planejarItem, prazoAuto, prazoEfetivo, normFornecedor, type PrazoFornecedor } from "../../web/lib/planejamento-compras";
 import { dataParaIso, lerColagem } from "../../web/lib/colar-grade";
 
 const hoje = "2026-10-08";
@@ -100,4 +100,30 @@ test("aceite F4: item que ganha PC sai do lote no recálculo; lote agendado sem 
 });
 test("simular comprar tudo hoje: todo lote pede hoje", () => {
   assert.ok(montarLotes(itensMock, { janela: 10, hoje, simAgora: true }).every((l) => l.pedir === hoje));
+});
+
+// ── prazo ajustado no item (sql/141, 08/10/26) ──
+test("prazo do item ajustado vence o manual do fornecedor e o do catálogo; comprar até recalcula", () => {
+  const p = planejarItem({ necessario: "2026-10-30", temPc: false, fornecedor: ACQUA, prazoItem: 31, prazoManualItem: 5, prazos: prazos(10), hoje });
+  assert.equal(p.prazo, 5);
+  assert.equal(p.fonte, "item_manual");
+  assert.equal(p.comprarAte, "2026-10-22");
+  assert.equal(p.estimado, false);
+});
+test("prazo do item vazio ou inválido = automático (↺)", () => {
+  for (const v of [null, "", "abc", -2]) {
+    const p = planejarItem({ necessario: "2026-10-30", temPc: false, fornecedor: ACQUA, prazoManualItem: v as never, prazos: prazos(null), hoje });
+    assert.equal(p.fonte, "historico");
+    assert.equal(p.prazo, 21);
+  }
+});
+test("prazoAuto ignora o ajuste do item (valor riscado na célula)", () => {
+  const a = prazoAuto({ fornecedor: ACQUA, prazoItem: null, prazos: prazos(null) });
+  assert.deepEqual(a, { prazo: 21, fonte: "historico", estimado: false });
+  const e = prazoEfetivo({ fornecedor: ACQUA, prazoManualItem: "0", prazos: prazos(null) });
+  assert.deepEqual(e, { prazo: 0, fonte: "item_manual", estimado: false });
+});
+test("data de planilha importada: número de série com fração da hora vira o dia certo", () => {
+  assert.equal(dataParaIso("46345.99947916667"), "2026-11-20");
+  assert.equal(dataParaIso("46346"), "2026-11-20");
 });

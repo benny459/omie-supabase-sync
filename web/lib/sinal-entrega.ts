@@ -26,6 +26,8 @@ export function sinalEntrega(a: {
   recebidoEm?: string | null; recebido?: boolean;
   temPc: boolean; previsaoPc?: string | null;
   prazoDias?: number | null; hoje?: string; folgaDias?: number;
+  /** de onde veio o prazo (ex.: "ajustado no item") — só entra no texto do motivo (sql/141) */
+  prazoFonte?: string | null;
 }): SinalEntrega | null {
   const nec = a.necessario && /^\d{4}-\d{2}-\d{2}/.test(a.necessario) ? a.necessario.slice(0, 10) : null;
   const hoje = a.hoje ?? iso(new Date());
@@ -57,7 +59,7 @@ export function sinalEntrega(a: {
   } else {
     chegada = addDias(hoje, Math.max(0, Number(a.prazoDias) || 0));
     estimada = true;
-    porque = `chegada ≈ ${br(chegada)} (sem PC: hoje + prazo médio de ${Math.max(0, Number(a.prazoDias) || 0)}d)`;
+    porque = `chegada ≈ ${br(chegada)} (sem PC: hoje + prazo de ${Math.max(0, Number(a.prazoDias) || 0)}d${a.prazoFonte ? `, ${a.prazoFonte}` : ""})`;
   }
   if (!nec) return { ...base, pcAtrasadoDias, nivel: "ok", chegada, estimada, folga: null, motivo: porque };
   const f = dias(nec, chegada);

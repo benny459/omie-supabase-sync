@@ -80,7 +80,12 @@ export type ColunaGrade = {
   /** Fundo próprio da coluna (CSS), opaco — vale também para coluna presa (08/10/26: a coluna
    *  provisória âmbar "Compatibilizar com o estoque"). */
   fundo?: string;
+  /** Texto de ajuda na célula vazia (ex.: "cole do Excel aqui (Ctrl+V)" na linha em branco). */
+  placeholder?: (linha: LinhaGrade) => string | undefined;
 };
+
+/** Ação no passar do mouse na linha (ao lado do 🗑) — ex.: "inserir linha abaixo". */
+export type AcaoLinha = { rot: string; dica: string; fn: () => void };
 
 export type LinhaGrade = Record<string, string> & { _id: string };
 
@@ -115,7 +120,23 @@ export const brl = (v: number) =>
 export default function GradeEditavel({
   cols, linhas, onChange, altura = 340, vazioMsg = "Digite, cole do Excel ou suba a planilha.",
   selecao, aoColar, colarExtras = [], aoRemover, botaoLinha = true, grupo, herdarNoColar = [], corLinha,
+  colsTodas, acoesLinha, escala = 1, ajustarLargura = false, cabecalhoNaPagina = false, linhaEmBranco,
 }: {
+  /** A linha conta como "em branco" para o colar? (padrão: todas as editáveis vazias). A lista de
+   *  materiais diz "sem item e sem código" — a linha nova do grupo já nasce com grupo e data. */
+  linhaEmBranco?: (l: LinhaGrade) => boolean;
+  /** Todas as colunas, inclusive as ocultas pelo usuário (08/10/26): o colar POR POSIÇÃO segue
+   *  a ordem completa (Código · Item · Qtd…) mesmo com colunas escondidas. Sem isso = `cols`. */
+  colsTodas?: ColunaGrade[];
+  /** Ações da linha no passar do mouse, ao lado do 🗑. */
+  acoesLinha?: (l: LinhaGrade) => AcaoLinha[];
+  /** Tamanho da letra (08/10/26): 1 = normal. Escala fonte e altura da linha juntas. */
+  escala?: number;
+  /** Encolhe as colunas (com reticências) para caber na largura da tela, sem rolagem lateral. */
+  ajustarLargura?: boolean;
+  /** Sem caixa de rolagem própria: a grade usa a altura da página e só o cabeçalho das colunas
+   *  fica preso no topo (abaixo da barra do painel) ao rolar. */
+  cabecalhoNaPagina?: boolean;
   /** Cor da borda esquerda da linha (08/10/26, spec B v3: a cor do grupo de equipamento). */
   corLinha?: (l: LinhaGrade) => string | null | undefined;
   /** Chaves que a linha colada sem valor herda da linha onde a colagem começou (ex.: equipamento). */
@@ -126,7 +147,9 @@ export default function GradeEditavel({
   /** Linhas de cabeçalho de grupo (08/10/26, spec B.3): antes de cada mudança de `de(linha)`
    *  entra uma linha larga com `cab(chave, linhas do grupo)`. `de` = null não abre grupo. */
   grupo?: { de: (l: LinhaGrade) => string | null; cab: (chave: string, linhas: LinhaGrade[]) => React.ReactNode;
-    /** cor do grupo — borda esquerda do cabeçalho */ cor?: (chave: string) => string | null | undefined };
+    /** cor do grupo — borda esquerda do cabeçalho */ cor?: (chave: string) => string | null | undefined;
+    /** linha no fim de cada grupo (08/10/26: "+ linha · + [3] linhas") */
+    rodape?: (chave: string, linhas: LinhaGrade[]) => React.ReactNode };
   /** Quem usa decide como remover (ex.: lista de materiais com "Desfazer"). Sem isso, tira da grade. */
   aoRemover?: (id: string) => void;
   /** Colunas que não aparecem na grade mas entram no colar COM cabeçalho (ex.: Modelo, PC). */
@@ -174,9 +197,17 @@ export default function GradeEditavel({
     // inclusive as que ficam fora do colar por posição. Sem cabeçalho, pela posição a
     // partir da célula focada (coluna `pularNoColar` focada começa na 1ª posicional).
     // Parser comum com o modal "Adicionar itens" (lib/colar-grade): datas dd/mm/aaaa viram ISO.
-    const alvosNome = [...editaveis, ...colarExtras.map((x) => ({ ...x, tipo: editaveis.find((e) => e.key === x.key)?.tipo }))];
-    const posicionais = editaveis.filter((e) => !e.pularNoColar);
-    const ini = Math.max(0, posicionais.indexOf(editaveis[ci]));
+    // Colunas ocultas pelo usuário continuam no colar: a ordem por posição é a da grade inteira.
+    const todasEd = (colsTodas ?? cols).filter((c) => !c.calculada && !c.render);
+    const alvosNome = [...todasEd, ...colarExtras.map((x) => ({ ...x, tipo: todasEd.find((e) => e.key === x.key)?.tipo }))];
+    const posicionais = todasEd.filter((e) => !e.pularNoColar);
+    const vaziaEm = (l: LinhaGrade | undefined) => !l || (linhaEmBranco ? linhaEmBranco(l) : cols.every((c) => c.calculada || c.render || !String(l[c.key] ?? "").trim()));
+    const inserir = vaziaEm(linhas[li]);
+    let ini = Math.max(0, posicionais.findIndex((e) => e.key === editaveis[ci]?.key));
+    // Linha em branco + bloco mais largo do que cabe a partir da célula: são linhas inteiras do
+    // Excel (Código · Item · Qtd…) — começa na 1ª coluna, não onde o cursor está.
+    const largura = Math.max(...texto.replace(/\r/g, "").split("\n").filter((x) => x.trim()).map((x) => x.split(x.includes("\t") ? "\t" : ";").length), 0);
+    if (inserir && largura > posicionais.length - ini) ini = 0;
     const { linhas: lidas } = lerColagem(texto, alvosNome, posicionais, ini);
     if (!lidas.length) return;
     // Colunas herdadas (ex.: o grupo de equipamento): a linha colada sem valor recebe o da
@@ -185,8 +216,12 @@ export default function GradeEditavel({
     const herda: Record<string, string> = Object.fromEntries(herdarNoColar.map((k) => [k, ancora(k)]).filter(([, v]) => v));
 
     const novas = [...linhas];
+    /* Colou numa linha EM BRANCO (08/10/26): as linhas coladas entram ali e logo abaixo, como
+       linhas NOVAS — nada do que vem depois (outro grupo, linhas preenchidas) é sobrescrito.
+       Colar em cima de linhas preenchidas segue como planilha: sobrescreve a partir dali. */
     lidas.forEach((vals, dl) => {
       const alvo = li + dl;
+      if (inserir && dl > 0 && alvo < novas.length) novas.splice(alvo, 0, linhaVazia(cols));
       while (novas.length <= alvo) novas.push(linhaVazia(cols));
       const base = novas[alvo];
       const extra: Record<string, string> = Object.fromEntries(Object.entries(herda).filter(([k]) => !String(base[k] ?? "").trim() && !vals[k]));
@@ -198,7 +233,7 @@ export default function GradeEditavel({
     }
     onChange(novas);
     aoColar?.();
-  }, [linhas, cols, editaveis, onChange, aoColar, colarExtras, herdarNoColar]);
+  }, [linhas, cols, colsTodas, editaveis, onChange, aoColar, colarExtras, herdarNoColar, linhaEmBranco]);
 
   /** Paste capturado no CONTÊINER: o navegador entrega o evento ao input, e
    *  tratar só lá faria o bloco inteiro cair numa célula. */
@@ -215,14 +250,14 @@ export default function GradeEditavel({
       // dois do Excel e colava sem clicar em nada perdia os dois primeiros
       // itens, sobrescritos em silêncio. Colar sem foco é "acrescentar isto
       // aqui", não "substituir o começo".
-      const primeiraVazia = linhas.findIndex((l) =>
-        cols.every((c) => c.calculada || c.render || !String(l[c.key] ?? "").trim()));
+      const primeiraVazia = linhas.findIndex((l) => (linhaEmBranco ? linhaEmBranco(l)
+        : cols.every((c) => c.calculada || c.render || !String(l[c.key] ?? "").trim())));
       const li = foco?.l ?? (primeiraVazia >= 0 ? primeiraVazia : linhas.length);
       colar(texto, li, foco?.c ?? 0);
     };
     el.addEventListener("paste", onPaste);
     return () => el.removeEventListener("paste", onPaste);
-  }, [colar, foco, linhas, cols]);
+  }, [colar, foco, linhas, cols, linhaEmBranco]);
 
   const irPara = (l: number, c: number) => {
     const alvo = wrapRef.current?.querySelector<HTMLInputElement>(`[data-cel="${l}-${c}"]`);
@@ -296,14 +331,58 @@ export default function GradeEditavel({
   };
 
   // Colunas presas à esquerda: caixinha, # e as `fixa` iniciais, com fundo opaco.
-  const W_SEL = 28, W_NUM = 28;
+  const W_SEL = 28, W_NUM = 28, W_FIM = acoesLinha ? 44 : 24;
+  /* Caber na largura (08/10/26): as colunas encolhem na mesma proporção (até 50%) para a grade
+     caber sem rolagem lateral; o texto que não cabe ganha reticências e a dica mostra inteiro.
+     A escala (A− / A / A+) usa `zoom`: fonte, altura da linha e larguras crescem juntas. */
+  const [larguraDisp, setLarguraDisp] = useState(0);
+  useEffect(() => {
+    const el = wrapRef.current;
+    if (!el || !ajustarLargura) return;
+    const ro = new ResizeObserver(() => setLarguraDisp(el.clientWidth));
+    ro.observe(el);
+    setLarguraDisp(el.clientWidth);
+    return () => ro.disconnect();
+  }, [ajustarLargura]);
+  const z = escala > 0 ? escala : 1;
+  const fixoW = (selecao ? W_SEL : 0) + W_NUM + W_FIM;
+  const somaCols = cols.reduce((a, c) => a + c.w, 0);
+  const caber = ajustarLargura && larguraDisp > 0 ? (larguraDisp / z - fixoW - 2 - cols.length * 2) / somaCols : 1;
+  const fator = Math.max(0.5, Math.min(1, caber));
+  const wc = (c: ColunaGrade) => Math.max(16, Math.floor(c.w * fator));
   const esq = new Map<string, number>();
   {
     let x = (selecao ? W_SEL : 0) + W_NUM;
-    for (const c of cols) { if (!c.fixa) break; esq.set(c.key, x); x += c.w; }
+    for (const c of cols) { if (!c.fixa) break; esq.set(c.key, x); x += wc(c); }
   }
   const ultimaFixa = [...esq.keys()].pop();
-  const larguraTotal = (selecao ? W_SEL : 0) + W_NUM + 24 + cols.reduce((a, c) => a + c.w, 0);
+  const larguraTotal = Math.max(fixoW + cols.reduce((a, c) => a + wc(c), 0), ajustarLargura && larguraDisp ? Math.floor(larguraDisp / z) - 2 : 0);
+
+  /* Cabeçalho preso na PÁGINA (08/10/26): sem caixa de rolagem vertical, o thead desliza com
+     transform para ficar logo abaixo da barra do painel (.ab, sticky) enquanto a grade passa. */
+  const tabelaRef = useRef<HTMLTableElement>(null);
+  const theadRef = useRef<HTMLTableSectionElement>(null);
+  useEffect(() => {
+    if (!cabecalhoNaPagina) return;
+    let raf = 0;
+    const ajustar = () => {
+      raf = 0;
+      const t = tabelaRef.current, h = theadRef.current;
+      if (!t || !h) return;
+      const barra = document.querySelector(".ab") as HTMLElement | null;
+      const topo = barra && getComputedStyle(barra).position !== "static" ? Math.max(0, barra.getBoundingClientRect().bottom) : 0;
+      const r = t.getBoundingClientRect();
+      const hh = h.getBoundingClientRect().height;
+      const desl = Math.max(0, Math.min(topo - r.top, r.height - hh * 2));
+      h.style.transform = desl > 0 ? `translateY(${desl / z}px)` : "";
+      h.classList.toggle("shadow-[0_2px_6px_rgba(0,0,0,0.12)]", desl > 0);
+    };
+    const pedir = () => { if (!raf) raf = requestAnimationFrame(ajustar); };
+    ajustar();
+    window.addEventListener("scroll", pedir, true);
+    window.addEventListener("resize", pedir);
+    return () => { window.removeEventListener("scroll", pedir, true); window.removeEventListener("resize", pedir); if (raf) cancelAnimationFrame(raf); };
+  }, [cabecalhoNaPagina, z, linhas.length]);
   const OPACO = "bg-[rgb(var(--color-ww-panel))]";
   const fixo = (left: number, z: number) => ({ position: "sticky" as const, left, zIndex: z });
   const sombra = (k: string) => (k === ultimaFixa ? "shadow-[2px_0_0_0_rgb(var(--color-ww-border))]" : "");
@@ -346,9 +425,10 @@ export default function GradeEditavel({
           <div className="px-2.5 py-1 text-[10px] text-ww-textFaint">↑↓ escolhe · Enter aplica · Esc fecha</div>
         </div>,
         document.body)}
-      <div className="overflow-auto" style={{ maxHeight: altura }}>
-        <table className="text-[11.5px] border-collapse" style={{ tableLayout: "fixed", width: larguraTotal, minWidth: "100%" }}>
-          <thead className="sticky top-0 z-10 bg-ww-panel">
+      <div className="overflow-auto" style={cabecalhoNaPagina ? { overflowY: "hidden" } : { maxHeight: altura }}>
+        <table ref={tabelaRef} className="text-[11.5px] border-collapse" data-escala={z}
+          style={{ tableLayout: "fixed", width: larguraTotal, ...(ajustarLargura ? {} : { minWidth: "100%" }), ...(z !== 1 ? { zoom: z } : {}) }}>
+          <thead ref={theadRef} className={`${cabecalhoNaPagina ? "relative z-20" : "sticky top-0 z-10"} bg-ww-panel`}>
             <tr>
               {selecao && (
                 <th style={{ width: W_SEL, ...(esq.size ? fixo(0, 21) : {}) }}
@@ -363,19 +443,21 @@ export default function GradeEditavel({
               <th style={{ width: W_NUM, ...(esq.size ? fixo(selecao ? W_SEL : 0, 21) : {}) }}
                   className={`p-1.5 text-[10px] text-ww-textFaint shadow-[0_1px_0_0_rgb(var(--color-ww-border))] ${OPACO}`}>#</th>
               {cols.map((c) => (
-                <th key={c.key} title={c.dicaCab} style={{ width: c.w, minWidth: c.w, ...(esq.has(c.key) ? fixo(esq.get(c.key)!, 21) : {}), ...(c.fundo ? { background: c.fundo } : {}) }}
+                <th key={c.key} title={c.dicaCab} data-colkey={c.key} style={{ width: wc(c), minWidth: wc(c), ...(esq.has(c.key) ? fixo(esq.get(c.key)!, 21) : {}), ...(c.fundo ? { background: c.fundo } : {}) }}
                     className={`p-1.5 text-[10px] uppercase tracking-wider font-semibold text-ww-textMuted whitespace-nowrap overflow-hidden text-ellipsis shadow-[0_1px_0_0_rgb(var(--color-ww-border))] ${
                       c.alinhaDireita ? "text-right" : "text-left"} ${OPACO} ${(c.classe ?? "").replace(/(^|\s)bg-\S+/g, " ")}`}>
                   {c.cab ?? c.label}
                 </th>
               ))}
-              <th style={{ width: 24 }} className={`shadow-[0_1px_0_0_rgb(var(--color-ww-border))] ${OPACO}`} />
+              <th style={{ width: W_FIM }} className={`shadow-[0_1px_0_0_rgb(var(--color-ww-border))] ${OPACO}`} />
             </tr>
           </thead>
           <tbody>
             {linhas.map((linha, li) => {
               const gk = grupo ? grupo.de(linha) : null;
               const abreGrupo = gk != null && (li === 0 || grupo!.de(linhas[li - 1]) !== gk);
+              const fechaGrupo = gk != null && !!grupo?.rodape && (li === linhas.length - 1 || grupo.de(linhas[li + 1]) !== gk);
+              const acoes = acoesLinha?.(linha) ?? [];
               return (<Fragment key={linha._k || linha._id}>
               {abreGrupo && (
                 <tr className="viz-grp">
@@ -447,7 +529,8 @@ export default function GradeEditavel({
                         </button>
                       )}
                       <input
-                        data-cel={`${li}-${ci}`}
+                        data-cel={`${li}-${ci}`} data-lid={linha._id} data-col={c.key}
+                        placeholder={c.placeholder?.(linha)}
                         value={mostrado}
                         onChange={(e) => { setCel(li, c.key, e.target.value); buscarAc(li, c, e.target.value, e.currentTarget); }}
                         onFocus={(e) => {
@@ -463,14 +546,19 @@ export default function GradeEditavel({
                         onKeyDown={(e) => tecla(e, li, ci)}
                         type={c.tipo === "data" ? "date" : "text"}
                         inputMode={c.tipo === "num" || c.tipo === "moeda" ? "decimal" : undefined}
-                        className={`w-full bg-transparent px-1.5 py-1.5 text-ww-text outline-none text-ellipsis
+                        className={`w-full bg-transparent px-1.5 py-1.5 text-ww-text outline-none text-ellipsis placeholder:text-ww-textFaint placeholder:italic placeholder:text-[10.5px]
                           focus:bg-ww-accentSoft focus:ring-1 focus:ring-ww-accent rounded-sm ${
                           c.alinhaDireita ? "text-right tabular-nums" : ""} ${ac2 ? "pr-5" : ""}`}
                       />
                     </td>
                   );
                 })}
-                <td className="p-0 border-b border-ww-border/40 text-center">
+                <td className="p-0 border-b border-ww-border/40 text-center whitespace-nowrap">
+                  {acoes.map((a) => (
+                    <button key={a.rot} type="button" onClick={a.fn} title={a.dica} data-acao-linha={a.rot}
+                      className="opacity-0 group-hover:opacity-100 focus:opacity-100 text-ww-textFaint hover:text-ww-accent transition px-0.5 text-[12px] font-semibold">
+                      {a.rot}
+                    </button>))}
                   <button type="button" onClick={() => removerLinha(li)}
                     title="Excluir linha"
                     className="opacity-0 group-hover:opacity-100 text-ww-textFaint hover:text-rose-500 transition px-1 text-[12px]">
@@ -478,6 +566,15 @@ export default function GradeEditavel({
                   </button>
                 </td>
               </tr>
+              {fechaGrupo && (
+                <tr className="viz-grp-fim" data-grupo-fim={gk!}>
+                  <td colSpan={(selecao ? 1 : 0) + 1 + cols.length + 1} className="p-0 border-b border-ww-border/60"
+                    style={grupo!.cor?.(gk!) ? { boxShadow: `inset 3px 0 0 0 ${grupo!.cor(gk!)}` } : undefined}>
+                    <div style={{ position: "sticky", left: 0 }} className="inline-flex items-center gap-2 px-2 py-0.5 text-[11px]">
+                      {grupo!.rodape!(gk!, linhas.filter((x) => grupo!.de(x) === gk))}
+                    </div>
+                  </td>
+                </tr>)}
               </Fragment>);
             })}
           </tbody>

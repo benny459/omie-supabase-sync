@@ -20,8 +20,10 @@ async function json<T>(r: Response): Promise<T> {
   return j as T;
 }
 
-export default function AgenteCompras({ empresa, codigo, itens, forcados, podeGerar, onGerarPc, recarregarToken }: {
+export default function AgenteCompras({ empresa, codigo, itens, forcados, podeGerar, onGerarPc, recarregarToken, filtroIds }: {
   empresa: string; codigo: number; itens: ItemLote[]; forcados: Set<string>; podeGerar: boolean;
+  /** caixa de filtro da etapa ③ (08/10/26): só os lotes com algum item destes ids; null = todos */
+  filtroIds?: Set<string> | null;
   /** abre a folha do Gerar pedido de compra com os itens do lote; `loteId` = lote agendado (marca "gerado" depois) */
   onGerarPc: (ids: string[], loteId: string | null) => void;
   /** muda quando a lista recarrega (PC gerado etc.) — relê os lotes gravados */
@@ -91,6 +93,7 @@ export default function AgenteCompras({ empresa, codigo, itens, forcados, podeGe
     finally { setOcupado(null); }
   };
 
+  const visiveis = filtroIds ? lotes.filter((l) => l.itens.some((x) => filtroIds.has(x.id))) : lotes;
   const total = lotes.reduce((a, l) => a + l.valor, 0);
   const neg = lotes.filter((l) => l.caixaNeg).length;
   const ultimo = lotes.filter((l) => l.status !== "gerado").map((l) => l.pedir).sort().pop();
@@ -111,10 +114,12 @@ export default function AgenteCompras({ empresa, codigo, itens, forcados, podeGe
       </div>
       {pendente && <p className="text-[11px] text-amber-700 dark:text-amber-300">Agendar ainda não está ativo (migração sql/129 pendente) — os lotes e o caixa já funcionam.</p>}
       {msg && <p className={`text-[11.5px] ${msg.erro ? "text-rose-600 dark:text-rose-400" : "text-emerald-700 dark:text-emerald-300"}`}>{msg.t}</p>}
+      {filtroIds && lotes.length > 0 && <p className="text-[11px] text-ww-textMuted" data-lotes-filtrados>{visiveis.length} de {lotes.length} lote(s) com itens da caixa escolhida{visiveis.length < lotes.length ? ` · ${lotes.length - visiveis.length} oculto(s) pelo filtro` : ""}</p>}
       {!lotes.length
         ? <p className="text-[11.5px] text-ww-textMuted">Nada a comprar — todos os itens têm PC ou estão sem “necessário em”.</p>
+        : !visiveis.length ? <p className="text-[11.5px] text-ww-textMuted">Nenhum lote com itens desta caixa.</p>
         : <div className="grid gap-2.5" style={{ gridTemplateColumns: "repeat(auto-fill,minmax(300px,1fr))" }}>
-          {lotes.map((l) => {
+          {visiveis.map((l) => {
             const cls = l.status === "gerado" ? "opacity-60 border-ww-border" : l.status === "agendado" ? "border-emerald-500/60" : l.atrasado ? "border-rose-500/60" : l.urgente ? "border-amber-500/60" : "border-ww-border";
             const pill = l.status === "gerado" ? ["PC gerado", "bg-ww-rowHover text-ww-textMuted"] : l.status === "agendado" ? ["🔔 agendado", "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300"]
               : l.atrasado ? ["pedir hoje", "bg-rose-500/15 text-rose-700 dark:text-rose-300"] : l.urgente ? ["esta semana", "bg-amber-500/15 text-amber-800 dark:text-amber-200"] : ["proposto", "bg-ww-accentSoft text-ww-accent"];
@@ -127,7 +132,7 @@ export default function AgenteCompras({ empresa, codigo, itens, forcados, podeGe
                   <small className="ml-1.5 text-[11px] font-medium text-ww-textFaint">pedir · chega ≈ {d2(l.chega)} · {l.prazo}d</small></div>
                 <div className="text-[11.5px] text-ww-textMuted leading-snug">{motivosIa.get(l.chave) ? <>{motivosIa.get(l.chave)} <small className="text-ww-textFaint">(IA)</small></> : <Negrito t={l.motivo} />}</div>
                 <ul className="text-[11.5px] space-y-0.5">{l.itens.map((x) => (
-                  <li key={x.id} className="flex justify-between gap-2 min-w-0"><span className="truncate" title={x.item}>{x.qtd} {x.un} · {x.item}</span><em className="not-italic text-ww-textFaint shrink-0">até {d2(x.plano.comprarAte)}</em></li>))}</ul>
+                  <li key={x.id} className={`flex justify-between gap-2 min-w-0 ${filtroIds && !filtroIds.has(x.id) ? "opacity-45" : ""}`}><span className="truncate" title={x.item}>{x.qtd} {x.un} · {x.item}</span><em className="not-italic text-ww-textFaint shrink-0">até {d2(x.plano.comprarAte)}</em></li>))}</ul>
                 <div className="flex items-baseline justify-between"><small className="text-ww-textFaint">{l.itens.length} {l.itens.length === 1 ? "item" : "itens"}{l.pedidoNum ? ` · PC ${l.pedidoNum}` : ""}</small><b className="tabular-nums text-ww-text">{brl(l.valor)}</b></div>
                 <div className={`text-[11px] px-2 py-1 rounded bg-ww-rowHover/60 ${l.caixaNeg ? "text-amber-700 dark:text-amber-300" : "text-ww-textMuted"}`}>{l.caixaMsg}</div>
                 {conferido.get(l.chave) && <div className="text-[11px] text-ww-textMuted">{conferido.get(l.chave)}</div>}

@@ -46,8 +46,10 @@ const POSICIONAIS: AlvoColar[] = [
   { label: "Necessário em", key: "data_necessaria", tipo: "data" }, { label: "Valor unit.", key: "cat_valor_unit" },
 ];
 
-export default function AdicionarItensModal({ empresa, grupos, modoInicial, onAdicionar, onFechar }: {
+export default function AdicionarItensModal({ empresa, grupos, modoInicial, onAdicionar, onFechar, textoInicial, arquivo }: {
   empresa: string; grupos: Grupo[]; modoInicial: "cat" | "colar";
+  /** "Importar planilha" (08/10/26): o conteúdo do arquivo já lido, como se tivesse sido colado. */
+  textoInicial?: string; arquivo?: string | null;
   onAdicionar: (linhas: LinhaNova[], modo: "cat" | "colar") => void; onFechar: () => void;
 }) {
   const [modo, setModo] = useState(modoInicial);
@@ -83,7 +85,7 @@ export default function AdicionarItensModal({ empresa, grupos, modoInicial, onAd
   }, [q, modo, empresa]);
 
   // ── colar ──
-  const [txt, setTxt] = useState("");
+  const [txt, setTxt] = useState(textoInicial ?? "");
   const [porCodigo, setPorCodigo] = useState<Map<string, ItemCatalogo | null>>(new Map());
   const [resolvendo, setResolvendo] = useState(false);
   const lidas = useMemo(() => (txt.trim() ? lerColagem(txt, ALVOS, POSICIONAIS).linhas.filter((l) => Object.values(l).some((v) => String(v).trim())) : []), [txt]);
@@ -147,7 +149,7 @@ export default function AdicionarItensModal({ empresa, grupos, modoInicial, onAd
       <div role="dialog" aria-label="Adicionar itens à lista" data-modal="adicionar"
         className="w-full sm:w-[min(920px,96vw)] max-h-[90vh] flex flex-col rounded-t-xl sm:rounded-xl border border-ww-border bg-[rgb(var(--color-ww-panel))] shadow-2xl text-[12px]">
         <div className="flex items-center gap-2 px-4 py-3 border-b border-ww-border">
-          <h4 className="text-[14px] font-semibold text-ww-text">Adicionar itens à lista</h4>
+          <h4 className="text-[14px] font-semibold text-ww-text">{arquivo ? "Importar planilha" : "Adicionar itens à lista"}</h4>
           <button type="button" className="ml-auto text-ww-textMuted hover:text-ww-text" onClick={onFechar}>✕</button>
         </div>
         <div className="px-4 py-3 overflow-auto space-y-2.5">
@@ -192,6 +194,7 @@ export default function AdicionarItensModal({ empresa, grupos, modoInicial, onAd
             {marc.size > 0 && <p className="text-[11px] text-ww-textMuted">Marcados: {[...marc.values()].map(({ c, qtd }) => `${qtd}× ${c.codigo}`).join(" · ")}</p>}
             <small className="block text-ww-textFaint">Marque vários (a busca pode mudar — os marcados ficam) e ajuste a quantidade. Cada item entra já com código, fornecedor e prazo do catálogo e com a data do grupo.</small>
           </>) : (<>
+            {arquivo && <p className="text-[11.5px] px-2 py-1 rounded-md bg-ww-accentSoft text-ww-text" data-importado>📄 Importado de <b>{arquivo}</b> — confira a prévia abaixo antes de adicionar (dá para editar o texto).</p>}
             <small className="block text-ww-textMuted">Cole direto do Excel. Com cabeçalho as colunas vão pelo nome (Código, Item, Qtd, Un, Necessário em, Valor unit., Grupo); sem cabeçalho a ordem é <b>Código · Item · Qtd · Un · Necessário em · Valor unit.</b> (Código pode ficar vazio). Datas em dd/mm/aaaa são aceitas. <a className="text-ww-accent hover:underline" href={`/api/rc-projetos/modelo?emp=${encodeURIComponent(empresa)}`}>⬇ modelo Excel com nossos códigos</a></small>
             <textarea value={txt} onChange={(e) => setTxt(e.target.value)} rows={7} autoFocus
               placeholder={"E02045\tCREPINA SUPERIOR\t2\tun\t30/10/2026\t40\n\tMANOMETRO C/CONEXAO LAT.0-7\t1\tun\t30/10/2026\t57,70"}

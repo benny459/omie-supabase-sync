@@ -3,7 +3,8 @@
 // (sql/128) calcula o mesmo `comprar_ate` no banco; aqui é para refletir na hora o que
 // se edita na tela, antes de gravar.
 //
-//   prazo efetivo = prazo MANUAL do fornecedor (⏱ Prazos por fornecedor)
+//   prazo efetivo = prazo ajustado no ITEM (célula Prazo da lista, sql/141)
+//                 → prazo MANUAL do fornecedor (⏱ Prazos por fornecedor)
 //                 → prazo do item no catálogo (cat_entrega_dias, média pedido → NF)
 //                 → histórico do fornecedor (média do catálogo de compras)
 //                 → 15 dias ("prazo estimado")
@@ -23,16 +24,32 @@ export const normFornecedor = (t: string | null | undefined) =>
   String(t ?? "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/[^a-z0-9/.,x]+/g, " ").trim();
 
 export type PrazoFornecedor = { norm: string; nome: string; historico: number | null; manual: number | null };
-export type FontePrazo = "manual" | "item" | "historico" | "estimado";
+/** item_manual = ajustado na célula Prazo da linha (sql/141); manual = ⏱ do fornecedor. */
+export type FontePrazo = "item_manual" | "manual" | "item" | "historico" | "estimado";
+export const ROTULO_FONTE: Record<FontePrazo, string> = {
+  item_manual: "ajustado no item", manual: "fornecedor (manual)", item: "item (catálogo)", historico: "histórico", estimado: "estimado",
+};
 
 const iso = (d: Date) => d.toISOString().slice(0, 10);
 export const difDias = (a: string, b: string) => Math.round((Date.parse(`${a}T12:00:00Z`) - Date.parse(`${b}T12:00:00Z`)) / 86400000);
 export const somaDias = (base: string, n: number) => { const d = new Date(`${base}T12:00:00Z`); d.setUTCDate(d.getUTCDate() + n); return iso(d); };
 export const hojeIso = () => iso(new Date(Date.now() - 3 * 3600000)); // dia de Brasília
 
-/** Prazo efetivo de um item. */
-export function prazoEfetivo(a: { prazoItem?: number | null; fornecedor?: string | null; prazos?: Map<string, PrazoFornecedor> }):
+const prazoValido = (v: unknown) => (v != null && String(v).trim() !== "" && Number.isFinite(Number(v)) && Number(v) >= 0 ? Math.round(Number(v)) : null);
+
+/** Prazo efetivo de um item. `prazoManualItem` (ajustado na linha) vence tudo; sem ele vale
+ *  o automático (prazoAuto). */
+export function prazoEfetivo(a: { prazoManualItem?: number | string | null; prazoItem?: number | null; fornecedor?: string | null; prazos?: Map<string, PrazoFornecedor> }):
   { prazo: number; fonte: FontePrazo; estimado: boolean } {
+  const m = prazoValido(a.prazoManualItem);
+  if (m != null) return { prazo: m, fonte: "item_manual", estimado: false };
+  return prazoAuto(a);
+}
+
+/** O prazo SEM o ajuste do item: manual do fornecedor → item → histórico → 15. É o valor que
+ *  a célula mostra riscado quando o item foi ajustado (e o que volta no ↺). */
+export function prazoAuto(a: { prazoItem?: number | null; fornecedor?: string | null; prazos?: Map<string, PrazoFornecedor> }):
+  { prazo: number; fonte: Exclude<FontePrazo, "item_manual">; estimado: boolean } {
   const f = a.fornecedor ? a.prazos?.get(normFornecedor(a.fornecedor)) : undefined;
   if (f?.manual != null) return { prazo: f.manual, fonte: "manual", estimado: false };
   const pi = a.prazoItem != null && Number.isFinite(Number(a.prazoItem)) && Number(a.prazoItem) > 0 ? Math.round(Number(a.prazoItem)) : null;
@@ -50,7 +67,7 @@ export type PlanoItem = {
 
 /** O plano de compra de UM item (sem PC: quando pedir; com PC: "compc", a lógica do sinal de entrega vale). */
 export function planejarItem(a: {
-  necessario: string | null | undefined; temPc: boolean; prazoItem?: number | null; fornecedor?: string | null;
+  necessario: string | null | undefined; temPc: boolean; prazoItem?: number | null; prazoManualItem?: number | string | null; fornecedor?: string | null;
   prazos?: Map<string, PrazoFornecedor>; hoje?: string; folga?: number;
 }): PlanoItem {
   const hoje = a.hoje ?? hojeIso();
