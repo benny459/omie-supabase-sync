@@ -18,6 +18,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { supaAdmin } from "@/lib/supabase-admin";
 import { lotesDoProjeto, gerarPcDoLote, salvarLote, avisarWebex } from "@/lib/agente-compras";
 import { hojeIso, somaDias } from "@/lib/planejamento-compras";
+import { loadPerms } from "@/lib/require-area";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
@@ -35,8 +36,12 @@ const URL_PAINEL = "https://painel.waterworks.com.br";
 type Agendado = { id: string; empresa: string; codigo_projeto: number; fornecedor: string | null; data_pedir: string; ultimo_aviso: string | null; itens: string[] };
 
 export async function GET(req: NextRequest) {
-  if (!authorized(req)) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   const sp = new URL(req.url).searchParams;
+  if (!authorized(req)) {
+    // administrador logado pode rodar a SIMULAÇÃO pelo navegador (sem criar PC, sem gravar, sem avisar)
+    const perms = sp.get("simular") === "1" && sp.get("avisar") !== "1" ? await loadPerms().catch(() => null) : null;
+    if (!perms?.is_admin) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  }
   const simular = sp.get("simular") === "1";
   const avisar = !simular || sp.get("avisar") === "1";
   const hoje = /^\d{4}-\d{2}-\d{2}$/.test(sp.get("hoje") ?? "") ? sp.get("hoje")! : hojeIso();
