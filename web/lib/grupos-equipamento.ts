@@ -24,6 +24,16 @@ export async function lerCadastroGrupos(todos = false): Promise<GrupoCadastro[] 
   return (data ?? []) as GrupoCadastro[];
 }
 
+/** Cor gravada de cada grupo do cadastro (sql/131), por nome normalizado. null = coluna ainda
+ *  não existe (migração pendente) — a tela usa a paleta pela ordem dos grupos. */
+export async function coresDosGrupos(): Promise<Record<string, string> | null> {
+  const { data, error } = await supaAdmin().schema("platform").from("equipamento_grupo").select("nome_norm, cor");
+  if (error) return null;
+  const out: Record<string, string> = {};
+  for (const r of (data ?? []) as { nome_norm: string; cor: string | null }[]) if (r.cor) out[r.nome_norm] = r.cor;
+  return out;
+}
+
 export async function salvarGrupo(a: { id?: number | null; nome: string; descricao?: string | null; ativo?: boolean; por: string }) {
   const nome = a.nome.trim().replace(/\s+/g, " ");
   if (nome.length < 2) throw new Error("Informe o nome do grupo");

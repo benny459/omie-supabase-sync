@@ -34,7 +34,7 @@ import FechamentoCrmBloco from "./FechamentoCrmBloco";
 import FluxoSimples from "./FluxoSimples";
 import FluxoComparado, { type DadosComparado } from "./FluxoComparado";
 import ProjetoEscopoButton from "../ProjetoEscopoButton";
-import { KpisProjeto } from "./ResumoProjeto";
+import PainelProjeto, { type ResumoVivo } from "./PainelProjeto";
 import type { PlanoCompleto } from "./PlanoFechamento";
 
 type Aba = "resumo" | "fluxo" | "materiais" | "separados";
@@ -45,7 +45,8 @@ type Aba = "resumo" | "fluxo" | "materiais" | "separados";
    do Omie são os dois lados do Fluxo. Cada aba agora responde uma pergunta
    inteira, e o que se abre é uma tela só em vez de seis meias-telas. */
 const ABAS: Array<{ k: Aba; label: string; dica: string; partes: AbaProjeto[] }> = [
-  /* 07/10/26: ordem de trabalho, numerada — 1 Resumo · 2 Lista · 3 Separados · 4 Fluxo. */
+  /* Ordem de trabalho: Resumo · Lista · Separados · Fluxo. Sem numeração desde 08/10/26 (spec B.1
+     v3): os números confundiam com as etapas da lista e com as contagens. */
   { k: "resumo",    label: "Resumo",
     dica: "o fechamento que veio do CRM e onde o dinheiro parou",
     partes: ["resumo"] },
@@ -126,6 +127,12 @@ export default function ProjetoWorkspace({
       + Number(cab.custo_despesas ?? 0)
     : 0;
 
+  /** Números ao vivo da lista (com a aba aberta) para o painel do topo; e o pedido de
+   *  "ver planejamento →" do painel, que abre a aba Lista na etapa Planejamento. */
+  const [vivo, setVivo] = useState<ResumoVivo | null>(null);
+  const [pedidoEtapa, setPedidoEtapa] = useState<{ etapa: "plan"; n: number } | null>(null);
+  useEffect(() => { if (aba !== "materiais") setVivo(null); }, [aba]);
+
   const aposGravar = useCallback(() => {
     setChave((k) => k + 1);
     // O card lateral de budget vive em outra tela e escuta este canal.
@@ -138,9 +145,10 @@ export default function ProjetoWorkspace({
 
   return (
     <div className="space-y-3.5">
-      {/* Os três números que não mudam de aba para aba. */}
-      <KpisProjeto plano={plano} teto={tetoPlano > 0 ? tetoPlano : null}
-        podeEditar={false} />
+      {/* Cabeçalho = painel gráfico (spec B.0 v3): valor fechado · barra de budget · comprar esta semana. */}
+      <PainelProjeto empresa={empresa} codigoProjeto={codigoProjeto} plano={plano}
+        teto={tetoPlano > 0 ? tetoPlano : null} chave={chave} vivo={vivo}
+        onVerPlanejamento={() => { setAba("materiais"); setPedidoEtapa((p) => ({ etapa: "plan", n: (p?.n ?? 0) + 1 })); }} />
 
       {avisoCrm && (
         <div className="flex items-start justify-between gap-3 px-3 py-2 rounded-md border border-emerald-300 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/40 text-[12px] text-emerald-900 dark:text-emerald-200">
@@ -153,14 +161,12 @@ export default function ProjetoWorkspace({
           ponto de cor cada uma competiriam com os KPIs logo acima. A cor fica
           reservada ao que é dado. */}
       <div className="flex items-center gap-1 flex-wrap border-b border-ww-border">
-        {ABAS.map(({ k, label, dica }, i) => (
-          <button key={k} type="button" onClick={() => setAba(k)} title={dica}
-            className={`inline-flex items-center gap-2 px-3 py-2 text-[15px] -mb-px border-b-2 transition-colors ${
+        {ABAS.map(({ k, label, dica }) => (
+          <button key={k} type="button" onClick={() => setAba(k)} title={dica} data-aba={k}
+            className={`inline-flex items-center gap-2 px-3 py-2 text-[14px] -mb-px border-b-2 transition-colors ${
               aba === k
                 ? "border-ww-accent text-ww-text font-semibold"
                 : "border-transparent text-ww-textMuted hover:text-ww-text"}`}>
-            <span aria-hidden className={`inline-flex items-center justify-center w-5 h-5 rounded-full text-[11px] font-bold tabular-nums ${
-              aba === k ? "bg-ww-accent text-white" : "bg-ww-rowHover text-ww-textMuted"}`}>{i + 1}</span>
             {label}
           </button>
         ))}
@@ -223,7 +229,8 @@ export default function ProjetoWorkspace({
 
       {aba === "materiais" && (
         <MateriaisGrade empresa={empresa} recarregarRef={recarregarGrade}
-          codigoProjeto={codigoProjeto} onGravado={aposGravar} />
+          codigoProjeto={codigoProjeto} onGravado={aposGravar}
+          onResumo={setVivo} pedidoEtapa={pedidoEtapa} />
       )}
     </div>
   );

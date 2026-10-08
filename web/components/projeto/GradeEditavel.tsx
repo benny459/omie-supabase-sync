@@ -74,6 +74,12 @@ export type ColunaGrade = {
    *  a sugestão do catálogo dentro da célula Código, com ✓ e ✕). Clicar fora dos
    *  botões dele entra na edição normal da célula. */
   sobrepor?: (linha: LinhaGrade) => React.ReactNode | null;
+  /** Cabeçalho com conteúdo próprio (08/10/26: a coluna "Compatibilizar com o estoque" tem
+   *  botões no cabeçalho). Sem isso vale `label`. */
+  cab?: React.ReactNode;
+  /** Fundo próprio da coluna (CSS), opaco — vale também para coluna presa (08/10/26: a coluna
+   *  provisória âmbar "Compatibilizar com o estoque"). */
+  fundo?: string;
 };
 
 export type LinhaGrade = Record<string, string> & { _id: string };
@@ -108,8 +114,10 @@ export const brl = (v: number) =>
 
 export default function GradeEditavel({
   cols, linhas, onChange, altura = 340, vazioMsg = "Digite, cole do Excel ou suba a planilha.",
-  selecao, aoColar, colarExtras = [], aoRemover, botaoLinha = true, grupo, herdarNoColar = [],
+  selecao, aoColar, colarExtras = [], aoRemover, botaoLinha = true, grupo, herdarNoColar = [], corLinha,
 }: {
+  /** Cor da borda esquerda da linha (08/10/26, spec B v3: a cor do grupo de equipamento). */
+  corLinha?: (l: LinhaGrade) => string | null | undefined;
   /** Chaves que a linha colada sem valor herda da linha onde a colagem começou (ex.: equipamento). */
   herdarNoColar?: string[];
   /** Botão "+ linha" do rodapé. A lista de materiais não usa (08/10/26, spec B.2): a grade
@@ -117,7 +125,8 @@ export default function GradeEditavel({
   botaoLinha?: boolean;
   /** Linhas de cabeçalho de grupo (08/10/26, spec B.3): antes de cada mudança de `de(linha)`
    *  entra uma linha larga com `cab(chave, linhas do grupo)`. `de` = null não abre grupo. */
-  grupo?: { de: (l: LinhaGrade) => string | null; cab: (chave: string, linhas: LinhaGrade[]) => React.ReactNode };
+  grupo?: { de: (l: LinhaGrade) => string | null; cab: (chave: string, linhas: LinhaGrade[]) => React.ReactNode;
+    /** cor do grupo — borda esquerda do cabeçalho */ cor?: (chave: string) => string | null | undefined };
   /** Quem usa decide como remover (ex.: lista de materiais com "Desfazer"). Sem isso, tira da grade. */
   aoRemover?: (id: string) => void;
   /** Colunas que não aparecem na grade mas entram no colar COM cabeçalho (ex.: Modelo, PC). */
@@ -354,10 +363,10 @@ export default function GradeEditavel({
               <th style={{ width: W_NUM, ...(esq.size ? fixo(selecao ? W_SEL : 0, 21) : {}) }}
                   className={`p-1.5 text-[10px] text-ww-textFaint shadow-[0_1px_0_0_rgb(var(--color-ww-border))] ${OPACO}`}>#</th>
               {cols.map((c) => (
-                <th key={c.key} title={c.dicaCab} style={{ width: c.w, minWidth: c.w, ...(esq.has(c.key) ? fixo(esq.get(c.key)!, 21) : {}) }}
+                <th key={c.key} title={c.dicaCab} style={{ width: c.w, minWidth: c.w, ...(esq.has(c.key) ? fixo(esq.get(c.key)!, 21) : {}), ...(c.fundo ? { background: c.fundo } : {}) }}
                     className={`p-1.5 text-[10px] uppercase tracking-wider font-semibold text-ww-textMuted whitespace-nowrap overflow-hidden text-ellipsis shadow-[0_1px_0_0_rgb(var(--color-ww-border))] ${
                       c.alinhaDireita ? "text-right" : "text-left"} ${OPACO} ${(c.classe ?? "").replace(/(^|\s)bg-\S+/g, " ")}`}>
-                  {c.label}
+                  {c.cab ?? c.label}
                 </th>
               ))}
               <th style={{ width: 24 }} className={`shadow-[0_1px_0_0_rgb(var(--color-ww-border))] ${OPACO}`} />
@@ -370,7 +379,8 @@ export default function GradeEditavel({
               return (<Fragment key={linha._k || linha._id}>
               {abreGrupo && (
                 <tr className="viz-grp">
-                  <td colSpan={(selecao ? 1 : 0) + 1 + cols.length + 1} className="p-0 border-b border-ww-border/60 bg-ww-rowHover/70">
+                  <td colSpan={(selecao ? 1 : 0) + 1 + cols.length + 1} className="p-0 border-b border-ww-border/60 bg-ww-rowHover/70"
+                    style={grupo!.cor?.(gk!) ? { boxShadow: `inset 3px 0 0 0 ${grupo!.cor(gk!)}` } : undefined}>
                     <div style={{ position: "sticky", left: 0 }} className="inline-flex items-center gap-2 px-2 py-1 text-[11.5px]">
                       {grupo!.cab(gk!, linhas.filter((x) => grupo!.de(x) === gk))}
                     </div>
@@ -378,7 +388,7 @@ export default function GradeEditavel({
                 </tr>)}
               <tr className="viz-row group">
                 {selecao && (
-                  <td style={esq.size ? fixo(0, 5) : undefined} className={`p-1 text-center border-b border-ww-border/40 ${esq.size ? OPACO : ""}`}>
+                  <td style={{ ...(esq.size ? fixo(0, 5) : {}), ...(corLinha?.(linha) ? { boxShadow: `inset 3px 0 0 0 ${corLinha(linha)}` } : {}) }} className={`p-1 text-center border-b border-ww-border/40 ${esq.size ? OPACO : ""}`}>
                     {selecao.podeMarcar(linha) && (
                       <input type="checkbox" checked={selecao.marcadas.has(linha._id)}
                         onChange={() => { /* controlado no onClick, pra ler o shift */ }}
@@ -394,9 +404,9 @@ export default function GradeEditavel({
                 {cols.map((c) => {
                   if (c.render) {
                     return (
-                      <td key={c.key} title={c.dica?.(linha)} style={esq.has(c.key) ? fixo(esq.get(c.key)!, 5) : undefined}
+                      <td key={c.key} title={c.dica?.(linha)} style={{ ...(esq.has(c.key) ? fixo(esq.get(c.key)!, 5) : {}), ...(c.fundo ? { background: c.fundo } : {}) }}
                           className={`p-1.5 border-b border-ww-border/40 whitespace-nowrap overflow-hidden text-ellipsis ${
-                            esq.has(c.key) ? `${OPACO} ${sombra(c.key)}` : "bg-ww-rowHover/40"} ${
+                            c.fundo ? sombra(c.key) : esq.has(c.key) ? `${OPACO} ${sombra(c.key)}` : "bg-ww-rowHover/40"} ${
                             c.alinhaDireita ? "text-right tabular-nums" : ""} ${c.classe ?? ""}`}>
                         {c.render(linha)}
                       </td>

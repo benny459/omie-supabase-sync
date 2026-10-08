@@ -4,7 +4,7 @@
 // sugerir o "necessário em" dos grupos (a CP não traz data por equipamento).
 import { NextResponse } from "next/server";
 import { supaServer } from "@/lib/supabase-server";
-import { gruposEmUso, lerCadastroGrupos, prazoDaProposta } from "@/lib/grupos-equipamento";
+import { coresDosGrupos, gruposEmUso, lerCadastroGrupos, prazoDaProposta } from "@/lib/grupos-equipamento";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -15,12 +15,13 @@ export async function GET(req: Request) {
   if (!user) return NextResponse.json({ error: "Sessão expirada — entre de novo" }, { status: 401 });
   const codigo = Number(new URL(req.url).searchParams.get("codigo_projeto"));
   try {
-    const [cadastro, emUso, prazo] = await Promise.all([
+    const [cadastro, emUso, prazo, cores] = await Promise.all([
       lerCadastroGrupos(),
       gruposEmUso(),
       codigo > 0 ? prazoDaProposta(codigo).catch(() => ({ data: null, fonte: null, grupos: [] as string[] })) : Promise.resolve({ data: null, fonte: null, grupos: [] as string[] }),
+      coresDosGrupos().catch(() => null),
     ]);
-    return NextResponse.json({ cadastro: cadastro?.map((c) => c.nome) ?? null, emUso, prazo });
+    return NextResponse.json({ cadastro: cadastro?.map((c) => c.nome) ?? null, cores, emUso, prazo });
   } catch (e) {
     return NextResponse.json({ error: e instanceof Error ? e.message : String(e) }, { status: 500 });
   }

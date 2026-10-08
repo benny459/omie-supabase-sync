@@ -45,7 +45,7 @@ import GerarPcDaLista, { type LinhaParaPc } from "./GerarPcDaLista";
 import AdicionarItensModal, { type LinhaNova } from "./AdicionarItensModal";
 import AcertoItemEstoque, { type Compra, type Escolhido } from "@/components/faturamento/AcertoItemEstoque";
 import "@/components/faturamento/nova-emissao.css";
-import { CSS_CDL, KpisCompras, SugestoesVinculo, ForaDaLista, FluxoCompras, situacaoPc,
+import { CSS_CDL, SugestoesVinculo, ForaDaLista, FluxoCompras, situacaoPc,
          type DadosCompras, type CasamentoPc } from "./ComprasDaLista";
 import { supaBrowser } from "@/lib/supabase";
 import { deHtml } from "@/lib/match-pc";
@@ -57,6 +57,11 @@ import { planejarItem, prazoEfetivo, normFornecedor, type PrazoFornecedor, type 
 import PlanejamentoCompras, { resumoPlano, type ItemPlano } from "./PlanejamentoCompras";
 import PrazosFornecedorModal from "./PrazosFornecedorModal";
 import AgenteCompras from "./AgenteCompras";
+import type { ResumoVivo } from "./PainelProjeto";
+
+/** Cores dos grupos de equipamento (spec B v3): paleta de 8, estável pela ordem dos grupos.
+ *  Com a migração sql/131 a cor gravada no cadastro (platform.equipamento_grupo.cor) vence. */
+export const CORES_GRUPO = ["#6ea8ff", "#3ddc97", "#f5b547", "#b48cff", "#ff8fa3", "#5fd4e8", "#ffb36e", "#9ad36e"];
 
 type ItemRow = {
   id: string; equipamento: string | null; item: string;
@@ -159,14 +164,18 @@ const chaveItem = (eq: string, item: string) =>
   `${String(eq || "Geral").trim().toLowerCase()}|${String(item).trim().toLowerCase()}`;
 
 type ItemCpBase = { equipamento: string; item: string; qtd: number | null; modelo: string | null; custo_cp: number | null };
-type GruposMeta = { cadastro: string[] | null; emUso: { nome: string; projetos: number }[];
+type GruposMeta = { cadastro: string[] | null; cores?: Record<string, string> | null; emUso: { nome: string; projetos: number }[];
   prazo: { data: string | null; fonte: string | null; grupos: string[] } };
 type Seletor = { alvo: "cp"; k: number } | { alvo: "lista"; id: string };
 
 export default function MateriaisGrade({
-  empresa, codigoProjeto, onGravado, recarregarRef,
+  empresa, codigoProjeto, onGravado, recarregarRef, onResumo, pedidoEtapa,
 }: {
   empresa: string; codigoProjeto: number; onGravado?: () => void;
+  /** Números ao vivo para o painel do topo do projeto (spec B.0 v3). */
+  onResumo?: (r: ResumoVivo | null) => void;
+  /** "ver planejamento →" do painel do topo: abre a etapa Planejamento. */
+  pedidoEtapa?: { etapa: "plan"; n: number } | null;
   /** A tela do projeto recarrega a grade por aqui (em vez de remontá-la — spec C.2). */
   recarregarRef?: React.MutableRefObject<(() => void) | null>;
 }) {
@@ -189,8 +198,9 @@ export default function MateriaisGrade({
   const [equipFiltro, setEquipFiltro] = useState<string | null>(null);
   /** ?pc=N vindo de Projetos: só as linhas daquele PC (07/10/26). */
   const [filtroPcNum, setFiltroPcNum] = useState<string | null>(null);
-  /** Filtros da lista (08/10/26, spec B.4): Todos · Com sugestão · Sem código · Sem PC · Em risco/atrasados. */
-  const [filtroPc, setFiltroPc] = useState<"todas" | "sug" | "sem_cod" | "sem_pc" | "risco">("todas");
+  /** Filtros da lista (spec B.5 v3): Todos · Sem código · Sem PC · Atrasados/em risco ("Com sugestão"
+   *  saiu: a coluna "Compatibilizar com o estoque" resolve isso). */
+  const [filtroPc, setFiltroPc] = useState<"todas" | "sem_cod" | "sem_pc" | "risco">("todas");
   /** Rascunho não salvo encontrado neste navegador ao abrir (ms de quando foi feito). */
   const [rascunhoDe, setRascunhoDe] = useState<number | null>(null);
   const chaveRascunho = `painel.materiais.rascunho.${empresa}.${codigoProjeto}`;
@@ -375,7 +385,6 @@ export default function MateriaisGrade({
   // As editáveis à esquerda; à direita, o catálogo e o bloco do PC (leitura,
   // com fundo próprio para se ver que vêm do mesmo lugar).
   const PC = "bg-sky-500/[0.05]";
-  const temSug = useMemo(() => linhas.some((l) => l._match === "sug"), [linhas]);
   /* Aceitar / recusar sugestões de código (07/10/26, Benny). Aceitar = o código vira
      confirmado na linha e o de-para (texto → item nosso) é gravado, como a escolha à mão. */
   const [aceiteDesfazer, setAceiteDesfazer] = useState<{ n: number; antes: LinhaGrade[] } | null>(null);
@@ -385,16 +394,19 @@ export default function MateriaisGrade({
   const fraseSalvar = () => (semAutosaveRef.current
     ? ` ⚠ Não está salvando sozinha (${semAutosaveRef.current}) — clique em Salvar lista.`
     : " A lista é salva sozinha em instantes.");
-  const aceitarSugestoes = useCallback(async (ids: string[]) => {
-    const alvo = new Set(ids);
-    const escolhidas = linhasRef.current.filter((l) => alvo.has(l._id) && l._match === "sug" && lerSug(l));
+  /** Aceita, por linha, o item escolhido (spec B.6 v3: o que está selecionado no select da coluna
+   *  "Compatibilizar com o estoque"; sem escolha explícita, a sugestão gravada). */
+  const aceitarEscolhas = useCallback(async (pares: { id: string; c: Cat }[]) => {
+    const porId = new Map(pares.map((x) => [x.id, x.c]));
+    const semCod = (l: LinhaGrade) => !String(l.cat_codigo ?? "").trim() || l._match === "omie";
+    const escolhidas = linhasRef.current.filter((l) => porId.has(l._id) && semCod(l));
     if (!escolhidas.length) return;
     const antes = linhasRef.current;
     setLinhas((atual) => atual.map((l) => {
-      if (!alvo.has(l._id) || l._match !== "sug") return l;
-      const c = lerSug(l); if (!c) return l;
+      const c = porId.get(l._id);
+      if (!c || (String(l.cat_codigo ?? "").trim() && l._match !== "omie")) return l;
       const temValor = !!String(l.cat_valor_unit ?? "").trim();
-      return { ...l, ...camposDoCatalogo(c, "ok", [], l.cat_valor_unit ?? ""), _sug: l._sug, _sug_status: "aceita", _omie_ncod: "",
+      return { ...l, ...camposDoCatalogo(c, "ok", [], l.cat_valor_unit ?? ""), _sug: JSON.stringify(c), _sug_status: "aceita", _omie_ncod: "", _omie: "",
         ...(temValor ? { cat_valor_unit: l.cat_valor_unit, _vu_fonte: l._vu_fonte ?? "" } : {}) };
     }));
     setSujo(true);
@@ -405,7 +417,7 @@ export default function MateriaisGrade({
     const res = await Promise.all(escolhidas.map(async (l) => {
       try {
         const r = await fetch("/api/catalogo/projeto", { method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ acao: "vincular", emp: empresa, texto: textoCasar(l.item, l.modelo), ncod_prod: lerSug(l)!.ncod_prod }) });
+          body: JSON.stringify({ acao: "vincular", emp: empresa, texto: textoCasar(l.item, l.modelo), ncod_prod: porId.get(l._id)!.ncod_prod }) });
         if (!r.ok) { const j = await r.json().catch(() => ({})); return String((j as { error?: string }).error ?? r.statusText); }
         return null;
       } catch (e) { return (e as Error).message; }
@@ -413,19 +425,19 @@ export default function MateriaisGrade({
     const falhas = res.filter(Boolean);
     if (falhas.length) setErro(`O código foi aceito na lista, mas ${falhas.length} de-para não gravou (o mesmo texto não vai casar sozinho da próxima vez): ${falhas[0]}`);
   }, [empresa]);
-  /** Revisar sugestões (07/10/26): uma tela com cada linha, o item sugerido por extenso e as
-   *  outras candidatas para trocar — aceitar as marcadas de uma vez. */
-  const [revisarSug, setRevisarSug] = useState(false);
-  const [sugMarc, setSugMarc] = useState<Set<string>>(new Set());
-  const trocarSugestao = useCallback((id: string, c: Cat) => {
-    setLinhas((atual) => atual.map((l) => (l._id === id ? { ...l, _match: "sug", _sug: JSON.stringify(c), _sug_status: "pendente" } : l)));
-    setSujo(true);
-  }, []);
-  /** Recusar (spec C.1): fica gravado — o casamento automático não sugere de novo para a linha. */
+  const aceitarSugestoes = useCallback((ids: string[]) => aceitarEscolhas(ids.map((id) => {
+    const l = linhasRef.current.find((x) => x._id === id);
+    const c = l && l._match === "sug" ? lerSug(l) : null;
+    return c ? { id, c } : null;
+  }).filter((x): x is { id: string; c: Cat } => !!x)), [aceitarEscolhas]);
+  /** Recusar = "não é item nosso" (spec C.1 / B.6 v3): fica gravado — o casamento automático não
+   *  sugere de novo para a linha e ela sai da coluna "Compatibilizar". Vale também para a linha
+   *  sem nenhuma candidata. */
   const recusarSugestao = useCallback((id: string) => {
     setLinhas((atual) => atual.map((l) => {
-      if (l._id !== id || l._match !== "sug") return l;
-      const omie: Record<string, string> = l._omie_ncod ? { cat_ncod_prod: l._omie_ncod, _match: "omie", _omie_ncod: "" } : { _match: "sem" };
+      if (l._id !== id || (String(l.cat_codigo ?? "").trim() && l._match !== "omie")) return l;
+      const omie: Record<string, string> = l._omie_ncod ? { cat_ncod_prod: l._omie_ncod, _match: "omie", _omie_ncod: "" }
+        : l._match === "omie" ? {} : { _match: "sem" };
       return { ...l, _sug_status: "recusada", ...omie } as LinhaGrade;
     }));
     setSujo(true);
@@ -471,29 +483,13 @@ export default function MateriaisGrade({
       } },
     // Código NOSSO (estoque/ALLKA), nunca o do Omie. O ícone diz a situação do
     // casamento (✓ / ⚠ conferir / ⌕ sem) e abre o seletor do catálogo.
-    /* 08/10/26 (spec C.10): a sugestão aparece DENTRO da célula Código — caixa tracejada
-       âmbar com código, descrição, % e fornecedor, ✓ aceita e ✕ recusa; some ao resolver. */
-    { key: "cat_codigo", label: "Código", w: temSug ? 250 : 88, fixa: true,
+    /* 08/10/26 (spec B.6 v3): a sugestão saiu da célula Código e foi para a coluna provisória
+       "Compatibilizar com o estoque", logo à direita. Aqui fica o código confirmado ou "sem código". */
+    { key: "cat_codigo", label: "Código", w: 88, fixa: true,
       limpaAoEditar: ["cat_ncod_prod", "_match", "_alts", "_cat_desc", "_sug", "_sug_status", "_omie_ncod"],
       dica: (l) => { const c = l._match === "sug" ? lerSug(l) : null; return c ? [`Sugestão do catálogo: ${c.codigo ?? ""} — ${c.descricao}`, c.fornecedor ? `fornecedor ${c.fornecedor}` : "", c.motivo ? `por quê: ${c.motivo}` : "", "✓ aceita (vira o código e ensina o de-para) · ✕ recusa (não volta a sugerir) · clique no texto para escolher outro"].filter(Boolean).join("\n") : undefined; },
-      sobrepor: (l) => {
-        const c = l._match === "sug" ? lerSug(l) : null;
-        if (!c) return null;
-        const pct = Math.round((c.score ?? 0) * 100);
-        return (
-          <span className="flex items-center gap-1 w-full min-w-0 rounded-md border border-dashed border-amber-500/70 bg-amber-500/10 px-1 py-px" data-sug={c.codigo ?? ""}>
-            <button type="button" className="min-w-0 flex-1 text-left leading-[1.15]" title="Escolher outro item do catálogo" onClick={() => abrirSeletorLista(l._id)}>
-              <span className="block truncate text-[11px]"><b className="font-mono text-amber-700 dark:text-amber-300">{c.codigo}</b> {c.descricao}</span>
-              <span className="block truncate text-[9.5px] text-ww-textFaint">{pct}%{c.fornecedor ? ` · ${c.fornecedor}` : ""}</span>
-            </button>
-            <button type="button" title="Aceitar esta sugestão" onClick={() => void aceitarSugestoes([l._id])}
-              className="shrink-0 w-5 h-5 rounded border border-emerald-500/60 text-emerald-700 dark:text-emerald-300 text-[11px] font-bold hover:bg-emerald-500/15">✓</button>
-            <button type="button" title="Recusar (fica sem código e não volta a sugerir)" onClick={() => recusarSugestao(l._id)}
-              className="shrink-0 w-5 h-5 rounded border border-ww-border text-ww-textMuted text-[11px] hover:text-rose-500 hover:border-rose-400">✕</button>
-          </span>);
-      },
       marca: (l) => (l._match === "sug" && lerSug(l)
-        ? { classe: "bg-amber-500/15" }
+        ? { classe: "bg-amber-500/15", etiqueta: "sugestão", dica: "Há uma sugestão de código na coluna Compatibilizar com o estoque" }
         : String(l.item ?? "").trim() && (!l.cat_ncod_prod || l._match === "omie")
         ? { classe: "bg-amber-500/15", etiqueta: l.cat_codigo ? "" : l._omie ? `Omie ${l._omie}` : "sem código",
             dica: l._omie ? `Só no Omie (${l._omie}), sem item do nosso estoque` : "Sem item do nosso estoque" } : null),
@@ -721,7 +717,7 @@ export default function MateriaisGrade({
             💬{n > 0 && <span className="absolute -top-1.5 -right-2 min-w-[14px] px-0.5 rounded-full bg-ww-accent text-white text-[9px] font-bold leading-[14px] text-center">{n}</span>}
           </button>);
       } },
-  ], [empresa, cmp, cmpPorId, nomesPadrao, gruposMeta, abrirSeletorLista, PC, conversa, sinais, origemCp, cpNaoUsados, aceitarSugestoes, recusarSugestao, temSug, planoDaLinha]);
+  ], [empresa, cmp, cmpPorId, nomesPadrao, gruposMeta, abrirSeletorLista, PC, conversa, sinais, origemCp, cpNaoUsados, planoDaLinha]);
 
   /** A leitura inicial funcionou?
    *
@@ -947,8 +943,7 @@ export default function MateriaisGrade({
       if (filtroPc === "sem_pc" && temPc(l)) return false;
       if (filtroPcNum && !cmpPorId.get(l._id)?.pcs.some((p) => p.pc === filtroPcNum)) return false;
       if (filtroPc === "risco" && !emRisco(l)) return false;
-      if (filtroPc === "sug" && l._match !== "sug") return false;
-      if (filtroPc === "sem_cod" && !(semCodigoNosso(l) && l._match !== "sug")) return false;
+      if (filtroPc === "sem_cod" && !semCodigoNosso(l)) return false;
       return true;
     });
     /* Agrupadas por equipamento (spec B.3: a data do grupo fica no cabeçalho do grupo, na
@@ -1225,8 +1220,8 @@ export default function MateriaisGrade({
     const vazio = !comCodigo.length && !alvo.length;
     if (!vazio) setAviso(`Catálogo: ${porCod - invalidos.length > 0 ? `${porCod - invalidos.length} pelo código digitado · ` : ""}${ok} item(ns) casado(s)`
       + (invalidos.length ? ` · ${invalidos.length} código(s) que não são do nosso estoque (${invalidos.slice(0, 5).join(", ")}${invalidos.length > 5 ? "…" : ""}) — a linha entra sem código` : "")
-      + (conf ? ` · ${conf} com SUGESTÃO (caixa âmbar no Código — ✓ aceita, ✕ recusa, ou "Aceitar todas as sugestões")` : "")
-      + (sem ? ` · ${sem} sem correspondência (clique em ⌕ no Código para procurar ou criar o item nosso)` : "") + "." + fraseSalvar());
+      + (conf ? ` · ${conf} com SUGESTÃO (na coluna âmbar "Compatibilizar com o estoque" — ✓ aceita, ✕ não é item nosso, ou "✓ aceitar as melhores")` : "")
+      + (sem ? ` · ${sem} sem correspondência (na coluna "Compatibilizar com o estoque": ⌕ buscar ou ＋ criar o item nosso)` : "") + "." + fraseSalvar());
     return { res, vazio };
   }, [empresa]);
   /** Aplica o resultado do casamento por id, só se o texto da linha não mudou no meio. */
@@ -1381,7 +1376,7 @@ export default function MateriaisGrade({
     setSubAba("lista");
     const sem = novas.filter((l) => l._match === "sem").length;
     const sg = novas.filter((l) => l._match === "sug").length;
-    setAviso(`${novas.length} item(ns) da RC adicionados à lista${sg ? ` · ${sg} com sugestão de código (aceite com ✓ ou "Aceitar todas as sugestões")` : ""}${sem ? ` · ${sem} sem código (resolva no ⌕ do Código)` : ""}. ${fraseSalvar()}`);
+    setAviso(`${novas.length} item(ns) da RC adicionados à lista${sg ? ` · ${sg} com sugestão de código (na coluna "Compatibilizar com o estoque": ✓ ou "✓ aceitar as melhores")` : ""}${sem ? ` · ${sem} sem código (resolva na coluna "Compatibilizar com o estoque")` : ""}. ${fraseSalvar()}`);
   }, [cp, cpMarcados, usoCp]);
 
   /** Escolha no seletor: grava o de-para (texto → item nosso) e aplica na linha. */
@@ -1411,6 +1406,8 @@ export default function MateriaisGrade({
       setAviso(`Item ${item.codigo ?? ""} escolhido — gravado para o texto "${texto.slice(0, 60)}" (casa sozinho da próxima vez).`);
     } catch (e) { setErro(`Não consegui gravar a escolha: ${e instanceof Error ? e.message : String(e)}`); }
   }, [linhas, cp, empresa]);
+  const escolherRef = useRef<typeof escolher | null>(null);
+  escolherRef.current = escolher;
 
   /** Estimado das linhas que ainda não viraram RC/PC — entra no projetado. */
   const restante = useMemo(() => validas.filter((l) => { const c = cmpPorId.get(l._id); return !c?.rc && !c?.pcs.length; })
@@ -1496,7 +1493,7 @@ export default function MateriaisGrade({
     try {
       const j = await postCompras({ acao: "importar_rc", rc_id: rcId }) as { rc: string; novas: number; casados: number; ligadas: number };
       setAviso(`RC ${j.rc}: ${j.novas} linha(s) nova(s) na lista, ${j.casados} já com o código do nosso estoque`
-        + (j.novas - j.casados > 0 ? ` e ${j.novas - j.casados} para resolver (âmbar — clique em ⌕ no Código)` : "")
+        + (j.novas - j.casados > 0 ? ` e ${j.novas - j.casados} para resolver (na coluna "Compatibilizar com o estoque")` : "")
         + `${j.ligadas ? `; ${j.ligadas} já existente(s) ligada(s) à RC` : ""}. A RC fica como origem; os pedidos saem da lista.`);
       setRcsAbertas(null);
       setImportarAberto(false);
@@ -1628,16 +1625,223 @@ export default function MateriaisGrade({
   const semDataComItens = grupos.filter((g) => g.n > 0 && !g.data);
 
   const nComPc = validas.filter(temPc).length;
-  const nRisco = validas.filter((l) => sinais.get(l._id)?.nivel === "risco").length;
-  const nAtraso = validas.filter((l) => sinais.get(l._id)?.nivel === "atrasado").length;
-  const nPcAtraso = validas.filter((l) => (sinais.get(l._id)?.pcAtrasadoDias ?? 0) > 0).length;
-  const nSug = validas.filter((l) => l._match === "sug").length;
-  const nSemCod = validas.filter((l) => !l.cat_ncod_prod && l._match !== "sug").length;
-  const nCod = validas.filter((l) => !!l.cat_ncod_prod && l._match !== "omie").length;
+  const nSemCod = validas.filter(semCodigoNosso).length;
+  const nCod = validas.length - nSemCod;
   const riscoGrupo = (k: string) => {
     const ls = validas.filter((l) => normGrupo(l.equipamento || "Geral") === k);
     return { risco: ls.filter((l) => sinais.get(l._id)?.nivel === "risco").length, atraso: ls.filter((l) => sinais.get(l._id)?.nivel === "atrasado").length };
   };
+
+
+  // ── Cor de cada grupo (spec B.2 v3) ─────────────────────────────────────────
+  /* Paleta de 8 pela ordem dos grupos (estável enquanto os grupos não mudam). Com a migração
+     sql/131 o cadastro devolve a cor gravada (platform.equipamento_grupo.cor) e ela vence. */
+  const [gruposNovos, setGruposNovos] = useState<{ k: string; nome: string; data: string | null }[]>([]);
+  const gruposChips = useMemo(() => {
+    const out = grupos.map((g) => ({ k: g.k, nome: g.nome, n: g.n, data: g.data }));
+    for (const g of gruposNovos) if (!out.some((x) => x.k === g.k)) out.push({ ...g, n: 0 });
+    return out;
+  }, [grupos, gruposNovos]);
+  /* A cor de um grupo não muda enquanto a tela está aberta: quem já tem cor fica com ela; grupo
+     novo pega a primeira cor livre da paleta (criar "Filtro Polidor" não repinta os outros). */
+  const coresRef = useRef(new Map<string, string>());
+  const coresGrupo = useMemo(() => {
+    const m = coresRef.current;
+    for (const g of gruposChips) {
+      const gravada = gruposMeta?.cores?.[g.k];
+      if (gravada) { m.set(g.k, gravada); continue; }
+      if (m.has(g.k)) continue;
+      const usadas = new Set(gruposChips.map((x) => m.get(x.k)).filter(Boolean));
+      m.set(g.k, CORES_GRUPO.find((c) => !usadas.has(c)) ?? CORES_GRUPO[m.size % CORES_GRUPO.length]);
+    }
+    return new Map(m);
+  }, [gruposChips, gruposMeta]);
+  const corGrupo = useCallback((k: string) => coresGrupo.get(k) ?? CORES_GRUPO[0], [coresGrupo]);
+
+  // ── "+ equipamento" e "mover para equipamento" (spec B.2 / B.4 v3) ─────────
+  const [novoGrupo, setNovoGrupo] = useState<{ nome: string; data: string } | null>(null);
+  const criarGrupo = useCallback(() => {
+    if (!novoGrupo) return;
+    const nome = novoGrupo.nome.trim().replace(/\s+/g, " ");
+    if (nome.length < 2) { setErro("Dê um nome ao equipamento."); return; }
+    const k = normGrupo(nome);
+    const data = /^\d{4}-\d{2}-\d{2}$/.test(novoGrupo.data) ? novoGrupo.data : "";
+    const ids = new Set([...marcadas]);
+    if (ids.size) {
+      setLinhas((ls) => ls.map((l) => (ids.has(l._id) ? { ...l, equipamento: nome, data_necessaria: data || l.data_necessaria } : l)));
+      setAviso(`Equipamento "${nome}" criado com ${ids.size} item(ns).${fraseSalvar()}`);
+      setMarcadas(new Set());
+      setSujo(true);
+    } else {
+      // grupo novo sem itens: aparece como chip e ganha uma linha vazia, pronta para digitar
+      setGruposNovos((gs) => (gs.some((g) => g.k === k) ? gs : [...gs, { k, nome, data: data || null }]));
+      setLinhas((ls) => [{ ...vazia(), equipamento: nome, data_necessaria: data } as LinhaGrade, ...ls]);
+      setAviso(`Equipamento "${nome}" criado — digite os itens na linha nova (ou use + Adicionar itens).`);
+      // as linhas em branco ficam no fim da grade: a nova é a penúltima (a última é a vazia de sempre)
+      setTimeout(() => { const cs = [...document.querySelectorAll<HTMLInputElement>('[data-cel$="-2"]')]; cs[cs.length - 2]?.focus(); }, 150);
+    }
+    setFiltroPc("todas"); setEquipFiltro(k); setNovoGrupo(null);
+  }, [novoGrupo, marcadas]); // eslint-disable-line react-hooks/exhaustive-deps
+  const moverParaGrupo = useCallback((nome: string) => {
+    const ids = new Set([...marcadas]);
+    if (!ids.size || !nome) return;
+    const k = normGrupo(nome);
+    const destino = dataGrupoRef.current.get(k) ?? gruposNovos.find((g) => g.k === k)?.data ?? null;
+    setLinhas((ls) => ls.map((l) => {
+      if (!ids.has(l._id)) return l;
+      // a linha que herdava a data do grupo antigo passa a herdar a do novo; data própria fica
+      const antiga = dataGrupoRef.current.get(normGrupo(l.equipamento || "Geral")) ?? null;
+      const herda = !l.data_necessaria || l.data_necessaria === antiga;
+      return { ...l, equipamento: nome, ...(herda && destino ? { data_necessaria: destino } : {}) };
+    }));
+    setSujo(true);
+    setAviso(`${ids.size} item(ns) movido(s) para ${nome}.${fraseSalvar()}`);
+    setMarcadas(new Set());
+  }, [marcadas, gruposNovos]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Coluna provisória "Compatibilizar com o estoque" (spec B.6 v3) ─────────
+  /* Aparece sozinha enquanto houver linha sem código nosso e não recusada; some sozinha quando a
+     última é resolvida; volta se entrar item novo sem código. O ⚡ da barra mostra/oculta à mão
+     (colSugManual: null = automático). Aberta à mão, mostra também as linhas já com código, para
+     trocar ou tirar o código. */
+  const pendentesSug = useMemo(() => validas.filter((l) => semCodigoNosso(l) && l._sug_status !== "recusada"), [validas]);
+  const [colSugManual, setColSugManual] = useState<boolean | null>(null);
+  const nPendAnt = useRef(0);
+  useEffect(() => {
+    const n = pendentesSug.length;
+    if (n === 0 && colSugManual !== true) setColSugManual(null);          // resolveu tudo → volta ao automático (fecha)
+    else if (n > nPendAnt.current && colSugManual === false) setColSugManual(null); // entrou item novo sem código → volta
+    nPendAnt.current = n;
+  }, [pendentesSug.length]); // eslint-disable-line react-hooks/exhaustive-deps
+  const colSugAberta = colSugManual === null ? pendentesSug.length > 0 : colSugManual;
+  /** Candidatas de cada linha: a sugestão gravada + as alternativas do casamento (sem repetir). */
+  const candidatas = useCallback((l: LinhaGrade): Cat[] => {
+    const out: Cat[] = []; const vistos = new Set<number>();
+    const add = (c: Cat | null | undefined) => { if (c && c.ncod_prod && !vistos.has(Number(c.ncod_prod))) { vistos.add(Number(c.ncod_prod)); out.push(c); } };
+    if (l._match === "sug") add(lerSug(l));
+    try { (l._alts ? JSON.parse(l._alts) as Cat[] : []).forEach(add); } catch { /* */ }
+    return out.slice(0, 4);
+  }, []);
+  /** Alternativas das linhas que JÁ têm código (só com a coluna aberta à mão): o casamento é
+   *  só leitura e fica na tela, não vai para a linha (não marca a lista para salvar). */
+  const [altsCod, setAltsCod] = useState<Record<string, Cat[]>>({});
+  useEffect(() => {
+    if (colSugManual !== true) return;
+    const falta = linhasRef.current.filter((l) => String(l.item ?? "").trim() && !semCodigoNosso(l) && !altsCod[l._id]);
+    if (!falta.length) return;
+    let vivo = true;
+    (async () => {
+      try {
+        const r = await fetch("/api/catalogo/projeto", { method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ acao: "casar", emp: empresa, textos: falta.map((l) => textoCasar(l.item, l.modelo)), custos: falta.map(() => null) }) });
+        const j = (await r.json().catch(() => ({}))) as { casamentos?: Casamento[] };
+        if (!vivo || !j.casamentos) return;
+        const m: Record<string, Cat[]> = {};
+        falta.forEach((l, k) => { const c = j.casamentos![k]; m[l._id] = [c?.melhor, ...(c?.alternativas ?? [])].filter((x): x is Cat => !!x); });
+        setAltsCod((a) => ({ ...a, ...m }));
+      } catch { /* sem alternativas: fica buscar no estoque e tirar o código */ }
+    })();
+    return () => { vivo = false; };
+  }, [colSugManual, validas.length, empresa]); // eslint-disable-line react-hooks/exhaustive-deps
+  /** Escolha no select da coluna: candidata (vira a sugestão da linha), buscar ou criar. */
+  const [escolhaSug, setEscolhaSug] = useState<Record<string, number>>({});
+  const reverRecusa = useCallback((id: string) => {
+    for (const k of [...sugTentadasRef.current]) if (k.startsWith(`${id}|`)) sugTentadasRef.current.delete(k);
+    setLinhas((ls) => ls.map((l) => (l._id === id ? { ...l, _sug_status: "", ...(l._match === "omie" ? {} : { _match: "" }) } as LinhaGrade : l)));
+    setSujo(true);
+  }, []);
+  const tirarCodigo = useCallback((id: string) => {
+    for (const k of [...sugTentadasRef.current]) if (k.startsWith(`${id}|`)) sugTentadasRef.current.delete(k);
+    setLinhas((ls) => ls.map((l) => (l._id === id ? { ...l, cat_ncod_prod: "", cat_codigo: "", _cat_desc: "", _match: "", _alts: "", _sug: "", _sug_status: "",
+      _omie: "", _omie_ncod: "", cat_fornecedor: "", cat_entrega_dias: "", cat_fat_dias: "" } as LinhaGrade : l)));
+    setSujo(true);
+    setAviso(`Código removido — a linha volta à compatibilização.${fraseSalvar()}`);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  const melhorDe = useCallback((l: LinhaGrade): Cat | null => {
+    const cs = candidatas(l);
+    const i = escolhaSug[l._id];
+    return (i != null ? cs[i] : null) ?? (l._match === "sug" ? lerSug(l) : null) ?? cs[0] ?? null;
+  }, [candidatas, escolhaSug]);
+  const aceitarMelhores = useCallback(() => {
+    const pares = pendentesSug.map((l) => ({ id: l._id, c: melhorDe(l) })).filter((x): x is { id: string; c: Cat } => !!x.c);
+    if (!pares.length) { setAviso("Nenhuma linha pendente tem candidata no estoque — use ⌕ buscar ou ＋ criar."); return; }
+    void aceitarEscolhas(pares);
+  }, [pendentesSug, melhorDe, aceitarEscolhas]);
+  const SEL = "max-w-[230px] min-w-0 rounded-md border border-amber-500/50 bg-[rgb(var(--color-ww-panel))] px-1 py-0.5 text-[11px] text-ww-text";
+  const BT = "shrink-0 w-[22px] h-[22px] rounded-md border border-ww-border text-[12px] leading-none";
+  const colunaSug: ColunaGrade = useMemo(() => ({
+    key: "_compat", label: "Compatibilizar com o estoque", w: 372, fixa: true,
+    classe: "border-x border-dashed border-amber-500/50",
+    fundo: "color-mix(in srgb, rgb(var(--color-ww-panel)) 87%, #f5b547)",
+    dicaCab: "Coluna provisória: aparece sozinha quando há item sem código do nosso estoque e some quando todos estão resolvidos. ✓ aceita o item selecionado (ensina o de-para) · ✕ = não é item nosso.",
+    cab: (<span className="inline-flex items-center gap-1.5 normal-case tracking-normal text-[11px] text-amber-700 dark:text-amber-300">
+      Compatibilizar com o estoque
+      <button type="button" onClick={aceitarMelhores} title="Aceita a melhor sugestão de todas as linhas pendentes"
+        className="px-1.5 py-px rounded border border-ww-border text-ww-text hover:border-ww-accent">✓ aceitar as melhores</button>
+      <button type="button" onClick={() => setColSugManual(false)} className="px-1 text-ww-textMuted hover:text-ww-text">ocultar</button>
+    </span>),
+    render: (l0) => {
+      const l = l0 as LinhaGrade;
+      if (!String(l.item ?? "").trim()) return null;
+      if (!semCodigoNosso(l)) {
+        // linha já com código só aparece aqui com a coluna aberta à mão (para trocar ou tirar o código)
+        if (colSugManual !== true) return null;
+        const alts = (altsCod[l._id] ?? candidatas(l)).filter((a) => String(a.ncod_prod) !== String(l.cat_ncod_prod));
+        return (
+          <select className={SEL} value="" data-compat="cod" title="Código atual; abra para trocar por outro item do estoque"
+            onChange={(e) => {
+              const v = e.target.value;
+              if (v === "buscar") abrirSeletorLista(l._id);
+              else if (v === "limpar") tirarCodigo(l._id);
+              else if (v) { const c = alts[Number(v)]; if (c) void escolherRef.current?.({ alvo: "lista", id: l._id }, { n_cod_prod: c.ncod_prod, codigo: c.codigo ?? "", descricao: c.descricao }); }
+            }}>
+            <option value="">✓ {l.cat_codigo} · mantido</option>
+            {alts.map((a, i) => <option key={a.ncod_prod} value={String(i)}>trocar por {a.codigo ?? "s/ cód"} · {a.descricao}</option>)}
+            <option value="buscar">⌕ buscar no estoque…</option>
+            <option value="limpar">✕ tirar o código</option>
+          </select>);
+      }
+      if (l._sug_status === "recusada") return (
+        <span className="text-[11px] text-ww-textFaint" data-compat="recusada">sem item nosso ·{" "}
+          <button type="button" className="text-ww-accent hover:underline" onClick={() => abrirSeletorLista(l._id)}>escolher</button> ·{" "}
+          <button type="button" className="hover:underline" onClick={() => reverRecusa(l._id)}>rever</button></span>);
+      const cs = candidatas(l);
+      const atual = melhorDe(l);
+      const idx = atual ? cs.findIndex((c) => c.ncod_prod === atual.ncod_prod) : -1;
+      return (
+        <span className="flex items-center gap-1.5 min-w-0" data-compat="pendente">
+          <select className={`${SEL} ${atual ? "font-semibold !text-amber-700 dark:!text-amber-300" : ""}`} value={idx >= 0 ? String(idx) : ""}
+            title="Melhor sugestão primeiro; abra para escolher outra, buscar no estoque ou criar o item"
+            onChange={(e) => {
+              const v = e.target.value;
+              if (v === "buscar" || v === "novo") { abrirSeletorLista(l._id); return; }
+              if (v === "") return;
+              setEscolhaSug((m) => ({ ...m, [l._id]: Number(v) }));
+            }}>
+            {cs.map((a, i) => <option key={a.ncod_prod} value={String(i)}>{a.codigo ?? "s/ cód"} · {a.descricao} ({Math.round((a.score ?? 0) * 100)}%)</option>)}
+            {!cs.length && <option value="">{sugBuscando ? "procurando no estoque…" : "nenhuma parecida no estoque"}</option>}
+            <option value="buscar">⌕ buscar no estoque…</option>
+            <option value="novo">＋ criar item novo no estoque</option>
+          </select>
+          {atual && <button type="button" className={`${BT} text-emerald-700 dark:text-emerald-300 hover:border-emerald-500`} title={`Aceitar ${atual.codigo ?? ""}`}
+            onClick={() => void aceitarEscolhas([{ id: l._id, c: atual }])}>✓</button>}
+          <button type="button" className={`${BT} text-ww-textMuted hover:text-rose-500 hover:border-rose-400`} title="Não é item nosso (fica sem código)"
+            onClick={() => recusarSugestao(l._id)}>✕</button>
+        </span>);
+    },
+  }), [colSugManual, aceitarMelhores, altsCod, candidatas, melhorDe, abrirSeletorLista, tirarCodigo, reverRecusa, aceitarEscolhas, recusarSugestao, sugBuscando]); // eslint-disable-line react-hooks/exhaustive-deps
+  const colunasGrade = useMemo(() => {
+    if (!colSugAberta) return COLS;
+    const i = COLS.findIndex((c) => c.key === "cat_codigo");
+    return [...COLS.slice(0, i + 1), colunaSug, ...COLS.slice(i + 1)];
+  }, [COLS, colSugAberta, colunaSug]);
+
+  // ── Painel do topo ao vivo e "ver planejamento →" ───────────────────────────
+  useEffect(() => {
+    onResumo?.({ restante, semana: resumoP.semana, nAtr: resumoP.atr.length, nAg: resumoP.ag.length });
+  }, [onResumo, restante, resumoP]);
+  useEffect(() => () => onResumo?.(null), [onResumo]);
+  useEffect(() => { if (pedidoEtapa) { etapaInicialFeita.current = true; setSubAba(pedidoEtapa.etapa); } }, [pedidoEtapa]);
 
   /* Etapa inicial (spec B.1): projeto sem lista abre em ① Itens da RC; com lista, em ②. */
   useEffect(() => {
@@ -1646,15 +1850,6 @@ export default function MateriaisGrade({
     setSubAba(validas.length ? "lista" : "rc");
   }, [carregouOk, carregando, validas.length]);
 
-  /** Linha nova no topo (do grupo filtrado, se houver), com o foco na coluna pedida. */
-  const novaLinhaNoTopo = useCallback((col: string) => {
-    setSubAba("lista"); setFiltroPc("todas"); setFiltroPcNum(null);
-    const nova = { ...vazia(), equipamento: equipFiltro ? (grupos.find((g) => g.k === equipFiltro)?.nome ?? "") : "" } as LinhaGrade;
-    setLinhas((ls) => [nova, ...ls]);
-    const ci = COLS.filter((c) => !c.calculada && !c.render).findIndex((c) => c.key === col);
-    setTimeout(() => (document.querySelector(`[data-cel="0-${Math.max(0, ci)}"]`) as HTMLInputElement | null)?.focus(), 80);
-  }, [equipFiltro, grupos, COLS]);
-
   /** "+ Adicionar itens ▾" (spec B.2 / D). */
   const [addModal, setAddModal] = useState<"cat" | "colar" | null>(null);
   const menuAdicionar: { rot: string; sub: string; fn: () => void }[] = [
@@ -1662,7 +1857,6 @@ export default function MateriaisGrade({
     { rot: "📋 Colar do Excel", sub: "cola 10, 15 linhas de uma vez, com ou sem cabeçalho", fn: () => setAddModal("colar") },
     { rot: "⬇ Baixar modelo Excel com nossos códigos", sub: "aba Lista para preencher + aba Códigos do estoque (para PROCV)",
       fn: () => { window.location.href = `/api/rc-projetos/modelo?emp=${encodeURIComponent(empresa)}`; } },
-    { rot: "✏️ Linha em branco", sub: "digitar à mão (Enter na última linha também cria outra)", fn: () => novaLinhaNoTopo("item") },
   ];
   /** Linhas do modal "Adicionar itens" → grade. As sem código passam pelo casamento automático. */
   const adicionarLinhasNovas = useCallback((novas: LinhaNova[], modo: "cat" | "colar") => {
@@ -1679,16 +1873,16 @@ export default function MateriaisGrade({
     setSubAba("lista"); setFiltroPc("todas"); setFiltroPcNum(null);
     const semCod = rows.filter((r) => !r.cat_ncod_prod).length;
     const inval = novas.filter((n) => n.codigo_invalido).length;
-    setAviso(`${rows.length} item(ns) adicionados${modo === "cat" ? " do estoque" : " do Excel"}${semCod ? ` · ${semCod} sem código vão passar pelo catálogo (sugestão na célula Código)` : ""}${inval ? ` · ${inval} código(s) colado(s) não são do nosso estoque` : ""}.${fraseSalvar()}`);
+    setAviso(`${rows.length} item(ns) adicionados${modo === "cat" ? " do estoque" : " do Excel"}${semCod ? ` · ${semCod} sem código vão passar pelo catálogo (sugestão na coluna "Compatibilizar com o estoque")` : ""}${inval ? ` · ${inval} código(s) colado(s) não são do nosso estoque` : ""}.${fraseSalvar()}`);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
   /** "⋯" (spec B.2): tudo o que saiu da barra continua aqui. */
   const menuMais: { rot: string; dica?: string; off?: boolean; fn: () => void }[] = [
-    { rot: casando ? "⚡ Casando…" : "⚡ Casar com o catálogo de novo", off: casando || salvando, dica: "Só nas linhas sem código (as recusadas ficam de fora)", fn: () => void casarAgora() },
-    { rot: "⚠ Revisar sugestões de código", off: !nSug, fn: () => { setSugMarc(new Set(validas.filter((l) => l._match === "sug").map((l) => l._id))); setRevisarSug(true); } },
     { rot: ocupado === "auto" ? "⇄ Vinculando…" : "⇄ Vincular PCs automaticamente", off: salvando || !!ocupado, dica: "Procura, nos pedidos de compra deste projeto, o item de cada linha — e grava o vínculo", fn: () => void vincularAuto() },
     { rot: ocupado === "sug" ? "Procurando…" : "Ver sugestões de vínculo com PCs", off: !!ocupado, dica: "Linhas parecidas com itens dos PCs do projeto, para você confirmar (também no “+ vincular” de cada linha)", fn: () => void verSugestoes() },
     { rot: "Exportar Excel", off: !validas.length, fn: exportar },
     { rot: salvando ? "Salvando…" : "Salvar agora", off: salvando || !carregouOk, fn: () => void salvar() },
+    { rot: "⏱ Prazos por fornecedor", dica: "Histórico × prazo usado no planejamento (comprar até)", fn: () => setPrazosAberto(true) },
+    { rot: casando ? "Casando…" : "Casar com o catálogo de novo", off: casando || salvando, dica: "Refaz as sugestões das linhas sem código (as recusadas ficam de fora)", fn: () => void casarAgora() },
     ...(cmp?.fora_da_lista.length ? [{ rot: `${foraAberto ? "Esconder" : "Ver"} PCs com itens fora da lista (${cmp.fora_da_lista.length})`, dica: "Itens de PCs do projeto que nenhuma linha da lista cobre — já contam no comprometido", fn: () => setForaAberto((v) => !v) }] : []),
   ];
 
@@ -1699,6 +1893,7 @@ export default function MateriaisGrade({
     const padrao = g && nomesPadrao.length ? nomePadrao(g.nome, nomesPadrao) : null;
     const rg = riscoGrupo(k);
     return (<>
+      <i aria-hidden className="inline-block w-[9px] h-[9px] rounded-full" style={{ background: corGrupo(k) }} />
       <b className="text-ww-text">{g?.nome ?? (ls[0]?.equipamento || "Geral")}</b>
       <span className="text-ww-textFaint">{ls.length} {ls.length === 1 ? "item" : "itens"}</span>
       <span className="text-ww-textMuted">· necessário em</span>
@@ -1732,51 +1927,32 @@ export default function MateriaisGrade({
   return (
     <section className="viz-panel bg-ww-panel border border-ww-border rounded-xl p-3.5 min-w-0 space-y-2.5">
       <style>{CSS_CDL}</style>
-      <header className="flex items-baseline gap-3 flex-wrap">
-        <div className="min-w-0">
-          <h3 className="text-[12.5px] font-semibold text-ww-text tracking-wide uppercase">
-            Lista de materiais
-          </h3>
-          <p className="text-[11px] text-ww-textMuted mt-0.5">
-            ① confira os itens da RC e leve-os para a lista · ② ajuste a lista (códigos, datas) e gere os pedidos de compra · ③ veja quando pedir cada item.
-            {" "}<a href={`/projetos?${new URLSearchParams({ empresa, abrir: String(codigoProjeto) })}`} className="text-ww-accent hover:underline"
-              title="Vendas (PV/OS) e as previsões de faturamento e recebimento ficam no cartão do projeto em Operação › Projetos">vendas e datas de faturamento em Operação › Projetos →</a>{" "}
-            <span className="cursor-help text-ww-textFaint" title={"Na grade: digite, ou cole do Excel com Ctrl+V a partir da célula selecionada.\nSem cabeçalho a ordem é Código · Item · Qtd · Un · Necessário em · Valor unit.\nCom a linha de cabeçalho, também Equipamento, Modelo, PC e Observação (a observação vira comentário).\nAo digitar o Item ou o Código, o catálogo sugere os itens do nosso estoque com último preço, fornecedor e prazos.\nÀ direita de cada linha: o pedido de compra, o valor e a situação."}>ⓘ</span>
-          </p>
+      {/* Etapas = controle segmentado compacto (spec B.2 v3), numa linha só, com a contagem dentro. */}
+      <div className="flex items-center gap-3 flex-wrap">
+        <div className="inline-flex rounded-[10px] border border-ww-border overflow-hidden bg-ww-rowHover/50" role="tablist" data-etapas>
+          {([
+            ["rc", "Itens da RC", cpBase ? String(cpBase.itens.length) : ""],
+            ["lista", "Lista", String(validas.length)],
+            ["plan", "Planejamento", resumoP.nSemana ? `${resumoP.nSemana} para agir` : ""],
+          ] as const).map(([k, rot, n], i) => (
+            <button key={k} type="button" role="tab" aria-selected={subAba === k} onClick={() => setSubAba(k)} data-etapa={k}
+              className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 text-[12.5px] transition ${i ? "border-l border-ww-border" : ""} ${
+                subAba === k ? "bg-ww-accent text-white font-semibold" : "text-ww-textMuted hover:text-ww-text"}`}>
+              {rot}{n && <span className={`text-[11px] ${subAba === k ? "opacity-90" : "opacity-80"}`}>{n}</span>}
+            </button>))}
         </div>
-      </header>
-
-      {/* Quanto vou gastar — KPIs que eram da aba "Compras × lista". */}
-      {cmp && (
-        <KpisCompras d={cmp} restante={restante}
-          empresa={empresa} codigoProjeto={codigoProjeto} onRecarregar={() => void carregarCompras()} />
-      )}
-      {cmpErro && !cmp && <p className="text-[11px] text-rose-600">Compras do projeto indisponíveis: {cmpErro}</p>}
-
-      {/* KPI "Comprar esta semana" (spec E): sem PC, já devia ter comprado + comprar nos próximos 7 dias. */}
-      {resumoP.nSemana > 0 && (
-        <button type="button" onClick={() => setSubAba("plan")} data-kpi-semana
-          className="flex items-center gap-3 flex-wrap w-full text-left rounded-lg border border-amber-500/50 bg-amber-500/10 px-3 py-1.5 text-[12px] hover:border-amber-500">
-          <span className="text-[10.5px] uppercase tracking-wider text-amber-800 dark:text-amber-200">Comprar esta semana</span>
-          <b className="text-[15px] tabular-nums text-ww-text">{brl(resumoP.semana)}</b>
-          <span className="text-ww-textMuted">{resumoP.atr.length ? `${resumoP.atr.length} item(ns) atrasado(s)` : ""}{resumoP.atr.length && resumoP.ag.length ? " · " : ""}{resumoP.ag.length ? `${resumoP.ag.length} para os próximos 7 dias` : ""}</span>
-          <span className="ml-auto text-ww-accent text-[11px]">ver planejamento →</span>
-        </button>)}
-
-      {/* As três etapas (08/10/26, spec B.1) — a lista nasce da RC e termina no planejamento. */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-        {([
-          ["rc", `① Itens da RC${cpBase ? ` (${cpBase.itens.length})` : ""}`, "vêm do CRM · conferir e levar para a lista"],
-          ["lista", `② Lista de materiais (${validas.length})`, "o que vamos comprar de fato · códigos, datas, PCs"],
-          ["plan", `③ Planejamento de compras${resumoP.nSemana ? ` (${resumoP.nSemana} para agir)` : ""}`, "quando pedir cada item para chegar no prazo"],
-        ] as const).map(([k, rot, sub]) => (
-          <button key={k} type="button" onClick={() => setSubAba(k)} data-etapa={k}
-            className={`text-left rounded-lg border px-3 py-2 transition ${subAba === k ? "border-ww-accent bg-ww-accentSoft" : "border-ww-border bg-ww-rowHover/40 hover:border-ww-accent/60"}`}>
-            <b className={`block text-[12.5px] ${subAba === k ? "text-ww-text" : "text-ww-textMuted"}`}>{rot}</b>
-            <small className="block text-[10.5px] text-ww-textFaint mt-0.5">{sub}</small>
-          </button>
-        ))}
+        <span className="text-[11.5px] text-ww-textMuted">
+          {subAba === "rc" ? "vêm do CRM · conferir e levar para a lista"
+            : subAba === "lista" ? "o que vamos comprar de fato · códigos, datas, PCs · clique num equipamento para filtrar"
+            : "quando pedir cada item para chegar no prazo · o agente monta os lotes"}
+        </span>
+        <span className="ml-auto text-[11px] text-ww-textMuted">
+          <a href={`/projetos?${new URLSearchParams({ empresa, abrir: String(codigoProjeto) })}`} className="text-ww-accent hover:underline"
+            title="Vendas (PV/OS) e as previsões de faturamento e recebimento ficam no cartão do projeto em Operação › Projetos">vendas e datas em Operação › Projetos →</a>{" "}
+          <span className="cursor-help text-ww-textFaint" title={"Na grade: digite, ou cole do Excel com Ctrl+V a partir da célula selecionada.\nSem cabeçalho a ordem é Código · Item · Qtd · Un · Necessário em · Valor unit.\nCom a linha de cabeçalho, também Equipamento, Modelo, PC e Observação (a observação vira comentário).\nAo digitar o Item ou o Código, o catálogo sugere os itens do nosso estoque com último preço, fornecedor e prazos.\nÀ direita de cada linha: o pedido de compra, o valor e a situação."}>ⓘ</span>
+        </span>
       </div>
+      {cmpErro && !cmp && <p className="text-[11px] text-rose-600">Compras do projeto indisponíveis: {cmpErro}</p>}
 
       {erro && (
         <div className="p-2.5 rounded-lg border border-rose-500/40 bg-rose-500/10 text-[12px] text-rose-700 dark:text-rose-300">
@@ -1863,16 +2039,40 @@ export default function MateriaisGrade({
                 </div>
                 </>);
             })()}
-          <p className="text-[10.5px] text-ww-textFaint">A RC é a referência e a origem do budget de materiais — aqui só se lê. Leve um item com “→ lista” ou todos com “⤵ Levar para a lista os que faltam” (casam com o nosso código antes de entrar). Na etapa ② você exclui, inclui e casa.</p>
+          <p className="text-[10.5px] text-ww-textFaint">A RC é a referência e a origem do budget de materiais — aqui só se lê. Leve um item com “→ lista” ou todos com “⤵ Levar para a lista os que faltam” (casam com o nosso código antes de entrar). Na etapa Lista você exclui, inclui e compatibiliza com o estoque.</p>
         </div>
       )}
 
       {subAba === "lista" && (<>
-      {/* Barra da lista (spec B.2): adicionar · gerar PC · ⋯, e à direita as sugestões pendentes. */}
-      <div className="flex items-center gap-2 flex-wrap">
+      {/* Equipamentos = chips coloridos + toolbar única à direita (spec B.2/B.3 v3). */}
+      <div className="flex items-center gap-2 flex-wrap" data-chips>
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <button type="button" onClick={() => setEquipFiltro(null)} data-grupo-chip=""
+            className={`inline-flex items-center gap-1.5 pl-2.5 pr-2.5 py-1 rounded-full border text-[12px] transition ${!equipFiltro ? "border-ww-textMuted bg-ww-rowHover text-ww-text" : "border-ww-border text-ww-textMuted hover:text-ww-text"}`}>
+            <b className="font-medium text-ww-text">Todos</b><span className="text-[11px] opacity-80">{validas.length}</span>
+          </button>
+          {gruposChips.map((g) => {
+            const cor = corGrupo(g.k);
+            const al = validas.filter((l) => normGrupo(l.equipamento || "Geral") === g.k && emRisco(l)).length;
+            const on = equipFiltro === g.k;
+            return (
+              <button key={g.k} type="button" data-grupo-chip={g.k} onClick={() => setEquipFiltro(on ? null : g.k)}
+                title={`${g.nome}${g.data ? ` · necessário em ${dia(g.data)}` : ""}${al ? ` · ${al} atrasado(s)/em risco` : ""} — clique para filtrar`}
+                className={`inline-flex items-center gap-1.5 pl-2 pr-2.5 py-1 rounded-full border text-[12px] transition ${on ? "text-ww-text" : "border-ww-border bg-ww-rowHover/50 text-ww-textMuted hover:text-ww-text"}`}
+                style={on ? { borderColor: cor, background: `color-mix(in srgb, ${cor} 14%, transparent)` } : undefined}>
+                <i aria-hidden className="inline-block w-[9px] h-[9px] rounded-full" style={{ background: cor }} />
+                <b className="font-medium text-ww-text">{g.nome}</b><span className="text-[11px] opacity-80">{g.n}</span>
+                {al > 0 && <span className="text-[11px] font-semibold text-rose-600 dark:text-rose-400">✕{al}</span>}
+              </button>);
+          })}
+          <button type="button" data-novo-grupo onClick={() => setNovoGrupo({ nome: "", data: "" })}
+            title={marcadas.size ? `Cria um equipamento novo com os ${marcadas.size} item(ns) marcados` : "Cria um equipamento (grupo) novo na lista"}
+            className="inline-flex items-center px-2.5 py-1 rounded-full border border-dashed border-ww-accent/70 text-[12px] text-ww-accent hover:bg-ww-accentSoft">+ equipamento</button>
+        </div>
+        <span className="flex-1" />
         <details className="relative" data-menu="adicionar">
-          <summary className="list-none cursor-pointer px-2.5 py-1 text-[11.5px] rounded-lg bg-ww-accent text-white font-semibold hover:brightness-110 select-none">+ Adicionar itens ▾</summary>
-          <div className="absolute left-0 mt-1 z-30 min-w-[290px] rounded-lg border border-ww-border bg-[rgb(var(--color-ww-panel))] shadow-xl p-1 text-[11.5px]">
+          <summary className="list-none cursor-pointer px-2.5 py-1 text-[12px] rounded-lg bg-ww-accent text-white font-semibold hover:brightness-110 select-none">+ Adicionar itens ▾</summary>
+          <div className="absolute right-0 mt-1 z-30 min-w-[290px] rounded-lg border border-ww-border bg-[rgb(var(--color-ww-panel))] shadow-xl p-1 text-[11.5px]">
             {menuAdicionar.map((m) => (
               <button key={m.rot} type="button" onClick={(e) => { (e.currentTarget.closest("details") as HTMLDetailsElement).open = false; m.fn(); }}
                 className="block w-full text-left px-2 py-1.5 rounded hover:bg-ww-rowHover">
@@ -1880,57 +2080,13 @@ export default function MateriaisGrade({
               </button>))}
           </div>
         </details>
-        {/* Botão dividido (spec F): comprar agora × deixar o agente achar a data certa */}
-        <span className="inline-flex" data-split>
-          <button type="button" onClick={() => { loteGerandoRef.current = null; abrirGerarPc(paraPc); }} disabled={!!ocupado || !paraPc.length}
-            title={paraPc.length ? "Gera os pedidos de compra (um por fornecedor) com as linhas marcadas sem PC" : "Marque linhas sem PC na caixinha da esquerda"}
-            className="px-2.5 py-1 text-[11.5px] rounded-l-lg border border-ww-accent/70 text-ww-accent font-semibold hover:bg-ww-accentSoft transition disabled:opacity-40">
-            🧾 Comprar agora ({paraPc.length})
-          </button>
-          <button type="button" disabled={!paraPc.length} data-planejar
-            onClick={() => { setForcados(new Set(paraPc)); setSubAba("plan"); setAviso(`${paraPc.length} item(ns) enviados ao agente — os lotes com eles ficam destacados.`);
-              setTimeout(() => document.querySelector("[data-agente]")?.scrollIntoView({ behavior: "smooth", block: "start" }), 120); }}
-            title="O agente coloca os itens marcados num lote com a data certa de pedir (um PC por fornecedor por data)"
-            className="px-2.5 py-1 text-[11.5px] rounded-r-lg border border-l-0 border-ww-accent/70 text-ww-accent hover:bg-ww-accentSoft transition disabled:opacity-40">
-            ✨ Planejar com o agente
-          </button>
-        </span>
-        <span className="flex-1" />
-        {nSug > 0
-          ? <button type="button" onClick={() => { setSugMarc(new Set(validas.filter((l) => l._match === "sug").map((l) => l._id))); setRevisarSug(true); }}
-              title="Revisar cada sugestão por extenso, trocar pela outra candidata e aceitar as marcadas"
-              className="text-[11px] font-semibold text-amber-700 dark:text-amber-300 hover:underline">⚠ {nSug} sugestão(ões) de código pendente(s)</button>
-          : <span className="text-[10.5px] text-ww-textFaint" title="Códigos da lista">✓ {nCod} com código · ⌕ {nSemCod} sem código</span>}
-        {sugBuscando && <span className="text-[10.5px] text-ww-textFaint">buscando sugestões…</span>}
-        {sugErro && (
-          <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full border border-rose-500/50 bg-rose-500/10 text-[10.5px] text-rose-700 dark:text-rose-300" title={sugErro}>
-            Não consegui buscar sugestões
-            <button type="button" className="underline font-semibold" onClick={() => { setSugErro(null); setSugTentativa((n) => n + 1); }}>tentar de novo</button>
-          </span>)}
-        {nSug > 0 && (
-          <button type="button" onClick={() => void aceitarSugestoes(validas.filter((l) => l._match === "sug").map((l) => l._id))}
-            title={`Confirma as ${nSug} sugestões de código. Dá para desfazer logo depois.`}
-            className="px-2 py-1 text-[11px] rounded-lg border border-amber-500/70 text-amber-800 dark:text-amber-200 font-semibold hover:bg-amber-500/10 transition">
-            ✓ Aceitar todas as sugestões
-          </button>
-        )}
-        {sujo && !salvando && !semAutosave && remocao == null && (
-          <span className="text-[10.5px] text-ww-textFaint">salvando…</span>)}
-        {salvando && <span className="text-[10.5px] text-ww-textFaint">salvando…</span>}
-        {/* Salvamento automático parado: diz por quê e oferece o botão (spec C.6) */}
-        {sujo && semAutosave && !salvando && (
-          <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full border border-amber-500/60 bg-amber-500/10 text-[10.5px] text-amber-800 dark:text-amber-200"
-            title="Enquanto isto estiver aqui, as mudanças NÃO vão para o sistema sozinhas">
-            ⚠ não está salvando: {semAutosave}
-          </span>)}
-        {sujo && semAutosave && semAutosave !== "a lista não carregou" && (
-          <button type="button" onClick={() => void salvar()} disabled={salvando}
-            className="px-2.5 py-1 text-[11.5px] rounded-lg border border-ww-accent bg-ww-accent text-white font-semibold hover:brightness-110 transition">
-            {salvando ? "…" : "Salvar lista"}
-          </button>
-        )}
+        <button type="button" data-compat-toggle onClick={() => setColSugManual(colSugAberta ? false : true)}
+          title="Mostra/oculta a coluna de compatibilização com o estoque. Ela abre sozinha quando há item sem código."
+          className={`px-2.5 py-1 text-[12px] rounded-lg border transition ${colSugAberta ? "border-amber-500/70 text-amber-800 dark:text-amber-200 bg-amber-500/10" : "border-ww-border text-ww-text hover:border-ww-accent"}`}>
+          {colSugAberta ? "⚡ ocultar compatibilização" : `⚡ Compatibilizar (${pendentesSug.length})`}
+        </button>
         <details className="relative" data-menu="mais">
-          <summary className="list-none cursor-pointer px-2 py-1 text-[12px] rounded-lg border border-ww-border text-ww-textMuted hover:text-ww-text hover:bg-ww-rowHover" title="Mais ações">⋯</summary>
+          <summary className="list-none cursor-pointer px-2 py-1 text-[12px] rounded-lg text-ww-textMuted hover:text-ww-text hover:bg-ww-rowHover" title="Mais ações">⋯</summary>
           <div className="absolute right-0 mt-1 z-30 min-w-[260px] rounded-lg border border-ww-border bg-[rgb(var(--color-ww-panel))] shadow-xl p-1 text-[11.5px]">
             {menuMais.map((m) => (
               <button key={m.rot} type="button" disabled={m.off} onClick={(e) => { (e.currentTarget.closest("details") as HTMLDetailsElement).open = false; m.fn(); }}
@@ -1941,51 +2097,89 @@ export default function MateriaisGrade({
         </details>
       </div>
 
+      {/* Barra de seleção (spec B.4 v3): só com itens marcados. */}
+      {marcadas.size > 0 && (
+        <div className="flex items-center gap-2 flex-wrap px-2.5 py-1.5 rounded-[10px] border border-ww-accent bg-ww-accentSoft text-[12px]" data-selbar>
+          <span><b className="text-ww-text">{marcadas.size}</b> marcados</span>
+          <button type="button" onClick={() => { loteGerandoRef.current = null; abrirGerarPc(paraPc); }} disabled={!paraPc.length || !!ocupado}
+            title={paraPc.length ? "Gera os pedidos de compra (um por fornecedor) com as linhas marcadas sem PC" : "As marcadas já têm PC"}
+            className="px-2 py-0.5 rounded-md bg-ww-accent text-white text-[11.5px] font-semibold hover:brightness-110 transition disabled:opacity-40">
+            🧾 Comprar agora{paraPc.length !== marcadas.size ? ` (${paraPc.length})` : ""}
+          </button>
+          <button type="button" disabled={!paraPc.length} data-planejar
+            onClick={() => { setForcados(new Set(paraPc)); setSubAba("plan"); setAviso(`${paraPc.length} item(ns) enviados ao agente — os lotes com eles ficam destacados.`); setMarcadas(new Set());
+              setTimeout(() => document.querySelector("[data-agente]")?.scrollIntoView({ behavior: "smooth", block: "start" }), 120); }}
+            title="O agente coloca os itens marcados num lote com a data certa de pedir (um PC por fornecedor por data)"
+            className="px-2 py-0.5 rounded-md border border-ww-border bg-[rgb(var(--color-ww-panel))] text-[11.5px] text-ww-text hover:border-ww-accent disabled:opacity-40">
+            ✨ Planejar com o agente
+          </button>
+          <select value="" data-mover onChange={(e) => { const v = e.target.value; if (v === "__novo") setNovoGrupo({ nome: "", data: "" }); else if (v) moverParaGrupo(v); }}
+            className="rounded-md border border-ww-border bg-[rgb(var(--color-ww-panel))] px-1.5 py-0.5 text-[11.5px] text-ww-text">
+            <option value="">mover para equipamento…</option>
+            {gruposChips.map((g) => <option key={g.k} value={g.nome}>{g.nome}</option>)}
+            <option value="__novo">+ novo equipamento…</option>
+          </select>
+          {[...marcadas].some((id) => linhas.find((l) => l._id === id)?._match === "sug") && (
+            <button type="button" onClick={() => void aceitarSugestoes([...marcadas])}
+              className="px-2 py-0.5 rounded-md border border-amber-500/70 text-amber-800 dark:text-amber-200 text-[11.5px] hover:bg-amber-500/10 transition">
+              ✓ Aceitar sugestões dos marcados ({[...marcadas].filter((id) => linhas.find((l) => l._id === id)?._match === "sug").length})
+            </button>
+          )}
+          <button type="button" onClick={() => setPicker(true)} title="Ligar as marcadas a um pedido de compra que já existe"
+            className="px-2 py-0.5 rounded-md text-[11.5px] text-ww-textMuted hover:text-ww-text hover:bg-ww-rowHover">⇄ vincular a um PC</button>
+          <button type="button" onClick={() => excluirLinhas([...marcadas])}
+            className="px-2 py-0.5 rounded-md text-[11.5px] text-ww-textMuted hover:text-rose-500 hover:bg-rose-500/10">🗑 Excluir</button>
+          <span className="flex-1" />
+          <button type="button" onClick={() => setMarcadas(new Set())} className="text-[11px] text-ww-textMuted hover:text-ww-text">limpar</button>
+        </div>
+      )}
+
       {filtroPcNum && (
         <div className="flex items-center gap-2 rounded-lg border border-ww-accent/50 bg-ww-accentSoft px-2.5 py-1.5 text-[11.5px]">
           <span>Mostrando só as linhas do <b className="font-mono">PC {filtroPcNum}</b></span>
           <button type="button" className="ml-auto text-ww-accent hover:underline" onClick={() => setFiltroPcNum(null)}>ver a lista toda</button>
         </div>
       )}
-      {/* 5 filtros (spec B.4) */}
-      <div className="flex items-center gap-1 flex-wrap text-[11px]">
-        {(["todas", "sug", "sem_cod", "sem_pc", "risco"] as const).map((k) => (
-          <button key={k} type="button" onClick={() => setFiltroPc(k)} data-filtro={k}
-            title={k === "risco" ? `Chega com menos de ${FOLGA_ENTREGA_DIAS} dias de folga, depois do necessário, ou o PC está atrasado` : undefined}
-            className={`px-2.5 py-0.5 rounded-full border transition ${filtroPc === k ? "border-ww-accent bg-ww-accentSoft text-ww-text"
-              : k === "risco" && (nRisco + nAtraso + nPcAtraso) ? "border-rose-500/50 text-rose-600 dark:text-rose-400"
-              : k === "sug" && nSug ? "border-amber-500/60 text-amber-700 dark:text-amber-300"
-              : "border-ww-border text-ww-textMuted hover:text-ww-text"}`}>
-            {k === "todas" ? `Todos ${validas.length}` : k === "sug" ? `⚠ Com sugestão ${nSug}` : k === "sem_cod" ? `⌕ Sem código ${nSemCod}`
-              : k === "sem_pc" ? `Sem PC ${validas.length - nComPc}` : `Em risco / atrasados ${validas.filter(emRisco).length}`}
-          </button>))}
-      </div>
-
-      {marcadas.size > 0 && (
-        <div className="flex items-center gap-2 flex-wrap px-3 py-2 rounded-lg border border-ww-accent/40 bg-ww-accentSoft text-[12px]">
-          <strong className="text-ww-accent">{marcadas.size} item(ns) marcados</strong>
-          <button type="button" onClick={() => setPicker(true)}
-            className="px-2.5 py-1 rounded-lg bg-ww-accent text-white text-[11.5px] font-semibold hover:brightness-110 transition">
-            Vincular a um PC
-          </button>
-          <button type="button" onClick={() => abrirGerarPc(paraPc)} disabled={!paraPc.length || !!ocupado}
-            className="px-2.5 py-1 rounded-lg bg-ww-accent text-white text-[11.5px] font-semibold hover:brightness-110 transition disabled:opacity-40">
-            🧾 Gerar pedido de compra ({paraPc.length})
-          </button>
-          {[...marcadas].some((id) => linhas.find((l) => l._id === id)?._match === "sug") && (
-            <button type="button" onClick={() => void aceitarSugestoes([...marcadas])}
-              className="px-2.5 py-1 rounded-lg border border-amber-500/70 text-amber-800 dark:text-amber-200 text-[11.5px] font-semibold hover:bg-amber-500/10 transition">
-              ✓ Aceitar sugestões dos marcados ({[...marcadas].filter((id) => linhas.find((l) => l._id === id)?._match === "sug").length})
-            </button>
-          )}
-          <button type="button" onClick={() => excluirLinhas([...marcadas])}
-            className="px-2.5 py-1 rounded-lg border border-rose-400/60 text-rose-700 dark:text-rose-300 text-[11.5px] hover:bg-rose-500/10 transition">
-            🗑 Excluir {marcadas.size} linha{marcadas.size === 1 ? "" : "s"}
-          </button>
-          <button type="button" onClick={() => setMarcadas(new Set())}
-            className="text-[11px] text-ww-textMuted hover:text-ww-text">limpar</button>
+      {/* Filtros = segmentado pequeno "mostrar" (spec B.5 v3) — sem cor de grupo. */}
+      <div className="flex items-center gap-2 flex-wrap text-[11.5px]">
+        <span className="text-[11px] text-ww-textMuted">mostrar</span>
+        <div className="inline-flex rounded-lg border border-ww-border overflow-hidden" data-filtros>
+          {(["todas", "sem_cod", "sem_pc", "risco"] as const).map((k, i) => {
+            const n = k === "sem_cod" ? nSemCod : k === "sem_pc" ? validas.length - nComPc : k === "risco" ? validas.filter(emRisco).length : null;
+            return (
+              <button key={k} type="button" onClick={() => setFiltroPc(k)} data-filtro={k}
+                title={k === "risco" ? `Sem PC e já devia ter comprado ou comprar nos próximos 7 dias; ou chega com menos de ${FOLGA_ENTREGA_DIAS} dias de folga, depois do necessário, ou o PC está atrasado` : undefined}
+                className={`px-2.5 py-0.5 transition ${i ? "border-l border-ww-border" : ""} ${filtroPc === k ? "bg-[rgb(var(--color-ww-panel))] text-ww-text shadow-[inset_0_0_0_1px_rgb(var(--color-ww-accent))]" : k === "risco" ? "text-rose-600 dark:text-rose-400" : "text-ww-textMuted hover:text-ww-text"}`}>
+                {k === "todas" ? "Todos" : k === "sem_cod" ? "⌕ Sem código" : k === "sem_pc" ? "Sem PC" : "✕ Atrasados / em risco"}
+                {n != null && <span className="ml-1 text-[10.5px] opacity-80">{n}</span>}
+              </button>);
+          })}
         </div>
-      )}
+        <span className="flex-1" />
+        {sugBuscando && <span className="text-[10.5px] text-ww-textFaint">buscando sugestões…</span>}
+        {sugErro && (
+          <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full border border-rose-500/50 bg-rose-500/10 text-[10.5px] text-rose-700 dark:text-rose-300" title={sugErro}>
+            Não consegui buscar sugestões
+            <button type="button" className="underline font-semibold" onClick={() => { setSugErro(null); setSugTentativa((n) => n + 1); }}>tentar de novo</button>
+          </span>)}
+        {colSugAberta && pendentesSug.length > 0
+          ? <span className="text-[11px] font-semibold text-amber-700 dark:text-amber-300">⚠ {pendentesSug.length} item(ns) sem código — compatibilize na coluna âmbar; ela some quando terminar</span>
+          : <span className="text-[10.5px] text-ww-textFaint">✓ {nCod} com código · ⌕ {nSemCod} sem código</span>}
+        {sujo && !salvando && !semAutosave && remocao == null && <span className="text-[10.5px] text-ww-textFaint">salvando…</span>}
+        {salvando && <span className="text-[10.5px] text-ww-textFaint">salvando…</span>}
+        {/* Salvamento automático parado: diz por quê e oferece o botão (spec C.6) */}
+        {sujo && semAutosave && !salvando && (
+          <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full border border-amber-500/60 bg-amber-500/10 text-[10.5px] text-amber-800 dark:text-amber-200"
+            title="Enquanto isto estiver aqui, as mudanças NÃO vão para o sistema sozinhas">
+            ⚠ não está salvando: {semAutosave}
+          </span>)}
+        {sujo && semAutosave && semAutosave !== "a lista não carregou" && (
+          <button type="button" onClick={() => void salvar()} disabled={salvando}
+            className="px-2.5 py-0.5 text-[11.5px] rounded-lg border border-ww-accent bg-ww-accent text-white font-semibold hover:brightness-110 transition">
+            {salvando ? "…" : "Salvar lista"}
+          </button>
+        )}
+      </div>
 
       {aceiteDesfazer && (
         <div className="flex items-center gap-3 flex-wrap p-2 rounded-lg border border-emerald-500/40 bg-emerald-500/10 text-[12px] text-emerald-800 dark:text-emerald-200">
@@ -2017,8 +2211,9 @@ export default function MateriaisGrade({
 
       {carregando
         ? <p className="text-[11.5px] text-ww-textFaint py-3">Carregando a lista…</p>
-        : <GradeEditavel cols={COLS} linhas={visiveis} botaoLinha={false} herdarNoColar={["equipamento"]}
-            grupo={{ de: (l) => (String(l.item ?? "").trim() ? normGrupo(l.equipamento || "Geral") : null), cab: cabecalhoGrupo }}
+        : <GradeEditavel cols={colunasGrade} linhas={visiveis} botaoLinha={false} herdarNoColar={["equipamento"]}
+            grupo={{ de: (l) => (String(l.item ?? "").trim() ? normGrupo(l.equipamento || "Geral") : null), cab: cabecalhoGrupo, cor: corGrupo }}
+            corLinha={(l) => (String(l.item ?? "").trim() || l.equipamento ? corGrupo(normGrupo(l.equipamento || "Geral")) : null)}
             colarExtras={[{ label: "Equipamento", key: "equipamento" }, { label: "Grupo", key: "equipamento" }, { label: "Modelo", key: "modelo" }, { label: "PC", key: "pc_numero" }, { label: "PC nº", key: "pc_numero" }, { label: "Observação", key: "observacao" }, { label: "Obs", key: "observacao" }]}
             aoColar={() => setCasarAposColar(true)}
             onChange={(l) => {
@@ -2155,9 +2350,40 @@ export default function MateriaisGrade({
           </div>);
       })(), document.body)}
 
+      {novoGrupo && createPortal(
+        <div className="fixed inset-0 z-[120] bg-black/45 flex items-start justify-center pt-[14vh] px-3" onMouseDown={(e) => { if (e.target === e.currentTarget) setNovoGrupo(null); }}>
+          <div role="dialog" aria-label="Novo equipamento" className="w-full max-w-[460px] rounded-xl border border-ww-border bg-[rgb(var(--color-ww-panel))] shadow-2xl text-[12px]">
+            <div className="flex items-center justify-between px-4 py-3 border-b border-ww-border">
+              <b className="text-[14px] text-ww-text">Novo equipamento (grupo)</b>
+              <button type="button" className="text-ww-textMuted hover:text-ww-text" onClick={() => setNovoGrupo(null)}>✕</button>
+            </div>
+            <div className="px-4 py-3 space-y-2.5">
+              <label className="block text-[11px] text-ww-textMuted">Nome
+                <input autoFocus list="grupos-cadastro" value={novoGrupo.nome} placeholder="ex.: Filtro Polidor, Tanque de contato…"
+                  onChange={(e) => setNovoGrupo({ ...novoGrupo, nome: e.target.value })}
+                  onKeyDown={(e) => { if (e.key === "Enter") criarGrupo(); }}
+                  className="mt-1 block w-full rounded-md border border-ww-border bg-transparent px-2 py-1 text-[12.5px] text-ww-text" />
+              </label>
+              <datalist id="grupos-cadastro">
+                {[...new Set([...nomesPadrao, ...(gruposMeta?.emUso ?? []).map((u) => u.nome)])].map((n) => <option key={n} value={n} />)}
+              </datalist>
+              <label className="block text-[11px] text-ww-textMuted">Necessário em
+                <input type="date" value={novoGrupo.data} onChange={(e) => setNovoGrupo({ ...novoGrupo, data: e.target.value })}
+                  className="mt-1 block rounded-md border border-ww-border bg-transparent px-2 py-1 text-[12.5px] text-ww-text" />
+              </label>
+              <p className="text-[11px] text-ww-textFaint">{marcadas.size
+                ? `Os ${marcadas.size} item(ns) marcados na lista entram neste grupo.`
+                : "Nenhum item marcado: o grupo nasce com uma linha vazia para digitar."} Depois dá para mover mais itens pela barra de seleção.</p>
+            </div>
+            <div className="flex justify-end gap-2 px-4 py-3 border-t border-ww-border">
+              <button type="button" className="px-3 py-1 rounded-lg border border-ww-border text-ww-textMuted hover:text-ww-text" onClick={() => setNovoGrupo(null)}>Cancelar</button>
+              <button type="button" className="px-3 py-1 rounded-lg bg-ww-accent text-white font-semibold disabled:opacity-40" disabled={novoGrupo.nome.trim().length < 2} onClick={criarGrupo}>Criar</button>
+            </div>
+          </div>
+        </div>, document.body)}
       {addModal && (
         <AdicionarItensModal empresa={empresa} modoInicial={addModal}
-          grupos={grupos.map((g) => ({ k: g.k, nome: g.nome, data: g.data }))}
+          grupos={[...gruposChips].sort((a, b) => Number(b.k === equipFiltro) - Number(a.k === equipFiltro)).map((g) => ({ k: g.k, nome: g.nome, data: g.data }))}
           onAdicionar={adicionarLinhasNovas} onFechar={() => setAddModal(null)} />
       )}
       {gerarPcLinhas && (
@@ -2195,7 +2421,7 @@ export default function MateriaisGrade({
           <div role="dialog" aria-label="Importar para a lista" className="w-full sm:w-[min(1100px,97vw)] max-h-[90vh] overflow-auto rounded-t-xl sm:rounded-xl border border-ww-border bg-[rgb(var(--color-ww-panel))] shadow-2xl p-3.5 space-y-2.5 text-[12px]">
             <div className="flex items-start gap-2">
               <div><h4 className="text-[14px] font-semibold text-ww-text">Importar itens da RC para a lista</h4>
-                <p className="text-[11px] text-ww-textMuted">Cada item da RC vem casado com o nosso catálogo (✓ certo · ⚠ sugestão · sem correspondência). Sugestão entra na lista como sugestão (âmbar) — aceite lá com ✓ ou “Aceitar todas as sugestões”. Marque o que entra e adicione; o que já está na lista fica apagado.<br /><span className="text-ww-textFaint">No catálogo: <b className="text-emerald-600">✓</b> casado sozinho · <b className="text-sky-600">✋</b> já escolhido à mão antes (o de-para guardou a escolha para este texto) · <b className="text-amber-600">⚠</b> sugestão · “sem correspondência” = nada parecido no estoque.</span></p></div>
+                <p className="text-[11px] text-ww-textMuted">Cada item da RC vem casado com o nosso catálogo (✓ certo · ⚠ sugestão · sem correspondência). Sugestão entra na lista como sugestão (âmbar) — aceite lá na coluna “Compatibilizar com o estoque” (✓ ou “✓ aceitar as melhores”). Marque o que entra e adicione; o que já está na lista fica apagado.<br /><span className="text-ww-textFaint">No catálogo: <b className="text-emerald-600">✓</b> casado sozinho · <b className="text-sky-600">✋</b> já escolhido à mão antes (o de-para guardou a escolha para este texto) · <b className="text-amber-600">⚠</b> sugestão · “sem correspondência” = nada parecido no estoque.</span></p></div>
               <button type="button" className="ml-auto text-ww-accent hover:underline" onClick={() => setImportarAberto(false)}>fechar</button>
             </div>
             {/* RC já lançada em Compras (nº da RC): entra com o vínculo, para os PCs cobrirem a RC */}
@@ -2321,65 +2547,6 @@ export default function MateriaisGrade({
           onClose={() => { setPicker(false); setVincBusca(null); }} onConfirm={vincular} />
       , document.body)}
 
-      {revisarSug && createPortal((() => {
-        const sugs = validas.filter((l) => l._match === "sug");
-        const cands = (l: LinhaGrade): Cat[] => {
-          const out: Cat[] = []; const vistos = new Set<number>();
-          const add = (c: Cat | null) => { if (c && !vistos.has(c.ncod_prod)) { vistos.add(c.ncod_prod); out.push(c); } };
-          add(lerSug(l));
-          try { (l._alts ? JSON.parse(l._alts) as Cat[] : []).forEach(add); } catch { /* */ }
-          return out.slice(0, 8);
-        };
-        const nMarc = sugs.filter((l) => sugMarc.has(l._id)).length;
-        return (
-          <div className="fixed inset-0 z-[130] bg-black/45 flex items-start justify-center pt-[6vh] px-3" onMouseDown={(e) => { if (e.target === e.currentTarget) setRevisarSug(false); }}>
-            <div role="dialog" aria-label="Revisar sugestões" className="w-full max-w-[1080px] max-h-[86vh] flex flex-col rounded-xl border border-ww-border bg-[rgb(var(--color-ww-panel))] shadow-2xl">
-              <div className="flex items-start gap-3 p-3.5 border-b border-ww-border">
-                <div><h4 className="text-[14px] font-semibold text-ww-text">Revisar sugestões de código ({sugs.length})</h4>
-                  <p className="text-[11px] text-ww-textMuted">À esquerda o item da lista; à direita o item do nosso estoque que o catálogo sugere. Troque pela outra candidata no seletor, desmarque o que não serve e aceite. Aceitar ensina o de-para (da próxima vez casa sozinho).</p></div>
-                <button type="button" className="ml-auto text-ww-textMuted hover:text-ww-text" onClick={() => setRevisarSug(false)}>fechar ✕</button>
-              </div>
-              <div className="overflow-auto">
-                <table className="w-full text-[12px] border-collapse">
-                  <thead className="sticky top-0 bg-[rgb(var(--color-ww-panel))] text-ww-textMuted text-left text-[11px]">
-                    <tr><th className="p-2 w-8"><input type="checkbox" checked={nMarc === sugs.length && sugs.length > 0}
-                      onChange={(e) => setSugMarc(e.target.checked ? new Set(sugs.map((l) => l._id)) : new Set())} /></th>
-                      <th className="p-2">#</th><th className="p-2">Item da lista</th><th className="p-2">Sugestão do nosso estoque</th><th className="p-2 text-right">Último preço</th><th className="p-2" /></tr>
-                  </thead>
-                  <tbody>{sugs.map((l) => {
-                    const c = lerSug(l)!; const cs = cands(l); const n = validas.findIndex((x) => x._id === l._id) + 1;
-                    return (
-                      <tr key={l._id} className="border-t border-ww-border/50 align-top">
-                        <td className="p-2"><input type="checkbox" checked={sugMarc.has(l._id)} onChange={() => setSugMarc((m) => { const k = new Set(m); if (k.has(l._id)) k.delete(l._id); else k.add(l._id); return k; })} /></td>
-                        <td className="p-2 text-ww-textFaint tabular-nums">{n}</td>
-                        <td className="p-2"><div className="text-ww-text">{l.item}{l.modelo ? <span className="text-ww-textFaint"> · {l.modelo}</span> : null}</div>
-                          <div className="text-[10.5px] text-ww-textFaint">{l.equipamento} · qtd {l.qtd || "—"}</div></td>
-                        <td className="p-2 min-w-[360px]">
-                          <select className="w-full bg-transparent border border-ww-border rounded px-1.5 py-1 text-[12px] text-ww-text" value={String(c.ncod_prod)}
-                            onChange={(e) => { const nv = cs.find((x) => String(x.ncod_prod) === e.target.value); if (nv) trocarSugestao(l._id, nv); }}>
-                            {cs.map((x) => <option key={x.ncod_prod} value={String(x.ncod_prod)}>{`${x.codigo ?? "s/ cód"} — ${x.descricao} (${Math.round((x.score ?? 0) * 100)}%)`}</option>)}
-                          </select>
-                          <div className="text-[10.5px] text-ww-textFaint mt-0.5">{[c.fornecedor, c.unidade ? `un ${c.unidade}` : "", c.motivo].filter(Boolean).join(" · ")}</div>
-                        </td>
-                        <td className="p-2 text-right tabular-nums">{c.ultimo_preco != null ? brl(c.ultimo_preco) : "—"}</td>
-                        <td className="p-2 whitespace-nowrap">
-                          <button type="button" className="text-[11px] text-ww-accent hover:underline mr-2" title="Procurar outro item ou criar item nosso" onClick={() => { setRevisarSug(false); abrirSeletorLista(l._id); }}>⌕ outro</button>
-                          <button type="button" className="text-[11px] text-ww-textMuted hover:text-rose-500" title="Recusar (fica sem código)" onClick={() => recusarSugestao(l._id)}>✕ recusar</button>
-                        </td>
-                      </tr>);
-                  })}</tbody>
-                </table>
-                {!sugs.length && <p className="p-4 text-[12px] text-ww-textFaint">Nenhuma sugestão pendente.</p>}
-              </div>
-              <div className="flex items-center gap-2 p-3 border-t border-ww-border">
-                <span className="text-[11px] text-ww-textMuted">{nMarc} marcada(s) de {sugs.length}</span>
-                <button type="button" className="ml-auto px-3 py-1.5 text-[12px] rounded-lg border border-ww-border text-ww-textMuted hover:text-ww-text" onClick={() => setRevisarSug(false)}>Fechar</button>
-                <button type="button" disabled={!nMarc} onClick={() => { void aceitarSugestoes(sugs.filter((l) => sugMarc.has(l._id)).map((l) => l._id)); setRevisarSug(false); }}
-                  className="px-3 py-1.5 text-[12px] rounded-lg bg-ww-accent text-white font-semibold hover:brightness-110 disabled:opacity-40">✓ Aceitar {nMarc} sugestão(ões)</button>
-              </div>
-            </div>
-          </div>);
-      })(), document.body)}
       {seletor && seletorDados && createPortal(
         <div className="ne-acerto-fundo" onMouseDown={(e) => { if (e.target === e.currentTarget) setSeletor(null); }}>
           <AcertoItemEstoque empresa={empresa} modo="lista"

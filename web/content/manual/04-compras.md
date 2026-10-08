@@ -94,7 +94,7 @@ O novo valor passa a valer em Operação (Vendas avulsas / Projetos), na fila de
 
 ## Pedidos criados pelo agente de compras (projetos)
 
-Na **Lista de materiais** de um projeto (etapa ③ Planejamento), o **✨ Agente de compras** junta os itens do mesmo fornecedor em lotes, cada um com a data certa de pedir. Um lote **agendado** vira pedido de compra sozinho no dia, às 07:00, pelo mesmo caminho do “Gerar pedido de compra” da lista: fornecedor do cadastro, a última categoria e condição usadas com ele, e previsão = o primeiro “necessário em”. O pedido entra **aguardando aprovação** e aparece aqui e em **Aprovações PC**, como qualquer outro. Avisos pelo Webex:
+Na **Lista de materiais** de um projeto (etapa Planejamento), o **✨ Agente de compras** junta os itens do mesmo fornecedor em lotes, cada um com a data certa de pedir. Um lote **agendado** vira pedido de compra sozinho no dia, às 07:00, pelo mesmo caminho do “Gerar pedido de compra” da lista: fornecedor do cadastro, a última categoria e condição usadas com ele, e previsão = o primeiro “necessário em”. O pedido entra **aguardando aprovação** e aparece aqui e em **Aprovações PC**, como qualquer outro. Avisos pelo Webex:
 - no dia, a lista dos PCs criados;
 - na véspera, um lembrete;
 - quando o agente não consegue gerar (fornecedor não achado com o mesmo nome no cadastro, ou sem categoria usada antes), avisa em vez de gerar;
