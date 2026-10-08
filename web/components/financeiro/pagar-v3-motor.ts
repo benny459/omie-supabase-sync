@@ -5,6 +5,7 @@
 //    conciliação, ignorar/desfazer, estorno) e a tela recarrega;
 //  · tudo escopado no contentor (root) — nada de document.getElementById.
 // O componente React (TelaPagarV3) monta o esqueleto e chama montarPagarV3.
+import { lerBoleto } from "@/lib/boleto";
 
 type Opts = {
   root: HTMLElement;
@@ -473,7 +474,7 @@ export function montarPagarV3(o: Opts) {
       return `<tr data-id="${r.id}" class="${S.sel.has(r.id) ? "sel" : ""} ${prov ? "row-prov" : ""}"><td>${PODE.baixar ? `<input type="checkbox" class="ck" data-id="${r.id}" ${S.sel.has(r.id) ? "checked" : ""}>` : ""}</td>
       <td class="${r.dias < 0 ? "od" : r.dias === 0 ? "td" : ""}">${dm(r.d)} <span class="sub2">${r.dias < 0 ? r.dias + "d" : r.dias === 0 ? "hoje" : "+" + r.dias + "d"}</span>${+r.d !== +r.vd || r.repr ? `<div class="sub2" title="Vencimento do documento${r.repr ? " · previsão reprogramada" : ""}">venc ${dm(r.vd)}${r.repr ? ' · <span style="color:#a78bfa">reprog.</span>' : ""}</div>` : ""}</td>
       <td><span class="emp ${r.emp}">${r.emp}</span></td><td title="${esc(r.razao || r.forn)}" style="font-weight:500">${esc(r.forn)}${r.razao && r.razao !== r.forn ? `<div class="sub2" style="max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(r.razao)}</div>` : ""}${pvSub}</td><td class="${r.cat ? "" : "nocat"}" style="color:var(--tx2)" title="${r.catHer ? "Categoria herdada do pedido de compra" : ""}">${esc(r.cat || "Sem categoria")}${r.catHer ? '<div class="sub2">do PC</div>' : ""}</td>
-      <td>${compra}</td><td>${nf}</td><td>${r.excl ? '<span class="bdg b-bloq" title="Este título já não existe no Omie (foi refeito/excluído lá) — não pagar">Excluído no Omie</span>' : badge(r.st)}${prov ? '<div style="margin-top:4px"><span class="bdg b-prov" title="Valor estimado — ainda sem NF/boleto. Confirme com o documento quando chegar.">◌ PROVISIONADO</span>' + (pv?.sug && PODE.editar ? `<div style="margin-top:4px"><button class="sugnf" data-sug="${r.id}" title="NF recebida do mesmo CNPJ, emitida em ${esc(String(pv.sug.emissao).split("-").reverse().join("/"))} · ${brl(Number(pv.sug.valor))}${Number(pv.sug.dif_pct) > 0 ? " · " + pv.sug.dif_pct + "% de diferença" : ""}">✦ ${pv.sug.tipo === "NFSE" ? "NFS-e" : "NF-e"} ${esc(pv.sug.numero)} encontrada — confirmar?</button></div>` : "") + '</div>' : pv?.conf ? `<div style="margin-top:4px"><span class="bdg b-real" title="Confirmado com documento no painel">✓ REAL</span> <span class="sub2">${esc(pv.conf.doc)}${pv.conf.emissao ? " · emitida " + esc(String(pv.conf.emissao).slice(0, 10).split("-").reverse().join("/")) : ""}</span>${Math.abs(Number(pv.conf.valor_prov) - r.vdoc) > 0.01 ? `<div class="sub2">provisão era ${brl(Number(pv.conf.valor_prov))}</div>` : ""}</div>` : ""}</td><td><select class="bsel ${r.bank ? (r.bank !== r.cod_cc ? "chg" : "") : "need"}" data-bk="${r.id}" title="Conta prevista no Omie: ${esc(r.conta)}" ${PODE.baixar ? "" : "disabled"}><option value="">Escolher banco…</option>${bankGroupsHtml(r.emp, r.bank)}</select>${interco(r, r.bank) ? `<div class="sub2" style="color:#a78bfa" title="Título da ${r.emp} pago por conta da ${interco(r, r.bank)} — fica registado como intercompany">pago pela ${interco(r, r.bank)}</div>` : ""}${r.env ? `<div class="sub2" style="color:#38bdf8" title="Arquivo de remessa #${r.env.id} gerado em ${new Date(r.env.em).toLocaleString("pt-BR")}">↗ enviado ${esc(r.env.banco)} · pagto ${dm(new Date(r.env.data + "T00:00:00"))}</div>` : ""}</td><td class="r" style="font-weight:650${prov ? ";color:#a855f7" : ""}">${brl(r.v)}${prov && pv?.media3 ? `<div class="sub2">média 3 últimas ${brl(Number(pv.media3))}</div>` : ""}${r.aj?.novo?.valor != null ? `<div class="sub2" title="Valor ajustado no painel">ajustado · orig. ${brl(Number(r.aj.orig?.valor ?? 0))}</div>` : ""}</td>
+      <td>${compra}</td><td>${nf}</td><td>${r.excl ? '<span class="bdg b-bloq" title="Este título já não existe no Omie (foi refeito/excluído lá) — não pagar">Excluído no Omie</span>' : badge(r.st)}${prov ? '<div style="margin-top:4px"><span class="bdg b-prov" title="Valor estimado — ainda sem NF/boleto. Confirme com o documento quando chegar.">◌ PROVISIONADO</span>' + (pv?.sug && PODE.editar ? `<div style="margin-top:4px"><button class="sugnf" data-sug="${r.id}" title="NF recebida do mesmo CNPJ, emitida em ${esc(String(pv.sug.emissao).split("-").reverse().join("/"))} · ${brl(Number(pv.sug.valor))}${Number(pv.sug.dif_pct) > 0 ? " · " + pv.sug.dif_pct + "% de diferença" : ""}">✦ ${pv.sug.tipo === "NFSE" ? "NFS-e" : "NF-e"} ${esc(pv.sug.numero)} encontrada — confirmar?</button></div>` : "") + '</div>' : pv?.conf ? `<div style="margin-top:4px"><span class="bdg b-real" title="Confirmado com documento no painel">✓ REAL</span> <span class="sub2">${esc(pv.conf.doc)}${pv.conf.emissao ? " · emitida " + esc(String(pv.conf.emissao).slice(0, 10).split("-").reverse().join("/")) : ""}</span>${pv.conf.arquivo ? Array.from({ length: Number(pv.conf.n_arquivos) || 1 }, (_, k) => ` <a class="nflink" href="/api/financeiro/provisao/nota?id=${pv.conf.id}&i=${k}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="Abrir o arquivo">📎 ${k === 0 ? "nota" : "anexo " + (k + 1)}</a>`).join("") : ""}${Math.abs(Number(pv.conf.valor_prov) - r.vdoc) > 0.01 ? `<div class="sub2">provisão era ${brl(Number(pv.conf.valor_prov))}</div>` : ""}</div>` : ""}</td><td><select class="bsel ${r.bank ? (r.bank !== r.cod_cc ? "chg" : "") : "need"}" data-bk="${r.id}" title="Conta prevista no Omie: ${esc(r.conta)}" ${PODE.baixar ? "" : "disabled"}><option value="">Escolher banco…</option>${bankGroupsHtml(r.emp, r.bank)}</select>${interco(r, r.bank) ? `<div class="sub2" style="color:#a78bfa" title="Título da ${r.emp} pago por conta da ${interco(r, r.bank)} — fica registado como intercompany">pago pela ${interco(r, r.bank)}</div>` : ""}${r.env ? `<div class="sub2" style="color:#38bdf8" title="Arquivo de remessa #${r.env.id} gerado em ${new Date(r.env.em).toLocaleString("pt-BR")}">↗ enviado ${esc(r.env.banco)} · pagto ${dm(new Date(r.env.data + "T00:00:00"))}</div>` : ""}</td><td class="r" style="font-weight:650${prov ? ";color:#a855f7" : ""}">${brl(r.v)}${prov && pv?.media3 ? `<div class="sub2">média 3 últimas ${brl(Number(pv.media3))}</div>` : ""}${r.aj?.novo?.valor != null ? `<div class="sub2" title="Valor ajustado no painel">ajustado · orig. ${brl(Number(r.aj.orig?.valor ?? 0))}</div>` : ""}</td>
       <td class="r" style="white-space:nowrap">${prov && PODE.editar ? `<button class="btn sm pri" data-cf="${r.id}" title="Informar a NF/boleto e o valor real">Confirmar com NF</button> ` : ""}${pv?.conf && PODE.editar ? `<button class="btn sm" data-desf="${r.id}" title="Desfazer a confirmação (volta a provisionado)">desfazer</button> ` : ""}${PODE.editar ? `<button class="btn sm" data-ed="${r.id}" title="Editar título (valor, vencimento, categoria…)">✎</button> ` : ""}${PODE.baixar ? `<button class="btn sm" data-bx="${r.id}">Baixar</button>` : ""}</td></tr>`;
     }).join("")}</tbody>`;
     qa("#tbl tbody tr").forEach((tr) => (tr.onclick = (e) => { if (e.target.classList.contains("ck") || e.target.tagName === "SELECT" || e.target.tagName === "OPTION") return; openDrawer(+tr.dataset.id); }));
@@ -556,13 +557,15 @@ export function montarPagarV3(o: Opts) {
     const ehCod = r.ref.startsWith("o:"); const tipoSug = /PJ|Contab|Honor|Servi/i.test(r.cat) ? "NFSE" : "BOL";
     md.innerHTML = `<div class="dh"><div><div class="sub2" style="text-transform:uppercase;letter-spacing:.06em">Confirmar provisão</div><h3 style="margin:2px 0 0">${esc(r.forn)}</h3>
       <div class="sub2" style="margin-top:3px">${r.emp} · ${esc(r.cat || "Sem categoria")} · provisionado <b style="color:#a855f7">${brl(r.v)}</b> para ${dm(r.vd)}${pv.serie ? " · recorrência " + esc(pv.serie) : ""}</div></div><button class="btn" id="mX" style="height:34px">✕</button></div>
-      <div class="dbody"><div class="frm">
+      <div class="dbody"><label class="nfdrop" id="fDrop"><input type="file" id="fArq" accept=".xml,.pdf,image/*" multiple hidden>
+        <b>📎 Nota, fatura ou boleto</b><span id="fArqSt">Solte aqui ou clique — XML, PDF ou foto; pode ser mais de um (ex.: a nota e o boleto). Lê nº, emissão, valor, vencimento e a linha digitável; os arquivos ficam guardados no título.</span></label>
+      <div class="frm">
         <label>Tipo de documento<select id="fTipo">${[["NFSE", "NFS-e"], ["NFE", "NF-e"], ["BOL", "Boleto / fatura"], ["REC", "Recibo"], ["DAS", "Guia (DAS/DARF/GPS)"]].map(([v, l]) => `<option value="${v}" ${v === tipoSug ? "selected" : ""}>${l}</option>`).join("")}</select></label>
         <label>Nº do documento *<input id="fNum" placeholder="ex.: 257"></label>
-        <label>Data de emissão *<input type="date" id="fEmi" max="${iso(new Date())}"></label>
+        <label>Data de emissão *<input type="date" id="fEmi" value="${iso(new Date())}" max="${iso(new Date())}" title="Hoje por padrão — ajuste se a nota foi emitida em outro dia"></label>
         <label>Valor real (R$) *<input id="fVal" class="num" value="${fmt(r.v)}"></label>
         <label>Vencimento real<input type="date" id="fVenc" value="${iso(r.vd)}"></label>
-        <label>Código de barras / linha digitável / chave NF-e (opcional)<input id="fBar" placeholder="44–48 dígitos"></label>
+        <label>Código de barras / linha digitável / chave NF-e (opcional)<input id="fBar" placeholder="44–48 dígitos"><span id="fBarInfo" class="sub2"></span></label>
       </div>
       <div id="fDiff"></div>
       <div id="fEscopo" style="display:none;margin-top:10px"><div class="sub2" style="font-weight:600;margin-bottom:6px">A diferença vale para…</div>
@@ -586,6 +589,69 @@ export function montarPagarV3(o: Opts) {
       if (sug.emissao) q("fEmi").value = String(sug.emissao).slice(0, 10);
     }
     q("fVal").oninput = diff; diff(); setTimeout(() => q(sug ? "fVal" : "fNum")?.focus(), 50);
+    // arquivo da nota (sql/144): guarda e lê — XML direto, PDF/foto pela IA. Quem confirma ainda confere.
+    let arqs = []; const M = {}; // mescla do que os arquivos trouxeram
+    const dt = (x) => String(x).split("-").reverse().join("/");
+    const aplicar = () => {
+      if (M.tipo) q("fTipo").value = M.tipo;
+      if (M.numero) q("fNum").value = M.numero;
+      if (M.emissao && M.emissao <= iso(new Date())) q("fEmi").value = M.emissao;
+      if (M.valor) q("fVal").value = fmt(Number(M.valor));
+      if (M.vencimento) q("fVenc").value = M.vencimento;
+      if (M.barras) q("fBar").value = M.barras;
+      infoBar(); diff();
+    };
+    const lerArquivo = async (f) => {
+      const fd = new FormData(); fd.append("arquivo", f); fd.append("empresa", r.emp);
+      const rr = await fetch("/api/financeiro/provisao/nota", { method: "POST", body: fd });
+      const j = await rr.json().catch(() => ({}));
+      if (!rr.ok) throw new Error(`${f.name}: ${j.error || "falha ao enviar"}`);
+      arqs.push({ path: j.path, nome: j.nome });
+      const d = j.dados || {}; const boleto = d.tipo === "BOL";
+      // nota manda em tipo/nº/emissão; boleto/fatura manda em linha digitável, vencimento e valor a pagar
+      if (d.tipo && (!M.tipo || !boleto)) M.tipo = d.tipo;
+      if (d.numero && (!M.numero || !boleto)) M.numero = d.numero;
+      if (d.emissao && (!M.emissao || !boleto)) M.emissao = d.emissao;
+      if (d.valor && (!M.valor || boleto || d.boleto?.valido)) M.valor = d.valor;
+      if (d.vencimento && (!M.vencimento || boleto || d.boleto)) M.vencimento = d.vencimento;
+      if (d.codigo_barras && [44, 47, 48].includes(d.codigo_barras.length)) M.barras = d.codigo_barras;
+      else if (!M.barras && d.chave && d.chave.length === 44) M.barras = d.chave;
+      const lidos = [d.descricao, d.numero && "nº " + d.numero, d.emissao && "emissão " + dt(d.emissao), d.valor && brl(Number(d.valor)), d.vencimento && "venc. " + dt(d.vencimento), d.codigo_barras && "linha digitável"].filter(Boolean);
+      const outroCnpj = d.cnpj_emitente && r.cnpj && d.cnpj_emitente !== String(r.cnpj).replace(/\D/g, "");
+      return { ok: !outroCnpj && !j.aviso && !(d.boleto && !d.boleto.valido),
+        html: `<b>${esc(f.name)}</b> guardado${lidos.length ? " · " + esc(lidos.join(" · ")) : ""}${d.fonte === "ia" ? " <i>(lido pela IA — confira)</i>" : ""}`
+          + (j.aviso ? `<br>${esc(j.aviso)}` : "")
+          + (d.boleto && !d.boleto.valido ? `<br><b>Atenção:</b> a linha digitável lida não confere — copie do boleto` : "")
+          + (outroCnpj ? `<br><b>Atenção:</b> documento de outro CNPJ (${esc(d.cnpj_emitente)}${d.emitente ? " · " + esc(d.emitente) : ""})` : "") };
+    };
+    const lerArquivos = async (fs) => {
+      const lista = [...(fs || [])]; if (!lista.length) return;
+      const st = q("fArqSt"), drop = q("fDrop");
+      drop.classList.remove("ok", "err"); q("mOk").disabled = true;
+      const linhas = []; let tudoOk = true;
+      for (const f of lista) {
+        st.innerHTML = [...linhas, `Lendo ${esc(f.name)}…`].join("<br>");
+        try { const x = await lerArquivo(f); linhas.push(x.html); tudoOk = tudoOk && x.ok; }
+        catch (e) { linhas.push(esc(String(e.message || e))); tudoOk = false; }
+      }
+      st.innerHTML = linhas.join("<br>") + (arqs.length > 1 ? `<br><span class="sub2">${arqs.length} arquivos guardados neste título</span>` : "");
+      drop.classList.add(tudoOk ? "ok" : "err"); q("mOk").disabled = false; aplicar();
+    };
+    // linha digitável colada à mão: lê valor e vencimento do próprio código
+    const infoBar = () => {
+      const b = lerBoleto(q("fBar").value); const el = q("fBarInfo");
+      if (!b) { el.textContent = ""; return; }
+      el.innerHTML = b.valido ? `${b.tipo === "bancario" ? "Boleto" : "Concessionária/tributo"}${b.valor ? " · " + brl(b.valor) : ""}${b.vencimento ? " · venc. " + dt(b.vencimento) : ""} ✓` : `<b style="color:#f59e0b">${esc(b.aviso || "código inválido")}</b>`;
+      return b;
+    };
+    q("fBar").oninput = () => {
+      const b = infoBar();
+      if (b?.valido) { if (b.valor) q("fVal").value = fmt(b.valor); if (b.vencimento) q("fVenc").value = b.vencimento; diff(); }
+    };
+    q("fArq").onchange = () => lerArquivos(q("fArq").files);
+    q("fDrop").ondragover = (e) => { e.preventDefault(); q("fDrop").classList.add("over"); };
+    q("fDrop").ondragleave = () => q("fDrop").classList.remove("over");
+    q("fDrop").ondrop = (e) => { e.preventDefault(); q("fDrop").classList.remove("over"); lerArquivos(e.dataTransfer?.files); };
     q("mOk").onclick = async () => {
       const numDoc = q("fNum").value.trim(); const v = num(q("fVal").value);
       if (!numDoc) { toast("Informe o nº do documento", true); q("fNum").focus(); return; }
@@ -601,6 +667,7 @@ export function montarPagarV3(o: Opts) {
         const rr = await fetch("/api/financeiro/provisao", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({
           acao: "confirmar", empresa: r.emp, ...(ehCod ? { cod_titulo: Number(r.ref.slice(2)) } : { pagar_id: Number(r.ref.slice(2)) }),
           tipo_doc: tipo, numero_doc: numDoc, valor_real: v, venc_real: q("fVenc").value || null, emissao: emi,
+          ...(arqs.length ? { arquivo_path: arqs[0].path, arquivo_nome: arqs[0].nome, arquivos: arqs } : {}),
           ...(bar.length === 44 && tipo === "NFE" ? { chave_nfe: bar } : bar ? { codigo_barras: bar } : {}),
           escopo: esc_, motivo: m ? m.value.trim() : null }) });
         const j = await rr.json(); if (!rr.ok) throw new Error(j.error ?? "HTTP " + rr.status);

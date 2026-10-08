@@ -135,10 +135,11 @@ Conta **provisionada** é uma estimativa: ainda não tem documento (NF, boleto o
 ### Confirmar com NF
 
 1. Na linha (ou no detalhe), clique **Confirmar com NF**.
-2. Informe tipo (NF-e, NFS-e, boleto, recibo), número, **data de emissão** (obrigatória, não pode ser futura), valor, vencimento e, se houver, o código de barras. A data de emissão fica gravada no título — aparece no detalhe e ao lado do selo ✓ REAL ("emitida 06/10/2026").
-3. Se o valor diferir mais de **10%** da provisão, escreva o motivo.
-4. Escolha o alcance: **Só esta parcela** (consumo variável), **Esta e as próximas provisões da série** (reajuste — só mexe nas futuras sem documento) ou **Próximas pela média das últimas 3 reais**.
-5. Salve: a conta vira **✓ REAL** e mostra "provisão era R$ …". **desfazer** volta tudo como estava.
+2. **Arquivo (recomendado):** solte ou escolha no quadro **"📎 Nota, fatura ou boleto"** o **XML, PDF ou foto** — pode ser mais de um (ex.: a NFS-e e o boleto, ou a fatura da Vivo que já traz o boleto). O painel guarda os arquivos no título e preenche sozinho tipo, número, data de emissão, valor, vencimento e a linha digitável. XML é lido direto; PDF e foto são lidos pela IA — **confira os campos**. A linha digitável é conferida pelos dígitos verificadores, e o valor e o vencimento escritos nela mandam. Se o documento for de outro CNPJ, aparece um aviso.
+3. Confira ou informe tipo (NF-e, NFS-e, boleto, recibo), número, **data de emissão** (vem com a data de hoje; ajuste se a nota foi emitida em outro dia — não pode ser futura), valor, vencimento e, se houver, o código de barras. Colando a linha digitável à mão, o painel lê dela o valor e o vencimento (boleto bancário) ou o valor (concessionária: Vivo, energia, água, guias).
+4. Se o valor diferir mais de **10%** da provisão, escreva o motivo.
+5. Escolha o alcance: **Só esta parcela** (consumo variável), **Esta e as próximas provisões da série** (reajuste — só mexe nas futuras sem documento) ou **Próximas pela média das últimas 3 reais**.
+6. Salve: a conta vira **✓ REAL**, mostra "emitida dd/mm/aaaa", os links **📎 nota** / **📎 anexo 2** (abrem os arquivos) e "provisão era R$ …". **desfazer** volta tudo como estava.
 
 Nada é gravado no Omie — a confirmação fica no painel, por cima do título.
 
