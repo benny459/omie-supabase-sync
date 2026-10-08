@@ -11,11 +11,14 @@
 // PC do Omie: NADA vai ao Omie. O cancelamento é só no painel (mesmo mecanismo do
 // "Excluir PC") e a resposta traz cancelar_no_omie = true para a tela avisar.
 // `simular: true` roda a função no banco e desfaz tudo no fim (dry-run).
-// Permissão: admin, aprovador e comprador (a mesma do "Excluir PC"); desfazer, só admin.
+// Permissão: devolver = admin, aprovador e comprador (a mesma do "Excluir PC"); cancelar = só quem aprova
+// (admin ou compras.aprovar — 08/10/26, Benny); desfazer, só admin.
 import { NextResponse } from "next/server";
 import { supaServer } from "@/lib/supabase-server";
 import { supaAdmin } from "@/lib/supabase-admin";
 import { lerAjustes } from "@/lib/pc-ajustes";
+import { loadPerms } from "@/lib/require-area";
+import { permissoesDe } from "@/lib/acessos";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -29,7 +32,9 @@ async function quem() {
   const { data: me } = await supaAdmin().schema("platform").from("user_profiles").select("is_admin, role").eq("id", user.id).maybeSingle();
   const p = me as { is_admin?: boolean; role?: string } | null;
   const admin = p?.is_admin === true || p?.role === "admin";
-  return { user, admin, pode: admin || (p?.role != null && PAPEIS.has(p.role)) };
+  const perms = await loadPerms();
+  const aprova = admin || (perms ? (await permissoesDe(perms))["compras.aprovar"] === true : false);
+  return { user, admin, aprova, pode: admin || (p?.role != null && PAPEIS.has(p.role)) };
 }
 
 const orders = () => supaAdmin().schema("orders");
@@ -74,7 +79,7 @@ export async function POST(req: Request) {
   try {
     switch (b.acao) {
       case "cancelar": {
-        if (!q.pode) return NextResponse.json({ error: "Sem permissão para cancelar pedido de compra" }, { status: 403 });
+        if (!q.aprova) return NextResponse.json({ error: "Só quem aprova pode cancelar o pedido de compra" }, { status: 403 });
         if (!String(b.motivo ?? "").trim()) return NextResponse.json({ error: "Informe o motivo" }, { status: 400 });
         return NextResponse.json(await rpc("compras_pc_cancelar", {
           p_empresa: empresa, p_numero: numero, p_motivo: String(b.motivo), p_por: por, p_uid: q.user.id,

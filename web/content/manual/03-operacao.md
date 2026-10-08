@@ -108,7 +108,7 @@ Tudo fica numa aba só: **Lista de materiais** (a antiga aba “Compras × lista
 
 **Aprovação dos PCs do projeto (PJ…)**: não depende da alçada da área nem do fluxo aprovado (o fluxo o Benny aprova à parte). Quem tem a permissão de aprovar compras do projeto aprova o PC quando o **projeto inteiro cabe no budget de materiais** (comprometido + este PC ≤ budget). Se estourar, só um administrador aprova — os demais veem “estoura o budget do projeto em R$ X — fica pendente para os administradores”. A Aria não aprova PC de projeto. Projetos-conta do Omie (41_VP, 47_CONTRATUAL…) seguem a regra de sempre.
 
-**Só pode reprovar quem aprova** (08/10/26): mudar o status de aprovação — **Aprovado**, **Não aprovado**, **Rejeitado por validade**, **N/A**, **Pré-seleção** ou devolver um aprovado/recusado para **Pendente** — exige a **mesma permissão de aprovar** (aprovador do módulo, dentro da alçada; PC de projeto que estoura o budget: só administrador). Para quem não aprova, o status aparece só para leitura, com a dica “só quem aprova pode reprovar”, e a seleção em massa não mostra Aprovar/Rejeitar. Vale para a tela nova, a clássica e a aprovação em massa. **Cancelar pedido** segue com a regra própria (admin, aprovador ou comprador).
+**Só pode reprovar quem aprova** (08/10/26): mudar o status de aprovação — **Aprovado**, **Não aprovado**, **Rejeitado por validade**, **N/A**, **Pré-seleção** ou devolver um aprovado/recusado para **Pendente** — exige a **mesma permissão de aprovar** (aprovador do módulo, dentro da alçada; PC de projeto que estoura o budget: só administrador). Para quem não aprova, o status aparece só para leitura, com a dica “só quem aprova pode reprovar”, e a seleção em massa não mostra Aprovar/Rejeitar. Vale para a tela nova, a clássica e a aprovação em massa. **Cancelar pedido** também é só de quem aprova; **Devolver material** continua para admin, aprovador ou comprador.
 
 **Pelo Compras**: no pedido de compra com projeto **PJ…**, o botão **📋 Puxar itens da Lista de materiais** (aba Itens) abre as linhas da lista sem PC (filtro por grupo e fornecedor); as escolhidas viram itens do pedido (código nosso, descrição, qtd e valor da lista, editáveis) e, ao salvar, cada linha fica ligada ao seu item — igual ao “Gerar pedido de compra” da lista. Trocar o fornecedor não desfaz os vínculos.
 
@@ -181,7 +181,7 @@ Tudo fica numa aba só: **Lista de materiais** (a antiga aba “Compras × lista
 
 ### Como faço para cancelar um pedido de compra do projeto
 
-Em **Projetos**, abra o projeto e, na tabela **Pedidos de compra**, escolha **Cancelar pedido** no seletor **Aprovação** do PC — ou **⋯ › 🚫 Cancelar pedido…**. (Admin, aprovador ou comprador.)
+Em **Projetos**, abra o projeto e, na tabela **Pedidos de compra**, escolha **Cancelar pedido** no seletor **Aprovação** do PC — ou **⋯ › 🚫 Cancelar pedido…**. (Só quem aprova.)
 
 1. A janela já mostra **o que vai acontecer** antes de gravar (o sistema simula no banco e desfaz): quantas linhas da Lista de materiais voltam a **sem PC**.
 2. Escreva o **motivo** (obrigatório) e confirme. Fica gravado quem cancelou e quando.

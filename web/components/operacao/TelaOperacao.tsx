@@ -456,9 +456,11 @@ export default function TelaOperacao({ modulo, title, rows: rowsIniciais, parcia
     const c = cs[0];
     if (!c?.pc) return;
     if (!podeAjustarPc) { mostrar({ msg: "Cancelar e devolver PC: só admin, aprovador ou comprador.", erro: true }); return; }
+    // Cancelar = decisão sobre o pedido: só quem aprova (08/10/26, Benny). Devolver segue livre p/ comprador.
+    if (acao === "cancelar" && !(ehAdmin || podeAprovar)) { mostrar({ msg: "Só quem aprova pode cancelar o pedido de compra.", erro: true }); return; }
     setAjustePc({ acao, empresa: s(c.row.empresa) || "SF", pc: c.pc, fornecedor: c.fornecedor, valor: cs.find((x) => x.pcValor != null)?.pcValor ?? null,
       codigoProjeto: Number(c.row.codigo_projeto ?? c.row.pv_codigo_projeto ?? 0) || null, pedidoId: c.pedidoId });
-  }, [podeAjustarPc, mostrar]);
+  }, [podeAjustarPc, mostrar, ehAdmin, podeAprovar]);
   const setStatus = useCallback(async (c: Compra, status: string) => {
     if (!podeAprovar) { mostrar({ msg: "Sem permissão para aprovar neste módulo.", erro: true }); return; }
     // "Cancelar pedido" cancela de verdade (sql/146) — abre o motivo em vez de só gravar o rótulo
