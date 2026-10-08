@@ -2,6 +2,7 @@
 //   GET ?q=…                      busca na tabela oficial (Siscomex) por código ou palavras
 //   GET ?op=sugerir&desc=…&cod=…  sugestões ranqueadas (catálogo, NF de fornecedor, NF-e do Omie)
 //   GET ?op=compras&desc=…&cod=…  "Das nossas compras": NCM das NF-e recebidas / PCs do Omie deste item ou parecidos
+//   GET ?op=familia&prefixo=…     NCMs mais usados pelos itens nossos da família (08/10/26)
 //   GET ?op=validar&ncm=…         existe e é folha de 8 dígitos?
 //   GET ?op=pendencias            itens do estoque sem NCM / com NCM inválido
 //   POST {codigo, ncm}            grava o NCM no cadastro do item (painel + dados fiscais), com histórico
@@ -48,6 +49,26 @@ export async function GET(req: NextRequest) {
       const desc = (sp.get("desc") ?? "").trim(), cod = (sp.get("cod") ?? "").trim();
       if (desc.length < 3 && !cod) return NextResponse.json({ compras: [] });
       return NextResponse.json({ compras: await rpc("ncm_das_compras", { p_empresa: emp, p_descricao: desc, p_codigo: cod || null }) ?? [] });
+    }
+    if (op === "familia") {
+      // 08/10/26: NCMs mais usados pelos itens nossos da família (código começa pelo prefixo da família) —
+      // o "Criar item nosso" da lista de materiais sugere a partir deles.
+      const pre = (sp.get("prefixo") ?? "").replace(/[^A-Za-z0-9]/g, "").toUpperCase().slice(0, 6);
+      if (!pre) return NextResponse.json({ familia: [] });
+      const { data, error } = await supaAdmin().schema("orders").from("v_item_ncm").select("ncm")
+        .eq("empresa", emp).ilike("codigo", `${pre}%`).not("ncm", "is", null).limit(3000);
+      if (error) throw new Error(error.message);
+      const conta = new Map<string, number>();
+      for (const r of (data ?? []) as { ncm: string | null }[]) { const d = String(r.ncm ?? "").replace(/\D/g, ""); if (d.length === 8) conta.set(d, (conta.get(d) ?? 0) + 1); }
+      const top = [...conta.entries()].sort((x, y) => y[1] - x[1]).slice(0, 8);
+      if (!top.length) return NextResponse.json({ familia: [] });
+      const validos = new Set(((await rpc<string[]>("ncm_validos", { p: top.map(([n]) => n) })) ?? []).map(String));
+      type Res = { codigo: string; codigo_fmt: string; descricao: string; caminho: string | null };
+      const out = await Promise.all(top.filter(([n]) => validos.has(n)).slice(0, 6).map(async ([n, itens]) => {
+        const r = ((await rpc<Res[]>("ncm_buscar", { p_q: n, p_lim: 5 }).catch(() => [])) ?? []).find((x) => x.codigo === n);
+        return { ncm: n, codigo_fmt: r?.codigo_fmt ?? `${n.slice(0, 4)}.${n.slice(4, 6)}.${n.slice(6)}`, descricao_ncm: r?.descricao ?? "", caminho: r?.caminho ?? null, itens };
+      }));
+      return NextResponse.json({ familia: out });
     }
     if (op === "validar") return NextResponse.json({ valido: await rpc<boolean>("ncm_valido", { p: sp.get("ncm") ?? "" }) });
     if (op === "pendencias") return NextResponse.json(await rpc("ncm_pendencias", { p_empresa: emp }));

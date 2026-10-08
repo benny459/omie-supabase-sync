@@ -19,3 +19,6 @@
 .ncm-pe .err{color:var(--ap-t-red)}
 .ncm-btn{background:none;border:1px solid var(--ww-border-strong,#28395a);color:var(--ww-accent-text,#7aa2ff);border-radius:7px;padding:2px 8px;font-size:11.5px;font-weight:600;cursor:pointer;white-space:nowrap}
 .ncm-btn.alerta{color:var(--ap-t-red);border-color:rgba(239,68,68,.45)}
+
+/* 08/10/26: opaco também no modo vidro (abre por cima do "Item do catálogo" da lista de materiais) */
+html[data-vidro] .ncm-caixa{background:rgb(var(--color-ww-panel));backdrop-filter:none;-webkit-backdrop-filter:none}

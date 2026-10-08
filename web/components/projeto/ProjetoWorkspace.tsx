@@ -26,7 +26,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 // RcProjetoItensBlock não é mais montado — a lista virou uma tabela só.
 // O arquivo continua no repositório caso falte alguma função dele.
-import RcProjetoUploadButton from "@/components/RcProjetoUploadButton";
 import FluxoProjetoView, { type AbaProjeto } from "./FluxoProjetoView";
 import MateriaisGrade from "./MateriaisGrade";
 import { SecaoSeparadosProjeto } from "../navy/estoque/Separacao";
@@ -180,14 +179,9 @@ export default function ProjetoWorkspace({
           </div>
         )}
 
-        {/* Um upload por aba, e só. A aba Fluxo tinha DOIS botões de importar
-            planilha, para arquivos diferentes; o import do fechamento passou a
-            cobrir os dois e este ficou só em Materiais. */}
-        {aba === "materiais" && (
-          <div className="ml-auto pb-1.5">
-            <RcProjetoUploadButton empresa={empresa} codigoProjeto={codigoProjeto} onDone={() => { aposGravar(); recarregarGrade.current?.(); }} />
-          </div>
-        )}
+        {/* 08/10/26 (Benny): o "📋 Subir planilha" saiu daqui — perdeu a razão de ser. Importar
+            mora em Materiais › "+ Adicionar itens ▾" (Importar planilha; e, para o arquivo antigo
+            de uma aba por equipamento, "Importar planilha antiga"). */}
       </div>
 
       {/* O fechamento do CRM abre o Resumo: é a premissa de tudo o que vem

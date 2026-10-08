@@ -54,13 +54,22 @@ export default function RcProjetoUploadButton({
   empresa,
   codigoProjeto,
   onDone,
+  aberto,
+  onFechar,
 }: {
   empresa: string;
   codigoProjeto: number;
   onDone?: () => void;
+  /** Controlado por fora (08/10/26): a lista de materiais abre este import pelo
+   *  "+ Adicionar itens ▾ › Importar planilha antiga (uma aba por equipamento)" — sem o botão. */
+  aberto?: boolean;
+  onFechar?: () => void;
 }) {
   const router = useRouter();
-  const [open, setOpen] = useState(false);
+  const controlado = aberto !== undefined;
+  const [openInterno, setOpenInterno] = useState(false);
+  const open = controlado ? !!aberto : openInterno;
+  const setOpen = (v: boolean) => { if (controlado) { if (!v) onFechar?.(); } else setOpenInterno(v); };
   const [parsed, setParsed] = useState<ParsedItem[] | null>(null);
   const [fileName, setFileName] = useState<string>("");
   const [busy, setBusy] = useState(false);
@@ -335,12 +344,12 @@ export default function RcProjetoUploadButton({
 
   return (
     <>
-      <button
+      {!controlado && <button
         onClick={(e) => { e.stopPropagation(); setOpen(true); }}
         className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-medium text-violet-800 hover:text-violet-950 hover:bg-violet-100 border border-violet-300 transition">
         <span className="text-[13px] leading-none">📋</span>
         Subir planilha
-      </button>
+      </button>}
 
       {open && (
         <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4"

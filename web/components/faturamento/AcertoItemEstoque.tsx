@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import LocalizarNcm, { ncmFmt, ncmValido } from "@/components/fiscal/LocalizarNcm";
 
 /* Acertar um código de compra na hora da emissão (05/10/26). Pedido do Benny:
    "assim a gente acerta o nosso estoque". Código de compra (produto do Omie que
@@ -57,6 +58,19 @@ export default function AcertoItemEstoque({ empresa, compra, onFechar, onPronto,
   /** Sugestões do mesmo motor do "Compatibilizar com o estoque" (nome + preço + unidade), 06/10/26 */
   const [sug, setSug] = useState<Sug[] | null>(sugeridas ?? null);
   const [buscaCompra, setBuscaCompra] = useState<Compra[]>([]);
+  /** 🔎 Localizar NCM no "Criar item nosso" (08/10/26, Benny) — o mesmo localizador do Faturamento. */
+  const [ncmBox, setNcmBox] = useState(false);
+  const [ncmOk, setNcmOk] = useState<boolean | null>(null);
+  const famSel = familias.find((f) => f.id === familia) ?? null;
+  const ehServico = (famSel?.prefixo ?? "").toUpperCase() === "SV";
+  const ncmDig = ncm.replace(/\D/g, "");
+  useEffect(() => {
+    if (!ncmDig) { setNcmOk(null); return; }
+    if (ncmDig.length !== 8) { setNcmOk(false); return; }
+    let vivo = true;
+    const t = window.setTimeout(() => { void ncmValido(ncmDig).then((v) => { if (vivo) setNcmOk(v); }); }, 300);
+    return () => { vivo = false; window.clearTimeout(t); };
+  }, [ncmDig]);
 
   useEffect(() => {
     const url = lista ? `/api/catalogo/projeto?op=preparar` : `/api/estoque/vinculos?op=preparar`;
@@ -117,10 +131,14 @@ export default function AcertoItemEstoque({ empresa, compra, onFechar, onPronto,
 
   async function cadastrar(forcar = false) {
     if (!familia) { setErro("Escolha a família do item."); return; }
+    // NCM: 8 dígitos da tabela oficial (como no Faturamento); só serviço (família SV) fica sem
+    if (ncmDig) {
+      if (ncmDig.length !== 8 || !(await ncmValido(ncmDig))) { setErro(`NCM ${ncm} não existe na tabela oficial (8 dígitos) — use 🔎 Localizar NCM.`); return; }
+    } else if (!ehServico) { setErro("Informe o NCM do item — use 🔎 Localizar NCM. Só itens de serviço (família SV) ficam sem NCM."); return; }
     setOcupado(true); setErro(null);
     const res = await fetch("/api/estoque/vinculos", { method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ acao: "cadastrar", emp: empresa, origem: origem.n_cod_prod || null, codigo_origem: origem.codigo, contexto: lista ? "lista" : "nota", familia_id: familia,
-        descricao, ncm: ncm || null, unidade, preco: preco === "" ? null : preco, forcar }) });
+        descricao, ncm: ncmDig || null, unidade, preco: preco === "" ? null : preco, forcar }) });
     const r = await res.json().catch((e) => ({ error: String(e) }));
     setOcupado(false);
     if (res.status === 409 && r.candidatos) { setParecidos(r.candidatos); setErro("Já existe item parecido no estoque — use um destes (ou, sendo admin, cadastre mesmo assim)."); return; }
@@ -184,7 +202,16 @@ export default function AcertoItemEstoque({ empresa, compra, onFechar, onPronto,
             {familias.map((f) => <option key={f.id} value={f.id}>{f.prefixo ? `${f.prefixo} · ` : ""}{f.nome}</option>)}
           </select></label>
           <label className="ne-rot" style={{ gridColumn: "span 2" }}>Descrição<input className="ne-in" value={descricao} onChange={(e) => setDescricao(e.target.value)} /></label>
-          <label className="ne-rot">NCM<input className="ne-in" value={ncm} onChange={(e) => setNcm(e.target.value)} /></label>
+          <label className="ne-rot">NCM{ehServico ? <small style={{ fontWeight: 400 }}> (opcional — serviço)</small> : null}
+            <span style={{ display: "flex", gap: 4, alignItems: "center" }}>
+              <input className={`ne-in${ncmOk === false ? " ruim" : ""}`} style={{ flex: 1, minWidth: 0 }} value={ncm} placeholder="0000.00.00" data-ncm-input
+                onChange={(e) => setNcm(e.target.value)} title={ncmOk === false ? "NCM inválido (8 dígitos da tabela oficial)" : undefined} />
+              <button type="button" className="ne-btn" data-localizar-ncm title="Localizar NCM: compras desse item, itens parecidos, família e a tabela oficial"
+                onClick={(e) => { e.preventDefault(); setNcmBox(true); }}>🔎 Localizar NCM</button>
+            </span>
+            {ncmOk === true && <small style={{ fontWeight: 400, color: "#34d399" }}>✓ {ncmFmt(ncmDig)} na tabela oficial</small>}
+            {ncmOk === false && <small style={{ fontWeight: 400, color: "#fb7185" }}>✕ não existe na tabela oficial</small>}
+          </label>
           <label className="ne-rot">Unidade<input className="ne-in" value={unidade} onChange={(e) => setUnidade(e.target.value.toUpperCase())} /></label>
           <label className="ne-rot">Preço de referência<input className="ne-in num" type="number" step="0.01" value={preco} onChange={(e) => setPreco(e.target.value === "" ? "" : Number(e.target.value))} /></label>
         </div>
@@ -201,6 +228,11 @@ export default function AcertoItemEstoque({ empresa, compra, onFechar, onPronto,
           : <div className="ne-dica">O código de compra fica vinculado ao item novo (de-para): nas próximas notas e compras ele já vem como item nosso.</div>}
       </div>
       {erro && <div className="ne-aviso" style={{ marginTop: 6 }}>{erro}</div>}
+      {ncmBox && (
+        <LocalizarNcm emp={empresa} descricao={descricao} codigo={origem.codigo || null} atual={ncm} cadastroNovo
+          familia={famSel ? { prefixo: famSel.prefixo, nome: famSel.nome } : null}
+          onFechar={() => setNcmBox(false)}
+          onEscolher={(n) => { setNcmBox(false); setNcm(ncmFmt(n)); setErro(null); }} />)}
     </div>
   );
 }
