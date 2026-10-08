@@ -66,3 +66,131 @@ export function planejarItem(a: {
   if (dias <= JANELA_AGORA_DIAS) return { ...base, status: "agora", comprarAte, dias, texto: "comprar agora" };
   return { ...base, status: "ok", comprarAte, dias, texto: `em ${dias}d` };
 }
+
+// ── Agente de compras: lotes (08/10/26, spec F — porta de montarLotes() do mockup) ──────────
+//
+// 1. Universo: itens sem PC, com "necessário em" (e comprar até), fora de lote agendado/gerado.
+// 2. Agrupa pelo fornecedor provável (sem fornecedor = lote "— sem fornecedor", para confirmar).
+// 3. No fornecedor, ordena por comprar até e junta guloso: o lote começa no 1º item (base) e
+//    recebe os seguintes enquanto comprar_ate − base ≤ janela (padrão 10 dias).
+// 4. pedir = max(base, hoje) (ou a data manual); chega = pedir + prazo; folga = 1º necessário − chega.
+// 5. atrasado (base < hoje) → "pedir hoje"; urgente (base ≤ hoje + 7) → "esta semana"; senão proposto.
+// 6. Caixa: gasto acumulado dos lotes por data de pedir × recebimentos das parcelas de venda até a
+//    data; saldo negativo avisa a próxima entrada. Informa, não bloqueia.
+// 7. Motivo: texto curto feito só com estes fatos (a reescrita pela IA, se houver, usa os mesmos).
+
+export const JANELA_PADRAO_DIAS = 10;
+export const SEM_FORNECEDOR = "— sem fornecedor";
+
+export type ItemLote = {
+  id: string; item: string; qtd: number; un: string; vu: number; fornecedor: string | null;
+  necessario: string | null; temPc: boolean; plano: PlanoItem;
+};
+export type Recebimento = { doc: string; valor: number; data: string };
+export type LotePersistido = {
+  id: string; fornecedor: string | null; data_base: string; data_pedir: string;
+  status: "proposto" | "agendado" | "gerado" | "cancelado"; motivo: string | null; pedido_num?: string | null; itens: string[];
+};
+export type Lote = {
+  chave: string; id: string | null; forn: string; semFornecedor: boolean;
+  base: string; pedir: string; status: "proposto" | "agendado" | "gerado";
+  itens: ItemLote[]; valor: number; prazo: number; estimado: boolean;
+  chega: string; primeiroNec: string; folga: number; atrasado: boolean; urgente: boolean; forcado: boolean;
+  motivo: string; pedidoNum: string | null;
+  caixaEntradas: number; caixaSaldo: number; caixaNeg: boolean; proxEntrada: Recebimento | null; caixaMsg: string;
+};
+
+const d2 = (s: string) => `${s.slice(8, 10)}/${s.slice(5, 7)}/${s.slice(2, 4)}`;
+const brl0 = (v: number) => v.toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 });
+
+export function chaveLote(forn: string, base: string) { return `${normFornecedor(forn) || "sem"}|${base}`; }
+
+/** Monta os lotes (propostos + persistidos) com motivo e caixa. Puro. */
+export function montarLotes(itens: ItemLote[], o: {
+  janela?: number; hoje?: string; simAgora?: boolean; persistidos?: LotePersistido[]; recebimentos?: Recebimento[];
+  datasManuais?: Map<string, string>; forcados?: Set<string>;
+}): Lote[] {
+  const hoje = o.hoje ?? hojeIso();
+  const janela = Math.max(0, o.janela ?? JANELA_PADRAO_DIAS);
+  const porId = new Map(itens.map((x) => [x.id, x]));
+  const pers = (o.persistidos ?? []).filter((l) => l.status === "agendado" || l.status === "gerado");
+  const emLote = new Set(pers.flatMap((l) => l.itens));
+  const abertos = itens.filter((x) => !x.temPc && x.necessario && x.plano.comprarAte && !emLote.has(x.id));
+
+  type Cru = { forn: string; base: string; itens: ItemLote[]; id: string | null; status: Lote["status"]; pedirFixo: string | null; motivoGravado: string | null; pedidoNum: string | null };
+  const crus: Cru[] = [];
+  const porForn = new Map<string, ItemLote[]>();
+  for (const x of abertos) { const f = x.fornecedor?.trim() || SEM_FORNECEDOR; porForn.set(f, [...(porForn.get(f) ?? []), x]); }
+  for (const [forn, xs] of porForn) {
+    xs.sort((a, b) => a.plano.comprarAte!.localeCompare(b.plano.comprarAte!) || a.id.localeCompare(b.id));
+    let cur: Cru | null = null;
+    for (const x of xs) {
+      if (!cur || difDias(x.plano.comprarAte!, cur.base) > janela) {
+        cur = { forn, base: x.plano.comprarAte!, itens: [], id: null, status: "proposto", pedirFixo: null, motivoGravado: null, pedidoNum: null };
+        crus.push(cur);
+      }
+      cur.itens.push(x);
+    }
+  }
+  for (const l of pers) {
+    // item que ganhou PC fora do lote agendado sai dele (no gerado, os itens já têm o PC do lote)
+    const its = l.itens.map((id) => porId.get(id)).filter((x): x is ItemLote => !!x && (l.status === "gerado" || !x.temPc));
+    if (!its.length && l.status === "agendado") continue;
+    crus.push({ forn: l.fornecedor?.trim() || SEM_FORNECEDOR, base: l.data_base, itens: its, id: l.id, status: l.status as Lote["status"],
+      pedirFixo: l.data_pedir, motivoGravado: l.motivo, pedidoNum: l.pedido_num ?? null });
+  }
+
+  const lotes: Lote[] = crus.map((c) => {
+    const chave = c.id ?? chaveLote(c.forn, c.base);
+    const manual = o.datasManuais?.get(chave);
+    const pedir = o.simAgora && c.status !== "gerado" ? hoje : (manual ?? c.pedirFixo ?? (c.base < hoje ? hoje : c.base));
+    const prazo = Math.max(0, ...c.itens.map((x) => x.plano.prazo));
+    const estimado = c.itens.some((x) => x.plano.estimado);
+    const valor = Math.round(c.itens.reduce((a, x) => a + x.qtd * x.vu, 0) * 100) / 100;
+    const chega = somaDias(pedir, prazo);
+    const primeiroNec = c.itens.map((x) => x.necessario ?? "").filter(Boolean).sort()[0] ?? pedir;
+    const folga = difDias(primeiroNec, chega);
+    const atrasado = c.status !== "gerado" && c.base < hoje;
+    const urgente = !atrasado && c.status !== "gerado" && difDias(c.base, hoje) <= JANELA_AGORA_DIAS;
+    const semFornecedor = c.forn === SEM_FORNECEDOR;
+    // motivo (só fatos do lote)
+    const n = c.itens.length;
+    const datas = [...new Set(c.itens.map((x) => x.plano.comprarAte).filter(Boolean) as string[])].sort();
+    const m: string[] = [];
+    if (n > 1 && datas.length > 1) m.push(`junta **${n} itens** com datas de pedir entre ${d2(datas[0])} e ${d2(datas[datas.length - 1])} num pedido só (um frete, uma aprovação)`);
+    else if (n > 1) m.push(`**${n} itens** com a mesma data de pedir`);
+    else m.push("item único — nada mais deste fornecedor na janela");
+    if (atrasado) m.push(`**já passou da data** (${d2(c.base)}); pedindo ${pedir === hoje ? "hoje" : `em ${d2(pedir)}`} chega ≈ ${d2(chega)}, ${folga < 0 ? `**${-folga}d depois** do necessário — avisar a obra ou pedir prazo menor` : `${folga}d antes do necessário`}`);
+    else m.push(`pedindo em ${d2(pedir)} chega ≈ ${d2(chega)}, ${folga < 0 ? `**${-folga}d depois**` : `${folga}d antes`} do primeiro "necessário em" (${d2(primeiroNec)})`);
+    if (estimado) m.push(`prazo do fornecedor é **estimado** (${PRAZO_ESTIMADO_DIAS}d) — confirmar antes de agendar`);
+    if (semFornecedor) m.push("**sem fornecedor provável** — escolha o fornecedor antes de gerar o PC");
+    return {
+      chave, id: c.id, forn: c.forn, semFornecedor, base: c.base, pedir, status: c.status, itens: c.itens, valor, prazo, estimado,
+      chega, primeiroNec, folga, atrasado, urgente, forcado: c.itens.some((x) => o.forcados?.has(x.id)),
+      motivo: m.join(" · "), pedidoNum: c.pedidoNum,
+      caixaEntradas: 0, caixaSaldo: 0, caixaNeg: false, proxEntrada: null, caixaMsg: "",
+    };
+  });
+
+  lotes.sort((a, b) => a.pedir.localeCompare(b.pedir) || b.valor - a.valor);
+  const rec = [...(o.recebimentos ?? [])].filter((r) => r.data && r.valor > 0).sort((a, b) => a.data.localeCompare(b.data));
+  let acum = 0;
+  for (const lo of lotes) {
+    acum += lo.valor;
+    lo.caixaEntradas = rec.filter((r) => r.data <= lo.pedir).reduce((a, r) => a + r.valor, 0);
+    lo.caixaSaldo = Math.round((lo.caixaEntradas - acum) * 100) / 100;
+    lo.caixaNeg = lo.caixaSaldo < 0;
+    lo.proxEntrada = rec.find((r) => r.data > lo.pedir) ?? null;
+    lo.caixaMsg = !rec.length ? "sem recebimentos de venda previstos para comparar"
+      : !lo.caixaNeg ? `caixa ok · ${brl0(lo.caixaEntradas)} recebido até ${d2(lo.pedir)}`
+      : `⚠ caixa: faltam ${brl0(-lo.caixaSaldo)} — próxima entrada ${lo.proxEntrada ? `${lo.proxEntrada.doc} ${brl0(lo.proxEntrada.valor)} em ${d2(lo.proxEntrada.data)}` : "nenhuma prevista"}`;
+  }
+  return lotes;
+}
+
+/** Recebimentos das parcelas de venda (Vendas PV/OS do projeto) para o caixa dos lotes. */
+export function recebimentosDasVendas(docs: { rotulo: string; valor: number; receb_inicial: string | null; receb_nova: string | null;
+  faturado?: boolean; titulo_venc?: string | null }[]): Recebimento[] {
+  return docs.map((d) => ({ doc: d.rotulo, valor: Number(d.valor) || 0,
+    data: String((d.faturado ? d.titulo_venc : null) ?? d.receb_nova ?? d.receb_inicial ?? "").slice(0, 10) })).filter((r) => r.data);
+}

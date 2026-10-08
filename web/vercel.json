@@ -17,6 +17,9 @@
     },
     "app/api/cron/aprovacao-ia/route.ts": {
       "maxDuration": 120
+    },
+    "app/api/cron/agente-compras/route.ts": {
+      "maxDuration": 120
     }
   },
   "crons": [
@@ -43,6 +46,10 @@
     {
       "path": "/api/cron/aprovacao-ia",
       "schedule": "0 11,15,20 * * *"
+    },
+    {
+      "path": "/api/cron/agente-compras",
+      "schedule": "0 10 * * *"
     }
   ]
 }

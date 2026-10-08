@@ -56,6 +56,7 @@ import { textoCasar, SUG_MIN } from "@/lib/texto-casar";
 import { planejarItem, prazoEfetivo, normFornecedor, type PrazoFornecedor, type PlanoItem } from "@/lib/planejamento-compras";
 import PlanejamentoCompras, { resumoPlano, type ItemPlano } from "./PlanejamentoCompras";
 import PrazosFornecedorModal from "./PrazosFornecedorModal";
+import AgenteCompras from "./AgenteCompras";
 
 type ItemRow = {
   id: string; equipamento: string | null; item: string;
@@ -291,6 +292,11 @@ export default function MateriaisGrade({
   /** Prazo de entrega por fornecedor (spec E): histórico × manual (⏱ Prazos por fornecedor). */
   const [prazos, setPrazos] = useState<Map<string, PrazoFornecedor>>(new Map());
   const [prazosAberto, setPrazosAberto] = useState(false);
+  /** Agente de compras (spec F): itens enviados por "✨ Planejar com o agente" (destaque), o
+   *  lote agendado cujo PC está sendo gerado pela folha, e um contador de recargas. */
+  const [forcados, setForcados] = useState<Set<string>>(new Set());
+  const loteGerandoRef = useRef<string | null>(null);
+  const [recargas, setRecargas] = useState(0);
   const carregarPrazos = useCallback(async () => {
     try {
       const j = await fetch(`/api/compras/fornecedor-prazo?emp=${encodeURIComponent(empresa)}`, { cache: "no-store" }).then((x) => x.json()) as
@@ -789,6 +795,7 @@ export default function MateriaisGrade({
         vazia(),
       ]);
       const idsNovos = new Set(rows.map((r) => `db${r.id}`));
+      setRecargas((n) => n + 1);
       setSujo(false); setErro(null); setMarcadas((m) => new Set([...m].filter((x) => idsNovos.has(x)))); setCarregouOk(true);
       /* Lista colada e não salva sumia no primeiro recarregar — "Atualizar
          versão", F5, fechar a aba. Aconteceu mais de uma vez (PJ359, PJ362–364,
@@ -1873,11 +1880,21 @@ export default function MateriaisGrade({
               </button>))}
           </div>
         </details>
-        <button type="button" onClick={() => abrirGerarPc(paraPc)} disabled={!!ocupado || !paraPc.length}
-          title={paraPc.length ? "Gera os pedidos de compra (um por fornecedor) com as linhas marcadas sem PC" : "Marque linhas sem PC na caixinha da esquerda"}
-          className="px-2.5 py-1 text-[11.5px] rounded-lg border border-ww-accent/70 text-ww-accent font-semibold hover:bg-ww-accentSoft transition disabled:opacity-40">
-          🧾 Gerar pedido de compra ({paraPc.length} marcado{paraPc.length === 1 ? "" : "s"})
-        </button>
+        {/* Botão dividido (spec F): comprar agora × deixar o agente achar a data certa */}
+        <span className="inline-flex" data-split>
+          <button type="button" onClick={() => { loteGerandoRef.current = null; abrirGerarPc(paraPc); }} disabled={!!ocupado || !paraPc.length}
+            title={paraPc.length ? "Gera os pedidos de compra (um por fornecedor) com as linhas marcadas sem PC" : "Marque linhas sem PC na caixinha da esquerda"}
+            className="px-2.5 py-1 text-[11.5px] rounded-l-lg border border-ww-accent/70 text-ww-accent font-semibold hover:bg-ww-accentSoft transition disabled:opacity-40">
+            🧾 Comprar agora ({paraPc.length})
+          </button>
+          <button type="button" disabled={!paraPc.length} data-planejar
+            onClick={() => { setForcados(new Set(paraPc)); setSubAba("plan"); setAviso(`${paraPc.length} item(ns) enviados ao agente — os lotes com eles ficam destacados.`);
+              setTimeout(() => document.querySelector("[data-agente]")?.scrollIntoView({ behavior: "smooth", block: "start" }), 120); }}
+            title="O agente coloca os itens marcados num lote com a data certa de pedir (um PC por fornecedor por data)"
+            className="px-2.5 py-1 text-[11.5px] rounded-r-lg border border-l-0 border-ww-accent/70 text-ww-accent hover:bg-ww-accentSoft transition disabled:opacity-40">
+            ✨ Planejar com o agente
+          </button>
+        </span>
         <span className="flex-1" />
         {nSug > 0
           ? <button type="button" onClick={() => { setSugMarc(new Set(validas.filter((l) => l._match === "sug").map((l) => l._id))); setRevisarSug(true); }}
@@ -2034,7 +2051,10 @@ export default function MateriaisGrade({
 
       {subAba === "plan" && (
         <PlanejamentoCompras itens={itensPlano} podeGerar={!sujo} onAbrirPrazos={() => setPrazosAberto(true)}
-          onGerarPc={(ids) => abrirGerarPc(ids.filter((id) => id.startsWith("db")))} />
+          onGerarPc={(ids) => { loteGerandoRef.current = null; abrirGerarPc(ids.filter((id) => id.startsWith("db"))); }}>
+          <AgenteCompras empresa={empresa} codigo={codigoProjeto} itens={itensPlano} forcados={forcados} podeGerar={!sujo} recarregarToken={recargas}
+            onGerarPc={(ids, loteId) => { loteGerandoRef.current = loteId; abrirGerarPc(ids.filter((id) => id.startsWith("db"))); }} />
+        </PlanejamentoCompras>
       )}
       {prazosAberto && (
         <PrazosFornecedorModal empresa={empresa} prazos={prazos}
@@ -2142,8 +2162,13 @@ export default function MateriaisGrade({
       )}
       {gerarPcLinhas && (
         <GerarPcDaLista empresa={empresa} codigoProjeto={codigoProjeto} linhas={gerarPcLinhas}
-          onFechar={() => setGerarPcLinhas(null)}
-          onFeito={(nums) => { setGerarPcLinhas(null); setMarcadas(new Set()); setAviso(`Pedido(s) de compra criado(s): ${nums.map((n) => `PC ${n}`).join(", ")} — já ligados às linhas da lista; seguem para aprovação.`); void carregar(); onGravado?.(); }} />
+          onFechar={() => { loteGerandoRef.current = null; setGerarPcLinhas(null); }}
+          onFeito={(nums) => {
+            // lote agendado do agente que virou PC pela folha: marca "gerado" (spec F)
+            const lote = loteGerandoRef.current; loteGerandoRef.current = null;
+            if (lote && nums[0]) void fetch("/api/rc-projetos/lotes", { method: "POST", headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ acao: "gerado", empresa, codigo: codigoProjeto, id: lote, pedido_num: nums[0] }) }).catch(() => null);
+            setGerarPcLinhas(null); setMarcadas(new Set()); setAviso(`Pedido(s) de compra criado(s): ${nums.map((n) => `PC ${n}`).join(", ")} — já ligados às linhas da lista; seguem para aprovação.`); void carregar(); onGravado?.(); }} />
       )}
       {usarCpEm && createPortal(
         <div className="fixed inset-0 z-[110] bg-black/40 flex items-end sm:items-start justify-center sm:pt-[10vh]" onMouseDown={(e) => { if (e.target === e.currentTarget) setUsarCpEm(null); }}>

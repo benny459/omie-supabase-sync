@@ -4,8 +4,8 @@ resumo: Requisição → pedido de compra → aprovação → NF → recebimento
 icone: 🛒
 area: erp
 rotas: /erp/compras
-caminhos: web/components/compras, web/app/api/compras, web/lib/compras.ts, web/lib/compras-avisos.ts
-atualizado: 2026-10-06
+caminhos: web/components/compras, web/app/api/compras, web/lib/compras.ts, web/lib/compras-avisos.ts, web/lib/agente-compras.ts, web/app/api/cron/agente-compras
+atualizado: 2026-10-08
 ---
 
 A tela **Compras** mostra o caminho de cada compra em **Kanban** (ou **Tabela**): **Requisição → Pedido de compra (pendente / aprovado) → Faturado → Recebido → Conferido**.
@@ -91,6 +91,16 @@ O novo valor passa a valer em Operação (Vendas avulsas / Projetos), na fila de
 
 - O número em **Compras** na barra soma NF sem pedido + requisições novas.
 - Uma faixa avisa **PCs criados no Omie depois de 01/10** — os pedidos devem nascer só no painel.
+
+## Pedidos criados pelo agente de compras (projetos)
+
+Na **Lista de materiais** de um projeto (etapa ③ Planejamento), o **✨ Agente de compras** junta os itens do mesmo fornecedor em lotes, cada um com a data certa de pedir. Um lote **agendado** vira pedido de compra sozinho no dia, às 07:00, pelo mesmo caminho do “Gerar pedido de compra” da lista: fornecedor do cadastro, a última categoria e condição usadas com ele, e previsão = o primeiro “necessário em”. O pedido entra **aguardando aprovação** e aparece aqui e em **Aprovações PC**, como qualquer outro. Avisos pelo Webex:
+- no dia, a lista dos PCs criados;
+- na véspera, um lembrete;
+- quando o agente não consegue gerar (fornecedor não achado com o mesmo nome no cadastro, ou sem categoria usada antes), avisa em vez de gerar;
+- lote que passou 2 dias da data sem ninguém agir vai para o administrador.
+
+**Prazos por fornecedor** (⏱, na mesma etapa): o prazo de entrega usado no planejamento. Vazio = vale o histórico, a média entre o pedido e a NF de entrada.
 
 ## Perguntas frequentes
 

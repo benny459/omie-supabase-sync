@@ -54,3 +54,50 @@ test("colar: sem cabeçalho na ordem Código · Item · Qtd · Un · Necessário
   assert.equal(b.comCabecalho, true);
   assert.deepEqual(b.linhas[0], { item: "CREPINA", qtd: "2", nec: "2026-11-01" });
 });
+
+// ── Agente de compras: a amostra do mockup (hoje 08/10/2026) ─────────────────
+import { montarLotes, type ItemLote } from "../../web/lib/planejamento-compras";
+const hist: Record<string, number> = { "ACQUA IMPORT": 21, SPRINGWAY: 45, ULTRAPURA: 7, INDFILTROS: 60, "NEW WATERS": 25 };
+const pz = new Map<string, PrazoFornecedor>(Object.entries(hist).map(([n, h]) => [normFornecedor(n), { norm: normFornecedor(n), nome: n, historico: h, manual: null }]));
+const amostra: [string, string | null, string, number, number, boolean][] = [
+  ["E02041", "ACQUA IMPORT", "2026-11-10", 1, 254.95, false], ["E02045", "ACQUA IMPORT", "2026-11-10", 1, 40, false],
+  ["MANOMETRO", null, "2026-11-10", 1, 57.7, false], ["MISC", null, "2026-11-10", 1, 800, false], ["RESINA", null, "2026-11-10", 40, 201.83, false],
+  ["V0310", "ACQUA IMPORT", "2026-11-10", 1, 5000, false], ["E02021", "ACQUA IMPORT", "2026-10-30", 500, 10, false],
+  ["E02045b", "ACQUA IMPORT", "2026-10-30", 2, 40, true], ["T0041", "ACQUA IMPORT", "2026-10-30", 1, 3022, false],
+  ["BOMBA", null, "2026-12-05", 1, 15360, false], ["M0120", "ULTRAPURA", "2026-12-15", 16, 1680, false],
+  ["SKID", "NEW WATERS", "2026-12-15", 1, 28500, false], ["F0210", "INDFILTROS", "2026-12-15", 6, 165, false],
+];
+const itensMock: ItemLote[] = amostra.map(([id, forn, nec, qtd, vu, temPc]) => ({ id, item: id, qtd, un: "un", vu, fornecedor: forn, necessario: nec, temPc,
+  plano: planejarItem({ necessario: nec, temPc, fornecedor: forn, prazos: pz, hoje }) }));
+const recMock = [{ doc: "OS4886", valor: 185763.67, data: "2026-10-09" }, { doc: "OS4887", valor: 111458.2, data: "2026-10-27" }];
+
+test("aceite F1: ACQUA pedir hoje (2 itens, R$ 8.022, caixa até 09/10) + 17/10 (3 itens); INDFILTROS 13/10", () => {
+  const ls = montarLotes(itensMock, { janela: 10, hoje, recebimentos: recMock });
+  const acqua = ls.filter((l) => l.forn === "ACQUA IMPORT");
+  assert.equal(acqua.length, 2);
+  const a1 = acqua.find((l) => l.base === "2026-10-06")!;
+  assert.equal(a1.itens.length, 2); assert.equal(a1.valor, 8022); assert.equal(a1.pedir, hoje); assert.equal(a1.atrasado, true);
+  assert.equal(a1.caixaNeg, true); assert.equal(a1.proxEntrada?.data, "2026-10-09"); assert.match(a1.caixaMsg, /OS4886/);
+  const a2 = acqua.find((l) => l.base === "2026-10-17")!;
+  assert.equal(a2.itens.length, 3); assert.equal(a2.pedir, "2026-10-17");
+  const ind = ls.find((l) => l.forn === "INDFILTROS")!;
+  assert.equal(ind.pedir, "2026-10-13"); assert.equal(ind.prazo, 60);
+});
+test("aceite F2: janela 15 junta os dois lotes da ACQUA", () => {
+  const acqua = montarLotes(itensMock, { janela: 15, hoje, recebimentos: recMock }).filter((l) => l.forn === "ACQUA IMPORT");
+  assert.equal(acqua.length, 1); assert.equal(acqua[0].itens.length, 5);
+});
+test("aceite F4: item que ganha PC sai do lote no recálculo; lote agendado sem esse item", () => {
+  const comPc = itensMock.map((x) => (x.id === "T0041" ? { ...x, temPc: true } : x));
+  const a1 = montarLotes(comPc, { janela: 10, hoje }).find((l) => l.forn === "ACQUA IMPORT" && l.base === "2026-10-06")!;
+  assert.deepEqual(a1.itens.map((x) => x.id), ["E02021"]);
+  const ag = montarLotes(comPc, { janela: 10, hoje, persistidos: [{ id: "L1", fornecedor: "ACQUA IMPORT", data_base: "2026-10-06", data_pedir: "2026-10-09", status: "agendado", motivo: null, itens: ["E02021", "T0041"] }] });
+  const l1 = ag.find((l) => l.id === "L1")!;
+  assert.deepEqual(l1.itens.map((x) => x.id), ["E02021"]);
+  assert.equal(l1.pedir, "2026-10-09");
+  // itens do lote agendado não aparecem de novo nos propostos
+  assert.ok(!ag.some((l) => !l.id && l.itens.some((x) => x.id === "E02021")));
+});
+test("simular comprar tudo hoje: todo lote pede hoje", () => {
+  assert.ok(montarLotes(itensMock, { janela: 10, hoje, simAgora: true }).every((l) => l.pedir === hoje));
+});
