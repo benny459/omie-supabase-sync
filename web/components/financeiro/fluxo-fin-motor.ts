@@ -555,7 +555,7 @@ async function init(){
     const j=await r1.json();if(!r1.ok)throw new Error(j.error||('HTTP '+r1.status));
     const jc=await r2.json().catch(()=>({cenarios:[],eventos:[]}));
     if(!vivo)return;
-    HOJE=dt(j.hoje);TEM_SNAP=!!j.snapshot;
+    HOJE=dt(j.hoje);TEM_SNAP=false; // previsto × realizado: liga quando o Δ vier da foto diária (finance.fluxo_snapshot) — até lá, sem Δ
     const pad=j.conta_padrao||{};
     const usadas=new Set();
     L=(j.lancs||[]).map(x=>{const emp=x[0];const conta=x[6]!=null?Number(x[6]):Number(pad[emp]||0);usadas.add(conta);
