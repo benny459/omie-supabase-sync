@@ -47,7 +47,7 @@ import { AtribuicaoModal } from "../AtribuirClienteView";
 import { supaBrowser } from "@/lib/supabase";
 import { estadoPc } from "@/lib/situacao-pc";
 import GradeOperacao from "./GradeOperacao";
-import ProjetosAtivosMenu, { EstrelaAtivo, chaveProjeto, useProjetosAtivos, type ItemMenu } from "../projeto/ProjetosAtivosMenu";
+import ProjetosAtivosMenu, { EstrelaAtivo, PainelAtivos, chaveProjeto, useProjetosAtivos, type ItemMenu } from "../projeto/ProjetosAtivosMenu";
 import { OcChip, useOcResumo } from "../vendas/OcAnexos";
 import type { OcResumo } from "@/lib/vendas-anexos";
 
@@ -219,6 +219,7 @@ export default function TelaOperacao({ modulo, title, rows: rowsIniciais, parcia
      pessoa no navegador; sem nenhum projeto marcado (ou antes da sql/130) mostra todos. */
   const pa = useProjetosAtivos(modulo === "projetos");
   const [soAtivos, setSoAtivosSt] = useState(true);
+  const [painelAtivos, setPainelAtivos] = useState(false);
   useEffect(() => {
     if (modulo !== "projetos") return;
     try { if (localStorage.getItem("op:projetos:soAtivos") === "0") setSoAtivosSt(false); } catch { /* */ }
@@ -666,6 +667,10 @@ export default function TelaOperacao({ modulo, title, rows: rowsIniciais, parcia
       {/* ── ★ projetos ativos (08/10/26) ── */}
       {modulo === "projetos" && (
         <div className="pa-bar" onClick={(e) => e.stopPropagation()}>
+          {pa.disponivel === true && (
+            <button type="button" className="btn" onClick={() => setPainelAtivos(true)}
+              title="Escolher os projetos ativos (em andamento, em que se está atuando) — vale para todo mundo">⚙ Ativos</button>
+          )}
           <ProjetosAtivosMenu itens={itensMenu} onEscolher={irPara} onAlternar={alternarAtivo} pode={podeMarcarAtivo} disponivel={pa.disponivel} />
           {pa.disponivel === true && (
             <div className="seg" role="group" aria-label="Quais projetos mostrar">
@@ -677,10 +682,19 @@ export default function TelaOperacao({ modulo, title, rows: rowsIniciais, parcia
           )}
           <span className="pa-dica">
             {pa.disponivel === false ? "Marcação de projetos ativos ainda não ligada no banco — mostrando todos."
-              : pa.disponivel && pa.chaves.size === 0 ? "Nenhum projeto marcado ainda — use a ☆ ao lado do nome do projeto (ou no menu) para marcar os ativos."
+              : pa.disponivel && pa.chaves.size === 0 ? "Nenhum projeto marcado ainda — clique em ⚙ Ativos para escolher os projetos em andamento."
               : filtroAtivos ? "Mostrando só os projetos marcados com ★ · ordem: maior PJ primeiro" : pa.disponivel ? "Mostrando todos os projetos · ☆ ao lado do nome marca como ativo" : ""}
           </span>
         </div>
+      )}
+
+      {painelAtivos && (
+        <PainelAtivos itens={itensMenu} pode={podeMarcarAtivo} onFechar={() => setPainelAtivos(false)}
+          onSalvar={async (mud) => {
+            const e = await pa.salvarLote(mud.map((m) => ({ empresa: m.empresa, codigo_projeto: m.codigo, nome: m.nome, cliente: m.cliente ?? null, ativo: m.ativo })));
+            if (!e) { setSoAtivos(true); mostrar({ msg: `Projetos ativos salvos (${mud.length} alteraç${mud.length === 1 ? "ão" : "ões"})` }); }
+            return e;
+          }} />
       )}
 
       {/* ── escopo ── */}
