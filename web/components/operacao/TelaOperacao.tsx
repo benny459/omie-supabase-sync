@@ -94,10 +94,12 @@ async function novaLinhaPc(head: AnyRow, rc: string, pc: string, modulo: Modulo)
   return error?.message ?? null;
 }
 
-export default function TelaOperacao({ modulo, title, rows: rowsIniciais, parcial = false, avisoErro = null }: {
+export default function TelaOperacao({ modulo, title, rows: rowsIniciais, parcial = false, parcialAtivos = false, avisoErro = null }: {
   modulo: Modulo; title: string; rows: AnyRow[];
   /** Só os não faturados chegaram até agora — o resto vem em segundo plano. */
   parcial?: boolean;
+  /** Projetos (08/10/26): por enquanto só os cartões dos ★ ativos — os outros vêm em segundo plano. */
+  parcialAtivos?: boolean;
   avisoErro?: string | null;
 }) {
   const user = useUserPerms();
@@ -305,20 +307,34 @@ export default function TelaOperacao({ modulo, title, rows: rowsIniciais, parcia
     }).catch(() => {});
   }, [modulo, atribTick]);
   const [budgetMap, setBudgetMap] = useState<Map<string, BudgetSummary>>(new Map());
+  /* 08/10/26: a lista chega em duas etapas (rápida → completa); o resumo de budget é pedido
+     só para os projetos que ainda não foram pedidos e soma ao que já veio — antes refazia
+     tudo a cada etapa. tickAjuste (cancelar/devolver PC) pede tudo de novo. */
+  const budgetPedidos = useRef<{ tick: number; keys: Set<string> }>({ tick: -1, keys: new Set() });
   useEffect(() => {
     if (modulo !== "projetos") return;
+    if (budgetPedidos.current.tick !== tickAjuste) budgetPedidos.current = { tick: tickAjuste, keys: new Set() };
+    const ja = budgetPedidos.current.keys;
     const keys = new Set<string>();
     for (const r of rowsIniciais) {
       const emp = s(r.empresa), cod = Number(r.codigo_projeto ?? r.pv_codigo_projeto ?? 0);
-      if (emp && cod > 0) keys.add(`${emp}|${cod}`);
+      if (emp && cod > 0 && !ja.has(`${emp}|${cod}`)) keys.add(`${emp}|${cod}`);
     }
     if (!keys.size) return;
-    fetch(`/api/rc-projetos/budget/summary?keys=${encodeURIComponent([...keys].join(","))}`).then((r) => r.json()).then((j) => {
-      const m = new Map<string, BudgetSummary>();
-      for (const row of j.rows ?? []) m.set(row.key, row);
-      setBudgetMap(m);
-    }).catch(() => {});
-  }, [modulo, rowsIniciais]);
+    for (const k of keys) ja.add(k);
+    const lotes: string[][] = [];
+    const todas = [...keys];
+    for (let i = 0; i < todas.length; i += 300) lotes.push(todas.slice(i, i + 300)); // a rota lê até 300
+    for (const lote of lotes) {
+      fetch(`/api/rc-projetos/budget/summary?keys=${encodeURIComponent(lote.join(","))}`).then((r) => r.json()).then((j) => {
+        setBudgetMap((atual) => {
+          const m = new Map(atual);
+          for (const row of j.rows ?? []) m.set(row.key, row);
+          return m;
+        });
+      }).catch(() => { for (const k of lote) ja.delete(k); });
+    }
+  }, [modulo, rowsIniciais, tickAjuste]);
   const [escondidos, setEscondidos] = useState<PcEscondido[]>([]);
   const carregarEscondidos = useCallback(() => {
     fetch("/api/pcs/excluir", { cache: "no-store" }).then((r) => r.json())
@@ -330,14 +346,19 @@ export default function TelaOperacao({ modulo, title, rows: rowsIniciais, parcia
      as compras foram pagas e a venda recebida (sales.mv_rentab_pvos). Uma
      busca por carga, só os selos — sem R$. */
   const [cadeia, setCadeia] = useState<Record<string, RentabResumo>>({});
+  /* 08/10/26: só as chaves ainda não pedidas, somadas ao que já veio (como o budget acima). */
+  const cadeiaPedidas = useRef<Set<string>>(new Set());
   useEffect(() => {
     if (modulo === "pcs") return;
+    const ja = cadeiaPedidas.current;
     const chaves = [...new Set(rowsIniciais
       .filter((r) => r.pv_os_label)
-      .map((r) => chaveRentab(s(r.empresa), s(r.pv_os_label))))];
+      .map((r) => chaveRentab(s(r.empresa), s(r.pv_os_label))))].filter((c) => !ja.has(c));
     if (!chaves.length) return;
+    for (const c of chaves) ja.add(c);
     fetch("/api/rentabilidade", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ chaves }) })
-      .then((r) => (r.ok ? r.json() : null)).then((j) => { if (j?.resumo) setCadeia(j.resumo); }).catch(() => {});
+      .then((r) => (r.ok ? r.json() : null)).then((j) => { if (j?.resumo) setCadeia((atual) => ({ ...atual, ...j.resumo })); else for (const c of chaves) ja.delete(c); })
+      .catch(() => { for (const c of chaves) ja.delete(c); });
   }, [modulo, rowsIniciais]);
 
   // ── filtros ───────────────────────────────────────────────────────────
@@ -738,7 +759,7 @@ export default function TelaOperacao({ modulo, title, rows: rowsIniciais, parcia
                     <button className={soAtivos && pa.chaves.size > 0 ? "on" : ""} disabled={pa.chaves.size === 0}
                       title={pa.chaves.size ? "Mostra só os projetos marcados com ★" : "Nenhum projeto marcado com ★ ainda — clique em ⚙ Ativos"}
                       onClick={() => setSoAtivos(true)}>★ Só ativos <b>{nAtivosNaLista}</b></button>
-                    <button className={!filtroAtivos ? "on" : ""} onClick={() => setSoAtivos(false)} title="Mostra todos os projetos (★ ativos primeiro)">Todos <b>{pedidos.length}</b></button>
+                    <button className={!filtroAtivos ? "on" : ""} onClick={() => setSoAtivos(false)} title={parcialAtivos ? "Carregando os demais projetos…" : "Mostra todos os projetos (★ ativos primeiro)"}>Todos <b>{parcialAtivos ? "…" : pedidos.length}</b></button>
                   </div>
                   <span className="sep" />
                 </>

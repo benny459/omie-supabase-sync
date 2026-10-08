@@ -17,6 +17,45 @@ const TelaOperacao = dynamic(() => import("./operacao/TelaOperacao"), {
 });
 
 type Modulo = "avulsos" | "pcs" | "projetos";
+type Resp = { rows?: Record<string, unknown>[]; count?: number | null; ativos?: boolean };
+type Etapas = { view: string; rapida: Promise<Resp> | null; completa: Promise<Resp>; t: number };
+
+/* Busca em duas etapas (01/10/2026): a rápida desenha a tela; a completa (faturados +
+   linhas manuais frescas da view viva) chega em segundo plano e substitui sem piscar.
+   Projetos com "★ Só ativos" (o padrão, 08/10/26): a rápida traz só os cartões dos
+   projetos ativos, filtrados no servidor — ~300 linhas em vez de ~1,7 mil. */
+function iniciarEtapas(view: string, countMode: string): Etapas {
+  const base = `/api/list/rows?view=${view}&count=${countMode}`;
+  const buscar = async (extra: string): Promise<Resp> => {
+    const r = await fetch(base + extra, { cache: "no-store" });
+    const j = await r.json();
+    if (!r.ok) throw new Error(j.error ?? r.statusText);
+    return j as Resp;
+  };
+  const qs = new URLSearchParams(window.location.search);
+  let soAtivos = false;
+  if (view === "v_pc_projetos") {
+    try { soAtivos = localStorage.getItem("op:projetos:soAtivos") !== "0"; } catch { soAtivos = true; }
+    if (qs.has("abrir")) soAtivos = false; // vai abrir um projeto específico: melhor a lista toda
+  }
+  const rapida = qs.has("classica") ? null : buscar(soAtivos ? "&ativos=1&aberto=1&rapido=1" : "&aberto=1&rapido=1");
+  rapida?.catch(() => { /* a completa resolve */ });
+  const completa = buscar("");
+  completa.catch(() => { /* tratado no efeito */ });
+  return { view, rapida, completa, t: Date.now() };
+}
+
+/* 08/10/26: a busca começa quando este arquivo carrega (logo no carregamento da página), e
+   não só quando a tela termina de "acordar" (hidratar) — numa carga direta de /projetos a
+   hidratação pode demorar, e a lista esperava por ela para sequer pedir os dados. */
+const COUNT_DA_ROTA: Record<string, [string, string]> = {
+  "/projetos": ["v_pc_projetos", "exact"], "/avulsos": ["v_pc_avulsos", "estimated"], "/pcs": ["v_pc_pcs", "exact"],
+};
+let preBusca: Etapas | null = null;
+if (typeof window !== "undefined") {
+  const r = COUNT_DA_ROTA[window.location.pathname];
+  if (r) { try { preBusca = iniciarEtapas(r[0], r[1]); } catch { preBusca = null; } }
+}
 
 type Props = {
   view: "v_pc_avulsos" | "v_pc_pcs" | "v_pc_projetos";
@@ -32,36 +71,25 @@ export default function BoldAvulsosLoader({ view, modulo, title, countMode = "ex
   const [parcial, setParcial] = useState(false);
   const [avisoErro, setAvisoErro] = useState<string | null>(null);
 
+  const [parcialAtivos, setParcialAtivos] = useState(false);
+
   useEffect(() => {
     let cancelled = false;
     let completo = false;
-    // Sem &limit — a rota pagina server-side e devolve a MV inteira. Passar
-    // limit=1000 era o que truncava /avulsos (1776 rows) e subestimava os
-    // alarmes, que são calculados client-side em cima desse dataset.
-    const base = `/api/list/rows?view=${view}&count=${countMode}`;
-    const buscar = async (extra: string) => {
-      const r = await fetch(base + extra, { cache: "no-store" });
-      const j = await r.json();
-      if (!r.ok) throw new Error(j.error ?? r.statusText);
-      return j as { rows?: Record<string, unknown>[]; count?: number | null };
-    };
-    /* Duas etapas (01/10/2026): a tela abre em "Em aberto", então primeiro
-       vêm só os não faturados direto da MV (rápido) e a tela desenha; o
-       conjunto completo (faturados + linhas manuais frescas da view viva)
-       chega em segundo plano e substitui sem piscar. Se a rápida falhar, a
-       completa ainda decide; se a completa falhar depois da rápida, fica a
-       rápida e avisa. */
-    const tela = typeof window !== "undefined" && new URLSearchParams(window.location.search).has("classica");
-    if (!tela) {
-      buscar("&aberto=1&rapido=1").then((j) => {
-        if (cancelled || completo) return;
-        setRows(j.rows ?? []); setParcial(true);
-      }).catch(() => { /* a completa resolve */ });
-    }
-    buscar("").then((j) => {
+    // Sem &limit — a rota pagina server-side e devolve a MV inteira.
+    const fresca = preBusca && preBusca.view === view && Date.now() - preBusca.t < 20_000 ? preBusca : null;
+    preBusca = null; // usa uma vez só; a próxima montagem busca de novo
+    const et = fresca ?? iniciarEtapas(view, countMode);
+    /* Se a rápida falhar, a completa ainda decide; se a completa falhar depois da rápida,
+       fica a rápida e avisa. */
+    et.rapida?.then((j) => {
+      if (cancelled || completo) return;
+      setRows(j.rows ?? []); setParcial(true); setParcialAtivos(!!j.ativos);
+    }).catch(() => { /* a completa resolve */ });
+    et.completa.then((j) => {
       completo = true;
       if (cancelled) return;
-      setRows(j.rows ?? []); setCount(j.count ?? null); setParcial(false);
+      setRows(j.rows ?? []); setCount(j.count ?? null); setParcial(false); setParcialAtivos(false);
     }).catch((e) => {
       completo = true;
       if (cancelled) return;
@@ -82,7 +110,7 @@ export default function BoldAvulsosLoader({ view, modulo, title, countMode = "ex
     return <ListSkeleton title={title} />;
   }
   const classica = typeof window !== "undefined" && new URLSearchParams(window.location.search).has("classica");
-  if (!classica) return <TelaOperacao modulo={modulo} title={title} rows={rows} parcial={parcial} avisoErro={avisoErro} />;
+  if (!classica) return <TelaOperacao modulo={modulo} title={title} rows={rows} parcial={parcial} parcialAtivos={parcialAtivos} avisoErro={avisoErro} />;
   return (
     <BoldAvulsosView modulo={modulo} title={title} rows={rows as never} totalCount={count} />
   );

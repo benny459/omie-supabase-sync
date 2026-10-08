@@ -1,4 +1,7 @@
 {
+  "regions": [
+    "gru1"
+  ],
   "functions": {
     "app/api/cron/bug-analyze/route.ts": {
       "maxDuration": 300

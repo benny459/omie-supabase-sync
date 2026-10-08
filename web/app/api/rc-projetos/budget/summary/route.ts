@@ -29,6 +29,19 @@ export async function GET(req: Request) {
   }
   if (codigos.size === 0) return NextResponse.json({ rows: [] });
 
+  /* 08/10/26: CRM e o resumo da lista saem JÁ, em paralelo com o budget — antes eram três
+     esperas em série (budget → CRM → lista). Mesmos dados, mesma ordem de aplicação. */
+  const crmP = fetchBudgetsDoCrm(Array.from(codigos)).then((m) => ({ m, e: null as unknown }), (e) => ({ m: null, e }));
+  const listaP = Promise.all([
+    supa.schema("approval" as never).from("rc_projetos_budget").select("*")
+      .in("empresa", Array.from(empresas)).in("codigo_projeto", Array.from(codigos)),
+    supa.schema("approval" as never).from("projeto_plano").select("empresa, codigo_projeto, custo_materiais")
+      .in("empresa", Array.from(empresas)).in("codigo_projeto", Array.from(codigos)),
+    supa.schema("approval" as never).from("rc_projetos_itens").select("empresa, codigo_projeto, qtd, cat_valor_unit, pc_numero, rc_item_id, pc_item_id")
+      .in("empresa", Array.from(empresas)).in("codigo_projeto", Array.from(codigos)).is("rc_item_id", null).is("pc_item_id", null).limit(20000),
+  ]);
+  listaP.catch(() => { /* tratado lá embaixo */ });
+
   const { data, error } = await supa
     .schema("approval" as never)
     .from("rc_projetos_budget")
@@ -62,7 +75,9 @@ export async function GET(req: Request) {
      importar o Fluxo Financeiro à mão — e comparava os PCs contra nada.
      Falar com o CRM é best-effort: se cair, o card volta ao que já mostrava. */
   try {
-    const doCrm = await fetchBudgetsDoCrm(Array.from(codigos));
+    const crm = await crmP;
+    if (crm.e) throw crm.e;
+    const doCrm = crm.m!;
     if (doCrm.size) {
       const porKey = new Map(rows.map((r) => [r.key, r]));
       for (const k of keys) {
@@ -91,14 +106,7 @@ export async function GET(req: Request) {
      (lib/lista-pc-completar). O "projetado" soma ao lançado o estimado das linhas
      da lista que ainda não têm RC/PC. */
   try {
-    const [bud, plano, its] = await Promise.all([
-      supa.schema("approval" as never).from("rc_projetos_budget").select("*")
-        .in("empresa", Array.from(empresas)).in("codigo_projeto", Array.from(codigos)),
-      supa.schema("approval" as never).from("projeto_plano").select("empresa, codigo_projeto, custo_materiais")
-        .in("empresa", Array.from(empresas)).in("codigo_projeto", Array.from(codigos)),
-      supa.schema("approval" as never).from("rc_projetos_itens").select("empresa, codigo_projeto, qtd, cat_valor_unit, pc_numero, rc_item_id, pc_item_id")
-        .in("empresa", Array.from(empresas)).in("codigo_projeto", Array.from(codigos)).is("rc_item_id", null).is("pc_item_id", null).limit(20000),
-    ]);
+    const [bud, plano, its] = await listaP;
     const porKey = new Map(rows.map((r) => [r.key, r as typeof r & { estimado_sem_pc?: number; budget_painel?: boolean }]));
     const garantir = (k: string) => {
       let r = porKey.get(k);
@@ -119,12 +127,7 @@ export async function GET(req: Request) {
     // Lista de materiais — sugestão que não casou com nenhum PC continua a comprar)
     const linhasIts = (its.data ?? []) as { empresa: string; codigo_projeto: number; qtd: number | null; cat_valor_unit: number | null; pc_numero: string | null }[];
     const nums = [...new Set(linhasIts.flatMap((i) => String(i.pc_numero ?? "").split(",").map((x) => `${i.empresa}|${x.trim()}`)).filter((x) => !x.endsWith("|")))].slice(0, 400);
-    const existe = new Set<string>();
-    await Promise.all(nums.map(async (k) => {
-      const [emp, num] = k.split("|");
-      const { data } = await supaAdmin().schema("orders").rpc("compras_id_por_numero", { p_empresa: emp, p_numero: num, p_tipo: "PC" });
-      if (data) existe.add(k);
-    }));
+    const existe = await pcsExistentes(nums);
     const est = new Map<string, number>();
     for (const i of linhasIts) {
       const pcs = String(i.pc_numero ?? "").split(",").map((x) => x.trim()).filter(Boolean);
@@ -136,4 +139,22 @@ export async function GET(req: Request) {
   } catch { /* sem o resumo da lista, o card segue como antes */ }
 
   return NextResponse.json({ rows });
+}
+
+/* Quais desses "EMP|número" são PCs que existem (08/10/26). Uma chamada por empresa
+   (orders.compras_pcs_existentes, sql/147) em vez de uma por número — eram até 400 idas ao
+   banco por carga de Projetos. Sem a sql/147 aplicada, volta ao teste número a número. */
+async function pcsExistentes(chaves: string[]): Promise<Set<string>> {
+  const existe = new Set<string>();
+  const porEmp = new Map<string, string[]>();
+  for (const k of chaves) { const [emp, num] = k.split("|"); porEmp.set(emp, [...(porEmp.get(emp) ?? []), num]); }
+  await Promise.all([...porEmp].map(async ([emp, nums]) => {
+    const { data, error } = await supaAdmin().schema("orders").rpc("compras_pcs_existentes", { p_empresa: emp, p_numeros: nums });
+    if (!error) { for (const n of (data ?? []) as string[]) existe.add(`${emp}|${n}`); return; }
+    await Promise.all(nums.map(async (num) => {
+      const { data: id } = await supaAdmin().schema("orders").rpc("compras_id_por_numero", { p_empresa: emp, p_numero: num, p_tipo: "PC" });
+      if (id) existe.add(`${emp}|${num}`);
+    }));
+  }));
+  return existe;
 }
