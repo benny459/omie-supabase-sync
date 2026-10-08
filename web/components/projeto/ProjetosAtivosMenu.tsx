@@ -166,7 +166,7 @@ export default function ProjetosAtivosMenu({ itens, onEscolher, onAlternar, pode
         <span className="text-amber-400">★</span> Projetos ativos <span className="text-ww-textMuted font-normal">({ativos.length})</span> <span className="text-ww-textFaint text-[10px]">▾</span>
       </button>
       {aberto && (
-        <div className={`absolute ${direita ? "right-0" : "left-0"} top-[38px] z-50 w-[min(420px,92vw)] rounded-xl border border-ww-border bg-ww-panel shadow-2xl p-1.5`}
+        <div className={`absolute ${direita ? "right-0" : "left-0"} top-[38px] z-50 w-[min(420px,92vw)] rounded-xl border border-ww-border bg-[rgb(var(--color-ww-panel))] shadow-2xl p-1.5`}
           role="listbox"
           onKeyDown={(e) => {
             if (e.key === "Escape") { setAberto(false); return; }

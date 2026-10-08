@@ -2337,7 +2337,7 @@ export default function MateriaisGrade({
         <span className="flex-1" />
         <details className="relative" data-menu="adicionar">
           <summary className="list-none cursor-pointer px-2.5 py-1 text-[12px] rounded-lg bg-ww-accent text-white font-semibold hover:brightness-110 select-none">+ Adicionar itens ▾</summary>
-          <div className="absolute right-0 mt-1 z-30 min-w-[290px] rounded-lg border border-ww-border bg-[rgb(var(--color-ww-panel))] shadow-xl p-1 text-[11.5px]">
+          <div role="menu" className="absolute right-0 mt-1 z-30 min-w-[290px] rounded-lg border border-ww-border bg-[rgb(var(--color-ww-panel))] shadow-xl p-1 text-[11.5px]">
             {menuAdicionar.map((m) => (
               <button key={m.rot} type="button" onClick={(e) => { (e.currentTarget.closest("details") as HTMLDetailsElement).open = false; m.fn(); }}
                 className="block w-full text-left px-2 py-1.5 rounded hover:bg-ww-rowHover">
@@ -2354,7 +2354,7 @@ export default function MateriaisGrade({
         <details className="relative" data-menu="colunas">
           <summary className="list-none cursor-pointer px-2.5 py-1 text-[12px] rounded-lg border border-ww-border text-ww-text hover:border-ww-accent select-none"
             title="Mostrar / esconder colunas da grade">Colunas{ocultas.size ? ` (${ocultas.size} oculta${ocultas.size > 1 ? "s" : ""})` : ""} ▾</summary>
-          <div className="absolute right-0 mt-1 z-30 w-[230px] rounded-lg border border-ww-border bg-[rgb(var(--color-ww-panel))] shadow-xl p-1.5 text-[11.5px]">
+          <div role="menu" className="absolute right-0 mt-1 z-30 w-[230px] rounded-lg border border-ww-border bg-[rgb(var(--color-ww-panel))] shadow-xl p-1.5 text-[11.5px]">
             {COLS.filter((c) => !COLUNAS_FIXAS.has(c.key)).map((c) => (
               <label key={c.key} className="flex items-center gap-2 px-1.5 py-1 rounded hover:bg-ww-rowHover cursor-pointer" data-col-toggle={c.key}>
                 <input type="checkbox" checked={!ocultas.has(c.key)}
@@ -2374,7 +2374,7 @@ export default function MateriaisGrade({
         </div>
         <details className="relative" data-menu="mais">
           <summary className="list-none cursor-pointer px-2 py-1 text-[12px] rounded-lg text-ww-textMuted hover:text-ww-text hover:bg-ww-rowHover" title="Mais ações">⋯</summary>
-          <div className="absolute right-0 mt-1 z-30 min-w-[260px] rounded-lg border border-ww-border bg-[rgb(var(--color-ww-panel))] shadow-xl p-1 text-[11.5px]">
+          <div role="menu" className="absolute right-0 mt-1 z-30 min-w-[260px] rounded-lg border border-ww-border bg-[rgb(var(--color-ww-panel))] shadow-xl p-1 text-[11.5px]">
             {menuMais.map((m) => (
               <button key={m.rot} type="button" disabled={m.off} onClick={(e) => { (e.currentTarget.closest("details") as HTMLDetailsElement).open = false; m.fn(); }}
                 className="block w-full text-left px-2 py-1.5 rounded hover:bg-ww-rowHover disabled:opacity-40" title={m.dica}>

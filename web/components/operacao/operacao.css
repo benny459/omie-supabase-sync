@@ -851,3 +851,6 @@
 .op .pj-row{grid-template-columns:1fr}
 .op .pj-busca{flex:1 1 100%}
 }
+/* 08/10/26: menus e painéis flutuantes (⋯/Visões salvas, Mais filtros, ⋮ do PC) sempre opacos,
+   também com vidro ligado — eram var(--ww-panel), translúcido no vidro, sobre os cartões. */
+html[data-vidro] .op :is(.pop,.fpanel,.pcmenu-pop){--ap-a:1;--ww-panel:rgb(var(--color-ww-panel));--ww-panel-sunken:rgb(var(--color-ww-panelSunken));--ww-row-l1:rgb(var(--color-ww-rowL1));background:rgb(var(--color-ww-panel));backdrop-filter:none;-webkit-backdrop-filter:none}
