@@ -171,9 +171,9 @@ export default function GerarPcDaLista({ empresa, codigoProjeto, linhas, onFecha
         {aviso && <div className="rounded-lg border border-emerald-500/40 bg-emerald-500/10 p-2 text-emerald-700 dark:text-emerald-300">{aviso}</div>}
         <div className="flex items-center gap-2 justify-end">
           <span className="mr-auto text-ww-textMuted">{ativos.length} pedido(s) · {brl(ativos.reduce((a, g) => a + totalG(g), 0))}</span>
-          <button type="button" disabled={ocupado || !refs} onClick={() => void enviar(true)}
+          <button type="button" data-testid="btn-simular-pc" disabled={ocupado || !refs} onClick={() => void enviar(true)}
             className="px-3 py-1.5 rounded-lg border border-ww-border hover:bg-ww-rowHover disabled:opacity-40">Simular</button>
-          <button type="button" disabled={ocupado || !refs || !ativos.length} onClick={() => void enviar(false)}
+          <button type="button" data-testid="btn-gerar-pc" disabled={ocupado || !refs || !ativos.length} onClick={() => void enviar(false)}
             className="px-3 py-1.5 rounded-lg bg-ww-accent text-white font-semibold disabled:opacity-40">
             {ocupado ? "Gravando…" : `Gerar ${ativos.length} pedido(s) de compra`}
           </button>

@@ -2238,7 +2238,7 @@ export default function MateriaisGrade({
     dicaCab: "Coluna provisória: aparece sozinha quando há item sem código do nosso estoque e some quando todos estão resolvidos. ✓ aceita o item selecionado (ensina o de-para) · ✕ = não é item nosso.",
     cab: (<span className="inline-flex items-center gap-1.5 normal-case tracking-normal text-[11px] text-amber-700 dark:text-amber-300">
       Compatibilizar com o estoque
-      <button type="button" onClick={aceitarMelhores} title="Aceita a melhor sugestão de todas as linhas pendentes"
+      <button type="button" data-testid="btn-aceitar-melhores" onClick={aceitarMelhores} title="Aceita a melhor sugestão de todas as linhas pendentes"
         className="px-1.5 py-px rounded border border-ww-border text-ww-text hover:border-ww-accent">✓ aceitar as melhores</button>
       <button type="button" onClick={() => setColSugManual(false)} className="px-1 text-ww-textMuted hover:text-ww-text">ocultar</button>
     </span>),
@@ -2488,7 +2488,7 @@ export default function MateriaisGrade({
                 <>
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className="text-[11px] text-ww-textMuted">Itens da proposta <b className="font-mono text-ww-text">{cpBase.proposta}</b> (composição de preço — o plano e o budget). Os que já estão na lista aparecem com ✓.</span>
-                  <button type="button" onClick={() => levarParaLista(naoUsados)} disabled={!naoUsados.length}
+                  <button type="button" data-testid="btn-levar-para-lista" onClick={() => levarParaLista(naoUsados)} disabled={!naoUsados.length}
                     title="Abre o importar com os itens que faltam marcados — cada um já casado com o nosso catálogo"
                     className="ml-auto px-2.5 py-1 text-[11.5px] rounded-lg bg-ww-accent text-white font-semibold hover:brightness-110 transition disabled:opacity-40">
                     ⤵ Levar para a lista os que faltam ({naoUsados.length})
@@ -2660,7 +2660,7 @@ export default function MateriaisGrade({
             onDesvincular={() => void desvincularLote()}
             onExportar={() => exportar(marcadasLinhas)}
             onCopiar={() => void copiarMarcadas()} />
-          <button type="button" onClick={() => { loteGerandoRef.current = null; abrirGerarPc(paraPc); }} disabled={!paraPc.length || !!ocupado}
+          <button type="button" data-testid="btn-comprar-agora" onClick={() => { loteGerandoRef.current = null; abrirGerarPc(paraPc); }} disabled={!paraPc.length || !!ocupado}
             title={paraPc.length ? "Gera os pedidos de compra (um por fornecedor) com as linhas marcadas sem PC" : "As marcadas já têm PC"}
             className="shrink-0 px-2 py-0.5 rounded-md bg-ww-accent text-white text-[11.5px] font-semibold hover:brightness-110 transition disabled:opacity-40">
             🧾 Comprar agora{paraPc.length !== marcadas.size ? ` (${paraPc.length})` : ""}
@@ -3035,7 +3035,7 @@ export default function MateriaisGrade({
           {cp?.proposta && (
             <>
               <div className="flex items-center gap-2 flex-wrap">
-                <button type="button" onClick={adicionarDaCp} disabled={!cpMarcados.size}
+                <button type="button" data-testid="btn-adicionar-rc" onClick={adicionarDaCp} disabled={!cpMarcados.size}
                   className="px-3 py-1 rounded-lg bg-ww-accent text-white text-[11.5px] font-semibold hover:brightness-110 transition disabled:opacity-40">
                   Adicionar {cpMarcados.size || ""} à lista
                 </button>

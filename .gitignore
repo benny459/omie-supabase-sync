@@ -35,3 +35,10 @@ docs/obsidian/.DS_Store
 * [0-9].ts
 * [0-9].tsx
 * [0-9].json
+
+# Tutoriais em vídeo: só o roteiro vai para o git (o mp4 final fica em web/public/manual-video/)
+web/tutoriais/*/audio/
+web/tutoriais/*/video/
+web/tutoriais/*/*.mp4
+web/tutoriais/*/marcas.json
+web/tutoriais/*/legendas.srt
