@@ -133,7 +133,9 @@ export default function TelaOperacao({ modulo, title, rows: rowsIniciais, parcia
   const [sel, setSel] = useState<Set<string>>(new Set());
   const [patches, setPatches] = useState<Map<string, AnyRow>>(new Map());
   const [toast, setToast] = useState<Toast>(null);
-  const [drawer, setDrawer] = useState<string | null>(null);
+  const [drawer, setDrawerSt] = useState<string | null>(null);
+  // PC nativo do Compras (sql/148, ncod_ped negativo) abre a folha dele no Compras.
+  const setDrawer = useCallback((k: string | null) => { if (!k || !abrirPcNativo(k.split("|")[1])) setDrawerSt(k); }, []);
   /* Cancelar pedido / Devolver material (08/10/26, sql/146): o modal aberto, os PCs que
      acabaram de ser cancelados (somem já, sem esperar a recarga) e um tique para o resumo
      do budget e a seção "Cancelados / devolvidos" buscarem de novo. */
@@ -462,6 +464,7 @@ export default function TelaOperacao({ modulo, title, rows: rowsIniciais, parcia
       codigoProjeto: Number(c.row.codigo_projeto ?? c.row.pv_codigo_projeto ?? 0) || null, pedidoId: c.pedidoId });
   }, [podeAjustarPc, mostrar, ehAdmin, podeAprovar]);
   const setStatus = useCallback(async (c: Compra, status: string) => {
+    if (abrirPcNativo(c.row.ncod_ped)) return;
     if (!podeAprovar) { mostrar({ msg: "Sem permissão para aprovar neste módulo.", erro: true }); return; }
     // "Cancelar pedido" cancela de verdade (sql/146) — abre o motivo em vez de só gravar o rótulo
     if (status === "CANCELAR_PEDIDO" && c.pc) { abrirAjustePc("cancelar", [c]); return; }
@@ -486,6 +489,7 @@ export default function TelaOperacao({ modulo, title, rows: rowsIniciais, parcia
   }, [aplicar, modulo, mostrar, podeAprovar, abrirAjustePc]);
 
   const gravar = useCallback(async (c: Compra, campo: keyof typeof CAMPOS, valor: unknown, patch: AnyRow) => {
+    if (abrirPcNativo(c.row.ncod_ped)) return false;
     const def = CAMPOS[campo] as { campo: string; historico?: boolean };
     const antes: AnyRow = Object.fromEntries(Object.keys(patch).map((k) => [k, c.row[k]]));
     aplicar(c.key, patch);
@@ -558,7 +562,7 @@ export default function TelaOperacao({ modulo, title, rows: rowsIniciais, parcia
 
   const selCompras = useMemo(() => [...sel].map((k) => compraPorKey.get(k)).filter(Boolean) as Compra[], [sel, compraPorKey]);
   const emMassa = async (status: string, lista?: Compra[]) => {
-    const alvo = (lista ?? selCompras).filter((c) => c.temPc);
+    const alvo = (lista ?? selCompras).filter((c) => c.temPc && Number(c.row.ncod_ped) > 0);
     if (!alvo.length) { mostrar({ msg: "Nenhuma das selecionadas tem PC — sem PC não há o que aprovar.", erro: true }); return; }
     const antes = new Map(alvo.map((c) => [c.key, c.statusCodigo]));
     for (const c of alvo) aplicar(c.key, { status });
@@ -2886,4 +2890,14 @@ function LogAlteracoes({ aberto, onFechar, compras }: { aberto: boolean; onFecha
       </div>
     </>
   );
+}
+
+/** PC criado no Compras do painel entra no Standalone com ncod_ped = -(9e12 + id)
+    (sql/148). Aprovar e editar daqui gravaria na aprovação do Omie, então ele abre
+    a folha do pedido no Compras. Devolve true quando redirecionou. */
+function abrirPcNativo(ncod: unknown): boolean {
+  const n = Number(ncod);
+  if (!(n < 0)) return false;
+  window.location.assign(`/erp/compras?pedido=${-n - 9_000_000_000_000}`);
+  return true;
 }
