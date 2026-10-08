@@ -6,11 +6,19 @@ export const normGrupo = (t: string | null | undefined) =>
   String(t ?? "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/[^a-z0-9/.,]+/g, " ").trim();
 
 /** Data do grupo = a data mais comum entre as linhas do grupo (empate: a mais cedo).
- *  Linha sem data não vota. Sem nenhuma data, o grupo não tem data. */
+ *  Linha sem data também vota: se as sem data são maioria, o grupo não tem data. */
 export function dataDoGrupo(datas: (string | null | undefined)[]): string | null {
   const c = new Map<string, number>();
-  for (const d of datas) if (d && /^\d{4}-\d{2}-\d{2}$/.test(d)) c.set(d, (c.get(d) ?? 0) + 1);
-  return [...c.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))[0]?.[0] ?? null;
+  let semData = 0;
+  for (const d of datas) {
+    if (d && /^\d{4}-\d{2}-\d{2}$/.test(d)) c.set(d, (c.get(d) ?? 0) + 1);
+    else semData++;
+  }
+  const [top] = [...c.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+  // Linhas sem data também votam (08/10/26): colar 3 linhas com data num grupo de 17 sem
+  // data não pode virar a data do grupo inteiro (e, ao salvar, a de todas as linhas).
+  if (!top || semData > top[1]) return null;
+  return top[0];
 }
 
 /** Datas novas das linhas ao mudar a data do grupo: muda quem estava vazio ou seguia
