@@ -27,7 +27,7 @@ import { STATUS_META } from "@/lib/columns";
 import { useUserPerms } from "../UserPermsProvider";
 import { canApprove, canEdit, canReleasePv, canViewValues } from "@/lib/permissions";
 import {
-  montarPedido, fases, financeiro, margensProjeto, passa, noEscopo, dataMs, diasAte, dBR, isoDia, brl, pct,
+  montarPedido, fases, financeiro, margensProjeto, passa, noEscopo, dataMs, diasAte, dBR, isoDia, brl, pct, encerrado,
   ESTADO_LABEL, FILTRO_LABEL,
   type Compra, type Escopo, type Estado, type Filtros, type Pedido, type Periodo, type Rapida,
   servicoDoPedido, servicoAtrasado, tipoVenda, STATUS_SERVICO, type Servico,
@@ -131,7 +131,7 @@ export default function TelaOperacao({ modulo, title, rows: rowsIniciais, parcia
   const [drawer, setDrawer] = useState<string | null>(null);
   const [gerarPcDe, setGerarPcDe] = useState<{ p: Pedido; rc: string; itens: Compra[] } | null>(null);
   const [painelFiltro, setPainelFiltro] = useState(false);
-  const [menu, setMenu] = useState<"mais" | "export" | null>(null);
+  const [menu, setMenu] = useState<"mais" | "export" | "visoes" | null>(null);
   const [logAberto, setLogAberto] = useState(false);
   const [visoes, setVisoes] = useState<Visao[]>([]);
   // Anotações por pedido (balãozinho): quem escreveu e quando ficam gravados no servidor.
@@ -363,7 +363,13 @@ export default function TelaOperacao({ modulo, title, rows: rowsIniciais, parcia
     }
     return out;
   }, [noScope, q, periodo, filtros]);
-  const visiveis = useMemo(() => ordenarPedidos(filtrarPor(marcados), ordem, modulo), [filtrarPor, marcados, ordem, modulo]);
+  /* Projetos (08/10/26, spec A2): em "Todos", os ★ ativos vêm primeiro — dentro de cada
+     grupo vale a ordem escolhida. */
+  const visiveis = useMemo(() => {
+    const o = ordenarPedidos(filtrarPor(marcados), ordem, modulo);
+    if (modulo !== "projetos" || filtroAtivos || !pa.chaves.size) return o;
+    return [...o.filter((x) => ehAtivo(x.p)), ...o.filter((x) => !ehAtivo(x.p))];
+  }, [filtrarPor, marcados, ordem, modulo, filtroAtivos, pa.chaves, ehAtivo]);
   const opcoes = useMemo(() => {
     const uniq = (a: string[]) => [...new Set(a.filter(Boolean))].sort((x, y) => x.localeCompare(y, "pt-BR"));
     return {
@@ -623,9 +629,226 @@ export default function TelaOperacao({ modulo, title, rows: rowsIniciais, parcia
   const totalCompras = visiveis.reduce((a, x) => a + x.compras.length, 0);
   const drawerCompra = drawer ? compraPorKey.get(drawer) ?? null : null;
 
+  /* ── Projetos: lista no desenho da spec A2 (08/10/26) ──
+     Acima da lista só duas faixas: o topo (título, busca, visão) e UMA barra de filtros.
+     Os filtros de atenção viram chips com bolinha da cor da severidade (vermelho = atraso,
+     âmbar = aprovação/serviço, cinza = "sem"); os menos usados ficam em "≡ Mais filtros".
+     Os indicadores (KpisNavy) ficam atrás do botão 📊 — a escolha fica gravada. */
+  const pj = (modulo as string) === "projetos";
+  const [verKpis, setVerKpisSt] = useState(false);
+  useEffect(() => { if (!pj) return; try { setVerKpisSt(localStorage.getItem("op:projetos:kpis") === "1"); } catch { /* */ } }, [pj]);
+  const alternarKpis = () => setVerKpisSt((v) => { try { localStorage.setItem("op:projetos:kpis", v ? "0" : "1"); } catch { /* */ } return !v; });
+  type ChipAtencao = { k: Rapida; l: string; n: number; tom: "crit" | "warn" | "mute" | "ok" | "info"; desc: string; fixo: boolean };
+  const chipsAtencao: ChipAtencao[] = !pj ? [] : [
+    { k: "venda_atraso", l: "Venda em atraso", n: rapidas.venda_atraso, tom: "crit", desc: ALARMES["venda em atraso"].desc, fixo: true },
+    { k: "compra_atraso", l: "Compra em atraso", n: rapidas.compra_atraso, tom: "crit", desc: ALARMES["compra em atraso"].desc, fixo: true },
+    { k: "recusa", l: "Recusados", n: rapidas.recusa, tom: "crit", desc: ALARMES["recusa a resolver"].desc, fixo: true },
+    { k: "mat_alarme", l: "Sem NF há +5d", n: rapidas.mat_alarme, tom: "crit", desc: ALARMES["material sem NF"].desc, fixo: true },
+    { k: "minha", l: "Minha aprovação", n: rapidas.minha, tom: "warn", desc: ALARMES["aprovação pendente"].desc, fixo: true },
+    { k: "serv_atraso", l: "Serviço em atraso", n: rapidas.serv_atraso, tom: "warn", desc: ALARME_SERV.atraso.desc, fixo: true },
+    { k: "sem_pc", l: "Sem PC", n: rapidas.sem_pc, tom: "mute", desc: ALARMES["sem PC"].desc, fixo: true },
+    { k: "serv_semos", l: "Sem OS", n: rapidas.serv_semos, tom: "mute", desc: ALARME_SERV.semos.desc, fixo: true },
+    { k: "mat_sem_nf", l: "Recebido sem NF", n: rapidas.mat_sem_nf, tom: "warn", desc: "Itens com material recebido, NF de entrada ainda não lançada", fixo: false },
+    { k: "mat_parcial", l: "Material parcial", n: rapidas.mat_parcial, tom: "warn", desc: "Itens recebidos em parte", fixo: false },
+    { k: "mat_estoque", l: "Em estoque", n: rapidas.mat_estoque, tom: "info", desc: "Itens atendidos do estoque (não precisam de compra)", fixo: false },
+    ...STATUS_SERVICO.map((st): ChipAtencao => ({ k: `serv_st:${st.rotulo}` as Rapida, l: `Serviço: ${st.rotulo}`, n: rapidas[`serv_st:${st.rotulo}` as Rapida] ?? 0,
+      tom: st.tom === "crit" || st.tom === "warn" || st.tom === "ok" || st.tom === "info" ? st.tom : "mute", desc: `Serviço: ${st.desc}`, fixo: false })),
+  ];
+  const corTom = (t: ChipAtencao["tom"]) => (t === "crit" ? "var(--ww-crit)" : t === "warn" ? "var(--ww-warn)" : t === "ok" ? "var(--ww-ok)" : t === "info" ? "var(--ww-info)" : "var(--ww-text-faint)");
+  const fchip = (c: ChipAtencao) => (
+    <button key={c.k} type="button" className={`fchip ${marcados.includes(c.k) ? "on" : ""}`} style={{ "--k": corTom(c.tom) } as React.CSSProperties}
+      onClick={() => alternar(c.k)} title={`${c.desc}${marcados.length && !marcados.includes(c.k) ? " · combina com os filtros marcados" : ""}`}>
+      <i />{c.l}<span className="n">{c.n}</span>
+    </button>
+  );
+  const nMaisAtivos = chipsAtencao.filter((c) => !c.fixo && marcados.includes(c.k)).length;
+
   return (
     <CadeiaCtx.Provider value={cadeia}>
     <div className={`op op-wrap op-${modulo}`} onClick={() => { setMenu(null); }}>
+      {pj && (
+        <>
+          {/* ── faixa 1 · topo: título + contagem · ★ ativos · busca · visão ── */}
+          <div className="pj-topo" onClick={(e) => e.stopPropagation()}>
+            <div className="pj-tit">
+              <div className="crumb">Operação › {title}</div>
+              <div className="pj-tit-l">
+                <h1>{title}</h1>
+                <span className="cnt">{noScope.length} projetos · {noScope.reduce((a, p) => a + p.compras.length, 0)} compras</span>
+                <SyncNowButton />
+              </div>
+            </div>
+            <span className="pj-sp" />
+            <ProjetosAtivosMenu itens={itensMenu} onEscolher={irPara} onAlternar={alternarAtivo} pode={podeMarcarAtivo} disponivel={pa.disponivel} />
+            {pa.disponivel === true && (
+              <button type="button" className="btn sm" onClick={() => setPainelAtivos(true)}
+                title="Escolher os projetos ativos (em andamento, em que se está atuando) — vale para todo mundo">⚙ Ativos</button>
+            )}
+            <div className="search pj-busca">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></svg>
+              <input ref={buscaRef} value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar PV, OS, PC, cliente ou fornecedor…" />
+              <span className="kbd">⌘ K</span>
+            </div>
+            <div className="seg sm">
+              {([["lista", "Lista"], ["tabela", "Tabela"], ["kanban", "Kanban"], ["tempo", "Linha do tempo"]] as const).map(([k, l]) => (
+                <button key={k} className={vista === k ? "on" : ""} onClick={() => trocarVista(k)}>{l}</button>
+              ))}
+            </div>
+            <div className="menu">
+              <button className="btn sm ghost" title="Mais" onClick={() => setMenu(menu === "mais" ? null : "mais")}>•••</button>
+              <div className={`pop ${menu === "mais" ? "open" : ""}`}>
+                <div style={{ padding: "4px 6px" }}>
+                  <PcsExcluidosButton linhas={escondidos} onMudou={() => { carregarEscondidos(); }} />
+                  {escondidos.length === 0 && <span style={{ fontSize: 12, color: "var(--ww-text-faint)" }}>🚫 PCs escondidos · 0</span>}
+                </div>
+                <button onClick={() => { setMenu(null); alternarKpis(); }}>📊 {verKpis ? "Esconder os indicadores" : "Mostrar os indicadores"}</button>
+                <button onClick={() => { setMenu(null); setLogAberto(true); }}>🕘 Log de alterações</button>
+                <div className="sep" />
+                <button onClick={() => { setMenu(null); trocarVista("tabela"); }}>⚙️ Colunas e preferências</button>
+                <button onClick={() => { window.location.search = "?classica=1"; }}>↩ Tela antiga (conferência)</button>
+              </div>
+            </div>
+          </div>
+
+          {/* ── faixa 2 · uma barra de filtros ── */}
+          <div className="pj-filtros" onClick={(e) => e.stopPropagation()}>
+            <div className="pj-frow">
+              {pa.disponivel === true && (
+                <>
+                  <span className="lab">Mostrar</span>
+                  <div className="seg sm" role="group" aria-label="Quais projetos mostrar">
+                    <button className={soAtivos && pa.chaves.size > 0 ? "on" : ""} disabled={pa.chaves.size === 0}
+                      title={pa.chaves.size ? "Mostra só os projetos marcados com ★" : "Nenhum projeto marcado com ★ ainda — clique em ⚙ Ativos"}
+                      onClick={() => setSoAtivos(true)}>★ Só ativos <b>{nAtivosNaLista}</b></button>
+                    <button className={!filtroAtivos ? "on" : ""} onClick={() => setSoAtivos(false)} title="Mostra todos os projetos (★ ativos primeiro)">Todos <b>{pedidos.length}</b></button>
+                  </div>
+                  <span className="sep" />
+                </>
+              )}
+              <span className="lab">Situação</span>
+              <div className="seg sm">
+                {(["aberto", "faturado", "todos"] as const).map((k) => (
+                  <button key={k} className={escopo === k ? "on" : ""} onClick={() => setEscopo(k)}
+                    title={`${parcial && k !== "aberto" ? "carregando…" : $(contagem[k][1])}${k === "aberto" ? " · não faturados" : k === "faturado" ? " · NF de saída emitida" : ""}`}>
+                    {k === "faturado" ? "✓ Faturados" : k === "aberto" ? "Em aberto" : "Todos"} <b>{parcial && k !== "aberto" ? "…" : contagem[k][0]}</b>
+                  </button>
+                ))}
+              </div>
+              <span className="sep" />
+              <span className="lab">Período</span>
+              <div className="seg sm">
+                {([["tudo", "Tudo", ""], ["7", "7 dias", "Emitidos (entraram no painel) nos últimos 7 dias"], ["30", "30 dias", "Emitidos (entraram no painel) nos últimos 30 dias"],
+                  ["vence7", "Vence em 7d", "Prazo limite nos próximos 7 dias"], ["vencidos", "Vencidos", "Prazo limite já passou"]] as const).map(([k, l, t]) => (
+                  <button key={k} className={periodo === k ? "on" : ""} title={t || undefined} onClick={() => setPeriodo(k)}>{l}</button>
+                ))}
+              </div>
+            </div>
+            <div className="pj-frow">
+              <span className="lab">Atenção</span>
+              <button type="button" className={`fchip todos ${marcados.length === 0 ? "on" : ""}`} onClick={() => setMarcados([])}><b>Todos</b><span className="n">{rapidas.todos}</span></button>
+              {chipsAtencao.filter((c) => marcados.includes(c.k) || (c.fixo && c.n > 0)).map(fchip)}
+              <span className="pj-sp" />
+              {podeAprovar && marcados.includes("minha") && fila.length > 0 && fila.length <= 30 && (
+                <button className="btn sm ok" onClick={() => {
+                  if (!window.confirm(`Aprovar as ${fila.length} compras aguardando aprovação? Cada uma passa pela mesma checagem de alçada e orçamento.`)) return;
+                  void emMassa("APROVADO", fila);
+                }}>✓ Aprovar todas ({fila.length})</button>
+              )}
+              {temAlgumFiltro && <button className="btn sm ghost" onClick={limparTudo} title="Limpa filtros rápidos, busca, período e painel de filtros">✕ Limpar</button>}
+              <div style={{ position: "relative" }}>
+                <button className="btn sm ghost" onClick={() => setPainelFiltro((x) => !x)}>
+                  ≡ Mais filtros {nFiltros + nMaisAtivos > 0 && <span className="count">{nFiltros + nMaisAtivos}</span>}
+                </button>
+                <PainelFiltros aberto={painelFiltro} filtros={filtros} opcoes={opcoes} modulo={modulo}
+                  onAplicar={(f) => { setFiltros(f); setPainelFiltro(false); }} onMudar={setFiltros} onFechar={() => setPainelFiltro(false)}
+                  extra={<div className="pj-mais">
+                    <h4>Atenção — mais filtros</h4>
+                    <div className="pj-mais-chips">
+                      {chipsAtencao.filter((c) => !c.fixo && (c.n > 0 || marcados.includes(c.k))).map(fchip)}
+                      {chipsAtencao.filter((c) => c.fixo && c.n === 0 && !marcados.includes(c.k)).map((c) => (
+                        <span key={c.k} className="fchip zero" title={`${c.desc} — nenhum agora`} style={{ "--k": corTom(c.tom) } as React.CSSProperties}><i />{c.l}<span className="n">0</span></span>
+                      ))}
+                    </div>
+                  </div>} />
+              </div>
+              <div className="menu">
+                <button className="btn sm ghost" onClick={() => setMenu(menu === "visoes" ? null : "visoes")}>Visões salvas{visoes.length ? ` (${visoes.length})` : ""} ▾</button>
+                <div className={`pop ${menu === "visoes" ? "open" : ""}`} onClick={(e) => e.stopPropagation()}>
+                  {visoes.length === 0 && <div className="pj-pop-vazio">Nenhuma visão salva ainda.</div>}
+                  {visoes.map((v) => (
+                    <div key={v.nome} className="pj-visao">
+                      <button onClick={() => { aplicarVisao(v); setMenu(null); }}>{v.nome}</button>
+                      <button className="x" title="Apagar visão" onClick={() => removerVisao(v.nome)}>✕</button>
+                    </div>
+                  ))}
+                  <div className="sep" />
+                  <button onClick={() => { setMenu(null); salvarVisao(); }}>+ Salvar visão atual</button>
+                </div>
+              </div>
+            </div>
+            {nFiltros > 0 && (
+              <div className="pj-frow tokens">
+                {(Object.keys(filtros) as (keyof Filtros)[]).filter((k) => filtros[k]).map((k) => (
+                  <span key={k} className="token"><span>{FILTRO_LABEL[k]}:</span> {k === "estado" ? ESTADO_LABEL[filtros[k] as Estado] : filtros[k]}
+                    <button onClick={() => setFiltros((f) => ({ ...f, [k]: undefined }))}>✕</button></span>
+                ))}
+                <button className="linkbtn" onClick={() => setFiltros({})}>Limpar tudo</button>
+              </div>
+            )}
+            {(avisoErro || pa.disponivel === false || (pa.disponivel && pa.chaves.size === 0)) && (
+              <div className="pj-aviso">
+                {avisoErro ? `Mostrando só os não faturados — a carga completa falhou (${avisoErro}). Recarregue a página para tentar de novo.`
+                  : pa.disponivel === false ? "Marcação de projetos ativos ainda não ligada no banco — mostrando todos."
+                  : "Nenhum projeto marcado como ativo ainda — clique em ⚙ Ativos para escolher os projetos em andamento."}
+              </div>
+            )}
+          </div>
+
+          {verKpis && (
+            <div className="pj-kpis">
+              <KpisNavy buckets={kpiBuckets} formatarValor={(v) => $(v)} rotuloPedido={rotulo} escopo={escopo === "faturado" ? "faturado" : escopo} />
+            </div>
+          )}
+
+          {/* cabeçalho da lista: dica de uso + legenda das cores do trilho (sem colunas de tabela) */}
+          <div className="pj-list-hd">
+            <span className="dica">
+              {visiveis.length} projeto{visiveis.length === 1 ? "" : "s"} · {totalCompras} compras
+              {vista === "lista" && <> · clique no projeto para abrir{!filtroAtivos && pa.chaves.size > 0 ? " · ★ ativos primeiro" : ""}</>}
+              {" · "}ordenado por{" "}
+              <select className="pj-ord" value={ordem.k} onChange={(e) => setOrdem({ k: e.target.value as OrdemCampo, d: ordem.d })}>
+                {([["pedido", "nº do projeto"], ["emissao", "emissão"], ["cliente", "cliente"], ["prazo", "prazo"], ["etapas", "etapas"], ["servico", "serviço"], ["pv", "venda"], ["pc", "compras"]] as const)
+                  .map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+              </select>
+              <button type="button" className="linkbtn" title={ordem.d === -1 ? "Decrescente — clique para crescente" : "Crescente — clique para decrescente"}
+                onClick={() => setOrdem({ k: ordem.k, d: ordem.d === 1 ? -1 : 1 })}>{ordem.d === -1 ? "↓" : "↑"}</button>
+              {(vista === "lista" || vista === "tabela") && (
+                <> · <button className="linkbtn" onClick={() => setAbertos(new Set(visiveis.map((x) => x.p.id)))}>expandir todos</button>
+                  {" · "}<button className="linkbtn" onClick={() => setAbertos(new Set())}>recolher</button></>
+              )}
+            </span>
+            {vista === "lista" && (
+              <span className="pj-legenda" title="Cores do trilho de etapas de cada projeto">
+                <span style={{ "--k": "var(--ww-ok)" } as React.CSSProperties}>concluído</span>
+                <span style={{ "--k": "var(--ww-warn)" } as React.CSSProperties}>em andamento</span>
+                <span style={{ "--k": "var(--ww-crit)" } as React.CSSProperties}>atrasado</span>
+                <span style={{ "--k": "color-mix(in srgb,var(--ww-text-faint) 45%,transparent)" } as React.CSSProperties}>não iniciado</span>
+              </span>
+            )}
+          </div>
+        </>
+      )}
+
+      {painelAtivos && (
+        <PainelAtivos itens={itensMenu} pode={podeMarcarAtivo} onFechar={() => setPainelAtivos(false)}
+          onSalvar={async (mud) => {
+            const e = await pa.salvarLote(mud.map((m) => ({ empresa: m.empresa, codigo_projeto: m.codigo, nome: m.nome, cliente: m.cliente ?? null, ativo: m.ativo })));
+            if (!e) { setSoAtivos(true); mostrar({ msg: `Projetos ativos salvos (${mud.length} alteraç${mud.length === 1 ? "ão" : "ões"})` }); }
+            return e;
+          }} />
+      )}
+
+      {!pj && <>
       {/* ── cabeçalho ── */}
       <div className="top">
         <div>
@@ -663,39 +886,6 @@ export default function TelaOperacao({ modulo, title, rows: rowsIniciais, parcia
           </div>
         </div>
       </div>
-
-      {/* ── ★ projetos ativos (08/10/26) ── */}
-      {modulo === "projetos" && (
-        <div className="pa-bar" onClick={(e) => e.stopPropagation()}>
-          {pa.disponivel === true && (
-            <button type="button" className="btn" onClick={() => setPainelAtivos(true)}
-              title="Escolher os projetos ativos (em andamento, em que se está atuando) — vale para todo mundo">⚙ Ativos</button>
-          )}
-          <ProjetosAtivosMenu itens={itensMenu} onEscolher={irPara} onAlternar={alternarAtivo} pode={podeMarcarAtivo} disponivel={pa.disponivel} />
-          {pa.disponivel === true && (
-            <div className="seg" role="group" aria-label="Quais projetos mostrar">
-              <button className={soAtivos && pa.chaves.size > 0 ? "on" : ""} disabled={pa.chaves.size === 0}
-                title={pa.chaves.size ? "Mostra só os projetos marcados com ★" : "Nenhum projeto marcado com ★ ainda"}
-                onClick={() => setSoAtivos(true)}>★ Só ativos <b>{nAtivosNaLista}</b></button>
-              <button className={!filtroAtivos ? "on" : ""} onClick={() => setSoAtivos(false)} title="Mostra todos os projetos">Todos <b>{pedidos.length}</b></button>
-            </div>
-          )}
-          <span className="pa-dica">
-            {pa.disponivel === false ? "Marcação de projetos ativos ainda não ligada no banco — mostrando todos."
-              : pa.disponivel && pa.chaves.size === 0 ? "Nenhum projeto marcado ainda — clique em ⚙ Ativos para escolher os projetos em andamento."
-              : filtroAtivos ? "Mostrando só os projetos marcados com ★ · ordem: maior PJ primeiro" : pa.disponivel ? "Mostrando todos os projetos · ☆ ao lado do nome marca como ativo" : ""}
-          </span>
-        </div>
-      )}
-
-      {painelAtivos && (
-        <PainelAtivos itens={itensMenu} pode={podeMarcarAtivo} onFechar={() => setPainelAtivos(false)}
-          onSalvar={async (mud) => {
-            const e = await pa.salvarLote(mud.map((m) => ({ empresa: m.empresa, codigo_projeto: m.codigo, nome: m.nome, cliente: m.cliente ?? null, ativo: m.ativo })));
-            if (!e) { setSoAtivos(true); mostrar({ msg: `Projetos ativos salvos (${mud.length} alteraç${mud.length === 1 ? "ão" : "ões"})` }); }
-            return e;
-          }} />
-      )}
 
       {/* ── escopo ── */}
       <div className="scope">
@@ -862,6 +1052,7 @@ export default function TelaOperacao({ modulo, title, rows: rowsIniciais, parcia
           </span>
         )}
       </div>
+      </>}
 
       {visiveis.length === 0 && (
         <div style={{ padding: 40, textAlign: "center", color: "var(--ww-text-faint)" }}>Nada com estes filtros.</div>
@@ -869,7 +1060,7 @@ export default function TelaOperacao({ modulo, title, rows: rowsIniciais, parcia
 
       {vista === "lista" && (
         <>
-          {visiveis.length > 0 && (
+          {visiveis.length > 0 && !pj && (
             <div className="pvh pvcols">
               <span />
               <span><OrdCab k="pedido" l={rotulo} o={ordem} on={ordenarPor} /> · <OrdCab k="emissao" l="emissão" o={ordem} on={ordenarPor} /></span>
@@ -1005,8 +1196,10 @@ async function enviarWebex(mostrar: (t: Toast) => void) {
 // ─────────────────────────────────────────────────────────────────────────
 /** Filtros aplicam na hora em que a opção é escolhida (01/10/2026) — antes
  *  dependiam de um "Aplicar" que ficava fora da tela. */
-function PainelFiltros({ aberto, filtros, opcoes, modulo, onAplicar, onMudar, onFechar }: {
+function PainelFiltros({ aberto, filtros, opcoes, modulo, onAplicar, onMudar, onFechar, extra }: {
   aberto: boolean; filtros: Filtros; modulo: Modulo;
+  /** Projetos (spec A2): os chips de atenção menos usados moram aqui. */
+  extra?: React.ReactNode;
   opcoes: { tipo: string[]; etapaVenda: string[]; projeto: string[]; fornecedor: string[]; categoria: string[] };
   onAplicar: (f: Filtros) => void; onMudar: (f: Filtros) => void; onFechar: () => void;
 }) {
@@ -1039,6 +1232,7 @@ function PainelFiltros({ aberto, filtros, opcoes, modulo, onAplicar, onMudar, on
           {campo("categoria", "Categoria", opcoes.categoria, "Todas")}
         </div>
       </div>
+      {extra}
       <footer>
         <button className="btn ghost sm" onClick={() => { setF({}); onAplicar({}); }}>Limpar</button>
         <button className="btn primary sm" onClick={onFechar}>Fechar</button>
@@ -1401,6 +1595,7 @@ function CartaoPedido(props: {
   const { p, compras, modulo, aberto, $ } = props;
   const d = diasAte(p.lim);
   const empresa = s(p.bucket.rows[0]?.empresa) || "SF";
+  if ((modulo as string) === "projetos") return <CartaoProjeto {...props} />;
   return (
     <div data-pid={p.id} className={`pv ${aberto ? "open" : ""} ${p.faturado ? "isfat" : ""} ${!p.faturado && p.flags.some((f) => f.t === "pode faturar") ? "podefat" : ""}`}>
       <div className="pvh" onClick={props.onToggle}>
@@ -1508,6 +1703,203 @@ function CartaoPedido(props: {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+/* Projetos › linha do projeto (08/10/26, spec A2 · mockup painel-projetos-correcoes_2 tela 1).
+   Uma linha em quatro colunas: identidade · trilho de etapas com "agora:" · prazo ·
+   financeiro em duas barras + margem. Substitui a grade RC·PC·PV·M.proj·M.real e o bloco
+   "BUDGET MATERIAIS · RC / Lançado / Projetado / APROV. / FALTA" que ficava embaixo.
+   Valores em "k" na linha; o valor completo fica no tooltip. */
+type PropsCartao = Parameters<typeof CartaoPedido>[0];
+
+/** R$ curto para a linha: 294 → "R$ 294", 2.115 → "R$ 2.115", 743.054 → "R$ 743k", 1.2 mi. */
+export function kBRL(v: number | null | undefined): string {
+  if (v == null || !Number.isFinite(v)) return "—";
+  const a = Math.abs(v), sinal = v < 0 ? "−" : "";
+  if (a >= 1e6) return `${sinal}R$ ${(a / 1e6).toLocaleString("pt-BR", { maximumFractionDigits: 1 })} mi`;
+  if (a >= 1e4) return `${sinal}R$ ${Math.round(a / 1000).toLocaleString("pt-BR")}k`;
+  return `${sinal}R$ ${Math.round(a).toLocaleString("pt-BR")}`;
+}
+
+function CartaoProjeto(props: PropsCartao) {
+  const { p, compras, aberto, $ } = props;
+  const empresa = s(p.bucket.rows[0]?.empresa) || "SF";
+  const proj = props.bucket ? projetoDoBucket("projetos", props.bucket) : null;
+  const bsum = proj ? props.budgetMap.get(`${proj.empresaProj}|${proj.codProj}`) : undefined;
+  return (
+    <div data-pid={p.id} className={`pj ${aberto ? "open" : ""} ${p.faturado ? "isfat" : ""}`}>
+      <div className="pj-row" onClick={props.onToggle} role="button" aria-expanded={aberto}>
+        <IdProjeto {...props} empresa={empresa} />
+        <TrilhoProjeto p={p} />
+        <PrazoProjeto p={p} />
+        <FinProjeto p={p} $={$} verValores={props.verValores} budget={bsum} />
+      </div>
+      {aberto && (
+        <div className="pj-body">
+          <div className="pj-acts" onClick={(e) => e.stopPropagation()}>
+            {proj && <LinkAbrirProjeto {...proj} />}
+            {props.podeEditar && (
+              <AddRowButton empresa={empresa} modulo="projetos" pv_os_label={null}
+                pvOsOptions={[...new Set(p.bucket.rows.map((r) => s(r.pv_os_label)).filter(Boolean))]}
+                codigoProjeto={Number(p.bucket.rows.find((r) => r.codigo_projeto)?.codigo_projeto ?? 0) || undefined} />
+            )}
+            <span className="pj-sp" />
+            {props.excluirPv && <button className="btn sm no" onClick={props.excluirPv} title="Tirar da lista (fica no Omie)">🗑 Excluir projeto</button>}
+          </div>
+          {proj ? <GruposPcProjeto {...props} compras={compras} proj={proj} budget={bsum} /> : (
+            <>
+              <GruposRc {...props} />
+              {compras.length === 0 && <div className="pcrow"><span /><span style={{ color: "var(--ww-text-faint)" }}>Sem compras lançadas — a venda existe, a compra ainda não.</span></div>}
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function IdProjeto(props: PropsCartao & { empresa: string }) {
+  const { p, empresa } = props;
+  const tv = tipoVenda(p.tipo);
+  // Sinais que o trilho e o prazo não mostram sozinhos (os de atraso/aprovação já têm cor lá).
+  const extras = p.flags.filter((f) => f.tom === "v" || f.t === "material sem NF");
+  return (
+    <div className="pj-id">
+      {props.estrela
+        ? <span className="pj-star"><EstrelaAtivo ativo={props.estrela.ativo} pode={props.estrela.pode} onAlternar={props.estrela.alternar} /></span>
+        : <span className="pj-star" />}
+      <div className="pj-id-c">
+        <div className="nm"><span className="nm-t" title={props.nomeId}>{props.nomeId}</span><Balao notas={props.notas} onAbrir={props.abrirNotas} /></div>
+        <div className="cl" title="Cliente · emissão do PV/OS mais antigo do projeto · compras">
+          <span className="cl-n">{(p.cliente || "—").replace(/&amp;/g, "&")}</span>
+          {" · "}{p.emissao ? `emitido ${dBR(p.emissao).replace(/\/(\d{2})(\d{2})$/, "/$2")}` : "emissão —"}
+          {" · "}{p.compras.length} compra{p.compras.length === 1 ? "" : "s"}
+        </div>
+        <div className="pj-tags">
+          {p.etapaVenda && <span className="pj-tag et" title="Etapa da venda no Omie">Etapa: {p.etapaVenda}</span>}
+          {(tv || p.tipo) && <span className={`pj-tag ${tv === "Mix" ? "mix" : tv === "Serviço" ? "serv" : tv ? "merc" : ""}`}>{tv || p.tipo}</span>}
+          {p.faturado && <span className="pj-tag ok" title={`NF de saída${p.fatEm ? ` · ${dBR(p.fatEm)}` : ""}`}>✓ NF {p.nfSaida || "emitida"}</span>}
+          {extras.map((f) => <span key={f.t} className={`pj-tag ${f.tom === "r" ? "crit" : "violet"}`} title={ALARMES[f.t]?.desc ?? f.t}>{f.t}</span>)}
+          {(props.propostas ?? []).map((n) => (
+            <a key={n} className="pj-tag link" href={`https://allka.ai/w/waterworks/crm/legado/${encodeURIComponent(n)}`}
+              title={`Gerado da proposta ${n} do CRM — abrir no CRM`} onClick={(e) => e.stopPropagation()}>↗ {n}</a>
+          ))}
+          {(props.ocs ?? []).filter((o) => o.r).map((o) => (
+            <OcChip key={o.label} className="pj-tag" empresa={empresa} label={o.label} resumo={o.r} compacto prefixo={o.label} />
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+const ROT_FASE: Record<string, string> = { "NF saída": "NF", "Receb.": "Receb" };
+function TrilhoProjeto({ p }: { p: Pedido }) {
+  const mapa = useContext(CadeiaCtx);
+  const { lista, atual } = fases(p, "projetos", cadeiaDoPedido(p, mapa));
+  const sv = servicoDoPedido(p);
+  const semOs = !!sv && sv.rotulo === "Sem vínculo" && !sv.os;
+  const svLate = servicoAtrasado(sv);
+  const dSv = sv?.prev != null && sv.st !== "Concluída" && sv.st !== "Cancelada" ? diasAte(sv.prev) : null;
+  const svHist = sv?.historico.length
+    ? "Mudanças da previsão:\n" + sv.historico.map((h) => `• ${h.data ? dBR(dataMs(h.data)) : "sem data"} (em ${dBR(dataMs(h.em))}${h.por ? ` por ${h.por}` : ""})`).join("\n") : "";
+  return (
+    <div className="pj-rail">
+      <div className="pj-steps" style={{ gridTemplateColumns: `repeat(${lista.length}, minmax(0,1fr))` }}>
+        {lista.map((x) => (
+          <div key={x.k} className={`pj-st ${x.s} ${x === atual ? "cur" : ""}`} title={`${x.k}: ${x.t}`}><i /><span>{ROT_FASE[x.k] ?? x.k}</span></div>
+        ))}
+      </div>
+      <div className="cur">
+        {atual
+          ? <>agora: <b className={atual.s} title={atual.t}>{ROT_FASE[atual.k] ?? atual.k} · {atual.next || atual.t}{atual.s === "l" ? " (atrasado)" : ""}</b></>
+          : p.faturado ? <><b className="d">✓ Faturado</b> · NF {p.nfSaida || "emitida"}{p.fatEm ? ` · ${dBR(p.fatEm)}` : ""}</> : <b className="d">✓ ciclo completo</b>}
+        {sv && sv.st !== "Cancelada" && (
+          <span className="pj-sv" onClick={(e) => e.stopPropagation()}
+            title={[sv.st === "Concluída" ? "OS concluída" : semOs ? "A venda já está no Painel de Vendas do app de serviços, à espera de que gerem a OS." : `OS ${sv.rotulo}${sv.os ? ` · ${sv.os}` : ""}`,
+              sv.prev != null ? `previsão ${dBR(sv.prev)}` : "", svHist,
+              sv.todos.length > 1 ? sv.todos.map((x) => `${x.pv || "sem PV"}: ${x.rotulo}${x.os ? ` · ${x.os}` : " · sem OS"}`).join("\n") : "", "Vem do app de serviços"].filter(Boolean).join("\n\n")}>
+            {" · serviço "}
+            <span className={`pill ${svLate ? "crit" : sv.tom}`}>
+              {semOs ? "aguardando OS" : sv.rotulo.toLowerCase()}
+              {svLate && dSv != null ? ` · ⚠ ${-dSv}d` : sv.st !== "Concluída" && sv.prev != null ? ` · ${dBR(sv.prev).slice(0, 5)}` : ""}
+            </span>
+            {sv.os
+              ? <a className="pj-os" href={`https://app.waterworks.com.br/ordens-de-servico/${encodeURIComponent(sv.os)}`} target="_blank" rel="noopener noreferrer" title="Abrir a OS no app de serviços">{sv.os.replace(/-/g, "")} ↗</a>
+              : semOs ? <a className="pj-os" href="https://app.waterworks.com.br/painel-de-vendas" target="_blank" rel="noopener noreferrer" title="Abrir o Painel de Vendas no app de serviços para gerar a OS">gerar OS ↗</a> : null}
+            {sv.todos.length > 1 && <span className="pj-os mute">+{sv.todos.length - 1} OS</span>}
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function PrazoProjeto({ p }: { p: Pedido }) {
+  const d = diasAte(p.lim);
+  const late = d != null && d < 0 && !p.faturado;
+  const soon = d != null && d >= 0 && d <= 7 && !p.faturado;
+  const ano = p.lim != null && new Date(p.lim).getFullYear() !== new Date().getFullYear();
+  return (
+    <div className={`pj-prazo ${late ? "late" : soon ? "soon" : ""}`} title={p.lim ? `Prazo da venda (previsão do PV/OS) ${dBR(p.lim)}` : "Sem prazo no PV/OS"}>
+      <div className="d">{p.lim ? (ano ? dBR(p.lim).replace(/\/(\d{2})(\d{2})$/, "/$2") : dBR(p.lim).slice(0, 5)) : "—"}</div>
+      <small>{p.faturado ? "faturado" : d == null ? "sem prazo" : d < 0 ? `${-d}d atrasado` : d === 0 ? "vence hoje" : `${d}d de folga`}</small>
+    </div>
+  );
+}
+
+/** Quanto da venda do projeto já foi faturado: soma dos PV/OS encerrados (com NF de saída). */
+function faturadoDoProjeto(p: Pedido): number {
+  const porPv = new Map<string, AnyRow>();
+  for (const r of p.bucket.rows) { const k = s(r.pv_os_label); if (k && !porPv.has(k)) porPv.set(k, r); }
+  let v = 0;
+  for (const r of porPv.values()) if (encerrado(r) && s(r.pv_etapa_texto) !== "Cancelado") v += Number(r.pv_valor_total ?? 0) || 0;
+  return v;
+}
+
+function FinProjeto({ p, $, verValores, budget }: { p: Pedido; $: (v: number | null) => string; verValores: boolean; budget?: BudgetSummary }) {
+  const bud = budget?.budget_custos != null ? Number(budget.budget_custos) : null;
+  const M = margensProjeto(p, bud);
+  const venda = p.valorPv;
+  const fat = Math.min(venda, faturadoDoProjeto(p));
+  const fatPct = venda > 0 ? fat / venda : 0;
+  const pcs = M.aprov + M.pend;
+  const escala = Math.max(venda, bud ?? 0, pcs) || 1;
+  const w = (v: number) => `${Math.max(0, Math.min(100, (v / escala) * 100))}%`;
+  const k = (v: number | null) => (verValores ? kBRL(v) : "R$ •••");
+  const estoura = bud != null && pcs > bud;
+  const pcN = new Set(p.compras.filter((c) => c.pc).map((c) => c.pc)).size;
+  return (
+    <div className="pj-fin" onClick={(e) => e.stopPropagation()}>
+      <span className="k">Venda</span>
+      <div className="pj-bar" title={`Venda ${$(venda)} · faturado ${$(fat)} (${Math.round(fatPct * 100)}%)`}>
+        <i style={{ width: w(venda), background: "var(--ww-info)" }} />
+        {fat > 0 && <i style={{ width: w(fat), background: "var(--ww-ok)" }} />}
+      </div>
+      <span className="v num" title={$(venda)}>{k(venda)}<small>{p.faturado || fatPct >= 0.999 ? "faturado" : fat > 0 ? `${Math.round(fatPct * 100)}% faturado` : "a faturar"}</small></span>
+
+      <span className="k">Compras</span>
+      <div className="pj-bar"
+        title={`${pcN} pedido(s) de compra · aprovados ${$(M.aprov)} · aguardando aprovação ${$(M.pend)}${bud != null ? ` · budget de materiais ${$(bud)}${estoura ? ` — estoura em ${$(pcs - bud)}` : ""}` : " · sem budget de materiais"}`}>
+        {bud != null && <i className="bud" style={{ width: w(bud) }} />}
+        {M.aprov > 0 && <i style={{ width: w(M.aprov), background: "var(--ww-info)" }} />}
+        {M.pend > 0 && <i style={{ left: w(M.aprov), width: w(M.pend), background: "var(--ww-warn)" }} />}
+      </div>
+      <span className={`v num ${estoura ? "neg" : ""}`} title={`PCs ${$(pcs)}${bud != null ? ` de ${$(bud)} de budget` : ""}`}>{pcN ? k(pcs) : "R$ 0"}
+        <small>{bud != null ? `de ${k(bud)} budget` : M.pend > 0 ? "aguardando" : "sem budget"}</small></span>
+
+      <div className="mg">
+        <span title={M.projetada ? `Margem projetada = (PV − budget de materiais da RC) ÷ PV\n${$(venda)} − ${$(bud)} = ${$(M.projetada.valor)}` : "Sem budget de materiais — não há margem projetada"}>
+          margem <b className={mbCls(M.projetada?.pct ?? null)}>{M.projetada ? pct(M.projetada.pct) : "—"}</b> <span className="dim">proj.{M.projetada ? ` · ${k(M.projetada.valor)}` : ""}</span>
+        </span>
+        <span className="dim" title={M.real == null ? "Margem real = (PV − PCs aprovados) ÷ PV — sem PCs aprovados ainda, não há custo real"
+          : `Margem real = (PV − PCs aprovados) ÷ PV\n${$(venda)} − ${$(M.aprov)} aprovados${M.pend ? `\nCom os ${$(M.pend)} aguardando: ${M.comPendentes ? pct(M.comPendentes.pct) : "—"}` : ""}`}>
+          · real {M.real ? <b className={mbCls(M.real.pct)}>{pct(M.real.pct)}</b> : "—"}
+        </span>
+      </div>
     </div>
   );
 }
@@ -1782,11 +2174,13 @@ function GruposRc({ compras, p, sel, toggleSel, podeAprovar, podeEditar, ehAdmin
  *  Prev. material (a do PC), situação (mesmas cores da lista), material, NF de
  *  entrada e o link para ver os itens daquele PC na Lista de materiais. Sem as
  *  linhas "sem RC · PC 7262 · 1 × R$ 0,00" que só serviam para pendurar o PC. */
-function GruposPcProjeto({ compras, p, podeAprovar, podeEditar, ehAdmin, statusLote, marcarMaterialLote, gravar, abrirDrawer, $, proj }: {
+function GruposPcProjeto({ compras, p, podeAprovar, podeEditar, ehAdmin, statusLote, marcarMaterialLote, gravar, abrirDrawer, $, proj, budget }: {
   compras: Compra[]; p: Pedido; podeAprovar: boolean; podeEditar: boolean; ehAdmin: boolean;
   statusLote: (lista: Compra[], status: string) => void; marcarMaterialLote: MarcarMaterialLote;
   gravar: Gravar; abrirDrawer: (k: string) => void; $: (v: number | null) => string;
   proj: { codProj: number; empresaProj: string };
+  /** resumo do budget (rota budget/summary): Resultado esperado do fechamento */
+  budget?: BudgetSummary;
 }) {
   const empresa = s(p.bucket.rows[0]?.empresa) || proj.empresaProj || "SF";
   const lista = (extra: string) => `/projetos/${proj.codProj}/materiais?${new URLSearchParams({ empresa, aba: "materiais" })}&${extra}`;
@@ -1812,7 +2206,7 @@ function GruposPcProjeto({ compras, p, podeAprovar, podeEditar, ehAdmin, statusL
   };
   return (
     <div className="pcproj">
-      <ResumoBudgetProjeto empresa={empresa} codigo={proj.codProj} $={$} valorPv={p.valorPv} />
+      <ResumoBudgetProjeto empresa={empresa} codigo={proj.codProj} $={$} valorPv={p.valorPv} resultadoPct={budget?.resultado_bruto_esperado_pct != null ? Number(budget.resultado_bruto_esperado_pct) : null} />
       {/* 07/10/26 (Benny): sem RC nesta tela — RCs e o valor delas vivem na Lista de materiais,
           e o "Gerar pedido de compra" também. Vendas (PV/OS) à esquerda e pedidos de compra à
           direita, como a linha aberta dos Avulsos; em tela estreita, um embaixo do outro. */}
@@ -1884,9 +2278,13 @@ function GruposPcProjeto({ compras, p, podeAprovar, podeEditar, ehAdmin, statusL
   );
 }
 
-/** Resumo do projeto inteiro (07/10/26): budget de materiais × projetado × comprometido
- *  × pago, com a mesma conta da Lista de materiais — é aqui que se aprovam os PCs. */
-function ResumoBudgetProjeto({ empresa, codigo, $, valorPv }: { empresa: string; codigo: number; $: (v: number | null) => string; valorPv: number }) {
+/** Resumo do projeto aberto (08/10/26, spec A2 item 5): UM bloco de budget com a mesma barra
+ *  do cabeçalho do projeto (spec B.0) — PCs aprovados · aguardando aprovação · ainda a comprar ·
+ *  o que estoura, com a marca "budget" — e, à direita, só Venda e Resultado esperado. Sai o
+ *  bloco numérico "Lançado / Projetado / APROV. / FALTA". Mesma conta da Lista de materiais. */
+function ResumoBudgetProjeto({ empresa, codigo, $, valorPv, resultadoPct }: {
+  empresa: string; codigo: number; $: (v: number | null) => string; valorPv: number; resultadoPct: number | null;
+}) {
   const [d, setD] = useState<{ budget: number | null; comp: number; proj: number; pago: number; aprov: number; pend: number } | null>(null);
   const [falhou, setFalhou] = useState(false);
   useEffect(() => {
@@ -1913,35 +2311,45 @@ function ResumoBudgetProjeto({ empresa, codigo, $, valorPv }: { empresa: string;
       }).catch(() => null);
     return () => { vivo = false; };
   }, [empresa, codigo]);
-  if (!d) return <div className="pcproj-resumo carregando">{falhou ? "Resumo do projeto indisponível agora — abra o projeto para ver a Lista de materiais." : "Resumo do projeto…"}</div>;
-  const max = Math.max(d.budget ?? 0, d.proj, d.comp, d.pago) || 1;
-  const pct = (v: number) => `${Math.min(100, (v / max) * 100)}%`;
+  const kv = (
+    <div className="kv">
+      <div title={$(valorPv)}><small>Venda</small><b className="num">{kBRL(valorPv)}</b></div>
+      <div title="Resultado esperado do fechamento (CRM) = (venda − materiais − mão de obra − despesas) ÷ venda">
+        <small>Resultado esp.</small><b className={`num ${resultadoPct == null ? "" : resultadoPct >= 0 ? "pos" : "neg"}`}>{resultadoPct == null ? "—" : pct(resultadoPct)}</b></div>
+    </div>
+  );
+  if (!d) return <div className="pj-bud carregando"><div className="t">{falhou ? "Resumo do budget indisponível agora — abra o projeto para ver a Lista de materiais." : "Resumo do budget…"}</div>{kv}</div>;
+  const escala = Math.max(d.budget ?? 0, d.proj, d.comp) * 1.02 || 1;
+  const w = (v: number) => `${Math.max(0, Math.min(100, (v / escala) * 100))}%`;
+  const teto = d.budget ?? Infinity;
+  const aComprar = Math.max(0, Math.min(d.proj, teto) - d.aprov - d.pend);
   const estoura = d.budget != null && d.proj > d.budget ? d.proj - d.budget : 0;
   return (
-    <div className="pcproj-resumo">
-      <div className="pcproj-resumo-nums">
-        <span>Budget de materiais <b>{d.budget != null ? $(d.budget) : "—"}</b></span>
-        <span>Projetado <b className={estoura ? "neg" : ""}>{$(d.proj)}</b></span>
-        <span>Comprometido (PCs) <b>{$(d.comp)}</b></span>
-        <span>Pago <b>{$(d.pago)}</b></span>
+    <div className="pj-bud">
+      <div className="esq">
+        <div className="t">
+          Budget de materiais <b className="num">{d.budget != null ? $(d.budget) : "—"}</b>
+          {" · "}lista prevista <b className={`num ${estoura ? "neg" : ""}`}>{$(d.proj)}</b>
+          {" · "}PCs <b className="num">{$(d.comp)}</b>
+          {d.pago > 0 && <span className="dim"> · pago {$(d.pago)}</span>}
+        </div>
+        <div className="pj-track" aria-label="Barra de budget">
+          <i style={{ left: 0, width: w(d.aprov), background: "var(--ww-info)" }} title={`PCs aprovados ${$(d.aprov)}`} />
+          <i style={{ left: w(d.aprov), width: w(d.pend), background: "var(--ww-warn)" }} title={`Aguardando aprovação ${$(d.pend)}`} />
+          <i style={{ left: w(d.aprov + d.pend), width: w(aComprar), background: "color-mix(in srgb,var(--ww-text-faint) 40%,transparent)" }} title={`Ainda a comprar ${$(aComprar)}`} />
+          {estoura > 0 && <i style={{ left: w(d.budget ?? 0), width: w(estoura), background: "var(--ww-crit)" }} title={`Estoura o budget em ${$(estoura)} — PC que passar do budget fica para os administradores`} />}
+          {d.budget != null && d.budget > 0 && <span className="marca" style={{ left: w(d.budget) }}><em>budget</em></span>}
+        </div>
+        <div className="pj-leg">
+          <span style={{ "--k": "var(--ww-info)" } as React.CSSProperties}>aprovados <b className="num">{$(d.aprov)}</b></span>
+          <span style={{ "--k": "var(--ww-warn)" } as React.CSSProperties}>aguardando <b className="num">{$(d.pend)}</b></span>
+          <span style={{ "--k": "color-mix(in srgb,var(--ww-text-faint) 55%,transparent)" } as React.CSSProperties}>a comprar <b className="num">{$(aComprar)}</b></span>
+          {d.budget == null ? <span className="dim">sem budget de materiais</span>
+            : estoura > 0 ? <span style={{ "--k": "var(--ww-crit)" } as React.CSSProperties} title="PC que passar do budget fica para os administradores">estoura <b className="num">{$(estoura)}</b></span>
+            : <span style={{ "--k": "var(--ww-ok)" } as React.CSSProperties}>sobra <b className="num">{$(d.budget - d.proj)}</b></span>}
+        </div>
       </div>
-      {valorPv > 0 && (() => {
-        /* Duas margens (07/10/26, Benny): projetada pelo budget de materiais da RC, real pelos PCs aprovados. */
-        const mProj = d.budget != null ? valorPv - d.budget : null;
-        const mReal = valorPv - d.aprov, mPend = valorPv - d.aprov - d.pend;
-        const pc = (v: number) => `${Math.round((v / valorPv) * 1000) / 10}%`;
-        return (
-          <div className="pcproj-resumo-nums" style={{ marginTop: 4 }}>
-            <span title={`(PV ${$(valorPv)} − budget de materiais da RC ${$(d.budget)}) ÷ PV`}>Margem projetada <b className={mProj != null && mProj < 0 ? "neg" : ""}>{mProj == null ? "—" : `${$(mProj)} · ${pc(mProj)}`}</b></span>
-            <span title={d.aprov > 0 ? `(PV ${$(valorPv)} − PCs aprovados ${$(d.aprov)}) ÷ PV${d.pend ? `\nSe os ${$(d.pend)} aguardando aprovação forem aprovados: ${$(mPend)} · ${pc(mPend)}` : ""}` : "Sem PCs aprovados ainda — não há custo real"}>
-              Margem real <b className={d.aprov > 0 && mReal < 0 ? "neg" : ""}>{d.aprov > 0 ? `${$(mReal)} · ${pc(mReal)}` : "—"}</b>{d.aprov > 0 && d.pend ? <small style={{ color: "var(--ww-text-faint)" }}> (com os aguardando: {pc(mPend)})</small> : null}</span>
-          </div>);
-      })()}
-      <div className="pcproj-trilho" title="Pago · comprometido · projetado, numa escala só; o traço é o budget">
-        <div className="proj" style={{ width: pct(d.proj) }} /><div className="comp" style={{ width: pct(d.comp) }} /><div className="pago" style={{ width: pct(d.pago) }} />
-        {d.budget != null && <div className="bud" style={{ left: pct(d.budget) }} />}
-      </div>
-      {estoura > 0 && <div className="pcproj-alerta">⚠ O projetado estoura o budget de materiais em <b>{$(estoura)}</b> — PC que passar do budget fica para os administradores.</div>}
+      {kv}
     </div>
   );
 }
@@ -2043,10 +2451,11 @@ function VendasDoProjeto({ empresa, codigo, $, valorPv, podeEditar }: { empresa:
             </span>
             <span className="num" style={{ textAlign: "right" }}><b>{$(d.valor)}</b><small>{total ? `${Math.round((d.valor / total) * 1000) / 10}%` : ""}</small></span>
             {d.faturado
-              ? <span className="vprev"><span className="atual"><b className="fixo">{isoBR(d.dt_fat)}</b><small className="fat" title="Data em que foi faturado">fat.</small></span>
+              ? <span className="vprev"><span className="atual"><b className="fixo">{isoBR(d.dt_fat)}</b><small className="fat" title="Data em que foi faturado">faturado</small></span>
+                  {/* spec A.1: a linha da inicial só aparece quando a data de faturamento é diferente dela */}
                   {d.fat_inicial && d.dt_fat && difD(d.dt_fat, d.fat_inicial) !== 0
                     ? <span className="ini" title="Previsão inicial de faturamento — riscada quando mudou"><span className="ini-w">inicial </span><s>{isoBR(d.fat_inicial)}</s><em className={difD(d.dt_fat, d.fat_inicial) > 0 ? "atraso" : "adianta"}>{difD(d.dt_fat, d.fat_inicial) > 0 ? "+" : ""}{difD(d.dt_fat, d.fat_inicial)}d</em></span>
-                    : <span className="ini dim">= inicial</span>}</span>
+                    : null}</span>
               : <DataPrev rotulo="faturamento" inicial={d.fat_inicial} nova={d.fat_nova} editavel={ed && !!d.chave} ocupado={gravando === `${d.chave}|faturamento`} onMudar={(v) => void mudar(d, "faturamento", v)} />}
             {d.faturado && !d.titulo_ref
               ? <span className="vprev"><span className="atual">
