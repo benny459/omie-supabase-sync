@@ -66,3 +66,4 @@
 .mn-mudou ul { margin: 0; padding-left: 18px; list-style: disc; font-size: 13.5px; color: var(--mn-tx2); }
 .mn-mudou li { margin: 3px 0; }
 .mn-data { color: var(--mn-tx3); font-variant-numeric: tabular-nums; margin-right: 6px; }
+.mn-corpo video.mn-img { width: 100%; height: auto; aspect-ratio: 16 / 10; background: #0c1830; }
