@@ -18,6 +18,7 @@
 
 import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { lerColagem } from "@/lib/colar-grade";
 
 /** Uma sugestão do autocompletar. `dados` volta intacto para aoEscolher. */
 export type SugestaoGrade = {
@@ -55,8 +56,7 @@ export type ColunaGrade = {
   /** Classe extra da coluna inteira (cabeçalho e células) — para agrupar à vista
    *  as colunas de leitura que vêm do mesmo lugar (ex.: o bloco do PC). */
   classe?: string;
-  /** Fora do colar por POSIÇÃO (07/10/26): coluna nova no meio não pode deslocar
-   *  o "Equipamento · Item · Qtd…" de sempre. Com cabeçalho no que se cola, entra. */
+  /** Fora do colar por POSIÇÃO: com cabeçalho no que se cola, entra pelo nome. */
   pularNoColar?: boolean;
   /** Botãozinho dentro da célula editável (ex.: abrir o seletor do catálogo). */
   acao?: { rot: string | ((linha: LinhaGrade) => string); dica: string | ((linha: LinhaGrade) => string); fn: (linha: LinhaGrade) => void;
@@ -108,8 +108,10 @@ export const brl = (v: number) =>
 
 export default function GradeEditavel({
   cols, linhas, onChange, altura = 340, vazioMsg = "Digite, cole do Excel ou suba a planilha.",
-  selecao, aoColar, colarExtras = [], aoRemover, botaoLinha = true, grupo,
+  selecao, aoColar, colarExtras = [], aoRemover, botaoLinha = true, grupo, herdarNoColar = [],
 }: {
+  /** Chaves que a linha colada sem valor herda da linha onde a colagem começou (ex.: equipamento). */
+  herdarNoColar?: string[];
   /** Botão "+ linha" do rodapé. A lista de materiais não usa (08/10/26, spec B.2): a grade
    *  já cria a linha nova ao digitar/Enter na última. */
   botaoLinha?: boolean;
@@ -159,32 +161,27 @@ export default function GradeEditavel({
    *  célula, ou ignora as linhas que passam do que existe. Aqui o bloco é
    *  distribuído a partir da célula atual e a grade cresce conforme precisa. */
   const colar = useCallback((texto: string, li: number, ci: number) => {
-    const grade = texto
-      .replace(/\r\n?/g, "\n")
-      .split("\n")
-      .filter((l, i, arr) => l.trim() !== "" || i < arr.length - 1)
-      .map((l) => (l.includes("\t") ? l.split("\t") : l.split(/;(?=(?:[^"]*"[^"]*")*[^"]*$)/)));
-    if (!grade.length) return;
-
-    // Primeira linha é cabeçalho (2+ nomes de coluna)? Então cada coluna vai pelo
-    // NOME — inclusive as que ficam fora do colar por posição.
-    const nrm = (t: string) => t.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
-    const alvosNome: { label: string; key: string }[] = [...editaveis, ...colarExtras];
-    const porNome = grade[0].map((c) => alvosNome.find((e) => nrm(e.label) === nrm(c) || nrm(e.key) === nrm(c)));
-    const comCabecalho = porNome.filter(Boolean).length >= 2;
-    const corpo = comCabecalho ? grade.slice(1) : grade;
-    const posicionais = editaveis.filter((e, i) => !e.pularNoColar || i === ci);
+    // Primeira linha é cabeçalho (2+ nomes de coluna)? Então cada coluna vai pelo NOME —
+    // inclusive as que ficam fora do colar por posição. Sem cabeçalho, pela posição a
+    // partir da célula focada (coluna `pularNoColar` focada começa na 1ª posicional).
+    // Parser comum com o modal "Adicionar itens" (lib/colar-grade): datas dd/mm/aaaa viram ISO.
+    const alvosNome = [...editaveis, ...colarExtras.map((x) => ({ ...x, tipo: editaveis.find((e) => e.key === x.key)?.tipo }))];
+    const posicionais = editaveis.filter((e) => !e.pularNoColar);
     const ini = Math.max(0, posicionais.indexOf(editaveis[ci]));
+    const { linhas: lidas } = lerColagem(texto, alvosNome, posicionais, ini);
+    if (!lidas.length) return;
+    // Colunas herdadas (ex.: o grupo de equipamento): a linha colada sem valor recebe o da
+    // linha onde a colagem começou, senão o da linha de cima.
+    const ancora = (k: string) => String(linhas[li]?.[k] ?? "").trim() || String(linhas[li - 1]?.[k] ?? "").trim();
+    const herda: Record<string, string> = Object.fromEntries(herdarNoColar.map((k) => [k, ancora(k)]).filter(([, v]) => v));
 
     const novas = [...linhas];
-    corpo.forEach((cells, dl) => {
+    lidas.forEach((vals, dl) => {
       const alvo = li + dl;
       while (novas.length <= alvo) novas.push(linhaVazia(cols));
-      cells.forEach((valor, dc) => {
-        const col = comCabecalho ? porNome[dc] : posicionais[ini + dc];
-        if (!col) return;   // passou da última coluna: descarta em vez de embaralhar
-        novas[alvo] = { ...novas[alvo], [col.key]: valor.trim().replace(/^"|"$/g, "") };
-      });
+      const base = novas[alvo];
+      const extra: Record<string, string> = Object.fromEntries(Object.entries(herda).filter(([k]) => !String(base[k] ?? "").trim() && !vals[k]));
+      novas[alvo] = { ...base, ...extra, ...vals };
     });
     // Sempre deixa uma linha em branco no fim, pra continuar digitando.
     if (Object.entries(novas[novas.length - 1]).some(([k, v]) => k !== "_id" && v)) {
@@ -192,7 +189,7 @@ export default function GradeEditavel({
     }
     onChange(novas);
     aoColar?.();
-  }, [linhas, cols, editaveis, onChange, aoColar, colarExtras]);
+  }, [linhas, cols, editaveis, onChange, aoColar, colarExtras, herdarNoColar]);
 
   /** Paste capturado no CONTÊINER: o navegador entrega o evento ao input, e
    *  tratar só lá faria o bloco inteiro cair numa célula. */

@@ -42,6 +42,7 @@ import * as XLSX from "xlsx";
 import GradeEditavel, { linhaVazia, num, type ColunaGrade, type LinhaGrade, type SugestaoGrade } from "./GradeEditavel";
 import PcPickerModal, { type PcSearchResult } from "./PcPickerModal";
 import GerarPcDaLista, { type LinhaParaPc } from "./GerarPcDaLista";
+import AdicionarItensModal, { type LinhaNova } from "./AdicionarItensModal";
 import AcertoItemEstoque, { type Compra, type Escolhido } from "@/components/faturamento/AcertoItemEstoque";
 import "@/components/faturamento/nova-emissao.css";
 import { CSS_CDL, KpisCompras, SugestoesVinculo, ForaDaLista, FluxoCompras, situacaoPc,
@@ -426,7 +427,9 @@ export default function MateriaisGrade({
               className="inline-block px-0.5 rounded bg-emerald-500/20 text-[8.5px] font-bold text-emerald-700 dark:text-emerald-300 hover:text-ww-accent">RC</a>
           : <span className="inline-block px-0.5 rounded bg-emerald-500/20 text-[8.5px] font-bold text-emerald-700 dark:text-emerald-300">RC</span>;
       } },
-    { key: "equipamento", label: "Equipamento", w: 88, fixa: true,
+    // Fora do colar por posição (spec D): a ordem sem cabeçalho é Código · Item · Qtd · Un ·
+    // Necessário em · Valor unit.; o grupo vem da linha onde se cola (herdarNoColar) ou do cabeçalho.
+    { key: "equipamento", label: "Equipamento", w: 88, fixa: true, pularNoColar: true,
       dica: (l) => l.equipamento || undefined,
       // Nome livre, mas sugere os padrões do cadastro e os já usados nos projetos.
       autocompletar: {
@@ -444,7 +447,7 @@ export default function MateriaisGrade({
     // casamento (✓ / ⚠ conferir / ⌕ sem) e abre o seletor do catálogo.
     /* 08/10/26 (spec C.10): a sugestão aparece DENTRO da célula Código — caixa tracejada
        âmbar com código, descrição, % e fornecedor, ✓ aceita e ✕ recusa; some ao resolver. */
-    { key: "cat_codigo", label: "Código", w: temSug ? 250 : 88, fixa: true, pularNoColar: true,
+    { key: "cat_codigo", label: "Código", w: temSug ? 250 : 88, fixa: true,
       limpaAoEditar: ["cat_ncod_prod", "_match", "_alts", "_cat_desc", "_sug", "_sug_status", "_omie_ncod"],
       dica: (l) => { const c = l._match === "sug" ? lerSug(l) : null; return c ? [`Sugestão do catálogo: ${c.codigo ?? ""} — ${c.descricao}`, c.fornecedor ? `fornecedor ${c.fornecedor}` : "", c.motivo ? `por quê: ${c.motivo}` : "", "✓ aceita (vira o código e ensina o de-para) · ✕ recusa (não volta a sugerir) · clique no texto para escolher outro"].filter(Boolean).join("\n") : undefined; },
       sobrepor: (l) => {
@@ -1108,8 +1111,10 @@ export default function MateriaisGrade({
    *  nunca trocando a lista inteira por uma cópia antiga. Recusadas ficam de fora. */
   const casarLinhas = useCallback(async (entrada: LinhaGrade[]) => {
     const res = new Map<string, { txt: string; patch: Record<string, string> }>();
+    const invalidos: string[] = [];
     // 1º o código digitado/colado: código nosso (ou antigo/de compra já ligado a um item nosso) resolve direto
-    const comCodigo = entrada.filter((l) => String(l.item ?? "").trim() && !l.cat_ncod_prod && String(l.cat_codigo ?? "").trim() && l._match !== "omie");
+    // (spec D: colado só com o código, sem descrição, também resolve — a descrição vem do catálogo)
+    const comCodigo = entrada.filter((l) => !l.cat_ncod_prod && String(l.cat_codigo ?? "").trim() && l._match !== "omie");
     if (comCodigo.length) {
       const achados = await Promise.all(comCodigo.map(async (l) => {
         const cod = String(l.cat_codigo).trim().toUpperCase();
@@ -1118,10 +1123,23 @@ export default function MateriaisGrade({
         return its.find((c) => String(c.codigo ?? "").toUpperCase() === cod)
           ?? its.find((c) => String(c.via ?? "").toUpperCase().split(/\s+/).includes(cod)) ?? null;
       }));
-      comCodigo.forEach((l, k) => { const c = achados[k]; if (c) res.set(l._id, { txt: textoCasar(l.item, l.modelo), patch: { ...camposDoCatalogo(c, "ok", [], l.cat_valor_unit ?? ""), _sug_status: "", _omie_ncod: "" } }); });
+      comCodigo.forEach((l, k) => {
+        const c = achados[k];
+        const txt = textoCasar(l.item, l.modelo);
+        if (c) {
+          const temValor = !!String(l.cat_valor_unit ?? "").trim();
+          res.set(l._id, { txt, patch: { ...camposDoCatalogo(c, "ok", [], l.cat_valor_unit ?? ""), _sug_status: "", _omie_ncod: "",
+            ...(String(l.item ?? "").trim() ? {} : { item: c.descricao }), ...(temValor ? { cat_valor_unit: l.cat_valor_unit, _vu_fonte: l._vu_fonte ?? "" } : {}) } });
+        } else if (String(l.item ?? "").trim()) {
+          // código que não é nosso: a linha entra sem código (e passa pelo casamento pelo texto)
+          invalidos.push(String(l.cat_codigo).trim());
+          res.set(l._id, { txt, patch: { cat_codigo: "", _cod_colado: String(l.cat_codigo).trim() } });
+        } else invalidos.push(String(l.cat_codigo).trim());
+      });
     }
     const porCod = res.size;
-    const alvo = entrada.filter((l) => !res.has(l._id) && String(l.item ?? "").trim() && semCodigoNosso(l) && l._sug_status !== "recusada" && l._match !== "sug");
+    const alvo = entrada.filter((l) => (!res.has(l._id) || res.get(l._id)!.patch._cod_colado) && String(l.item ?? "").trim()
+      && (semCodigoNosso(l) || !!res.get(l._id)?.patch._cod_colado) && l._sug_status !== "recusada" && l._match !== "sug");
     let ok = 0, conf = 0, sem = 0;
     if (alvo.length) {
       const r = await fetch("/api/catalogo/projeto", {
@@ -1135,14 +1153,16 @@ export default function MateriaisGrade({
         const c = j.casamentos![k];
         const txt = textoCasar(l.item, l.modelo);
         sugTentadasRef.current.add(`${l._id}|${txt}`);
-        if (!c?.melhor) { res.set(l._id, { txt, patch: l._match === "omie" ? {} : { _match: "sem" } }); sem++; return; }
-        if (c.status === "ok") { res.set(l._id, { txt, patch: { ...camposDoCatalogo(c.melhor, "ok", [], l.cat_valor_unit ?? ""), _sug_status: "", _omie_ncod: "" } }); ok++; return; }
-        if ((c.melhor.score ?? 0) >= SUG_MIN) { res.set(l._id, { txt, patch: camposSugestao(c.melhor, c.alternativas, l) }); conf++; return; }
-        res.set(l._id, { txt, patch: { ...(l._match === "omie" ? {} : { _match: "sem" }), _alts: c.alternativas?.length ? JSON.stringify(c.alternativas) : "" } }); sem++;
+        const put = (patch: Record<string, string>) => res.set(l._id, { txt, patch: { ...(res.get(l._id)?.patch ?? {}), ...patch } });
+        if (!c?.melhor) { put(l._match === "omie" ? {} : { _match: "sem" }); sem++; return; }
+        if (c.status === "ok") { put({ ...camposDoCatalogo(c.melhor, "ok", [], l.cat_valor_unit ?? ""), _sug_status: "", _omie_ncod: "" }); ok++; return; }
+        if ((c.melhor.score ?? 0) >= SUG_MIN) { put(camposSugestao(c.melhor, c.alternativas, l)); conf++; return; }
+        put({ ...(l._match === "omie" ? {} : { _match: "sem" }), _alts: c.alternativas?.length ? JSON.stringify(c.alternativas) : "" }); sem++;
       });
     }
     const vazio = !comCodigo.length && !alvo.length;
-    if (!vazio) setAviso(`Catálogo: ${porCod ? `${porCod} pelo código digitado · ` : ""}${ok} item(ns) casado(s)`
+    if (!vazio) setAviso(`Catálogo: ${porCod - invalidos.length > 0 ? `${porCod - invalidos.length} pelo código digitado · ` : ""}${ok} item(ns) casado(s)`
+      + (invalidos.length ? ` · ${invalidos.length} código(s) que não são do nosso estoque (${invalidos.slice(0, 5).join(", ")}${invalidos.length > 5 ? "…" : ""}) — a linha entra sem código` : "")
       + (conf ? ` · ${conf} com SUGESTÃO (caixa âmbar no Código — ✓ aceita, ✕ recusa, ou "Aceitar todas as sugestões")` : "")
       + (sem ? ` · ${sem} sem correspondência (clique em ⌕ no Código para procurar ou criar o item nosso)` : "") + "." + fraseSalvar());
     return { res, vazio };
@@ -1574,12 +1594,31 @@ export default function MateriaisGrade({
   }, [equipFiltro, grupos, COLS]);
 
   /** "+ Adicionar itens ▾" (spec B.2 / D). */
+  const [addModal, setAddModal] = useState<"cat" | "colar" | null>(null);
   const menuAdicionar: { rot: string; sub: string; fn: () => void }[] = [
-    { rot: "🔎 Escolher do estoque / catálogo", sub: "digite código ou descrição na linha nova — o catálogo sugere", fn: () => novaLinhaNoTopo("cat_codigo") },
-    { rot: "📋 Colar do Excel", sub: "clique numa célula da grade e cole (Ctrl+V) — 10, 15 linhas de uma vez",
-      fn: () => { setSubAba("lista"); setAviso("Clique na célula onde começa a colagem (ou em qualquer lugar da grade) e cole com Ctrl+V. Sem cabeçalho: Código · Item · Qtd · Un · Necessário em · Valor unit."); setTimeout(() => (document.querySelector(`[data-cel="${Math.max(0, visiveis.length - 1)}-0"]`) as HTMLInputElement | null)?.focus(), 80); } },
+    { rot: "🔎 Escolher do estoque / catálogo", sub: "busca por código ou descrição, marca vários", fn: () => setAddModal("cat") },
+    { rot: "📋 Colar do Excel", sub: "cola 10, 15 linhas de uma vez, com ou sem cabeçalho", fn: () => setAddModal("colar") },
+    { rot: "⬇ Baixar modelo Excel com nossos códigos", sub: "aba Lista para preencher + aba Códigos do estoque (para PROCV)",
+      fn: () => { window.location.href = `/api/rc-projetos/modelo?emp=${encodeURIComponent(empresa)}`; } },
     { rot: "✏️ Linha em branco", sub: "digitar à mão (Enter na última linha também cria outra)", fn: () => novaLinhaNoTopo("item") },
   ];
+  /** Linhas do modal "Adicionar itens" → grade. As sem código passam pelo casamento automático. */
+  const adicionarLinhasNovas = useCallback((novas: LinhaNova[], modo: "cat" | "colar") => {
+    const rows: LinhaGrade[] = novas.map((n) => {
+      const base = { ...vazia(), equipamento: n.equipamento, item: n.item, qtd: n.qtd, un: n.un, data_necessaria: n.data_necessaria,
+        cat_valor_unit: n.cat_valor_unit, _vu_fonte: "" } as LinhaGrade;
+      if (!n.cat) return base;
+      const campos = camposDoCatalogo(n.cat as unknown as Cat, "ok", [], n.cat_valor_unit);
+      return { ...base, ...campos, ...(n.cat_valor_unit ? { cat_valor_unit: n.cat_valor_unit, _vu_fonte: modo === "cat" ? "catálogo" : "" } : {}) } as LinhaGrade;
+    });
+    setLinhas((ls) => [...ls.filter((l) => String(l.item ?? "").trim()), ...rows, vazia()]);
+    setSujo(true);
+    setAddModal(null);
+    setSubAba("lista"); setFiltroPc("todas"); setFiltroPcNum(null);
+    const semCod = rows.filter((r) => !r.cat_ncod_prod).length;
+    const inval = novas.filter((n) => n.codigo_invalido).length;
+    setAviso(`${rows.length} item(ns) adicionados${modo === "cat" ? " do estoque" : " do Excel"}${semCod ? ` · ${semCod} sem código vão passar pelo catálogo (sugestão na célula Código)` : ""}${inval ? ` · ${inval} código(s) colado(s) não são do nosso estoque` : ""}.${fraseSalvar()}`);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
   /** "⋯" (spec B.2): tudo o que saiu da barra continua aqui. */
   const menuMais: { rot: string; dica?: string; off?: boolean; fn: () => void }[] = [
     { rot: casando ? "⚡ Casando…" : "⚡ Casar com o catálogo de novo", off: casando || salvando, dica: "Só nas linhas sem código (as recusadas ficam de fora)", fn: () => void casarAgora() },
@@ -1896,7 +1935,7 @@ export default function MateriaisGrade({
 
       {carregando
         ? <p className="text-[11.5px] text-ww-textFaint py-3">Carregando a lista…</p>
-        : <GradeEditavel cols={COLS} linhas={visiveis} botaoLinha={false}
+        : <GradeEditavel cols={COLS} linhas={visiveis} botaoLinha={false} herdarNoColar={["equipamento"]}
             grupo={{ de: (l) => (String(l.item ?? "").trim() ? normGrupo(l.equipamento || "Geral") : null), cab: cabecalhoGrupo }}
             colarExtras={[{ label: "Equipamento", key: "equipamento" }, { label: "Grupo", key: "equipamento" }, { label: "Modelo", key: "modelo" }, { label: "PC", key: "pc_numero" }, { label: "PC nº", key: "pc_numero" }, { label: "Observação", key: "observacao" }, { label: "Obs", key: "observacao" }]}
             aoColar={() => setCasarAposColar(true)}
@@ -2020,6 +2059,11 @@ export default function MateriaisGrade({
           </div>);
       })(), document.body)}
 
+      {addModal && (
+        <AdicionarItensModal empresa={empresa} modoInicial={addModal}
+          grupos={grupos.map((g) => ({ k: g.k, nome: g.nome, data: g.data }))}
+          onAdicionar={adicionarLinhasNovas} onFechar={() => setAddModal(null)} />
+      )}
       {gerarPcLinhas && (
         <GerarPcDaLista empresa={empresa} codigoProjeto={codigoProjeto} linhas={gerarPcLinhas}
           onFechar={() => setGerarPcLinhas(null)}
