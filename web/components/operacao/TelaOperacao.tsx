@@ -46,6 +46,7 @@ import PcsExcluidosButton, { type PcEscondido } from "../PcsExcluidosButton";
 import { AtribuicaoModal } from "../AtribuirClienteView";
 import { supaBrowser } from "@/lib/supabase";
 import { estadoPc } from "@/lib/situacao-pc";
+import { ModalCancelarPc, ModalDevolverPc, SecaoAjustesPc } from "../compras/PcCancelarDevolver";
 import GradeOperacao from "./GradeOperacao";
 import ProjetosAtivosMenu, { EstrelaAtivo, PainelAtivos, chaveProjeto, useProjetosAtivos, type ItemMenu } from "../projeto/ProjetosAtivosMenu";
 import { OcChip, useOcResumo } from "../vendas/OcAnexos";
@@ -68,6 +69,7 @@ export const OPCOES_STATUS: { v: string; l: string; admin?: boolean }[] = [
 export const RECUSAS = new Set(["NAO_APROVADO", "REJEITADO_VALIDADE", "CANCELAR_PEDIDO"]);
 
 type Vista = "lista" | "tabela" | "kanban" | "tempo";
+type AjustePcAberto = { acao: "cancelar" | "devolver"; empresa: string; pc: string; fornecedor: string; valor: number | null; codigoProjeto: number | null; pedidoId: string };
 type Toast = { msg: string; desfazer?: () => void; erro?: boolean } | null;
 type Visao = { nome: string; escopo: Escopo; periodo: Periodo; filtros: Filtros; rapida: Rapida | Rapida[]; q: string; ordem?: Ordem };
 
@@ -129,6 +131,12 @@ export default function TelaOperacao({ modulo, title, rows: rowsIniciais, parcia
   const [patches, setPatches] = useState<Map<string, AnyRow>>(new Map());
   const [toast, setToast] = useState<Toast>(null);
   const [drawer, setDrawer] = useState<string | null>(null);
+  /* Cancelar pedido / Devolver material (08/10/26, sql/146): o modal aberto, os PCs que
+     acabaram de ser cancelados (somem já, sem esperar a recarga) e um tique para o resumo
+     do budget e a seção "Cancelados / devolvidos" buscarem de novo. */
+  const [ajustePc, setAjustePc] = useState<AjustePcAberto | null>(null);
+  const [ocultosPc, setOcultosPc] = useState<Set<string>>(new Set());
+  const [tickAjuste, setTickAjuste] = useState(0);
   const [gerarPcDe, setGerarPcDe] = useState<{ p: Pedido; rc: string; itens: Compra[] } | null>(null);
   const [painelFiltro, setPainelFiltro] = useState(false);
   const [menu, setMenu] = useState<"mais" | "export" | "visoes" | null>(null);
@@ -186,11 +194,11 @@ export default function TelaOperacao({ modulo, title, rows: rowsIniciais, parcia
       ? [...rowsIniciais.map((r) => vivas.get(`${s(r.empresa)}|${s(r.ncod_ped)}`) ?? r),
          ...[...vivas.entries()].filter(([k]) => !rowsIniciais.some((r) => `${s(r.empresa)}|${s(r.ncod_ped)}` === k)).map(([, r]) => r)]
       : rowsIniciais;
-    return base.map((r) => {
+    return base.filter((r) => !ocultosPc.size || !ocultosPc.has(`${s(r.empresa)}|${s(r.pc_numero) || s(r.pc_numero_manual)}`)).map((r) => {
       const p = patches.get(`${s(r.empresa)}|${s(r.ncod_ped)}`);
       return p ? { ...r, ...p } : r;
     });
-  }, [rowsIniciais, vivas, patches]);
+  }, [rowsIniciais, vivas, patches, ocultosPc]);
   const recarregarPedido = useCallback(async (p: Pedido) => {
     const pvsDoPedido = [...new Set(p.bucket.rows.map((r) => s(r.pv_os_label)).filter(Boolean))];
     const proj = modulo === "projetos" ? Number(p.bucket.rows.find((r) => r.codigo_projeto)?.codigo_projeto ?? 0) || 0 : 0;
@@ -421,8 +429,18 @@ export default function TelaOperacao({ modulo, title, rows: rowsIniciais, parcia
     return m;
   }, [pedidos]);
 
+  const podeAjustarPc = ehAdmin || ["aprovador", "comprador"].includes(String(user?.role ?? ""));
+  const abrirAjustePc = useCallback((acao: "cancelar" | "devolver", cs: Compra[]) => {
+    const c = cs[0];
+    if (!c?.pc) return;
+    if (!podeAjustarPc) { mostrar({ msg: "Cancelar e devolver PC: só admin, aprovador ou comprador.", erro: true }); return; }
+    setAjustePc({ acao, empresa: s(c.row.empresa) || "SF", pc: c.pc, fornecedor: c.fornecedor, valor: cs.find((x) => x.pcValor != null)?.pcValor ?? null,
+      codigoProjeto: Number(c.row.codigo_projeto ?? c.row.pv_codigo_projeto ?? 0) || null, pedidoId: c.pedidoId });
+  }, [podeAjustarPc, mostrar]);
   const setStatus = useCallback(async (c: Compra, status: string) => {
     if (!podeAprovar) { mostrar({ msg: "Sem permissão para aprovar neste módulo.", erro: true }); return; }
+    // "Cancelar pedido" cancela de verdade (sql/146) — abre o motivo em vez de só gravar o rótulo
+    if (status === "CANCELAR_PEDIDO" && c.pc) { abrirAjustePc("cancelar", [c]); return; }
     const antes = c.statusCodigo;
     aplicar(c.key, { status });
     const r = await mudarStatus(c.row, status, modulo);
@@ -441,7 +459,7 @@ export default function TelaOperacao({ modulo, title, rows: rowsIniciais, parcia
       },
     });
     if (RECUSAS.has(status) && !c.justificativa) setTimeout(() => document.getElementById(`jr-${c.key}`)?.focus(), 40);
-  }, [aplicar, modulo, mostrar, podeAprovar]);
+  }, [aplicar, modulo, mostrar, podeAprovar, abrirAjustePc]);
 
   const gravar = useCallback(async (c: Compra, campo: keyof typeof CAMPOS, valor: unknown, patch: AnyRow) => {
     const def = CAMPOS[campo] as { campo: string; historico?: boolean };
@@ -1080,7 +1098,11 @@ export default function TelaOperacao({ modulo, title, rows: rowsIniciais, parcia
               bucket={bucketPorId.get(p.id)} budgetMap={budgetMap} verValores={verValores}
               liberacao={modulo === "avulsos" ? { ativo: liberacao.has(p.id), pode: podeLiberar, alternar: () => void liberar(p) } : null}
               excluirPv={ehAdmin && modulo !== "pcs" ? () => void excluirPv(p) : null}
-              statusLote={(lista, st) => { if (lista.length === 1) void setStatus(lista[0], st); else void emMassa(st, lista); }}
+              statusLote={(lista, st) => {
+                if (st === "CANCELAR_PEDIDO" && lista[0]?.pc) { abrirAjustePc("cancelar", lista); return; }
+                if (lista.length === 1) void setStatus(lista[0], st); else void emMassa(st, lista);
+              }}
+              ajuste={{ abrir: abrirAjustePc, tick: tickAjuste, pode: podeAjustarPc, aoDesfazer: () => window.location.reload() }}
               incluirPc={(rc, itens, numero) => incluirPc(p, rc, itens, numero)}
               gerarPc={(rc, itens) => setGerarPcDe({ p, rc, itens })}
               filtrarRapida={(r) => { setMarcados((m) => (m.includes(r) ? m : [...m, r])); window.scrollTo({ top: 0, behavior: "smooth" }); }}
@@ -1130,6 +1152,26 @@ export default function TelaOperacao({ modulo, title, rows: rowsIniciais, parcia
         onCancelar={() => setSel(new Set())} />
 
       {/* ── gaveta ── */}
+      {ajustePc?.acao === "cancelar" && (
+        <ModalCancelarPc empresa={ajustePc.empresa} numero={ajustePc.pc} fornecedor={ajustePc.fornecedor} valor={ajustePc.valor}
+          codigoProjeto={ajustePc.codigoProjeto} onFechar={() => setAjustePc(null)}
+          onFeito={(r) => {
+            setAjustePc(null);
+            setOcultosPc((x) => new Set(x).add(`${ajustePc.empresa}|${ajustePc.pc}`));
+            setTickAjuste((t) => t + 1);
+            mostrar({ msg: `PC ${r.numero} cancelado${r.linhas_liberadas ? ` · ${r.linhas_liberadas} linha(s) da Lista voltaram a "sem PC"` : ""}${r.cancelar_no_omie ? " — é do Omie: cancele também no Omie" : ""}`, erro: r.cancelar_no_omie });
+          }} />
+      )}
+      {ajustePc?.acao === "devolver" && (
+        <ModalDevolverPc empresa={ajustePc.empresa} numero={ajustePc.pc} codigoProjeto={ajustePc.codigoProjeto} onFechar={() => setAjustePc(null)}
+          onFeito={(r) => {
+            const ped = porId.get(ajustePc.pedidoId);
+            setAjustePc(null);
+            setTickAjuste((t) => t + 1);
+            if (ped) void recarregarPedido(ped).catch(() => null);
+            mostrar({ msg: `Devolução ${r.tipo} do PC ${r.numero} registrada (${brl(r.valor)} saem do projeto)${r.linhas_liberadas ? ` · ${r.linhas_liberadas} linha(s) da Lista voltaram a "sem PC"` : ""}` });
+          }} />
+      )}
       {gerarPcDe && (
         <GerarPcDaRc rc={gerarPcDe.rc} empresa={s(gerarPcDe.p.bucket.rows[0]?.empresa) || "SF"}
           itensRc={gerarPcDe.itens.map((c) => Number((c.row.custom_fields as Record<string, unknown> | null)?.rc_compras)).filter((x) => Number.isFinite(x) && x > 0)}
@@ -1591,6 +1633,8 @@ function CartaoPedido(props: {
   ocs?: { label: string; r?: OcResumo }[];
   /** ★ projeto ativo (só Projetos, 08/10/26). */
   estrela?: { ativo: boolean; pode: boolean; alternar: () => void } | null;
+  /** Cancelar pedido / Devolver material (sql/146). */
+  ajuste?: { abrir: (acao: "cancelar" | "devolver", cs: Compra[]) => void; tick: number; pode: boolean; aoDesfazer: () => void };
 }) {
   const { p, compras, modulo, aberto, $ } = props;
   const d = diasAte(p.lim);
@@ -2174,13 +2218,14 @@ function GruposRc({ compras, p, sel, toggleSel, podeAprovar, podeEditar, ehAdmin
  *  Prev. material (a do PC), situação (mesmas cores da lista), material, NF de
  *  entrada e o link para ver os itens daquele PC na Lista de materiais. Sem as
  *  linhas "sem RC · PC 7262 · 1 × R$ 0,00" que só serviam para pendurar o PC. */
-function GruposPcProjeto({ compras, p, podeAprovar, podeEditar, ehAdmin, statusLote, marcarMaterialLote, gravar, abrirDrawer, $, proj, budget }: {
+function GruposPcProjeto({ compras, p, podeAprovar, podeEditar, ehAdmin, statusLote, marcarMaterialLote, gravar, abrirDrawer, $, proj, budget, ajuste }: {
   compras: Compra[]; p: Pedido; podeAprovar: boolean; podeEditar: boolean; ehAdmin: boolean;
   statusLote: (lista: Compra[], status: string) => void; marcarMaterialLote: MarcarMaterialLote;
   gravar: Gravar; abrirDrawer: (k: string) => void; $: (v: number | null) => string;
   proj: { codProj: number; empresaProj: string };
   /** resumo do budget (rota budget/summary): Resultado esperado do fechamento */
   budget?: BudgetSummary;
+  ajuste?: PropsCartao["ajuste"];
 }) {
   const empresa = s(p.bucket.rows[0]?.empresa) || proj.empresaProj || "SF";
   const lista = (extra: string) => `/projetos/${proj.codProj}/materiais?${new URLSearchParams({ empresa, aba: "materiais" })}&${extra}`;
@@ -2201,12 +2246,13 @@ function GruposPcProjeto({ compras, p, podeAprovar, podeEditar, ehAdmin, statusL
     const aprov = /^APROVADO/.test(st) ? "aprovado" : st === "NAO_APROVADO" ? "nao_aprovado" : st === "CANCELAR_PEDIDO" ? "nao_aprovado" : "aguardando";
     const rec = cs.every((x) => x.recebidoEm != null) ? Math.max(...cs.map((x) => x.recebidoEm ?? 0)) : null;
     const parcial = !rec && cs.some((x) => x.recebidoEm != null);
-    return estadoPc({ aprov, nf: cs.find((x) => x.nfFornecedor)?.nfFornecedor || null,
+    const dev = (cs.find((x) => x.row.pc_devolucao)?.row.pc_devolucao as { tipo?: "total" | "parcial" } | undefined)?.tipo ?? null;
+    return estadoPc({ aprov, devolucao: dev, nf: cs.find((x) => x.nfFornecedor)?.nfFornecedor || null,
       dt_rec: rec ? new Date(rec).toISOString().slice(0, 10) : null, qtd: parcial ? 2 : null, qtd_recebida: parcial ? 1 : null });
   };
   return (
     <div className="pcproj">
-      <ResumoBudgetProjeto empresa={empresa} codigo={proj.codProj} $={$} valorPv={p.valorPv} resultadoPct={budget?.resultado_bruto_esperado_pct != null ? Number(budget.resultado_bruto_esperado_pct) : null} />
+      <ResumoBudgetProjeto key={`bud${ajuste?.tick ?? 0}`} empresa={empresa} codigo={proj.codProj} $={$} valorPv={p.valorPv} resultadoPct={budget?.resultado_bruto_esperado_pct != null ? Number(budget.resultado_bruto_esperado_pct) : null} />
       {/* 07/10/26 (Benny): sem RC nesta tela — RCs e o valor delas vivem na Lista de materiais,
           e o "Gerar pedido de compra" também. Vendas (PV/OS) à esquerda e pedidos de compra à
           direita, como a linha aberta dos Avulsos; em tela estreita, um embaixo do outro. */}
@@ -2265,12 +2311,19 @@ function GruposPcProjeto({ compras, p, podeAprovar, podeEditar, ehAdmin, statusL
                   <a href={lista(`pc=${encodeURIComponent(pc)}`)}>Ver itens na Lista de materiais</a>
                   {podeEditar && <label className="pcmenu-mat">Material (marcar à mão)
                     <MatPc cs={cs} auto={mat} podeEditar={podeEditar} marcarLote={marcarMaterialLote} /></label>}
+                  {ajuste?.pode && <>
+                    <button type="button" onClick={(e) => { (e.currentTarget.closest("details") as HTMLDetailsElement).open = false; ajuste.abrir("devolver", cs); }}
+                      title="O PC continua ativo; o material devolvido sai da conta do projeto e as linhas voltam a sem PC">↩ Devolver material…</button>
+                    <button type="button" className="pcmenu-no" onClick={(e) => { (e.currentTarget.closest("details") as HTMLDetailsElement).open = false; ajuste.abrir("cancelar", cs); }}
+                      title="Cancela de verdade: sai da tabela e das contas do projeto; as linhas da Lista voltam a sem PC">🚫 Cancelar pedido…</button>
+                  </>}
                 </div>
               </details>
             </div>
           );
         })}
         {!pcs.size && <div className="pcproj-vazio">Nenhum pedido de compra ainda — gere pela Lista de materiais.</div>}
+        <SecaoAjustesPc empresa={empresa} codigo={proj.codProj} tick={ajuste?.tick} $={$} onMudou={() => ajuste?.aoDesfazer()} />
       </div>
       </div></div>
       {comentPc && <ComentariosPc empresa={empresa} pc={comentPc} onFechar={(n) => { if (n != null) setComent((c) => ({ ...c, [comentPc]: n })); setComentPc(null); }} />}

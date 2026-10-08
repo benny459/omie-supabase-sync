@@ -150,13 +150,17 @@ export default function TelaFaturamento() {
   /* Link vindo de outra tela (07/10/26 — Operação › Projetos, vendas do projeto):
      /faturamento?abrir=<chave>&q=<PV1971> busca o documento e abre a gaveta. */
   const [abrirChave, setAbrirChave] = useState<string | null>(null);
+  /* /faturamento?devolucao=1&nf=<NF de entrada>&motivo=&pc= (devolução de PC, sql/146):
+     abre a NF-e de devolução preenchida para conferir — nada é emitido sozinho. */
+  const [devIni, setDevIni] = useState<{ nf?: string | null; motivo?: string | null; pc?: string | null } | null>(null);
   useEffect(() => {
     const u = new URLSearchParams(window.location.search);
     const ch = u.get("abrir"), qq = u.get("q"), emp = u.get("emp");
     if (emp) setEmpresa(emp);
     if (qq) setQ(qq);
     if (ch) setAbrirChave(ch);
-  }, []);
+    if (u.get("devolucao") === "1") { setDevIni({ nf: u.get("nf"), motivo: u.get("motivo"), pc: u.get("pc") }); setNova(true); }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const [orig, setOrig] = useState("");
   const [fst, setFst] = useState<"" | St>("");
   const [chips, setChips] = useState<Set<string>>(new Set());
@@ -407,7 +411,8 @@ export default function TelaFaturamento() {
           abrirFolha={(chave) => { const d = (docs ?? []).find((x) => x.chave === chave); setLote(null); if (d) abrirFolhaDe(d); }}
           onEmitido={() => { carregar(); setSel(new Set()); }} />}
         <NovaEmissao config={config} aberto={nova} inicial={inicialNova} semProposta={!!pront?.pode_sem_proposta} homologacao={!!pront?.pode_homologacao} rascunhoId={rascNova}
-          fechar={() => { setNova(false); setInicialNova(null); setRascNova(null); window.setTimeout(carregarRasc, 1500); }} avisar={avisar}
+          devolucaoInicial={inicialNova || rascNova ? null : devIni}
+          fechar={() => { setNova(false); setInicialNova(null); setRascNova(null); setDevIni(null); window.setTimeout(carregarRasc, 1500); }} avisar={avisar}
           onEmitido={() => { carregar(); carregarRasc(); }} />
 
         <div className="tabsec">

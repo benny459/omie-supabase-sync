@@ -11,6 +11,7 @@
  */
 
 import { estadoPc, dicaEstadoPc } from "@/lib/situacao-pc";
+import { ModalCancelarPc, ModalDevolverPc } from "./PcCancelarDevolver";
 import PagamentoAntecipado from "@/components/compras/PagamentoAntecipado";
 import "./compras.css";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -61,6 +62,7 @@ export default function TelaCompras() {
   const [projeto, setProjeto] = useState("");
   const [periodo, setPeriodo] = useState("");
   const [soAtraso, setSoAtraso] = useState(false);
+  const [soDevolucao, setSoDevolucao] = useState(false);
   const [soNaoEnviado, setSoNaoEnviado] = useState(false);
   const [soNf, setSoNf] = useState(false);
   const [origem, setOrigem] = useState<"" | "painel" | "omie">("");
@@ -70,6 +72,8 @@ export default function TelaCompras() {
   const [enviar, setEnviar] = useState<number | null>(null);
   // Pagamento antecipado de PC (06/10/26): diálogo + selo 💸 no cartão
   const [antecipar, setAntecipar] = useState<number | null>(null);
+  /* Cancelar PC (com motivo, libera a Lista; PC do Omie só no painel) e Devolver material — sql/146 */
+  const [ajPc, setAjPc] = useState<{ acao: "cancelar" | "devolver"; emp: string; num: string; forn?: string; valor?: number } | null>(null);
   const [antecipados, setAntecipados] = useState<Record<string, { valor: number; pago: boolean }>>({});
   const [sort, setSort] = useState<{ k: string; dir: 1 | -1 }>({ k: "emissao", dir: -1 });
   const [group, setGroup] = useState("");
@@ -174,6 +178,7 @@ export default function TelaCompras() {
       if (projeto && p.proj !== projeto) return false;
       if (periodo && p.emissao && diffDias(hoje(), p.emissao) > Number(periodo)) return false;
       if (soAtraso && !atrasado(p)) return false;
+      if (soDevolucao && !p.devolucao) return false;
       if (soNaoEnviado && !naoEnviado(p)) return false;
       if (soNf && !nfSug[p.id]) return false;
       if (origem && p.origem !== origem) return false;
@@ -185,7 +190,7 @@ export default function TelaCompras() {
       }
       return true;
     });
-  }, [todos, q, comprador, projeto, periodo, soAtraso, soNaoEnviado, soNf, nfSug, origem, soSemPedido, idsSugeridos, pedidosEq]);
+  }, [todos, q, comprador, projeto, periodo, soAtraso, soDevolucao, soNaoEnviado, soNf, nfSug, origem, soSemPedido, idsSugeridos, pedidosEq]);
 
   // ── ações ────────────────────────────────────────────────────────────────
   const acao = useCallback(async (body: Record<string, unknown>) => {
@@ -247,7 +252,9 @@ export default function TelaCompras() {
       if (k === "print" || k === "enviar") setEnviar(p.id);
       if (k === "antecipar") setAntecipar(p.id);
       if (k === "venda") setFolha({ id: p.id });
-      if (k === "cancel") setConfirma({ texto: `Cancelar o ${p.tipo === "RC" ? "requisição" : "pedido"} ${p.num}?`, acao: async () => {
+      if (k === "cancel" && p.tipo === "PC") setAjPc({ acao: "cancelar", emp: p.emp, num: p.num, forn: p.forn, valor: p.valor });
+      if (k === "devolver") setAjPc({ acao: "devolver", emp: p.emp, num: p.num });
+      if (k === "cancel" && p.tipo === "RC") setConfirma({ texto: `Cancelar o ${p.tipo === "RC" ? "requisição" : "pedido"} ${p.num}?`, acao: async () => {
         await acao({ acao: "cancelar", id: p.id }); toast(`${p.num} cancelado`); carregar();
       } });
     } catch (e) { toast((e as Error).message, true); }
@@ -267,7 +274,7 @@ export default function TelaCompras() {
     // 07/10/26: situação = aprovação + etapa, com a paleta única do painel (lib/situacao-pc)
     { k: "situacao", l: "Situação", v: situacao, h: (p) => {
       if (p.tipo === "RC") { const s = situacao(p); return <span className={`pill ${s.startsWith("Requisição") ? "p-off" : "p-warn"}`}>{s}</span>; }
-      const dp = { etapa: p.etapa, aprov: p.aprov, nf: p.nf, enviado_em: p.enviadoEm, dt_fat: p.dtFat, dt_rec: p.dtRec, aprov_por: p.aprovPor, aprov_em: p.aprovEm, previsao: p.previsao };
+      const dp = { etapa: p.etapa, aprov: p.aprov, nf: p.nf, enviado_em: p.enviadoEm, dt_fat: p.dtFat, dt_rec: p.dtRec, aprov_por: p.aprovPor, aprov_em: p.aprovEm, previsao: p.previsao, devolucao: p.devolucao ?? null };
       const e = estadoPc(dp);
       return <span title={`${dicaEstadoPc(dp)}${atrasado(p) ? " · previsão de entrega atrasada" : ""}`}>
         <span className="pill" style={{ background: e.cor, color: "#fff" }}>{e.rot}</span>{atrasado(p) && <span className="pill p-crit" style={{ marginLeft: 4 }}>atrasada</span>}</span>;
@@ -317,7 +324,7 @@ export default function TelaCompras() {
     const cond = p.tipo === "RC" ? `com ${p.nItens} ${p.nItens === 1 ? "item" : "itens"}` : (parcDesc(p.parc) || "").toLowerCase();
     return (
       <article key={p.id} className={`card${avisos.novas.has(p.id) ? " nova" : ""}${naColPc ? (p.aprov === "aprovado" ? " aprovado" : " pendente") : late ? " late" : ""}${arrasto === String(p.id) ? " dragging" : ""}`} draggable tabIndex={0}
-        style={{ ["--c" as string]: p.tipo === "PC" ? estadoPc({ etapa: p.etapa, aprov: p.aprov, nf: p.nf, enviado_em: p.enviadoEm, dt_fat: p.dtFat, dt_rec: p.dtRec }).cor : ETAPA[p.etapa]?.cor }}
+        style={{ ["--c" as string]: p.tipo === "PC" ? estadoPc({ etapa: p.etapa, aprov: p.aprov, nf: p.nf, enviado_em: p.enviadoEm, dt_fat: p.dtFat, dt_rec: p.dtRec, devolucao: p.devolucao ?? null }).cor : ETAPA[p.etapa]?.cor }}
         aria-label={`${p.tipo} ${p.num}`}
         onClick={(e) => { if ((e.target as HTMLElement).closest(".kebab")) return; setFolha({ id: p.id }); }}
         onKeyDown={(e) => { if (e.key === "Enter") setFolha({ id: p.id }); }}
@@ -454,6 +461,9 @@ export default function TelaCompras() {
           {semPedido.length > 0 && <button className={`chipf semped${soSemPedido ? " on" : ""}`} title="Mostra só as NF-e sem pedido e os pedidos sugeridos para elas"
             onClick={() => setSoSemPedido((v) => !v)}>⛔ NF sem pedido ({semPedido.length})</button>}
           <button className={`chipf${soAtraso ? " on" : ""}`} onClick={() => setSoAtraso((v) => !v)}>⚠ Entrega atrasada{lista ? ` · ${atrasados.length}` : ""}</button>
+          {todos.some((p) => p.devolucao) && <button className={`chipf${soDevolucao ? " on" : ""}`} title="Pedidos com devolução de material registrada (o PC segue ativo)"
+            style={soDevolucao ? { borderColor: "#7C6F9B", color: "#5B4F7A", background: "color-mix(in srgb,#7C6F9B 14%,transparent)" } : undefined}
+            onClick={() => setSoDevolucao((v) => !v)}>↩ Devolução · {todos.filter((p) => p.devolucao).length}</button>}
           <button className={`chipf${soNaoEnviado ? " on" : ""}`} title="Pedidos de compra aprovados que ainda não foram enviados ao fornecedor"
             onClick={() => setSoNaoEnviado((v) => !v)}>✉ Não enviados{lista ? ` · ${naoEnviados.length}` : ""}</button>
           <button className={`chipf${soNf ? " on" : ""}`} style={soNf ? { borderColor: "#0EA5E9", color: "#0369A1", background: "color-mix(in srgb,#0EA5E9 14%,transparent)" } : undefined}
@@ -638,7 +648,9 @@ export default function TelaCompras() {
         if (p.tipo === "PC") it.push(["print", "Imprimir / PDF para fornecedor"]);
         if (p.tipo === "PC" && p.aprov === "aprovado" && !["60", "80"].includes(p.etapa)) it.push(["antecipar", "💸 Pagamento antecipado…"]);
         if (p.tipo === "RC") it.push(["venda", p.pv ? "Trocar venda vinculada" : "Vincular à venda (PV/OS)"]);
-        it.push(["cancel", p.tipo === "RC" ? "Cancelar requisição" : "Cancelar pedido", p.origem !== "painel"]);
+        if (p.tipo === "PC" && p.aprov === "aprovado") it.push(["devolver", "↩ Devolver material…"]);
+        // PC: cancela de verdade (motivo, Lista volta a "sem PC"); do Omie só no painel, com aviso (sql/146)
+        it.push(["cancel", p.tipo === "RC" ? "Cancelar requisição" : "Cancelar pedido…", p.tipo === "RC" && p.origem !== "painel"]);
         const info = [p.contato && `👤 ${p.contato}`, p.proj && `📁 ${p.proj}`, p.cnpj && `🏷 ${p.cnpj}`].filter(Boolean) as string[];
         return (
           <div className="dropdown" style={{ left: ctx.x, top: ctx.y }} onClick={(e) => e.stopPropagation()}>
@@ -673,7 +685,8 @@ export default function TelaCompras() {
           onAbrir={(id) => { carregar(); setFolha({ id }); }}
           onReceber={(id) => { setFolha(null); setReceb({ id }); }}
           onDuplicar={(id) => { setFolha(null); duplicar(id); }}
-          onImprimir={(id) => { setFolha(null); setEnviar(id); }} />
+          onImprimir={(id) => { setFolha(null); setEnviar(id); }}
+          onAjustePc={(acao, d) => setAjPc({ acao, emp: d.emp, num: d.num, forn: d.forn, valor: d.valor })} />
       )}
       {receb && (
         <FolhaRecebimento id={receb.id} candidatos={candidatosReceb} toast={toast} onClose={() => setReceb(null)}
@@ -689,6 +702,10 @@ export default function TelaCompras() {
         onGerado={(r) => { setPcDaNf(null); setCaixa(null); toast(`Pedido ${r.num} gerado da NF — aguardando aprovação`); carregar(); }} />}
       {confer != null && <FolhaConferencia id={confer} toast={toast} onClose={() => setConfer(null)}
         onConferido={(m) => { setConfer(null); toast(m); carregar(); }} />}
+      {ajPc?.acao === "cancelar" && <ModalCancelarPc empresa={ajPc.emp} numero={ajPc.num} fornecedor={ajPc.forn} valor={ajPc.valor} onFechar={() => setAjPc(null)}
+        onFeito={(r) => { setAjPc(null); setFolha(null); toast(`${r.numero} cancelado${r.cancelar_no_omie ? " no painel — cancele também no Omie" : ""}`, r.cancelar_no_omie); carregar(); }} />}
+      {ajPc?.acao === "devolver" && <ModalDevolverPc empresa={ajPc.emp} numero={ajPc.num} onFechar={() => setAjPc(null)}
+        onFeito={(r) => { setAjPc(null); toast(`Devolução ${r.tipo} do ${r.numero} registrada`); carregar(); }} />}
       {toastMsg && <div className={`cmp-toast${toastMsg.erro ? " erro" : ""}`} role="status">{toastMsg.m}</div>}
     </div>
   );

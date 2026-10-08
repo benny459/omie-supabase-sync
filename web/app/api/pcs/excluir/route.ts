@@ -90,9 +90,16 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: true, count: pcs.length, action: "exclude" });
   }
 
-  const { error } = await admin
+  /* PC CANCELADO (sql/146, tipo 'cancelado') não volta por aqui: tem rastro em
+     compras.pc_cancelamento e só sai por "Desfazer cancelamento" (admin, /api/pcs/ajuste).
+     Sem a coluna (migração ainda não aplicada), vale o comportamento antigo. */
+  let { error } = await admin
     .schema("platform" as never).from("excluded_pc")
-    .delete().eq("empresa", body.empresa).in("pc_numero", pcs);
+    .delete().eq("empresa", body.empresa).in("pc_numero", pcs).neq("tipo", "cancelado");
+  if (error && /tipo/.test(error.message)) {
+    ({ error } = await admin.schema("platform" as never).from("excluded_pc")
+      .delete().eq("empresa", body.empresa).in("pc_numero", pcs));
+  }
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ ok: true, count: pcs.length, action: "restore" });
 }
@@ -106,11 +113,14 @@ export async function GET() {
   const admin = supaAdmin();
   const { data, error } = await admin
     .schema("platform" as never).from("excluded_pc")
-    .select("empresa, pc_numero, motivo, excluded_at, excluded_by")
+    .select("*")
     .order("excluded_at", { ascending: false });
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-  const linhas = (data ?? []) as Escondido[];
+  // Cancelados (sql/146) aparecem na seção "Cancelados / devolvidos" do projeto, não aqui.
+  const linhas = ((data ?? []) as (Escondido & { tipo?: string })[])
+    .filter((l) => l.tipo !== "cancelado")
+    .map(({ empresa, pc_numero, motivo, excluded_at, excluded_by }) => ({ empresa, pc_numero, motivo, excluded_at, excluded_by }));
   if (linhas.length === 0) return NextResponse.json({ rows: [] });
 
   /* A tabela guarda só (empresa, número) — de propósito, para não desatualizar

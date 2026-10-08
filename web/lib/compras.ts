@@ -55,6 +55,8 @@ export type PedidoLista = {
   origem: "painel" | "omie"; sync?: string; rcs?: string[]; cobDone?: number; cobTotal?: number; cobPcs?: string[];
   saldo?: number; parciais?: number; enviadoEm?: string; enviadoPara?: string; enviadoMeio?: string; enviadoPor?: string;
   semRc?: boolean; avulsa?: boolean; criadoEm?: string;
+  /** devolução de material registrada (sql/146) e o valor devolvido */
+  devolucao?: "total" | "parcial"; devolvido?: number;
 };
 
 // ── Pedido completo (folha) ─────────────────────────────────────────────────
@@ -173,6 +175,7 @@ export const totalItem = (it: Item) =>
 
 export const rcAtendida = (p: PedidoLista) => p.tipo === "RC" && (p.cobTotal ?? 0) > 0 && p.cobDone === p.cobTotal;
 export function situacao(p: PedidoLista): string {
+  if (p.devolucao) return p.devolucao === "total" ? "Devolução total" : "Devolução parcial";
   if (p.etapa === "60" || p.etapa === "80") return "Recebido";
   if (p.etapa === "20") return rcAtendida(p) ? "Requisição atendida" : "Requisição";
   if (p.previsao && p.previsao < hoje()) return "Previsão de entrega atrasada";

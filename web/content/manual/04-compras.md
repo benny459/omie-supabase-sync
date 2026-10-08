@@ -4,7 +4,7 @@ resumo: Requisição → pedido de compra → aprovação → NF → recebimento
 icone: 🛒
 area: erp
 rotas: /erp/compras
-caminhos: web/components/compras, web/app/api/compras, web/lib/compras.ts, web/lib/compras-avisos.ts, web/lib/agente-compras.ts, web/app/api/cron/agente-compras
+caminhos: web/components/compras, web/app/api/compras, web/app/api/pcs/ajuste, web/lib/pc-ajustes.ts, web/lib/compras.ts, web/lib/compras-avisos.ts, web/lib/agente-compras.ts, web/app/api/cron/agente-compras
 atualizado: 2026-10-08
 ---
 
@@ -77,6 +77,18 @@ Pedidos de compra de **Vendas avulsas** que cumprem a regra abaixo são aprovado
 
 1. Quando o material chega, use **📦 Registrar recebimento** (etapa Recebido).
 2. Depois de conferir, mova para **Conferido**. A conta a pagar fica **liberada para pagar**.
+
+## Como faço para cancelar um pedido de compra
+
+No menu **⋮** do pedido escolha **Cancelar pedido…** (ou **🚫 Cancelar pedido** na folha do PC). Informe o **motivo** — a janela mostra antes quantas linhas da Lista de materiais do projeto voltam a **sem PC**. O pedido sai da lista do Compras, das contas do projeto e fica no histórico com o motivo, quem e quando.
+
+- **Pedido do painel**: fica cancelado no Compras.
+- **Pedido do Omie**: o painel não escreve no Omie — ele fica cancelado **só no painel**. **Cancele também no Omie.**
+- Requisição (RC) continua com o **Cancelar requisição** de sempre.
+
+## Como faço para registrar uma devolução de material
+
+Em pedido aprovado: **⋮ › ↩ Devolver material…** (ou **↩ Devolver material** na folha). Escolha itens e quantidades, o motivo e, se houver, o nº/data da **NF de devolução**. O pedido **continua ativo** com a situação **Devolução total / parcial** (pílula lilás acinzentada); o filtro **↩ Devolução** mostra só esses pedidos. O valor devolvido sai da conta do projeto, e as linhas da Lista voltam a **sem PC** pela quantidade devolvida. **emitir NF de devolução ↗** abre o Faturamento com a NF-e de devolução (de compra) preenchida — sem emitir.
 
 ## Corrigir um pedido que veio do Omie
 

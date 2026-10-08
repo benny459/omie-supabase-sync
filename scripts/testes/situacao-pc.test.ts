@@ -28,3 +28,9 @@ test("dica traz data, NF e quem aprovou", () => {
   const t = dicaEstadoPc({ etapa: "80", aprov: "aprovado", nf: "000019571", dt_rec: "2026-09-24", aprov_por: "marcelo@waterworks.com.br", aprov_em: "2026-09-21" });
   assert.match(t, /recebido em 24\/09\/26/); assert.match(t, /NF 000019571/); assert.match(t, /por marcelo em 21\/09\/26/);
 });
+test("devolução (sql/146): pílula própria, total ou parcial; cancelado vence", () => {
+  const p = estadoPc({ etapa: "60", aprov: "aprovado", dt_rec: "2026-10-01", devolucao: "parcial" });
+  assert.equal(p.chave, "devolucao"); assert.equal(p.rot, "Devolução parcial"); assert.equal(p.parcial, true);
+  assert.equal(estadoPc({ etapa: "80", aprov: "aprovado", devolucao: "total" }).rot, "Devolução total");
+  assert.equal(estadoPc({ etapa: "40", cancelado: true, devolucao: "total" }).chave, "cancelado");
+});

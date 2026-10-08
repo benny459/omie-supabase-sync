@@ -6,13 +6,14 @@
 // cores das etapas (lib/compras ETAPAS) e dos status de aprovação do /pcs.
 // Pura — testada em scripts/testes/situacao-pc.test.ts.
 
-export type EstadoPc = "requisicao" | "aguardando" | "reprovado" | "cancelado" | "aprovado" | "enviado" | "faturado" | "recebido" | "conferido";
+export type EstadoPc = "requisicao" | "aguardando" | "reprovado" | "cancelado" | "devolucao" | "aprovado" | "enviado" | "faturado" | "recebido" | "conferido";
 
 export const ESTADOS_PC: Record<EstadoPc, { rot: string; cor: string; ajuda: string }> = {
   requisicao: { rot: "Requisição",            cor: "#94A3B8", ajuda: "RC — ainda não virou pedido de compra" },
   aguardando: { rot: "Aguardando aprovação",  cor: "#F59E0B", ajuda: "PC criado, ainda sem aprovação" },
   reprovado:  { rot: "Reprovado",             cor: "#E11D48", ajuda: "aprovação negada" },
   cancelado:  { rot: "Cancelado",             cor: "#BE123C", ajuda: "pedido cancelado" },
+  devolucao:  { rot: "Devolução",             cor: "#7C6F9B", ajuda: "material devolvido ao fornecedor (total ou parcial) — o PC segue ativo, o devolvido sai da conta do projeto" },
   aprovado:   { rot: "Aprovado",              cor: "#2563EB", ajuda: "aprovado, ainda não enviado ao fornecedor" },
   enviado:    { rot: "Enviado ao fornecedor", cor: "#6366F1", ajuda: "pedido mandado ao fornecedor (e-mail do PC)" },
   faturado:   { rot: "Faturado",              cor: "#A855F7", ajuda: "NF emitida pelo fornecedor — a caminho" },
@@ -20,7 +21,7 @@ export const ESTADOS_PC: Record<EstadoPc, { rot: string; cor: string; ajuda: str
   conferido:  { rot: "Conferido",             cor: "#16A34A", ajuda: "itens, quantidades e valores batidos com pedido e NF" },
 };
 /** Ordem da legenda. */
-export const ORDEM_ESTADOS: EstadoPc[] = ["aguardando", "aprovado", "enviado", "faturado", "recebido", "conferido", "reprovado", "cancelado"];
+export const ORDEM_ESTADOS: EstadoPc[] = ["aguardando", "aprovado", "enviado", "faturado", "recebido", "conferido", "devolucao", "reprovado", "cancelado"];
 export const LEGENDA_SITUACAO = ORDEM_ESTADOS.map((k) => `■ ${ESTADOS_PC[k].rot} — ${ESTADOS_PC[k].ajuda}`).join("\n");
 
 export type DadosPc = {
@@ -28,6 +29,8 @@ export type DadosPc = {
   enviado_em?: string | null; dt_fat?: string | null; dt_rec?: string | null;
   qtd?: number | null; qtd_recebida?: number | null;
   aprov_por?: string | null; aprov_em?: string | null;
+  /** devolução de material registrada no painel (sql/146) */
+  devolucao?: "total" | "parcial" | null;
 };
 
 /** Estado real do PC: aprovação + etapa da compra. */
@@ -36,6 +39,7 @@ export function estadoPc(p: DadosPc): { chave: EstadoPc; rot: string; cor: strin
   const parcial = rec > 0 && qtd > 0 && rec < qtd - 1e-6;
   const k: EstadoPc =
     p.cancelado ? "cancelado"
+    : p.devolucao ? "devolucao"
     : p.aprov === "nao_aprovado" ? "reprovado"
     : p.etapa === "80" ? "conferido"
     : p.etapa === "60" || rec > 0 || !!p.dt_rec ? "recebido"
@@ -45,7 +49,9 @@ export function estadoPc(p: DadosPc): { chave: EstadoPc; rot: string; cor: strin
     : p.aprov === "aprovado" || p.aprov === "na" ? "aprovado"
     : "aguardando";
   const e = ESTADOS_PC[k];
-  return { chave: k, rot: k === "recebido" && parcial ? "Recebido parcial" : e.rot, cor: e.cor, parcial };
+  const rot = k === "recebido" && parcial ? "Recebido parcial"
+    : k === "devolucao" ? (p.devolucao === "total" ? "Devolução total" : "Devolução parcial") : e.rot;
+  return { chave: k, rot, cor: e.cor, parcial: parcial || (k === "devolucao" && p.devolucao !== "total") };
 }
 
 const d = (s?: string | null) => {

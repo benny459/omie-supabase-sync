@@ -7,6 +7,7 @@
 import { NextResponse } from "next/server";
 import { supaServer } from "@/lib/supabase-server";
 import { createClient } from "@supabase/supabase-js";
+import { lerAjustes, devolvidoPorPc, valorLiquido } from "@/lib/pc-ajustes";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -73,6 +74,7 @@ export async function GET(req: Request) {
         return !pc || !ch.has(`${String(r.empresa ?? "")}|${pc}`);
       });
     }
+    linhas = await comDevolucoes(linhas);
     return NextResponse.json({ rows: linhas, count: linhas.length, parcial: true });
   }
 
@@ -186,6 +188,8 @@ export async function GET(req: Request) {
     }
   } catch { /* lista de exclusão indisponível: mostra tudo */ }
 
+  merged = await comDevolucoes(merged);
+
   // Buscamos a MV inteira, então rows.length É o total — mais confiável que o
   // count "estimated" do planner. Só caímos no header count se batemos MAX_ROWS.
   return NextResponse.json({
@@ -193,5 +197,23 @@ export async function GET(req: Request) {
     count: truncated ? (headerCount ?? merged.length) : merged.length,
     truncated,
     parcial: soAberto || rapido,
+  });
+}
+
+/* Devolução de material (sql/146): o PC continua na lista, mas o valor devolvido sai
+   da conta do projeto — valor_total vira o líquido (o original fica em
+   valor_total_original) e pc_devolucao diz total/parcial para a pílula. Assim margem,
+   barras e KPIs, que leem valor_total, já contam certo. Falhou a leitura: nada muda. */
+async function comDevolucoes(rows: Record<string, unknown>[]): Promise<Record<string, unknown>[]> {
+  const { devolucoes } = await lerAjustes({});
+  if (!devolucoes.length) return rows;
+  const dev = devolvidoPorPc(devolucoes);
+  return rows.map((r) => {
+    const pc = String(r.pc_numero ?? r.pc_numero_manual ?? "").trim();
+    const d = pc ? dev.get(`${String(r.empresa ?? "")}|${pc}`) : undefined;
+    if (!d) return r;
+    const v = Number(r.valor_total ?? 0) || 0;
+    return { ...r, valor_total_original: r.valor_total, valor_total: r.valor_total == null ? null : valorLiquido(v, d),
+      pc_devolucao: { tipo: d.tipo, valor: d.valor } };
   });
 }
