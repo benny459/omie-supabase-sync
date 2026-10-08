@@ -3,7 +3,8 @@
 //
 // • Com cabeçalho (2+ nomes de coluna reconhecidos na 1ª linha): cada coluna vai pelo nome.
 // • Sem cabeçalho: pela posição, na ordem que quem chama passar (na lista de materiais:
-//   Código · Item · Qtd · Un · Necessário em · Valor unit. — Código pode vir vazio).
+//   Código · Item · Qtd · Un · Necessário em · Valor unit. · Grupo — Código pode vir vazio;
+//   é a ordem do bloco B:H "PARA_COLAR" do modelo Excel).
 // • Datas dd/mm/aaaa (ou dd/mm/aa) viram ISO — antes eram descartadas em silêncio no salvar
 //   e a linha ficava com a data do grupo.
 // • Modelo Excel novo (lib/modelo-lista, 08/10/26): linhas de título/instrução antes do
@@ -24,7 +25,11 @@ export const ALVOS_LISTA: AlvoColar[] = [
 export const POSICIONAIS_LISTA: AlvoColar[] = [
   { label: "Código", key: "cat_codigo" }, { label: "Item", key: "item" }, { label: "Qtd", key: "qtd" }, { label: "Un", key: "un" },
   { label: "Necessário em", key: "data_necessaria", tipo: "data" }, { label: "Valor unit.", key: "cat_valor_unit" },
+  { label: "Grupo", key: "equipamento" },
 ];
+/** Na grade, o Grupo (equipamento) fica à esquerda e fora do colar por posição — entra como
+ *  7ª posição, depois de Valor unit., para o bloco B:H do modelo colar direto. */
+export const POSICIONAIS_EXTRAS_GRADE: AlvoColar[] = [{ label: "Grupo", key: "equipamento" }];
 
 /** Quebra o texto colado em linhas × células (TAB do Excel; `;` de CSV como reserva). */
 export function dividirColagem(texto: string): string[][] {
@@ -83,10 +88,11 @@ export function lerColagem(texto: string, alvosNome: AlvoColar[], posicionais: A
   const casa = (c: string) => alvosNome.find((e) => nrm(e.label) === nrm(c) || nrm(e.key) === nrm(c))
     ?? (ehEscolha(c) ? { label: c, key: "_escolha" } : undefined);
   const ehCab = (cells: string[]) => cells.map(casa).filter(Boolean).length >= 2;
-  // título/instrução do modelo antes do cabeçalho: linhas com no máximo 1 célula preenchida
+  // título/instrução/faixa "copie estas colunas" do modelo antes do cabeçalho: linhas com no
+  // máximo 2 células preenchidas, cabeçalho até a 6ª linha
   if (!ehCab(grade[0])) {
     const k = grade.findIndex((cells, j) => j > 0 && j <= 5 && ehCab(cells));
-    if (k > 0 && grade.slice(0, k).every((cells) => cells.filter((c) => c.trim()).length <= 1)) grade = grade.slice(k);
+    if (k > 0 && grade.slice(0, k).every((cells) => cells.filter((c) => c.trim()).length <= 2)) grade = grade.slice(k);
   }
   const porNome = grade[0].map(casa);
   const comCabecalho = porNome.filter(Boolean).length >= 2;

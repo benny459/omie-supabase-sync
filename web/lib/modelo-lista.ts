@@ -5,9 +5,11 @@
 //                     apontando para o nome CATALOGO ("CÓDIGO · descrição"). Excel 365/web
 //                     procura enquanto digita; versões antigas mostram a lista. Aviso (não
 //                     bloqueio): texto livre entra e vira item "sem código" na importação.
-//                     Ele preenche Qtd, Necessário em, Grupo e (opcional) Valor unit.; o resto
-//                     (Código, Descrição, Un, Fornecedor, Último preço, Prazo, Total) sai por
-//                     fórmula, em cinza e travado.
+//                     B:H = bloco PARA_COLAR, na ordem posicional do colar da grade/modal
+//                     (Código · Item · Qtd · Un · Necessário em · Valor unit. · Grupo), marcado
+//                     em azul — copia e cola direto. Ele preenche Qtd, Necessário em, Grupo e
+//                     (opcional, à direita) Valor unit. se diferente; o resto sai por fórmula,
+//                     em cinza e travado.
 //   aba "Catálogo"  — os itens do estoque (código novo, ativos), visível para consultar e filtrar,
 //                     protegida (sem senha) para não estragar a lista do menu.
 //   aba "Grupos"    — grupos do projeto + cadastro, alimenta o menu da coluna Grupo.
@@ -24,8 +26,8 @@ export type GrupoModelo = { nome: string; origem: "projeto" | "proposta" | "cada
 
 /** Linhas preparadas na aba Lista. */
 export const LINHAS_MODELO = 300;
-/** Linha do cabeçalho na aba Lista (1 = título, 2 = instrução). */
-export const LINHA_CAB = 3;
+/** Linha do cabeçalho na aba Lista (1 = título, 2 = instrução, 3 = faixa "copie estas colunas"). */
+export const LINHA_CAB = 4;
 export const CAB_ESCOLHA = "Item (digite e escolha)";
 
 /** O texto que aparece no menu: "ME0063 · ROTAMETRO P/ PAINEL 10 A 100 LPM". Sem * ? ~ —
@@ -88,20 +90,27 @@ export function montarModeloLista(opts: {
   wb.definedNames.add(`'Grupos'!$A$2:$A$${grupos.length + 1}`, "GRUPOS");
 
   // ── Lista ──
-  const COLS: { h: string; w: number; auto?: boolean; fmt?: string; hidden?: boolean }[] = [
-    { h: CAB_ESCOLHA, w: 62 },                         // A
-    { h: "Qtd", w: 8, fmt: "#,##0.##" },               // B
-    { h: "Necessário em", w: 14, fmt: "dd/mm/yyyy" },  // C
-    { h: "Grupo", w: 22 },                             // D
-    { h: "Valor unit. (se diferente)", w: 15, fmt: "#,##0.00" }, // E
-    { h: "Código", w: 10, auto: true },                // F
-    { h: "Descrição", w: 52, auto: true },             // G
-    { h: "Un", w: 6, auto: true },                     // H
-    { h: "Fornecedor habitual", w: 30, auto: true },   // I
-    { h: "Último preço", w: 13, auto: true, fmt: "#,##0.00" }, // J
-    { h: "Prazo médio (dias)", w: 11, auto: true },    // K
-    { h: "Total", w: 14, auto: true, fmt: "#,##0.00" },// L
-    { h: "nº no catálogo", w: 8, auto: true, hidden: true }, // M (auxiliar, oculta)
+  // A: escolha · B:H = BLOCO PARA COLAR, na ordem posicional da grade/modal (lib/colar-grade,
+  // POSICIONAIS_LISTA): Código · Item · Qtd · Un · Necessário em · Valor unit. · Grupo ·
+  // I: separador · J:N informações (Valor unit. se diferente, Fornecedor, Último preço, Prazo,
+  // Total) · O: auxiliar oculta (nº da linha no catálogo).
+  type Col = { h: string; w: number; auto?: boolean; fmt?: string; hidden?: boolean; vazia?: boolean };
+  const COLS: Col[] = [
+    { h: CAB_ESCOLHA, w: 60 },                                  // A
+    { h: "Código", w: 10, auto: true },                         // B ┐
+    { h: "Item", w: 50, auto: true },                           // C │
+    { h: "Qtd", w: 8, fmt: "#,##0.##" },                        // D │ bloco
+    { h: "Un", w: 6, auto: true },                              // E │ PARA_COLAR
+    { h: "Necessário em", w: 14, fmt: "dd/mm/yyyy" },           // F │
+    { h: "Valor unit.", w: 13, auto: true, fmt: "#,##0.00" },   // G │
+    { h: "Grupo", w: 22 },                                      // H ┘
+    { h: "", w: 2.5, vazia: true },                             // I separador
+    { h: "Valor unit. (se diferente)", w: 15, fmt: "#,##0.00" },// J
+    { h: "Fornecedor habitual", w: 30, auto: true },            // K
+    { h: "Último preço", w: 13, auto: true, fmt: "#,##0.00" },  // L
+    { h: "Prazo médio (dias)", w: 11, auto: true },             // M
+    { h: "Total", w: 14, auto: true, fmt: "#,##0.00" },         // N
+    { h: "nº no catálogo", w: 8, auto: true, hidden: true },    // O (auxiliar)
   ];
   COLS.forEach((c, i) => {
     const col = lista.getColumn(i + 1);
@@ -109,30 +118,51 @@ export function montarModeloLista(opts: {
     if (c.fmt) col.numFmt = c.fmt;
     if (c.hidden) col.hidden = true;
   });
-  const ultCol = String.fromCharCode(64 + COLS.length - 1); // L (a M é auxiliar)
+  const BLOCO_INI = 2, BLOCO_FIM = 8; // B:H
+  const ultCol = "N";
+  const solido = (argb: string) => ({ type: "pattern" as const, pattern: "solid" as const, fgColor: { argb } });
 
   lista.mergeCells(`A1:${ultCol}1`);
   const t = lista.getCell("A1");
   t.value = `Lista de materiais${opts.projeto ? ` — ${opts.projeto}` : ""} · ${opts.empresa}`;
   t.font = { bold: true, size: 14, color: { argb: "FFFFFFFF" } };
-  t.fill = { type: "pattern", pattern: "solid", fgColor: { argb: NAVY } };
+  t.fill = solido(NAVY);
   t.alignment = { vertical: "middle", indent: 1 };
   lista.getRow(1).height = 26;
   lista.mergeCells(`A2:${ultCol}2`);
   const ins = lista.getCell("A2");
-  ins.value = "Na coluna A comece a digitar o código ou parte da descrição e escolha na lista (ou abra a setinha). "
-    + "Preencha Qtd, Necessário em e Grupo. As colunas cinza se preenchem sozinhas. Item que não está no estoque: digite o nome e confirme o aviso — entra \"sem código\". "
-    + "Depois: Lista de materiais › + Adicionar itens › Importar planilha.";
+  ins.value = "① Na coluna A digite o código ou parte da descrição e escolha na lista. ② Preencha Qtd, Necessário em e Grupo (cinza = automático). "
+    + "③ Para levar ao painel: COPIE AS COLUNAS B:H (área azul) da 1ª à última linha preenchida — ou Ctrl+G › PARA_COLAR — e cole com Ctrl+V numa linha em branco da lista de materiais. "
+    + "Ou importe o arquivo inteiro: + Adicionar itens › Importar planilha. Item fora do estoque: digite o nome e confirme o aviso (entra \"sem código\").";
   ins.font = { italic: true, size: 10, color: { argb: CINZA_TXT } };
   ins.alignment = { wrapText: true, vertical: "middle", indent: 1 };
-  ins.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF5F7FB" } };
-  lista.getRow(2).height = 32;
+  ins.fill = solido("FFF5F7FB");
+  lista.getRow(2).height = 44;
+
+  // faixa de marcação (linha 3): "digite aqui" sobre A e "copie estas colunas" sobre o bloco
+  const faixa = lista.getRow(LINHA_CAB - 1);
+  faixa.height = 30;
+  const fA = faixa.getCell(1);
+  fA.value = "▼ DIGITE AQUI E ESCOLHA O ITEM";
+  fA.font = { bold: true, color: { argb: NAVY } };
+  fA.fill = solido("FFE4EAF7");
+  fA.alignment = { vertical: "middle", indent: 1 };
+  lista.mergeCells(LINHA_CAB - 1, BLOCO_INI, LINHA_CAB - 1, BLOCO_FIM);
+  const fB = faixa.getCell(BLOCO_INI);
+  fB.value = "▼ COPIE ESTAS COLUNAS (B:H) — da 1ª linha preenchida até a última — e cole com Ctrl+V numa linha em branco da lista";
+  fB.font = { bold: true, color: { argb: "FFFFFFFF" } };
+  fB.fill = solido(ACCENT);
+  fB.alignment = { vertical: "middle", horizontal: "center", wrapText: true };
 
   const cab = lista.getRow(LINHA_CAB);
-  COLS.forEach((c, i) => { cab.getCell(i + 1).value = c.h; });
+  COLS.forEach((c, i) => { cab.getCell(i + 1).value = c.h || null; });
   estiloCab(cab);
   COLS.forEach((c, i) => {
-    if (c.auto) cab.getCell(i + 1).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF3A4A75" } };
+    const cel = cab.getCell(i + 1);
+    if (c.vazia) { cel.fill = solido("FFFFFFFF"); cel.border = {}; return; }
+    const noBloco = i + 1 >= BLOCO_INI && i + 1 <= BLOCO_FIM;
+    if (noBloco) cel.fill = solido(c.auto ? "FF1F4FC4" : ACCENT);
+    else if (c.auto) cel.fill = solido("FF3A4A75");
   });
   cab.height = 30;
   cab.getCell(1).note = "Digite parte do código ou da descrição: o Excel 365 filtra a lista enquanto você digita. "
@@ -141,60 +171,73 @@ export function montarModeloLista(opts: {
   const L = LINHA_CAB + 1;
   const ultLista = LINHA_CAB + nLin;
   const C = (col: string) => `'Catálogo'!$${col}$2:$${col}$${ultCat}`;
+  const AZUL = { style: "medium" as const, color: { argb: ACCENT } };
   for (let r = L; r <= ultLista; r++) {
     const row = lista.getRow(r);
     const f: Record<string, string> = {
-      M: `IF($A${r}="","",IFERROR(MATCH($A${r},CATALOGO,0),IFERROR(MATCH($A${r},CAT_CODIGO,0),"")))`,
-      F: `IF($M${r}="","",INDEX(${C("B")},$M${r}))`,
-      G: `IF($A${r}="","",IF($M${r}="",$A${r},INDEX(${C("C")},$M${r})))`,
-      H: `IF($M${r}="","",INDEX(${C("D")},$M${r})&"")`,
-      I: `IF($M${r}="","",INDEX(${C("F")},$M${r})&"")`,
-      J: `IF($M${r}="","",IF(INDEX(${C("G")},$M${r})="","",INDEX(${C("G")},$M${r})))`,
-      K: `IF($M${r}="","",IF(INDEX(${C("H")},$M${r})="","",INDEX(${C("H")},$M${r})))`,
-      L: `IF(OR($A${r}="",$B${r}=""),"",IF(AND($E${r}="",N($J${r})=0),"",IFERROR($B${r}*IF($E${r}<>"",$E${r},$J${r}),"")))`,
+      O: `IF($A${r}="","",IFERROR(MATCH($A${r},CATALOGO,0),IFERROR(MATCH($A${r},CAT_CODIGO,0),"")))`,
+      B: `IF($O${r}="","",INDEX(${C("B")},$O${r}))`,
+      C: `IF($A${r}="","",IF($O${r}="",$A${r},INDEX(${C("C")},$O${r})))`,
+      E: `IF($O${r}="","",INDEX(${C("D")},$O${r})&"")`,
+      G: `IF($A${r}="","",IF($J${r}<>"",$J${r},$L${r}))`,
+      K: `IF($O${r}="","",INDEX(${C("F")},$O${r})&"")`,
+      L: `IF($O${r}="","",IF(INDEX(${C("G")},$O${r})="","",INDEX(${C("G")},$O${r})))`,
+      M: `IF($O${r}="","",IF(INDEX(${C("H")},$O${r})="","",INDEX(${C("H")},$O${r})))`,
+      N: `IF(OR($A${r}="",$D${r}="",$G${r}=""),"",IFERROR($D${r}*$G${r},""))`,
     };
     COLS.forEach((c, i) => {
       const cell = row.getCell(i + 1);
       const letra = String.fromCharCode(65 + i);
-      cell.border = bordas;
+      if (c.vazia) return;
+      const noBloco = i + 1 >= BLOCO_INI && i + 1 <= BLOCO_FIM;
+      cell.border = {
+        ...bordas,
+        ...(i + 1 === BLOCO_INI ? { left: AZUL } : {}), ...(i + 1 === BLOCO_FIM ? { right: AZUL } : {}),
+        ...(noBloco && r === ultLista ? { bottom: AZUL } : {}),
+      };
       if (c.auto) {
         cell.value = { formula: f[letra], result: "" } as ExcelJS.CellFormulaValue;
-        cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: CINZA } };
+        cell.fill = solido(noBloco ? "FFE6ECF8" : CINZA);
         cell.font = { color: { argb: CINZA_TXT } };
         cell.protection = { locked: true };
       } else {
-        cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: INPUT } };
+        cell.fill = solido(INPUT);
         cell.protection = { locked: false };
       }
     });
   }
+  // contorno de cima do bloco (cabeçalho)
+  for (let c = BLOCO_INI; c <= BLOCO_FIM; c++) {
+    const cel = cab.getCell(c);
+    cel.border = { ...bordas, top: AZUL, ...(c === BLOCO_INI ? { left: AZUL } : {}), ...(c === BLOCO_FIM ? { right: AZUL } : {}) };
+  }
+  // Ctrl+G › PARA_COLAR seleciona as linhas do bloco (sem o cabeçalho)
+  wb.definedNames.add(`Lista!$B$${L}:$H$${ultLista}`, "PARA_COLAR");
+
   // validação por FAIXA (uma por coluna): célula a célula, o "otimizador" do ExcelJS ordena
   // os endereços como texto (A10 < A4) e grava faixas sobrepostas — o Excel pede reparo.
   const dvs = (lista as unknown as { dataValidations: { add: (a: string, v: ExcelJS.DataValidation) => void } }).dataValidations;
-  const dv = (col: number, v: ExcelJS.DataValidation) => {
-    const l = String.fromCharCode(64 + col);
-    dvs.add(`${l}${L}:${l}${ultLista}`, v);
-  };
-  dv(1, {
+  const dv = (l: string, v: ExcelJS.DataValidation) => dvs.add(`${l}${L}:${l}${ultLista}`, v);
+  dv("A", {
     type: "list", allowBlank: true, formulae: ["CATALOGO"], showErrorMessage: true, errorStyle: "information",
     errorTitle: "Item fora do estoque", error: "Esse texto não está no catálogo. Clique OK para manter como item \"sem código\" (você compatibiliza depois no painel) ou Cancelar para escolher da lista.",
   });
-  dv(2, {
+  dv("D", {
     type: "decimal", operator: "greaterThan", formulae: [0], allowBlank: true, showErrorMessage: true, errorStyle: "warning",
     errorTitle: "Quantidade", error: "A quantidade deve ser um número maior que zero.",
   });
-  dv(3, {
+  dv("F", {
     type: "date", operator: "greaterThan", formulae: [new Date(Date.UTC(2020, 0, 1))], allowBlank: true,
     showInputMessage: true, promptTitle: "Necessário em", prompt: "Data no formato dd/mm/aaaa",
     showErrorMessage: true, errorStyle: "warning", errorTitle: "Data", error: "Use uma data no formato dd/mm/aaaa.",
   });
-  dv(4, {
+  dv("H", {
     type: "list", allowBlank: true, formulae: ["GRUPOS"], showErrorMessage: true, errorStyle: "information",
     errorTitle: "Grupo novo", error: "Esse grupo não está na lista. Clique OK para criar um grupo novo com esse nome.",
   });
-  dv(5, {
+  dv("J", {
     type: "decimal", operator: "greaterThanOrEqual", formulae: [0], allowBlank: true, showErrorMessage: true, errorStyle: "warning",
-    showInputMessage: true, promptTitle: "Valor unitário", prompt: "Só se for diferente do último preço (coluna J). Vazio = usa o último preço.",
+    showInputMessage: true, promptTitle: "Valor unitário", prompt: "Só se for diferente do último preço (coluna L). Vazio = usa o último preço.",
     errorTitle: "Valor", error: "Use um número (ex.: 125,90).",
   });
   lista.autoFilter = { from: { row: LINHA_CAB, column: 1 }, to: { row: ultLista, column: COLS.length - 1 } };

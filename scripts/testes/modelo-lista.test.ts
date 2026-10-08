@@ -7,7 +7,7 @@ import ExcelJS from "exceljs";
 import * as XLSX from "xlsx";
 import { montarModeloLista, rotuloItem, LINHA_CAB, LINHAS_MODELO, CAB_ESCOLHA, type ItemModelo } from "../../web/lib/modelo-lista";
 import { arquivoParaTexto } from "../../web/lib/ler-planilha";
-import { lerColagem, separarEscolha, ALVOS_LISTA, POSICIONAIS_LISTA } from "../../web/lib/colar-grade";
+import { lerColagem, separarEscolha, ALVOS_LISTA, POSICIONAIS_LISTA, POSICIONAIS_EXTRAS_GRADE } from "../../web/lib/colar-grade";
 
 const ITENS: ItemModelo[] = [
   { codigo: "ME0063", descricao: "ROTAMETRO P/ PAINEL 10 A 100 LPM", un: "UN", familia: "MEDIDORES", fornecedor: "ACME LTDA", ultimo_preco: 412.5, prazo_dias: 12 },
@@ -16,7 +16,6 @@ const ITENS: ItemModelo[] = [
 ];
 const GRUPOS = [{ nome: "Abrandador", origem: "projeto" as const }, { nome: "Geral", origem: "cadastro" as const }];
 const novo = () => montarModeloLista({ itens: ITENS, grupos: GRUPOS, empresa: "SF", projeto: "projeto 9000000000013" });
-const serial = (iso: string) => (Date.UTC(+iso.slice(0, 4), +iso.slice(5, 7) - 1, +iso.slice(8, 10)) - Date.UTC(1899, 11, 30)) / 86400000;
 const ler = (texto: string) => lerColagem(texto, ALVOS_LISTA, POSICIONAIS_LISTA).linhas;
 
 /** Preenche como o Benny faria; `comResultado` simula o Excel gravando o resultado das fórmulas. */
@@ -31,15 +30,16 @@ async function preencher(comResultado: boolean): Promise<Buffer> {
   ];
   linhas.forEach(([a, q, d, g, v], i) => {
     const r = ws.getRow(LINHA_CAB + 1 + i);
-    r.getCell(1).value = a;
-    if (q != null) r.getCell(2).value = q;
-    if (d) r.getCell(3).value = new Date(`${d}T00:00:00Z`);
-    if (g) r.getCell(4).value = g;
-    if (v != null) r.getCell(5).value = v;
+    r.getCell("A").value = a;
+    if (q != null) r.getCell("D").value = q;
+    if (d) r.getCell("F").value = new Date(`${d}T00:00:00Z`);
+    if (g) r.getCell("H").value = g;
+    if (v != null) r.getCell("J").value = v;
     if (comResultado) {
       const it = ITENS.find((x) => a.startsWith(x.codigo));
-      const set = (c: number, res: unknown) => { const f = (r.getCell(c).value as ExcelJS.CellFormulaValue).formula; r.getCell(c).value = { formula: f, result: res } as ExcelJS.CellFormulaValue; };
-      set(6, it?.codigo ?? ""); set(7, it?.descricao ?? a); set(8, it?.un ?? ""); set(10, it?.ultimo_preco ?? "");
+      const set = (c: string, res: unknown) => { const f = (r.getCell(c).value as ExcelJS.CellFormulaValue).formula; r.getCell(c).value = { formula: f, result: res } as ExcelJS.CellFormulaValue; };
+      set("B", it?.codigo ?? ""); set("C", it?.descricao ?? a); set("E", it?.un ?? ""); set("L", it?.ultimo_preco ?? "");
+      set("G", v ?? it?.ultimo_preco ?? "");
     }
   });
   return Buffer.from(await wb.xlsx.writeBuffer() as ArrayBuffer);
@@ -63,15 +63,19 @@ test("o modelo gerado: abas, nomes, validações e fórmulas", async () => {
   assert.deepEqual(wb.worksheets.map((w) => w.name), ["Lista", "Catálogo", "Grupos"]);
   const ws = wb.getWorksheet("Lista")!;
   assert.equal(ws.getCell(LINHA_CAB, 1).value, CAB_ESCOLHA);
-  const a = ws.getCell(LINHA_CAB + 1, 1).dataValidation;
+  const a = ws.getCell(`A${LINHA_CAB + 1}`).dataValidation;
   assert.equal(a.type, "list"); assert.equal(a.errorStyle, "information"); assert.deepEqual(a.formulae, ["CATALOGO"]);
-  assert.equal(ws.getCell(LINHA_CAB + LINHAS_MODELO, 4).dataValidation.formulae?.[0], "GRUPOS");
-  assert.equal(ws.getCell(LINHA_CAB + 1, 3).dataValidation.type, "date");
-  assert.match(String((ws.getCell(LINHA_CAB + 1, 6).value as ExcelJS.CellFormulaValue).formula), /INDEX\('Catálogo'!\$B\$2:\$B\$4,\$M4\)/);
-  assert.notEqual(ws.getCell(LINHA_CAB + 1, 6).protection?.locked, false, "coluna automática travada (padrão do Excel)");
-  assert.equal(ws.getCell(LINHA_CAB + 1, 2).protection?.locked, false);
+  assert.equal(ws.getCell(`H${LINHA_CAB + LINHAS_MODELO}`).dataValidation.formulae?.[0], "GRUPOS");
+  assert.equal(ws.getCell(`F${LINHA_CAB + 1}`).dataValidation.type, "date");
+  // bloco B:H na ordem posicional do colar
+  assert.deepEqual(["B", "C", "D", "E", "F", "G", "H"].map((c) => ws.getCell(`${c}${LINHA_CAB}`).value),
+    POSICIONAIS_LISTA.map((p) => p.label));
+  assert.match(String(ws.getCell(`B${LINHA_CAB - 1}`).value), /COPIE ESTAS COLUNAS \(B:H\)/);
+  assert.match(String((ws.getCell(`B${LINHA_CAB + 1}`).value as ExcelJS.CellFormulaValue).formula), /INDEX\('Catálogo'!\$B\$2:\$B\$4,\$O5\)/);
+  assert.notEqual(ws.getCell(`B${LINHA_CAB + 1}`).protection?.locked, false, "coluna automática travada (padrão do Excel)");
+  assert.equal(ws.getCell(`D${LINHA_CAB + 1}`).protection?.locked, false);
   const xml = XLSX.read(buf, { type: "buffer" });
-  assert.deepEqual(xml.Workbook?.Names?.map((n) => n.Name).sort(), ["CATALOGO", "CAT_CODIGO", "GRUPOS"]);
+  assert.deepEqual(xml.Workbook?.Names?.map((n) => n.Name).sort(), ["CATALOGO", "CAT_CODIGO", "GRUPOS", "PARA_COLAR"]);
   assert.equal(XLSX.utils.sheet_to_json(xml.Sheets["Catálogo"]).length, 3);
   // o modelo em branco não importa nada
   assert.deepEqual(ler(arquivoParaTexto("m.xlsx", buf)), []);
@@ -87,9 +91,9 @@ for (const comResultado of [true, false]) {
     assert.equal(l1.qtd, "2");
     assert.equal(l1.data_necessaria, "2026-10-30");
     assert.equal(l1.equipamento, "Abrandador");
-    assert.equal(l1.cat_valor_unit ?? "", "", "valor vazio = usa o último preço do catálogo");
+    assert.equal(l1.cat_valor_unit ?? "", comResultado ? "412.5" : "", "sem 'se diferente' = último preço (pela fórmula, ou o modal completa do catálogo)");
     assert.equal(l2.cat_codigo, "TB0101");
-    assert.equal(l2.cat_valor_unit, "27.9");
+    assert.equal(l2.cat_valor_unit, "27.9", "o 'se diferente' manda");
     assert.equal(l2.data_necessaria ?? "", "");
     assert.equal(l3.cat_codigo ?? "", "", "texto livre entra sem código");
     assert.equal(l3.item, "VÁLVULA ESPECIAL FORA DO ESTOQUE");
@@ -98,25 +102,60 @@ for (const comResultado of [true, false]) {
   });
 }
 
-test("colar do Excel a aba Lista copiada (título + instrução + cabeçalho + linhas, datas dd/mm/aaaa)", () => {
-  const cab = [CAB_ESCOLHA, "Qtd", "Necessário em", "Grupo", "Valor unit. (se diferente)", "Código", "Descrição", "Un", "Fornecedor habitual", "Último preço", "Prazo médio (dias)", "Total"];
+test("colar do Excel a aba Lista inteira copiada (título + instrução + faixa + cabeçalho + linhas)", () => {
+  const cab = [CAB_ESCOLHA, "Código", "Item", "Qtd", "Un", "Necessário em", "Valor unit.", "Grupo", "", "Valor unit. (se diferente)", "Fornecedor habitual", "Último preço", "Prazo médio (dias)", "Total"];
   const texto = [
     "Lista de materiais — projeto 9000000000013 · SF",
-    "Na coluna A comece a digitar…",
+    "① Na coluna A digite…",
+    "▼ DIGITE AQUI E ESCOLHA O ITEM\t▼ COPIE ESTAS COLUNAS (B:H)",
     cab.join("\t"),
-    ["ME0063 · ROTAMETRO P/ PAINEL 10 A 100 LPM", "3", "30/10/2026", "Abrandador", "", "ME0063", "ROTAMETRO P/ PAINEL 10 A 100 LPM", "UN", "ACME", "412,50", "12", "1.237,50"].join("\t"),
-    ["", "", "", "", "", "", "", "", "", "", "", ""].join("\t"),
-    ["Parafuso especial", "10", "", "", "1,20", "", "Parafuso especial", "", "", "", "", "12,00"].join("\t"),
+    ["ME0063 · ROTAMETRO P/ PAINEL 10 A 100 LPM", "ME0063", "ROTAMETRO P/ PAINEL 10 A 100 LPM", "3", "UN", "30/10/2026", "412,50", "Abrandador", "", "", "ACME", "412,50", "12", "1.237,50"].join("\t"),
+    Array(14).fill("").join("\t"),
+    ["Parafuso especial", "", "Parafuso especial", "10", "", "", "1,20", "", "", "1,20", "", "", "", "12,00"].join("\t"),
   ].join("\n");
   const r = lerColagem(texto, ALVOS_LISTA, POSICIONAIS_LISTA);
   assert.equal(r.comCabecalho, true);
   assert.equal(r.linhas.length, 2);
   assert.deepEqual(
-    { c: r.linhas[0].cat_codigo, i: r.linhas[0].item, q: r.linhas[0].qtd, d: r.linhas[0].data_necessaria, v: r.linhas[0].cat_valor_unit },
-    { c: "ME0063", i: "ROTAMETRO P/ PAINEL 10 A 100 LPM", q: "3", d: "2026-10-30", v: "" });
+    { c: r.linhas[0].cat_codigo, i: r.linhas[0].item, q: r.linhas[0].qtd, d: r.linhas[0].data_necessaria, v: r.linhas[0].cat_valor_unit, g: r.linhas[0].equipamento },
+    { c: "ME0063", i: "ROTAMETRO P/ PAINEL 10 A 100 LPM", q: "3", d: "2026-10-30", v: "412,50", g: "Abrandador" });
   assert.equal(r.linhas[1].cat_codigo ?? "", "");
   assert.equal(r.linhas[1].cat_valor_unit, "1,20");
-  assert.ok(serial("2026-10-30") > 46000);
+});
+
+// o que o Excel põe na área de transferência ao copiar B:H (fórmulas viram valores)
+const BLOCO = [
+  ["ME0063", "ROTAMETRO P/ PAINEL 10 A 100 LPM", "3", "UN", "30/10/2026", "412,50", "Abrandador"],
+  ["", "Parafuso especial", "10", "", "15/11/2026", "1,20", "Grupo Novo"],
+  ["TB0101", "TUBO PVC 1/2\" x 6M", "5", "BR", "", "30,00", ""],
+];
+const confere = (ls: Record<string, string>[]) => {
+  assert.equal(ls.length, 3);
+  assert.deepEqual(ls[0], { cat_codigo: "ME0063", item: "ROTAMETRO P/ PAINEL 10 A 100 LPM", qtd: "3", un: "UN", data_necessaria: "2026-10-30", cat_valor_unit: "412,50", equipamento: "Abrandador" });
+  assert.equal(ls[1].cat_codigo, ""); assert.equal(ls[1].item, "Parafuso especial"); assert.equal(ls[1].equipamento, "Grupo Novo");
+  assert.equal(ls[2].equipamento, "", "grupo vazio: a grade/modal usa o da linha/seletor");
+};
+
+test("colar o bloco B:H SEM cabeçalho — modal (ordem posicional com Grupo em 7º)", () => {
+  const r = lerColagem(BLOCO.map((l) => l.join("\t")).join("\n") + "\n", ALVOS_LISTA, POSICIONAIS_LISTA);
+  assert.equal(r.comCabecalho, false);
+  confere(r.linhas);
+});
+
+test("colar o bloco B:H SEM cabeçalho — grade (editáveis + Grupo como 7ª posição)", () => {
+  // as editáveis da grade da lista na ordem (o equipamento fica fora: pularNoColar)
+  const editaveisGrade = [{ label: "Código", key: "cat_codigo" }, { label: "Item", key: "item" }, { label: "Qtd", key: "qtd" }, { label: "Un", key: "un" },
+    { label: "Necessário em", key: "data_necessaria", tipo: "data" }, { label: "Valor unit.", key: "cat_valor_unit" }];
+  const pos = [...editaveisGrade, ...POSICIONAIS_EXTRAS_GRADE];
+  assert.deepEqual(pos.map((p) => p.key), POSICIONAIS_LISTA.map((p) => p.key), "grade e modal na mesma ordem");
+  confere(lerColagem(BLOCO.map((l) => l.join("\t")).join("\n"), ALVOS_LISTA, pos).linhas);
+});
+
+test("colar o bloco B:H COM o cabeçalho do bloco", () => {
+  const cab = ["Código", "Item", "Qtd", "Un", "Necessário em", "Valor unit.", "Grupo"];
+  const r = lerColagem([cab, ...BLOCO].map((l) => l.join("\t")).join("\n"), ALVOS_LISTA, POSICIONAIS_LISTA);
+  assert.equal(r.comCabecalho, true);
+  confere(r.linhas);
 });
 
 test("colagem antiga (sem modelo) continua igual", () => {
