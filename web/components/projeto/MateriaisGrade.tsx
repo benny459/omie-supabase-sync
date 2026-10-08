@@ -51,6 +51,7 @@ import { deHtml } from "@/lib/match-pc";
 import { normGrupo, dataDoGrupo, aplicarDataGrupo, nomePadrao } from "@/lib/grupos-equipamento-puro";
 import { estadoPc, dicaEstadoPc, LEGENDA_SITUACAO } from "@/lib/situacao-pc";
 import { sinalEntrega, FOLGA_ENTREGA_DIAS, type SinalEntrega } from "@/lib/sinal-entrega";
+import { textoCasar, SUG_MIN } from "@/lib/texto-casar";
 
 type ItemRow = {
   id: string; equipamento: string | null; item: string;
@@ -65,6 +66,9 @@ type ItemRow = {
   cat_fornecedor: string | null; cat_entrega_dias: number | null; cat_fat_dias: number | null;
   un: string | null; data_necessaria: string | null;
 };
+/** Sugestão gravada na linha (sql/127, 08/10/26). Lida à parte da view. */
+type SugRow = { id: string; sug_ncod_prod: number | null; sug_codigo: string | null; sug_descricao: string | null;
+  sug_fornecedor: string | null; sug_score: number | null; sug_status: "pendente" | "aceita" | "recusada" | null };
 
 /** Item do catálogo da lista (lib/catalogo-projeto): item NOSSO (código novo) ou, à parte, só do Omie. */
 type Cat = {
@@ -75,9 +79,11 @@ type Cat = {
 };
 type Casamento = { idx: number; status: "ok" | "conferir" | "sem"; manual?: boolean; melhor: Cat | null; alternativas: Cat[]; compra?: Cat[] };
 
-/** Campos que o catálogo preenche na linha. `_match` e `_alts` só vivem na tela. */
+/** Campos que o catálogo preenche na linha. `_match` e `_alts` só vivem na tela; a
+ *  sugestão (`_sug`, `_sug_status`) é gravada (sql/127) e também cai se o texto mudar. */
 const CAT_CAMPOS = ["cat_ncod_prod", "cat_codigo", "cat_valor_unit", "cat_fornecedor",
-                    "cat_entrega_dias", "cat_fat_dias", "_match", "_alts", "_vu_fonte", "_cat_desc"];
+                    "cat_entrega_dias", "cat_fat_dias", "_match", "_alts", "_vu_fonte", "_cat_desc",
+                    "_sug", "_sug_status", "_omie_ncod"];
 /** Chaves da linha (para a linha vazia — independe das colunas de leitura). */
 const CHAVES = ["equipamento", "cat_codigo", "item", "qtd", "un", "data_necessaria", "observacao", "cat_valor_unit", "modelo", "pc_numero"];
 const vazia = () => linhaVazia(CHAVES.map((key) => ({ key, label: "", w: 0 })));
@@ -98,11 +104,28 @@ function camposDoCatalogo(c: Cat, match: "ok" | "conferir", alts: Cat[] = [], va
   };
 }
 /** Sugestão do catálogo (07/10/26, Benny): casamento provável (⚠ conferir com nota ≥ SUG_MIN)
- *  vai para a linha como SUGESTÃO — fica à vista, mas não é código confirmado: não grava
- *  no banco, não conta como casado e o PC não sai com ela até alguém aceitar. */
-const SUG_MIN = 0.6;
-function camposSugestao(c: Cat, alts: Cat[] = []): Record<string, string> {
-  return { _match: "sug", _sug: JSON.stringify(c), _alts: alts.length ? JSON.stringify(alts) : "", cat_ncod_prod: "", cat_codigo: "", _cat_desc: "" };
+ *  vai para a linha como SUGESTÃO — fica à vista, mas não é código confirmado: não conta
+ *  como casado e o PC não sai com ela até alguém aceitar. Desde 08/10/26 (spec C) ela é
+ *  GRAVADA na linha (sug_*, sug_status='pendente'): recarregar, gerar PC ou F5 não a apaga.
+ *  Linha só do Omie guarda o produto do Omie em `_omie_ncod` enquanto a sugestão está pendente. */
+function camposSugestao(c: Cat, alts: Cat[] = [], l?: LinhaGrade): Record<string, string> {
+  const omie: Record<string, string> = l && l._match === "omie" && l.cat_ncod_prod ? { _omie_ncod: l.cat_ncod_prod } : {};
+  return { ...omie, _match: "sug", _sug: JSON.stringify(c), _sug_status: "pendente", _alts: alts.length ? JSON.stringify(alts) : "", cat_ncod_prod: "", cat_codigo: "", _cat_desc: "" };
+}
+/** A linha pode receber sugestão automática? (spec C.3/C.8: sem código NOSSO — inclusive
+ *  a que só tem produto do Omie —, sem sugestão pendente e não recusada.) */
+const semCodigoNosso = (l: LinhaGrade) => !String(l.cat_codigo ?? "").trim() || l._match === "omie";
+const elegivelSug = (l: LinhaGrade) => !!String(l.item ?? "").trim() && semCodigoNosso(l)
+  && l._match !== "sug" && l._sug_status !== "recusada";
+/** Sugestão gravada → campos da linha. */
+function sugDaLinhaGravada(sg: SugRow | undefined, temCodigo: boolean): Record<string, string> {
+  if (!sg?.sug_status) return {};
+  const c: Cat = { ncod_prod: Number(sg.sug_ncod_prod), codigo: sg.sug_codigo, descricao: sg.sug_descricao ?? "", unidade: null,
+    ultimo_preco: null, ultima_compra: null, fornecedor: sg.sug_fornecedor, qtd_compras: null, entrega_dias: null, entrega_fonte: null,
+    fat_dias: null, score: sg.sug_score ?? undefined, nativo: true };
+  const js = sg.sug_ncod_prod ? JSON.stringify(c) : "";
+  if (sg.sug_status === "pendente" && !temCodigo && js) return { _match: "sug", _sug: js, _sug_status: "pendente" };
+  return { _sug: js, _sug_status: sg.sug_status === "pendente" ? "" : sg.sug_status };
 }
 const lerSug = (l: Record<string, string>): Cat | null => { try { return l._sug ? JSON.parse(l._sug) as Cat : null; } catch { return null; } };
 function sugestao(c: Cat): SugestaoGrade {
@@ -129,7 +152,6 @@ const dia = (s: string | null | undefined) => {
 };
 const chaveItem = (eq: string, item: string) =>
   `${String(eq || "Geral").trim().toLowerCase()}|${String(item).trim().toLowerCase()}`;
-const textoCasar = (item: string, modelo?: string | null) => [item, modelo].filter(Boolean).join(" ");
 
 type ItemCpBase = { equipamento: string; item: string; qtd: number | null; modelo: string | null; custo_cp: number | null };
 type GruposMeta = { cadastro: string[] | null; emUso: { nome: string; projetos: number }[];
@@ -137,11 +159,15 @@ type GruposMeta = { cadastro: string[] | null; emUso: { nome: string; projetos: 
 type Seletor = { alvo: "cp"; k: number } | { alvo: "lista"; id: string };
 
 export default function MateriaisGrade({
-  empresa, codigoProjeto, onGravado,
+  empresa, codigoProjeto, onGravado, recarregarRef,
 }: {
   empresa: string; codigoProjeto: number; onGravado?: () => void;
+  /** A tela do projeto recarrega a grade por aqui (em vez de remontá-la — spec C.2). */
+  recarregarRef?: React.MutableRefObject<(() => void) | null>;
 }) {
   const [linhas, setLinhas] = useState<LinhaGrade[]>([vazia()]);
+  const linhasRef = useRef(linhas);
+  linhasRef.current = linhas;
   const [carregando, setCarregando] = useState(true);
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
@@ -330,34 +356,56 @@ export default function MateriaisGrade({
   /* Aceitar / recusar sugestões de código (07/10/26, Benny). Aceitar = o código vira
      confirmado na linha e o de-para (texto → item nosso) é gravado, como a escolha à mão. */
   const [aceiteDesfazer, setAceiteDesfazer] = useState<{ n: number; antes: LinhaGrade[] } | null>(null);
+  /** Por que o salvamento automático está parado (null = salva sozinho). Preenchido mais
+   *  abaixo; os avisos usam para não prometer "salva sozinha" quando não salva (spec C.6). */
+  const semAutosaveRef = useRef<string | null>(null);
+  const fraseSalvar = () => (semAutosaveRef.current
+    ? ` ⚠ Não está salvando sozinha (${semAutosaveRef.current}) — clique em Salvar lista.`
+    : " A lista é salva sozinha em instantes.");
   const aceitarSugestoes = useCallback(async (ids: string[]) => {
     const alvo = new Set(ids);
-    const escolhidas = linhas.filter((l) => alvo.has(l._id) && l._match === "sug" && lerSug(l));
+    const escolhidas = linhasRef.current.filter((l) => alvo.has(l._id) && l._match === "sug" && lerSug(l));
     if (!escolhidas.length) return;
-    const antes = linhas;
+    const antes = linhasRef.current;
     setLinhas((atual) => atual.map((l) => {
       if (!alvo.has(l._id) || l._match !== "sug") return l;
       const c = lerSug(l); if (!c) return l;
       const temValor = !!String(l.cat_valor_unit ?? "").trim();
-      return { ...l, ...camposDoCatalogo(c, "ok", [], l.cat_valor_unit ?? ""), _sug: "",
+      return { ...l, ...camposDoCatalogo(c, "ok", [], l.cat_valor_unit ?? ""), _sug: l._sug, _sug_status: "aceita", _omie_ncod: "",
         ...(temValor ? { cat_valor_unit: l.cat_valor_unit, _vu_fonte: l._vu_fonte ?? "" } : {}) };
     }));
     setSujo(true);
     setAceiteDesfazer({ n: escolhidas.length, antes });
-    setAviso(`${escolhidas.length} sugestão(ões) aceita(s) — viraram código confirmado. A lista é salva sozinha em instantes.`);
-    // de-para em segundo plano: da próxima vez o mesmo texto casa sozinho
-    void Promise.all(escolhidas.map((l) => fetch("/api/catalogo/projeto", { method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ acao: "vincular", emp: empresa, texto: textoCasar(l.item, l.modelo), ncod_prod: lerSug(l)!.ncod_prod }) }).catch(() => null)));
-  }, [linhas, empresa]);
+    setAviso(`${escolhidas.length} sugestão(ões) aceita(s) — viraram código confirmado.${fraseSalvar()}`);
+    // de-para: da próxima vez o mesmo texto casa sozinho. Esperado e conferido (spec C.7) —
+    // antes ia em segundo plano e uma falha passava em silêncio.
+    const res = await Promise.all(escolhidas.map(async (l) => {
+      try {
+        const r = await fetch("/api/catalogo/projeto", { method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ acao: "vincular", emp: empresa, texto: textoCasar(l.item, l.modelo), ncod_prod: lerSug(l)!.ncod_prod }) });
+        if (!r.ok) { const j = await r.json().catch(() => ({})); return String((j as { error?: string }).error ?? r.statusText); }
+        return null;
+      } catch (e) { return (e as Error).message; }
+    }));
+    const falhas = res.filter(Boolean);
+    if (falhas.length) setErro(`O código foi aceito na lista, mas ${falhas.length} de-para não gravou (o mesmo texto não vai casar sozinho da próxima vez): ${falhas[0]}`);
+  }, [empresa]);
   /** Revisar sugestões (07/10/26): uma tela com cada linha, o item sugerido por extenso e as
    *  outras candidatas para trocar — aceitar as marcadas de uma vez. */
   const [revisarSug, setRevisarSug] = useState(false);
   const [sugMarc, setSugMarc] = useState<Set<string>>(new Set());
   const trocarSugestao = useCallback((id: string, c: Cat) => {
-    setLinhas((atual) => atual.map((l) => (l._id === id ? { ...l, _match: "sug", _sug: JSON.stringify(c) } : l)));
+    setLinhas((atual) => atual.map((l) => (l._id === id ? { ...l, _match: "sug", _sug: JSON.stringify(c), _sug_status: "pendente" } : l)));
+    setSujo(true);
   }, []);
+  /** Recusar (spec C.1): fica gravado — o casamento automático não sugere de novo para a linha. */
   const recusarSugestao = useCallback((id: string) => {
-    setLinhas((atual) => atual.map((l) => (l._id === id && l._match === "sug" ? { ...l, _match: "sem", _sug: "" } : l)));
+    setLinhas((atual) => atual.map((l) => {
+      if (l._id !== id || l._match !== "sug") return l;
+      const omie: Record<string, string> = l._omie_ncod ? { cat_ncod_prod: l._omie_ncod, _match: "omie", _omie_ncod: "" } : { _match: "sem" };
+      return { ...l, _sug_status: "recusada", ...omie } as LinhaGrade;
+    }));
+    setSujo(true);
   }, []);
   /* 07/10/26 (redesenho pedido pelo Benny no PJ361): Código antes do Item; casado,
      o Item mostra a descrição do catálogo (o texto original fica na dica); a antiga
@@ -394,11 +442,29 @@ export default function MateriaisGrade({
       } },
     // Código NOSSO (estoque/ALLKA), nunca o do Omie. O ícone diz a situação do
     // casamento (✓ / ⚠ conferir / ⌕ sem) e abre o seletor do catálogo.
-    { key: "cat_codigo", label: "Código", w: 88, fixa: true, pularNoColar: true,
-      limpaAoEditar: ["cat_ncod_prod", "_match", "_alts", "_cat_desc"],
+    /* 08/10/26 (spec C.10): a sugestão aparece DENTRO da célula Código — caixa tracejada
+       âmbar com código, descrição, % e fornecedor, ✓ aceita e ✕ recusa; some ao resolver. */
+    { key: "cat_codigo", label: "Código", w: temSug ? 250 : 88, fixa: true, pularNoColar: true,
+      limpaAoEditar: ["cat_ncod_prod", "_match", "_alts", "_cat_desc", "_sug", "_sug_status", "_omie_ncod"],
+      dica: (l) => { const c = l._match === "sug" ? lerSug(l) : null; return c ? [`Sugestão do catálogo: ${c.codigo ?? ""} — ${c.descricao}`, c.fornecedor ? `fornecedor ${c.fornecedor}` : "", c.motivo ? `por quê: ${c.motivo}` : "", "✓ aceita (vira o código e ensina o de-para) · ✕ recusa (não volta a sugerir) · clique no texto para escolher outro"].filter(Boolean).join("\n") : undefined; },
+      sobrepor: (l) => {
+        const c = l._match === "sug" ? lerSug(l) : null;
+        if (!c) return null;
+        const pct = Math.round((c.score ?? 0) * 100);
+        return (
+          <span className="flex items-center gap-1 w-full min-w-0 rounded-md border border-dashed border-amber-500/70 bg-amber-500/10 px-1 py-px" data-sug={c.codigo ?? ""}>
+            <button type="button" className="min-w-0 flex-1 text-left leading-[1.15]" title="Escolher outro item do catálogo" onClick={() => abrirSeletorLista(l._id)}>
+              <span className="block truncate text-[11px]"><b className="font-mono text-amber-700 dark:text-amber-300">{c.codigo}</b> {c.descricao}</span>
+              <span className="block truncate text-[9.5px] text-ww-textFaint">{pct}%{c.fornecedor ? ` · ${c.fornecedor}` : ""}</span>
+            </button>
+            <button type="button" title="Aceitar esta sugestão" onClick={() => void aceitarSugestoes([l._id])}
+              className="shrink-0 w-5 h-5 rounded border border-emerald-500/60 text-emerald-700 dark:text-emerald-300 text-[11px] font-bold hover:bg-emerald-500/15">✓</button>
+            <button type="button" title="Recusar (fica sem código e não volta a sugerir)" onClick={() => recusarSugestao(l._id)}
+              className="shrink-0 w-5 h-5 rounded border border-ww-border text-ww-textMuted text-[11px] hover:text-rose-500 hover:border-rose-400">✕</button>
+          </span>);
+      },
       marca: (l) => (l._match === "sug" && lerSug(l)
-        ? { classe: "bg-amber-500/15", etiqueta: "ver sugestão",
-            dica: `Sugestão do catálogo: ${lerSug(l)!.codigo ?? ""} ${lerSug(l)!.descricao} — veja na coluna "Sugestão do catálogo" (✓ aceita, ✕ recusa)` }
+        ? { classe: "bg-amber-500/15" }
         : String(l.item ?? "").trim() && (!l.cat_ncod_prod || l._match === "omie")
         ? { classe: "bg-amber-500/15", etiqueta: l.cat_codigo ? "" : l._omie ? `Omie ${l._omie}` : "sem código",
             dica: l._omie ? `Só no Omie (${l._omie}), sem item do nosso estoque` : "Sem item do nosso estoque" } : null),
@@ -444,28 +510,6 @@ export default function MateriaisGrade({
           try { return (JSON.parse(linha._alts) as Cat[]).map(sugestao); } catch { return []; }
         },
       } },
-    /* Sugestão do catálogo (07/10/26, Benny: "não consigo ver o item que ele sugere"): o item
-       sugerido por extenso, a semelhança e ✓ / ✕ na mesma célula. Só aparece com sugestões. */
-    ...(temSug ? [{ key: "_sug_col", label: "Sugestão do catálogo", w: 330,
-      dicaCab: "Item do nosso estoque que o catálogo acha provável para esta linha. ✓ aceita (vira o código da linha e ensina o de-para) · ✕ recusa (fica sem código) · ⌕ no Código escolhe outro.",
-      dica: (l: LinhaGrade) => { const c = lerSug(l); return c ? [`${c.codigo ?? ""} — ${c.descricao}`, c.ultimo_preco != null ? `último preço ${brl(c.ultimo_preco)}` : "sem compra anterior", c.fornecedor ? `fornecedor ${c.fornecedor}` : "", c.unidade ? `un ${c.unidade}` : "", c.motivo ? `por quê: ${c.motivo}` : ""].filter(Boolean).join("\n") : undefined; },
-      render: (l: LinhaGrade) => {
-        const c = l._match === "sug" ? lerSug(l) : null;
-        if (!c) return null;
-        const pct = Math.round((c.score ?? 0) * 100);
-        return (
-          <span className="flex items-center gap-1.5 w-full min-w-0">
-            <span className={`shrink-0 text-[10px] font-semibold px-1 rounded ${pct >= 85 ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300" : "bg-amber-500/20 text-amber-800 dark:text-amber-200"}`}>{pct}%</span>
-            <b className="shrink-0 font-mono text-[11px]">{c.codigo}</b>
-            <span className="truncate text-[11.5px]">{c.descricao}</span>
-            <span className="ml-auto shrink-0 inline-flex gap-1">
-              <button type="button" title="Aceitar esta sugestão" onClick={() => void aceitarSugestoes([l._id])}
-                className="px-1.5 rounded border border-emerald-500/60 text-emerald-700 dark:text-emerald-300 font-bold hover:bg-emerald-500/15">✓</button>
-              <button type="button" title="Recusar (fica sem código)" onClick={() => recusarSugestao(l._id)}
-                className="px-1.5 rounded border border-ww-border text-ww-textMuted hover:text-rose-500 hover:border-rose-400">✕</button>
-            </span>
-          </span>);
-      } } as ColunaGrade] : []),
     { key: "qtd",         label: "Qtd",         w: 46, tipo: "num", alinhaDireita: true },
     { key: "un",          label: "Un",          w: 34 },
     { key: "data_necessaria", label: "Necessário em", w: 102, tipo: "data",
@@ -639,8 +683,8 @@ export default function MateriaisGrade({
    *  falso mandaria uma lista vazia por cima do que está no banco — a rota já
    *  trava, mas a tela não deve nem tentar. */
   const [carregouOk, setCarregouOk] = useState(false);
-  /** Sugestões recalculadas depois de cada carga (não ficam no banco — ver SUG_MIN). */
-  const sugeridoRef = useRef(false);
+  /** Linhas (id + texto) que já passaram pelo casamento automático nesta tela. */
+  const sugTentadasRef = useRef<Set<string>>(new Set());
 
   const carregar = useCallback(async () => {
     setCarregando(true);
@@ -650,17 +694,39 @@ export default function MateriaisGrade({
     try {
       const supa = supaBrowser();
       const approval = supa.schema("approval" as never);
-      const itens = await approval.from("v_rc_projetos_itens")
-        .select("id, equipamento, item, qtd, modelo, observacao, pc_numero, nome_fornecedor, dt_previsao, nova_prev_materiais, mt_data_recebimento_nf, pc_etapa_texto, cat_ncod_prod, cat_codigo, cat_valor_unit, cat_fornecedor, cat_entrega_dias, cat_fat_dias, un, data_necessaria")
-        .eq("empresa", empresa).eq("codigo_projeto", codigoProjeto)
-        .order("equipamento", { ascending: true }).order("item", { ascending: true });
+      // a sugestão gravada (sql/127) vem da tabela, em paralelo — sem a migração, segue sem ela
+      const [itens, sugs] = await Promise.all([
+        approval.from("v_rc_projetos_itens")
+          .select("id, equipamento, item, qtd, modelo, observacao, pc_numero, nome_fornecedor, dt_previsao, nova_prev_materiais, mt_data_recebimento_nf, pc_etapa_texto, cat_ncod_prod, cat_codigo, cat_valor_unit, cat_fornecedor, cat_entrega_dias, cat_fat_dias, un, data_necessaria")
+          .eq("empresa", empresa).eq("codigo_projeto", codigoProjeto)
+          .order("equipamento", { ascending: true }).order("item", { ascending: true }),
+        approval.from("rc_projetos_itens")
+          .select("id, sug_ncod_prod, sug_codigo, sug_descricao, sug_fornecedor, sug_score, sug_status")
+          .eq("empresa", empresa).eq("codigo_projeto", codigoProjeto).not("sug_status", "is", null),
+      ]);
+      const sugPorId = new Map(((sugs.error ? [] : sugs.data ?? []) as SugRow[]).map((x) => [x.id, x]));
       // Sem marcar a carga como OK, a tela fica indistinguível de "projeto
       // vazio" — e foi assim que salvar por cima apagou lista alheia.
       if (itens.error) { setErro(itens.error.message); setCarregouOk(false); return; }
       const rows = (itens.data ?? []) as ItemRow[];
       setOriginal(rows.length);
+      /* Recarregar não apaga o que só vive na tela (spec C.2): por _id, a sugestão ainda não
+         gravada e as alternativas do casamento ficam; a seleção também. */
+      const antes = new Map(linhasRef.current.map((l) => [l._id, l]));
       setLinhas([
-        ...rows.map((r) => ({
+        ...rows.map((r) => {
+          const id = `db${r.id}`;
+          const temCod = !!String(r.cat_codigo ?? "").trim();
+          const gravada = sugDaLinhaGravada(sugPorId.get(r.id), temCod);
+          const prev = antes.get(id);
+          const manter: Record<string, string> = {};
+          if (prev && !gravada._match && !temCod && prev._match === "sug" && prev._sug && prev.item === (r.item ?? "")) {
+            Object.assign(manter, { _match: "sug", _sug: prev._sug, _sug_status: "pendente", _omie_ncod: prev._omie_ncod ?? "" });
+          }
+          if (prev?._alts && !temCod) manter._alts = prev._alts;
+          if (prev?._k) manter._k = prev._k;
+          const omiePend = gravada._match === "sug" && r.cat_ncod_prod ? { _omie_ncod: s(r.cat_ncod_prod), cat_ncod_prod: "" } : {};
+          return ({
           _id: `db${r.id}`,
           equipamento: r.equipamento ?? "",
           item: r.item ?? "",
@@ -678,11 +744,12 @@ export default function MateriaisGrade({
           cat_valor_unit: moeda(r.cat_valor_unit), cat_fornecedor: deHtml(s(r.cat_fornecedor)),
           cat_entrega_dias: s(r.cat_entrega_dias), cat_fat_dias: s(r.cat_fat_dias),
           _match: r.cat_ncod_prod ? "ok" : "", _alts: "", _vu_fonte: "",
-        })) as LinhaGrade[],
+          ...gravada, ...omiePend, ...manter,
+        }); }) as LinhaGrade[],
         vazia(),
       ]);
-      setSujo(false); setErro(null); setMarcadas(new Set()); setCarregouOk(true);
-      sugeridoRef.current = false;
+      const idsNovos = new Set(rows.map((r) => `db${r.id}`));
+      setSujo(false); setErro(null); setMarcadas((m) => new Set([...m].filter((x) => idsNovos.has(x)))); setCarregouOk(true);
       /* Lista colada e não salva sumia no primeiro recarregar — "Atualizar
          versão", F5, fechar a aba. Aconteceu mais de uma vez (PJ359, PJ362–364,
          set/2026): o banco nunca recebeu essas listas. Agora o que não foi
@@ -763,7 +830,7 @@ export default function MateriaisGrade({
     });
     if (mudou) queueMicrotask(() => {
       setSujo(true);
-      setAviso(`${mudou} ajuste(s) automático(s) na lista: código do Omie trocado pelo item nosso e/ou valor unit. vazio preenchido (do PC, do catálogo ou da RC). A lista é salva sozinha em instantes.`);
+      setAviso(`${mudou} ajuste(s) automático(s) na lista: código do Omie trocado pelo item nosso e/ou valor unit. vazio preenchido (do PC, do catálogo ou da RC).${fraseSalvar()}`);
     });
     return res; });
   }, [empresa, codigoProjeto, carregarCompras]);
@@ -771,6 +838,12 @@ export default function MateriaisGrade({
   enriquecerRef.current = enriquecer;
 
   useEffect(() => { void carregar(); }, [carregar]);
+  // a tela do projeto recarrega por aqui (upload de planilha) — sem remontar a grade
+  useEffect(() => {
+    if (!recarregarRef) return;
+    recarregarRef.current = () => { void carregar(); };
+    return () => { recarregarRef.current = null; };
+  }, [recarregarRef, carregar]);
 
   // Guarda o que não foi salvo, a cada mudança.
   useEffect(() => {
@@ -837,7 +910,12 @@ export default function MateriaisGrade({
           empresa, codigo_projeto: codigoProjeto,
           confirmar_remocao: confirmarRemocao || intencional,
           esvaziar: intencional && validas.length === 0,
-          items: validas.map((l) => ({
+          items: validas.map((l) => {
+            const sg = lerSug(l);
+            const st = l._match === "sug" && sg ? "pendente" : (l._sug_status === "aceita" || l._sug_status === "recusada" ? l._sug_status : null);
+            return {
+            // linha já gravada vai POR ID (spec C.9); a nova leva a ref para voltar com o id (C.5)
+            ...(l._id.startsWith("db") ? { id: l._id.slice(2) } : { ref: l._id }),
             equipamento: String(l.equipamento ?? "").trim() || "Geral",
             item: String(l.item ?? "").trim(),
             qtd: l.qtd?.trim() ? num(l.qtd) : null,
@@ -846,13 +924,17 @@ export default function MateriaisGrade({
             modelo: String(l.modelo ?? "").trim() || null,
             observacao: String(l.observacao ?? "").trim() || null,
             pc_numero: String(l.pc_numero ?? "").trim() || null,
-            cat_ncod_prod: l.cat_ncod_prod ? Number(l.cat_ncod_prod) : null,
+            cat_ncod_prod: l.cat_ncod_prod ? Number(l.cat_ncod_prod) : l._omie_ncod ? Number(l._omie_ncod) : null,
             cat_codigo: l.cat_codigo || null,
             cat_valor_unit: String(l.cat_valor_unit ?? "").trim() ? num(l.cat_valor_unit) : null,
             cat_fornecedor: l.cat_fornecedor || null,
             cat_entrega_dias: l.cat_entrega_dias ? Number(l.cat_entrega_dias) : null,
             cat_fat_dias: l.cat_fat_dias ? Number(l.cat_fat_dias) : null,
-          })),
+            sug_status: st,
+            sug_ncod_prod: st && sg ? sg.ncod_prod : null, sug_codigo: st && sg ? sg.codigo ?? null : null,
+            sug_descricao: st && sg ? sg.descricao ?? null : null, sug_fornecedor: st && sg ? sg.fornecedor ?? null : null,
+            sug_score: st && sg && sg.score != null ? sg.score : null,
+          }; }),
         }),
       });
       const j = await r.json();
@@ -870,6 +952,13 @@ export default function MateriaisGrade({
         // exclusão pelo 🗑 que não gravou: o aviso fica com Desfazer e Tentar de novo
         if (intencional) setRemocao((x) => (x ? { ...x, erro: String(j.error ?? r.statusText) } : x));
         return;
+      }
+      /* A linha nova ganha o id do banco na hora (spec C.5): PC, situação, marcar e
+         comentar funcionam sem F5. `_k` segura a chave do React (a linha não remonta). */
+      const refs = (j.refs ?? {}) as Record<string, string>;
+      if (Object.keys(refs).length) {
+        setLinhas((ls) => ls.map((l) => (refs[l._id] ? { ...l, _id: `db${refs[l._id]}`, _k: l._k || l._id } : l)));
+        setMarcadas((m) => new Set([...m].map((x) => (refs[x] ? `db${refs[x]}` : x))));
       }
       if (silencioso) {
         // Gravado sem recarregar a grade (quem está digitando não perde o foco).
@@ -909,6 +998,17 @@ export default function MateriaisGrade({
   /* Salvamento automático (06/10/26): 2,5 s depois da última mudança a lista
      vai para o banco sozinha — lista nunca mais se perde. Só não salva sozinho
      quando há item a REMOVER (isso pede o botão Salvar, com a confirmação). */
+  /** Por que não está salvando sozinha (spec C.6) — aparece como chip com o botão Salvar. */
+  const semAutosave = useMemo(() => {
+    if (!carregouOk) return "a lista não carregou";
+    if (rascunhoDe) return "lista recuperada deste navegador — confira";
+    if (remocao?.erro) return "a exclusão não gravou";
+    const intencional = remocao != null && remocaoRef.current;
+    if (!intencional && validas.length < original) return `${original - validas.length} linha(s) a menos que no banco — confirme`;
+    if (!intencional && !validas.length) return "lista vazia";
+    return null;
+  }, [carregouOk, rascunhoDe, remocao, validas.length, original]);
+  semAutosaveRef.current = semAutosave;
   useEffect(() => {
     if (!sujo || !carregouOk || salvando || rascunhoDe) return;
     const intencional = remocao != null && remocaoRef.current;
@@ -947,72 +1047,108 @@ export default function MateriaisGrade({
   // ── Catálogo ────────────────────────────────────────────────────────────
   const [casando, setCasando] = useState(false);
 
-  /* Depois de carregar: linha sem código ganha a SUGESTÃO do catálogo (provável), à vista e
-     sem gravar nada — confirmar é com ✓ / "Aceitar todas as sugestões". */
+  /* Sugestão automática (spec C.4, 08/10/26): roda sempre que aparece linha sem código
+     ainda não tentada (chave derivada dos ids + textos — não é mais "uma vez por carga"),
+     e uma falha da API vira aviso com "tentar de novo" em vez de sumir em silêncio. O
+     resultado entra POR ID, só nas linhas que continuam sem código (spec C.3). */
+  const [sugErro, setSugErro] = useState<string | null>(null);
+  const [sugTentativa, setSugTentativa] = useState(0);
+  const [sugBuscando, setSugBuscando] = useState(false);
+  const alvoAuto = useMemo(() => linhas.filter((l) => elegivelSug(l) && l._match !== "sem" && !l._omie_ncod
+    && !sugTentadasRef.current.has(`${l._id}|${textoCasar(l.item, l.modelo)}`)), [linhas]);
+  const chaveAuto = alvoAuto.map((l) => `${l._id}|${textoCasar(l.item, l.modelo)}`).join("\n");
   useEffect(() => {
-    if (!carregouOk || sugeridoRef.current || carregando) return;
-    const alvo = linhas.map((l, i) => ({ l, i })).filter(({ l }) => String(l.item ?? "").trim() && !l.cat_ncod_prod && l._match !== "omie" && l._match !== "sug" && !l._omie);
-    sugeridoRef.current = true;
-    if (!alvo.length) return;
-    (async () => {
+    if (!carregouOk || carregando || !chaveAuto) return;
+    let vivo = true;
+    const t = window.setTimeout(async () => {
+      const alvo = linhasRef.current.filter((l) => elegivelSug(l) && l._match !== "sem" && !l._omie_ncod
+        && !sugTentadasRef.current.has(`${l._id}|${textoCasar(l.item, l.modelo)}`));
+      if (!alvo.length) return;
+      const textos = alvo.map((l) => textoCasar(l.item, l.modelo));
+      setSugBuscando(true);
       try {
         const r = await fetch("/api/catalogo/projeto", { method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ acao: "casar", emp: empresa, textos: alvo.map(({ l }) => textoCasar(l.item, l.modelo)), custos: alvo.map(() => null) }) });
-        const j = (await r.json()) as { casamentos?: Casamento[] };
-        if (!r.ok || !j.casamentos) return;
-        const porId = new Map<string, Record<string, string>>();
-        alvo.forEach(({ l }, k) => {
-          const c = j.casamentos![k];
-          if (c?.melhor && (c.status === "ok" || (c.melhor.score ?? 0) >= SUG_MIN)) porId.set(l._id, camposSugestao(c.melhor, c.alternativas ?? []));
-          else if (c?.alternativas?.length) porId.set(l._id, { _match: "sem", _alts: JSON.stringify(c.alternativas) });
-        });
-        if (porId.size) setLinhas((atual) => atual.map((l) => (porId.has(l._id) && !l.cat_ncod_prod ? { ...l, ...porId.get(l._id)! } : l)));
-      } catch { /* sem sugestão: a linha segue sem código */ }
-    })();
-  }, [carregouOk, carregando, linhas, empresa]);
+          body: JSON.stringify({ acao: "casar", emp: empresa, textos, custos: alvo.map(() => null) }) });
+        const j = (await r.json().catch(() => ({}))) as { casamentos?: Casamento[]; error?: string };
+        if (!r.ok || !j.casamentos) throw new Error(j.error ?? `${r.status} ${r.statusText}`);
+        if (!vivo) return;
+        alvo.forEach((l, k) => sugTentadasRef.current.add(`${l._id}|${textos[k]}`));
+        const porId = new Map<string, { txt: string; c: Casamento | undefined }>();
+        alvo.forEach((l, k) => porId.set(l._id, { txt: textos[k], c: j.casamentos![k] }));
+        let n = 0;
+        setLinhas((atual) => atual.map((l) => {
+          const x = porId.get(l._id);
+          if (!x || !elegivelSug(l) || textoCasar(l.item, l.modelo) !== x.txt) return l;
+          const c = x.c;
+          if (c?.melhor && (c.status === "ok" || (c.melhor.score ?? 0) >= SUG_MIN)) { n++; return { ...l, ...camposSugestao(c.melhor, c.alternativas ?? [], l) }; }
+          if (c?.alternativas?.length) return { ...l, _alts: JSON.stringify(c.alternativas) };
+          return l;
+        }));
+        setSugErro(null);
+        // a sugestão é gravada (sql/127): marca para o salvamento automático
+        queueMicrotask(() => { if (n) setSujo(true); });
+      } catch (e) {
+        if (vivo) setSugErro((e as Error).message || "falha na busca");
+      } finally { if (vivo) setSugBuscando(false); }
+    }, 700);
+    return () => { vivo = false; window.clearTimeout(t); };
+  }, [carregouOk, carregando, chaveAuto, empresa, sugTentativa]);
 
-  /** Casa com o catálogo (itens NOSSOS) as linhas com texto e sem vínculo. Aceita
-   *  sozinho só o que é de-para gravado ou muito parecido; o resto fica "conferir". */
+  /** Casa com o catálogo (itens NOSSOS) as linhas com texto e sem código nosso. Aceita
+   *  sozinho só o que é de-para gravado ou muito parecido; o resto vira SUGESTÃO.
+   *  Devolve as mudanças POR ID (spec C.3) — quem chama aplica com aplicarCasamento,
+   *  nunca trocando a lista inteira por uma cópia antiga. Recusadas ficam de fora. */
   const casarLinhas = useCallback(async (entrada: LinhaGrade[]) => {
+    const res = new Map<string, { txt: string; patch: Record<string, string> }>();
     // 1º o código digitado/colado: código nosso (ou antigo/de compra já ligado a um item nosso) resolve direto
-    let base = entrada;
-    const comCodigo = base.map((l, i) => ({ l, i }))
-      .filter(({ l }) => String(l.item ?? "").trim() && !l.cat_ncod_prod && String(l.cat_codigo ?? "").trim());
+    const comCodigo = entrada.filter((l) => String(l.item ?? "").trim() && !l.cat_ncod_prod && String(l.cat_codigo ?? "").trim() && l._match !== "omie");
     if (comCodigo.length) {
-      const achados = await Promise.all(comCodigo.map(async ({ l }) => {
+      const achados = await Promise.all(comCodigo.map(async (l) => {
         const cod = String(l.cat_codigo).trim().toUpperCase();
         const j = await fetch(`/api/catalogo/projeto?op=buscar&emp=${empresa}&q=${encodeURIComponent(cod)}&lim=5`).then((x) => x.json()).catch(() => ({})) as { itens?: Cat[] };
         const its = j.itens ?? [];
         return its.find((c) => String(c.codigo ?? "").toUpperCase() === cod)
           ?? its.find((c) => String(c.via ?? "").toUpperCase().split(/\s+/).includes(cod)) ?? null;
       }));
-      base = [...base];
-      comCodigo.forEach(({ l, i }, k) => { const c = achados[k]; if (c) base[i] = { ...l, ...camposDoCatalogo(c, "ok", [], l.cat_valor_unit ?? "") }; });
+      comCodigo.forEach((l, k) => { const c = achados[k]; if (c) res.set(l._id, { txt: textoCasar(l.item, l.modelo), patch: { ...camposDoCatalogo(c, "ok", [], l.cat_valor_unit ?? ""), _sug_status: "", _omie_ncod: "" } }); });
     }
-    const alvo = base.map((l, i) => ({ l, i }))
-      .filter(({ l }) => String(l.item ?? "").trim() && !l.cat_ncod_prod);
-    if (!alvo.length) return base;
-    const r = await fetch("/api/catalogo/projeto", {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ acao: "casar", emp: empresa, textos: alvo.map(({ l }) => textoCasar(l.item, l.modelo)),
-        custos: alvo.map(({ l }) => (String(l.cat_valor_unit ?? "").trim() ? num(l.cat_valor_unit) : null)) }),
-    });
-    const j = (await r.json()) as { casamentos?: Casamento[]; error?: string };
-    if (!r.ok || !j.casamentos) throw new Error(j.error ?? r.statusText);
-    const novas = [...base];
+    const porCod = res.size;
+    const alvo = entrada.filter((l) => !res.has(l._id) && String(l.item ?? "").trim() && semCodigoNosso(l) && l._sug_status !== "recusada" && l._match !== "sug");
     let ok = 0, conf = 0, sem = 0;
-    alvo.forEach(({ l, i }, k) => {
-      const c = j.casamentos![k];
-      if (!c?.melhor) { novas[i] = { ...l, _match: "sem", _sug: "" }; sem++; return; }
-      if (c.status === "ok") { novas[i] = { ...l, _sug: "", ...camposDoCatalogo(c.melhor, "ok", [], l.cat_valor_unit ?? "") }; ok++; return; }
-      if ((c.melhor.score ?? 0) >= SUG_MIN) { novas[i] = { ...l, ...camposSugestao(c.melhor, c.alternativas) }; conf++; return; }
-      novas[i] = { ...l, _match: "sem", _sug: "", _alts: c.alternativas?.length ? JSON.stringify(c.alternativas) : "" }; sem++;
-    });
-    setAviso(`Catálogo: ${ok} item(ns) casado(s)`
-      + (conf ? ` · ${conf} com SUGESTÃO (⚠ âmbar — aceite com ✓ na linha ou "Aceitar todas as sugestões")` : "")
-      + (sem ? ` · ${sem} sem correspondência (clique em "escolher" para procurar ou criar o item nosso)` : "") + ". A lista é salva sozinha em instantes.");
-    return novas;
+    if (alvo.length) {
+      const r = await fetch("/api/catalogo/projeto", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ acao: "casar", emp: empresa, textos: alvo.map((l) => textoCasar(l.item, l.modelo)),
+          custos: alvo.map((l) => (String(l.cat_valor_unit ?? "").trim() ? num(l.cat_valor_unit) : null)) }),
+      });
+      const j = (await r.json()) as { casamentos?: Casamento[]; error?: string };
+      if (!r.ok || !j.casamentos) throw new Error(j.error ?? r.statusText);
+      alvo.forEach((l, k) => {
+        const c = j.casamentos![k];
+        const txt = textoCasar(l.item, l.modelo);
+        sugTentadasRef.current.add(`${l._id}|${txt}`);
+        if (!c?.melhor) { res.set(l._id, { txt, patch: l._match === "omie" ? {} : { _match: "sem" } }); sem++; return; }
+        if (c.status === "ok") { res.set(l._id, { txt, patch: { ...camposDoCatalogo(c.melhor, "ok", [], l.cat_valor_unit ?? ""), _sug_status: "", _omie_ncod: "" } }); ok++; return; }
+        if ((c.melhor.score ?? 0) >= SUG_MIN) { res.set(l._id, { txt, patch: camposSugestao(c.melhor, c.alternativas, l) }); conf++; return; }
+        res.set(l._id, { txt, patch: { ...(l._match === "omie" ? {} : { _match: "sem" }), _alts: c.alternativas?.length ? JSON.stringify(c.alternativas) : "" } }); sem++;
+      });
+    }
+    const vazio = !comCodigo.length && !alvo.length;
+    if (!vazio) setAviso(`Catálogo: ${porCod ? `${porCod} pelo código digitado · ` : ""}${ok} item(ns) casado(s)`
+      + (conf ? ` · ${conf} com SUGESTÃO (caixa âmbar no Código — ✓ aceita, ✕ recusa, ou "Aceitar todas as sugestões")` : "")
+      + (sem ? ` · ${sem} sem correspondência (clique em ⌕ no Código para procurar ou criar o item nosso)` : "") + "." + fraseSalvar());
+    return { res, vazio };
   }, [empresa]);
+  /** Aplica o resultado do casamento por id, só se o texto da linha não mudou no meio. */
+  const aplicarCasamento = useCallback((res: Map<string, { txt: string; patch: Record<string, string> }>) => {
+    if (!res.size) return;
+    setLinhas((ls) => ls.map((l) => {
+      const x = res.get(l._id);
+      if (!x || textoCasar(l.item, l.modelo) !== x.txt) return l;
+      return { ...l, ...x.patch } as LinhaGrade;
+    }));
+    setSujo(true);
+  }, []);
 
   /** "Usar item da CP" (07/10/26): a linha recebe o item da CP (texto, qtd, equipamento,
    *  custo da CP se não houver valor) e passa pelo catálogo — ✓ sozinho ou fica para o ⌕. */
@@ -1020,26 +1156,25 @@ export default function MateriaisGrade({
     const it = cpBase?.itens[k];
     if (!it) return;
     setUsarCpEm(null);
-    const i = linhas.findIndex((x) => x._id === rowId);
-    if (i < 0) return;
-    const l = linhas[i];
+    const l = linhasRef.current.find((x) => x._id === rowId);
+    if (!l) return;
     const eq = it.equipamento || l.equipamento || "Geral";
     const temValor = !!String(l.cat_valor_unit ?? "").trim();
     const nova = { ...l, item: it.item, modelo: it.modelo ?? l.modelo ?? "", equipamento: eq,
       qtd: it.qtd != null ? String(it.qtd) : l.qtd,
-      cat_ncod_prod: "", cat_codigo: "", _match: "", _alts: "", _cat_desc: "", _omie: "",
+      cat_ncod_prod: "", cat_codigo: "", _match: "", _alts: "", _cat_desc: "", _omie: "", _sug: "", _sug_status: "", _omie_ncod: "",
       cat_valor_unit: temValor ? l.cat_valor_unit : (it.custo_cp != null ? moeda(it.custo_cp) : ""),
       _vu_fonte: temValor ? (l._vu_fonte ?? "") : (it.custo_cp != null ? "CP" : ""),
       data_necessaria: l.data_necessaria || (dataGrupoRef.current.get(normGrupo(eq)) ?? "") } as LinhaGrade;
-    const out = [...linhas]; out[i] = nova;
-    if (i === linhas.length - 1) out.push(vazia());
-    setLinhas(out);
+    setLinhas((ls) => {
+      const out = ls.map((x) => (x._id === rowId ? nova : x));
+      if (ls[ls.length - 1]?._id === rowId) out.push(vazia());
+      return out;
+    });
     setSujo(true);
-    try {
-      const [casada] = await casarLinhas([nova]);
-      setLinhas((atual) => atual.map((x) => (x._id === rowId ? { ...x, ...casada, _id: rowId } : x)));
-    } catch { /* fica sem código: resolve no ⌕ */ }
-  }, [cpBase, casarLinhas, linhas]);
+    try { aplicarCasamento((await casarLinhas([nova])).res); }
+    catch { /* fica sem código: resolve no ⌕ */ }
+  }, [cpBase, casarLinhas, aplicarCasamento]);
 
   // ── Aba "Itens da CP" ───────────────────────────────────────────────────
   // A CP (composição de preço da proposta no CRM) fica SEPARADA da lista: é
@@ -1096,13 +1231,14 @@ export default function MateriaisGrade({
         }
         return;
       }
-      const base = baseColada ?? linhas;
-      const novas = await casarLinhas(base);
-      if (novas !== base) { setLinhas(novas); setSujo(true); }
-      else if (!baseColada) setAviso("Todas as linhas já estão ligadas ao catálogo.");
+      // a lista atual é só a ENTRADA (textos); o resultado volta por id e entra em cima
+      // do estado mais novo — o que se digitou enquanto o catálogo respondia não se perde
+      const { res, vazio } = await casarLinhas(baseColada ?? linhasRef.current);
+      aplicarCasamento(res);
+      if (vazio && !baseColada) setAviso("Todas as linhas já estão ligadas ao catálogo (ou tiveram a sugestão recusada).");
     } catch (e) { setErro(`Não consegui casar com o catálogo: ${e instanceof Error ? e.message : String(e)}`); }
     finally { setCasando(false); }
-  }, [casarLinhas, linhas, importarAberto, carregarCp]);
+  }, [casarLinhas, aplicarCasamento, importarAberto, carregarCp]);
 
   /** Depois de colar do Excel, casa sozinho — o paste chega ao estado no
    *  próximo render, então o efeito espera a lista nova. Linha colada sem data
@@ -1111,13 +1247,13 @@ export default function MateriaisGrade({
   useEffect(() => {
     if (!casarAposColar) return;
     setCasarAposColar(false);
-    const comData = linhas.map((l) => {
+    const comData = (l: LinhaGrade) => {
       if (!String(l.item ?? "").trim() || l.data_necessaria) return l;
       const g = dataGrupoRef.current.get(normGrupo(l.equipamento || "Geral"));
       return g ? { ...l, data_necessaria: g } : l;
-    });
-    setLinhas(comData);
-    void casarAgora(comData);
+    };
+    setLinhas((ls) => ls.map(comData));
+    void casarAgora(linhas.map(comData));
   }, [casarAposColar, casarAgora, linhas]);
 
   const adicionarDaCp = useCallback(() => {
@@ -1145,15 +1281,15 @@ export default function MateriaisGrade({
       }
     }
     if (!novas.length) { setAviso("Nada novo para adicionar — os marcados já estão na lista."); return; }
-    setLinhas([...linhas.filter((l) => String(l.item ?? "").trim()), ...novas, vazia()]);
+    setLinhas((ls) => [...ls.filter((l) => String(l.item ?? "").trim()), ...novas, vazia()]);
     setSujo(true);
     setCpMarcados(new Set());
     setImportarAberto(false);
     setSubAba("lista");
     const sem = novas.filter((l) => l._match === "sem").length;
     const sg = novas.filter((l) => l._match === "sug").length;
-    setAviso(`${novas.length} item(ns) da RC adicionados à lista${sg ? ` · ${sg} com sugestão de código (aceite com ✓ ou "Aceitar todas as sugestões")` : ""}${sem ? ` · ${sem} sem código (resolva no ⌕ do Código)` : ""}. A lista é salva sozinha em instantes.`);
-  }, [cp, cpMarcados, usoCp, linhas]);
+    setAviso(`${novas.length} item(ns) da RC adicionados à lista${sg ? ` · ${sg} com sugestão de código (aceite com ✓ ou "Aceitar todas as sugestões")` : ""}${sem ? ` · ${sem} sem código (resolva no ⌕ do Código)` : ""}. ${fraseSalvar()}`);
+  }, [cp, cpMarcados, usoCp]);
 
   /** Escolha no seletor: grava o de-para (texto → item nosso) e aplica na linha. */
   const escolher = useCallback(async (sel: Seletor, it: Escolhido) => {
@@ -1175,7 +1311,7 @@ export default function MateriaisGrade({
           ? { ...x, casamento: { idx: x.casamento?.idx ?? 0, status: "ok", manual: true, melhor: item, alternativas: [item], compra: [] } } : x)) });
       } else if (linhaLista) {
         setLinhas((atual) => atual.map((l) => (l._id === linhaLista._id
-          ? { ...l, ...camposDoCatalogo(item, "ok", [], l.cat_valor_unit ?? ""), _sug: "", ...(String(l.cat_valor_unit ?? "").trim() ? { cat_valor_unit: l.cat_valor_unit, _vu_fonte: l._vu_fonte ?? "" } : {}) }
+          ? { ...l, ...camposDoCatalogo(item, "ok", [], l.cat_valor_unit ?? ""), _sug: "", _sug_status: "", _omie_ncod: "", ...(String(l.cat_valor_unit ?? "").trim() ? { cat_valor_unit: l.cat_valor_unit, _vu_fonte: l._vu_fonte ?? "" } : {}) }
           : l)));
         setSujo(true);
       }
@@ -1472,7 +1608,12 @@ export default function MateriaisGrade({
             ✓ Aceitar todas as sugestões ({nSug})
           </button>
         )}
-        <span className="text-[10.5px] text-ww-textFaint" title="Códigos da lista">✓ {nCod} · ⚠ {nSug} sugestão · ⌕ {nSemCod} sem código</span>
+        <span className="text-[10.5px] text-ww-textFaint" title="Códigos da lista">✓ {nCod} · ⚠ {nSug} sugestão · ⌕ {nSemCod} sem código{sugBuscando ? " · buscando sugestões…" : ""}</span>
+        {sugErro && (
+          <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full border border-rose-500/50 bg-rose-500/10 text-[10.5px] text-rose-700 dark:text-rose-300" title={sugErro}>
+            Não consegui buscar sugestões
+            <button type="button" className="underline font-semibold" onClick={() => { setSugErro(null); setSugTentativa((n) => n + 1); }}>tentar de novo</button>
+          </span>)}
         <button type="button" onClick={() => void verSugestoes()} disabled={!!ocupado}
           title="Mostra as linhas parecidas com itens dos pedidos de compra do projeto, para você confirmar"
           className="px-2 py-1 text-[11px] rounded-lg border border-ww-border text-ww-textMuted hover:text-ww-text hover:bg-ww-rowHover transition disabled:opacity-40">
@@ -1500,10 +1641,16 @@ export default function MateriaisGrade({
           </button>
         )}
         <span className="flex-1" />
-        {sujo && !salvando && remocao == null && rascunhoDe == null && validas.length >= original && (
+        {sujo && !salvando && !semAutosave && remocao == null && (
           <span className="text-[10.5px] text-ww-textFaint">salvando…</span>)}
         {salvando && <span className="text-[10.5px] text-ww-textFaint">salvando…</span>}
-        {(rascunhoDe != null || (sujo && validas.length < original && remocao == null)) && (
+        {/* Salvamento automático parado: diz por quê e oferece o botão (spec C.6) */}
+        {sujo && semAutosave && !salvando && (
+          <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full border border-amber-500/60 bg-amber-500/10 text-[10.5px] text-amber-800 dark:text-amber-200"
+            title="Enquanto isto estiver aqui, as mudanças NÃO vão para o sistema sozinhas">
+            ⚠ não está salvando: {semAutosave}
+          </span>)}
+        {sujo && semAutosave && semAutosave !== "a lista não carregou" && (
           <button type="button" onClick={() => void salvar()} disabled={salvando}
             className="px-2.5 py-1 text-[11.5px] rounded-lg border border-ww-accent bg-ww-accent text-white font-semibold hover:brightness-110 transition">
             {salvando ? "…" : "Salvar lista"}

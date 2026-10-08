@@ -15,6 +15,7 @@ import { exigirCompras, rpc, erro, posGravar } from "@/lib/compras-server";
 import { completarPcs, type DadosPcs } from "@/lib/lista-pc-completar";
 import { fetchItensCp } from "@/lib/crm-fechamento";
 import { casarItensProjeto, resolverItensProjeto } from "@/lib/catalogo-projeto";
+import { textoCasar, SUG_MIN } from "@/lib/texto-casar";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -196,7 +197,7 @@ export async function POST(req: Request) {
          (CRM/fornecedor/Omie) não vai para a coluna Código — fica na observação. */
       const porProduto = await resolverItensProjeto(empresa, entrar.map((e) => Number(e.i.ncodProd)).filter((x) => x > 0));
       const precisaTexto = entrar.filter((e) => !(e.i.ncodProd && porProduto[String(e.i.ncodProd)]));
-      const cas = precisaTexto.length ? await casarItensProjeto(empresa, precisaTexto.map((e) => e.desc), precisaTexto.map((e) => Number(e.i.vu) || null)) : [];
+      const cas = precisaTexto.length ? await casarItensProjeto(empresa, precisaTexto.map((e) => textoCasar(e.desc)), precisaTexto.map((e) => Number(e.i.vu) || null)) : [];
       const porTexto = new Map(precisaTexto.map((e, k) => [e, cas[k]]));
       let casados = 0;
       for (const e of entrar) {
@@ -210,10 +211,18 @@ export async function POST(req: Request) {
           cat_valor_unit: e.i.vu ?? it?.ultimo_preco ?? null, cat_fornecedor: it?.fornecedor ?? null,
           cat_entrega_dias: it?.entrega_dias ?? null, cat_fat_dias: it?.fat_dias ?? null,
           observacao: [`RC ${rc.num}`, codRc && codRc !== it?.codigo ? `cód. na RC ${codRc}` : ""].filter(Boolean).join(" · "),
-          rc_item_id: Number(e.i.id), vinculo_via: "rc", vinculo_em: new Date().toISOString(), criado_por: por, atualizado_por: por });
+          rc_item_id: Number(e.i.id), vinculo_via: "rc", vinculo_em: new Date().toISOString(), criado_por: por, atualizado_por: por,
+          // provável sem certeza: entra como SUGESTÃO gravada (sql/127) — a grade mostra ✓/✕
+          ...(!it && c?.melhor && (c.melhor.score ?? 0) >= SUG_MIN ? { sug_ncod_prod: c.melhor.ncod_prod, sug_codigo: c.melhor.codigo ?? null,
+            sug_descricao: c.melhor.descricao ?? null, sug_fornecedor: c.melhor.fornecedor ?? null, sug_score: c.melhor.score ?? null, sug_status: "pendente" } : {}) });
       }
       if (b.simular) return NextResponse.json({ ok: true, simulado: true, rc: rc.num, novas: novas.length, casados, ligadas: ligar.length, linhas: novas });
-      if (novas.length) { const { error } = await approval().from("rc_projetos_itens").insert(novas); if (error) throw new Error(error.message); }
+      if (novas.length) {
+        let { error } = await approval().from("rc_projetos_itens").insert(novas);
+        // sem a sql/127 as colunas de sugestão não existem: grava sem elas
+        if (error && /sug_/.test(error.message)) ({ error } = await approval().from("rc_projetos_itens").insert(novas.map((n) => Object.fromEntries(Object.entries(n).filter(([k]) => !k.startsWith("sug_"))))));
+        if (error) throw new Error(error.message);
+      }
       for (const l of ligar) await approval().from("rc_projetos_itens").update({ rc_item_id: l.rc_item_id, vinculo_via: "rc", vinculo_em: new Date().toISOString(), atualizado_por: por }).eq("id", l.id);
       return NextResponse.json({ ok: true, rc: rc.num, novas: novas.length, casados, ligadas: ligar.length });
     }

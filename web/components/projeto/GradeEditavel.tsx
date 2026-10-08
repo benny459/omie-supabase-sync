@@ -70,6 +70,10 @@ export type ColunaGrade = {
   dica?: (linha: LinhaGrade) => string | undefined;
   /** Dica do cabeçalho (o que a coluna significa). */
   dicaCab?: string;
+  /** Conteúdo por cima da célula editável enquanto ela não está em edição (08/10/26:
+   *  a sugestão do catálogo dentro da célula Código, com ✓ e ✕). Clicar fora dos
+   *  botões dele entra na edição normal da célula. */
+  sobrepor?: (linha: LinhaGrade) => React.ReactNode | null;
 };
 
 export type LinhaGrade = Record<string, string> & { _id: string };
@@ -358,7 +362,7 @@ export default function GradeEditavel({
           </thead>
           <tbody>
             {linhas.map((linha, li) => (
-              <tr key={linha._id} className="viz-row group">
+              <tr key={linha._k || linha._id} className="viz-row group">
                 {selecao && (
                   <td style={esq.size ? fixo(0, 5) : undefined} className={`p-1 text-center border-b border-ww-border/40 ${esq.size ? OPACO : ""}`}>
                     {selecao.podeMarcar(linha) && (
@@ -398,11 +402,18 @@ export default function GradeEditavel({
                   const mostrado = !emEdicao && c.exibir ? (c.exibir(linha) ?? linha[c.key] ?? "") : (linha[c.key] ?? "");
                   const ac2 = c.acao && (c.acao.mostrar?.(linha) ?? true) ? c.acao : null;
                   const fx = esq.has(c.key);
+                  const sob = !emEdicao && c.sobrepor ? c.sobrepor(linha) : null;
                   return (
                     <td key={c.key} style={fx ? fixo(esq.get(c.key)!, 5) : undefined}
                         className={`p-0 border-b border-ww-border/40 relative ${fx ? `${OPACO} ${sombra(c.key)}` : ""} ${mk?.classe ?? ""} ${c.classe ?? ""}`}
                         title={[mk?.dica, c.dica?.(linha)].filter(Boolean).join(" · ") || undefined}>
-                      {mk?.etiqueta && (
+                      {sob && (
+                        <div className={`absolute inset-0 z-[1] flex items-center px-0.5 ${fx ? OPACO : "bg-[rgb(var(--color-ww-panel))]"}`}
+                          onClick={(e) => { if ((e.target as HTMLElement).closest("button")) return; const inp = (e.currentTarget.parentElement?.querySelector("input")) as HTMLInputElement | null; inp?.focus(); }}>
+                          {sob}
+                        </div>
+                      )}
+                      {mk?.etiqueta && !sob && (
                         <span className="pointer-events-none absolute left-1.5 top-1/2 -translate-y-1/2 text-[9px] leading-none text-ww-textFaint">{mk.etiqueta}</span>
                       )}
                       {ac2 && (

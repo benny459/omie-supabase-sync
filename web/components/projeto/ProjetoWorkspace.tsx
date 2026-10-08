@@ -23,7 +23,7 @@
 // Carregar os dois juntos faria os três números esperarem por algo de que não
 // precisam — e eles são o que a pessoa veio ver.
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 // RcProjetoItensBlock não é mais montado — a lista virou uma tabela só.
 // O arquivo continua no repositório caso falte alguma função dele.
 import RcProjetoUploadButton from "@/components/RcProjetoUploadButton";
@@ -67,10 +67,11 @@ export default function ProjetoWorkspace({
   empresa: string; codigoProjeto: number; nomeProjeto?: string; abaInicial?: Aba;
 }) {
   const [aba, setAba] = useState<Aba>(abaInicial);
-  /** Sobe a cada gravação de materiais: o bloco de itens carrega no mount, e
-   *  remontar é o jeito mais simples de ele refletir o que acabou de ser
-   *  gravado sem duplicar a lógica de fetch. */
+  /** Sobe a cada gravação de materiais: relê o plano (KPIs). A grade NÃO é mais remontada
+   *  (08/10/26, spec C.2 — remontar apagava as sugestões e a seleção): ela se recarrega
+   *  sozinha depois de gravar, e o upload de planilha pede a recarga por `recarregarGrade`. */
   const [chave, setChave] = useState(0);
+  const recarregarGrade = useRef<(() => void) | null>(null);
   /* Há fechamento do CRM linkado? Com ele, o Resumo não repete premissas e
      condições — o cartão já as traz. Sem ele, elas voltam, senão o projeto
      ficaria sem nenhuma referência de plano. */
@@ -178,7 +179,7 @@ export default function ProjetoWorkspace({
             cobrir os dois e este ficou só em Materiais. */}
         {aba === "materiais" && (
           <div className="ml-auto pb-1.5">
-            <RcProjetoUploadButton empresa={empresa} codigoProjeto={codigoProjeto} onDone={aposGravar} />
+            <RcProjetoUploadButton empresa={empresa} codigoProjeto={codigoProjeto} onDone={() => { aposGravar(); recarregarGrade.current?.(); }} />
           </div>
         )}
       </div>
@@ -221,7 +222,7 @@ export default function ProjetoWorkspace({
       {aba === "separados" && <SecaoSeparadosProjeto codigoProjeto={codigoProjeto} nomeProjeto={nomeProjeto} />}
 
       {aba === "materiais" && (
-        <MateriaisGrade key={`mat-${chave}`} empresa={empresa}
+        <MateriaisGrade empresa={empresa} recarregarRef={recarregarGrade}
           codigoProjeto={codigoProjeto} onGravado={aposGravar} />
       )}
     </div>
