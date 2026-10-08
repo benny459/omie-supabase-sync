@@ -644,3 +644,14 @@
 .op .pcproj-pc .nf{white-space:nowrap;text-overflow:ellipsis}
 .op .pcproj-pc input.in{min-width:0;width:100%}
 .op .pcproj-pc .acts{display:flex;gap:2px;justify-content:flex-end}
+/* Vendas — altura da linha fica em 48–50px (spec A.5): tudo em duas linhas compactas */
+.op .pcproj-vendas .ln{padding-top:5px;padding-bottom:5px}
+.op .pcproj-vendas .doc{gap:1px}
+.op .pcproj-vendas .doc small{line-height:15px}
+.op .pcproj-vendas .doc .l1{line-height:18px}
+.op .pcproj-vendas .doc .l1 .rcnum{padding-top:0;padding-bottom:0;line-height:18px}
+.op .pcproj-vendas .vprev input{height:22px;box-sizing:border-box;padding:0 4px}
+.op .pcproj-vendas .vprev .fixo{line-height:22px}
+.op .pcproj-vendas .vprev .ini{line-height:14px}
+.op .pcproj-vendas .stv{min-width:0;gap:1px}
+.op .pcproj-vendas .stv small{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;line-height:14px}
