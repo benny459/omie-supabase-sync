@@ -121,7 +121,12 @@ export default function GradeEditavel({
   cols, linhas, onChange, altura = 340, vazioMsg = "Digite, cole do Excel ou suba a planilha.",
   selecao, aoColar, colarExtras = [], aoRemover, botaoLinha = true, grupo, herdarNoColar = [], corLinha,
   colsTodas, acoesLinha, escala = 1, ajustarLargura = false, cabecalhoNaPagina = false, linhaEmBranco,
+  filtroCab, rodapeInfo,
 }: {
+  /** Controle no cabeçalho de cada coluna (08/10/26: o ▾ do filtro estilo Excel). null = sem. */
+  filtroCab?: (c: ColunaGrade) => React.ReactNode;
+  /** Texto à direita no rodapé da grade (ex.: "12 de 36 linhas"). */
+  rodapeInfo?: React.ReactNode;
   /** A linha conta como "em branco" para o colar? (padrão: todas as editáveis vazias). A lista de
    *  materiais diz "sem item e sem código" — a linha nova do grupo já nasce com grupo e data. */
   linhaEmBranco?: (l: LinhaGrade) => boolean;
@@ -445,10 +450,19 @@ export default function GradeEditavel({
               <th style={{ width: W_NUM, ...(esq.size ? fixo(selecao ? W_SEL : 0, 21) : {}) }}
                   className={`p-1.5 text-[10px] text-ww-textFaint shadow-[0_1px_0_0_rgb(var(--color-ww-border))] ${OPACO}`}>#</th>
               {cols.map((c) => (
-                <th key={c.key} title={c.dicaCab} data-colkey={c.key} style={{ width: wc(c), minWidth: wc(c), ...(esq.has(c.key) ? fixo(esq.get(c.key)!, 21) : {}), ...(c.fundo ? { background: c.fundo } : {}) }}
-                    className={`p-1.5 text-[10px] uppercase tracking-wider font-semibold text-ww-textMuted whitespace-nowrap overflow-hidden text-ellipsis shadow-[0_1px_0_0_rgb(var(--color-ww-border))] ${
+                <th key={c.key} title={c.dicaCab} data-colkey={c.key} style={{ ...(filtroCab ? { position: "relative" } : {}),  width: wc(c), minWidth: wc(c), ...(esq.has(c.key) ? fixo(esq.get(c.key)!, 21) : {}), ...(c.fundo ? { background: c.fundo } : {}) }}
+                    className={`group/th p-1.5 text-[10px] uppercase tracking-wider font-semibold text-ww-textMuted whitespace-nowrap overflow-hidden text-ellipsis shadow-[0_1px_0_0_rgb(var(--color-ww-border))] ${
                       c.alinhaDireita ? "text-right" : "text-left"} ${OPACO} ${(c.classe ?? "").replace(/(^|\s)bg-\S+/g, " ")}`}>
-                  {c.cab ?? c.label}
+                  {(() => {
+                    const fc = filtroCab?.(c);
+                    if (!fc) return c.cab ?? c.label;
+                    // o ▾ fica por cima da borda direita (aparece ao passar o mouse; filtro ativo fica sempre):
+                    // não come a largura do rótulo nas colunas estreitas
+                    return (<>
+                      {c.cab ?? c.label}
+                      <span className="absolute right-0 top-1/2 -translate-y-1/2 flex items-center pr-0.5" data-filtro-slot>{fc}</span>
+                    </>);
+                  })()}
                 </th>
               ))}
               <th style={{ width: W_FIM }} className={`shadow-[0_1px_0_0_rgb(var(--color-ww-border))] ${OPACO}`} />
@@ -594,6 +608,7 @@ export default function GradeEditavel({
         {linhas.length <= 1 && (
           <span className="ml-auto text-[10.5px] text-ww-textFaint">{vazioMsg}</span>
         )}
+        {rodapeInfo && <span className={`${linhas.length <= 1 ? "" : "ml-auto "}text-[10.5px] text-ww-textMuted tabular-nums`} data-rodape-info>{rodapeInfo}</span>}
       </div>
     </div>
   );

@@ -57,6 +57,9 @@ import { planejarItem, prazoEfetivo, prazoAuto, normFornecedor, ROTULO_FONTE, ty
 import PlanejamentoCompras, { resumoPlano, type ItemPlano } from "./PlanejamentoCompras";
 import PrazosFornecedorModal from "./PrazosFornecedorModal";
 import AgenteCompras from "./AgenteCompras";
+import { BotaoFiltro, PopoverFixo, passaFiltro, filtroAtivo, type FiltroCol, type Ordem, type TipoFiltro } from "./FiltroColuna";
+import RcProjetoUploadButton from "@/components/RcProjetoUploadButton";
+import MenuLote from "./MenuLote";
 import type { ResumoVivo } from "./PainelProjeto";
 
 /** Cores dos grupos de equipamento (spec B v3): paleta de 8, estável pela ordem dos grupos.
@@ -177,6 +180,12 @@ const ROTULO_COLUNA: Record<string, string> = {
   _orig: "Origem (RC)", equipamento: "Equipamento", cat_codigo: "Código", un: "Un", data_necessaria: "Necessário em",
   cat_valor_unit: "Valor unit.", _prazo: "Prazo (dias)", _comprar: "Comprar até", _cheg: "Chegada prev.", _ent: "Sinal ✓/⚠/✕",
   _proj: "Projetado", _pc: "PC", _sit: "Situação", _forn: "Fornecedor", _comprado: "Comprado (PC)", _delta: "Δ", _obs: "💬 Comentários",
+};
+/** Filtro estilo Excel por coluna (08/10/26, Benny): o tipo de cada coluna filtrável. */
+const TIPO_FILTRO: Record<string, TipoFiltro> = {
+  equipamento: "texto", cat_codigo: "texto", item: "texto", qtd: "num", un: "texto", data_necessaria: "data",
+  cat_valor_unit: "num", _prazo: "num", _comprar: "data", _cheg: "data", _proj: "num", _pc: "texto", _sit: "texto",
+  _forn: "texto", _comprado: "num",
 };
 /** Tamanho da letra da grade (A− / A / A+ / A++). */
 const ESCALAS = [0.88, 1, 1.12, 1.25];
@@ -1101,26 +1110,108 @@ export default function MateriaisGrade({
     const pl = planoDaLinha(l);
     return !!pl && (pl.status === "atrasado" || pl.status === "agora");
   }, [sinais, planoDaLinha]);
+  /* ── Filtros por coluna, estilo Excel (08/10/26, Benny) ───────────────────────────
+     O ▾ de cada cabeçalho filtra (valores distintos com a contagem, "contém…", de/até) e ordena.
+     Somam com os chips "mostrar" e com o chip do equipamento. Guardados na sessão do navegador,
+     por projeto (não passam de um projeto para outro). */
+  const valorCol = useCallback((l: LinhaGrade, k: string): string | number | null => {
+    const c = cmpPorId.get(l._id);
+    switch (k) {
+      case "equipamento": return String(l.equipamento || "Geral").trim();
+      case "cat_codigo": return semCodigoNosso(l) ? "" : String(l.cat_codigo ?? "").trim();
+      case "item": return String(l.cat_ncod_prod && l._match !== "omie" && l._cat_desc ? l._cat_desc : l.item ?? "").trim();
+      case "qtd": return String(l.qtd ?? "").trim() ? num(l.qtd) : null;
+      case "un": return String(l.un ?? "").trim().toUpperCase();
+      case "data_necessaria": return l.data_necessaria || null;
+      case "cat_valor_unit": return String(l.cat_valor_unit ?? "").trim() ? num(l.cat_valor_unit) : null;
+      case "_prazo": return prazoDe(l).efetivo.prazo;
+      case "_comprar": { const pl = planoDaLinha(l); return pl && pl.status !== "compc" ? pl.comprarAte ?? null : null; }
+      case "_cheg": { const sg = sinais.get(l._id); return !sg ? null : sg.recebido ? sg.chegada ?? null : sg.previsaoPc ?? sg.chegada ?? null; }
+      case "_proj": { const t = num(l.qtd) * num(l.cat_valor_unit); return t || null; }
+      case "_pc": return c?.pcs.length ? String(c.pcs[0].pc) : "";
+      case "_sit": return c?.pcs.length ? estadoPc(c.pcs[0]).rot : String(l.pc_numero ?? "").trim() ? "sugestão de PC" : c?.rc ? "na RC" : "sem PC";
+      case "_forn": return String(c?.pcs.map((p) => p.fornecedor).filter(Boolean)[0] || l.cat_fornecedor || "").trim();
+      case "_comprado": return c?.valor_pc ?? null;
+      default: return null;
+    }
+  }, [cmpPorId, prazoDe, planoDaLinha, sinais]);
+  const chaveFiltros = `painel.materiais.filtros.${empresa}.${codigoProjeto}`;
+  const [filtrosCol, setFiltrosCol] = useState<Record<string, FiltroCol>>({});
+  const [ordem, setOrdem] = useState<Ordem>(null);
+  const filtrosLidos = useRef(false);
+  useEffect(() => {
+    filtrosLidos.current = false;
+    try {
+      const j = JSON.parse(window.sessionStorage.getItem(chaveFiltros) ?? "null") as { f?: Record<string, FiltroCol>; o?: Ordem; pc?: typeof filtroPc; eq?: string | null } | null;
+      setFiltrosCol(j?.f && typeof j.f === "object" ? Object.fromEntries(Object.entries(j.f).filter(([k, f]) => TIPO_FILTRO[k] && filtroAtivo(f))) : {});
+      setOrdem(j?.o && TIPO_FILTRO[j.o.key] ? j.o : null);
+      if (j?.pc) setFiltroPc(j.pc);
+      if (j?.eq !== undefined) setEquipFiltro(j.eq ?? null);
+    } catch { setFiltrosCol({}); setOrdem(null); }
+    filtrosLidos.current = true;
+  }, [chaveFiltros]);
+  useEffect(() => {
+    if (!filtrosLidos.current) return;
+    try { window.sessionStorage.setItem(chaveFiltros, JSON.stringify({ f: filtrosCol, o: ordem, pc: filtroPc, eq: equipFiltro })); } catch { /* sessão bloqueada */ }
+  }, [chaveFiltros, filtrosCol, ordem, filtroPc, equipFiltro]);
+  const nFiltrosCol = Object.values(filtrosCol).filter(filtroAtivo).length;
+  const mudarFiltro = useCallback((k: string, f: FiltroCol | undefined) => setFiltrosCol((m) => {
+    const n = { ...m }; if (f && filtroAtivo(f)) n[k] = f; else delete n[k]; return n;
+  }), []);
+  /** Chips "mostrar" + equipamento + ?pc (o que já existia). */
+  const passaChips = useCallback((l: LinhaGrade) => {
+    if (filtroPc === "prazo" && !String(l._prazo_man ?? "").trim()) return false;
+    if (equipFiltro && normGrupo(l.equipamento || "Geral") !== equipFiltro) return false;
+    if (filtroPc === "sem_pc" && temPc(l)) return false;
+    if (filtroPcNum && !cmpPorId.get(l._id)?.pcs.some((p) => p.pc === filtroPcNum)) return false;
+    if (filtroPc === "risco" && !emRisco(l)) return false;
+    if (filtroPc === "sem_cod" && !semCodigoNosso(l)) return false;
+    return true;
+  }, [filtroPc, equipFiltro, temPc, filtroPcNum, cmpPorId, emRisco]);
+  const passaCols = useCallback((l: LinhaGrade, exceto?: string) => Object.entries(filtrosCol)
+    .every(([k, f]) => k === exceto || !TIPO_FILTRO[k] || passaFiltro(TIPO_FILTRO[k], f, valorCol(l, k))), [filtrosCol, valorCol]);
+  /** Valores distintos da coluna (com a contagem) entre as linhas que passam nos OUTROS filtros. */
+  const valoresDistintos = useCallback((k: string) => {
+    const m = new Map<string, number>();
+    for (const l of linhas) {
+      if (!String(l.item ?? "").trim() || !passaChips(l) || !passaCols(l, k)) continue;
+      const v = String(valorCol(l, k) ?? "");
+      m.set(v, (m.get(v) ?? 0) + 1);
+    }
+    return [...m.entries()].map(([v, n]) => ({ v, n })).sort((a, b) => (a.v === "" ? 1 : b.v === "" ? -1 : a.v.localeCompare(b.v, "pt-BR", { numeric: true })));
+  }, [linhas, passaChips, passaCols, valorCol]);
   const visiveis = useMemo(() => {
+    const comFiltroCol = nFiltrosCol > 0;
     const vis = linhas.filter((l) => {
-      // linha em branco fica sempre (a de um grupo, só quando o grupo está à vista)
-      if (!l.item?.trim()) return !(equipFiltro && l._grp && l._grp !== equipFiltro);
-      if (filtroPc === "prazo" && !String(l._prazo_man ?? "").trim()) return false;
-      if (equipFiltro && normGrupo(l.equipamento || "Geral") !== equipFiltro) return false;
-      if (filtroPc === "sem_pc" && temPc(l)) return false;
-      if (filtroPcNum && !cmpPorId.get(l._id)?.pcs.some((p) => p.pc === filtroPcNum)) return false;
-      if (filtroPc === "risco" && !emRisco(l)) return false;
-      if (filtroPc === "sem_cod" && !semCodigoNosso(l)) return false;
-      return true;
+      // linha em branco fica sempre (a de um grupo, só quando o grupo está à vista e sem filtro de coluna)
+      if (!l.item?.trim()) return !(equipFiltro && l._grp && l._grp !== equipFiltro) && !(comFiltroCol && l._grp);
+      return passaChips(l) && (!comFiltroCol || passaCols(l));
     });
     /* Agrupadas por equipamento (spec B.3: a data do grupo fica no cabeçalho do grupo, na
-       própria grade). Ordem dos grupos = a da 1ª aparição; dentro do grupo, a ordem de sempre;
-       a linha em branco fica no fim. */
-    const ordem = new Map<string, number>();
-    for (const l of vis) { const k = grupoDe(l); if (k != null && !ordem.has(k)) ordem.set(k, ordem.size); }
-    const pos = (l: LinhaGrade) => { const k = grupoDe(l); return k != null ? ordem.get(k)! : Number.MAX_SAFE_INTEGER; };
-    return vis.map((l, i) => ({ l, i })).sort((a, b) => pos(a.l) - pos(b.l) || a.i - b.i).map((x) => x.l);
-  }, [linhas, equipFiltro, filtroPc, temPc, emRisco, filtroPcNum, cmpPorId]);
+       própria grade). Ordem dos grupos = a da 1ª aparição (ou pelo nome, ordenando por Equipamento);
+       dentro do grupo, a ordem de sempre ou a da coluna ordenada; a linha em branco fica no fim. */
+    const ordemG = new Map<string, number>();
+    const gs: string[] = [];
+    for (const l of vis) { const k = grupoDe(l); if (k != null && !ordemG.has(k)) { ordemG.set(k, ordemG.size); gs.push(k); } }
+    if (ordem?.key === "equipamento") {
+      const nome = (k: string) => String(vis.find((l) => grupoDe(l) === k)?.equipamento || "Geral");
+      [...gs].sort((a, b) => nome(a).localeCompare(nome(b), "pt-BR") * ordem.dir).forEach((k, i) => ordemG.set(k, i));
+    }
+    const pos = (l: LinhaGrade) => { const k = grupoDe(l); return k != null ? ordemG.get(k)! : Number.MAX_SAFE_INTEGER; };
+    const tipo = ordem ? TIPO_FILTRO[ordem.key] : null;
+    const cmp = (a: LinhaGrade, b: LinhaGrade) => {
+      if (!ordem || ordem.key === "equipamento" || !tipo) return 0;
+      const ea = !String(a.item ?? "").trim(), eb = !String(b.item ?? "").trim();
+      if (ea || eb) return Number(ea) - Number(eb);
+      const va = valorCol(a, ordem.key), vb = valorCol(b, ordem.key);
+      const na = va == null || va === "", nb = vb == null || vb === "";
+      if (na || nb) return Number(na) - Number(nb); // vazias sempre no fim
+      const r = tipo === "num" ? Number(va) - Number(vb) : String(va).localeCompare(String(vb), "pt-BR", { numeric: true });
+      return r * ordem.dir;
+    };
+    return vis.map((l, i) => ({ l, i })).sort((a, b) => pos(a.l) - pos(b.l) || cmp(a.l, b.l) || a.i - b.i).map((x) => x.l);
+  }, [linhas, equipFiltro, passaChips, passaCols, nFiltrosCol, ordem, valorCol]);
+  const nVisiveis = visiveis.filter((l) => String(l.item ?? "").trim()).length;
 
   const salvar = useCallback(async (confirmarRemocao = false, silencioso = false) => {
     const versaoInicio = versaoRef.current;
@@ -1767,9 +1858,9 @@ export default function MateriaisGrade({
     } finally { setSalvando(false); }
   }, [marcadas, vincBusca, empresa, codigoProjeto, carregar, onGravado]);
 
-  const exportar = useCallback(() => {
+  const exportar = useCallback((sohEstas?: LinhaGrade[]) => {
     const wb = XLSX.utils.book_new();
-    const dados = validas.map((l) => {
+    const dados = (sohEstas ?? validas).map((l) => {
       const c = cmpPorId.get(l._id);
       return {
         Equipamento: l.equipamento, Item: l.item, Qtd: l.qtd, Un: l.un, "Necessário em": l.data_necessaria, Modelo: l.modelo,
@@ -1787,12 +1878,148 @@ export default function MateriaisGrade({
       };
     });
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(dados), "Materiais");
-    XLSX.writeFile(wb, `materiais-projeto-${codigoProjeto}.xlsx`);
-  }, [validas, codigoProjeto, cmpPorId, conversa, prazoDe, planoDaLinha]);
+    XLSX.writeFile(wb, `materiais-projeto-${codigoProjeto}${sohEstas ? `-marcados-${sohEstas.length}` : ""}.xlsx`);
+  }, [validas, codigoProjeto, cmpPorId, conversa, prazoDe, planoDaLinha, origemCp]);
 
   const alternar = useCallback((id: string, _i: number, _shift: boolean) => {
     setMarcadas((p) => { const n = new Set(p); if (n.has(id)) n.delete(id); else n.add(id); return n; });
   }, []);
+
+  /* ── Alterar em lote (08/10/26, Benny: "várias opções, todas que são possíveis") ─────────
+     Tudo o que se edita na linha, aplicado aos marcados de uma vez. Campos da grade mudam na tela
+     e o salvamento automático grava; o aviso guarda o valor anterior de cada linha para o Desfazer.
+     O prazo por item grava direto (sql/141) e o Desfazer regrava o anterior. Comentário e
+     desvincular PC vão direto ao servidor — pedem confirmação e não têm desfazer. */
+  const marcadasLinhas = useMemo(() => linhas.filter((l) => marcadas.has(l._id) && String(l.item ?? "").trim()), [linhas, marcadas]);
+  const [loteDesf, setLoteDesf] = useState<{ texto: string; prev: Map<string, Record<string, string>>; prazos?: { id: string; v: number | null }[] } | null>(null);
+  const [loteOcupado, setLoteOcupado] = useState(false);
+  const aplicarLote = useCallback((calc: (l: LinhaGrade) => Record<string, string> | null, texto: (n: number) => string) => {
+    const prev = new Map<string, Record<string, string>>();
+    const patches = new Map<string, Record<string, string>>();
+    for (const l of linhasRef.current) {
+      if (!marcadas.has(l._id) || !String(l.item ?? "").trim()) continue;
+      const p = calc(l);
+      if (!p) continue;
+      const mud = Object.entries(p).filter(([k, v]) => String(l[k] ?? "") !== v);
+      if (!mud.length) continue;
+      patches.set(l._id, Object.fromEntries(mud));
+      prev.set(l._id, Object.fromEntries(mud.map(([k]) => [k, String(l[k] ?? "")])));
+    }
+    if (!patches.size) { setAviso("Nada mudou — as linhas marcadas já estavam assim (ou a ação não se aplica a elas)."); return 0; }
+    setLinhas((ls) => ls.map((l) => (patches.has(l._id) ? { ...l, ...patches.get(l._id)! } as LinhaGrade : l)));
+    setSujo(true);
+    setLoteDesf({ texto: texto(patches.size), prev });
+    return patches.size;
+  }, [marcadas]);
+  const gravarPrazos = useCallback(async (alvos: { id: string; v: number | null }[]) => {
+    setLoteOcupado(true);
+    const falhas: string[] = [];
+    const res = new Map<string, { m: string; por: string; em: string }>();
+    for (let i = 0; i < alvos.length; i += 6) {
+      await Promise.all(alvos.slice(i, i + 6).map(async (a) => {
+        try {
+          const r = await fetch("/api/rc-projetos/prazo", { method: "PUT", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ empresa, codigo_projeto: codigoProjeto, id: a.id.slice(2), prazo_dias: a.v }) });
+          const j = (await r.json().catch(() => ({}))) as { error?: string; prazo_dias_manual?: number | null; prazo_por?: string | null; prazo_em?: string | null };
+          if (!r.ok) throw new Error(j.error ?? r.statusText);
+          res.set(a.id, { m: j.prazo_dias_manual == null ? "" : String(j.prazo_dias_manual), por: j.prazo_por ?? "", em: j.prazo_em ?? "" });
+        } catch (e) { falhas.push((e as Error).message); }
+      }));
+    }
+    setLinhas((ls) => ls.map((l) => { const x = res.get(l._id); return x ? { ...l, _prazo_man: x.m, _prazo_por: x.por, _prazo_em: x.em } : l; }));
+    setLoteOcupado(false);
+    if (falhas.length) setErro(`${falhas.length} prazo(s) não gravaram: ${falhas[0]}`);
+    return res;
+  }, [empresa, codigoProjeto]);
+  const prazoMan = (l: LinhaGrade) => (String(l._prazo_man ?? "").trim() ? Number(l._prazo_man) : null);
+  const prazoLote = useCallback(async (v: number | null) => {
+    const alvo = marcadasLinhas.filter((l) => l._id.startsWith("db") && prazoMan(l) !== v);
+    if (!alvo.length) { setAviso(v == null ? "Os marcados já estão no prazo automático." : `Os marcados já estão com ${v} dias.`); return; }
+    const antes = alvo.map((l) => ({ id: l._id, v: prazoMan(l) }));
+    const ok = await gravarPrazos(alvo.map((l) => ({ id: l._id, v })));
+    if (!ok.size) return;
+    setLoteDesf({ texto: v == null ? `Prazo de ${ok.size} item(ns) voltou ao automático — comprar até recalculado.` : `Prazo de ${ok.size} item(ns) ajustado para ${v} dias — comprar até recalculado.`,
+      prev: new Map(), prazos: antes.filter((a) => ok.has(a.id)) });
+  }, [marcadasLinhas, gravarPrazos]);
+  const desfazerLote = useCallback(async () => {
+    const d = loteDesf;
+    if (!d) return;
+    setLoteDesf(null);
+    if (d.prev.size) {
+      setLinhas((ls) => ls.map((l) => (d.prev.has(l._id) ? { ...l, ...d.prev.get(l._id)! } as LinhaGrade : l)));
+      setSujo(true);
+    }
+    if (d.prazos?.length) await gravarPrazos(d.prazos);
+    setAviso(`Desfeito: ${d.texto.replace(/ —.*$/, "").replace(/\.$/, "")}.`);
+  }, [loteDesf, gravarPrazos]);
+  /** Valor unit. = último preço do catálogo; sem compra anterior, o custo da RC. */
+  const vuAutoLote = useCallback(async () => {
+    const ids = [...new Set(marcadasLinhas.filter((l) => l._match !== "omie").map((l) => Number(l.cat_ncod_prod)).filter((x) => x > 0))];
+    setLoteOcupado(true);
+    const r = ids.length ? await fetch("/api/catalogo/projeto", { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ acao: "resolver", emp: empresa, ids }) }).then((x) => (x.ok ? x.json() : null)).catch(() => null) : null;
+    setLoteOcupado(false);
+    const cat = ((r as { itens?: Record<string, Cat> } | null)?.itens ?? {});
+    const custoCp = new Map((cpBase?.itens ?? []).filter((i) => i.custo_cp != null).map((i) => [chaveItem(i.equipamento, i.item), Number(i.custo_cp)]));
+    aplicarLote((l) => {
+      const c = l.cat_ncod_prod && l._match !== "omie" ? cat[l.cat_ncod_prod] : undefined;
+      if (c?.ultimo_preco != null) return { cat_valor_unit: moeda(c.ultimo_preco), _vu_fonte: "catálogo" };
+      const cp = custoCp.get(chaveItem(l.equipamento, l.item));
+      return cp != null ? { cat_valor_unit: moeda(cp), _vu_fonte: "CP" } : null;
+    }, (n) => `Valor unit. de ${n} item(ns) trocado pelo último preço do catálogo (ou o custo da RC).${fraseSalvar()}`);
+  }, [marcadasLinhas, empresa, cpBase, aplicarLote]); // eslint-disable-line react-hooks/exhaustive-deps
+  const comentarLote = useCallback(async (texto: string) => {
+    const alvo = marcadasLinhas.filter((l) => l._id.startsWith("db"));
+    if (!texto.trim() || !alvo.length) return false;
+    if (!window.confirm(`Adicionar o comentário abaixo em ${alvo.length} linha(s)?\n\n“${texto.trim()}”\n\nComentário não tem desfazer — fica na conversa de cada linha.`)) return false;
+    setLoteOcupado(true);
+    let ok = 0; const falhas: string[] = [];
+    for (const l of alvo) {
+      try {
+        const r = await fetch("/api/rc-projetos/comentarios", { method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ empresa, codigo_projeto: codigoProjeto, item_id: l._id.slice(2), texto: texto.trim() }) });
+        const j = await r.json();
+        if (!r.ok) throw new Error(j.error ?? r.statusText);
+        ok++;
+        setComents((m) => ({ ...m, [l._id.slice(2)]: [...(m[l._id.slice(2)] ?? []), j.comentario as Coment] }));
+      } catch (e) { falhas.push((e as Error).message); }
+    }
+    setLoteOcupado(false);
+    if (falhas.length) setErro(`${falhas.length} comentário(s) não gravaram: ${falhas[0]}`);
+    if (ok) setAviso(`💬 Comentário adicionado em ${ok} linha(s).`);
+    return ok > 0;
+  }, [marcadasLinhas, empresa, codigoProjeto]);
+  const desvincularLote = useCallback(async () => {
+    const alvo = marcadasLinhas.filter((l) => { const c = cmpPorId.get(l._id); return !!c?.pcs.length && c.vinculo_via !== "rc"; });
+    if (!alvo.length) { setAviso("Nenhum dos marcados está vinculado a um PC (vínculo pela RC sai na própria RC)."); return; }
+    if (!window.confirm(`Desvincular ${alvo.length} linha(s) do pedido de compra?\n\nO PC não muda — só a ligação com a lista. Não tem desfazer: para religar, use “⇄ vincular a um PC”.`)) return;
+    setLoteOcupado(true);
+    let ok = 0; const falhas: string[] = [];
+    for (const l of alvo) {
+      try { await postCompras({ acao: "desvincular", lista_id: l._id.slice(2) }); ok++; } catch (e) { falhas.push((e as Error).message); }
+    }
+    setLoteOcupado(false);
+    if (falhas.length) setErro(`${falhas.length} não desvincularam: ${falhas[0]}`);
+    setAviso(`${ok} linha(s) desvinculada(s) do PC.`);
+    await carregar();
+    onGravado?.();
+  }, [marcadasLinhas, cmpPorId, postCompras, carregar, onGravado]);
+  /** Copiar os marcados como TSV (cola no Excel — e de volta na grade, pelo cabeçalho). */
+  const copiarMarcadas = useCallback(async () => {
+    const cab = ["Equipamento", "Código", "Item", "Qtd", "Un", "Necessário em", "Valor unit.", "Fornecedor", "Prazo (d)", "Comprar até", "PC", "Situação"];
+    const lin = marcadasLinhas.map((l) => {
+      const c = cmpPorId.get(l._id);
+      return [l.equipamento || "Geral", semCodigoNosso(l) ? "" : l.cat_codigo, l._cat_desc || l.item, l.qtd, l.un, l.data_necessaria ? dia(l.data_necessaria).replace(/\/(\d\d)$/, "/20$1") : "",
+        l.cat_valor_unit, c?.pcs[0]?.fornecedor || l.cat_fornecedor, String(prazoDe(l).efetivo.prazo), planoDaLinha(l)?.comprarAte ? dia(planoDaLinha(l)!.comprarAte).replace(/\/(\d\d)$/, "/20$1") : "",
+        c?.pcs.map((p) => p.pc).join(", ") || "", c?.pcs.length ? estadoPc(c.pcs[0]).rot : ""].map((v) => String(v ?? "").replace(/[\t\r\n]+/g, " "));
+    });
+    const tsv = [cab, ...lin].map((r) => r.join("\t")).join("\n");
+    try { await navigator.clipboard.writeText(tsv); setAviso(`📋 ${lin.length} linha(s) copiada(s) — cole no Excel (Ctrl+V).`); }
+    catch { setErro("O navegador não deixou copiar para a área de transferência."); }
+  }, [marcadasLinhas, cmpPorId, prazoDe, planoDaLinha]);
+  /** Fornecedores conhecidos (o ⏱ Prazos por fornecedor e os da própria lista) — o mesmo nome agrupa o lote. */
+  const fornecedoresConhecidos = useMemo(() => [...new Set([...[...prazos.values()].map((p) => p.nome), ...validas.map((l) => l.cat_fornecedor).filter(Boolean)])]
+    .sort((a, b) => a.localeCompare(b, "pt-BR")), [prazos, validas]);
 
   // ── Faixa "Grupos de equipamento" ────────────────────────────────────────
   type Grupo = { k: string; nome: string; n: number; data: string | null; proprias: number; daCp: boolean };
@@ -2106,6 +2333,7 @@ export default function MateriaisGrade({
   const [addModal, setAddModal] = useState<"cat" | "colar" | null>(null);
   /** "Importar planilha": o arquivo lido vira o texto do "Colar do Excel" (mesmo leitor, mesma prévia). */
   const arquivoRef = useRef<HTMLInputElement>(null);
+  const [uploadAntigo, setUploadAntigo] = useState(false);
   const [importado, setImportado] = useState<{ nome: string; texto: string } | null>(null);
   const abrirArquivo = useCallback(async (f: File) => {
     try {
@@ -2143,7 +2371,11 @@ export default function MateriaisGrade({
   const menuMais: { rot: string; dica?: string; off?: boolean; fn: () => void }[] = [
     { rot: ocupado === "auto" ? "⇄ Vinculando…" : "⇄ Vincular PCs automaticamente", off: salvando || !!ocupado, dica: "Procura, nos pedidos de compra deste projeto, o item de cada linha — e grava o vínculo", fn: () => void vincularAuto() },
     { rot: ocupado === "sug" ? "Procurando…" : "Ver sugestões de vínculo com PCs", off: !!ocupado, dica: "Linhas parecidas com itens dos PCs do projeto, para você confirmar (também no “+ vincular” de cada linha)", fn: () => void verSugestoes() },
-    { rot: "Exportar Excel", off: !validas.length, fn: exportar },
+    { rot: "Exportar Excel", off: !validas.length, fn: () => exportar() },
+    /* 08/10/26: o antigo "📋 Subir planilha" do topo do projeto mora aqui — é o único import que lê o
+       arquivo de UMA ABA POR EQUIPAMENTO e sincroniza a lista (novos entram, existentes atualizam, sumidos saem). */
+    { rot: "🗂 Importar planilha antiga (uma aba por equipamento)", dica: "Cada aba vira um equipamento; SUBSTITUI a lista — mostra novos · atualizados · removidos antes de gravar",
+      fn: () => { if (sujo) { setErro("Há alterações não salvas — espere salvar (ou clique em Salvar lista) antes de importar a planilha antiga: ela substitui a lista."); return; } setUploadAntigo(true); } },
     { rot: salvando ? "Salvando…" : "Salvar agora", off: salvando || !carregouOk, fn: () => void salvar() },
     { rot: "⏱ Prazos por fornecedor", dica: "Histórico × prazo usado no planejamento (comprar até)", fn: () => setPrazosAberto(true) },
     { rot: casando ? "Casando…" : "Casar com o catálogo de novo", off: casando || salvando, dica: "Refaz as sugestões das linhas sem código (as recusadas ficam de fora)", fn: () => void casarAgora() },
@@ -2384,40 +2616,84 @@ export default function MateriaisGrade({
         </details>
       </div>
 
-      {/* Barra de seleção (spec B.4 v3): só com itens marcados. */}
+      {/* Barra de seleção (spec B.4 v3): só com itens marcados. Numa linha só (08/10/26): o que é
+          mudar campo foi para "✎ Alterar em lote ▾". */}
       {marcadas.size > 0 && (
-        <div className="flex items-center gap-2 flex-wrap px-2.5 py-1.5 rounded-[10px] border border-ww-accent bg-ww-accentSoft text-[12px]" data-selbar>
-          <span><b className="text-ww-text">{marcadas.size}</b> marcados</span>
+        <div className="flex items-center gap-2 flex-nowrap whitespace-nowrap overflow-x-auto px-2.5 py-1.5 rounded-[10px] border border-ww-accent bg-ww-accentSoft text-[12px]" data-selbar>
+          <span className="shrink-0" data-sel-n><b className="text-ww-text">{marcadas.size}</b> marcados{(() => { const vis = new Set(visiveis.map((l) => l._id)); const fora = marcadasLinhas.filter((l) => !vis.has(l._id)).length;
+            return fora ? <span className="text-ww-textMuted" title="Marcadas antes de filtrar — as ações valem para elas também"> ({fora} fora do filtro)</span> : null; })()}</span>
+          <MenuLote n={marcadasLinhas.length} ocupado={loteOcupado}
+            alcance={{
+              prazo: prazoCfg?.pode && prazoCfg.ativo ? marcadasLinhas.filter((l) => l._id.startsWith("db")).length : 0,
+              sug: marcadasLinhas.filter((l) => l._match === "sug").length,
+              semCod: marcadasLinhas.filter((l) => semCodigoNosso(l) && l._sug_status !== "recusada").length,
+              comCod: marcadasLinhas.filter((l) => !semCodigoNosso(l)).length,
+              comPc: marcadasLinhas.filter((l) => { const c = cmpPorId.get(l._id); return !!c?.pcs.length && c.vinculo_via !== "rc"; }).length,
+              db: marcadasLinhas.filter((l) => l._id.startsWith("db")).length,
+            }}
+            prazoBloqueio={!prazoCfg ? undefined : !prazoCfg.ativo ? "Ajuste por item aguarda a migração sql/141" : !prazoCfg.pode ? "Só quem tem acesso a Compras ajusta o prazo" : undefined}
+            fornecedores={fornecedoresConhecidos}
+            unidades={[...new Set(["UN", "PC", "M", "M2", "KG", "L", "CJ", "VB", "CX", "RL", ...validas.map((l) => String(l.un ?? "").toUpperCase()).filter(Boolean)])]}
+            onPrazo={(v) => void prazoLote(v)}
+            onNecessario={(iso) => aplicarLote((l) => {
+              const d = iso ?? dataGrupoRef.current.get(normGrupo(l.equipamento || "Geral")) ?? null;
+              return d ? { data_necessaria: d } : null;
+            }, (n) => (iso ? `Necessário em ${dia(iso)} em ${n} item(ns).` : `${n} item(ns) voltaram para a data do grupo.`) + fraseSalvar())}
+            onFornecedor={(nome) => aplicarLote(() => ({ cat_fornecedor: nome }), (n) => `Fornecedor “${nome}” em ${n} item(ns) — entram juntos no mesmo lote/PC.${fraseSalvar()}`)}
+            onValor={(v) => (v == null ? void vuAutoLote()
+              : aplicarLote(() => ({ cat_valor_unit: moeda(v), _vu_fonte: "" }), (n) => `Valor unit. ${brl(v)} em ${n} item(ns).${fraseSalvar()}`))}
+            onQtd={(modo, v) => aplicarLote((l) => {
+              if (modo === "=") return { qtd: String(v) };
+              if (!String(l.qtd ?? "").trim()) return null;
+              return { qtd: String(Math.round(num(l.qtd) * v * 1000) / 1000) };
+            }, (n) => (modo === "x" ? `Qtd × ${v} em ${n} item(ns).` : `Qtd = ${v} em ${n} item(ns).`) + fraseSalvar())}
+            onUnidade={(un) => aplicarLote(() => ({ un }), (n) => `Unidade ${un} em ${n} item(ns).${fraseSalvar()}`)}
+            onAceitarSug={() => void aceitarSugestoes([...marcadas])}
+            onNaoNosso={() => aplicarLote((l) => (semCodigoNosso(l) && l._sug_status !== "recusada"
+              ? { _sug_status: "recusada", ...(l._omie_ncod ? { cat_ncod_prod: l._omie_ncod, _match: "omie", _omie_ncod: "" } : l._match === "omie" ? {} : { _match: "sem" }) } : null),
+              (n) => `${n} item(ns) marcados como “não é item nosso” — o catálogo não volta a sugerir.${fraseSalvar()}`)}
+            onTirarCodigo={() => {
+              for (const l of marcadasLinhas) for (const k of [...sugTentadasRef.current]) if (k.startsWith(`${l._id}|`)) sugTentadasRef.current.delete(k);
+              aplicarLote((l) => (!semCodigoNosso(l) ? { cat_ncod_prod: "", cat_codigo: "", _cat_desc: "", _match: "", _alts: "", _sug: "", _sug_status: "",
+                _omie: "", _omie_ncod: "", cat_fornecedor: "", cat_entrega_dias: "", cat_fat_dias: "" } : null),
+                (n) => `Código tirado de ${n} item(ns) — voltam à compatibilização.${fraseSalvar()}`);
+            }}
+            onComentar={comentarLote}
+            onDesvincular={() => void desvincularLote()}
+            onExportar={() => exportar(marcadasLinhas)}
+            onCopiar={() => void copiarMarcadas()} />
           <button type="button" onClick={() => { loteGerandoRef.current = null; abrirGerarPc(paraPc); }} disabled={!paraPc.length || !!ocupado}
             title={paraPc.length ? "Gera os pedidos de compra (um por fornecedor) com as linhas marcadas sem PC" : "As marcadas já têm PC"}
-            className="px-2 py-0.5 rounded-md bg-ww-accent text-white text-[11.5px] font-semibold hover:brightness-110 transition disabled:opacity-40">
+            className="shrink-0 px-2 py-0.5 rounded-md bg-ww-accent text-white text-[11.5px] font-semibold hover:brightness-110 transition disabled:opacity-40">
             🧾 Comprar agora{paraPc.length !== marcadas.size ? ` (${paraPc.length})` : ""}
           </button>
           <button type="button" disabled={!paraPc.length} data-planejar
             onClick={() => { setForcados(new Set(paraPc)); setSubAba("plan"); setAviso(`${paraPc.length} item(ns) enviados ao agente — os lotes com eles ficam destacados.`); setMarcadas(new Set());
               setTimeout(() => document.querySelector("[data-agente]")?.scrollIntoView({ behavior: "smooth", block: "start" }), 120); }}
             title="O agente coloca os itens marcados num lote com a data certa de pedir (um PC por fornecedor por data)"
-            className="px-2 py-0.5 rounded-md border border-ww-border bg-[rgb(var(--color-ww-panel))] text-[11.5px] text-ww-text hover:border-ww-accent disabled:opacity-40">
+            className="shrink-0 px-2 py-0.5 rounded-md border border-ww-border bg-[rgb(var(--color-ww-panel))] text-[11.5px] text-ww-text hover:border-ww-accent disabled:opacity-40">
             ✨ Planejar com o agente
           </button>
           <select value="" data-mover onChange={(e) => { const v = e.target.value; if (v === "__novo") setNovoGrupo({ nome: "", data: "" }); else if (v) moverParaGrupo(v); }}
-            className="rounded-md border border-ww-border bg-[rgb(var(--color-ww-panel))] px-1.5 py-0.5 text-[11.5px] text-ww-text">
+            className="shrink-0 max-w-[170px] rounded-md border border-ww-border bg-[rgb(var(--color-ww-panel))] px-1.5 py-0.5 text-[11.5px] text-ww-text">
             <option value="">mover para equipamento…</option>
             {gruposChips.map((g) => <option key={g.k} value={g.nome}>{g.nome}</option>)}
             <option value="__novo">+ novo equipamento…</option>
           </select>
-          {[...marcadas].some((id) => linhas.find((l) => l._id === id)?._match === "sug") && (
-            <button type="button" onClick={() => void aceitarSugestoes([...marcadas])}
-              className="px-2 py-0.5 rounded-md border border-amber-500/70 text-amber-800 dark:text-amber-200 text-[11.5px] hover:bg-amber-500/10 transition">
-              ✓ Aceitar sugestões dos marcados ({[...marcadas].filter((id) => linhas.find((l) => l._id === id)?._match === "sug").length})
-            </button>
-          )}
           <button type="button" onClick={() => setPicker(true)} title="Ligar as marcadas a um pedido de compra que já existe"
-            className="px-2 py-0.5 rounded-md text-[11.5px] text-ww-textMuted hover:text-ww-text hover:bg-ww-rowHover">⇄ vincular a um PC</button>
+            className="shrink-0 px-2 py-0.5 rounded-md text-[11.5px] text-ww-textMuted hover:text-ww-text hover:bg-ww-rowHover">⇄ vincular a um PC</button>
           <button type="button" onClick={() => excluirLinhas([...marcadas])}
-            className="px-2 py-0.5 rounded-md text-[11.5px] text-ww-textMuted hover:text-rose-500 hover:bg-rose-500/10">🗑 Excluir</button>
+            className="shrink-0 px-2 py-0.5 rounded-md text-[11.5px] text-ww-textMuted hover:text-rose-500 hover:bg-rose-500/10">🗑 Excluir</button>
           <span className="flex-1" />
-          <button type="button" onClick={() => setMarcadas(new Set())} className="text-[11px] text-ww-textMuted hover:text-ww-text">limpar</button>
+          <button type="button" onClick={() => setMarcadas(new Set())} className="shrink-0 text-[11px] text-ww-textMuted hover:text-ww-text">limpar</button>
+        </div>
+      )}
+      {loteDesf && (
+        <div className="flex items-center gap-3 flex-wrap p-2 rounded-lg border border-ww-accent/50 bg-ww-accentSoft text-[12px] text-ww-text" data-lote-desfazer role="status">
+          <span>✎ {loteDesf.texto}</span>
+          <button type="button" onClick={() => void desfazerLote()} disabled={loteOcupado}
+            className="ml-auto px-2 py-0.5 rounded border border-ww-accent font-semibold hover:bg-ww-accent/10 disabled:opacity-40">Desfazer</button>
+          <button type="button" onClick={() => setLoteDesf(null)} className="text-[11px] opacity-70 hover:opacity-100">ok</button>
         </div>
       )}
 
@@ -2443,6 +2719,13 @@ export default function MateriaisGrade({
               </button>);
           })}
         </div>
+        {(nFiltrosCol > 0 || ordem) && (
+          <button type="button" data-limpar-filtros onClick={() => { setFiltrosCol({}); setOrdem(null); }}
+            title={[...Object.keys(filtrosCol).map((k) => `filtro em ${ROTULO_COLUNA[k] ?? k}`), ordem ? `ordenado por ${ROTULO_COLUNA[ordem.key] ?? ordem.key}` : ""].filter(Boolean).join(" · ")}
+            className="px-2 py-0.5 rounded-lg border border-ww-accent text-ww-accent text-[11px] font-semibold hover:bg-ww-accentSoft">
+            ✕ Limpar filtros{nFiltrosCol ? ` (${nFiltrosCol})` : ""}{ordem ? " e ordem" : ""}
+          </button>)}
+        {(nFiltrosCol > 0 || filtroPc !== "todas" || equipFiltro) && <span className="text-[10.5px] text-ww-textMuted tabular-nums" data-contagem>{nVisiveis} de {validas.length} linhas</span>}
         <span className="flex-1" />
         {sugBuscando && <span className="text-[10.5px] text-ww-textFaint">buscando sugestões…</span>}
         {sugErro && (
@@ -2501,6 +2784,11 @@ export default function MateriaisGrade({
         ? <p className="text-[11.5px] text-ww-textFaint py-3">Carregando a lista…</p>
         : <GradeEditavel cols={colunasGrade} colsTodas={colunasTodas} linhas={visiveis} botaoLinha={false} herdarNoColar={["equipamento", "_grp"]}
             cabecalhoNaPagina ajustarLargura escala={ESCALAS[escIdx]} linhaEmBranco={emBranco}
+            filtroCab={(c) => (TIPO_FILTRO[c.key] ? (
+              <BotaoFiltro colKey={c.key} rotulo={ROTULO_COLUNA[c.key] ?? c.label} tipo={TIPO_FILTRO[c.key]} filtro={filtrosCol[c.key]}
+                ordemDir={ordem?.key === c.key ? ordem.dir : null} valores={() => valoresDistintos(c.key)}
+                onFiltro={(f) => mudarFiltro(c.key, f)} onOrdem={(d) => setOrdem(d ? { key: c.key, dir: d } : null)} />) : null)}
+            rodapeInfo={<>{nVisiveis} de {validas.length} linhas{nFiltrosCol ? ` · ${nFiltrosCol} filtro(s) de coluna` : ""}</>}
             acoesLinha={(l) => (String(l.item ?? "").trim() || l._grp ? [{ rot: "＋", dica: "Inserir linha abaixo (no mesmo grupo)",
               fn: () => inserirLinhas(grupoDe(l) ?? normGrupo(l.equipamento || "Geral"), 1, l._id) }] : [])}
             grupo={{ de: grupoDe, cab: cabecalhoGrupo, cor: corGrupo, rodape: (k) => <RodapeGrupo onInserir={(n) => inserirLinhas(k, n)} /> }}
@@ -2510,7 +2798,7 @@ export default function MateriaisGrade({
             onChange={(l) => {
               // Com filtro ativo, o que volta é só o pedaço visível — recompõe
               // com o resto para não apagar o que está escondido.
-              if (equipFiltro || filtroPc !== "todas" || filtroPcNum) {
+              if (equipFiltro || filtroPc !== "todas" || filtroPcNum || nFiltrosCol > 0) {
                 const ids = new Set(visiveis.map((x) => x._id));
                 const foraDaVista = linhas.filter((x) => (x.item?.trim() || x._grp) && !ids.has(x._id));
                 setLinhas([...foraDaVista, ...l]);
@@ -2674,6 +2962,9 @@ export default function MateriaisGrade({
             </div>
           </div>
         </div>, document.body)}
+      {uploadAntigo && (
+        <RcProjetoUploadButton empresa={empresa} codigoProjeto={codigoProjeto} aberto onFechar={() => setUploadAntigo(false)}
+          onDone={() => { setUploadAntigo(false); void carregar(); onGravado?.(); }} />)}
       <input ref={arquivoRef} type="file" accept=".xlsx,.xls,.csv,.txt" hidden data-importar-arquivo
         onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; if (f) void abrirArquivo(f); }} />
       {addModal && (
