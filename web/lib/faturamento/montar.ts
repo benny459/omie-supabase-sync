@@ -296,7 +296,10 @@ export function montarNfe(doc: DocFat, em: Emitente, opts: { natureza: string; s
   const semCob = semCobranca(doc);
   const mesmaUF = (em.uf || "SP").toUpperCase() === c.uf.toUpperCase();
   const ieDig = so(c.ie);
-  const indIE = c.indicador_ie ?? (ieDig ? "1" : /isent/i.test(c.ie ?? "") ? "2" : "9");
+  // A IE que está no campo manda (09/10/26): com IE numérica é contribuinte (1), mesmo que o
+  // indicador salvo (Omie "contribuinte=N", rascunho antigo) diga 9 — a SEFAZ rejeita
+  // "IE do destinatário não informada" quando o destinatário tem IE ativa (HECI, PV1865).
+  const indIE = ieDig ? "1" : /isent/i.test(c.ie ?? "") ? "2" : c.indicador_ie === "1" || !c.indicador_ie ? "9" : c.indicador_ie;
   const desconto = r2(doc.itens.reduce((s, i) => s + (i.valor_desconto ?? 0), 0));
   const frete = r2(doc.itens.reduce((s, i) => s + (i.valor_frete ?? 0), 0));
   const outras = r2(doc.itens.reduce((s, i) => s + (i.valor_outras ?? 0), 0));

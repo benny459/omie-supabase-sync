@@ -25,9 +25,10 @@ export function docFatPvOmie(empresa: string, d: PvOmieDoc): DocFat {
   const o = d.cliente_omie ?? {};
   const doc = so(c.cnpj_cpf ?? c.doc ?? o.cnpj_cpf);
   const ie = s(c.inscricao_estadual ?? o.inscricao_estadual);
-  const contrib = s(c.contribuinte ?? o.contribuinte).toUpperCase();
+  // IE numérica = contribuinte, mesmo com "contribuinte=N" no Omie: a SEFAZ confere o cadastro
+  // dela e rejeita a nota sem IE (HECI 27193705000129, IE 080048633 — 09/10/26).
   const indicador_ie: "1" | "2" | "9" =
-    /isent/i.test(ie) ? "2" : so(ie) && contrib !== "N" ? "1" : "9";
+    /isent/i.test(ie) ? "2" : so(ie) ? "1" : "9";
   const t = d.transportadora;
   const modal = s(pv.modalidade);
   const vol = n(pv.volumes);

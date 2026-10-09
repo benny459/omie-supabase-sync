@@ -156,6 +156,7 @@ function dicaRejeicao(msg: string): string | null {
   if (/778|ncm/.test(m)) return "NCM inexistente ou inválido em algum item. Corrija o NCM no item (cadastro do produto) e reenvie.";
   if (/cep/.test(m)) return "CEP do destinatário inválido. Confira no cadastro do cliente.";
   if (/munic|ibge/.test(m)) return "Código IBGE do município inválido ou diferente da UF. Use a busca de CEP no cadastro do cliente.";
+  if (/ie do destinat.rio n.o informada/.test(m)) return "A SEFAZ diz que este cliente tem Inscrição Estadual ativa — a nota não pode sair sem ela. Clique em Corrigir e reenviar, preencha o campo Inscrição estadual do cliente (a mesma das notas anteriores; veja em Últimos faturamentos ou no cadastro) e emita de novo. Depois corrija também o cadastro do cliente.";
   if (/inscri|\bie\b|232|233|209/.test(m)) return "Inscrição estadual do destinatário inválida ou incompatível. Se o cliente é isento/não contribuinte, deixe a IE vazia.";
   if (/certificad/.test(m)) return "Problema no certificado digital A1 (vence 23/10/2026). Renove e envie o .pfx à Focus.";
   if (/schema|225/.test(m)) return "Algum campo está fora do formato da SEFAZ. Veja a mensagem completa e corrija o campo indicado.";
