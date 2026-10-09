@@ -21,7 +21,9 @@ export type LinhaItem = {
 
 export const detectorLigadoPara = detetorLigado;
 
-export type Aba = { modulo: ModuloOrdem; rotulo: string; acesso: boolean; ligado: boolean; previa: boolean; n: number | null; criticos: number | null };
+export type Aba = { modulo: ModuloOrdem; rotulo: string; acesso: boolean; ligado: boolean; previa: boolean; n: number | null; criticos: number | null; motivo?: string | null };
+/** Módulo de outro sistema (CRM, Serviços): o próprio sistema decide o acesso; aqui só se lista. */
+export type Externo = { acesso: boolean; itens: ItemTela[]; motivo?: string | null };
 
 export type Fila = {
   abas: Aba[];
@@ -43,7 +45,7 @@ export function ordenar<T extends { urgencia: "critica" | "atencao" | null; degr
 
 export function filtrarItens(
   q: Quem, cfg: ConfigOrdem, linhas: LinhaItem[],
-  opts: { modulo?: ModuloOrdem | null; escopo?: Escopo; nomes?: Map<string, string>; feitosHoje?: number; comercial?: { acesso: boolean; itens: ItemTela[] }; agora?: string },
+  opts: { modulo?: ModuloOrdem | null; escopo?: Escopo; nomes?: Map<string, string>; feitosHoje?: number; externos?: Partial<Record<ModuloOrdem, Externo>>; agora?: string },
 ): Fila {
   const nomes = opts.nomes ?? new Map<string, string>();
   const escopos = escoposPermitidos(q, cfg);
@@ -78,18 +80,20 @@ export function filtrarItens(
       acao: ac ? { chave: ac.chave, rotulo: ac.rotulo, ligada: cfg.acoes[ac.chave] === true, podeExecutar: !!ex?.ok, motivo: ex?.motivo ?? null, irreversivel: ac.irreversivel } : null,
     });
   }
-  if (opts.comercial?.acesso) visiveis.push(...opts.comercial.itens);
+  for (const e of Object.values(opts.externos ?? {})) if (e?.acesso) visiveis.push(...e.itens);
 
   const abas: Aba[] = MODULOS.map((m) => {
-    const acesso = m.id === "comercial" ? !!opts.comercial?.acesso : veModulo(q, m.id, cfg);
+    const ext = m.externo ? opts.externos?.[m.id] : undefined;
+    const acesso = m.externo ? !!ext?.acesso : veModulo(q, m.id, cfg);
     const ml = moduloLigado(q, cfg, m.id);
-    if (!acesso) return { modulo: m.id, rotulo: m.rotulo, acesso: false, ligado: ml.ligado, previa: ml.previa, n: null, criticos: null };
+    if (!acesso) return { modulo: m.id, rotulo: m.rotulo, acesso: false, ligado: ml.ligado, previa: ml.previa, n: null, criticos: null, motivo: ext?.motivo ?? null };
     const xs = visiveis.filter((i) => i.modulo === m.id);
-    return { modulo: m.id, rotulo: m.rotulo, acesso: true, ligado: m.id === "comercial" ? true : ml.ligado, previa: m.id === "comercial" ? false : ml.previa, n: xs.length, criticos: xs.filter((i) => i.urgencia === "critica").length };
+    return { modulo: m.id, rotulo: m.rotulo, acesso: true, ligado: m.externo ? true : ml.ligado, previa: m.externo ? false : ml.previa, n: xs.length, criticos: xs.filter((i) => i.urgencia === "critica").length };
   }).filter((a) => a.ligado || !a.acesso);  // módulo desligado para a pessoa (não-admin) some; sem acesso fica com cadeado
 
   const mod = opts.modulo ?? null;
-  const bloqueado = mod && mod !== "comercial" && !veModulo(q, mod, cfg) ? mod : mod === "comercial" && !opts.comercial?.acesso ? mod : null;
+  const externo = mod ? MODULOS.find((x) => x.id === mod)?.externo : false;
+  const bloqueado = !mod ? null : externo ? (opts.externos?.[mod]?.acesso ? null : mod) : !veModulo(q, mod, cfg) ? mod : null;
   const itens = bloqueado ? [] : ordenar(mod ? visiveis.filter((i) => i.modulo === mod) : visiveis);
   const feitos = opts.feitosHoje ?? 0;
   return { abas, itens, escopos, escopo, bloqueado, previa, emOrdem: { feitos, total: feitos + itens.length } };

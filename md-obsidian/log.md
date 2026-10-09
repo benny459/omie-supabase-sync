@@ -4,6 +4,10 @@
 
 ---
 
+## [2026-10-09] [painel] feat | Central de Ordem — Serviços e Comercial no Meu dia (só leitura, desligados)
+
+- Interruptores "Serviços no Meu dia" e "Comercial no Meu dia" (desligados). Serviços via `/api/ciclo/central` (env **CICLO_CENTRAL_TOKEN** no painel, ainda por criar); sem token / 403 / sem itens → aba com 🔒 e o motivo. Cartões só "Abrir em Serviços ↗"/"Abrir no CRM ↗".
+
 ## [2026-10-09] [painel] fix | Central de Ordem — validação e carga no banco
 
 - Gate OK (Pagar 533 linhas, mesmos estados) e matriz de permissões por pessoa real em `docs/plans/CENTRAL_DE_ORDEM.md` §7.

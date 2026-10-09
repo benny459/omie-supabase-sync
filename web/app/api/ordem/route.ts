@@ -4,6 +4,7 @@
 // lê o cache ordem.item (os detetores correm no cron /api/cron/ordem).
 import { NextResponse } from "next/server";
 import { comercialDe } from "@/lib/ordem/comercial";
+import { servicosDe } from "@/lib/ordem/servicos";
 import { ehModulo } from "@/lib/ordem/modulos";
 import { MODULO_POR_ID } from "@/lib/ordem/modulos";
 import { filtrarItens } from "@/lib/ordem/fila";
@@ -26,15 +27,20 @@ export async function GET(req: Request) {
   const modulo = ehModulo(m) ? m : null;
   const escopo = (u.searchParams.get("escopo") ?? undefined) as Escopo | undefined;
 
-  const [linhas, ps, ult, comercial, donos] = await Promise.all([
-    itensAbertos(), pessoas(), ultimaSync(), comercialDe(q.email, q.uid), lerDonos(),
+  // CRM e Serviços: só com o interruptor de integração ligado (configuração); cada sistema decide o acesso.
+  const desligada = (n: string) => Promise.resolve({ acesso: false, itens: [], motivo: `integração com ${n} desligada na configuração da Central` });
+  const [linhas, ps, ult, comercial, servicos, donos] = await Promise.all([
+    itensAbertos(), pessoas(), ultimaSync(),
+    cfg.integracoes.comercial ? comercialDe(q.email, q.uid) : desligada("o CRM"),
+    cfg.integracoes.servicos ? servicosDe(q.email, q.uid) : desligada("Serviços"),
+    lerDonos(),
   ]);
   const nomes = new Map(ps.map((p) => [p.id, p.nome]));
   const inicioHoje = new Date(new Date().toLocaleDateString("sv-SE", { timeZone: "America/Sao_Paulo" }) + "T00:00:00-03:00").toISOString();
   const { count: feitosHoje } = await db().from("item").select("id", { count: "exact", head: true })
     .eq("tenant_slug", TENANT).eq("dono_id", q.uid).gte("resolvido_em", inicioHoje);
 
-  const fila = filtrarItens(q, cfg, linhas, { modulo, escopo, nomes, feitosHoje: feitosHoje ?? 0, comercial });
+  const fila = filtrarItens(q, cfg, linhas, { modulo, escopo, nomes, feitosHoje: feitosHoje ?? 0, externos: { comercial, servicos } });
 
   if (fila.bloqueado) {
     // Só os nomes dos donos do módulo (para o diálogo "Sem acesso") — nunca itens nem contagens.
@@ -42,6 +48,7 @@ export async function GET(req: Request) {
     const donosMod = [...new Set(donos.filter((d) => tiposMod.includes(d.tipo)).map((d) => nomes.get(d.titular_id)).filter(Boolean))];
     return NextResponse.json({
       error: `Sem acesso a ${MODULO_POR_ID[fila.bloqueado].rotulo}`, bloqueado: fila.bloqueado, donos: donosMod,
+      motivo: fila.abas.find((a) => a.modulo === fila.bloqueado)?.motivo ?? null, externo: !!MODULO_POR_ID[fila.bloqueado].externo,
       abas: fila.abas, quem: { nome: q.nome, admin: q.admin },
     }, { status: 403 });
   }
@@ -64,6 +71,6 @@ export async function GET(req: Request) {
       dialogo_entrada: cfg.dialogo_entrada, pedido_acesso: cfg.pedido_acesso, livre: cfg.parametros.p4_encaminhar_livre,
       assistente: "Aria",
     },
-    comercial_erro: comercial.erro ?? null,
+    comercial_erro: (comercial as { erro?: string }).erro ?? null,
   }, { headers: { "Cache-Control": "no-store" } });
 }

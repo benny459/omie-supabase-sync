@@ -95,6 +95,8 @@ export default function ConfigOrdemTela() {
         <Interruptor v={cfg.sino} on={(v) => set((c) => ({ ...c, sino: v }))} rotulo="Avisos (número vermelho na bolinha da conta + lista no menu da conta)" />
         <Interruptor v={cfg.dialogo_entrada} on={(v) => set((c) => ({ ...c, dialogo_entrada: v }))} rotulo="Diálogo de entrada (“Bom dia…”, uma vez por dia ou com aviso novo)" />
         <Interruptor v={cfg.pedido_acesso} on={(v) => set((c) => ({ ...c, pedido_acesso: v }))} rotulo="Botão “Pedir acesso” no diálogo Sem acesso" />
+        <Interruptor v={cfg.integracoes.servicos} on={(v) => set((c) => ({ ...c, integracoes: { ...c.integracoes, servicos: v } }))} rotulo="Serviços no Meu dia (itens do app de Serviços, só “Abrir em Serviços ↗”; precisa de CICLO_CENTRAL_TOKEN e da exportação ligada no app)" />
+        <Interruptor v={cfg.integracoes.comercial} on={(v) => set((c) => ({ ...c, integracoes: { ...c.integracoes, comercial: v } }))} rotulo="Comercial no Meu dia (itens do CRM, só “Abrir no CRM ↗”)" />
         <Interruptor v={cfg.comandos} on={(v) => set((c) => ({ ...c, comandos: v }))} rotulo="Barra de comandos da Aria (pré-visualiza e pede “Confirmar N”)" />
       </Secao>
 

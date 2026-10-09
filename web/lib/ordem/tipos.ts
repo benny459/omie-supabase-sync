@@ -2,7 +2,7 @@
 // SPEC-allka-em-dia-central-de-ordem.md §3.3 (modelo do item) e §0.2 (cartão de decisão).
 
 export type ModuloOrdem =
-  | "compras" | "financeiro" | "operacao" | "projetos" | "faturamento" | "estoque" | "cadastros" | "comercial";
+  | "compras" | "financeiro" | "operacao" | "projetos" | "faturamento" | "estoque" | "cadastros" | "comercial" | "servicos";
 
 export type Urgencia = "critica" | "atencao";
 export type Confianca = "alta" | "media" | "baixa";

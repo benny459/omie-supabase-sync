@@ -16,7 +16,7 @@ import type { ItemTela, ModuloOrdem } from "@/lib/ordem/tipos";
 import { tom, type Tom } from "@/components/navy/primitivos";
 import { cartao, kbrl, BotaoTela, Aviso } from "@/components/navy/tela/KitTela";
 
-type Aba = { modulo: ModuloOrdem; rotulo: string; acesso: boolean; ligado: boolean; previa: boolean; n: number | null; criticos: number | null };
+type Aba = { modulo: ModuloOrdem; rotulo: string; acesso: boolean; ligado: boolean; previa: boolean; n: number | null; criticos: number | null; motivo?: string | null };
 type Acomp = { id: string; modulo: string; titulo: string; estado: string; dono: string | null; criado_em: string; resolvido_em: string | null; motivo: string | null };
 type Resp = {
   abas: Aba[]; itens: ItemTela[]; escopos: string[]; escopo: string; previa: boolean; emOrdem: { feitos: number; total: number };
@@ -24,7 +24,7 @@ type Resp = {
   quem: { uid: string; nome: string; email: string; admin: boolean };
   central: { ativo: boolean; comandos: boolean; encaminhar: boolean; sino: boolean; decisoes: boolean; dialogo_entrada: boolean; pedido_acesso: boolean; livre: boolean; assistente: string };
 };
-type Bloq = { bloqueado: ModuloOrdem; donos: string[]; abas?: Aba[] };
+type Bloq = { bloqueado: ModuloOrdem; donos: string[]; abas?: Aba[]; motivo?: string | null; externo?: boolean };
 
 const ROT_ESCOPO: Record<string, string> = { meus: "Só os meus", equipe: "Também os da equipe", todos: "Todos (supervisão)" };
 const urgTom = (u: string | null): Tom => (u === "critica" ? "crit" : "warn");
@@ -139,7 +139,7 @@ export default function CentralOrdem() {
         <Separador ativo={!m} onClick={() => irModulo(null)} n={dados ? totalMeu : null}>Meu dia</Separador>
         {abas.map((a) => (
           <Separador key={a.modulo} ativo={m === a.modulo} cadeado={!a.acesso} n={a.acesso ? a.n : null} crit={a.criticos ?? 0}
-            onClick={() => irModulo(a.modulo)} title={a.acesso ? (a.previa ? "Desligado para a equipa — pré-visualização" : undefined) : "Sem acesso a este módulo"}>
+            onClick={() => irModulo(a.modulo)} title={a.acesso ? (a.previa ? "Desligado para a equipa — pré-visualização" : undefined) : (a.motivo ?? "Sem acesso a este módulo")}>
             {a.rotulo}
           </Separador>
         ))}
@@ -438,7 +438,7 @@ function CartaoDecisao({ item, central, admin, onFeito }: {
         {mostraEncaminhar && <BotaoTela primario={!a} onClick={() => setModo("encaminhar")} disabled={ocupado}>Encaminhar a {MODULO_POR_ID[item.depende_de!.modulo]?.rotulo}</BotaoTela>}
         {item.link && (
           <a href={item.link} target={item.externo ? "_blank" : undefined} rel="noreferrer" style={{ textDecoration: "none" }}>
-            <BotaoTela title="Ajustar: abre a tela de hoje no item, com tudo o que ela tem">{item.externo ? "Abrir no CRM ↗" : "Abrir na tela tradicional ↗"}</BotaoTela>
+            <BotaoTela title="Ajustar: abre a tela de hoje no item, com tudo o que ela tem">{item.modulo === "servicos" ? "Abrir em Serviços ↗" : item.externo ? "Abrir no CRM ↗" : "Abrir na tela tradicional ↗"}</BotaoTela>
           </a>
         )}
         {central.decisoes && !item.externo && (
@@ -534,11 +534,12 @@ function SemAcesso({ b, onFechar, central }: { b: Bloq; onFechar: () => void; ce
   }
   return (
     <div role="dialog" aria-modal="true" aria-labelledby="sem-acesso-titulo" style={{ ...cartao, padding: "18px 20px", display: "flex", flexDirection: "column", gap: 10, borderColor: "var(--ww-warn)" }}>
-      <h2 id="sem-acesso-titulo" style={{ margin: 0, fontSize: 18 }}>🔒 Sem acesso a {nome}</h2>
-      <p style={{ margin: 0, fontSize: 13.5, color: "var(--ww-text-2)" }}>
+      <h2 id="sem-acesso-titulo" style={{ margin: 0, fontSize: 18 }}>🔒 {b.externo ? `${nome} indisponível aqui` : `Sem acesso a ${nome}`}</h2>
+      {b.externo && <p style={{ margin: 0, fontSize: 13.5, color: "var(--ww-text-2)" }}>{b.motivo ?? "Este módulo vive noutro sistema."} Abra-o diretamente: <a href={MODULO_POR_ID[b.bloqueado]?.tela} target="_blank" rel="noreferrer" style={{ color: "var(--ww-accent-text)" }}>{nome} ↗</a></p>}
+      {!b.externo && <p style={{ margin: 0, fontSize: 13.5, color: "var(--ww-text-2)" }}>
         O seu perfil não inclui este módulo.{" "}
         {central?.encaminhar ? <>Se precisa de algo de {nome}, a Aria pode encaminhar ao responsável{b.donos.length ? ` (${b.donos.join(", ")})` : ""}, e o pedido fica a ser acompanhado aqui.</> : <>Fale com o administrador se precisar deste módulo.</>}
-      </p>
+      </p>}
       {modo && (
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
           <textarea value={texto} onChange={(e) => setTexto(e.target.value)} rows={3} placeholder={modo === "pedido" ? "O que precisa?" : "Para que precisa do acesso?"}
@@ -549,8 +550,8 @@ function SemAcesso({ b, onFechar, central }: { b: Bloq; onFechar: () => void; ce
       )}
       {msg && <div style={{ fontSize: 13, color: "var(--ww-text-muted)" }}>{msg}</div>}
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-        {central?.encaminhar && central.livre && <BotaoTela onClick={() => setModo("pedido")}>Encaminhar um pedido</BotaoTela>}
-        {central?.pedido_acesso && <BotaoTela onClick={() => setModo("acesso")}>Pedir acesso</BotaoTela>}
+        {!b.externo && central?.encaminhar && central.livre && <BotaoTela onClick={() => setModo("pedido")}>Encaminhar um pedido</BotaoTela>}
+        {!b.externo && central?.pedido_acesso && <BotaoTela onClick={() => setModo("acesso")}>Pedir acesso</BotaoTela>}
         <button ref={btn} type="button" onClick={onFechar} style={{ height: 34, padding: "0 14px", borderRadius: 10, border: "1px solid var(--ww-border-strong)", background: "transparent", color: "var(--ww-text-2)", cursor: "pointer", fontWeight: 600 }}>Fechar</button>
       </div>
     </div>

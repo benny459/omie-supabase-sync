@@ -24,6 +24,8 @@ export type ConfigOrdem = {
   sino: boolean;
   dialogo_entrada: boolean;
   pedido_acesso: boolean;
+  /** Itens de outros sistemas no Meu dia (só leitura, "Abrir ↗"): CRM legado e app de Serviços. */
+  integracoes: { comercial: boolean; servicos: boolean };
   mensagens: {
     modo: ModoMensagens;          // ensaio = só regista; teste = só ao e-mail de teste com [TESTE]; ligado = a cada dono
     horarios: string[];           // "07:30", …
@@ -70,6 +72,7 @@ export const CONFIG_VAZIA: ConfigOrdem = {
   sino: false,
   dialogo_entrada: false,
   pedido_acesso: false,
+  integracoes: { comercial: false, servicos: false },
   mensagens: { modo: "desligado", horarios: [], limite_dia: 0, so_dias_uteis: true, email_teste: "" },
   escada: { ligada: false, dias_segundo_aviso: 0, dias_supervisao: 0, dias_direcao: 0, supervisao_emails: [], direcao_emails: [] },
   parametros: {
@@ -122,6 +125,7 @@ export function normalizarConfig(dados: unknown): ConfigOrdem {
     acoes: { ...(d.acoes ?? {}) },
     mensagens: { ...CONFIG_VAZIA.mensagens, ...(d.mensagens ?? {}) },
     escada: { ...CONFIG_VAZIA.escada, ...(d.escada ?? {}) },
+    integracoes: { ...CONFIG_VAZIA.integracoes, ...(d.integracoes ?? {}) },
     parametros: { ...CONFIG_VAZIA.parametros, ...(d.parametros ?? {}) },
     supervisao_ids: Array.isArray(d.supervisao_ids) ? d.supervisao_ids : [],
   };

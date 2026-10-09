@@ -21,7 +21,8 @@ Uma aba a mais em cada módulo (`/ordem?m=compras|financeiro|operacao|projetos|f
 | Encaminhar, pedido livre, pedido de acesso | `lib/ordem/encaminhar.ts`, `/api/ordem/pedido` |
 | Comandos | `lib/ordem/comandos.ts`, `/api/ordem/comando` |
 | Mensagens e escada | `lib/ordem/mensagens.ts` (+ `mensagens-regras.ts`), `/api/ordem/mensagens` (pré-visualização) |
-| Comercial (CRM) | `lib/ordem/comercial.ts` → `propostas-ww/api/ordem-comercial` |
+| Comercial (CRM) | `lib/ordem/comercial.ts` → `propostas-ww/api/ordem-comercial` (x-compras-secret) |
+| Serviços (app) | `lib/ordem/servicos.ts` → `app.waterworks.com.br/api/ciclo/central` (Bearer CICLO_CENTRAL_TOKEN; 403 = exportação desligada lá) |
 | Dados | `sql/162_central_ordem.sql` (schema `ordem`) |
 
 ## Ligações

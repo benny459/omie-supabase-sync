@@ -30,6 +30,7 @@ export function veModulo(q: Pick<Quem, "perms" | "pode">, m: ModuloOrdem, cfg?: 
     case "projetos": return canViewArea(q.perms, "operacao");
     // CRM: o painel não guarda o acesso; decide o próprio CRM (lista vazia = sem acesso).
     case "comercial": return false;
+    case "servicos": return false;
   }
 }
 

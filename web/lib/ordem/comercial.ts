@@ -13,16 +13,16 @@ type ItemCrm = {
   recomendacao?: { acao?: string; porque?: string; impacto?: string; alternativas?: { acao: string; nota?: string }[]; confianca?: string };
 };
 
-export type Comercial = { acesso: boolean; itens: ItemTela[]; erro?: string };
+export type Comercial = { acesso: boolean; itens: ItemTela[]; erro?: string; motivo?: string | null };
 
 export async function comercialDe(email: string, uid: string): Promise<Comercial> {
   const segredo = process.env.COMPRAS_RC_SECRET;
-  if (!segredo || !email) return { acesso: false, itens: [], erro: "sem segredo" };
+  if (!segredo || !email) return { acesso: false, itens: [], erro: "sem segredo", motivo: "integração com o CRM não configurada" };
   try {
     const r = await fetch(`${BASE}/api/ordem-comercial?email=${encodeURIComponent(email)}`, {
       headers: { "x-compras-secret": segredo }, cache: "no-store", signal: AbortSignal.timeout(3500),
     });
-    if (!r.ok) return { acesso: false, itens: [], erro: `CRM ${r.status}` };
+    if (!r.ok) return { acesso: false, itens: [], erro: `CRM ${r.status}`, motivo: `CRM indisponível (${r.status})` };
     const j = (await r.json()) as { ok?: boolean; email?: string; itens?: ItemCrm[] };
     if (!j?.ok || (j.email && j.email.toLowerCase() !== email.toLowerCase())) return { acesso: false, itens: [] };
     const itens = (j.itens ?? []).map((x): ItemTela => {
@@ -39,7 +39,7 @@ export async function comercialDe(email: string, uid: string): Promise<Comercial
       };
     });
     // Sem itens = sem acesso OU fila zerada; o CRM não distingue — a aba só abre com itens.
-    return { acesso: itens.length > 0, itens };
+    return { acesso: itens.length > 0, itens, motivo: itens.length ? null : "sem itens do CRM para si (ou sem acesso ao CRM)" };
   } catch (e) {
     return { acesso: false, itens: [], erro: e instanceof Error ? e.message : String(e) };
   }

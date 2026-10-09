@@ -9,6 +9,7 @@
 //   projetos     → /projetos               menu da área "operacao" (canViewArea)
 //   comercial    → CRM legado (Propostas-WW): o painel não guarda o acesso ao CRM —
 //                  quem decide é o próprio CRM (/api/ordem-comercial devolve [] a quem não tem).
+//   servicos     → app de Serviços (waterworks-app): decide o próprio app (/api/ciclo/central?email=).
 import type { ModuloOrdem } from "./tipos";
 
 export type DefModulo = {
@@ -55,6 +56,10 @@ export const MODULOS: DefModulo[] = [
     emDia: "nenhuma oportunidade sem próxima ação e nenhuma proposta acima do SLA da etapa.",
     ciclo: ["Abertura", "CP", "MC", "Enviada", "Negociação", "Ganha / Perdida"],
     quentes: ["Enviada"], tela: "https://propostas-ww.vercel.app", externo: true },
+  { id: "servicos", rotulo: "Serviços", sub: "Chamados, OS e agenda (app de Serviços)",
+    emDia: "nenhum chamado fora do SLA sem plano, nenhuma OS por revisar e nenhum vencimento sem pedido.",
+    ciclo: ["Ler a OS", "Classificar", "Revisar OS", "Planejar", "Liberar", "Agendar", "Conferir"],
+    quentes: ["Revisar OS", "Agendar"], tela: "https://app.waterworks.com.br/chamados", externo: true },
 ];
 
 export const MODULO_POR_ID: Record<ModuloOrdem, DefModulo> =

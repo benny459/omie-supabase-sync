@@ -78,7 +78,7 @@ Ao clicar num módulo com 🔒 abre o diálogo **Sem acesso**: pode **Encaminhar
 
 Em **⚙ Configurar** (só admin) liga-se tudo aos poucos — **tudo nasce desligado**:
 
-1. **Ligar a Central** para a equipa, e os extras: Decisões (recusar/adiar), Encaminhar, Sino, Diálogo de entrada, Pedido de acesso, Comandos.
+1. **Ligar a Central** para a equipa, e os extras: Decisões (recusar/adiar), Encaminhar, Avisos, Diálogo de entrada, Pedido de acesso, Serviços e Comercial no Meu dia, Comandos.
 2. **Módulos** — um interruptor por módulo.
 3. **Detetores e donos** — um interruptor por tipo de pendência e o dono (titular + substituto, e “titular ausente”). Só aparecem como dono pessoas que já veem o módulo. Sem dono gravado vale o de hoje.
 4. **Ações** — cada ação (aprovar, casar NF, enviar ao fornecedor, cobrar fornecedor, aceitar conciliação) tem o seu interruptor.
@@ -106,4 +106,4 @@ Em **⚙ Configurar** (só admin) liga-se tudo aos poucos — **tudo nasce desli
 
 **Porque um item não tem dono?** O tipo ainda não tem dono configurado e o dado não indica ninguém — aparece para a equipa do módulo.
 
-**O Comercial?** Os itens do CRM aparecem quando o CRM os publicar; ali o cartão só tem **Abrir no CRM ↗**.
+**O Comercial e os Serviços?** São de outros sistemas (CRM e app de Serviços). Quando o administrador liga a integração, os seus itens aparecem no Meu dia só para consulta: o cartão tem **Abrir no CRM ↗** ou **Abrir em Serviços ↗**, e a decisão é tomada lá. Quem decide se pode ver é o próprio sistema; sem itens, a aba fica com 🔒 e o motivo (ex.: “integração não configurada”).
