@@ -28,7 +28,7 @@ const hojeISO = () => new Date().toLocaleDateString("sv-SE", { timeZone: "Americ
 const somaDias = (iso: string, d: number) => { const x = new Date(`${iso}T12:00:00Z`); x.setUTCDate(x.getUTCDate() + d); return x.toISOString().slice(0, 10); };
 
 export default function RegistrarNfse({ empresa, chaves, fechar, feito, avisar }: {
-  empresa: string; chaves: string[]; fechar: () => void; feito: () => void; avisar: (m: string) => void;
+  empresa: string; chaves: string[]; fechar: () => void; feito: (registro?: { id: number }) => void; avisar: (m: string) => void;
 }) {
   const [os, setOs] = useState<OsPre[] | null>(null);
   const [erro, setErro] = useState<string | null>(null);
@@ -155,7 +155,7 @@ export default function RegistrarNfse({ empresa, chaves, fechar, feito, avisar }
     setEnviando(false);
     if (r.error) { avisar(r.error); return; }
     avisar(`NFS-e ${r.registro.numero} registrada · ${r.registro.receber_ids?.length ?? 0} parcela(s) a receber criada(s)`);
-    feito();
+    feito(r.registro); // abre "Enviar ao cliente" da NFS-e (09/10/26)
   }
 
   const campo = (rot: string, el: ReactNode, w?: number | string) => <label className="fld" style={{ width: w }}><span>{rot}</span>{el}</label>;

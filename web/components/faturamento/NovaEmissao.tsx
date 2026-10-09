@@ -1,6 +1,6 @@
 "use client";
 
-import EnviarAoCliente from "./EnviarAoCliente";
+import EnviarAoCliente, { MSG_DEPOIS } from "./EnviarAoCliente";
 import { useEffect, useMemo, useRef, useState } from "react";
 import AcertoItemEstoque from "./AcertoItemEstoque";
 import type { ClienteFat, CondicaoFat, DocFat, ItemFat, OperacaoNfe, OperacaoTipo, ParcelaDoc, RetencoesFat, TransporteFat } from "@/lib/faturamento/montar";
@@ -266,6 +266,8 @@ export default function NovaEmissao({ config, aberto, fechar, avisar, onEmitido,
   const iniRef = useRef<Inicial | null>(null);
   const [validando, setValidando] = useState(false);
   const [tx, setTx] = useState<null | { fase: "enviando" | "processando" | "final"; id?: number; inicio: number; e?: Record<string, unknown>; xml?: string | null; pdf?: string | null; receber?: Record<string, unknown>[]; erro?: string }>(null);
+  // Envio ao cliente logo depois da emissão (09/10/26): a janela abre sozinha; null = ainda não decidiu.
+  const [envioTx, setEnvioTx] = useState<null | "enviado" | "depois">(null);
   const [agora, setAgora] = useState(Date.now());
   // ── Rascunho (05/10/26): salva o estado completo da folha para continuar depois.
   //    Quem acrescentar estado novo à folha: inclua-o em estadoRascunho() e aplicarRascunho().
@@ -360,7 +362,7 @@ export default function NovaEmissao({ config, aberto, fechar, avisar, onEmitido,
   useEffect(() => {
     if (!aberto) return;
     vivo.current = true;
-    setTx(null); setPre(null); setCriado(null);
+    setTx(null); setPre(null); setCriado(null); setEnvioTx(null);
     fetch(`/api/faturamento/nova?op=opcoes&emp=${empresa}`, { cache: "no-store" }).then((x) => x.json()).then((j) => { if (!j.error) setOpc(j); }).catch(() => null);
     carregarProximos();
     formaDefinida.current = false;
@@ -917,6 +919,9 @@ export default function NovaEmissao({ config, aberto, fechar, avisar, onEmitido,
   }
 
   function sair() {
+    // Documento real emitido e ainda não enviado ao cliente: confirma antes de fechar.
+    const ef = (tx?.e ?? {}) as Record<string, unknown>;
+    if (tx?.fase === "final" && ef.status === "autorizada" && ef.ambiente === "producao" && !ef.ensaio && envioTx === null && !window.confirm(MSG_DEPOIS)) return;
     vivo.current = false;
     if (tx && tx.fase !== "final" && tx.id) { avisar(`Emissão #${tx.id} continua processando — avisaremos aqui.`); acompanharEmFundo(tx.id, avisar, onEmitido); }
     // Fechar sem emitir: o rascunho fica salvo (só se há algo preenchido e mudou).
@@ -927,7 +932,7 @@ export default function NovaEmissao({ config, aberto, fechar, avisar, onEmitido,
   }
 
   function corrigir() {
-    setTx(null); setPre(null); vivo.current = true;
+    setTx(null); setPre(null); setEnvioTx(null); vivo.current = true;
     // O PV/OS novo já existe: reenviar emite sobre ele (não cria outro).
     if (criado) { setChave(`venda:${criado.id}`); setRotulo(criado.label); setModo("existente"); }
   }
@@ -1027,7 +1032,10 @@ export default function NovaEmissao({ config, aberto, fechar, avisar, onEmitido,
                     {(tx.pdf || tx.xml) && <button className="ne-btn" onClick={() => { navigator.clipboard.writeText(String(tx.pdf ?? tx.xml)); avisar("Link copiado (vale por algumas horas)"); }}>Copiar link</button>}
                     {e.chave && !recibo && <a className="ne-btn" href="https://www.nfe.fazenda.gov.br/portal/consultaRecaptcha.aspx?tipoConsulta=resumo&tipoConteudo=7PhJ+gAVw2g=" target="_blank" rel="noopener"
                       onClick={() => navigator.clipboard.writeText(String(e.chave))}>Consultar na SEFAZ (chave copiada)</a>}
-                    <EnviarAoCliente id={Number(e.id ?? tx.id) || null} />
+                    <EnviarAoCliente id={Number(e.id ?? tx.id) || null} rotulo={envioTx === "enviado" ? "✉ Reenviar ao cliente" : undefined}
+                      auto={envioTx === null && e.ambiente === "producao" && !e.ensaio}
+                      onFechado={(env) => setEnvioTx(env ? "enviado" : "depois")} />
+                    {envioTx === "depois" && <span className="ne-lk" style={{ alignSelf: "center", color: "var(--ww-warn-text, #B45309)" }}>✉ não enviado ao cliente</span>}
                   </div>
                   <div>
                     <div style={{ fontSize: 12.5, fontWeight: 700, margin: "6px 0" }}>Contas a receber criadas</div>

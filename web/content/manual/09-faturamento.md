@@ -72,7 +72,8 @@ A maioria das OS fatura por **recibo**, emitido **pelo painel** — também as O
 4. Abre a lista de conferência: para cada OS, o valor a receber, o vencimento, a **forma e a conta** (as mesmas que a folha "Revisar e emitir recibo" usaria — a conta dos dados bancários da OS ou a do último faturamento do cliente), o **projeto** e a **categoria**.
    - OS que **não podem** sair (já têm recibo ou NFS-e, falta projeto/categoria, PV que fatura por NF-e) ficam em vermelho, com o motivo, e **não entram no lote**. Use **abrir na folha** para corrigir uma a uma.
 5. Clique em **Emitir N recibos** e confirme. Os recibos saem **um de cada vez, na ordem da lista**, com a numeração sequencial do painel, as contas a receber e o bloco Pagamento — exatamente como na emissão avulsa.
-6. No fim, os recibos **já baixam sozinhos em PDF — um arquivo por recibo**, com o nome do recibo (ex.: *Recibo de Prestação de Serviço nº 0000004646.pdf*). Não abre tela de visualização. Se o navegador perguntar, **permita vários downloads**; se ele barrar, use **Baixar todos (.zip)**. Cada linha mostra o **nº do recibo** e o link **ver recibo**; **Baixar PDFs de novo** repete o download.
+6. No fim, abre **Enviar os N ao cliente**: **um e-mail por recibo**, cada um para o seu cliente e já preenchido como na janela individual. A lista mostra o Para de cada um, que dá para editar. Desmarque o que não quer mandar agora. **Revisar** abre a janela completa daquele recibo. **Enviar N e-mails** manda todos. **Enviar depois** pergunta antes, porque os recibos ficam marcados como não enviados. O botão **✉ Enviar os N ao cliente** continua no rodapé do lote.
+7. Os recibos também **já baixam sozinhos em PDF — um arquivo por recibo**, com o nome do recibo (ex.: *Recibo de Prestação de Serviço nº 0000004646.pdf*). Não abre tela de visualização. Se o navegador perguntar, **permita vários downloads**; se ele barrar, use **Baixar todos (.zip)**. Cada linha mostra o **nº do recibo** e o link **ver recibo**; **Baixar PDFs de novo** repete o download.
 
 > Para mudar forma, conta, vencimento ou observação de uma OS antes de emitir, use **abrir na folha** — o lote usa os dados como estão.
 
@@ -125,13 +126,18 @@ A janela acompanha: **1 · Enviando à Focus → 2 · Processando na SEFAZ → A
 
 ### Como faço para enviar a nota ou o recibo ao cliente
 
-**Nada é enviado sozinho.** Com o documento autorizado, clique em **✉ Enviar ao cliente**. O botão fica na janela de emissão e na carteira, quando o pedido está 100% faturado. Abre a mesma janela de envio do pedido de compra:
-1. **Para** vem com os e-mails do cadastro do cliente. Dá para tirar, acrescentar, e usar **Cc** e **Cco**.
-2. **Assunto** e **Texto complementar** são editáveis. O assunto segue o padrão do Omie: *SAFE WATER BRASIL LTDA - Recibo de Prestação de Serviço nº …*.
-3. Vão anexados o **DANFE (PDF) e o XML** da NF-e, ou o **recibo em PDF**. Dá para incluir mais um anexo, como o boleto.
-4. **👁 Visualizar o arquivo** mostra o PDF. **✉ Enviar agora** manda.
+**Ao emitir, a janela de envio abre sozinha.** Assim que a NF-e é autorizada, o recibo é gerado ou a NFS-e da prefeitura é registrada, o painel já leva para **Enviar ao cliente por e-mail**, com tudo preenchido. Confira e clique em **✉ Enviar agora**. Nada sai sem esse clique.
 
-**De onde sai:** *WaterWorks Faturamento <noreply@waterworks.com.br>*. Se o cliente clicar em responder, a resposta vai para quem enviou. Todo envio vai com **cópia oculta para o contasareceber@ e para quem enviou**, com os anexos. A resposta do cliente chega para quem enviou.
+1. **Para** vem com os e-mails do cadastro do cliente: primeiro o e-mail de NF-e, depois os outros. Os nossos endereços (como o contasareceber@) não entram no Para. Dá para tirar, acrescentar e usar **Cc** e **Cco**.
+2. **Assunto** segue o padrão do Omie, com o pedido e a OC do cliente: *SAFE WATER BRASIL LTDA - Nota Fiscal Eletrônica (NF-e) nº 2203 (PV1875) - OC 4101522069*. Dá para editar.
+3. **O texto do e-mail** já traz: o documento e o nº, o valor (na NFS-e com retenções, também o **líquido a pagar**), a **OC do cliente**, os **vencimentos** e os **dados para pagamento** (forma, PIX ou banco/agência/conta, os mesmos do bloco Pagamento do recibo). Na NF-e vai também a chave de acesso. O **Texto complementar** entra no fim. A prévia ao lado mostra o e-mail exatamente como vai sair.
+4. **Anexos:** NF-e → **DANFE (PDF) e XML**; recibo → **recibo em PDF**; NFS-e registrada → o **PDF e o XML** anexados no registro. Se houver boleto ligado ao título, ele vai junto. Dá para incluir mais um anexo.
+5. **🔍 Conferir** monta o e-mail e os anexos de verdade e mostra De, Para, Cc, Cco, "responder para" e o tamanho de cada anexo, **sem enviar nada**. Ali também há **Mandar prova só para mim**: o mesmo e-mail só para você, com o assunto *[TESTE]* (o documento continua não enviado).
+6. **✉ Enviar agora** manda. Depois de enviado, o botão vira **Reenviar**.
+
+**Enviar depois:** se fechar a janela sem enviar, o painel pergunta antes: **o documento fica marcado como NÃO ENVIADO** até alguém enviar ou marcar como enviado.
+
+**De onde sai:** *WaterWorks Faturamento <noreply@waterworks.com.br>*. Se o cliente clicar em responder, a resposta vai para quem enviou. Todo envio vai com **cópia oculta para o contasareceber@ e para quem enviou**, com os anexos.
 
 **Histórico de envios** (na mesma janela): data, quem enviou, para quem, anexos e a situação do e-mail:
 - **Enviado — aguardando entrega**;
@@ -143,7 +149,16 @@ A janela acompanha: **1 · Enviando à Focus → 2 · Processando na SEFAZ → A
 
 A situação se atualiza sozinha cada vez que a janela é aberta.
 
-**Enviou por WhatsApp ou pelo portal do cliente?** Use **✓ Marcar como enviado**. Ele só registra no histórico.
+**Enviou por WhatsApp ou pelo portal do cliente?** Use **✓ Marcar como enviado**. Ele só registra no histórico, e o documento deixa de aparecer como não enviado.
+
+### Como acho o que ainda não foi enviado ao cliente
+
+- Na **carteira**, o documento com nota ou recibo emitido no painel e ainda não enviado mostra a pill **✉ não enviado**. O filtro rápido **✉ Não enviados (N)** mostra só esses.
+- Em **⎙ Emissões**, a mesma pill na coluna Status, o filtro **✉ Não enviados (N)** e o botão **✉ Enviar** (ou **Reenviar**) em cada linha de produção.
+- Na **gaveta** do documento, cada nota autorizada tem **✉ Enviar** (ou **✉ Reenviar**). A janela mostra o histórico de envios.
+- **Lembrete diário:** nos dias úteis, às 8h, quem emitiu recebe no Webex a lista dos seus documentos emitidos há mais de 1 dia e ainda não enviados. Vale para o que foi emitido a partir de 09/10/2026. O lembrete vem **ligado**; para desligar, o administrador põe `FAT_LEMBRETE_NAO_ENVIADO=0` na Vercel.
+
+Só contam documentos de **produção**. Homologação e ensaio não vão ao cliente.
 
 ### De qual proposta é este pedido?
 
@@ -195,6 +210,7 @@ A NFS-e continua sendo emitida no portal da prefeitura. Depois:
 1. Na carteira, na OS, clique em **Registrar NFS-e**.
 2. Informe número, código de verificação, data, valores e retenções (ISS retido, IR, PIS, COFINS, CSLL, INSS) e anexe o PDF/XML.
 3. Salve. A OS fica faturada e as parcelas entram no contas a receber **pelo valor líquido**.
+4. Em seguida abre **Enviar ao cliente**, com o PDF/XML da NFS-e anexados e o líquido a pagar no texto.
 
 ## Contratos recorrentes
 

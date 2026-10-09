@@ -63,6 +63,7 @@ type Emissao = {
   id: number; empresa: string; ambiente: string; tipo: string; origem_tipo: string; origem_id: string | null; origem_rotulo?: string | null;
   cliente: { nome?: string } | null; status: string; mensagem: string | null; numero: string | null; serie: string | null;
   valor_total: number; xml_path: string | null; pdf_path: string | null; receber_ids: string[] | null; created_at: string; ensaio?: boolean; operacao?: { tipo?: string } | null;
+  enviado_em?: string | null; enviado_por?: string | null;
 };
 
 // ── formatação ───────────────────────────────────────────────────────────────
@@ -82,6 +83,14 @@ const saldo = (d: Doc) => Math.max(0, Number(d.valor) - Number(d.faturado));
 const nfsAut = (d: Doc) => d.nfs.filter((n) => n.status === "autorizada" && n.ambiente === "producao");
 /** OS que ainda não tem NFS-e registrada e tem saldo a faturar. */
 const semNfse = (d: Doc) => d.tipo === "OS" && !!d.nfse && !d.nfse_registrada && status(d) !== "fat";
+/** Nota emitida/registrada no painel → chave na lista de não enviados (GET /api/faturamento/enviar?pendentes=1). */
+const refEnvio = (n: Nf) => (!n.id ? null : n.nfse_manual ? `n${n.id}` : n.fonte === "painel" ? `e${n.id}` : null);
+/** Notas do documento ainda NÃO ENVIADAS ao cliente (09/10/26). */
+const naoEnviadas = (d: Doc, ne: Set<string> | null) => (ne ? nfsAut(d).filter((n) => { const r = refEnvio(n); return !!r && ne.has(r); }) : []);
+function PillNaoEnviado({ n }: { n: number }) {
+  return <span className="pill s-emis" style={{ marginLeft: 6, padding: "1px 7px", fontSize: 10.5 }}
+    title="Documento emitido e ainda não enviado ao cliente — abra e use “Enviar ao cliente” (ou marque como enviado)">✉ não enviado{n > 1 ? ` · ${n}` : ""}</span>;
+}
 
 function status(d: Doc): St {
   if (Number(d.faturado) >= Number(d.valor) - 0.01 && Number(d.valor) > 0) return "fat";
@@ -196,6 +205,9 @@ export default function TelaFaturamento() {
 
   // Contas a receber de cada documento (sql/72) — carregadas depois da lista, em lotes.
   const [rec, setRec] = useState<Record<string, RecRes>>({});
+  // Documentos emitidos e ainda não enviados ao cliente (09/10/26): refs "e<id>" (emissão) / "n<id>" (NFS-e registrada).
+  const [naoEnv, setNaoEnv] = useState<Set<string> | null>(null);
+  const [envioNfse, setEnvioNfse] = useState<number | null>(null);
   useEffect(() => {
     if (!docsBrutos?.length) return;
     let vivo = true;
@@ -224,6 +236,8 @@ export default function TelaFaturamento() {
       setConfig(b.config ?? []);
       if (c && !c.error) setPront(c);
       setEmissoes((d.emissoes ?? []).filter((e: Emissao) => e.empresa === empresa));
+      fetch(`/api/faturamento/enviar?pendentes=1&empresa=${empresa}`, { cache: "no-store" }).then((r) => r.json())
+        .then((j) => { if (!j.error) setNaoEnv(new Set(((j.docs ?? []) as { ref: string }[]).map((x) => x.ref))); }).catch(() => null);
     } catch (e) {
       const m = e instanceof Error ? e.message : String(e);
       setErro(/statement timeout|canceling statement|timeout/i.test(m)
@@ -267,6 +281,7 @@ export default function TelaFaturamento() {
     if (chips.has("saldo") && st === "fat") return false;
     if (chips.has("semnfse") && !semNfse(d)) return false;
     if (chips.has("prevatras") && !((prevDias(d) ?? 1) < 0)) return false;
+    if (chips.has("naoenv") && !naoEnviadas(d, naoEnv).length) return false;
     if (nums) {
       const rn = d.rotulo.replace(/^\D+/, "").replace(/^0+/, "");
       if (!nums.some((t) => (rn === t.num && (!t.pre || d.rotulo.toUpperCase().startsWith(t.pre))) || d.nfs.some((n) => String(n.num).replace(/^0+/, "") === t.num))) return false;
@@ -276,7 +291,7 @@ export default function TelaFaturamento() {
       if (!q.toLowerCase().split(/\s+/).filter(Boolean).every((w) => h.includes(w))) return false;
     }
     return true;
-  }), [base, orig, fst, kpi, chips, q, nums]);
+  }), [base, orig, fst, kpi, chips, q, nums, naoEnv]);
 
   const ordenados = useMemo(() => {
     const k = sort.k, dir = sort.d;
@@ -382,7 +397,7 @@ export default function TelaFaturamento() {
     ...(orig ? [{ k: "orig", l: `Origem: ${orig}`, limpar: () => setOrig("") }] : []),
     ...(fst ? [{ k: "st", l: `Status: ${ST[fst].l}`, limpar: () => setFst("") }] : []),
     ...(kpi ? [{ k: "kpi", l: `Indicador: ${kpi}`, limpar: () => setKpi(null) }] : []),
-    ...[...chips].map((c) => ({ k: `c-${c}`, l: ({ semoc: "Sem OC", old: "> 30 dias", saldo: "Só com saldo", semnfse: "OS sem NFS-e", prevatras: "Previsão atrasada" } as Record<string, string>)[c] ?? c,
+    ...[...chips].map((c) => ({ k: `c-${c}`, l: ({ semoc: "Sem OC", old: "> 30 dias", saldo: "Só com saldo", semnfse: "OS sem NFS-e", prevatras: "Previsão atrasada", naoenv: "Não enviados ao cliente" } as Record<string, string>)[c] ?? c,
       limpar: () => setChips((s) => { const n = new Set(s); n.delete(c); return n; }) })),
   ];
   const temFiltro = !!q || tipo !== "all" || !!orig || !!fst || !!kpi || chips.size > 0 || periodo !== "mes";
@@ -520,6 +535,7 @@ export default function TelaFaturamento() {
                 ["saldo", "Só com saldo", (docs ?? []).filter((d) => status(d) !== "fat").length, undefined],
                 ["prevatras", "Previsão atrasada", (docs ?? []).filter((d) => (prevDias(d) ?? 1) < 0).length, undefined],
                 ["semnfse", "OS sem NFS-e", (docs ?? []).filter(semNfse).length, "OS faturáveis sem NFS-e registrada (emitida na prefeitura)"],
+                ["naoenv", "✉ Não enviados", (docs ?? []).filter((d) => naoEnviadas(d, naoEnv).length).length, "Nota/recibo emitido no painel e ainda não enviado ao cliente"],
               ] as const).map(([k, l, n, t]) => (
                 <button key={k} type="button" className={`qpill ${chips.has(k) ? "on" : ""}`} aria-pressed={chips.has(k)} title={t}
                   onClick={() => setChips((s) => { const x = new Set(s); if (x.has(k)) x.delete(k); else x.add(k); return x; })}>{l}<span className="n">{n}</span></button>
@@ -565,9 +581,9 @@ export default function TelaFaturamento() {
           </div>
         )}
 
-        {view === "list" && (docs ? <Lista rows={ordenados} sel={sel} setSel={setSel} sort={sort} setSort={setSort} abrir={setAberto} ocupado={ocupado} agir={agir} prod={prod} registrar={(d) => setRegNfse([d.chave])} salvarPrevisao={salvarPrevisao} rec={rec} revisar={abrirFolhaDe} rasc={rascChaves} empresa={empresa} /> : null)}
+        {view === "list" && (docs ? <Lista rows={ordenados} sel={sel} setSel={setSel} sort={sort} setSort={setSort} abrir={setAberto} ocupado={ocupado} agir={agir} prod={prod} registrar={(d) => setRegNfse([d.chave])} salvarPrevisao={salvarPrevisao} rec={rec} revisar={abrirFolhaDe} rasc={rascChaves} empresa={empresa} naoEnv={naoEnv} /> : null)}
         {view === "kanban" && (docs ? <Kanban rows={filtrados} abrir={setAberto} /> : null)}
-        {view === "emissoes" && <Emissoes lista={emissoes} q={q} onMudou={carregar} avisar={avisar} />}
+        {view === "emissoes" && <Emissoes lista={emissoes} q={q} onMudou={carregar} avisar={avisar} naoEnv={naoEnv} />}
         {view === "nfse" && <NfseRegistradas empresa={empresa} q={q} onMudou={carregar} avisar={avisar} />}
         {view === "rascunhos" && <Rascunhos q={q} avisar={avisar} onMudou={carregarRasc}
           continuar={(id) => { setInicialNova(null); setRascNova(id); setNova(true); }} />}
@@ -578,11 +594,13 @@ export default function TelaFaturamento() {
         </p>
         </>}
 
-        {docAberto && <Gaveta d={docAberto} r={rec[docAberto.rotulo.toUpperCase()]} empresa={empresa} prod={prod} ocupado={ocupado} agir={agir} fechar={() => setAberto(null)} avisar={avisar} onMudou={carregar}
+        {docAberto && <Gaveta d={docAberto} r={rec[docAberto.rotulo.toUpperCase()]} empresa={empresa} naoEnv={naoEnv} prod={prod} ocupado={ocupado} agir={agir} fechar={() => setAberto(null)} avisar={avisar} onMudou={carregar}
           abrirFolha={(sec?: Inicial["secao"]) => abrirFolhaDe(docAberto, sec)}
           registrar={() => { setRegNfse([docAberto.chave]); setAberto(null); }} />}
         {regNfse && <RegistrarNfse empresa={empresa} chaves={regNfse} avisar={avisar} fechar={() => setRegNfse(null)}
-          feito={() => { setRegNfse(null); setSel(new Set()); carregar(); setVerContratos((v) => v + 1); }} />}
+          feito={(reg) => { setRegNfse(null); setSel(new Set()); carregar(); setVerContratos((v) => v + 1); if (reg?.id) setEnvioNfse(reg.id); }} />}
+        {envioNfse && <EnviarAoCliente key={`nfse-${envioNfse}`} nfse={envioNfse} auto semBotao
+          onFechado={() => { setEnvioNfse(null); carregar(); }} />}
         {toast && <div className="fpv-toast" onClick={() => setToast(null)}>{toast}</div>}
       </div>
     </PaginaNavy>
@@ -827,8 +845,8 @@ function Valores({ valor, faturado, nNf, fat }: { valor: number; faturado: numbe
   );
 }
 
-function Lista({ rows, sel, setSel, sort, setSort, abrir, ocupado, agir, prod, registrar, salvarPrevisao, rec, revisar, rasc, empresa }: {
-  empresa: string; rows: Doc[]; sel: Set<string>; setSel: (s: Set<string>) => void; sort: { k: string; d: 1 | -1 }; setSort: (s: { k: string; d: 1 | -1 }) => void;
+function Lista({ rows, sel, setSel, sort, setSort, abrir, ocupado, agir, prod, registrar, salvarPrevisao, rec, revisar, rasc, empresa, naoEnv = null }: {
+  empresa: string; naoEnv?: Set<string> | null; rows: Doc[]; sel: Set<string>; setSel: (s: Set<string>) => void; sort: { k: string; d: 1 | -1 }; setSort: (s: { k: string; d: 1 | -1 }) => void;
   abrir: (k: string) => void; ocupado: string | null; agir: (d: Doc, a: "prevoo" | "ensaio" | "emitir") => unknown; prod: boolean; registrar: (d: Doc) => void;
   salvarPrevisao: (d: Doc, data: string | null) => void; rec: Record<string, RecRes>; revisar: (d: Doc) => void; rasc?: Map<string, number>;
 }) {
@@ -881,6 +899,7 @@ function Lista({ rows, sel, setSel, sort, setSort, abrir, ocupado, agir, prod, r
                 <td className="tf-fix tf-fix-ult c-doc" style={col2}>
                   <div className="doc"><span className={`tag ${d.tipo.toLowerCase()}`}>{d.tipo}</span><b>{d.rotulo}</b>
                     {rasc?.has(d.chave) && <span className="chipf on" style={{ marginLeft: 2, padding: "1px 7px", fontSize: 10.5 }} title={`Tem rascunho salvo (#${rasc.get(d.chave)}) — Revisar e emitir oferece continuar`}>rascunho</span>}
+                    {naoEnviadas(d, naoEnv).length > 0 && <PillNaoEnviado n={naoEnviadas(d, naoEnv).length} />}
                     <span className="orig tf-ell c-etapa" title={`${d.origem} · ${etapaRot(d)}`}>{d.origem} · {etapaRot(d)}</span></div>
                   <div className="cli tf-ell" title={[limpo(d.fantasia || d.cliente || ""), limpo(d.razao ?? "")].filter(Boolean).join(" — ")}>{nomeCli}</div>
                   {d.razao && d.fantasia && limpo(d.razao) !== limpo(d.fantasia) && <div className="orig tf-ell" title={limpo(d.razao)}>{limpo(d.razao)}</div>}
@@ -968,8 +987,8 @@ function Kanban({ rows, abrir }: { rows: Doc[]; abrir: (k: string) => void }) {
 }
 
 // ── Gaveta do documento ──────────────────────────────────────────────────────
-function Gaveta({ d, r, empresa, prod, ocupado, agir, fechar, avisar, onMudou, registrar, abrirFolha }: {
-  d: Doc; r?: RecRes; empresa: string; prod: boolean; ocupado: string | null;
+function Gaveta({ d, r, empresa, prod, ocupado, agir, fechar, avisar, onMudou, registrar, abrirFolha, naoEnv = null }: {
+  d: Doc; naoEnv?: Set<string> | null; r?: RecRes; empresa: string; prod: boolean; ocupado: string | null;
   agir: (d: Doc, a: "prevoo" | "ensaio" | "emitir" | "doc") => Promise<Record<string, unknown> | null>;
   fechar: () => void; avisar: (m: string) => void; onMudou: () => void; registrar: () => void; abrirFolha: (secao?: Inicial["secao"]) => void;
 }) {
@@ -1134,6 +1153,12 @@ function Gaveta({ d, r, empresa, prod, ocupado, agir, fechar, avisar, onMudou, r
                 <div className="info"><b>{n.num}</b>
                   <span>{dataBR(n.data)} · {n.status}{n.ambiente !== "producao" ? " · homologação" : ""} · {n.fonte === "omie" ? "Omie" : n.fonte === "prefeitura" ? `prefeitura${n.municipio ? ` de ${n.municipio}` : ""} · registrada no painel` : "painel"}{n.msg && n.status !== "autorizada" ? ` · ${n.msg}` : ""}</span></div>
                 <b className="mono">{fmt(Number(n.valor))}</b>
+                {n.status === "autorizada" && n.ambiente === "producao" && refEnvio(n) && (() => {
+                  const falta = !!naoEnv?.has(refEnvio(n)!);
+                  return <>{falta && <PillNaoEnviado n={1} />}
+                    <EnviarAoCliente className="btn ghost sm" id={n.nfse_manual ? null : n.id} nfse={n.nfse_manual ? n.id : null}
+                      rotulo={falta ? "✉ Enviar" : "✉ Reenviar"} onFechado={(env) => { if (env) onMudou(); }} /></>;
+                })()}
                 {n.nfse_manual ? <>
                   {n.id && n.xml && <button className="btn ghost sm" onClick={() => arquivoNfse(n.id!, "xml")}>XML</button>}
                   {n.id && n.pdf && <button className="btn ghost sm" onClick={() => arquivoNfse(n.id!, "pdf")}>PDF</button>}
@@ -1268,10 +1293,13 @@ function Prontidao({ p, empresa, aberto, onMudou }: { p: Pront | null; empresa: 
 const TIPO_DOC: Record<string, string> = { nfe: "NF-e", nfse: "NFS-e", recibo: "Recibo" };
 const ST_EM: Record<string, string> = { rascunho: "s-pend", processando: "s-emis", autorizada: "s-fat", rejeitada: "s-rej", cancelada: "s-pend", erro: "s-rej" };
 
-function Emissoes({ lista, q, onMudou, avisar }: { lista: Emissao[] | null; q: string; onMudou: () => void; avisar: (m: string) => void }) {
+function Emissoes({ lista, q, onMudou, avisar, naoEnv = null }: { lista: Emissao[] | null; q: string; onMudou: () => void; avisar: (m: string) => void; naoEnv?: Set<string> | null }) {
   const [ocup, setOcup] = useState<number | null>(null);
+  const [soNaoEnv, setSoNaoEnv] = useState(false);
   if (!lista) return <div className="tablebox"><div className="empty">Carregando…</div></div>;
-  const vis = lista.filter((e) => !q || [e.cliente?.nome, e.numero, e.origem_id, e.origem_rotulo, String(e.id)].some((v) => (v ?? "").toLowerCase().includes(q.toLowerCase())));
+  const falta = (e: Emissao) => !!naoEnv?.has(`e${e.id}`);
+  const nFalta = lista.filter(falta).length;
+  const vis = lista.filter((e) => (!soNaoEnv || falta(e)) && (!q || [e.cliente?.nome, e.numero, e.origem_id, e.origem_rotulo, String(e.id)].some((v) => (v ?? "").toLowerCase().includes(q.toLowerCase()))));
   async function abrir(e: Emissao, qual: "xml" | "pdf") {
     setOcup(e.id);
     const r = await fetch(`/api/faturamento/emissoes/${e.id}`, { cache: "no-store" }).then((x) => x.json()).catch((er) => ({ error: String(er) }));
@@ -1296,7 +1324,11 @@ function Emissoes({ lista, q, onMudou, avisar }: { lista: Emissao[] | null; q: s
   }
   return (
     <div className="tablebox">
-      {vis.length === 0 ? <div className="empty">Nenhuma emissão.</div> : (
+      <div className="orig" style={{ padding: "10px 14px", display: "flex", gap: 8, alignItems: "center" }}>
+        <button className={`chipf ${soNaoEnv ? "on" : ""}`} onClick={() => setSoNaoEnv((v) => !v)}
+          title="Notas/recibos de produção emitidos e ainda não enviados ao cliente">✉ Não enviados ({nFalta})</button>
+      </div>
+      {vis.length === 0 ? <div className="empty">{soNaoEnv ? "Nenhum documento pendente de envio ao cliente." : "Nenhuma emissão."}</div> : (
         <table className="fl">
           <thead><tr><th>#</th><th>Data</th><th>Documento</th><th>Origem</th><th>Cliente</th><th className="r">Valor</th><th>Status</th><th className="r">Ações</th></tr></thead>
           <tbody>
@@ -1312,6 +1344,8 @@ function Emissoes({ lista, q, onMudou, avisar }: { lista: Emissao[] | null; q: s
                 <td style={{ maxWidth: 300 }}>
                   <span className={`pill ${ST_EM[e.status] ?? "s-pend"}`}><i />{e.status}</span>
                   {e.receber_ids?.length ? <span className="orig"> · {e.receber_ids.length} parcela(s) a receber</span> : null}
+                  {falta(e) && <PillNaoEnviado n={1} />}
+                  {e.enviado_em && <span className="orig" title={e.enviado_por ? `por ${e.enviado_por}` : undefined}> · ✉ enviado {new Date(e.enviado_em).toLocaleDateString("pt-BR")}</span>}
                   {e.mensagem && <div className="orig" style={{ marginTop: 3 }}>{e.mensagem}</div>}
                 </td>
                 <td><div className="rowact">
@@ -1320,6 +1354,8 @@ function Emissoes({ lista, q, onMudou, avisar }: { lista: Emissao[] | null; q: s
                     onClick={async () => { setOcup(e.id); const r = await baixarPdfs([`/api/faturamento/recibo-pdf?p=${encodeURIComponent(e.pdf_path!)}`]); setOcup(null); if (r.falhas[0]) avisar(r.falhas[0]); }}>Recibo (PDF)</button>}
                   {e.pdf_path && <button className="btn ghost sm" disabled={ocup === e.id} onClick={() => abrir(e, "pdf")}>{e.tipo === "recibo" ? "ver" : "PDF"}</button>}
                   {["processando", "autorizada"].includes(e.status) && e.tipo !== "recibo" && <button className="btn ghost sm" disabled={ocup === e.id} onClick={() => atualizar(e)}>{ocup === e.id ? "…" : "Atualizar"}</button>}
+                  {e.status === "autorizada" && e.ambiente === "producao" && !e.ensaio &&
+                    <EnviarAoCliente className="btn ghost sm" id={e.id} rotulo={falta(e) ? "✉ Enviar" : "✉ Reenviar"} onFechado={(env) => { if (env) onMudou(); }} />}
                   {e.status === "autorizada" && e.ambiente === "homologacao" && <button className="btn ghost sm danger" disabled={ocup === e.id} onClick={() => cancelar(e)}>Cancelar</button>}
                 </div></td>
               </tr>

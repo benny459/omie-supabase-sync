@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { limpo } from "@/lib/faturamento/montar";
 import { baixarPdfs, baixarZip, pdfDoLink, type Baixado } from "@/lib/faturamento/baixar";
+import { EnvioLote, MSG_DEPOIS } from "@/components/faturamento/EnviarAoCliente";
 
 /* Recibos em lote (05/10/26): o Benny busca "4729, 4735, 4738", seleciona as OS
    e emite todos de uma vez. Cada OS é montada no servidor exatamente como a folha
@@ -18,6 +19,7 @@ type Linha = {
   d: DocLote; estado: "carregando" | "pronto" | "bloqueado" | "emitindo" | "emitido" | "falhou";
   documento?: unknown; cond?: Cond; parcelas?: Parc[]; liquido?: number; erros?: string[]; bloqueio?: string | null;
   numero?: string | null; url?: string | null; msg?: string | null;
+  /** id da emissão (para o envio ao cliente) e se é de produção. */ emId?: number | null; real?: boolean;
 };
 
 const BRL = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
@@ -36,6 +38,8 @@ export default function LoteRecibos({ empresa, docs, prod, admin, fechar, abrirF
   // PDFs baixados ao fim da emissão (um arquivo por recibo); guardados para o .zip.
   const [pdfs, setPdfs] = useState<Baixado[]>([]);
   const [baixando, setBaixando] = useState<string | null>(null);
+  // Depois de emitir: "Enviar os N ao cliente" (09/10/26). null = não abriu; "depois" = adiou com confirmação.
+  const [envio, setEnvio] = useState<null | "aberto" | "depois" | "feito">(null);
   // Links dos recibos emitidos nesta rodada (o estado ainda não atualizou quando o laço acaba).
   const urlsEmitidos = useRef<string[]>([]);
   const muda = (chave: string, p: Partial<Linha>) => setLinhas((ls) => ls.map((l) => (l.d.chave === chave ? { ...l, ...p } : l)));
@@ -78,15 +82,23 @@ export default function LoteRecibos({ empresa, docs, prod, admin, fechar, abrirF
       const r = await fetch("/api/faturamento/carteira", { method: "POST", headers: { "content-type": "application/json" },
         body: JSON.stringify({ empresa, chave: l.d.chave, acao: "emitir", documento: l.documento, forcar_homologacao: teste }) })
         .then((x) => x.json()).catch((e) => ({ error: String(e) }));
-      const e = r.emissao as { status?: string; numero?: string | null; mensagem?: string | null } | undefined;
+      const e = r.emissao as { id?: number; status?: string; numero?: string | null; mensagem?: string | null; ambiente?: string; ensaio?: boolean } | undefined;
       if (r.error || !e) muda(l.d.chave, { estado: "falhou", msg: r.error ?? "sem resposta" });
-      else muda(l.d.chave, { estado: e.status === "autorizada" ? "emitido" : "falhou", numero: e.numero ?? null, url: r.pdf_url ?? null, msg: e.status === "autorizada" ? null : e.mensagem ?? e.status ?? null });
+      else muda(l.d.chave, { estado: e.status === "autorizada" ? "emitido" : "falhou", numero: e.numero ?? null, url: r.pdf_url ?? null, emId: e.id ?? null, real: e.ambiente === "producao" && !e.ensaio, msg: e.status === "autorizada" ? null : e.mensagem ?? e.status ?? null });
       if (e?.status === "autorizada") { const u = pdfDoLink(r.pdf_url); if (u) urlsEmitidos.current.push(u); }
     }
     setRodando(false);
     onEmitido();
+    setEnvio("aberto");
     await baixarTodos(urlsEmitidos.current);
   }
+
+  // Recibos reais emitidos agora: vão ao cliente (homologação/teste não).
+  const paraEnviar = linhas.filter((l) => l.estado === "emitido" && l.emId && l.real).map((l) => l.emId!) ;
+  const sair = () => {
+    if (paraEnviar.length && envio !== "depois" && envio !== "feito" && !window.confirm(MSG_DEPOIS.replace("O documento ficará marcado", `${paraEnviar.length} recibo(s) ficarão marcados`))) return;
+    fechar();
+  };
 
   function pdfsDe(ls: Linha[]) { return ls.map((l) => pdfDoLink(l.url)).filter(Boolean) as string[]; }
 
@@ -112,10 +124,10 @@ export default function LoteRecibos({ empresa, docs, prod, admin, fechar, abrirF
 
   return (
     <>
-      <div className="fpv-scrim" onClick={rodando ? undefined : fechar} />
+      <div className="fpv-scrim" onClick={rodando ? undefined : sair} />
       <aside className="fpv-drawer fpv-form fpv-lote">
         <div className="dh">
-          <button className="x" onClick={fechar} disabled={rodando}>✕</button>
+          <button className="x" onClick={sair} disabled={rodando}>✕</button>
           <h2><span className="tag os">OS</span>Emitir recibos em lote</h2>
           <div className="c">Cada recibo sai como na folha “Revisar e emitir recibo”: forma e conta do último faturamento do cliente, parcelas pela condição da OS. Para mudar algo, abra a OS na folha.</div>
         </div>
@@ -156,12 +168,16 @@ export default function LoteRecibos({ empresa, docs, prod, admin, fechar, abrirF
           {admin && <label className="fld chk" title="Sai um recibo de teste (homologação), sem usar a numeração real"><input type="checkbox" checked={teste} disabled={rodando} onChange={(e) => setTeste(e.target.checked)} /> Teste (forçar homologação)</label>}
           {emitidos.length > 0 && <button className="btn" disabled={!!baixando?.startsWith("Baixando")} onClick={() => baixarTodos(pdfsDe(emitidos))}>Baixar PDFs de novo ({emitidos.length})</button>}
           {pdfs.length > 1 && <button className="btn" onClick={() => baixarZip(pdfs, `recibos-${empresa}-${new Date().toISOString().slice(0, 10)}.zip`)}>Baixar todos (.zip)</button>}
-          <button className="btn" onClick={fechar} disabled={rodando}>{emitidos.length ? "Fechar" : "Cancelar"}</button>
+          {paraEnviar.length > 0 && <button className={`btn${envio === "feito" ? "" : " pri"}`} disabled={rodando} onClick={() => setEnvio("aberto")}
+            title="Um e-mail por recibo, para o cliente de cada um — com lista de revisão">✉ Enviar os {paraEnviar.length} ao cliente</button>}
+          <button className="btn" onClick={sair} disabled={rodando}>{emitidos.length ? "Fechar" : "Cancelar"}</button>
           <button className="btn pri" disabled={rodando || carregando || !prontas.length} onClick={emitirTodos}>
             {rodando ? "Emitindo…" : `Emitir ${prontas.length} recibo${prontas.length === 1 ? "" : "s"}`}
           </button>
         </div>
       </aside>
+      {envio === "aberto" && paraEnviar.length > 0 && <EnvioLote ids={paraEnviar} onMudou={onEmitido}
+        fechar={() => setEnvio("depois")} />}
     </>
   );
 }
