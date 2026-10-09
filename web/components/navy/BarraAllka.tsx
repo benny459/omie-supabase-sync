@@ -19,7 +19,7 @@
  * lib/modulos-identidade.ts de lá — mudou lá, muda aqui nos dois.
  */
 
-import { Fragment, useEffect, useRef, useState, type CSSProperties, type MouseEvent as RMouseEvent, type ReactNode } from "react";
+import { Fragment, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type MouseEvent as RMouseEvent, type ReactNode } from "react";
 import "./barra-allka.css";
 
 export interface ItemModulo {
@@ -30,6 +30,8 @@ export interface ItemModulo {
   /** Título de secção antes deste item (BI: Geral, Compras…). */
   secao?: string;
   activo?: boolean;
+  /** Sai do app (só usado no "Mais", onde cada item é um módulo). */
+  externo?: boolean;
 }
 
 export interface ModuloBarra {
@@ -167,6 +169,41 @@ export default function BarraAllka({ modulos, activo, hubHref, navegar, aquecer,
     .map((g) => abas.filter((m) => identidade(m.id).grupo === g).sort((a, b) => identidade(a.id).ordem - identidade(b.id).ordem))
     .filter((g) => g.length > 0);
   const modActivo = modulos.find((m) => m.id === activo);
+
+  /* 09/10/26: a fila nunca se sobrepõe à marca nem à busca. Quando não cabe
+     (mesmo só com ícones), os últimos módulos — nunca o aberto — passam para
+     um "Mais ▾". Mede-se com tudo à vista a cada mudança de largura e corta-se
+     um a um antes de pintar (useLayoutEffect). */
+  const navRef = useRef<HTMLElement>(null);
+  const ordem = grupos.flat();
+  const [cabem, setCabem] = useState<number | null>(null);
+  const chaveMods = ordem.map((m) => m.id).join(",") + "|" + (activo ?? "");
+  useEffect(() => {
+    const el = navRef.current?.parentElement;
+    if (!el) return;
+    let w = el.clientWidth;
+    const ro = new ResizeObserver(() => { if (el.clientWidth !== w) { w = el.clientWidth; setCabem(null); } });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  useEffect(() => { setCabem(null); }, [chaveMods]);
+  useLayoutEffect(() => {
+    const nav = navRef.current;
+    if (!nav || getComputedStyle(nav).display === "none") return;
+    const n = cabem ?? ordem.length;
+    if (nav.scrollWidth > nav.clientWidth + 1 && n > 1) setCabem(n - 1);
+  });
+  const nVis = cabem ?? ordem.length;
+  const escondidos = new Set<string>();
+  for (let i = ordem.length - 1, falta = ordem.length - nVis; i >= 0 && falta > 0; i--) {
+    if (ordem[i].id === activo) continue;
+    escondidos.add(ordem[i].id); falta--;
+  }
+  const gruposVis = grupos.map((g) => g.filter((m) => !escondidos.has(m.id))).filter((g) => g.length > 0);
+  const mais: ModuloBarra | null = escondidos.size ? {
+    id: "mais", nome: "Mais", href: "#", titulo: "Mais módulos",
+    itens: ordem.filter((m) => escondidos.has(m.id)).map((m) => ({ label: m.nome, href: m.href, externo: m.externo })),
+  } : null;
   const cor = modActivo ? identidade(modActivo.id).cor : "#6CCBFF";
 
   return (
@@ -196,8 +233,8 @@ export default function BarraAllka({ modulos, activo, hubHref, navegar, aquecer,
         </div>
       </div>
 
-      <nav className="ab-nav" aria-label="Módulos">
-        {grupos.map((g, i) => (
+      <nav className="ab-nav" aria-label="Módulos" ref={navRef}>
+        {gruposVis.map((g, i) => (
           <Fragment key={i}>
             {i > 0 && <span className="ab-gsep" />}
             {g.map((m) => (
@@ -205,6 +242,7 @@ export default function BarraAllka({ modulos, activo, hubHref, navegar, aquecer,
             ))}
           </Fragment>
         ))}
+        {mais && <Modulo m={mais} activo={false} ir={ir} aquecer={aquecer} pendente={pendente} />}
       </nav>
 
       <div className="ab-movel" ref={caixaMovel}>
@@ -276,7 +314,8 @@ function Modulo({ m, activo, ir, aquecer, pendente, soIcone }: {
         <a className="ab-mod-link" href={m.href} title={m.titulo ?? m.nome}
           data-activo={activo ? "1" : undefined} data-aberto={aberto ? "1" : undefined}
           data-pendente={pendente && pendente === m.href ? "1" : undefined}
-          onClick={(e) => { setAberto(false); ir(m.href, m.externo)(e); }}>
+          data-mais={m.id === "mais" ? "1" : undefined}
+          onClick={(e) => { if (m.id === "mais") { e.preventDefault(); abrir(); return; } setAberto(false); ir(m.href, m.externo)(e); }}>
           <IconeModulo nome={id.icone} className="ab-i" />
           <span className="ab-nome">{m.nome}</span>
           {m.selo && <em className="ab-selo">{m.selo}</em>}
@@ -293,7 +332,7 @@ function Modulo({ m, activo, ir, aquecer, pendente, soIcone }: {
               {s.secao && (<>{i > 0 && <div className="ab-sep" />}<div className="ab-titulo">{s.secao}</div></>)}
               {s.href ? (
                 <a className="ab-item" href={s.href} data-activo={s.activo ? "1" : undefined}
-                  onClick={(e) => { setAberto(false); if (s.onClick) { e.preventDefault(); s.onClick(); } else ir(s.href!, m.externo)(e); }}>
+                  onClick={(e) => { setAberto(false); if (s.onClick) { e.preventDefault(); s.onClick(); } else ir(s.href!, s.externo ?? m.externo)(e); }}>
                   <span className="ab-ponto" /><b>{s.label}</b>
                 </a>
               ) : (

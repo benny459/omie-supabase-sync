@@ -7,7 +7,15 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { ehNativo, idDoCodigo } from "@/lib/vendas";
+import { TblFit } from "./TabelaFit";
 import { OcAnexosPainel } from "@/components/vendas/OcAnexos";
+/** 09/10/26: colunas que somem primeiro quando a tabela estreita (.tbl-fit). */
+const PRIO: Record<string, string> = {
+  previsao: "tf-p3", categoria: "tf-p3", contato: "tf-p3", cnpj_cpf: "tf-p3", cliente_cidade: "tf-p3", cliente_uf: "tf-p3", codigo_vendedor: "tf-p3",
+  codigo_parcela: "tf-p3", numero_contrato: "tf-p3", natureza_operacao: "tf-p3", chave_nfe: "tf-p3", dt_registro: "tf-p3", serie: "tf-p3",
+  projeto: "tf-p2", empresa: "tf-p2", qtd_itens: "tf-p2", valor_mercadorias: "tf-p2", valor_desconto: "tf-p2", valor_frete: "tf-p2", dt_fat: "tf-p2",
+  qtd_parcelas: "tf-p2", num_pedido_cliente: "tf-p2", total_produtos: "tf-p2", vlr_frete: "tf-p2", vlr_icms: "tf-p2", vlr_ipi: "tf-p2",
+};
 
 type Row = Record<string, unknown>;
 type Item = {
@@ -275,6 +283,10 @@ export default function ErpListaView({ modulo }: { modulo: "vendas" | "compras" 
 
       {/* Toolbar */}
       <div className="flex flex-wrap items-center gap-2">
+        {/* 09/10/26: a busca vem sempre primeiro, à esquerda (regra do painel) */}
+        <input value={q} onChange={e => { setQ(e.target.value); setPage(0); }}
+          placeholder="Buscar nº, cliente, projeto, NF… (qualquer campo)"
+          className="w-[320px] max-w-full h-8 px-3 border border-ww-borderStrong rounded-lg bg-ww-panel text-[13px] text-ww-text focus:outline-none focus:ring-2 focus:ring-ww-accent/40" />
         <div className="inline-flex rounded-lg border border-ww-border overflow-hidden">
           {abas.map(([k, lbl]) => (
             <button key={k} onClick={() => { setAba(k); setPage(0); }}
@@ -296,9 +308,6 @@ export default function ErpListaView({ modulo }: { modulo: "vendas" | "compras" 
           <option value="">Todas as etapas</option>
           {etapas.map(([cod, desc]) => <option key={cod} value={cod}>{cod} · {desc}</option>)}
         </select>
-        <input value={q} onChange={e => { setQ(e.target.value); setPage(0); }}
-          placeholder="Filtrar qualquer campo…"
-          className="flex-1 min-w-[200px] px-3 py-1.5 border border-ww-border rounded-lg bg-ww-panel text-[12px] text-ww-text focus:outline-none focus:ring-2 focus:ring-ww-accent/40" />
         {empresas.length > 1 && (
           <div className="flex gap-1">
             {empresas.map(e => (
@@ -328,12 +337,12 @@ export default function ErpListaView({ modulo }: { modulo: "vendas" | "compras" 
 
       {/* Tabela */}
       <div className="rounded-xl border border-ww-border bg-ww-panel overflow-hidden">
-        <div className="overflow-x-auto">
+        <TblFit className="tf-col1" style={{ maxHeight: "calc(100vh - 200px)" }}>
           <table className="w-full text-[12px]">
             <thead>
               <tr className="border-b border-ww-border">
                 {ativas.map(c => (
-                  <th key={c.key} className={`px-3 py-2 text-[10px] uppercase tracking-wide text-ww-textFaint ${c.align === "right" ? "text-right" : "text-left"}`}>
+                  <th key={c.key} className={`px-3 py-2 text-[10px] uppercase tracking-wide text-ww-textFaint ${c.align === "right" ? "text-right" : "text-left"} ${PRIO[c.key] ?? ""}`}>
                     {c.label}
                   </th>
                 ))}
@@ -348,7 +357,7 @@ export default function ErpListaView({ modulo }: { modulo: "vendas" | "compras" 
                     className={`border-b border-ww-border/60 hover:bg-ww-rowHover/60 cursor-pointer transition-colors ${r.cancelado ? "opacity-40 line-through" : ""}`}>
                   {ativas.map(c => (
                     <td key={c.key}
-                        className={`px-3 py-1.5 ${c.align === "right" ? "text-right" : ""} ${c.largura ? `${c.largura} truncate` : "whitespace-nowrap"} text-ww-text`}
+                        className={`px-3 py-1.5 ${c.align === "right" ? "text-right" : ""} ${c.largura ? `${c.largura} truncate` : "whitespace-nowrap"} text-ww-text ${PRIO[c.key] ?? ""}`}
                         title={c.largura ? String(r[c.key] ?? "") : undefined}>
                       {c.render ? c.render(r) : texto(r[c.key])}
                     </td>
@@ -357,7 +366,7 @@ export default function ErpListaView({ modulo }: { modulo: "vendas" | "compras" 
               ))}
             </tbody>
           </table>
-        </div>
+        </TblFit>
         <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 border-t border-ww-border text-[11px] text-ww-textMuted">
           <span>{filtrados.length} doc(s) · <span className="font-semibold text-ww-text">{money(totalFiltrado)}</span></span>
           {pages > 1 && (

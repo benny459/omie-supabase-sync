@@ -118,11 +118,11 @@ export function FaixaFiltros({ children, busca, onBusca, placeholder }: {
 }) {
   return (
     <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-      {children}
+      {/* 09/10/26: a busca vem sempre primeiro, à esquerda (regra do painel) */}
       {onBusca && (
         <div style={{
-          marginLeft: "auto", display: "flex", alignItems: "center", gap: 8, height: 34,
-          width: 260, maxWidth: "100%", padding: "0 12px", borderRadius: 10,
+          display: "flex", alignItems: "center", gap: 8, height: 34,
+          width: 320, maxWidth: "100%", padding: "0 12px", borderRadius: 10,
           background: "var(--ww-panel-sunken)", border: "1px solid var(--ww-border-strong)",
           color: "var(--ww-text-faint)", fontSize: 12.5,
         }}>
@@ -134,6 +134,7 @@ export function FaixaFiltros({ children, busca, onBusca, placeholder }: {
                      color: "var(--ww-text)", fontSize: 12.5, fontFamily: "inherit" }} />
         </div>
       )}
+      {children}
     </div>
   );
 }

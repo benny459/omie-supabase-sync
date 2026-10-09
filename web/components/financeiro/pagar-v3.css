@@ -352,3 +352,12 @@ html:not(.dark) .cp3 .sugnf{color:#7c3aed}
 .cp3 .nflink{font-size:11px;color:#c4b5fd;text-decoration:none;white-space:nowrap}
 html:not(.dark) .cp3 .nflink{color:#7c3aed}
 .cp3 .nflink:hover{text-decoration:underline}
+
+/* 09/10/26 — tabela de títulos no utilitário .tbl-fit (app/tbl-fit.css):
+   seleção + fornecedor/cliente presos à esquerda, fundo opaco também com vidro. */
+.cp3 .tbl.tbl-fit{max-height:calc(100vh - 160px)}
+.cp3 .tbl.tbl-fit table{min-width:0}
+.cp3 .tbl .c-ck{width:22px;min-width:22px;max-width:22px;padding-left:10px;padding-right:2px}
+.cp3 .tbl .c-forn{--tf-left:34px;min-width:150px;max-width:220px}
+.cp3 .tbl .c-forn .emp{margin-right:4px}
+.cp3 .tbl.tbl-fit .bsel{max-width:170px}

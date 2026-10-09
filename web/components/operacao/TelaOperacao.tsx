@@ -742,17 +742,18 @@ export default function TelaOperacao({ modulo, title, rows: rowsIniciais, parcia
                 <SyncNowButton />
               </div>
             </div>
+            {/* 09/10/26: busca logo a seguir ao título, à esquerda (regra do painel) */}
+            <div className="search pj-busca">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></svg>
+              <input ref={buscaRef} value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar PV, OS, PC, cliente ou fornecedor…" />
+              <span className="kbd">⌘ K</span>
+            </div>
             <span className="pj-sp" />
             <ProjetosAtivosMenu itens={itensMenu} onEscolher={irPara} onAlternar={alternarAtivo} pode={podeMarcarAtivo} disponivel={pa.disponivel} />
             {pa.disponivel === true && (
               <button type="button" className="btn sm" onClick={() => setPainelAtivos(true)}
                 title="Escolher os projetos ativos (em andamento, em que se está atuando) — vale para todo mundo">⚙ Ativos</button>
             )}
-            <div className="search pj-busca">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></svg>
-              <input ref={buscaRef} value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar PV, OS, PC, cliente ou fornecedor…" />
-              <span className="kbd">⌘ K</span>
-            </div>
             <div className="seg sm">
               {([["lista", "Lista"], ["tabela", "Tabela"], ["kanban", "Kanban"], ["tempo", "Linha do tempo"]] as const).map(([k, l]) => (
                 <button key={k} className={vista === k ? "on" : ""} onClick={() => trocarVista(k)}>{l}</button>

@@ -14,6 +14,7 @@ import { estadoPc, dicaEstadoPc } from "@/lib/situacao-pc";
 import { ModalCancelarPc, ModalDevolverPc } from "./PcCancelarDevolver";
 import PagamentoAntecipado from "@/components/compras/PagamentoAntecipado";
 import "./compras.css";
+import { TblFit } from "../TabelaFit";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CabecalhoTela, PaginaNavy, Carregando, Aviso } from "@/components/navy/tela/KitTela";
 import FolhaPedido from "./FolhaPedido";
@@ -35,6 +36,12 @@ type Col = { k: string; l: string; v: (p: PedidoLista) => string | number | null
 const LIMITE_COLUNA = 60;
 const lsGet = (k: string) => { try { return localStorage.getItem(k); } catch { return null; } };
 const lsSet = (k: string, v: string) => { try { localStorage.setItem(k, v); } catch { /* sem storage */ } };
+/** Ordem em que as colunas somem quando a tabela estreita (tf-p3 primeiro). */
+const PRIO_COL: Record<string, string> = {
+  numForn: "tf-p3", contato: "tf-p3", conta: "tf-p3", comprador: "tf-p3", rcs: "tf-p3", contrato: "tf-p3", obsInt: "tf-p3", parc: "tf-p3", cnpj: "tf-p3",
+  aprov: "tf-p2", cat: "tf-p2", pv: "tf-p2", itens: "tf-p2", origem: "tf-p2", dtRec: "tf-p2", enviado: "tf-p2",
+  proj: "tf-p1", emissao: "tf-p1", tipo: "tf-p1",
+};
 const COLS_PADRAO = ["situacao", "aprov", "num", "forn", "valor", "etapaNome", "previsao", "numForn", "contato", "cat", "conta", "comprador", "proj", "rcs", "pv"];
 
 export default function TelaCompras() {
@@ -311,7 +318,9 @@ export default function TelaCompras() {
     { k: "enviado", l: "Enviado ao fornecedor", v: (p) => p.enviadoEm ?? "", h: (p) => { const e = rotuloEnvio(p); return e ? <span className="pill p-env" title={e.dica}>{e.texto} {dBR(p.enviadoEm!.slice(0, 10))}{p.enviadoMeio === "whatsapp" ? " · WhatsApp" : p.enviadoMeio?.startsWith("email") ? " · e-mail" : ""}</span> : naoEnviado(p) ? <span className="pill" style={{ opacity: .75 }}>não enviado</span> : ""; } },
   ], [parcDesc, nfSug]);
   const COL = useMemo(() => Object.fromEntries(COLS.map((c) => [c.k, c])), [COLS]);
-  const colsVis = cols.map((k) => COL[k]).filter(Boolean) as Col[];
+  /* 09/10/26: o Número vai para a frente (preso à esquerda com a seleção, .tbl-fit tf-col2)
+     e as colunas de apoio somem primeiro quando a tabela estreita. */
+  const colsVis = [...cols.filter((k) => k === "num"), ...cols.filter((k) => k !== "num")].map((k) => COL[k]).filter(Boolean) as Col[];
   const tabelaLinhas = useMemo(() => {
     let l = filtrados.filter((p) => colsVis.every((c) => { const f = (colf[c.k] ?? "").toLowerCase(); return !f || String(c.v(p) ?? "").toLowerCase().includes(f); }));
     const sc = COL[sort.k] ?? (sort.k === "emissao" ? COL.emissao : null);
@@ -451,6 +460,11 @@ export default function TelaCompras() {
         )}
 
         <div className="filtros">
+          {/* 09/10/26: a busca vem sempre primeiro, à esquerda (regra do painel) */}
+          <div className="busca">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="11" cy="11" r="7" /><path d="M20 20l-3.5-3.5" /></svg>
+            <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Nº, fornecedor, CNPJ, produto, PV/OS…" />
+          </div>
           <select className="sel" value={comprador} onChange={(e) => setComprador(e.target.value)} aria-label="Comprador">
             <option value="">Todos os compradores</option>{compradores.map((c) => <option key={c}>{c}</option>)}</select>
           <select className="sel" value={projeto} onChange={(e) => setProjeto(e.target.value)} aria-label="Projeto">
@@ -501,10 +515,6 @@ export default function TelaCompras() {
               </div>
             </>
           )}
-          <div className="busca">
-            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="11" cy="11" r="7" /><path d="M20 20l-3.5-3.5" /></svg>
-            <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Nº, fornecedor, CNPJ, produto, PV/OS…" />
-          </div>
         </div>
         <div className="faint" style={{ fontSize: 12, marginTop: -6 }}>
           {lista ? `${filtrados.length} de ${todos.length} registros${historico !== "todos" ? " (histórico do Omie limitado ao filtro acima)" : ""}` : ""}
@@ -585,7 +595,7 @@ export default function TelaCompras() {
         )}
 
         {lista && view === "tabela" && (
-          <div className="tbl-wrap">
+          <TblFit className="tbl-wrap tf-col2">
             <table className="grid">
               <thead>
                 <tr>
@@ -593,13 +603,13 @@ export default function TelaCompras() {
                     checked={tabelaLinhas.length > 0 && tabelaLinhas.every((p) => sel.has(p.id))}
                     onChange={(e) => setSel((s) => { const n = new Set(s); tabelaLinhas.forEach((p) => (e.target.checked ? n.add(p.id) : n.delete(p.id))); return n; })} /></th>
                   {colsVis.map((c) => (
-                    <th key={c.k} className={c.r ? "r" : ""} onClick={() => setSort((s) => (s.k === c.k ? { k: c.k, dir: (-s.dir) as 1 | -1 } : { k: c.k, dir: 1 }))}>
+                    <th key={c.k} className={`${c.r ? "r" : ""} ${PRIO_COL[c.k] ?? ""}`} onClick={() => setSort((s) => (s.k === c.k ? { k: c.k, dir: (-s.dir) as 1 | -1 } : { k: c.k, dir: 1 }))}>
                       {c.l} {sort.k === c.k ? (sort.dir > 0 ? "↑" : "↓") : ""}</th>
                   ))}
                   <th style={{ width: 70 }} />
                 </tr>
                 <tr className="flt"><th />{colsVis.map((c) => (
-                  <th key={c.k}><input value={colf[c.k] ?? ""} placeholder="filtrar" aria-label={`Filtrar ${c.l}`}
+                  <th key={c.k} className={PRIO_COL[c.k]}><input value={colf[c.k] ?? ""} placeholder="filtrar" aria-label={`Filtrar ${c.l}`}
                     onChange={(e) => setColf((f) => ({ ...f, [c.k]: e.target.value }))} /></th>))}<th /></tr>
               </thead>
               <tbody>
@@ -610,7 +620,7 @@ export default function TelaCompras() {
                       <td><input type="checkbox" aria-label="Selecionar" checked={sel.has(p.id)}
                         onChange={(e) => setSel((s) => { const n = new Set(s); if (e.target.checked) n.add(p.id); else n.delete(p.id); return n; })} /></td>
                       {colsVis.map((c) => (
-                        <td key={c.k} className={`${c.r ? "r" : ""}${c.tr ? " trunc" : ""}`} title={c.tr ? String(c.v(p) ?? "") : undefined}>
+                        <td key={c.k} className={`${c.r ? "r" : ""}${c.tr ? " trunc" : ""} ${PRIO_COL[c.k] ?? ""}`} title={c.tr ? String(c.v(p) ?? "") : undefined}>
                           {c.h ? c.h(p) : String(c.v(p) ?? "")}</td>))}
                       <td style={{ whiteSpace: "nowrap" }}>
                         {p.tipo === "PC" && <button className="btn sm ghost" title="Imprimir / PDF / enviar ao fornecedor" onClick={(e) => { e.stopPropagation(); setEnviar(p.id); }}>🖨</button>}
@@ -634,10 +644,10 @@ export default function TelaCompras() {
                 })()}
               </tbody>
               <tfoot><tr><td />{colsVis.map((c, i) => (
-                <td key={c.k} className={c.r ? "r" : ""}>{c.sum ? <span className="num">Σ {money(tabelaLinhas.reduce((a, p) => a + (Number(c.v(p)) || 0), 0))}</span>
+                <td key={c.k} className={`${c.r ? "r" : ""} ${PRIO_COL[c.k] ?? ""}`}>{c.sum ? <span className="num">Σ {money(tabelaLinhas.reduce((a, p) => a + (Number(c.v(p)) || 0), 0))}</span>
                   : i === 0 ? `${tabelaLinhas.length} registros${tabelaLinhas.length > 2000 && !group ? " (2.000 à vista)" : ""}` : ""}</td>))}<td /></tr></tfoot>
             </table>
-          </div>
+          </TblFit>
         )}
       </PaginaNavy>
 

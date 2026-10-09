@@ -1,0 +1,109 @@
+/*
+ * .tbl-fit — tabelas largas que cabem na tela (09/10/26).
+ *
+ * Pedido do Benny: "evitar ao máximo ter que fazer scroll. Caso precise, a
+ * coluna da esquerda tem que ficar congelada". Um só utilitário para todas
+ * as tabelas do painel, em vez de remendos por tela:
+ *
+ *   <div class="tbl-fit">            ← o contentor que rola (e o @container)
+ *     <table>
+ *       <thead><tr><th class="tf-fix">Documento</th> … </tr></thead>
+ *       <tbody><tr><td class="tf-fix">…</td> … </tr></tbody>
+ *
+ * - Cabeçalho fica preso no topo do contentor (sticky) com fundo opaco.
+ * - .tf-fix: coluna presa à esquerda, fundo opaco (também com vidro ligado),
+ *   sombra só quando há rolagem horizontal (classe .tf-rola, posta pelo
+ *   useTblFit ou à mão). Duas colunas presas: a 2.ª leva style="--tf-left: 34px".
+ * - .tf-p3 / .tf-p2 / .tf-p1: colunas de menor prioridade, somem por esta
+ *   ordem quando o CONTENTOR (não a janela) estreita.
+ * - .tf-so-estreito: só aparece quando a tabela está estreita (ex.: o status
+ *   que passa para dentro da célula do recebimento quando a coluna some).
+ * - .tf-ell: corta com reticências (pôr title= com o texto inteiro).
+ *
+ * Fundo opaco vem dos canais rgb (--color-ww-*), que o vidro não toca.
+ */
+.tbl-fit {
+  --tf-bg: rgb(var(--color-ww-panel, 255 255 255));
+  --tf-head: rgb(var(--color-ww-panelSunken, 246 247 249));
+  --tf-hover: rgb(var(--color-ww-rowHover, 242 244 247));
+  --tf-line: rgb(var(--color-ww-border, 226 232 240));
+  container: tbl / inline-size;
+  overflow: auto;
+  overscroll-behavior-x: contain;
+  max-width: 100%;
+}
+.tbl-fit > table { width: 100%; }
+
+/* .tbl-fit.tbl-fit dobra a especificidade: ganha das regras de cada tela
+   (.cp3 .tbl th, .cmp table.grid td, .est .tabela tr:hover td…) sem !important. */
+.tbl-fit.tbl-fit > table > thead > tr > th {
+  position: sticky; top: 0; z-index: 3;
+  background-color: var(--tf-head);
+  background-image: none;
+}
+.tbl-fit.tbl-fit .tf-fix {
+  position: sticky; left: var(--tf-left, 0); z-index: 2;
+  background-color: var(--tf-bg);
+  background-image: none;
+  background-clip: padding-box;
+}
+.tbl-fit.tbl-fit > table > thead > tr > th.tf-fix { z-index: 4; background-color: var(--tf-head); }
+.tbl-fit.tbl-fit > table > tfoot > tr > .tf-fix { z-index: 3; background-color: var(--tf-head); }
+.tbl-fit.tbl-fit > table > tbody > tr:hover > .tf-fix { background-color: var(--tf-hover); }
+.tbl-fit.tbl-fit > table > tbody > tr:is(.sel, .chk) > .tf-fix {
+  background-image: linear-gradient(rgb(59 130 246 / .14), rgb(59 130 246 / .14));
+}
+/* tf-col1 / tf-col2: prende a 1.ª (ou a seleção + a 2.ª) coluna sem pôr classe em cada célula */
+.tbl-fit.tf-col1 > table > tr > :first-child:not([colspan]),
+.tbl-fit.tf-col1 > table > * > tr > :first-child:not([colspan]),
+.tbl-fit.tf-col2 > table > * > tr > :is(:first-child, :nth-child(2)):not([colspan]) {
+  position: sticky; left: 0; z-index: 2; background-color: var(--tf-bg); background-image: none; background-clip: padding-box;
+}
+.tbl-fit.tf-col2 > table > * > tr > :nth-child(2):not([colspan]) { left: var(--tf-left, 34px); }
+.tbl-fit.tf-col1 > table > thead > tr > :first-child,
+.tbl-fit.tf-col2 > table > thead > tr > :is(:first-child, :nth-child(2)) { z-index: 4; background-color: var(--tf-head); }
+.tbl-fit.tf-col1 > table > tbody > tr:hover > :first-child:not([colspan]),
+.tbl-fit.tf-col2 > table > tbody > tr:hover > :is(:first-child, :nth-child(2)):not([colspan]) { background-color: var(--tf-hover); }
+.tbl-fit.tf-col1 > table > tbody > tr:is(.sel, .chk) > :first-child:not([colspan]),
+.tbl-fit.tf-col2 > table > tbody > tr:is(.sel, .chk) > :is(:first-child, :nth-child(2)):not([colspan]) {
+  background-image: linear-gradient(rgb(59 130 246 / .14), rgb(59 130 246 / .14));
+}
+/* sombra de "há conteúdo por baixo" só quando rola */
+.tbl-fit.tf-rola .tf-fix-ult,
+.tbl-fit.tf-rola.tf-col1 > table > * > tr > :first-child:not([colspan]),
+.tbl-fit.tf-rola.tf-col2 > table > * > tr > :nth-child(2):not([colspan]) {
+  box-shadow: 8px 0 10px -8px rgb(0 0 0 / .3), inset -1px 0 0 var(--tf-line);
+}
+
+.tbl-fit .tf-ell { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: var(--tf-ell, 260px); }
+.tbl-fit .tf-num { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.tbl-fit.tbl-fit .tf-so-estreito { display: none; }
+
+/* Prioridades — larguras do contentor da tabela, não da janela. */
+@container tbl (max-width: 1360px) { .tbl-fit.tbl-fit .tf-p3 { display: none; } }
+@container tbl (max-width: 1180px) {
+  .tbl-fit.tbl-fit .tf-p2 { display: none; }
+  .tbl-fit.tbl-fit .tf-so-estreito { display: revert; }
+}
+@container tbl (max-width: 900px) { .tbl-fit.tbl-fit .tf-p1 { display: none; } }
+
+/* Ações compactas: botão principal + ⋯ (MenuMais) */
+.tf-acoes { display: inline-flex; align-items: center; gap: 4px; justify-content: flex-end; white-space: nowrap; }
+.tf-mais-btn {
+  width: 28px; height: 28px; border-radius: 8px; display: inline-grid; place-items: center; flex: none;
+  border: 1px solid var(--ww-border, rgb(var(--color-ww-border))); background: transparent; color: var(--ww-text-muted, currentColor);
+  font-size: 16px; line-height: 1; cursor: pointer; transition: background-color .15s, color .15s;
+}
+.tf-mais-btn:hover, .tf-mais-btn[aria-expanded="true"] { background: rgb(var(--color-ww-rowHover)); color: var(--ww-text, inherit); }
+.tf-mais-menu {
+  position: fixed; z-index: 80; min-width: 190px; padding: 6px; border-radius: 12px;
+  background: rgb(var(--color-ww-panel)); color: var(--ww-text, inherit);
+  border: 1px solid rgb(var(--color-ww-border)); box-shadow: 0 18px 40px -12px rgb(0 0 0 / .45);
+  font-size: 13px;
+}
+.tf-mais-menu button {
+  display: block; width: 100%; text-align: left; border: 0; background: transparent; color: inherit;
+  padding: 8px 10px; border-radius: 8px; font: inherit; cursor: pointer; white-space: nowrap;
+}
+.tf-mais-menu button:hover:not(:disabled) { background: rgb(var(--color-ww-rowHover)); }
+.tf-mais-menu button:disabled { opacity: .45; cursor: default; }

@@ -75,6 +75,15 @@ export default function GradeOperacao({ visiveis, modulo, $, podeAprovar, podeEd
     { k: "rec", l: "Recebido em", g: "Recebimento", w: 100, ro: () => true, valor: (c) => dBR(c.recebidoEm) },
   ], [$, modulo, nomeId, podeAprovar, podeEditar, semEdicaoRc]);
   const cols = COLS.filter((c) => !ocultos.has(c.g));
+  /* 09/10/26 (Benny: "a coluna da esquerda tem que ficar congelada"): seleção +
+     PV/OS + Cliente presas à esquerda; o resto da planilha rola por baixo. */
+  const FIXA: Record<string, { left: number; w: number }> = { pv: { left: 56, w: 96 }, cli: { left: 172, w: 190 } };
+  const fixa = (k: string) => (FIXA[k] && cols.some((c) => c.k === "pv") ? FIXA[k] : null);
+  const estiloCol = (c: Col): React.CSSProperties => {
+    const f = fixa(c.k);
+    return f ? { left: f.left, minWidth: f.w, maxWidth: c.k === "pv" ? f.w : f.w + 40, width: c.k === "pv" ? f.w : undefined } : { minWidth: c.w, maxWidth: c.w + 60 };
+  };
+  const clsFixa = (k: string) => (fixa(k) ? ` stk${k === "cli" ? " stk-ult" : ""}` : "");
 
   // Linhas navegáveis (compras) e cabeçalhos de pedido.
   const [limite, setLimite] = useState(400);
@@ -239,16 +248,16 @@ export default function GradeOperacao({ visiveis, modulo, $, podeAprovar, podeEd
         <table className="grid">
           <thead>
             <tr className="gh">
-              <th className="blank" style={{ width: 36 }} />
-              {gruposVis.map(({ g, n }) => <th key={g} colSpan={n}>{g}</th>)}
+              <th className="blank stk" style={{ width: 36, left: 0 }} />
+              {gruposVis.map(({ g, n }) => <th key={g} colSpan={n} className={g === "Venda" && fixa("pv") ? "stk stk-ult" : undefined} style={g === "Venda" && fixa("pv") ? { left: 56 } : undefined}>{g}</th>)}
               <th className="blank" />
             </tr>
             <tr className="ch">
-              <th style={{ width: 36 }}>
+              <th className="stk" style={{ width: 36, left: 0 }}>
                 <input type="checkbox" className="cb" checked={linhas.length > 0 && linhas.every((l) => sel.has(l.c.key))}
                   onChange={(e) => setSel(e.target.checked ? new Set(linhas.map((l) => l.c.key)) : new Set())} />
               </th>
-              {cols.map((c) => <th key={c.k} className={c.al === "r" ? "r" : ""} style={{ minWidth: c.w, maxWidth: c.w + 60, cursor: "pointer", userSelect: "none" }}
+              {cols.map((c) => <th key={c.k} className={`${c.al === "r" ? "r" : ""}${clsFixa(c.k)}`} style={{ ...estiloCol(c), cursor: "pointer", userSelect: "none" }}
                 title="Clique para ordenar (de novo inverte; 3º clique volta à ordem da lista)" onClick={() => clicarCab(c.k)}>
                 {c.tipo ? "✎ " : ""}{c.l}{ordCol?.k === c.k ? (ordCol.d === 1 ? " ↑" : " ↓") : ""}</th>)}
               <th style={{ width: 90 }} />
@@ -270,7 +279,7 @@ export default function GradeOperacao({ visiveis, modulo, $, podeAprovar, podeEd
                   </tr>
                 ),
                 <tr key={l.c.key} className={sel.has(l.c.key) ? "sel" : ""}>
-                  <td style={{ width: 36 }}>
+                  <td className="stk" style={{ width: 36, left: 0 }}>
                     <input type="checkbox" className="cb" checked={sel.has(l.c.key)}
                       onChange={() => { const n = new Set(sel); if (n.has(l.c.key)) n.delete(l.c.key); else n.add(l.c.key); setSel(n); }} />
                   </td>
@@ -280,10 +289,10 @@ export default function GradeOperacao({ visiveis, modulo, $, podeAprovar, podeEd
                     const k = `${l.c.key}:${col.k}`;
                     const erro = col.k === "just" && RECUSAS.has(l.c.statusCodigo) && !l.c.justificativa;
                     const cls = [col.al === "r" ? "r" : "", ed ? "ed" : "ro", sujos.has(k) ? "dirty" : "", erro ? "err" : "",
-                      ativa ? "act" : "", ativa && editando ? "editing" : "", nope === k ? "nope" : ""].join(" ");
+                      ativa ? "act" : "", ativa && editando ? "editing" : "", nope === k ? "nope" : ""].join(" ") + clsFixa(col.k);
                     return (
-                      <td key={col.k} data-cel={`${ri}-${j}`} className={cls} style={{ minWidth: col.w, maxWidth: col.w + 60 }}
-                        title={erro ? "Recusado sem justificativa" : undefined}
+                      <td key={col.k} data-cel={`${ri}-${j}`} className={cls} style={estiloCol(col)}
+                        title={erro ? "Recusado sem justificativa" : fixa(col.k) ? col.valor(l.c, l.p) : undefined}
                         onMouseDown={() => { if (!(ativa && editando)) { setEditando(false); setCel({ r: ri, c: j }); } }}
                         onDoubleClick={() => iniciar()}>
                         {ativa && editando ? (

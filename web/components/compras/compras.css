@@ -60,7 +60,7 @@
 .cmp .chipf { height: 32px; padding: 0 12px; border-radius: 999px; border: 1px solid var(--line-2); background: transparent;
   color: var(--tx-2); font-size: 12.5px; cursor: pointer; font-weight: 600; }
 .cmp .chipf.on { border-color: var(--ww-crit); color: var(--ww-crit-text); background: var(--ww-crit-soft); }
-.cmp .busca { margin-left: auto; display: flex; align-items: center; gap: 8px; height: 32px; width: 300px; max-width: 100%;
+.cmp .busca { margin-left: 0; display: flex; align-items: center; gap: 8px; height: 32px; width: 300px; max-width: 100%;
   padding: 0 12px; border-radius: 9px; background: var(--sunken); border: 1px solid var(--line-2); color: var(--tx-4); }
 .cmp .busca input { flex: 1; min-width: 0; border: 0; outline: none; background: transparent; color: var(--tx); font-size: 12.5px; font-family: inherit; }
 
@@ -396,3 +396,9 @@
 .cmp .tb th, .cmp .tb td { padding: 6px 8px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
 .cmp .tb th { font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: var(--tx-3); }
 .cmp .tb .r { text-align: right; white-space: nowrap; }
+
+/* 09/10/26 — tabela no utilitário .tbl-fit (app/tbl-fit.css): seleção + Número
+   presos à esquerda; colunas de apoio somem primeiro quando a tabela estreita. */
+.cmp .tbl-wrap.tbl-fit { --tf-left: 48px; max-height: calc(100vh - 180px); }
+.cmp .tbl-wrap.tbl-fit table.grid > * > tr > :first-child { width: 34px; min-width: 34px; padding: 0 4px 0 10px; }
+.cmp .busca { width: 340px; }

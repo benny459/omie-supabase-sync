@@ -13,6 +13,7 @@
  * Códigos mesclados saem da lista (a ficha deles leva ao principal). Foto: miniatura do bucket "produtos".
  */
 
+import { TblFit } from "@/components/TabelaFit";
 import "../estoque/estoque.css";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -65,11 +66,11 @@ const COLS: Col[] = [
   { k: "item", rotulo: "Item", v: (p) => p.descricao },
   { k: "sit", rotulo: "Situação", v: (p) => situacao(p)[0] },
   { k: "saldo", rotulo: "Saldo ⓘ", v: (p) => p.saldo, cls: "r" },
-  { k: "pend", rotulo: "Pendente", v: (p) => p.pendente, cls: "r opt" },
-  { k: "al", rotulo: "Alarme", v: (p) => alarme(p)[0], cls: "opt" },
+  { k: "pend", rotulo: "Pendente", v: (p) => p.pendente, cls: "r opt tf-p2" },
+  { k: "al", rotulo: "Alarme", v: (p) => alarme(p)[0], cls: "opt tf-p3" },
   { k: "cob", rotulo: "Cobertura", v: (p) => cobertura(p) ?? 1e9 },
-  { k: "ult", rotulo: "Última mov.", v: (p) => p.ult_mov ?? "", cls: "opt" },
-  { k: "cmc", rotulo: "CMC", v: (p) => p.cmc, cls: "r opt" },
+  { k: "ult", rotulo: "Última mov.", v: (p) => p.ult_mov ?? "", cls: "opt tf-p3" },
+  { k: "cmc", rotulo: "CMC", v: (p) => p.cmc, cls: "r opt tf-p2" },
   { k: "valor", rotulo: "Valor", v: valorItem, cls: "r" },
 ];
 
@@ -228,6 +229,9 @@ function AbaItens({ itens, lista, st, muda, abrir, cliente, carregandoCliente, l
 
     <div className="cartao">
       <div className="head" style={{ padding: "12px 16px", gap: 10 }}>
+        {/* 09/10/26: a busca vem sempre primeiro, à esquerda (regra do painel) */}
+        <input className="inp" value={st.busca} onChange={(e) => muda({ busca: e.target.value, limite: 100 })}
+          placeholder="Buscar item, código, família…" style={{ width: 280 }} aria-label="Filtrar a lista" />
         <div className="filtros" style={{ flex: 1, position: "relative" }}>
           {FILTROS.filter((f) => f.k === "todos" || f.k === "saldo").map((f) => (
             <button key={f.k} className={`chip ${st.filtro === f.k ? "on" : ""}`} title={f.title}
@@ -248,8 +252,6 @@ function AbaItens({ itens, lista, st, muda, abrir, cliente, carregandoCliente, l
           <button className={org === "alfa" ? "on" : ""} onClick={() => setOrg("alfa")}>A–Z</button>
           <button className={org === "familia" ? "on" : ""} onClick={() => setOrg("familia")}>Família</button>
         </div>
-        <input className="inp" value={st.busca} onChange={(e) => muda({ busca: e.target.value, limite: 100 })}
-          placeholder="Filtrar a lista…" style={{ width: 200 }} aria-label="Filtrar a lista" />
         <button className="btn sm" onClick={csv}>CSV</button>
       </div>
       {cliente && (
@@ -267,7 +269,7 @@ function AbaItens({ itens, lista, st, muda, abrir, cliente, carregandoCliente, l
       {org === "familia" && semFamilia === itens.length && (
         <div style={{ padding: "0 16px 10px" }}><div className="aviso t-info">As famílias ainda não chegaram do Omie (sincronização de produtos em andamento). Por enquanto todos os itens aparecem em “Sem família”.</div></div>
       )}
-      <div className="scroll">
+      <TblFit className="scroll tf-col1" style={{ maxHeight: "calc(100vh - 160px)" }}>
         <table className="tabela">
           <thead>
             <tr>
@@ -303,7 +305,7 @@ function AbaItens({ itens, lista, st, muda, abrir, cliente, carregandoCliente, l
             </button>
           </div>
         )}
-      </div>
+      </TblFit>
       <div className="tfoot">
         <span>{q(lista.length)} itens{org === "familia" ? ` em ${grupos.length} famílias` : ""} · valor <b style={{ color: "var(--ww-text)" }}>{brl(lista.reduce((s, p) => s + valorItem(p), 0))}</b></span>
         {org === "familia" && grupos.length > 1 && (
@@ -332,8 +334,8 @@ function LinhaItem({ p, abrir }: { p: ItemEstoque; abrir: (p: ItemEstoque) => vo
       </td>
       <td><Pill t={st} tom={tom} /></td>
       <td className="r" style={{ fontWeight: 600, color: p.saldo < 0 ? "var(--ww-crit-text)" : undefined }}>{q(p.saldo)}{p.reservado_proj ? <div className="disp-res" title={`Separado para ${p.n_projetos} projeto(s) — disponível = saldo − separado`}>disp. {q(p.saldo - p.reservado_proj)} · sep. {q(p.reservado_proj)}</div> : null}</td>
-      <td className="r opt">{p.pendente ? q(p.pendente) : <span className="mini">—</span>}</td>
-      <td className="opt"><Pill t={al} tom={atom} /></td>
+      <td className="r opt tf-p2">{p.pendente ? q(p.pendente) : <span className="mini">—</span>}</td>
+      <td className="opt tf-p3"><Pill t={al} tom={atom} /></td>
       <td>
         {cob === null ? <span className="mini">sem consumo</span> : (
           <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
@@ -344,8 +346,8 @@ function LinhaItem({ p, abrir }: { p: ItemEstoque; abrir: (p: ItemEstoque) => vo
           </div>
         )}
       </td>
-      <td className="opt"><span className="num">{ddmmaa(p.ult_mov)}</span>{p.ult_mov && <span className="mini"> · {dias(p.ult_mov)} d</span>}</td>
-      <td className="r opt">{brl(p.cmc)}</td>
+      <td className="opt tf-p3"><span className="num">{ddmmaa(p.ult_mov)}</span>{p.ult_mov && <span className="mini"> · {dias(p.ult_mov)} d</span>}</td>
+      <td className="r opt tf-p2">{brl(p.cmc)}</td>
       <td className="r" style={{ fontWeight: 600 }}>{brl(valorItem(p))}</td>
     </tr>
   );

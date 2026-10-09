@@ -334,3 +334,17 @@
 .est-ov .modal.sep-proj { width: min(1150px, 100%); }
 .est-ov .modal.sep-proj .tabela td .inp { height: 30px; }
 .est .disp-res { font-size: 11px; color: var(--ww-text-faint); white-space: nowrap; }
+
+/* 09/10/26 — todas as tabelas do estoque (itens, movimentação, catálogo,
+   inventário…) seguem o padrão .tbl-fit (app/tbl-fit.css): o .scroll é o
+   contentor das container queries, cabeçalho e 1.ª coluna presos com fundo
+   opaco (também com vidro), e as colunas .opt saem pela largura da TABELA. */
+.est .scroll { container: tbl / inline-size; }
+.est .scroll > .tabela > thead > tr > th { z-index: 2; background: rgb(var(--color-ww-panelSunken)); }
+.est .scroll > .tabela > * > tr > :first-child:not([colspan]) {
+  position: sticky; left: 0; z-index: 1; background-color: rgb(var(--color-ww-panel)); background-clip: padding-box;
+}
+.est .scroll > .tabela > thead > tr > :first-child { z-index: 3; background-color: rgb(var(--color-ww-panelSunken)); }
+.est .scroll > .tabela > tbody > tr:hover > :first-child:not([colspan]) { background-color: rgb(var(--color-ww-rowHover)); }
+.est .scroll.tf-rola > .tabela > * > tr > :first-child:not([colspan]) { box-shadow: 8px 0 10px -8px rgb(0 0 0 / .3), inset -1px 0 0 rgb(var(--color-ww-border)); }
+@container tbl (max-width: 900px) { .est .tabela .opt { display: none; } }

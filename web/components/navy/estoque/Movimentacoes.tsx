@@ -186,6 +186,8 @@ function AbaMovsCliente({ porId, itens, abrir }: {
 
   return (<>
     <div className="filtros">
+      {/* 09/10/26: a busca vem sempre primeiro, à esquerda (regra do painel) */}
+      <input className="inp" value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Produto, cliente, projeto, doc…" style={{ width: 260, height: 32 }} aria-label="Buscar movimentos" />
       {([7, 30, 90] as const).map((d) => <button key={d} className={`chip ${dias === d ? "on" : ""}`} onClick={() => setDias(d)}>Últimos {d} dias</button>)}
       <select className="inp" value={fonte} onChange={(e) => setFonte(e.target.value as typeof fonte)} aria-label="Origem" style={{ height: 32 }}>
         <option value="todas">NF do Omie + internas</option><option value="omie">Só NF do Omie (automáticas)</option><option value="painel">Só internas (lançadas aqui)</option>
@@ -196,7 +198,6 @@ function AbaMovsCliente({ porId, itens, abrir }: {
       {solicitantes.length > 0 && <select className="inp" value={solF} onChange={(e) => setSolF(e.target.value)} aria-label="Solicitante" style={{ height: 32 }}>
         <option value="">Qualquer solicitante</option>{solicitantes.map((s) => <option key={s}>{s}</option>)}
       </select>}
-      <input className="inp" value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Produto, cliente, projeto, doc…" style={{ width: 220 }} aria-label="Buscar movimentos" />
       <div className="sp" />
       <button className="btn sm" onClick={csv} disabled={carregando}>CSV</button>
       {apoio?.admin && <button className="btn sm" onClick={() => setConfig(true)}>Configurar tipos</button>}

@@ -704,7 +704,7 @@
 .op .pj-tit-l{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
 .op .pj-tit-l h1{font-size:22px}
 .op .pj-tit-l .cnt{color:var(--ww-text-muted);font-size:13px}
-.op .pj-busca{flex:0 1 220px;min-width:160px}
+.op .pj-busca{flex:0 1 300px;min-width:180px}
 .op .pj-busca input{height:34px}
 .op .pj-busca svg{top:10px}
 .op .pj-busca .kbd{top:7px}
@@ -858,3 +858,13 @@ html[data-vidro] .op :is(.pop,.fpanel,.pcmenu-pop){--ap-a:1;--ww-panel:rgb(var(-
 .op .pcproj-pc .pcmenu-pop > button.pcmenu-no{color:var(--ww-crit-text,#be123c);border-top:1px solid var(--ww-border);border-radius:0 0 6px 6px;margin-top:2px}
 /* tela estreita (≤1100px): o ⋯ cai para a esquerda da linha — o menu abre para a direita, senão sai da tela */
 @media (max-width:1100px){.op .pcproj-pc .pcmenu-pop{right:auto;left:0}}
+
+/* 09/10/26 — Tabela (planilha): seleção + PV/OS + Cliente presos à esquerda,
+   fundo opaco (também com vidro), sombra na borda da última coluna presa. */
+.op .grid th.stk{position:sticky;z-index:6;background:rgb(var(--color-ww-panelSunken))}
+.op .grid td.stk{position:sticky;z-index:2;background:rgb(var(--color-ww-panel))}
+.op .grid tr:hover td.stk{background:rgb(var(--color-ww-rowHover))}
+.op .grid tr.sel td.stk{background:linear-gradient(var(--ww-info-soft),var(--ww-info-soft)) rgb(var(--color-ww-panel))}
+.op .grid td.stk.act{background:linear-gradient(var(--ww-info-soft),var(--ww-info-soft)) rgb(var(--color-ww-panel))}
+.op .grid .stk-ult{box-shadow:8px 0 10px -8px rgb(0 0 0 / .3),inset -1px 0 0 var(--ww-border)}
+.op .grid td.stk.err{background:linear-gradient(var(--ww-crit-soft),var(--ww-crit-soft)) rgb(var(--color-ww-panel))}

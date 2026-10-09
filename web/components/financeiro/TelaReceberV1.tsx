@@ -6,6 +6,7 @@
  * em receber-v1-motor.ts ligado a /api/financeiro/receber.
  */
 import { useEffect, useRef, useState } from "react";
+import { useTblFit } from "../TabelaFit";
 import { CasarHost } from "./CasarPainel";
 import Link from "next/link";
 import { useUserPerms } from "../UserPermsProvider";
@@ -17,6 +18,8 @@ import "./pagar-v3.css";
 export default function TelaReceberV1() {
   const perms = useUserPerms();
   const ref = useRef<HTMLDivElement>(null);
+  const tblRef = useRef<HTMLDivElement>(null);
+  useTblFit(tblRef);
   const motor = useRef<{ recarregar: () => Promise<void>; destruir: () => void } | null>(null);
   const [nova, setNova] = useState(false);
   const [editar, setEditar] = useState<string | null>(null);
@@ -131,7 +134,7 @@ export default function TelaReceberV1() {
                   <button className="btn sm" id="tCsv">CSV</button>
                 </div>
                 <div className="bstrip" id="bstrip" />
-                <div className="tbl"><table className="num" id="tbl" /></div>
+                <div className="tbl tbl-fit" ref={tblRef}><table className="num" id="tbl" /></div>
                 <div className="abar" id="abar"><b id="abarN" /><span id="abarV" className="num" /><span id="abarE" style={{ fontSize: 12 }} /><span style={{ marginLeft: "auto" }} /><select id="abarBank" /><button className="btn sm" id="abarPrev">Alterar previsão</button><button className="btn sm" id="abarCob">Cobrar</button><button className="btn sm" id="abarClr">Limpar</button><button className="btn ok sm" id="abarGo">Receber em lote</button></div>
                 <div className="foot"><span id="tblFoot" /><span>Situação = vencimento + previsão/promessa + boleto/NF · clique numa linha para abrir</span></div>
               </div>

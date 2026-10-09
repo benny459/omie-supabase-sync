@@ -24,6 +24,7 @@
  * automática. Teclado: j/k (ou ↓/↑) navega, Enter aceita a 1ª sugestão, Esc fecha.
  */
 
+import { TblFit } from "@/components/TabelaFit";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Aviso, BotaoTela, CabecalhoTela, CampoData, Carregando, ChipFiltro, FaixaFiltros, GradeKpis, PaginaNavy,
@@ -812,14 +813,16 @@ function VisaoContas({ resumo, conta, onEscolher }: { resumo: ResumoConta[] | nu
   const th: React.CSSProperties = { fontSize: 11, textTransform: "uppercase", letterSpacing: ".06em", color: "var(--ww-text-faint)", fontWeight: 600, padding: "8px 12px", textAlign: "left", whiteSpace: "nowrap" };
   const td: React.CSSProperties = { padding: "9px 12px", fontSize: 13, borderTop: "1px solid var(--ww-border)", whiteSpace: "nowrap" };
   return (
-    <div style={{ ...cartao, padding: 0, overflowX: "auto" }}>
+    <div style={{ ...cartao, padding: 0, overflow: "hidden" }}>
       <div style={{ padding: "10px 14px 4px", fontSize: 13, fontWeight: 700, color: "var(--ww-text)" }}>
         Contas · situação da conciliação no período <span style={{ fontWeight: 400, color: "var(--ww-text-faint)" }}>(clique para abrir a conta)</span>
       </div>
-      <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 760 }}>
+      {/* 09/10/26: .tbl-fit — Conta presa à esquerda; o último extrato sai primeiro quando estreita */}
+      <TblFit className="tf-col1">
+      <table style={{ width: "100%", borderCollapse: "collapse" }}>
         <thead><tr>
-          <th style={th}>Conta</th><th style={th}>Extrato até</th><th style={{ ...th, textAlign: "right" }}>Movimentos</th>
-          <th style={th}>Conciliado</th><th style={{ ...th, textAlign: "right" }}>Falta conciliar</th><th style={th}>Último extrato importado</th>
+          <th style={th}>Conta</th><th style={th}>Extrato até</th><th className="tf-p2" style={{ ...th, textAlign: "right" }}>Movimentos</th>
+          <th style={th}>Conciliado</th><th style={{ ...th, textAlign: "right" }}>Falta conciliar</th><th className="tf-p3" style={th}>Último extrato importado</th>
         </tr></thead>
         <tbody>
           {resumo.map((r) => {
@@ -828,9 +831,9 @@ function VisaoContas({ resumo, conta, onEscolher }: { resumo: ResumoConta[] | nu
             const dias = r.extrato_ate ? Math.round((Date.parse(hojeISO()) - Date.parse(r.extrato_ate)) / 864e5) : null;
             return (
               <tr key={k} onClick={() => onEscolher(k)} style={{ cursor: "pointer", background: sel ? "var(--ww-panel-sunken)" : undefined }}>
-                <td style={{ ...td, fontWeight: sel ? 700 : 500 }}>{r.empresa} · {r.descricao}</td>
+                <td style={{ ...td, fontWeight: sel ? 700 : 500, maxWidth: 260, overflow: "hidden", textOverflow: "ellipsis" }} title={`${r.empresa} · ${r.descricao}`}>{r.empresa} · {r.descricao}</td>
                 <td style={td}>{r.extrato_ate ? ddmmaa(r.extrato_ate) : "—"}{dias != null && dias > 3 && <span style={{ color: "var(--ww-crit-text)", fontSize: 11.5 }}> · {dias} dias sem extrato</span>}</td>
-                <td style={{ ...td, textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{r.n}</td>
+                <td className="tf-p2" style={{ ...td, textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{r.n}</td>
                 <td style={td}>
                   <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
                     <span style={{ width: 90, height: 6, borderRadius: 99, background: "var(--ww-panel-sunken)", overflow: "hidden", display: "inline-block" }}>
@@ -842,7 +845,7 @@ function VisaoContas({ resumo, conta, onEscolher }: { resumo: ResumoConta[] | nu
                 <td style={{ ...td, textAlign: "right", fontVariantNumeric: "tabular-nums" }}>
                   {r.pendentes ? <><b>{r.pendentes}</b> · {brl(r.pendentes_valor)}<span style={{ display: "block", fontSize: 11.5, color: "var(--ww-text-faint)" }}>{r.pend_entradas} entradas · {r.pend_saidas} saídas</span></> : <span style={{ color: "var(--ww-ok-text)" }}>nada pendente</span>}
                 </td>
-                <td style={{ ...td, fontSize: 12, color: "var(--ww-text-muted)" }}>
+                <td className="tf-p3" style={{ ...td, fontSize: 12, color: "var(--ww-text-muted)" }}>
                   {r.ultima_importacao ? <>{ddmmaa(r.ultima_importacao.slice(0, 10))}{r.ultimo_arquivo ? ` · ${r.ultimo_arquivo}` : ""}{r.ultimo_de && r.ultimo_ate ? ` (${ddmmaa(r.ultimo_de)}–${ddmmaa(r.ultimo_ate)})` : ""}</> : r.omie ? "movimentos vindos do Omie" : "—"}
                 </td>
               </tr>
@@ -850,6 +853,7 @@ function VisaoContas({ resumo, conta, onEscolher }: { resumo: ResumoConta[] | nu
           })}
         </tbody>
       </table>
+      </TblFit>
     </div>
   );
 }

@@ -7,6 +7,7 @@
  * "Nova conta" e o retrato do fornecedor reaproveitam os componentes da tela anterior.
  */
 import { useEffect, useRef, useState } from "react";
+import { useTblFit } from "../TabelaFit";
 import { CasarHost } from "./CasarPainel";
 import Link from "next/link";
 import { useUserPerms } from "../UserPermsProvider";
@@ -22,6 +23,8 @@ import "./pagar-v3.css";
 export default function TelaPagarV3() {
   const perms = useUserPerms();
   const ref = useRef<HTMLDivElement>(null);
+  const tblRef = useRef<HTMLDivElement>(null);
+  useTblFit(tblRef);
   const motor = useRef<{ recarregar: () => Promise<void>; destruir: () => void } | null>(null);
   const [nova, setNova] = useState(false);
   // pagamento antecipado de PC a partir do nº (06/10/26)
@@ -154,7 +157,7 @@ export default function TelaPagarV3() {
                 </div>
                 <div className="bstrip" id="bstrip" />
                 <div id="exclBox" />
-                <div className="tbl"><table className="num" id="tbl" /></div>
+                <div className="tbl tbl-fit" ref={tblRef}><table className="num" id="tbl" /></div>
                 <div className="abar" id="abar"><b id="abarN" /><span id="abarV" className="num" /><span id="abarE" style={{ fontSize: 12 }} /><span className="w" id="abarW" /><span style={{ marginLeft: "auto" }} /><select id="abarBank" /><button className="btn sm" id="abarRep" title="Mudar a previsão de pagamento (o vencimento do documento não muda)">Reprogramar previsão</button><button className="btn sm" id="abarC6" title="Gerar o arquivo de pagamentos em lote do C6 Bank">Arquivo C6</button><button className="btn sm" id="abarClr">Limpar</button><button className="btn ok sm" id="abarGo">Baixar em lote</button></div>
                 <div className="foot"><span id="tblFoot" /><span>Status de pagamento = aprovação do pedido de compra + NF recebida · clique numa linha para abrir</span></div>
               </div>

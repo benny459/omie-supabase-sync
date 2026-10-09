@@ -68,7 +68,7 @@
 .ab-tenant-chip { width: 24px; height: 24px; border-radius: 7px; background: #2f6bff; color: #fff; display: grid; place-items: center; font: 600 10px var(--ab-brand); line-height: 1; flex: none; }
 
 /* ── centro: abas por módulo ── */
-.ab-nav { display: flex; align-items: center; justify-content: center; gap: 2px; flex: 1; min-width: 0; }
+.ab-nav { display: flex; align-items: center; justify-content: safe center; gap: 2px; flex: 1; min-width: 0; }
 .ab-gsep { width: 1px; height: 22px; background: var(--ab-line); margin: 0 8px; flex: none; }
 .ab-mod { position: relative; display: flex; align-items: center; }
 .ab-mod-link {
@@ -195,3 +195,7 @@
   .ab-marca-nome, .ab-barra { display: none; }
   .ab { gap: 10px; }
 }
+
+/* 09/10/26: "Mais ▾" — módulos que não cabem (BarraAllka mede e corta) */
+.ab-mod-link[data-mais="1"] .ab-nome { display: inline !important; }
+.ab-mod-link[data-mais="1"] .ab-chev { display: inline-block !important; }

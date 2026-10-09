@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Instrument_Sans, JetBrains_Mono, Outfit, Plus_Jakarta_Sans } from "next/font/google";
 import "./globals.css";
 import "./aparencia.css";
+import "./tbl-fit.css";
 import { SCRIPT_APARENCIA } from "@/lib/aparencia";
 import AparenciaSync from "@/components/navy/AparenciaSync";
 import UpdateBanner from "@/components/UpdateBanner";

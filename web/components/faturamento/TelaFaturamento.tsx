@@ -1,7 +1,7 @@
 "use client";
 
 import EnviarAoCliente from "./EnviarAoCliente";
-import { useCallback, useEffect, useMemo, useState, type MouseEvent, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useState, type CSSProperties, type MouseEvent, type ReactNode } from "react";
 import { PaginaNavy } from "@/components/navy/tela/KitTela";
 import { limpo } from "@/lib/faturamento/montar";
 import NovaEmissao, { type ConfigFat, type Inicial } from "@/components/faturamento/NovaEmissao";
@@ -12,6 +12,7 @@ import LoteRecibos from "@/components/faturamento/LoteRecibos";
 import { baixarPdfs, baixarZip, pdfDoLink, type Baixado } from "@/lib/faturamento/baixar";
 import { OcAnexosPainel, OcChip, useOcResumo } from "@/components/vendas/OcAnexos";
 import "./faturamento.css";
+import { MenuMais, TblFit, type AcaoMais } from "@/components/TabelaFit";
 
 /* Faturamento PV & OS (05/10/2026) — conceito do mockup do Benny
    (faturamento-pv-os-mockup.html): controle do que já foi faturado e do que
@@ -384,6 +385,19 @@ export default function TelaFaturamento() {
     ...[...chips].map((c) => ({ k: `c-${c}`, l: ({ semoc: "Sem OC", old: "> 30 dias", saldo: "Só com saldo", semnfse: "OS sem NFS-e", prevatras: "Previsão atrasada" } as Record<string, string>)[c] ?? c,
       limpar: () => setChips((s) => { const n = new Set(s); n.delete(c); return n; }) })),
   ];
+  const temFiltro = !!q || tipo !== "all" || !!orig || !!fst || !!kpi || chips.size > 0 || periodo !== "mes";
+  /* "/" leva à busca (fora de campos de texto) — 09/10/26 */
+  useEffect(() => {
+    const f = (e: KeyboardEvent) => {
+      if (e.key !== "/" || e.metaKey || e.ctrlKey || e.altKey) return;
+      const t = e.target as HTMLElement | null;
+      if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return;
+      const el = document.getElementById("fat-busca") as HTMLInputElement | null;
+      if (el) { e.preventDefault(); el.focus(); el.select(); }
+    };
+    document.addEventListener("keydown", f);
+    return () => document.removeEventListener("keydown", f);
+  }, []);
   const limparFiltros = () => { setQ(""); setTipo("all"); setOrig(""); setFst(""); setKpi(null); setChips(new Set()); setPeriodo("mes"); };
 
   return (
@@ -456,43 +470,67 @@ export default function TelaFaturamento() {
           </>
         )}
 
-        <div className="filters">
-          <div className="seg">
-            <button className={view === "list" ? "on" : ""} onClick={() => setView("list")}>☰ Lista</button>
-            <button className={view === "kanban" ? "on" : ""} onClick={() => setView("kanban")}>▦ Kanban</button>
-            <button className={view === "emissoes" ? "on" : ""} onClick={() => setView("emissoes")}>⎙ Emissões</button>
-            <button className={view === "nfse" ? "on" : ""} onClick={() => setView("nfse")}>🏛 NFS-e registradas</button>
-            <button className={view === "rascunhos" ? "on" : ""} onClick={() => setView("rascunhos")}>✎ Rascunhos{rascChaves.size ? ` · ${rascChaves.size} de PV/OS` : ""}</button>
+        {/* 09/10/26 (Benny: "mais clean e demarcado o campo de procura"): duas linhas —
+            1) busca à esquerda (regra do painel) + vistas à direita; 2) filtros. */}
+        <div className="fbar">
+          <div className="fbar-r1">
+            <div className="fsearch">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></svg>
+              <input id="fat-busca" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar PV, OS, cliente, OC, NF… (vários: separe por vírgula)"
+                title="Vários números: 4729, 4735, 4738 — com busca, procura em todos os períodos"
+                onKeyDown={(e) => { if (e.key === "Escape" && q) { e.preventDefault(); setQ(""); } }} />
+              {q ? <button type="button" className="fx" title="Limpar busca" onClick={() => setQ("")}>✕</button> : <kbd title="Atalho: tecla /">/</kbd>}
+            </div>
+            <div className="seg vseg">
+              <button className={view === "list" ? "on" : ""} onClick={() => setView("list")}>☰ Lista</button>
+              <button className={view === "kanban" ? "on" : ""} onClick={() => setView("kanban")}>▦ Kanban</button>
+              <button className={view === "emissoes" ? "on" : ""} onClick={() => setView("emissoes")}>⎙ Emissões</button>
+              <button className={view === "nfse" ? "on" : ""} onClick={() => setView("nfse")}>🏛 NFS-e registradas</button>
+              <button className={view === "rascunhos" ? "on" : ""} onClick={() => setView("rascunhos")} title={rascChaves.size ? `${rascChaves.size} PV/OS com rascunho salvo` : undefined}>
+                ✎ Rascunhos{rascChaves.size ? <span className="nb">{rascChaves.size}</span> : null}
+              </button>
+            </div>
           </div>
-          <label className="per" title="Período do faturado — a carteira em aberto aparece sempre; com busca, procura em todos os períodos">
-            <span>Período</span>
-            <select className="sel" value={qServ ? "busca" : periodo} disabled={!!qServ} onChange={(e) => setPeriodo(e.target.value)}>
-              {qServ && <option value="busca">Todos (busca)</option>}
-              {(["mes", "tri", "ano", "12m", "tudo"] as const).map((p) => <option key={p} value={p}>{rotPeriodo[p]}</option>)}
-            </select>
-          </label>
-          <div className="search">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></svg>
-            <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar PV, OS, cliente, OC, NF… — vários números: 4729, 4735, 4738" />
+          <div className="fbar-r2">
+            <label className="flab" title="Período do faturado — a carteira em aberto aparece sempre; com busca, procura em todos os períodos">
+              <span>Período</span>
+              <select value={qServ ? "busca" : periodo} disabled={!!qServ} onChange={(e) => setPeriodo(e.target.value)}>
+                {qServ && <option value="busca">Todos (busca)</option>}
+                {(["mes", "tri", "ano", "12m", "tudo"] as const).map((p) => <option key={p} value={p}>{rotPeriodo[p]}</option>)}
+              </select>
+            </label>
+            {view !== "emissoes" && view !== "nfse" && view !== "rascunhos" && <>
+              <label className="flab">
+                <span>Origem</span>
+                <select value={orig} onChange={(e) => setOrig(e.target.value)}>
+                  <option value="">Todas</option><option>Omie</option><option>Painel</option><option>CRM</option>
+                </select>
+              </label>
+              <label className="flab">
+                <span>Status</span>
+                <select value={fst} onChange={(e) => setFst(e.target.value as St | "")}>
+                  <option value="">Todos</option>
+                  {(Object.keys(ST) as St[]).map((k) => <option key={k} value={k}>{ST[k].l}</option>)}
+                </select>
+              </label>
+              <span className="fsep" />
+              {([
+                ["semoc", "Sem OC", (docs ?? []).filter((d) => !d.oc).length, undefined],
+                ["old", "> 30 dias", (docs ?? []).filter((d) => dias(d.emissao) > 30).length, "Emitidos há mais de 30 dias"],
+                ["saldo", "Só com saldo", (docs ?? []).filter((d) => status(d) !== "fat").length, undefined],
+                ["prevatras", "Previsão atrasada", (docs ?? []).filter((d) => (prevDias(d) ?? 1) < 0).length, undefined],
+                ["semnfse", "OS sem NFS-e", (docs ?? []).filter(semNfse).length, "OS faturáveis sem NFS-e registrada (emitida na prefeitura)"],
+              ] as const).map(([k, l, n, t]) => (
+                <button key={k} type="button" className={`qpill ${chips.has(k) ? "on" : ""}`} aria-pressed={chips.has(k)} title={t}
+                  onClick={() => setChips((s) => { const x = new Set(s); if (x.has(k)) x.delete(k); else x.add(k); return x; })}>{l}<span className="n">{n}</span></button>
+              ))}
+            </>}
+            {temFiltro && <button type="button" className="fclear" onClick={limparFiltros}>✕ Limpar filtros</button>}
           </div>
-          {view !== "emissoes" && view !== "nfse" && view !== "rascunhos" && <>
-            <select className="sel" value={orig} onChange={(e) => setOrig(e.target.value)}>
-              <option value="">Origem: todas</option><option>Omie</option><option>Painel</option><option>CRM</option>
-            </select>
-            <select className="sel" value={fst} onChange={(e) => setFst(e.target.value as St | "")}>
-              <option value="">Status: todos</option>
-              {(Object.keys(ST) as St[]).map((k) => <option key={k} value={k}>{ST[k].l}</option>)}
-            </select>
-            {([["semoc", "Sem OC"], ["old", "> 30 dias"], ["saldo", "Só com saldo"], ["prevatras", `Previsão atrasada · ${(docs ?? []).filter((d) => (prevDias(d) ?? 1) < 0).length}`], ["semnfse", `OS sem NFS-e · ${(docs ?? []).filter(semNfse).length}`]] as const).map(([k, l]) => (
-              <button key={k} className={`chipf ${chips.has(k) ? "on" : ""}`} title={k === "semnfse" ? "OS faturáveis sem NFS-e registrada (emitida na prefeitura)" : undefined}
-                onClick={() => setChips((s) => { const n = new Set(s); if (n.has(k)) n.delete(k); else n.add(k); return n; })}>{l}</button>
-            ))}
-          </>}
         </div>
         {view !== "emissoes" && view !== "nfse" && view !== "rascunhos" && (
           <div className="ativos">
             {ativos.map((a) => <span key={a.k} className="fchip">{a.l}<button onClick={a.limpar} title="Tirar este filtro">×</button></span>)}
-            {ativos.length > 1 && <button className="btn ghost sm" onClick={limparFiltros}>Limpar filtros</button>}
             <span className="cont">
               {docs ? <><b>{filtrados.length}</b> documento(s){qServ ? " · busca em todos os períodos" : ` · faturados só de ${rotPeriodo[periodo]} (em aberto: todas as datas)`}</> : "carregando…"}
             </span>
@@ -749,14 +787,44 @@ function Acoes({ d, ocupado, abrir, prod, registrar, revisar }: { d: Doc; ocupad
   if (st === "pend") return <button className="btn ghost sm" onClick={pare(() => abrir(d.chave))}>Resolver</button>;
   if (st === "rej") return <button className="btn ghost sm" style={{ color: "var(--f-bad)" }} onClick={pare(() => abrir(d.chave))}>Ver rejeição</button>;
   if (st === "emis") return <button className="btn ghost sm" onClick={pare(() => abrir(d.chave))}>Atualizar</button>;
+  // 09/10/26: botão principal + ⋯ (Validar, Registrar NFS-e) — cabe sem rolar a tabela.
+  const rotulo = `Revisar e emitir${d.tipo === "OS" ? " recibo" : ""}${st === "parc" ? " saldo" : ""}${prod ? "" : " (homolog.)"}`;
+  const mais: AcaoMais[] = [{ label: "Validar", disabled: !!ocupado, onClick: () => abrir(d.chave), title: "Abre o documento para validar antes de emitir" }];
+  if (d.tipo === "OS" && semNfse(d)) mais.push({ label: "Registrar NFS-e", disabled: !!ocupado, tom: "var(--f-os)", onClick: () => registrar(d) });
+  return (
+    <span className="tf-acoes">
+      <button className="btn sm pri" disabled={!!ocupado} title={`${rotulo} — abre a folha completa: cliente, itens, recebimento, prévia do ${d.tipo === "PV" ? "DANFE" : "recibo"} — a emissão só acontece lá`}
+        onClick={pare(() => revisar?.(d))}>
+        Revisar e emitir{st === "parc" ? " saldo" : ""}
+      </button>
+      <MenuMais acoes={mais} />
+    </span>
+  );
+}
+
+function StatusPill({ d }: { d: Doc }) {
+  const st = status(d);
   return <>
-    <button className="btn ghost sm" disabled={!!ocupado} onClick={pare(() => abrir(d.chave))}>Validar</button>
-    <button className="btn sm pri" disabled={!!ocupado} title={`Abre a folha completa: cliente, itens, recebimento, prévia do ${d.tipo === "PV" ? "DANFE" : "recibo"} — a emissão só acontece lá`}
-      onClick={pare(() => revisar?.(d))}>
-      {`Revisar e emitir${d.tipo === "OS" ? " recibo" : ""}${st === "parc" ? " saldo" : ""}${prod ? "" : " (homolog.)"}`}
-    </button>
-    {d.tipo === "OS" && btnNfse}
+    {d.aguarda_nfse && st !== "fat"
+      ? <span className="pill s-nfse" title="Aguardando NFS-e (prefeitura)"><i />Aguardando NFS-e</span>
+      : <span className={`pill ${ST[st].c}`}><i />{ST[st].l}</span>}
+    {d.nfse_registrada && <div className="orig" style={{ color: "var(--f-os)" }}>NFS-e registrada</div>}
   </>;
+}
+
+function Valores({ valor, faturado, nNf, fat }: { valor: number; faturado: number; nNf?: number; fat?: boolean }) {
+  const sd = Math.max(0, valor - faturado);
+  const p = valor ? Math.min(1, faturado / valor) : 0;
+  return (
+    <div className="vals" title={`Valor total ${fmt(valor)} · Faturado ${fmt(faturado)} · Falta faturar ${fmt(sd)}`}>
+      <b className="mono" style={{ color: sd > 0.01 ? "var(--f-tx)" : "var(--f-tx3)" }}>{sd > 0.01 ? fmt(sd) : "—"}</b>
+      <span className="vbar"><i style={{ width: `${p * 100}%`, background: fat || p >= 0.999 ? "var(--f-ok)" : "var(--f-warn)" }} /></span>
+      <small className="mono">
+        <span style={{ color: faturado ? "var(--f-ok)" : undefined }}>{Math.round(p * 100)}%</span>
+        {nNf !== undefined && <> · {nNf} NF</>} · de {fmt(valor)}
+      </small>
+    </div>
+  );
 }
 
 function Lista({ rows, sel, setSel, sort, setSort, abrir, ocupado, agir, prod, registrar, salvarPrevisao, rec, revisar, rasc, empresa }: {
@@ -766,77 +834,91 @@ function Lista({ rows, sel, setSel, sort, setSort, abrir, ocupado, agir, prod, r
 }) {
   const [limite, setLimite] = useState(200);
   if (!rows.length) return <div className="tablebox"><div className="empty">Nenhum documento com esses filtros.</div></div>;
-  const th = (k: string, l: string, cls = "") => (
-    <th className={cls} onClick={() => setSort({ k, d: sort.k === k ? (sort.d === 1 ? -1 : 1) : -1 })}>{l}{sort.k === k ? (sort.d > 0 ? " ↑" : " ↓") : ""}</th>
+  // Ordenação: um cabeçalho pode ter mais de um critério (ex.: Documento · Cliente).
+  const so = (k: string, l: string) => (
+    <span className="so" data-on={sort.k === k ? "1" : undefined} onClick={(e) => { e.stopPropagation(); setSort({ k, d: sort.k === k ? (sort.d === 1 ? -1 : 1) : -1 }); }}>
+      {l}{sort.k === k ? (sort.d > 0 ? " ↑" : " ↓") : ""}
+    </span>
   );
   const tot = rows.reduce((a, d) => a + Number(d.valor), 0), fat = rows.reduce((a, d) => a + Number(d.faturado), 0);
   // Faturados também se selecionam (05/10/26): servem para abrir/imprimir os recibos em lote;
   // a emissão em lote só considera os que ainda têm saldo.
   const selecionaveis = rows;
   const todos = selecionaveis.length > 0 && selecionaveis.every((d) => sel.has(d.chave));
+  const col2 = { "--tf-left": "38px" } as CSSProperties;
+  /* 09/10/26 (Benny: "evitar ao máximo ter que fazer scroll"): Documento+Cliente
+     numa coluna presa à esquerda; valores num bloco só com a cobertura; Emissão
+     e Status saem primeiro quando a tabela estreita (o status desce para a
+     célula do recebimento). Utilitário em app/tbl-fit.css. */
   return (
-    <div className="tablebox">
+    <TblFit className="tablebox">
       <table className="fl">
         <thead><tr>
-          <th style={{ width: 34 }} onClick={(e) => e.stopPropagation()}>
+          <th className="tf-fix c-cb" onClick={(e) => e.stopPropagation()}>
             <input type="checkbox" className="cb" checked={todos} onChange={() => {
               const n = new Set(sel); selecionaveis.forEach((d) => (todos ? n.delete(d.chave) : n.add(d.chave))); setSel(n);
             }} />
           </th>
-          {th("doc", "Documento")}{th("cliente", "Cliente / OC")}{th("emissao", "Emissão")}{th("previsao", "Previsão fat.")}{th("valor", "Valor total", "r")}
-          {th("faturado", "Faturado", "r")}{th("saldo", "Falta faturar", "r")}{th("pct", "Cobertura")}<th>Recebimento</th><th>Status</th><th className="r">Ações</th>
+          <th className="tf-fix tf-fix-ult c-doc" style={col2}>{so("doc", "Documento")} <span className="so-sep">·</span> {so("cliente", "Cliente / OC")}</th>
+          <th className="tf-p2">{so("emissao", "Emissão")}</th>
+          <th>{so("previsao", "Previsão fat.")}</th>
+          <th className="r">{so("saldo", "Falta faturar")} <span className="so-sep">·</span> {so("valor", "Total")} <span className="so-sep">·</span> {so("pct", "%")}</th>
+          <th>Recebimento</th>
+          <th className="tf-p2">Status</th>
+          <th className="r">Ações</th>
         </tr></thead>
         <tbody>
           {rows.slice(0, limite).map((d) => {
-            const st = status(d); const sd = saldo(d);
+            const st = status(d);
             const rej = d.nfs.filter((n) => n.fonte === "painel" && (n.status === "rejeitada" || n.status === "erro")).slice(-1)[0];
+            const nomeCli = limpo(d.fantasia || d.cliente || d.razao || "—");
             return (
               <tr key={d.chave} className={`row ${sel.has(d.chave) ? "sel" : ""}`} onClick={() => abrir(d.chave)}>
-                <td onClick={(e) => e.stopPropagation()}>
+                <td className="tf-fix c-cb" onClick={(e) => e.stopPropagation()}>
                   <input type="checkbox" className="cb" checked={sel.has(d.chave)}
                     onChange={() => { const n = new Set(sel); if (n.has(d.chave)) n.delete(d.chave); else n.add(d.chave); setSel(n); }} />
                 </td>
-                <td>
+                <td className="tf-fix tf-fix-ult c-doc" style={col2}>
                   <div className="doc"><span className={`tag ${d.tipo.toLowerCase()}`}>{d.tipo}</span><b>{d.rotulo}</b>
-                    {rasc?.has(d.chave) && <span className="chipf on" style={{ marginLeft: 6, padding: "1px 7px", fontSize: 10.5 }} title={`Tem rascunho salvo (#${rasc.get(d.chave)}) — Revisar e emitir oferece continuar`}>rascunho</span>}</div>
-                  <div className="orig">{d.origem} · {etapaRot(d)}</div>
-                  {d.proposta && <div className="orig" title="Proposta do CRM">↳ {d.proposta}</div>}
-                  {!d.proposta && d.sem_proposta && <div className="orig" style={{ color: "var(--f-warn)" }} title={d.sem_proposta}>sem proposta</div>}
-                </td>
-                <td>
-                  <div className="cli" title={limpo(d.razao ?? d.cliente ?? "")}>{limpo(d.fantasia || d.cliente || d.razao || "—")}
-                    {d.razao && d.fantasia && limpo(d.razao) !== limpo(d.fantasia) && <small className="razao">{limpo(d.razao)}</small>}
-                    <small>{d.oc ? `OC ${d.oc}` : <span style={{ color: "var(--f-warn)" }}>sem OC</span>}{" "}<OcChip empresa={empresa} label={d.rotulo} mostrarOc={false} compacto
-                      resumo={{ label: d.rotulo, num_pedido_cliente: d.oc, oc_origem: null, anexos: d.anexos ?? 0, anexos_oc: 0 }} />{d.descricao ? ` · ${d.descricao}` : ""}</small>
+                    {rasc?.has(d.chave) && <span className="chipf on" style={{ marginLeft: 2, padding: "1px 7px", fontSize: 10.5 }} title={`Tem rascunho salvo (#${rasc.get(d.chave)}) — Revisar e emitir oferece continuar`}>rascunho</span>}
+                    <span className="orig tf-ell" style={{ marginLeft: "auto", ["--tf-ell" as string]: "130px" }} title={`${d.origem} · ${etapaRot(d)}`}>{d.origem} · {etapaRot(d)}</span></div>
+                  <div className="cli tf-ell" title={[limpo(d.fantasia || d.cliente || ""), limpo(d.razao ?? "")].filter(Boolean).join(" — ")}>{nomeCli}</div>
+                  {d.razao && d.fantasia && limpo(d.razao) !== limpo(d.fantasia) && <div className="orig tf-ell" title={limpo(d.razao)}>{limpo(d.razao)}</div>}
+                  <div className="orig tf-ell" title={[d.oc ? `OC ${d.oc}` : "sem OC", d.descricao].filter(Boolean).join(" · ")}>
+                    {d.oc ? `OC ${d.oc}` : <span style={{ color: "var(--f-warn)" }}>sem OC</span>}{" "}<OcChip empresa={empresa} label={d.rotulo} mostrarOc={false} compacto
+                      resumo={{ label: d.rotulo, num_pedido_cliente: d.oc, oc_origem: null, anexos: d.anexos ?? 0, anexos_oc: 0 }} />{d.descricao ? ` · ${d.descricao}` : ""}
                   </div>
+                  {d.proposta && <div className="orig tf-ell" title={`Proposta do CRM: ${d.proposta}`}>↳ {d.proposta}</div>}
+                  {!d.proposta && d.sem_proposta && <div className="orig" style={{ color: "var(--f-warn)" }} title={d.sem_proposta}>sem proposta</div>}
+                  <div className="orig tf-so-estreito">emissão {dataBR(d.emissao)}{st !== "fat" && d.emissao ? ` · há ${dias(d.emissao)} dia${dias(d.emissao) === 1 ? "" : "s"}` : ""}</div>
                   {st !== "fat" && d.pend.map((p) => <div className="flag" key={p}>⚠ {p}</div>)}
                   {st === "rej" && rej && <div className="flag bad">✕ {rej.msg ?? "rejeitada"}</div>}
                 </td>
-                <td><Emissao d={d} /></td>
+                <td className="tf-p2"><Emissao d={d} /></td>
                 <td onClick={(e) => e.stopPropagation()}><Previsao d={d} salvar={salvarPrevisao} /></td>
-                <td className="r mono">{fmt(Number(d.valor))}</td>
-                <td className="r mono" style={{ color: Number(d.faturado) ? "var(--f-ok)" : "var(--f-tx3)" }}>{Number(d.faturado) ? fmt(Number(d.faturado)) : "—"}</td>
-                <td className="r mono" style={{ fontWeight: 650, color: sd > 0.01 ? "var(--f-tx)" : "var(--f-tx3)" }}>{sd > 0.01 ? fmt(sd) : "—"}</td>
-                <td><Prog d={d} /></td>
-                <td><RecCell d={d} r={rec[d.rotulo.toUpperCase()]} /></td>
-                <td>{d.aguarda_nfse && st !== "fat"
-                  ? <span className="pill s-nfse"><i />Aguardando NFS-e (prefeitura)</span>
-                  : <span className={`pill ${ST[st].c}`}><i />{ST[st].l}</span>}
-                  {d.nfse_registrada && <div className="orig" style={{ color: "var(--f-os)" }}>NFS-e registrada</div>}</td>
-                <td><div className="rowact"><Acoes d={d} ocupado={ocupado} agir={agir} abrir={abrir} prod={prod} registrar={registrar} revisar={revisar} /></div></td>
+                <td className="r"><Valores valor={Number(d.valor)} faturado={Number(d.faturado)} nNf={nfsAut(d).length} fat={st === "fat"} /></td>
+                <td>
+                  <div className="tf-so-estreito" style={{ marginBottom: 4 }}><StatusPill d={d} /></div>
+                  <RecCell d={d} r={rec[d.rotulo.toUpperCase()]} />
+                </td>
+                <td className="tf-p2"><StatusPill d={d} /></td>
+                <td className="r"><div className="rowact"><Acoes d={d} ocupado={ocupado} agir={agir} abrir={abrir} prod={prod} registrar={registrar} revisar={revisar} /></div></td>
               </tr>
             );
           })}
         </tbody>
         <tfoot><tr>
-          <td /><td colSpan={4}>{rows.length} documentos{rows.length > limite && <button className="btn ghost sm" onClick={() => setLimite((l) => l + 300)}>ver mais</button>}</td>
-          <td className="r mono">{fmt(tot)}</td><td className="r mono" style={{ color: "var(--f-ok)" }}>{fmt(fat)}</td><td className="r mono">{fmt(tot - fat)}</td>
-          <td colSpan={4}><div className="prog" style={{ width: 200 }}><div className="b"><i style={{ width: `${tot ? (fat / tot) * 100 : 0}%`, background: "var(--f-ok)" }} /></div><div className="l"><span>{tot ? Math.round((fat / tot) * 100) : 0}% faturado</span></div></div></td>
+          <td className="tf-fix c-cb" />
+          <td className="tf-fix tf-fix-ult c-doc" style={col2}>{rows.length} documentos{rows.length > limite && <button className="btn ghost sm" style={{ marginLeft: 8 }} onClick={() => setLimite((l) => l + 300)}>ver mais</button>}</td>
+          <td className="tf-p2" /><td />
+          <td className="r"><Valores valor={tot} faturado={fat} /></td>
+          <td /><td className="tf-p2" /><td />
         </tr></tfoot>
       </table>
-    </div>
+    </TblFit>
   );
 }
+
 
 // ── Kanban (etapas derivadas dos dados — não se arrasta) ─────────────────────
 function Kanban({ rows, abrir }: { rows: Doc[]; abrir: (k: string) => void }) {
