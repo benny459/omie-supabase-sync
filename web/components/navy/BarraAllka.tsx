@@ -47,6 +47,8 @@ export interface ModuloBarra {
   contador?: { n: number; titulo?: string };
   titulo?: string;
   itens?: ItemModulo[];
+  /** Lista que abre ao passar o rato, mas sem a seta (não alarga o botão — 09/10/26, Central de Ordem). */
+  semSeta?: boolean;
 }
 
 export interface BarraAllkaProps {
@@ -320,7 +322,7 @@ function Modulo({ m, activo, ir, aquecer, pendente, soIcone }: {
           <span className="ab-nome">{m.nome}</span>
           {m.selo && <em className="ab-selo">{m.selo}</em>}
           {m.contador && m.contador.n > 0 && <em className="ab-contador" title={m.contador.titulo}>{m.contador.n}</em>}
-          {temLista && <Chevron />}
+          {temLista && !m.semSeta && <Chevron />}
         </a>
       )}
       {aberto && temLista && (

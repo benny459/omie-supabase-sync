@@ -36,19 +36,16 @@ export function useEstadoOrdem(pathname: string): EstadoOrdem | null {
   return e;
 }
 
-export default function SinoOrdem({ estado }: { estado: EstadoOrdem }) {
+/** Avisos do sino + diálogo de entrada (uma vez por dia, ou com aviso novo). */
+export function useAvisosOrdem(estado: EstadoOrdem | null) {
   const [av, setAv] = useState<Avisos | null>(null);
-  const [aberto, setAberto] = useState(false);
   const [dialogo, setDialogo] = useState(false);
-  const caixa = useRef<HTMLDivElement>(null);
-
   const carregar = useCallback(async () => {
-    if (!estado.sino && !estado.dialogo) return;
+    if (!estado?.central || (!estado.sino && !estado.dialogo)) return;
     const r = await fetch("/api/ordem/avisos", { cache: "no-store" }).catch(() => null);
     if (!r?.ok) return;
     const j = (await r.json()) as Avisos;
     setAv(j);
-    // diálogo de entrada: uma vez por dia, ou quando há aviso novo não lido
     if (j.dialogo) {
       const hoje = new Date().toISOString().slice(0, 10);
       let visto = ""; let ultimo = 0;
@@ -56,61 +53,52 @@ export default function SinoOrdem({ estado }: { estado: EstadoOrdem }) {
       const maior = Math.max(0, ...j.avisos.filter((a) => !a.lido_em).map((a) => a.id));
       if (visto !== hoje || maior > ultimo) setDialogo(true);
     }
-  }, [estado.sino, estado.dialogo]);
+  }, [estado?.central, estado?.sino, estado?.dialogo]);
   useEffect(() => { void carregar(); }, [carregar]);
-  useEffect(() => {
-    if (!aberto) return;
-    const f = (e: MouseEvent) => { if (caixa.current && !caixa.current.contains(e.target as Node)) setAberto(false); };
-    document.addEventListener("mousedown", f); return () => document.removeEventListener("mousedown", f);
-  }, [aberto]);
-
-  function fecharDialogo() {
+  const fecharDialogo = useCallback(() => {
     setDialogo(false);
     try {
       localStorage.setItem("ordem-dialogo-dia", new Date().toISOString().slice(0, 10));
       localStorage.setItem("ordem-dialogo-aviso", String(Math.max(0, ...(av?.avisos ?? []).map((a) => a.id))));
     } catch { /* ok */ }
-  }
-  async function marcarLidos() {
+  }, [av]);
+  const marcarLidos = useCallback(async () => {
     await fetch("/api/ordem/avisos", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ lidos: "todos" }) }).catch(() => null);
     void carregar();
-  }
+  }, [carregar]);
+  return { av, dialogo, fecharDialogo, marcarLidos, abrirDialogo: () => setDialogo(true) };
+}
 
+/**
+ * Entradas da Central no menu do avatar (a barra não alarga — nada muda de lugar):
+ * "✦ Meu dia" e, com o sino ligado, os avisos com "Ir para o item".
+ */
+export function EntradasOrdem({ estado, av, marcarLidos, abrirDialogo }: {
+  estado: EstadoOrdem; av: Avisos | null; marcarLidos: () => void; abrirDialogo: () => void;
+}) {
   return (
-    <div ref={caixa} style={{ position: "relative", display: "flex", gap: 4, alignItems: "center" }}>
-      <a className="ab-icone" href="/ordem" title="Meu dia — Central de Ordem (Aria)" aria-label="Meu dia — Central de Ordem"
-        style={{ display: "grid", placeItems: "center", textDecoration: "none", fontWeight: 700 }}>✦</a>
-      {estado.sino && (
-        <button type="button" className="ab-icone" aria-label={`Avisos${av?.n ? ` (${av.n} novos)` : ""}`} title="Avisos da Central de Ordem"
-          data-aberto={aberto ? "1" : undefined} onClick={() => setAberto((v) => !v)} style={{ position: "relative" }}>
-          <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" strokeWidth={1.9} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-            <path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9" /><path d="M13.7 21a2 2 0 0 1-3.4 0" />
-          </svg>
-          {!!av?.n && <em className="ab-contador" style={{ position: "absolute", top: -4, right: -4 }}>{av.n}</em>}
-        </button>
-      )}
-      {aberto && av && (
-        <div className="ab-painel" style={{ display: "block", right: 0, width: 340 }}>
-          <div className="ab-titulo">Avisos</div>
-          {av.avisos.length === 0 && <div className="ab-nota" style={{ padding: "6px 10px" }}>Sem avisos.</div>}
-          {av.avisos.slice(0, 12).map((a) => (
-            <a key={a.id} className="ab-item" href={a.item_id ? `/ordem?item=${a.item_id}` : "/ordem"} style={{ fontWeight: a.lido_em ? 400 : 600, whiteSpace: "normal", alignItems: "flex-start" }}>
-              <span style={{ fontSize: 12.5 }}>{a.texto}{a.item_id ? " · Ir para o item ↗" : ""}</span>
+    <>
+      <a className="ab-item" href="/ordem" title="Central de Ordem — o que está fora de ordem nos seus módulos">✦ Meu dia · Central de Ordem</a>
+      {estado.sino && av && (
+        <>
+          <div className="ab-titulo" style={{ display: "flex", justifyContent: "space-between" }}>
+            <span>🔔 Avisos{av.n ? ` (${av.n})` : ""}</span>
+            {!!av.n && <button type="button" onClick={marcarLidos} style={{ border: 0, background: "transparent", color: "var(--ab-muted)", cursor: "pointer", fontSize: 11 }}>marcar lidos</button>}
+          </div>
+          {av.avisos.length === 0 && <div className="ab-nota" style={{ padding: "2px 10px" }}>Sem avisos.</div>}
+          {av.avisos.slice(0, 8).map((a) => (
+            <a key={a.id} className="ab-item" href={a.item_id ? `/ordem?item=${a.item_id}` : "/ordem"} style={{ fontWeight: a.lido_em ? 400 : 600, whiteSpace: "normal", fontSize: 12.5 }}>
+              {a.texto}{a.item_id ? " · Ir para o item ↗" : ""}
             </a>
           ))}
-          <div className="ab-sep" />
-          <div className="ab-linha" style={{ gap: 8 }}>
-            <a className="ab-item" href="/ordem" style={{ flex: 1 }}>Abrir Meu dia</a>
-            {!!av.n && <button type="button" className="ab-item" onClick={marcarLidos}>Marcar lidos</button>}
-          </div>
-        </div>
+          {av.dialogo && <button type="button" className="ab-item" onClick={abrirDialogo}>Resumo do dia</button>}
+        </>
       )}
-      {dialogo && av && <DialogoEntrada av={av} onFechar={fecharDialogo} />}
-    </div>
+    </>
   );
 }
 
-function DialogoEntrada({ av, onFechar }: { av: Avisos; onFechar: () => void }) {
+export function DialogoEntrada({ av, onFechar }: { av: Avisos; onFechar: () => void }) {
   const btn = useRef<HTMLAnchorElement | HTMLButtonElement | null>(null);
   useEffect(() => {
     btn.current?.focus();

@@ -103,3 +103,34 @@ test("dias úteis", () => {
   assert.equal(diasUteis("2026-10-09", "2026-10-13"), 2);   // sex → ter
   assert.equal(diasUteis("2026-10-09", "2026-10-09"), 0);
 });
+
+import { detetarAcimaBudget, detetarAlarmesOperacao, detetarPendenciaCadastroFat } from "../../web/lib/ordem/regras-outros";
+
+test("Operação: um cartão por alarme de lib/alarmes.ts, dono = o de hoje (ALARM_OWNERS)", () => {
+  const xs = detetarAlarmesOperacao({ pode_faturar: [{ pv_os_label: "PV1", cliente: "C", tipo: "PV", valor: 10 }], venda: [] },
+    { pode_faturar: "Pronto para faturar" }, { pode_faturar: "Fernanda" }, (k) => `https://painel.waterworks.com.br/avulsos?alarme=${k}`);
+  assert.equal(xs.length, 1);
+  assert.equal(xs[0].tipo, "op_pode_faturar"); assert.equal(xs[0].dono_email, "Fernanda");
+  assert.equal(xs[0].link, "/avulsos?alarme=pode_faturar");
+  assert.equal(xs[0].depende_de?.modulo, "faturamento");
+});
+
+test("Projetos: acima do budget só quando o comprometido passa o budget", () => {
+  const xs = detetarAcimaBudget([
+    { empresa: "SF", codigo_projeto: 1, nome: "PJ364", budget: 49000, comprometido: 99000 },
+    { empresa: "SF", codigo_projeto: 2, nome: "PJ365", budget: 128000, comprometido: 100000 },
+    { empresa: "SF", codigo_projeto: 3, nome: "X", budget: null, comprometido: 5 },
+  ]);
+  assert.deepEqual(xs.map((x) => x.origem_ref), ["projeto:SF|1"]);
+  assert.match(xs[0].titulo, /202%/);
+});
+
+test("Faturamento: pendência de cadastro encaminha a Cadastros; já faturado não entra", () => {
+  const xs = detetarPendenciaCadastroFat([
+    { chave: "a", rotulo: "PV1", cliente: "C", valor: 100, faturado: 0, pend: ["CEP"] },
+    { chave: "b", rotulo: "PV2", cliente: "C", valor: 100, faturado: 100, pend: ["CEP"] },
+    { chave: "c", rotulo: "PV3", cliente: "C", valor: 100, faturado: 0, pend: [] },
+  ]);
+  assert.deepEqual(xs.map((x) => x.origem_ref), ["doc:a"]);
+  assert.equal(xs[0].depende_de?.modulo, "cadastros");
+});

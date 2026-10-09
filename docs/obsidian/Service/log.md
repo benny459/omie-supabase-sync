@@ -4,6 +4,13 @@
 
 ---
 
+## [2026-10-09] [painel] feat | Central de Ordem — Fases 5–6 e roteiro dos outros módulos
+
+- Comandos à Aria (`/api/ordem/comando`, interpretação determinística em `lib/ordem/comandos.ts`): pré-visualização, itens fora por falta de acesso, "Confirmar N", desfazer em lote.
+- Mensagens 07:30/11:30/16:00/18:00 e escada (`lib/ordem/mensagens.ts`, cron `/api/cron/ordem`): modos desligado/ensaio/teste/ligado; pré-visualização por pessoa em Configurar.
+- Detetores de Operação (15 alarmes via `computeReportCounts`), Projetos (PJ pendentes, aprovar até, etapas, budget), Faturamento (não enviado, pendência de cadastro), Estoque (abaixo do mínimo) e Cadastros (duplicados).
+- Barra do topo: a Central entra pelo menu do avatar e pela lista de cada módulo (sem seta nos módulos de um item) — a barra não alarga.
+
 ## [2026-10-09] [painel] feat | Central de Ordem (Aria por módulo) — Fases 0–4, tudo desligado
 
 - Nova aba **✦ Central de Ordem** em cada módulo + **Meu dia** (`/ordem`), ver [[Painel/40-Central-de-Ordem]]. Desvio da SPEC pedido pelo Benny: dentro do painel, não no portal.

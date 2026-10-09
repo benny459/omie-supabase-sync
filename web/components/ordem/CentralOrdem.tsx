@@ -11,6 +11,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { MODULO_POR_ID, MODULOS } from "@/lib/ordem/modulos";
+import { SUGESTOES } from "@/lib/ordem/comandos";
 import type { ItemTela, ModuloOrdem } from "@/lib/ordem/tipos";
 import { tom, type Tom } from "@/components/navy/primitivos";
 import { cartao, kbrl, BotaoTela, Aviso } from "@/components/navy/tela/KitTela";
@@ -34,7 +35,7 @@ export default function CentralOrdem() {
   const pathname = usePathname();
   const m = (sp.get("m") as ModuloOrdem | null) ?? null;
   const itemUrl = sp.get("item");
-  const [escopo, setEscopo] = useState<string>(() => { try { return localStorage.getItem("ordem-escopo") ?? ""; } catch { return ""; } });
+  const [escopo, setEscopo] = useState<string>(() => { try { return sp.get("escopo") ?? localStorage.getItem("ordem-escopo") ?? ""; } catch { return sp.get("escopo") ?? ""; } });
   const [dados, setDados] = useState<Resp | null>(null);
   const [bloq, setBloq] = useState<Bloq | null>(null);
   const [erro, setErro] = useState<string | null>(null);
@@ -144,11 +145,16 @@ export default function CentralOrdem() {
         ))}
       </nav>
 
-      {bloq && <SemAcesso b={bloq} onFechar={() => irModulo(null)} central={dados?.central} />}
+      {dados && (dados.central.comandos || dados.quem.admin) && (
+        <BarraComando ligado={dados.central.comandos} modulos={abas.filter((a) => a.acesso).map((a) => a.modulo)} modulo={m}
+          semAcesso={(mod) => setBloq({ bloqueado: mod, donos: [] })} onFeito={(t, ruim) => { setToast({ t, ruim }); void carregar(); }} />
+      )}
+
+      {bloq && <SemAcesso b={bloq} onFechar={() => (m ? irModulo(null) : setBloq(null))} central={dados?.central} />}
 
       {carregando && !dados && !bloq && <div style={{ ...cartao, padding: 32, textAlign: "center", color: "var(--ww-text-muted)" }}>Carregando a sua fila…</div>}
 
-      {dados && !bloq && (
+      {dados && !(bloq && m) && (
         <>
           {def && <CicloModulo def={def} itens={dados.itens} etapa={etapa} setEtapa={setEtapa} />}
           {!m && <GradeModulos abas={abas} irModulo={irModulo} />}
@@ -336,7 +342,7 @@ function CartaoDecisao({ item, central, admin, onFeito }: {
   const [ocupado, setOcupado] = useState(false);
   const [ultimo, setUltimo] = useState<{ log: number; pode: boolean } | null>(null);
   const ref = useRef<HTMLDivElement>(null);
-  useEffect(() => { ref.current?.focus(); }, []);
+  useEffect(() => { ref.current?.focus({ preventScroll: true }); }, []);
 
   async function chamar(acao: string, extra: Record<string, unknown> = {}) {
     setOcupado(true);
@@ -557,4 +563,86 @@ function tempoAtras(iso: string) {
   if (min < 60) return `há ${min} min`;
   const h = Math.round(min / 60);
   return h < 24 ? `há ${h} h` : `há ${Math.round(h / 24)} d`;
+}
+
+// ── Barra de comandos ────────────────────────────────────────────────────────
+type PlanoItem = { id: string; modulo: ModuloOrdem; titulo: string; dono: string | null; modo: "executar" | "encaminhar" | "abrir"; motivo: string | null; link: string | null };
+type PreviaCmd = { ok: boolean; frase: string; itens?: PlanoItem[]; fora?: number; executaveis?: number; comandosLigados?: boolean; semAcesso?: ModuloOrdem };
+
+function BarraComando({ ligado, modulos, modulo, semAcesso, onFeito }: {
+  ligado: boolean; modulos: ModuloOrdem[]; modulo: ModuloOrdem | null; semAcesso: (m: ModuloOrdem) => void; onFeito: (t: string, ruim?: boolean) => void;
+}) {
+  const [texto, setTexto] = useState("");
+  const [previa, setPrevia] = useState<PreviaCmd | null>(null);
+  const [ocupado, setOcupado] = useState(false);
+  const [lote, setLote] = useState<number[]>([]);
+  const sugs = SUGESTOES.filter((x) => modulos.includes(x.modulo) && (!modulo || x.modulo === modulo));
+
+  async function ver(t = texto) {
+    if (!t.trim()) return;
+    setOcupado(true); setLote([]);
+    const r = await fetch("/api/ordem/comando", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ texto: t }) });
+    const j = (await r.json().catch(() => ({}))) as PreviaCmd & { error?: string };
+    setOcupado(false);
+    if (!r.ok) { onFeito(j.error ?? "Não foi possível", true); return; }
+    if (j.semAcesso) { setPrevia(null); semAcesso(j.semAcesso); return; }
+    setPrevia(j);
+  }
+  async function confirmar() {
+    if (!previa?.itens) return;
+    setOcupado(true);
+    const r = await fetch("/api/ordem/comando", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ texto, confirmar: true }) });
+    const j = await r.json().catch(() => ({})) as { resultados?: { ok: boolean; texto: string }[]; log_ids?: number[]; error?: string };
+    setOcupado(false);
+    if (!r.ok) { onFeito(j.error ?? "Não foi possível", true); return; }
+    const ok = (j.resultados ?? []).filter((x) => x.ok).length, tot = (j.resultados ?? []).length;
+    setLote(j.log_ids ?? []); setPrevia(null);
+    onFeito(`Comando: ${ok} de ${tot} feito(s).${tot > ok ? " Os que falharam continuam na fila com o motivo." : ""}`, tot > ok);
+  }
+  async function desfazerLote() {
+    setOcupado(true);
+    let ok = 0;
+    for (const id of [...lote].reverse()) {
+      const r = await fetch("/api/ordem/acao", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ acao: "desfazer", log_id: id }) });
+      if (r.ok) ok++;
+    }
+    setOcupado(false); setLote([]);
+    onFeito(`Desfeito(s) ${ok} de ${lote.length}.`, ok < lote.length);
+  }
+  const n = previa?.itens?.filter((i) => i.modo !== "abrir").length ?? 0;
+  return (
+    <section style={{ ...cartao, padding: "12px 14px", display: "flex", flexDirection: "column", gap: 8, borderColor: "var(--ww-violet)" }}>
+      <form onSubmit={(e) => { e.preventDefault(); void ver(); }} style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+        <span aria-hidden style={{ color: "var(--ww-violet-text)", fontWeight: 700 }}>✦</span>
+        <input value={texto} onChange={(e) => setTexto(e.target.value)} placeholder="Dê um comando à Aria, ex.: casar as NF da coluna do meio" aria-label="Comando para a Aria"
+          style={{ flex: "1 1 240px", minWidth: 0, height: 34, padding: "0 12px", borderRadius: 10, fontSize: 13, background: "var(--ww-panel-sunken)", border: "1px solid var(--ww-border-strong)", color: "var(--ww-text)" }} />
+        <BotaoTela primario disabled={ocupado || !texto.trim()} onClick={() => void ver()}>{ocupado ? "…" : "Ver o que faz"}</BotaoTela>
+        {lote.length > 0 && <BotaoTela onClick={desfazerLote} disabled={ocupado}>↶ Desfazer o comando ({lote.length})</BotaoTela>}
+      </form>
+      {sugs.length > 0 && (
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", fontSize: 12 }}>
+          <span style={{ color: "var(--ww-text-faint)" }}>Sugestões:</span>
+          {sugs.map((x) => <button key={x.texto} type="button" onClick={() => { setTexto(x.texto); void ver(x.texto); }} style={{ padding: "3px 10px", borderRadius: 99, border: "1px dashed var(--ww-violet)", background: "transparent", color: "var(--ww-violet-text)", cursor: "pointer", fontSize: 12 }}>{x.texto}</button>)}
+        </div>
+      )}
+      {!ligado && <div style={{ fontSize: 11.5, color: "var(--ww-text-faint)" }}>Comandos desligados para a equipa: só pré-visualização (ligue em Configurar).</div>}
+      {previa && (
+        <div style={{ padding: 10, borderRadius: 10, background: "var(--ww-violet-soft)", fontSize: 13, display: "flex", flexDirection: "column", gap: 6 }}>
+          <div><b>A Aria entendeu:</b> {previa.frase}</div>
+          {previa.itens && (previa.itens.length === 0 ? <div>Nada na sua fila corresponde a este comando.</div> : (
+            <ul style={{ margin: 0, paddingLeft: 18, maxHeight: 220, overflowY: "auto" }}>
+              {previa.itens.map((i) => (
+                <li key={i.id}>{i.titulo} <span style={{ color: "var(--ww-text-muted)" }}>· {MODULO_POR_ID[i.modulo]?.rotulo}{i.dono ? ` · ${i.dono}` : ""} · {i.modo === "executar" ? "executa" : i.modo === "encaminhar" ? "encaminha" : `só abrir (${i.motivo})`}</span></li>
+              ))}
+            </ul>
+          ))}
+          {!!previa.fora && <div>🔒 {previa.fora} item(ns) de módulos a que não tem acesso ficaram de fora.</div>}
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <BotaoTela primario disabled={ocupado || !n || !previa.comandosLigados} onClick={confirmar}>Confirmar {n}</BotaoTela>
+            <BotaoTela onClick={() => setPrevia(null)}>Cancelar</BotaoTela>
+          </div>
+        </div>
+      )}
+    </section>
+  );
 }

@@ -36,7 +36,7 @@ import SeletorPaleta from "../viz/SeletorPaleta";
 import { useCesar } from "../cesar/CesarProvider";
 import { supaBrowser } from "@/lib/supabase";
 import { slugDaRota } from "@/lib/manual-rotas";
-import SinoOrdem, { useEstadoOrdem, type EstadoOrdem } from "../ordem/SinoOrdem";
+import { DialogoEntrada, EntradasOrdem, useAvisosOrdem, useEstadoOrdem, type EstadoOrdem } from "../ordem/SinoOrdem";
 import type { ModuloOrdem } from "@/lib/ordem/tipos";
 import BarraAllka, {
   Avatar, BotaoAssistente, IconeOpcoes, useFechaFora,
@@ -189,6 +189,8 @@ export default function TopNav({ userEmail, isPlatformAdmin }: { userEmail?: str
     modulos.push({
       id: g, nome: def.label, href: itens[0].href, titulo: def.desc,
       itens: semLista ? undefined : lista,
+      // módulo de um item só que ganhou a Central: lista ao passar o rato, sem seta (a barra não alarga)
+      semSeta: itens.length === 1 && daCentral.length > 0,
       // + RCs novas desde a última visita a Compras (sql/51)
       contador: g === "compras" && nfSemPedido.n + nfSemPedido.rcNovas > 0 ? {
         n: nfSemPedido.n + nfSemPedido.rcNovas,
@@ -204,7 +206,7 @@ export default function TopNav({ userEmail, isPlatformAdmin }: { userEmail?: str
   if (fat && visivel(fat)) {
     const fatOrdem = itensOrdem(ordem, "faturamento");
     modulos.push({ id: "faturamento", nome: "Faturamento", href: fat.href, titulo: "Emitir NF-e / NFS-e / recibo e acompanhar emissões",
-      itens: fatOrdem.length ? [{ label: "Faturamento", href: fat.href, activo: pathname === fat.href }, ...fatOrdem] : undefined });
+      itens: fatOrdem.length ? [{ label: "Faturamento", href: fat.href, activo: pathname === fat.href }, ...fatOrdem] : undefined, semSeta: true });
   }
   modulos.push({ id: "servicos", nome: "Serviços", href: "https://app.waterworks.com.br", externo: true, titulo: "Plataforma de serviços (login próprio)" });
   // RH (03/10/26): módulo próprio, logo a seguir a Serviços, igual ao portal.
@@ -227,7 +229,7 @@ export default function TopNav({ userEmail, isPlatformAdmin }: { userEmail?: str
       aquecer={aquecer}
       pendente={pendingHref}
       direita={<Direita ordem={ordem} />}
-      avatar={<MenuUtilizador email={userEmail} iniciais={iniciaisDe(userEmail)} />}
+      avatar={<MenuUtilizador email={userEmail} iniciais={iniciaisDe(userEmail)} ordem={ordem} />}
     />
   );
 }
@@ -247,7 +249,6 @@ function Direita({ ordem }: { ordem: EstadoOrdem | null }) {
   return (
     <>
       <GlobalSearch gatilho="campo" />
-      {ordem?.central && <SinoOrdem estado={ordem} />}
       <BotaoAssistente nome="Pergunte ao Cesar" onClick={() => abrir()} activo={aberto} />
       <BotaoManual />
       <Opcoes />
@@ -307,10 +308,11 @@ function Opcoes() {
   );
 }
 
-function MenuUtilizador({ email, iniciais }: { email?: string | null; iniciais: string }) {
+function MenuUtilizador({ email, iniciais, ordem }: { email?: string | null; iniciais: string; ordem: EstadoOrdem | null }) {
   const [aberto, setAberto] = useState(false);
   const caixa = useFechaFora(aberto, () => setAberto(false));
 
+  const avisos = useAvisosOrdem(ordem);
   /* Não há rota /api/auth/signout: a sessão fecha no cliente. */
   async function sair() {
     await supaBrowser().auth.signOut();
@@ -319,16 +321,19 @@ function MenuUtilizador({ email, iniciais }: { email?: string | null; iniciais: 
 
   return (
     <div ref={caixa} style={{ position: "relative" }}>
-      <button type="button" className="ab-avatar-btn" onClick={() => setAberto((v) => !v)} title={email ?? undefined} aria-label="Conta">
+      <button type="button" className="ab-avatar-btn" onClick={() => setAberto((v) => !v)} title={email ?? undefined} aria-label="Conta" style={{ position: "relative" }}>
         <Avatar iniciais={iniciais} />
+        {!!(ordem?.sino && avisos.av?.n) && <em className="ab-contador" style={{ position: "absolute", top: -4, right: -6 }} title="Avisos da Central de Ordem">{avisos.av!.n}</em>}
       </button>
+      {avisos.dialogo && avisos.av && <DialogoEntrada av={avisos.av} onFechar={avisos.fecharDialogo} />}
       {aberto && (
-        <div className="ab-lista ab-lista-dir" style={{ width: 224 }}>
+        <div className="ab-lista ab-lista-dir" style={{ width: ordem?.central ? 300 : 224 }}>
           <div style={{ padding: "6px 10px" }}>
             <div style={{ fontSize: 14, fontWeight: 600 }}>{(email ?? "").split("@")[0] || "—"}</div>
             <div style={{ fontSize: 11, color: "var(--ab-muted)" }}>{email ?? "—"}</div>
           </div>
           <div className="ab-sep" />
+          {ordem?.central && <><EntradasOrdem estado={ordem} av={avisos.av} marcarLidos={avisos.marcarLidos} abrirDialogo={() => { setAberto(false); avisos.abrirDialogo(); }} /><div className="ab-sep" /></>}
           <a className="ab-item" href={`${PORTAL_SSO}/w/waterworks`}>Portal ALLKA</a>
           {process.env.NEXT_PUBLIC_APP_VERSION && (
             <div className="ab-nota">Painel v{process.env.NEXT_PUBLIC_APP_VERSION}</div>

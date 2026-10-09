@@ -16,9 +16,11 @@ Uma aba a mais em cada módulo (`/ordem?m=compras|financeiro|operacao|projetos|f
 |---|---|
 | Fila/tela | `components/ordem/CentralOrdem.tsx`, `/api/ordem` |
 | Configuração | `components/ordem/ConfigOrdem.tsx`, `/api/ordem/config` (admin) |
-| Barra: ✦ Meu dia, sino, diálogo de entrada | `components/ordem/SinoOrdem.tsx`, `/api/ordem/estado`, `/api/ordem/avisos` |
+| Barra: menu do avatar (✦ Meu dia, avisos, contador), diálogo de entrada; lista de cada módulo | `components/ordem/SinoOrdem.tsx`, `TopNav.tsx`, `/api/ordem/estado`, `/api/ordem/avisos` |
 | Ações / decisões | `/api/ordem/acao` |
 | Encaminhar, pedido livre, pedido de acesso | `lib/ordem/encaminhar.ts`, `/api/ordem/pedido` |
+| Comandos | `lib/ordem/comandos.ts`, `/api/ordem/comando` |
+| Mensagens e escada | `lib/ordem/mensagens.ts` (+ `mensagens-regras.ts`), `/api/ordem/mensagens` (pré-visualização) |
 | Comercial (CRM) | `lib/ordem/comercial.ts` → `propostas-ww/api/ordem-comercial` |
 | Dados | `sql/162_central_ordem.sql` (schema `ordem`) |
 

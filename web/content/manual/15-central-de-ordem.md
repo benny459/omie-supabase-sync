@@ -16,7 +16,7 @@ A **Central de Ordem** é uma aba a mais em cada módulo (Compras, Financeiro, O
 ## Como abro a Central
 
 1. Passe o rato no módulo da barra (ex.: **Compras**) e clique em **✦ Central de Ordem** — abre a Central já filtrada nesse módulo.
-2. Ou clique no **✦** da barra do topo (ao lado da pesquisa): abre o **Meu dia**, com os seus itens de todos os módulos a que tem acesso.
+2. Ou abra o menu da sua conta (a bolinha com as suas iniciais, no canto superior direito) › **✦ Meu dia · Central de Ordem**: os seus itens de todos os módulos a que tem acesso.
 3. Os separadores mostram quantas pendências há em cada módulo. Um módulo com **🔒** é um módulo a que o seu perfil não tem acesso: não mostra quantas nem quais.
 
 ## Como leio um cartão de decisão
@@ -53,9 +53,20 @@ A **Central de Ordem** é uma aba a mais em cada módulo (Compras, Financeiro, O
 - **Também os da equipe** mostra os itens dos colegas **nos mesmos módulos**, com o nome de cada dono.
 - Diretoria e supervisão veem **todos** os itens dos módulos a que têm acesso.
 
+## Comandos à Aria
+
+Na barra **✦ Dê um comando à Aria** escreva o que quer em português (ou clique numa **sugestão**, que só mostra as dos seus módulos):
+
+- “casar as NF da coluna do meio” · “enviar os PCs aprovados” · “cobrar fornecedores com entrega atrasada > 7 dias” · “aprovar os PCs do PJ364 dentro do budget”
+- “conciliar o extrato do Omie.CASH” · “pedir as NF dos títulos bloqueados” · “regularizar as NF sem pedido” · “faturar o que já pode faturar”
+
+1. **Ver o que faz** — a Aria diz o que entendeu e lista os itens que vai tocar, com o dono de cada um e se **executa**, **encaminha** (quando depende de outro módulo) ou fica **só para abrir**.
+2. Itens de módulos a que não tem acesso **ficam de fora** e a Aria diz quantos (🔒). Se todos forem de módulos sem acesso, abre o diálogo **Sem acesso** e nada é executado.
+3. **Confirmar N** executa item a item pela rota de sempre. **↶ Desfazer o comando** desfaz o que tiver volta.
+
 ## Sino e mensagens
 
-- O **sino** na barra mostra os avisos novos: encaminhamentos recebidos, respostas, pedidos de acesso decididos, itens que subiram na escada da cobrança. **Ir para o item ↗** abre o cartão.
+- Os **avisos** aparecem como um número vermelho na bolinha da sua conta (canto superior direito); abra o menu para os ver: encaminhamentos recebidos, respostas, pedidos de acesso decididos, itens que subiram na escada da cobrança. **Ir para o item ↗** abre o cartão.
 - Uma vez por dia (ou quando chega aviso novo) a Aria abre o **“Bom dia”** com o resumo e o item por onde começar: **Resolver agora** abre o cartão; **Mais tarde** fecha.
 - Mensagens às 07:30, 11:30, 16:00 e 18:00 pela Webex, só com os seus módulos, quando o administrador ligar.
 
@@ -82,7 +93,7 @@ Em **⚙ Configurar** (só admin) liga-se tudo aos poucos — **tudo nasce desli
    - **P2** Financeiro na Central: “tela” = quem abre Títulos a Pagar/Receber hoje; “estrito” = exige também a área Financeiro.
    - **P3** pedidos de acesso: só o admin aprova.
    - **P4** encaminhamento livre: sugerido sim.
-6. **Mensagens** — modo **desligado → ensaio** (só regista o que seria enviado) **→ teste** (só para o e-mail de teste, com [TESTE]) **→ ligado**; horários, limite por dia e escada da cobrança.
+6. **Mensagens** — modo **desligado → ensaio** (só regista o que seria enviado) **→ teste** (um resumo só para o e-mail de teste, com [TESTE]) **→ ligado**; horários, limite por dia e escada da cobrança. **Pré-visualizar (não envia)** mostra já o que cada pessoa receberia numa janela (07:30, 11:30, 16:00, 18:00), filtrado pelo perfil dela.
 7. **Diretoria e supervisão**, **Pedidos de acesso** e o **Histórico de mudanças** (quem mudou o quê e quando).
 
 **↻ Atualizar agora** corre os detetores na hora (o sistema atualiza sozinho a cada 15 minutos). Os detetores só **leem** os módulos.

@@ -56,8 +56,22 @@ Legado só leitura: espelho do Omie (`orders.pedidos_compra`, trigger sql/159), 
 |---|---|---|
 | `/erp/compras` (TelaCompras) | kanban/tabela, colunas, chips, filtros, ações, folhas | **inalterada** (só ganhou `?pedido=` vindo da Central, que já existia) |
 | `/financeiro/pagar`, `/receber`, `/conciliacao` | KPIs, abas, filtros, ações | **inalteradas**; `carregar()` saiu da rota para `lib/financeiro-pagar-dados.ts` (mesmo código). Prova: GET antes/depois com as mesmas 533 linhas e a mesma distribuição de estados |
-| Barra do topo (TopNav) | módulos e listas | mesmos itens + "✦ Central de Ordem" no fim da lista dos módulos (só para quem a Central está ligada) + ✦ e sino à direita |
+| Barra do topo (TopNav) | módulos e listas | mesmos itens e mesma largura: "✦ Central de Ordem" no fim da lista dos módulos (Compras/Faturamento: lista sem seta), "✦ Meu dia" e avisos no menu do avatar. 1ª versão punha um ✦ à direita e empurrava Faturamento/Cadastros/BI para "Mais" a 1420 px — corrigido |
 | `vercel.json` | 9 crons | + `/api/cron/ordem` a cada 15 min |
 
 ## 5. Dados (sql/162, schema `ordem`, só aditivo)
 `config`, `config_log`, `dono_config`, `item`, `aviso`, `pedido_acesso`, `acao_log`, `mensagem` — `tenant_slug`, RLS sem políticas, grant só a service_role; `ordem` acrescentado a `pgrst.db_schemas`.
+
+## 6. Detetores do roteiro (outros módulos)
+
+| Detetor | Fonte (função existente) |
+|---|---|
+| op_* (15) | `computeReportCounts()` de `lib/avulsos-report.ts` → `lib/alarmes.ts`; dono de hoje `ALARM_OWNERS` |
+| pj_pc_pendente | `orders.compras_lista` (PJ), aprovação pelo caminho "projetos" de `/api/compras/acao` |
+| pj_aprovar_ate | `approval.v_pc_projetos.aprovar_ate_calc` (PENDENTE/PRE_SELECAO, ≤ hoje+7) |
+| pj_etapa_atrasada | `approval.projeto_etapas` |
+| pj_acima_budget | `contextoProjeto()` de `lib/aprovacao-projeto.ts` (projetos ativos) |
+| fat_nao_enviado | `pendentes()` de `lib/faturamento/enviar.ts` |
+| fat_pendencia_cadastro | `orders.fat_carteira` (pend) → encaminha a Cadastros |
+| est_abaixo_minimo | `orders.v_estoque_item` + `alarme()` de `lib/estoque.ts` |
+| cad_duplicados | `orders.cadastros_duplicidades_v2('provavel')` |

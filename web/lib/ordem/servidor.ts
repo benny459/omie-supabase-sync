@@ -113,12 +113,16 @@ export async function sincronizar(opts: { modulos?: ModuloOrdem[] } = {}): Promi
   const { detetarFinanceiro } = await import("./detectores/financeiro");
   const { detetarOperacao } = await import("./detectores/operacao");
   const { detetarOutros } = await import("./detectores/outros");
-  const res = await Promise.all([
-    quer("compras") ? detetarCompras(cfg, hoje) : null,
-    quer("financeiro") ? detetarFinanceiro(cfg, hoje) : null,
-    quer("operacao") || quer("projetos") ? detetarOperacao(cfg, hoje) : null,
-    quer("faturamento") || quer("estoque") || quer("cadastros") ? detetarOutros(cfg, hoje) : null,
-  ]);
+  // Operação (v_pc_avulsos, pesada) corre sozinha depois das outras — em paralelo estourava o
+  // statement_timeout de 8 s do PostgREST.
+  const res = [
+    ...(await Promise.all([
+      quer("compras") ? detetarCompras(cfg, hoje) : null,
+      quer("financeiro") ? detetarFinanceiro(cfg, hoje) : null,
+    ])),
+    quer("operacao") || quer("projetos") ? await detetarOperacao(cfg, hoje) : null,
+    quer("faturamento") || quer("estoque") || quer("cadastros") ? await detetarOutros(cfg, hoje) : null,
+  ];
   const itens = res.flatMap((r) => r?.itens ?? []);
   const tipos = res.flatMap((r) => r?.tipos ?? []);
   const erros = Object.assign({}, ...res.map((r) => r?.erros ?? {}));

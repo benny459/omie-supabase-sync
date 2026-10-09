@@ -201,6 +201,7 @@ export default function ConfigOrdemTela() {
           </label>
           <button type="button" style={linkBtn} onClick={() => set((c) => ({ ...c, mensagens: { ...d.sugerido.mensagens, modo: c.mensagens.modo } }))}>usar sugerido (horários, limite, e-mail)</button>
         </div>
+        <PreviaMensagens horarios={cfg.mensagens.horarios.length ? cfg.mensagens.horarios : d.sugerido.mensagens.horarios} />
         <Interruptor v={cfg.escada.ligada} on={(v) => set((c) => ({ ...c, escada: { ...c.escada, ligada: v } }))} rotulo="Escada da cobrança: Lembrete → 2º aviso → Supervisão → Direção" />
         <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
           {(["dias_segundo_aviso", "dias_supervisao", "dias_direcao"] as const).map((k) => (
@@ -301,4 +302,35 @@ function Campo({ valor, sugerido, on, chave }: { valor: unknown; sugerido: unkno
   const ops = opcoes[chave];
   if (ops) return <select value={String(valor ?? "")} onChange={(e) => on(e.target.value)} style={sel} aria-label={chave}>{ops.map((o) => <option key={o} value={o}>{o}</option>)}</select>;
   return <input value={String(valor ?? "")} onChange={(e) => on(e.target.value)} style={inp} aria-label={chave} />;
+}
+
+function PreviaMensagens({ horarios }: { horarios: string[] }) {
+  const [j, setJ] = useState(horarios[0] ?? "07:30");
+  const [res, setRes] = useState<{ mensagens?: number; previa?: { para: string; texto: string }[]; error?: string } | null>(null);
+  const [ocupado, setOcupado] = useState(false);
+  async function ver() {
+    setOcupado(true);
+    const r = await fetch(`/api/ordem/mensagens?janela=${encodeURIComponent(j)}`, { cache: "no-store" });
+    setRes(await r.json().catch(() => ({ error: "falhou" })));
+    setOcupado(false);
+  }
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 8, padding: 10, borderRadius: 10, border: "1px dashed var(--ww-border-strong)" }}>
+      <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", fontSize: 13 }}>
+        <span>Ver agora o que cada pessoa receberia às</span>
+        <select value={j} onChange={(e) => setJ(e.target.value)} style={sel}>{horarios.map((h) => <option key={h}>{h}</option>)}</select>
+        <BotaoTela onClick={ver} disabled={ocupado}>{ocupado ? "Calculando…" : "Pré-visualizar (não envia)"}</BotaoTela>
+      </div>
+      {res?.error && <div style={{ fontSize: 12.5, color: "var(--ww-crit-text)" }}>{res.error}</div>}
+      {res?.previa && (res.previa.length === 0 ? <div style={{ fontSize: 12.5 }}>Ninguém receberia mensagem (filas zeradas).</div> : (
+        <div style={{ display: "flex", flexDirection: "column", gap: 6, maxHeight: 360, overflowY: "auto" }}>
+          {res.previa.map((m, i) => (
+            <div key={i} style={{ fontSize: 12.5, padding: 8, borderRadius: 8, background: "var(--ww-panel-sunken)" }}>
+              <b>Para {m.para}</b><pre style={{ margin: "4px 0 0", whiteSpace: "pre-wrap", fontFamily: "inherit" }}>{m.texto}</pre>
+            </div>
+          ))}
+        </div>
+      ))}
+    </div>
+  );
 }
