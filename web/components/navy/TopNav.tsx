@@ -249,7 +249,7 @@ function Direita({ ordem }: { ordem: EstadoOrdem | null }) {
   return (
     <>
       <GlobalSearch gatilho="campo" />
-      <BotaoAssistente nome="Pergunte ao Cesar" onClick={() => abrir()} activo={aberto} />
+      <BotaoAssistente nome={ordem?.assistente === "Aria" ? "Pergunte à Aria" : "Pergunte ao Cesar"} onClick={() => abrir()} activo={aberto} />
       <BotaoManual />
       <Opcoes />
     </>

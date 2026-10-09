@@ -12,10 +12,12 @@ export async function GET() {
   const q = await quemOrdem();
   if (q instanceof NextResponse) return NextResponse.json({ central: false, modulos: [] });
   const cfg = await lerConfig();
+  // M5: nome do assistente no botão da barra (o Cesar continua igual; só muda o nome quando o admin grava "Aria").
+  const assistente = cfg.parametros.m5_nome_assistente === "Aria" ? "Aria" : "Cesar";
   const central = q.admin || cfg.ativo;
   const modulos = central ? modulosVisiveis(q, cfg).filter((m) => moduloLigado(q, cfg, m).ligado) : [];
   return NextResponse.json({
-    central, modulos, admin: q.admin,
+    central, modulos, admin: q.admin, assistente,
     sino: cfg.ativo && cfg.sino, dialogo: cfg.ativo && cfg.dialogo_entrada,
   }, { headers: { "Cache-Control": "no-store" } });
 }

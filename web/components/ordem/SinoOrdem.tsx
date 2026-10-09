@@ -10,7 +10,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { MODULO_POR_ID } from "@/lib/ordem/modulos";
 import type { ModuloOrdem } from "@/lib/ordem/tipos";
 
-export type EstadoOrdem = { central: boolean; modulos: ModuloOrdem[]; admin?: boolean; sino: boolean; dialogo: boolean };
+export type EstadoOrdem = { central: boolean; modulos: ModuloOrdem[]; admin?: boolean; sino: boolean; dialogo: boolean; assistente?: "Aria" | "Cesar" };
 type Aviso = { id: number; tipo: string; item_id: string | null; texto: string; criado_em: string; lido_em: string | null };
 type Avisos = { ligado: boolean; dialogo?: boolean; nome?: string; n: number; avisos: Aviso[];
   resumo?: { total: number; porModulo: Record<string, number>; primeiro: { id: string; modulo: ModuloOrdem; titulo: string; acao: string } | null } };
