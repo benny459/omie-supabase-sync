@@ -5,6 +5,10 @@
 // Substitui atribuição anterior no salvar.
 
 import { useEffect, useMemo, useState } from "react";
+import { confereGravacao, lerJson, mensagemErroAtrib, motivoSalvarDesligado, type AtribCliente } from "@/lib/pc-atribuicao";
+
+/** O que o modal devolve depois de gravar e conferir no banco (null = atribuição removida). */
+export type AtribSalva = { empresa: string; pc_numero: string; clientes: AtribCliente[]; soma_pct: number } | null;
 
 type PcRow = {
   empresa: string; pc_numero: string;
@@ -557,7 +561,7 @@ function Kpi({ label, value, tone, sub }: { label: string; value: string; tone: 
 
 type Row = { codigo_cliente_omie: number; nome: string; percentual: number };
 
-export function AtribuicaoModal({ pc, onClose, onSaved }: { pc: PcRow; onClose: () => void; onSaved: () => void }) {
+export function AtribuicaoModal({ pc, onClose, onSaved }: { pc: PcRow; onClose: () => void; onSaved: (salvo: AtribSalva) => void }) {
   const [rows, setRows] = useState<Row[]>(() => {
     if (pc.clientes && pc.clientes.length > 0) {
       return pc.clientes.map(c => ({ codigo_cliente_omie: c.codigo_cliente_omie, nome: c.nome ?? `Omie #${c.codigo_cliente_omie}`, percentual: c.percentual }));
@@ -569,6 +573,7 @@ export function AtribuicaoModal({ pc, onClose, onSaved }: { pc: PcRow; onClose: 
   const [q, setQ] = useState("");
   const [results, setResults] = useState<OmieCli[]>([]);
   const [searching, setSearching] = useState(false);
+  const [erroBusca, setErroBusca] = useState<string | null>(null);
   // Modo de entrada: percentual (default) ou valor absoluto (soma = valor_total).
   const [mode, setMode] = useState<"pct" | "valor">("pct");
   const valorTotal = Number(pc.valor_total) || 0;
@@ -581,17 +586,30 @@ export function AtribuicaoModal({ pc, onClose, onSaved }: { pc: PcRow; onClose: 
   // Autocomplete
   useEffect(() => {
     const t = setTimeout(async () => {
-      if (q.trim().length < 2) { setResults([]); return; }
+      if (q.trim().length < 2) { setResults([]); setErroBusca(null); return; }
       setSearching(true);
       try {
-        const r = await fetch(`/api/clientes-omie?q=${encodeURIComponent(q)}`);
-        const j = await r.json();
+        // 09/10/26: erro da busca (sessão expirada, 500) aparecia como "Nenhum resultado".
+        const r = await fetch(`/api/clientes-omie?q=${encodeURIComponent(q)}`, { cache: "no-store" });
+        const j = await lerJson(r) as { items?: OmieCli[] };
+        if (!r.ok) { setResults([]); setErroBusca(mensagemErroAtrib(r.status, j, "buscar")); return; }
+        setErroBusca(null);
         setResults(j.items || []);
-      } catch { setResults([]); }
+      } catch { setResults([]); setErroBusca(mensagemErroAtrib(0, null, "buscar")); }
       finally { setSearching(false); }
     }, 300);
     return () => clearTimeout(t);
   }, [q]);
+
+  // Mudou algo em relação ao que estava gravado? (clique fora / Cancelar pede confirmação)
+  const original = useMemo(() => JSON.stringify((pc.clientes ?? []).map(c => [c.codigo_cliente_omie, Number(c.percentual)])), [pc.clientes]);
+  const sujo = JSON.stringify(rows.map(r => [r.codigo_cliente_omie, Number(r.percentual)])) !== original;
+  const motivoDesligado = motivoSalvarDesligado(rows, saving);
+  function fechar() {
+    if (saving) return;
+    if (sujo && !confirm("Os clientes escolhidos ainda NÃO foram salvos. Fechar e descartar?\n\n(Para gravar, clique em \"Salvar atribuição\".)")) return;
+    onClose();
+  }
 
   function addCliente(c: OmieCli) {
     if (rows.some(r => r.codigo_cliente_omie === c.codigo_cliente_omie)) return;
@@ -637,29 +655,37 @@ export function AtribuicaoModal({ pc, onClose, onSaved }: { pc: PcRow; onClose: 
           atribuicoes: rows.map(r => ({ codigo_cliente_omie: r.codigo_cliente_omie, percentual: r.percentual })),
         }),
       });
-      const j = await r.json();
-      if (!r.ok) throw new Error(j.error || r.statusText);
-      onSaved();
-    } catch (e) {
-      setErr(e instanceof Error ? e.message : String(e));
+      const j = await lerJson(r) as { clientes?: AtribCliente[]; soma_pct?: number };
+      if (!r.ok) { setErr(mensagemErroAtrib(r.status, j, "salvar")); return; }
+      // Confirmação real: o servidor relê do banco o que ficou gravado; se não bate, avisa.
+      const pedido = rows.map(r => ({ codigo_cliente_omie: r.codigo_cliente_omie, percentual: Math.round(Number(r.percentual) * 100) / 100 }));
+      if (!Array.isArray(j.clientes) || !confereGravacao(pedido, j.clientes)) {
+        setErr("O servidor respondeu, mas a atribuição gravada não confere com a escolhida. Recarregue a página (F5) e confira; se continuar, avise o suporte com o nº do PC.");
+        return;
+      }
+      onSaved({ empresa: pc.empresa, pc_numero: pc.pc_numero, clientes: j.clientes, soma_pct: Number(j.soma_pct ?? 100) });
+    } catch {
+      setErr(mensagemErroAtrib(0, null, "salvar"));
     } finally { setSaving(false); }
   }
 
   async function limparAtribuicao() {
     if (!confirm("Remover TODA atribuição deste PC? Ele volta pro backlog.")) return;
-    setSaving(true);
+    setSaving(true); setErr(null);
     try {
-      const r = await fetch(`/api/pcs/atribuicao?empresa=${pc.empresa}&pc_numero=${pc.pc_numero}`, { method: "DELETE" });
-      if (!r.ok) { const j = await r.json(); throw new Error(j.error || r.statusText); }
-      onSaved();
-    } catch (e) {
-      alert(`Falha: ${e instanceof Error ? e.message : String(e)}`);
+      const r = await fetch(`/api/pcs/atribuicao?empresa=${encodeURIComponent(pc.empresa)}&pc_numero=${encodeURIComponent(pc.pc_numero)}`, { method: "DELETE" });
+      if (!r.ok) { setErr(mensagemErroAtrib(r.status, await lerJson(r), "limpar")); return; }
+      onSaved(null);
+    } catch {
+      setErr(mensagemErroAtrib(0, null, "limpar"));
     } finally { setSaving(false); }
   }
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" onClick={onClose}>
-      <div className="bg-ww-panel border border-ww-border rounded-lg max-w-3xl w-full max-h-[90vh] overflow-y-auto p-4 space-y-3"
+    <div className="fixed inset-0 z-[1000] bg-black/50 flex items-center justify-center p-4" onClick={fechar}
+         onKeyDown={(e) => { if (e.key === "Escape") fechar(); }}>
+      <div role="dialog" aria-modal="true" aria-label={`Atribuir cliente ao PC ${pc.pc_numero}`}
+           className="bg-ww-panel border border-ww-border rounded-lg max-w-3xl w-full max-h-[90vh] overflow-y-auto p-4 space-y-3"
            onClick={(e) => e.stopPropagation()}>
         <div className="flex items-start justify-between">
           <div>
@@ -670,10 +696,10 @@ export function AtribuicaoModal({ pc, onClose, onSaved }: { pc: PcRow; onClose: 
               Projeto: <strong>{pc.projeto_nome ?? "(sem)"}</strong> · Data: {fmtBR(pc._dt_inclusao_d)} · Valor: <strong>{brl(pc.valor_total)}</strong>
             </p>
           </div>
-          <button onClick={onClose} className="text-ww-textMuted hover:text-ww-text text-lg">×</button>
+          <button onClick={fechar} className="text-ww-textMuted hover:text-ww-text text-lg" title="Fechar">×</button>
         </div>
 
-        {err && <div className="p-2 rounded border border-rose-200 bg-rose-50 text-rose-800 text-[11px]">{err}</div>}
+        {err && <div role="alert" className="p-2 rounded border border-rose-200 bg-rose-50 text-rose-800 text-[12px] font-medium">{err}</div>}
 
         {/* Lista de clientes atribuídos */}
         <div className="space-y-2">
@@ -768,8 +794,10 @@ export function AtribuicaoModal({ pc, onClose, onSaved }: { pc: PcRow; onClose: 
             <div className="max-h-48 overflow-y-auto border border-ww-border rounded bg-ww-panel">
               {searching ? (
                 <div className="p-2 text-[11px] text-ww-textMuted">Buscando…</div>
+              ) : erroBusca ? (
+                <div role="alert" className="p-2 text-[11.5px] text-rose-700 dark:text-rose-300">{erroBusca}</div>
               ) : results.length === 0 ? (
-                <div className="p-2 text-[11px] text-ww-textMuted">Nenhum resultado</div>
+                <div className="p-2 text-[11px] text-ww-textMuted">Nenhum cliente ativo da Safe Water com “{q.trim()}”. Tente parte do nome, a fantasia ou o CNPJ só com números; se o cliente não existe, cadastre-o em Cadastros › Clientes.</div>
               ) : (
                 results.map((c) => (
                   <button key={c.codigo_cliente_omie} onClick={() => addCliente(c)}
@@ -792,7 +820,8 @@ export function AtribuicaoModal({ pc, onClose, onSaved }: { pc: PcRow; onClose: 
             Limpar atribuição
           </button>
           <div className="flex items-center gap-2">
-            <button onClick={onClose} disabled={saving}
+            {motivoDesligado && <span className="text-[11px] text-amber-700 dark:text-amber-300 max-w-[280px] text-right">{motivoDesligado}</span>}
+            <button onClick={fechar} disabled={saving}
               className="px-3 py-1.5 text-[12px] rounded border border-ww-border bg-ww-bg hover:bg-ww-rowHover text-ww-text">
               Cancelar
             </button>

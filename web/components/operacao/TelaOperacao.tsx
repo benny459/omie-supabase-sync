@@ -46,7 +46,8 @@ import AddRowButton from "../AddRowButton";
 import RcExcelDropZone from "../RcExcelDropZone";
 import SyncNowButton from "../SyncNowButton";
 import PcsExcluidosButton, { type PcEscondido } from "../PcsExcluidosButton";
-import { AtribuicaoModal } from "../AtribuirClienteView";
+import { AtribuicaoModal, type AtribSalva } from "../AtribuirClienteView";
+import { lerJson as lerJsonAtrib, mensagemErroAtrib } from "@/lib/pc-atribuicao";
 import { supaBrowser } from "@/lib/supabase";
 import { estadoPc } from "@/lib/situacao-pc";
 import { ModalCancelarPc, ModalDevolverPc, SecaoAjustesPc } from "../compras/PcCancelarDevolver";
@@ -316,7 +317,14 @@ export default function TelaOperacao({ modulo, title, rows: rowsIniciais, parcia
   const [atribEdit, setAtribEdit] = useState<Parameters<typeof AtribuicaoModal>[0]["pc"] | null>(null);
   useEffect(() => {
     if (modulo !== "pcs") return;
-    fetch("/api/pcs/atribuicao", { cache: "no-store" }).then((r) => r.json()).then((j) => {
+    /* 09/10/26 (Cris, PC 7388): ?mapa=1 lê só o que está gravado — antes o GET completo varria
+       approval.v_pc_pcs (segundos) e qualquer falha era engolida: o botão seguia "Atribuir
+       cliente" como se nada tivesse sido salvo. Agora erro vira aviso. */
+    let vivo = true;
+    fetch("/api/pcs/atribuicao?mapa=1", { cache: "no-store" }).then(async (r) => {
+      const j = await lerJsonAtrib(r) as { atribuidos?: { empresa: string; pc_numero: string; soma_pct: number; clientes: Atrib["clientes"] }[] };
+      if (!vivo) return;
+      if (!r.ok) { mostrar({ msg: mensagemErroAtrib(r.status, j, "carregar"), erro: true }); return; }
       const m = new Map<string, Atrib>();
       for (const p of j.atribuidos ?? []) m.set(`${p.empresa}|${p.pc_numero}`, {
         soma_pct: Number(p.soma_pct ?? 0),
@@ -324,8 +332,23 @@ export default function TelaOperacao({ modulo, title, rows: rowsIniciais, parcia
           ({ codigo_cliente_omie: c.codigo_cliente_omie, nome: c.nome ?? `Omie #${c.codigo_cliente_omie}`, percentual: Number(c.percentual) })),
       });
       setAtrib(m);
-    }).catch(() => {});
-  }, [modulo, atribTick]);
+    }).catch(() => { if (vivo) mostrar({ msg: mensagemErroAtrib(0, null, "carregar"), erro: true }); });
+    return () => { vivo = false; };
+  }, [modulo, atribTick, mostrar]);
+  /** Depois de salvar: o modal já conferiu no banco — pinta na hora e relê em segundo plano. */
+  const atribSalva = useCallback((salvo: AtribSalva, pcNum: string) => {
+    setAtribEdit(null);
+    setAtrib((m) => {
+      const n = new Map(m);
+      if (salvo) n.set(`${salvo.empresa}|${salvo.pc_numero}`, { soma_pct: salvo.soma_pct, clientes: salvo.clientes });
+      else for (const k of [...n.keys()]) if (k.endsWith(`|${pcNum}`)) n.delete(k);
+      return n;
+    });
+    mostrar({ msg: salvo
+      ? `PC ${salvo.pc_numero}: ${salvo.clientes.length === 1 ? `cliente ${salvo.clientes[0].nome}` : `${salvo.clientes.length} clientes`} salvo${salvo.clientes.length === 1 ? "" : "s"} ✓`
+      : `PC ${pcNum}: atribuição removida.` });
+    setAtribTick((t) => t + 1);
+  }, [mostrar]);
   const [budgetMap, setBudgetMap] = useState<Map<string, BudgetSummary>>(new Map());
   /* 08/10/26: a lista chega em duas etapas (rápida → completa); o resumo de budget é pedido
      só para os projetos que ainda não foram pedidos e soma ao que já veio — antes refazia
@@ -1274,7 +1297,7 @@ export default function TelaOperacao({ modulo, title, rows: rowsIniciais, parcia
       <LogAlteracoes aberto={logAberto} onFechar={() => setLogAberto(false)} compras={noScope.flatMap((p) => p.compras)} />
 
       {atribEdit && (
-        <AtribuicaoModal pc={atribEdit} onClose={() => setAtribEdit(null)} onSaved={() => { setAtribEdit(null); setAtribTick((t) => t + 1); }} />
+        <AtribuicaoModal pc={atribEdit} onClose={() => setAtribEdit(null)} onSaved={(salvo) => atribSalva(salvo, atribEdit.pc_numero)} />
       )}
 
       {notasDe && (

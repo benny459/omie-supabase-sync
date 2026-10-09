@@ -7,6 +7,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supaServer } from "@/lib/supabase-server";
 import { createClient } from "@supabase/supabase-js";
+import { validarAtribuicoes, montarMapaAtrib } from "@/lib/pc-atribuicao";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -27,6 +28,40 @@ async function requireUser() {
 
 type Atrib = { codigo_cliente_omie: number; percentual: number };
 
+function svcFinance() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    { auth: { persistSession: false }, db: { schema: "finance" } },
+  );
+}
+
+async function nomesClientes(codigos: number[]): Promise<Map<number, string>> {
+  const m = new Map<number, string>();
+  const unicos = Array.from(new Set(codigos.filter((c) => Number.isFinite(c))));
+  if (unicos.length === 0) return m;
+  const { data } = await svcFinance().from("clientes")
+    .select("codigo_cliente_omie, razao_social, nome_fantasia").in("codigo_cliente_omie", unicos);
+  for (const c of (data ?? []) as { codigo_cliente_omie: number; razao_social: string; nome_fantasia: string | null }[]) {
+    if (!m.has(c.codigo_cliente_omie)) m.set(c.codigo_cliente_omie, c.nome_fantasia || c.razao_social);
+  }
+  return m;
+}
+
+type LinhaAtrib = { empresa: string; pc_numero: string; codigo_cliente_omie: number; percentual: number | string };
+
+/** Lê o que está gravado (todas, ou de 1 PC) e devolve linhas com nome — base do "mapa" das telas. */
+async function lerAtribuicoes(filtro?: { empresa: string; pc: string }) {
+  let q = admin().schema("platform" as never).from("pc_cliente_atribuicao")
+    .select("empresa, pc_numero, codigo_cliente_omie, percentual");
+  if (filtro) q = q.eq("empresa", filtro.empresa).eq("pc_numero", filtro.pc);
+  const { data, error } = await q;
+  if (error) return { error: error.message, linhas: [] as (LinhaAtrib & { nome: string })[] };
+  const linhas = (data ?? []) as LinhaAtrib[];
+  const nomes = await nomesClientes(linhas.map((l) => Number(l.codigo_cliente_omie)));
+  return { error: null, linhas: linhas.map((l) => ({ ...l, percentual: Number(l.percentual), nome: nomes.get(Number(l.codigo_cliente_omie)) ?? `Omie #${l.codigo_cliente_omie}` })) };
+}
+
 // ─────────────────────────────────────────────────────────────────
 // GET — retorna backlog (PCs standalone sem atribuição) + atribuidos
 // ─────────────────────────────────────────────────────────────────
@@ -36,6 +71,23 @@ export async function GET(req: NextRequest) {
 
   const url = new URL(req.url);
   const soBacklog = url.searchParams.get("backlog") === "1";
+
+  // 09/10/26: ?mapa=1 → só o que está gravado (rápido; as telas da Operação usam isto para
+  // pintar "Clientes ✓"). Antes elas usavam o GET completo, que varre approval.v_pc_pcs e só
+  // devolve PCs que estão nessa view — PC fora dela nunca aparecia como atribuído.
+  // ?empresa=&pc_numero= → só 1 PC (confirmação depois de salvar).
+  const pcUnico = url.searchParams.get("pc_numero");
+  if (url.searchParams.get("mapa") === "1" || pcUnico) {
+    const filtro = pcUnico ? { empresa: url.searchParams.get("empresa") || "SF", pc: pcUnico } : undefined;
+    const r = await lerAtribuicoes(filtro);
+    if (r.error) return NextResponse.json({ error: r.error }, { status: 500 });
+    const mapa = montarMapaAtrib(r.linhas);
+    const atribuidos = [...mapa.entries()].map(([k, v]) => {
+      const [empresa, pc_numero] = k.split("|");
+      return { empresa, pc_numero, qtd_clientes: v.qtd, soma_pct: v.soma_pct, clientes: v.clientes };
+    });
+    return NextResponse.json({ atribuidos }, { headers: { "Cache-Control": "no-store" } });
+  }
 
   const svc = admin();
 
@@ -135,47 +187,42 @@ export async function POST(req: NextRequest) {
 
   const empresa = String(body.empresa ?? "").trim();
   const pc = String(body.pc_numero ?? "").trim();
-  const atribs = body.atribuicoes ?? [];
+  const atribs = (body.atribuicoes ?? []) as Atrib[];
 
-  if (!empresa || !pc) return NextResponse.json({ error: "empresa e pc_numero obrigatórios" }, { status: 400 });
-  if (!Array.isArray(atribs) || atribs.length === 0) {
-    return NextResponse.json({ error: "atribuicoes precisa ter pelo menos 1 cliente" }, { status: 400 });
-  }
-  const soma = atribs.reduce((a, x) => a + (Number(x.percentual) || 0), 0);
-  if (Math.abs(soma - 100) > 0.01) {
-    return NextResponse.json({ error: `Soma dos percentuais precisa ser 100.00 (recebido: ${soma.toFixed(2)})` }, { status: 400 });
-  }
-  const dedupClientes = new Set(atribs.map(a => a.codigo_cliente_omie));
-  if (dedupClientes.size !== atribs.length) {
-    return NextResponse.json({ error: "Cliente duplicado na lista" }, { status: 400 });
-  }
-  for (const a of atribs) {
-    if (!Number.isFinite(a.codigo_cliente_omie) || a.codigo_cliente_omie <= 0) {
-      return NextResponse.json({ error: "codigo_cliente_omie inválido" }, { status: 400 });
-    }
-    if (!(a.percentual > 0 && a.percentual <= 100)) {
-      return NextResponse.json({ error: "percentual precisa ser > 0 e ≤ 100" }, { status: 400 });
-    }
-  }
+  if (!empresa || !pc) return NextResponse.json({ error: "PC sem número/empresa — feche o quadro, recarregue a página e tente de novo." }, { status: 400 });
+  const invalido = validarAtribuicoes(atribs);
+  if (invalido) return NextResponse.json({ error: invalido }, { status: 400 });
 
   const svc = admin();
+  const tabela = () => svc.schema("platform" as never).from("pc_cliente_atribuicao");
+
+  // Guarda o que havia, para devolver se a gravação nova falhar no meio (antes: DELETE ok +
+  // INSERT com erro = PC ficava sem atribuição nenhuma).
+  const { data: antigas, error: lerErr } = await tabela()
+    .select("empresa, pc_numero, codigo_cliente_omie, percentual, criado_por").eq("empresa", empresa).eq("pc_numero", pc);
+  if (lerErr) return NextResponse.json({ error: lerErr.message }, { status: 500 });
+
   // Estratégia: DELETE + INSERT (substitui atribuição anterior)
-  const { error: delErr } = await svc.schema("platform" as never)
-    .from("pc_cliente_atribuicao")
-    .delete().eq("empresa", empresa).eq("pc_numero", pc);
+  const { error: delErr } = await tabela().delete().eq("empresa", empresa).eq("pc_numero", pc);
   if (delErr) return NextResponse.json({ error: delErr.message }, { status: 500 });
 
   const rows = atribs.map(a => ({
     empresa, pc_numero: pc,
-    codigo_cliente_omie: a.codigo_cliente_omie,
-    percentual: a.percentual,
+    codigo_cliente_omie: Number(a.codigo_cliente_omie),
+    percentual: Math.round(Number(a.percentual) * 100) / 100,
     criado_por: user.email ?? null,
   }));
-  const { error: insErr } = await svc.schema("platform" as never)
-    .from("pc_cliente_atribuicao").insert(rows);
-  if (insErr) return NextResponse.json({ error: insErr.message }, { status: 500 });
+  const { error: insErr } = await tabela().insert(rows);
+  if (insErr) {
+    if ((antigas ?? []).length > 0) await tabela().insert(antigas as never[]);
+    return NextResponse.json({ error: `${insErr.message} — a atribuição anterior foi mantida.` }, { status: 500 });
+  }
 
-  return NextResponse.json({ ok: true, pc_numero: pc, atribuicoes: rows.length });
+  // Confirmação real: lê de volta do banco o que ficou gravado e devolve para a tela.
+  const lido = await lerAtribuicoes({ empresa, pc });
+  if (lido.error) return NextResponse.json({ error: `Gravou, mas não consegui conferir: ${lido.error}. Recarregue a página para ver.` }, { status: 500 });
+  const info = montarMapaAtrib(lido.linhas).get(`${empresa}|${pc}`);
+  return NextResponse.json({ ok: true, empresa, pc_numero: pc, atribuicoes: rows.length, clientes: info?.clientes ?? [], soma_pct: info?.soma_pct ?? 0 });
 }
 
 // ─────────────────────────────────────────────────────────────────

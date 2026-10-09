@@ -229,6 +229,18 @@ Em **/pcs** ficam os pedidos de compra que não pertencem a projeto nem a pedido
 - Entram tanto os PCs que vieram do Omie quanto os criados na tela **Compras** do painel (por exemplo, um PC de 47_CONTRATUAL lançado pela compradora). O PC do Compras aparece até 10 minutos depois de criado.
 - **Aprovar, Não aprovado e voltar para Aguardando** funcionam aqui mesmo, também em lote, com a regra do Compras: um PC de projeto PJ é aprovado pelo Marcelo e, se estourar o budget, só pelo admin. Para editar ou ver os detalhes, o clique abre a **folha do pedido no Compras**.
 
+### Como faço para atribuir o cliente a um PC
+
+O PC standalone só pode ser aprovado depois de dizer **para qual cliente (ou clientes) ele é**.
+1. Na vista **Lista**, abra o PC e clique em **Atribuir cliente** (na vista **Tabela** clássica, na coluna **Cliente(s)**).
+2. Em **Adicionar cliente**, digite parte do nome, a fantasia ou o CNPJ e **clique no cliente** da lista.
+3. Mais de um cliente? Adicione os outros — o rateio vem 100/N; ajuste em **%** ou **R$**. A soma precisa dar **100%**.
+4. Clique em **Salvar atribuição**. O quadro fecha, aparece **"PC 7388: cliente … salvo ✓"** e o botão vira **Clientes ✓** na hora.
+
+- Escolher o cliente na busca **não grava sozinho**: só **Salvar atribuição** grava. Se fechar o quadro (✕, Cancelar ou clique fora) com algo escolhido, a tela pergunta se quer descartar.
+- Se o **Salvar** estiver apagado, o motivo aparece ao lado (falta escolher o cliente, ou a soma não dá 100%).
+- Se der erro, a mensagem diz o que fazer — ex.: *sessão expirou: recarregue a página (F5)*. O que já estava gravado no PC não se perde quando a gravação nova falha.
+
 ### Onde cada PC aparece
 
 Vale para os PCs do Omie e para os criados no **Compras**, nesta ordem:

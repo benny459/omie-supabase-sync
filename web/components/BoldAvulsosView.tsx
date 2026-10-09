@@ -38,6 +38,7 @@ import LinhaDoTempo from "./navy/LinhaDoTempo";
 import KpisNavy from "./navy/KpisNavy";
 import { SegmentedControl } from "./navy/primitivos";
 import { AtribuicaoModal } from "./AtribuirClienteView";
+import { lerJson as lerJsonAtrib, mensagemErroAtrib } from "@/lib/pc-atribuicao";
 import { OcChip, useOcResumo } from "./vendas/OcAnexos";
 import type { OcResumo } from "@/lib/vendas-anexos";
 import { Virtuoso, type VirtuosoHandle } from "react-virtuoso";
@@ -944,15 +945,18 @@ export default function BoldAvulsosView({
     soma_pct?: number;
   } | null>(null);
   const [atribuicaoTick, setAtribuicaoTick] = useState(0);
+  const [atribuicaoErro, setAtribuicaoErro] = useState<string | null>(null);
   useEffect(() => {
     if (modulo !== "pcs") return;
     let cancelled = false;
     (async () => {
       try {
-        const r = await fetch("/api/pcs/atribuicao", { cache: "no-store" });
-        if (!r.ok) return;
-        const j = await r.json();
+        // 09/10/26: ?mapa=1 (só o gravado, rápido) e erro visível — antes falha = silêncio.
+        const r = await fetch("/api/pcs/atribuicao?mapa=1", { cache: "no-store" });
+        const j = await lerJsonAtrib(r) as { atribuidos?: { empresa: string; pc_numero: string; qtd_clientes?: number; soma_pct?: number; clientes?: { codigo_cliente_omie: number; nome?: string; percentual: number | string }[] }[] };
         if (cancelled) return;
+        if (!r.ok) { setAtribuicaoErro(mensagemErroAtrib(r.status, j, "carregar")); return; }
+        setAtribuicaoErro(null);
         const m = new Map<string, AtribInfo>();
         for (const p of j.atribuidos ?? []) {
           const clientes = (p.clientes ?? []).map((c: { codigo_cliente_omie: number; nome?: string; percentual: number | string }) => ({
@@ -967,7 +971,7 @@ export default function BoldAvulsosView({
           });
         }
         setAtribuicaoMap(m);
-      } catch {}
+      } catch { if (!cancelled) setAtribuicaoErro(mensagemErroAtrib(0, null, "carregar")); }
     })();
     return () => { cancelled = true; };
   }, [modulo, atribuicaoTick]);
@@ -2390,11 +2394,25 @@ export default function BoldAvulsosView({
         <AtribuicaoModal
           pc={editingAtribuicao}
           onClose={() => setEditingAtribuicao(null)}
-          onSaved={() => {
+          onSaved={(salvo) => {
+            const pcNum = editingAtribuicao.pc_numero;
             setEditingAtribuicao(null);
+            // Pinta na hora com o que o servidor conferiu no banco; o GET de fundo confirma.
+            setAtribuicaoMap((m) => {
+              const n = new Map(m);
+              if (salvo) n.set(`${salvo.empresa}|${salvo.pc_numero}`, { qtd: salvo.clientes.length, soma_pct: salvo.soma_pct, clientes: salvo.clientes });
+              else for (const k of [...n.keys()]) if (k.endsWith(`|${pcNum}`)) n.delete(k);
+              return n;
+            });
             setAtribuicaoTick(t => t + 1);
           }}
         />
+      )}
+      {atribuicaoErro && (
+        <div role="alert" className="fixed bottom-4 right-4 z-[1000] max-w-md p-3 rounded border border-rose-300 bg-rose-50 text-rose-800 text-[12px] shadow-lg">
+          {atribuicaoErro} <button className="underline ml-1" onClick={() => setAtribuicaoTick(t => t + 1)}>Tentar de novo</button>
+          <button className="ml-2" title="Fechar" onClick={() => setAtribuicaoErro(null)}>×</button>
+        </div>
       )}
 
       {/* Status popover */}
