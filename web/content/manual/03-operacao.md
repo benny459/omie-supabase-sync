@@ -255,7 +255,7 @@ Vale para os PCs do Omie e para os criados no **Compras**, nesta ordem:
 
 Desde 02/10/26 não há mais sincronização com o Omie: os PCs que vieram de lá ficam guardados só como histórico (ninguém mais grava nessa cópia, nada vai para o Omie).
 - **Mesmo PC nos dois lados** (a cópia do Omie e o PC do painel/aprovação com o mesmo número): a lista mostra **só o do painel** — a cópia do Omie saiu de Projetos, Standby e PCs Standalone, então PC já aprovado deixa de aparecer como pendente.
-- **PC do Omie que nunca teve aprovação no painel**: deixa de ser **Pendente** e aparece como **Histórico Omie** (status N/A). Não entra na fila de aprovação, não conta como aprovado nem como “aguardando” na barra de budget e na margem, e não acende “compra em atraso”. Quem aprova ainda pode mudar o status dele, se for o caso.
+- **PC do Omie que nunca teve aprovação no painel**: deixa de ser **Pendente** e aparece como **Histórico Omie** (status N/A). Não entra na fila de aprovação, não conta como aprovado nem como “aguardando” na barra de budget e na margem, não acende “compra em atraso” e não entra em “Aguarda aprov.” no quadro **Compras por status**. Quem aprova ainda pode mudar o status dele, se for o caso.
 - Exceção: os PCs incluídos no Omie **a partir de 01/09/26** sem aprovação continuam **Pendente** — podem estar mesmo à espera.
 
 ## Pedidos · PV/OS

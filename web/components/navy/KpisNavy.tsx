@@ -14,7 +14,7 @@
  */
 
 import { useMemo } from "react";
-import { STATUS_META } from "@/lib/columns";
+import { STATUS_META, ehHistoricoOmie } from "@/lib/columns";
 import { tom, type Tom } from "./primitivos";
 
 type AnyRow = Record<string, unknown>;
@@ -117,7 +117,7 @@ export default function KpisNavy({
         } else if (!temPc) {
           // sem PC ainda não é compra em curso
         } else if (aprovado) aReceber += 1;
-        else aguardaAprov += 1;
+        else if (!ehHistoricoOmie(r)) aguardaAprov += 1;   // sql/159: histórico do Omie não aguarda nada
       }
     }
 

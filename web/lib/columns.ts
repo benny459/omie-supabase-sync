@@ -297,6 +297,10 @@ export const STATUS_ORDER: string[] = [
 ];
 
 export const isApproved = (status: string): boolean => !!STATUS_META[status]?.isApproved;
+/** PC do espelho do Omie sem aprovação própria (sql/159, 09/10/26): status N_A com
+ *  status_label "Histórico Omie". Não é compra em curso — fora de fila, atraso e "aguarda aprov.". */
+export const ehHistoricoOmie = (r: { status?: unknown; status_label?: unknown }): boolean =>
+  String(r.status ?? "") === "N_A" && String(r.status_label ?? "") === "Histórico Omie";
 export const STATUS_BADGE: Record<string, string> = Object.fromEntries(
   Object.entries(STATUS_META).map(([k, v]) => [k, v.tone]),
 );

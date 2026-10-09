@@ -11,7 +11,7 @@
 //
 // Nenhuma regra de gravação mora aqui — ver lib/approvals-write.ts.
 
-import { STATUS_META } from "@/lib/columns";
+import { STATUS_META, ehHistoricoOmie } from "@/lib/columns";
 import { computeBucketAlarms, type AlarmKind } from "@/lib/alarmes";
 import type { RentabResumo } from "@/lib/rentabilidade";
 
@@ -28,9 +28,7 @@ export const ESTADO_LABEL: Record<Estado, string> = {
   sem_pc: "Sem PC", pendente: "Aguarda aprovação", aprovado: "Aprovado",
   recebido: "Recebido", recusado: "Recusado", historico: "Histórico Omie",
 };
-/** Linha do espelho do Omie que virou histórico (sql/159). */
-export const ehHistoricoOmie = (r: { status?: unknown; status_label?: unknown }) =>
-  String(r.status ?? "") === "N_A" && String(r.status_label ?? "") === "Histórico Omie";
+export { ehHistoricoOmie };
 
 /** Data do Omie (dd/mm/aaaa ou ISO) → ms à meia-noite, ou null. */
 export function dataMs(v: unknown): number | null {

@@ -23,7 +23,7 @@
 //
 // REGRA: mudou alarme? Muda AQUI. Nunca reintroduza cópia local.
 
-import { isApproved } from "./columns";
+import { isApproved, ehHistoricoOmie } from "./columns";
 
 export type AlarmKind =
   | "pvos_incompl"
@@ -138,6 +138,7 @@ export function isAtrasoVenda(r: AlarmRow, todayMs: number): boolean {
 // senão dt_previsao) vencida E material ainda não recebido.
 export function isAtrasoCompra(r: AlarmRow, todayMs: number): boolean {
   if (r.mt_data_recebimento_nf) return false;
+  if (ehHistoricoOmie(r)) return false;   // sql/159: histórico do Omie não é compra em curso
   const novaS = String(r.nova_prev_materiais ?? "").trim();
   const origS = String(r.dt_previsao ?? "").trim();
   const efetivaStr = novaS || origS;
