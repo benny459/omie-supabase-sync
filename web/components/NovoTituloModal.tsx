@@ -150,6 +150,12 @@ export default function NovoTituloModal({
   const [secImp, setSecImp] = useState(false);
   const totalImpostos = IMPOSTOS.reduce((t, i) => t + paraNumero(impostos[i.chave]), 0);
 
+  // Nota/boleto solto na janela (09/10/26): mesma leitura do "Confirmar real" do provisionado
+  // (XML direto; PDF ou foto pela IA) — preenche valor, vencimento, emissão, nº, chave, código de barras e fornecedor.
+  const [arquivos, setArquivos] = useState<{ path: string; nome: string }[]>([]);
+  const [lendoNota, setLendoNota] = useState(false);
+  const [notaMsg, setNotaMsg] = useState<{ t: string; erro?: boolean } | null>(null);
+  const [arrastando, setArrastando] = useState(false);
   const [salvando, setSalvando] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [ok, setOk] = useState(false);
@@ -186,6 +192,48 @@ export default function NovoTituloModal({
       finally { setBuscando(false); }
     }, 350);
   }, [q, empresa, tipo]);
+
+  async function lerNota(f: File) {
+    setNotaMsg(null); setLendoNota(true);
+    try {
+      const fd = new FormData(); fd.append("arquivo", f); fd.append("empresa", empresa);
+      const r = await fetch("/api/financeiro/provisao/nota", { method: "POST", body: fd });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(j.error ?? "Não consegui ler o arquivo");
+      setArquivos((a) => [...a, { path: j.path, nome: j.nome }]);
+      const d = j.dados as null | { tipo?: string | null; numero?: string | null; emissao?: string | null; valor?: number | null;
+        vencimento?: string | null; cnpj_emitente?: string | null; emitente?: string | null; chave?: string | null; codigo_barras?: string | null; descricao?: string | null };
+      if (!d) { setNotaMsg({ t: j.aviso ?? "Arquivo guardado, mas não deu para ler os dados — preencha à mão." }); return; }
+      const lidos: string[] = [];
+      if (d.valor) { setValor(d.valor.toFixed(2).replace(".", ",")); lidos.push("valor"); }
+      if (d.vencimento) { setVencimento(d.vencimento); lidos.push("vencimento"); }
+      if (d.emissao) { setEmissao(d.emissao); lidos.push("emissão"); }
+      if (d.numero) { setNumeroDocFiscal(d.numero); lidos.push("nº da nota"); }
+      if (d.chave) { setChaveNfe(d.chave); lidos.push("chave"); }
+      const td = ({ NFE: "NFE", NFSE: "NFS", BOL: "BOL", REC: "REC", DAS: "DAS" } as Record<string, string>)[d.tipo ?? ""];
+      if (td) setTipoDoc(td);
+      if (d.numero || d.chave || td) setSecDoc(true);
+      if (d.codigo_barras && tipo === "pagar") { setBarras(d.codigo_barras); lidos.push("código de barras"); }
+      if (d.descricao && !obs.trim()) setObs(d.descricao);
+      // fornecedor pelo CNPJ do emitente (cadastro do painel: Omie + cadastrados aqui)
+      let achou = false;
+      const doc = (d.cnpj_emitente ?? "").replace(/\D/g, "");
+      if (doc) {
+        const fmt = doc.length === 14 ? doc.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, "$1.$2.$3/$4-$5") : doc.replace(/^(\d{3})(\d{3})(\d{3})(\d{2})$/, "$1.$2.$3-$4");
+        for (const termo of [fmt, doc]) {
+          const rr = await fetch(`/api/financeiro/aux?empresa=${empresa}&tipo=${tipo}&q=${encodeURIComponent(termo)}`).then((x) => x.json()).catch(() => ({}));
+          const lista = ((rr.clientes ?? []) as Cliente[]).filter((c) => (c.cnpj_cpf ?? "").replace(/\D/g, "") === doc);
+          if (lista.length) { setContraparte(lista[0]); setQ(""); achou = true; lidos.push(rotulo.toLowerCase()); break; }
+        }
+      }
+      if (!achou && d.emitente) setQ(d.emitente);
+      setNotaMsg({ t: `Lido ${d.tipo === "BOL" ? "do boleto" : "da nota"}: ${lidos.join(", ") || "nada"}.` +
+        (!achou && doc ? ` ${rotulo} com CNPJ ${doc} não está no cadastro${d.emitente ? ` (${d.emitente})` : ""} — escolha na lista ou cadastre em Cadastros.` : "") +
+        " Confira antes de criar." });
+    } catch (e) {
+      setNotaMsg({ t: e instanceof Error ? e.message : String(e), erro: true });
+    } finally { setLendoNota(false); }
+  }
 
   async function salvar() {
     setErr(null);
@@ -227,6 +275,7 @@ export default function NovoTituloModal({
           numero_parcela: numeroParcela || undefined,
           numero_pedido: numeroPedido || undefined,
           chave_nfe: chaveNfe || undefined,
+          arquivos: arquivos.length ? arquivos : undefined,
           data_emissao: emissao || undefined,
           data_entrada: entrada || undefined,
           // Valor preenchido implica retenção — o par vai junto ou nenhum vai.
@@ -287,6 +336,21 @@ export default function NovoTituloModal({
           </div>
           <button onClick={onClose} className="text-ww-textFaint hover:text-ww-text text-xl leading-none">×</button>
         </div>
+
+        {tipo === "pagar" && (
+          <label
+            onDragOver={(e) => { e.preventDefault(); setArrastando(true); }}
+            onDragLeave={() => setArrastando(false)}
+            onDrop={(e) => { e.preventDefault(); setArrastando(false); const f = e.dataTransfer.files?.[0]; if (f) void lerNota(f); }}
+            className={`block mb-3 rounded-lg border border-dashed px-3 py-2.5 text-[12px] cursor-pointer transition ${arrastando ? "border-ww-accent bg-ww-accent/10" : "border-ww-border hover:border-ww-accent"}`}>
+            <input type="file" accept=".xml,.pdf,image/*" className="hidden" disabled={lendoNota}
+              onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; if (f) void lerNota(f); }} />
+            <span className="text-ww-text font-medium">{lendoNota ? "Lendo o arquivo…" : "📎 Solte aqui a nota ou o boleto"}</span>
+            <span className="text-ww-textMuted"> · XML, PDF ou foto. Preenche valor, vencimento, emissão, nº, chave, código de barras e {rotulo.toLowerCase()}.</span>
+            {arquivos.length > 0 && <span className="block mt-1 text-ww-textMuted">Anexado: {arquivos.map((a) => a.nome).join(" · ")}</span>}
+            {notaMsg && <span className={`block mt-1 ${notaMsg.erro ? "text-red-400" : "text-ww-text"}`}>{notaMsg.t}</span>}
+          </label>
+        )}
 
         <div className="grid grid-cols-2 gap-3">
           <div>

@@ -530,7 +530,8 @@ export function montarReceberV1(o: Opts) {
 
   /* CONCILIAÇÃO OFX (créditos) */
   const norm = (s) => String(s ?? "").toUpperCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
-  const estado = (m) => (m.ignorado ? "ign" : m.casado >= m.v - 0.004 ? "done" : "new");
+  // Omie.CASH: o movimento já vem baixado no título do Omie (sql/158) — conta como conciliado, sem ação.
+  const estado = (m) => (m.ignorado ? "ign" : m.omie || m.casado >= m.v - 0.004 ? "done" : "new");
   function candidates(m) {
     const resto = m.v - m.casado; const memo = norm(m.memo);
     if (resto < 50 && /REND/.test(memo)) return [];
@@ -556,7 +557,8 @@ export function montarReceberV1(o: Opts) {
     <div class="cstats"><div class="cst"><b class="num ent">${brl(MOV.reduce((s, m) => s + m.v, 0))}</b>${MOV.length} créditos</div><div class="cst"><b class="num" style="color:#22c55e">${MOV.filter((m) => estado(m) === "done").length}</b>conciliados</div><div class="cst"><b class="num" style="color:#f59e0b">${sug.length}</b>com sugestão</div><div class="cst"><b class="num">${MOV.filter((m) => estado(m) === "new" && !m.c.length).length}</b>sem título</div></div>
     ${!MOVLOAD ? '<div class="carregando">Carregando extrato…</div>' : !MOV.length ? '<div class="sub2" style="padding:16px">Nenhum crédito importado nesta conta nos últimos 90 dias — importe o OFX do banco.</div>' : `<div class="tbl" style="max-height:600px"><div class="mrow h"><span>Data</span><span>Extrato (OFX)</span><span style="text-align:right">Valor</span><span></span><span>Título(s) sugerido(s)</span><span style="text-align:right">Ação</span></div>
     ${MOV.map((m, ix) => { const c = m.c || []; let right = "", act = ""; const est = estado(m);
-      if (est === "done") { right = `<div class="cand"><span class="f">${(m.baixas || []).map((b) => esc(b.contraparte || b.documento || "—")).join(" + ")}</span><span class="sub2">${(m.baixas || []).length} baixa(s)${(m.baixas || []).some((b) => Number(b.juros) > 0) ? " · com juros/multa" : ""}</span></div>`; act = `<span class="bdg b-pago">Conciliado · recebido</span><button class="btn sm" data-undo="${ix}">Desfazer</button>`; }
+      if (est === "done" && m.omie && !(m.baixas || []).length) { right = `<div class="cand"><span class="f">Baixado no Omie</span><span class="sub2">${esc(m.omie_origem || "movimento da Omie.CASH")} · o título já foi baixado lá — não precisa casar</span></div>`; act = `<span class="bdg b-pago">Conciliado no Omie</span>`; }
+      else if (est === "done") { right = `<div class="cand"><span class="f">${(m.baixas || []).map((b) => esc(b.contraparte || b.documento || "—")).join(" + ")}</span><span class="sub2">${(m.baixas || []).length} baixa(s)${(m.baixas || []).some((b) => Number(b.juros) > 0) ? " · com juros/multa" : ""}</span></div>`; act = `<span class="bdg b-pago">Conciliado · recebido</span><button class="btn sm" data-undo="${ix}">Desfazer</button>`; }
       else if (est === "ign") { right = `<span class="sub2">${esc(m.motivo)}</span>`; act = `<button class="btn sm" data-reat="${ix}">Desfazer</button>`; }
       else if (c.length) { const p = c[m.pick] || c[0]; const rs = p.ids.map((i) => rows[i]);
         const desc = rs.map((r) => `${esc(r.forn.slice(0, 30))} · venc ${dm(r.d)} · ${brl(r.v)}`).join("<br>");

@@ -65,6 +65,8 @@ Atalhos: **j/k** navegam, **/** vai para a busca, **Enter** casa, **Esc** fecha.
 
 O **Omie Cash** funciona como uma conta bancária: os movimentos entram sozinhos de hora em hora e passam pela conciliação automática.
 
+**Movimento da Omie.CASH que já vem baixado no Omie:** pagamentos (*Conta Paga*), recebimentos (*Conta Recebida*, como os boletos pagos pelo cliente) e tarifas já chegam ligados ao título de lá. Eles aparecem como **Conciliado no Omie** e **não precisam ser casados**: não entram em "mov. a conciliar", não viram sugestão e o **Casar** mostra "Já baixado no Omie". Só o que **não** veio baixado continua pendente, como um crédito de transferência entre contas.
+
 ## Perguntas frequentes
 
 **Concilei errado.** Use **desfazer** no lançamento (ou desfazer transferência).

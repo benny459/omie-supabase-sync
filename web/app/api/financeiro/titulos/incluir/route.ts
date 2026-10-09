@@ -17,6 +17,8 @@ export const maxDuration = 30;
 
 type Body = {
   tipo: "pagar" | "receber";
+  /** arquivo da nota/boleto lido na Nova conta (bucket financeiro-documentos) */
+  arquivos?: { path: string; nome: string }[];
   empresa: string;
   codigo_cliente_fornecedor: number;
   valor_documento: number;
@@ -117,6 +119,7 @@ async function incluirPagarNativo(body: Body, empresa: string, previsaoISO: stri
   if (body.id_origem) extras.id_origem = body.id_origem;
   if (body.data_entrada) extras.data_entrada = body.data_entrada;
   if (body.numero_pedido) extras.numero_pedido = body.numero_pedido;
+  if (body.arquivos?.length) extras.arquivos = body.arquivos.filter((x) => x?.path && /^provisao\//.test(x.path)).slice(0, 10);
   for (const k of ["pis", "cofins", "csll", "ir", "iss", "inss"] as const) {
     const v = Number(body[`valor_${k}`] ?? 0);
     if (v > 0) { extras[`valor_${k}`] = v; extras[`retem_${k}`] = !!body[`retem_${k}`]; }

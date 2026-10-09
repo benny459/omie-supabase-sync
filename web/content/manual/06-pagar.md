@@ -87,6 +87,7 @@ O título da CD fica **PAGO** e o sistema registra sozinho "**CD deve à SF**" e
 
 1. Clique em **+ Nova conta**, escolha fornecedor, categoria, conta, projeto, vencimento e valor.
    - A busca de **Fornecedor** usa o mesmo cadastro da tela **Cadastros**: aparecem os que vieram do Omie e os **cadastrados no painel**, na hora.
+   - **Solte a nota ou o boleto** no topo da janela (XML, PDF ou foto): o painel lê e preenche **valor, vencimento, emissão, nº da nota, chave, código de barras e o fornecedor** (pelo CNPJ). O XML é lido direto; o PDF e a foto, pela IA. O arquivo fica anexado ao título. Confira antes de clicar em **Criar conta**. Se o CNPJ não estiver cadastrado, o nome do emitente vai para a busca: escolha na lista ou cadastre em Cadastros.
    - **Nº documento ou nº da nota fiscal é obrigatório.** Sem documento? Clique em **Gerar nº** — sai um número único (ex.: PG-SF-2610-000001) que fica registrado.
    - **Emissão**: se não preencher, fica a data do lançamento (hoje) — ela aparece no formulário e na gaveta do título.
    - **Código de barras / linha digitável** (boleto, 44/47/48 dígitos): cole no campo. Se o valor estiver vazio e o vencimento for o de hoje, o sistema lê **valor e vencimento do próprio código**. O código aparece na gaveta com **copiar** e vai sozinho para o **Arquivo C6** como pagamento de boleto. Dá para corrigir depois em **Editar título**.

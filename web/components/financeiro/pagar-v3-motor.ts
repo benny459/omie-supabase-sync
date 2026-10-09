@@ -837,7 +837,8 @@ export function montarPagarV3(o: Opts) {
     if (m.v > 0) return []; const val = -m.v - m.casado; const md_ = new Date(m.data + "T00:00:00"); const bank = bankOf(S.ofxBank);
     return open_().filter((r) => Math.abs(r.v - val) < 0.02).map((r) => { const dd = Math.abs((r.d - md_) / DAY); const sc = 100 - dd * 6 - (bank && r.emp !== bank.emp ? 15 : 0); return { r, dd, sc: Math.max(40, Math.round(sc)) }; }).filter((c) => c.dd <= 35).sort((a, b) => b.sc - a.sc);
   }
-  const estado = (m) => (m.ignorado ? "ign" : m.casado >= Math.abs(m.v) - 0.004 ? "done" : "new");
+  // Omie.CASH: o movimento já vem baixado no título do Omie (sql/158) — conta como conciliado, sem ação.
+  const estado = (m) => (m.ignorado ? "ign" : m.omie || m.casado >= Math.abs(m.v) - 0.004 ? "done" : "new");
   function renderConc() {
     const el = q("pConc"); const bank = bankOf(S.ofxBank);
     const nNew = MOV.filter((m) => estado(m) === "new" && m.v < 0).length; q("tcConc").textContent = PODE.conciliar ? nNew : "—";
@@ -852,7 +853,8 @@ export function montarPagarV3(o: Opts) {
     ${!MOVLOAD ? '<div class="carregando">Carregando extrato…</div>' : !MOV.length ? '<div class="sub2" style="padding:16px">Nenhum movimento importado nesta conta nos últimos 90 dias — importe o OFX do banco.</div>' : `<div class="tbl" style="max-height:560px"><div class="mrow h"><span>Data</span><span>Extrato (OFX)</span><span style="text-align:right">Valor</span><span></span><span>Título sugerido</span><span style="text-align:right">Ação</span></div>
     ${MOV.map((m, ix) => {
       const c = m.c || []; let right = "", act = ""; const est = estado(m);
-      if (est === "done") { right = `<div class="cand">${(m.baixas || []).map((b) => `<span class="f">${esc(b.contraparte || b.documento || "—")}</span><span class="sub2">${esc(b.empresa)} · ${brl(Number(b.valor))}${b.ref && b.ref.startsWith("o:") ? " · título Omie" : ""}</span>`).join("")}</div>`; act = `<span class="bdg b-pago">Conciliado</span><button class="btn sm" data-undo="${ix}">Desfazer</button>`; }
+      if (est === "done" && m.omie && !(m.baixas || []).length) { right = `<div class="cand"><span class="f">Baixado no Omie</span><span class="sub2">${esc(m.omie_origem || "movimento da Omie.CASH")} · o título já foi baixado lá — não precisa casar</span></div>`; act = `<span class="bdg b-pago">Conciliado no Omie</span>`; }
+      else if (est === "done") { right = `<div class="cand">${(m.baixas || []).map((b) => `<span class="f">${esc(b.contraparte || b.documento || "—")}</span><span class="sub2">${esc(b.empresa)} · ${brl(Number(b.valor))}${b.ref && b.ref.startsWith("o:") ? " · título Omie" : ""}</span>`).join("")}</div>`; act = `<span class="bdg b-pago">Conciliado</span><button class="btn sm" data-undo="${ix}">Desfazer</button>`; }
       else if (est === "ign") { right = `<span class="sub2">${esc(m.motivo)}</span>`; act = `<button class="btn sm" data-reat="${ix}">Desfazer</button>`; }
       else if (m.v > 0) { right = `<div class="cand"><span class="f">Entrada — não é contas a pagar</span><span class="sub2">Recebimento ou transferência entre contas — concilie na <a href="/financeiro/conciliacao?conta=${bank ? encodeURIComponent(bank.emp + ":" + bank.cod) : ""}" style="color:#7aa2ff">Conciliação bancária</a></span></div>`; act = `<button class="btn sm" data-ign="${ix}" data-mot="Transferência entre contas próprias">Marcar transferência</button>`; }
       else if (c.length) { const p = c.find((x) => x.r.id === m.pick) || c[0]; const r = p.r;

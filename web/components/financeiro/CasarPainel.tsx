@@ -337,7 +337,7 @@ export default function CasarPainel({ movimentoId, onFechar }: { movimentoId: nu
           <label style={{ fontSize: 12, color: C.tx2, display: "inline-flex", gap: 4, alignItems: "center", marginLeft: "auto" }} title="Guarda o trecho do histórico → cliente/fornecedor para as próximas sugestões">
             <input type="checkbox" checked={aprender} onChange={(e) => setAprender(e.target.checked)} /> aprender
           </label>
-          <button type="button" disabled={ocupado || restante <= 0.004 || (!Object.keys(sel).length && !d.candidatos.length)} style={btn(C.ok, true)}
+          <button type="button" disabled={ocupado || !!m?.omie || restante <= 0.004 || (!Object.keys(sel).length && !d.candidatos.length)} style={btn(C.ok, true)}
             onClick={() => {
               if (Object.keys(sel).length) casar();
               else {
@@ -346,7 +346,7 @@ export default function CasarPainel({ movimentoId, onFechar }: { movimentoId: nu
                 if (c1) { const v = Math.min(Number(c1.saldo), restante), jur = r2(restante - v); casar([{ ref: c1.ref, valor: v, ...(jur >= 0.005 ? { juros: jur } : {}) }]); }
               }
             }}>
-            {ocupado ? "Casando…" : Object.keys(sel).length ? "Casar (Enter)" : "Casar com o 1º (Enter)"}
+            {m?.omie ? "Já baixado no Omie" : ocupado ? "Casando…" : Object.keys(sel).length ? "Casar (Enter)" : "Casar com o 1º (Enter)"}
           </button>
         </div>
       )}
