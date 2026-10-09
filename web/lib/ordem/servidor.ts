@@ -104,7 +104,26 @@ export function resolverDono(it: Pick<ItemDetectado, "tipo" | "dono_email">, don
 // ── Sincronização (detetores → ordem.item) ───────────────────────────────────
 export type Sync = { detetados: number; novos: number; fechados: number; reabertos: number; tipos: string[]; erros: Record<string, string>; ms: number };
 
-export async function sincronizar(opts: { modulos?: ModuloOrdem[] } = {}): Promise<Sync> {
+/** Trava simples (linha "__sync:<tenant>" em ordem.config): duas sincronizações ao mesmo tempo
+ *  duplicavam a carga no banco. Uma em curso há menos de 4 min → a outra não corre. */
+async function travar(): Promise<boolean> {
+  const chave = `__sync:${TENANT}`;
+  const { data } = await db().from("config").select("dados").eq("tenant_slug", chave).maybeSingle();
+  const ini = (data as { dados?: { inicio?: string; fim?: string | null } } | null)?.dados;
+  if (ini?.inicio && !ini.fim && Date.now() - Date.parse(ini.inicio) < 4 * 60_000) return false;
+  await db().from("config").upsert({ tenant_slug: chave, dados: { inicio: new Date().toISOString(), fim: null } });
+  return true;
+}
+async function destravar() {
+  await db().from("config").upsert({ tenant_slug: `__sync:${TENANT}`, dados: { inicio: new Date(0).toISOString(), fim: new Date().toISOString() } });
+}
+
+export async function sincronizar(opts: { modulos?: ModuloOrdem[]; pesados?: boolean } = {}): Promise<Sync> {
+  if (!(await travar())) return { detetados: 0, novos: 0, fechados: 0, reabertos: 0, tipos: [], erros: { _: "outra atualização em curso — tente daqui a pouco" }, ms: 0 };
+  try { return await sincronizarSemTrava(opts); } finally { await destravar(); }
+}
+
+async function sincronizarSemTrava(opts: { modulos?: ModuloOrdem[]; pesados?: boolean }): Promise<Sync> {
   const t0 = Date.now();
   const cfg = await lerConfig();
   const hoje = hojeSP();
@@ -120,7 +139,8 @@ export async function sincronizar(opts: { modulos?: ModuloOrdem[] } = {}): Promi
       quer("compras") ? detetarCompras(cfg, hoje) : null,
       quer("financeiro") ? detetarFinanceiro(cfg, hoje) : null,
     ])),
-    quer("operacao") || quer("projetos") ? await detetarOperacao(cfg, hoje) : null,
+    // Operação/Projetos (v_pc_avulsos e budget dos projetos) são os mais pesados: só de hora a hora no cron.
+    (quer("operacao") || quer("projetos")) && opts.pesados !== false ? await detetarOperacao(cfg, hoje) : null,
     quer("faturamento") || quer("estoque") || quer("cadastros") ? await detetarOutros(cfg, hoje) : null,
   ];
   const itens = res.flatMap((r) => r?.itens ?? []);

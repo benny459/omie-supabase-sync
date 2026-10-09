@@ -22,7 +22,9 @@ export async function GET(req: NextRequest) {
   const simular = new URL(req.url).searchParams.get("simular") === "1";
   const out: Record<string, unknown> = {};
   if (!simular) {
-    try { out.sync = await sincronizar(); } catch (e) { out.sync = { erro: e instanceof Error ? e.message : String(e) }; }
+    // pesados (Operação/Projetos) só na primeira passagem de cada hora
+    const minuto = new Date().getUTCMinutes();
+    try { out.sync = await sincronizar({ pesados: minuto < 15 }); } catch (e) { out.sync = { erro: e instanceof Error ? e.message : String(e) }; }
   }
   try {
     const { rodarMensagens } = await import("@/lib/ordem/mensagens");

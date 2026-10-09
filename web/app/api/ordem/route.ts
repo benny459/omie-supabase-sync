@@ -1,14 +1,14 @@
 // GET /api/ordem?m=<modulo>&escopo=meus|equipe|todos — a fila da Central de Ordem da pessoa.
 // Tudo filtrado NO SERVIDOR pelas camadas de permissão de hoje (lib/ordem/acesso.ts):
 // módulo sem acesso → 403 e nenhum dado (nem contagem). Só leitura; sincroniza em segundo
-// plano se a última leitura dos detetores tiver mais de 10 minutos.
-import { NextResponse, after } from "next/server";
+// lê o cache ordem.item (os detetores correm no cron /api/cron/ordem).
+import { NextResponse } from "next/server";
 import { comercialDe } from "@/lib/ordem/comercial";
 import { ehModulo } from "@/lib/ordem/modulos";
 import { MODULO_POR_ID } from "@/lib/ordem/modulos";
 import { filtrarItens } from "@/lib/ordem/fila";
 import { escoposPermitidos, type Escopo } from "@/lib/ordem/acesso";
-import { db, itensAbertos, lerConfig, lerDonos, pessoas, quemOrdem, sincronizar, TENANT, ultimaSync } from "@/lib/ordem/servidor";
+import { db, itensAbertos, lerConfig, lerDonos, pessoas, quemOrdem, TENANT, ultimaSync } from "@/lib/ordem/servidor";
 import { DETETOR_POR_TIPO } from "@/lib/ordem/catalogo";
 
 export const runtime = "nodejs";
@@ -52,11 +52,8 @@ export async function GET(req: Request) {
   const acompanhar = ((enc ?? []) as { id: string; modulo: string; titulo: string; estado: string; dono_id: string | null; criado_em: string; resolvido_em: string | null; dados: { motivo?: string } | null }[])
     .map((e) => ({ id: e.id, modulo: e.modulo, titulo: e.titulo, estado: e.estado, dono: e.dono_id ? nomes.get(e.dono_id) ?? null : null, criado_em: e.criado_em, resolvido_em: e.resolvido_em, motivo: e.dados?.motivo ?? null }));
 
-  if (q.admin || cfg.ativo) {
-    const velho = !ult || Date.now() - Date.parse(ult) > 10 * 60_000;
-    if (velho) { try { after(() => sincronizar().catch(() => null)); } catch { /* sem after: o cron trata */ } }
-  }
-
+  // Sem sincronizar aqui (09/10/26): o cron de 15 em 15 min e o "Atualizar agora" do admin tratam — a
+  // leitura dos módulos é pesada e não deve correr a cada abertura da tela.
   return NextResponse.json({
     ...fila,
     acompanhar,
