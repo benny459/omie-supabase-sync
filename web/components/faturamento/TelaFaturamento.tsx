@@ -795,7 +795,7 @@ function Acoes({ d, ocupado, abrir, prod, registrar, revisar }: { d: Doc; ocupad
     <span className="tf-acoes">
       <button className="btn sm pri" disabled={!!ocupado} title={`${rotulo} — abre a folha completa: cliente, itens, recebimento, prévia do ${d.tipo === "PV" ? "DANFE" : "recibo"} — a emissão só acontece lá`}
         onClick={pare(() => revisar?.(d))}>
-        Revisar e emitir{st === "parc" ? " saldo" : ""}
+        Revisar e emitir
       </button>
       <MenuMais acoes={mais} />
     </span>
@@ -816,8 +816,8 @@ function Valores({ valor, faturado, nNf, fat }: { valor: number; faturado: numbe
   const sd = Math.max(0, valor - faturado);
   const p = valor ? Math.min(1, faturado / valor) : 0;
   return (
-    <div className="vals" title={`Valor total ${fmt(valor)} · Faturado ${fmt(faturado)} · Falta faturar ${fmt(sd)}`}>
-      <b className="mono" style={{ color: sd > 0.01 ? "var(--f-tx)" : "var(--f-tx3)" }}>{sd > 0.01 ? fmt(sd) : "—"}</b>
+    <div className="vals">
+      <b className="mono" style={{ color: sd > 0.01 ? "var(--f-tx)" : "var(--f-tx3)" }} title={`Falta faturar ${fmt(sd)} · Faturado ${fmt(faturado)} · Valor total ${fmt(valor)}`}>{sd > 0.01 ? fmt(sd) : "—"}</b>
       <span className="vbar"><i style={{ width: `${p * 100}%`, background: fat || p >= 0.999 ? "var(--f-ok)" : "var(--f-warn)" }} /></span>
       <small className="mono">
         <span style={{ color: faturado ? "var(--f-ok)" : undefined }}>{Math.round(p * 100)}%</span>
@@ -860,12 +860,12 @@ function Lista({ rows, sel, setSel, sort, setSort, abrir, ocupado, agir, prod, r
             }} />
           </th>
           <th className="tf-fix tf-fix-ult c-doc" style={col2}>{so("doc", "Documento")} <span className="so-sep">·</span> {so("cliente", "Cliente / OC")}</th>
-          <th className="tf-p2">{so("emissao", "Emissão")}</th>
-          <th>{so("previsao", "Previsão fat.")}</th>
-          <th className="r">{so("saldo", "Falta faturar")} <span className="so-sep">·</span> {so("valor", "Total")} <span className="so-sep">·</span> {so("pct", "%")}</th>
-          <th>Recebimento</th>
-          <th className="tf-p2">Status</th>
-          <th className="r">Ações</th>
+          <th className="tf-p2 c-emi">{so("emissao", "Emissão")}</th>
+          <th className="c-prev">{so("previsao", "Previsão fat.")}</th>
+          <th className="r c-val">{so("saldo", "Falta faturar")} <span className="so-sep">·</span> {so("valor", "Total")} <span className="so-sep">·</span> {so("pct", "%")}</th>
+          <th className="c-rec">Recebimento</th>
+          <th className="tf-p2 c-st">Status</th>
+          <th className="r c-acao">Ações</th>
         </tr></thead>
         <tbody>
           {rows.slice(0, limite).map((d) => {
@@ -881,7 +881,7 @@ function Lista({ rows, sel, setSel, sort, setSort, abrir, ocupado, agir, prod, r
                 <td className="tf-fix tf-fix-ult c-doc" style={col2}>
                   <div className="doc"><span className={`tag ${d.tipo.toLowerCase()}`}>{d.tipo}</span><b>{d.rotulo}</b>
                     {rasc?.has(d.chave) && <span className="chipf on" style={{ marginLeft: 2, padding: "1px 7px", fontSize: 10.5 }} title={`Tem rascunho salvo (#${rasc.get(d.chave)}) — Revisar e emitir oferece continuar`}>rascunho</span>}
-                    <span className="orig tf-ell" style={{ marginLeft: "auto", ["--tf-ell" as string]: "130px" }} title={`${d.origem} · ${etapaRot(d)}`}>{d.origem} · {etapaRot(d)}</span></div>
+                    <span className="orig tf-ell c-etapa" title={`${d.origem} · ${etapaRot(d)}`}>{d.origem} · {etapaRot(d)}</span></div>
                   <div className="cli tf-ell" title={[limpo(d.fantasia || d.cliente || ""), limpo(d.razao ?? "")].filter(Boolean).join(" — ")}>{nomeCli}</div>
                   {d.razao && d.fantasia && limpo(d.razao) !== limpo(d.fantasia) && <div className="orig tf-ell" title={limpo(d.razao)}>{limpo(d.razao)}</div>}
                   <div className="orig tf-ell" title={[d.oc ? `OC ${d.oc}` : "sem OC", d.descricao].filter(Boolean).join(" · ")}>

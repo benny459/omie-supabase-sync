@@ -416,7 +416,20 @@
 .fpv .tbl-fit .fl tr.row.sel td.tf-fix { background: linear-gradient(var(--f-blue-s), var(--f-blue-s)) var(--tf-bg); }
 .fpv .tbl-fit .fl tfoot td.tf-fix { background: var(--tf-head); }
 .fpv .fl .c-cb { width: 38px; min-width: 38px; max-width: 38px; padding-left: 12px; padding-right: 0; }
-.fpv .fl .c-doc { width: 300px; min-width: 230px; max-width: 320px; --tf-ell: 296px; }
+/* Larguras explícitas (table-layout: fixed — a 1.ª linha manda): só Documento+Cliente
+   é flexível e fica com o que sobra; nada de espaço perdido entre colunas. */
+.fpv .tbl-fit > table.fl { table-layout: fixed; }
+.fpv .tbl-fit .fl th, .fpv .tbl-fit .fl td { box-sizing: border-box; }
+.fpv .fl .c-doc { width: auto; min-width: 230px; --tf-ell: 100%; overflow: hidden; }
+.fpv .fl .c-emi { width: 104px; }
+.fpv .fl .c-prev { width: 118px; }
+.fpv .fl .c-val { width: 176px; }
+.fpv .fl .c-rec { width: 176px; }
+.fpv .fl .c-st { width: 164px; }
+.fpv .fl .c-acao { width: 190px; }
+.fpv .fl .c-doc .c-etapa { margin-left: auto; max-width: 45%; flex: 0 1 auto; }
+.fpv .fl td.c-doc .doc { min-width: 0; overflow: hidden; }
+.fpv .fl td.c-doc .doc b { white-space: nowrap; }
 .fpv .fl .c-doc .doc { min-width: 0; }
 .fpv .fl .c-doc .cli { max-width: var(--tf-ell); margin-top: 3px; font-weight: 550; }
 .fpv .fl .c-doc .flag { white-space: normal; }
@@ -429,3 +442,4 @@
 .fpv .vals .vbar i { display: block; height: 100%; }
 .fpv .vals small { font-size: 11px; color: var(--f-tx3); white-space: nowrap; }
 .fpv .tbl-fit .rowact { justify-content: flex-end; }
+.fpv .tbl-fit .rec-cel { flex-wrap: wrap; white-space: normal; row-gap: 2px; }
