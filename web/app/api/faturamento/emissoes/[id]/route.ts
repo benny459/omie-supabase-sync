@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { exigirFaturamento, falha } from "@/lib/faturamento/auth";
-import { atualizar, cancelar, urlArquivo } from "@/lib/faturamento/server";
+import { atualizar, buscar, cancelar, cancelarRecibo, situacaoRecibo, urlArquivo } from "@/lib/faturamento/server";
 import { supaAdmin } from "@/lib/supabase-admin";
 
 export const dynamic = "force-dynamic";
@@ -24,14 +24,26 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ id: string
   try { return await resposta(Number(id)); } catch (e) { return falha(e); }
 }
 
-/** POST { acao: "cancelar", justificativa } — só homologação. */
+/** POST { acao: "cancelar", justificativa } — homologação (qualquer tipo) ou RECIBO de produção (09/10/26).
+ *  POST { acao: "cancelar_previa" } — o que acontece ao cancelar o recibo (recebimento baixado? enviado ao cliente?). */
 export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   const q = await exigirFaturamento();
   if (q instanceof NextResponse) return q;
   const { id } = await ctx.params;
   const body = await req.json().catch(() => ({}));
   try {
+    if (body.acao === "cancelar_previa") {
+      const s = await situacaoRecibo(Number(id));
+      return NextResponse.json({ numero: s.row.numero, valor: Number(s.row.valor_total), origem: s.row.origem_rotulo, status: s.row.status,
+        tipo: s.row.tipo, ambiente: s.row.ambiente, tem_baixa: s.tem_baixa, receber: s.receber, envios: s.envios });
+    }
     if (body.acao === "cancelar") {
+      const row = await buscar(Number(id));
+      if (row.tipo === "recibo" && row.ambiente === "producao") {
+        const e = await cancelarRecibo(Number(id), String(body.justificativa || ""), q.email);
+        await supaAdmin().schema("orders").rpc("vendas_refrescar").then(() => null, () => null);
+        return NextResponse.json({ emissao: e });
+      }
       const e = await cancelar(Number(id), String(body.justificativa || ""));
       return NextResponse.json({ emissao: e });
     }

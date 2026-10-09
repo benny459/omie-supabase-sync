@@ -260,6 +260,30 @@ Na aba **Contratos recorrentes**:
 - Para cada contrato: itens, valor do período, dia de faturamento, competências já faturadas.
 - **Faturar** uma competência (ou várias) gera a OS; depois emita o recibo ou registre a NFS-e. **A mesma competência não pode ser faturada duas vezes.**
 - **+ Novo contrato**, **Editar**, **Suspender**, **Encerrar**, **Registrar reajuste**.
+- Contrato com valor **R$ 0,00** não fatura: o painel avisa e pede para editar o valor antes. Recibo com total R$ 0,00 também não é emitido.
+
+### Como editar o valor (ou os itens) de um contrato
+
+1. Clique no contrato para abrir a gaveta e depois em **Editar**.
+2. Nos **Itens**, digite o valor do serviço. Pode ser `2.720,64`, `2720,64` ou `2720.64`. Se o valor não for entendido, o campo fica vermelho e o painel diz o que corrigir.
+3. Se houver OS deste contrato já geradas e **ainda não faturadas**, deixe marcado **Aplicar também às OS já geradas e ainda não faturadas** para que recebam o valor novo.
+4. Clique em **Gravar contrato** e confirme. Aparece **✓ Contrato … gravado** com o que mudou (ex.: `valor: R$ 2.600,00 → R$ 2.720,64`) e as OS atualizadas.
+5. O **Registro**, no fim da gaveta, guarda quem alterou, quando e o "de → para".
+
+### O recibo saiu com o valor errado (ou zerado). Como corrijo?
+
+Recibo é um documento interno (não passa pela SEFAZ). Ele pode ser cancelado e emitido de novo:
+
+1. Abra o contrato. Se o valor do contrato estiver errado, corrija primeiro em **Editar** (veja acima).
+2. A gaveta mostra em vermelho a OS que saiu errada. Clique em **Cancelar recibo nº … e corrigir a OS…** e confirme o motivo. Para outros recibos, use **Cancelar recibo e corrigir** no Histórico de faturamento.
+3. O painel cancela o recibo, tira o título **REC …** do Contas a receber e põe na OS o valor atual do contrato.
+4. Clique em **Emitir recibo**. O recibo novo sai com o **próximo número**, porque o número cancelado não volta. Depois use **✉ Enviar** para mandá-lo ao cliente.
+
+Também dá para cancelar um recibo de produção em **Faturamento › Emissões › Cancelar recibo**. A OS volta para "aberta". Corrija o valor e emita de novo pela carteira.
+
+- O cancelamento é bloqueado se o recibo já tem **recebimento baixado**. Nesse caso, estorne a baixa antes em Financeiro › Contas a receber.
+- Se o recibo já tinha sido **enviado ao cliente**, o painel avisa. Ao mandar o novo, informe que o anterior foi cancelado.
+- NF-e e NFS-e **não** são canceladas por aqui.
 
 ## Prontidão
 
@@ -280,4 +304,6 @@ Toda NF-e precisa de um NCM válido (8 dígitos, da tabela oficial da Receita) e
 
 **Não acho uma OS faturada.** Ela pode estar fora do período escolhido — busque pelo número ou mude o período para **Tudo**.
 
-**Errei a nota.** Rejeitada: corrija e reenvie. Autorizada: fale com o financeiro para cancelamento.
+**Errei a nota.** Rejeitada: corrija e reenvie. Autorizada: fale com o financeiro para cancelamento. **Recibo** errado: veja "O recibo saiu com o valor errado" em Contratos recorrentes. Ele pode ser cancelado e reemitido pelo painel.
+
+**Editei o contrato e o valor não ficou.** Confira a mensagem **✓ Contrato … gravado — R$ …** e o Registro da gaveta. Se o valor digitado não for entendido, o painel não grava e diz o que corrigir.

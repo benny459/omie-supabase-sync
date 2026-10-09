@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { limpo } from "@/lib/faturamento/montar";
 import { BuscaPessoa, type PessoaOp } from "@/components/vendas/BuscasCrmCadastro";
+import { numBR, validarItensContrato } from "@/lib/faturamento/contrato-valor";
 
 /* Contratos recorrentes (sql/68, 05/10/2026) — aba da tela /faturamento.
    O contrato vive no painel (importado uma vez do Omie). "Faturar competência"
@@ -48,6 +49,15 @@ const SIT: Record<Sit, { l: string; c: string }> = {
   a_faturar: { l: "A faturar", c: "s-pronto" }, futuro: { l: "Próximo mês", c: "s-pend" },
 };
 const STC: Record<Ctr["status"], string> = { ativo: "s-fat", suspenso: "s-pend", encerrado: "s-pend", rascunho: "s-pend" };
+/** Linha do Registro do contrato em português (09/10/26: "valor: R$ 0,00 → R$ 2.720,64"). */
+function textoLog(l: { acao: string; detalhe: Record<string, unknown> | null }) {
+  const d = l.detalhe ?? {};
+  if (typeof d.texto === "string" && d.texto) return `${({ alteracao: "alterado", os_atualizada: "OS atualizada", recibo_cancelado: "recibo cancelado" } as Record<string, string>)[l.acao] ?? l.acao} · ${d.texto}`;
+  if (l.acao === "editado" || l.acao === "criado") return `${l.acao === "criado" ? "criado" : "gravado"} · valor ${fmt(Number(d.valor ?? 0))}${d.itens != null ? ` · ${d.itens} item(ns)` : ""}`;
+  if (l.acao === "faturar") return `faturado · ${String(d.documento ?? "")} · competência ${comp(String(d.competencia ?? ""))} · ${fmt(Number(d.valor ?? 0))}`;
+  if (l.acao === "desfazer") return `competência ${comp(String(d.competencia ?? ""))} desfeita · ${String(d.motivo ?? "")}`;
+  return `${l.acao}${Object.keys(d).length ? ` · ${JSON.stringify(d)}` : ""}`;
+}
 const devidas = (c: Ctr) => c.competencias.filter((x) => x.situacao === "atrasado" || x.situacao === "a_faturar");
 
 export default function ContratosRecorrentes({ empresa, admin, tipoOs, prod, avisar, registrarNfse }: {
@@ -78,6 +88,7 @@ export default function ContratosRecorrentes({ empresa, admin, tipoOs, prod, avi
   }
 
   async function faturar(c: Ctr, competencia: string) {
+    if (!(Number(c.valor) > 0)) { avisar(`O contrato ${c.numero} está com valor R$ 0,00 — a OS sairia sem preço. Abra o contrato, clique em Editar, informe o valor e grave; depois fature.`); return; }
     if (!window.confirm(`Gerar a OS do contrato ${c.numero} (${limpo(c.cliente ?? "")}) — competência ${comp(competencia)} — ${fmt(c.valor)}?`)) return;
     setOcupado(`f:${c.id}:${competencia}`);
     const r = await post({ acao: "faturar", id: c.id, competencia });
@@ -353,8 +364,35 @@ function Gaveta({ c, fechar, faturar, ocupado, avisar, post, onMudou, editar, em
     const r = await post({ acao: "desfazer", comp_id: compId, motivo });
     if (r.error) avisar(r.error); else { avisar("Competência desfeita"); onMudou(); carregar(); }
   }
+  const [corrigindo, setCorrigindo] = useState<number | null>(null);
+  async function atualizarOs(h: Detalhe["historico_faturas"][number]) {
+    if (!window.confirm(`Atualizar a ${h.documento} com o valor atual do contrato (${fmt(c.valor)})?\n\nA OS ainda não foi faturada: os itens passam a ser os do contrato e as parcelas são recalculadas. Depois emita o recibo.`)) return;
+    setCorrigindo(h.id);
+    const r = await post({ acao: "atualizar_os", id: c.id, comp_id: h.id });
+    setCorrigindo(null);
+    if (r.error) { avisar(r.error); return; }
+    avisar(`${r.documento}: ${fmt(Number(r.de))} → ${fmt(Number(r.para))}. Agora clique em “Emitir recibo”.`);
+    onMudou(); carregar();
+  }
+  async function corrigirRecibo(h: Detalhe["historico_faturas"][number]) {
+    const num = h.emissao?.numero ?? "";
+    if (!window.confirm(`Cancelar o recibo nº ${num} (${fmt(Number(h.valor))}) da ${h.documento} e corrigir a OS para ${fmt(c.valor)}?\n\n` +
+      `• O recibo nº ${num} fica CANCELADO (o número não é reaproveitado; o novo recibo sai com o próximo número).\n` +
+      `• O título REC ${num} sai do Contas a receber.\n• A ${h.documento} volta a “aberta” com o valor do contrato.\n\n` +
+      `Depois é só clicar em “Emitir recibo” e enviar ao cliente.`)) return;
+    const motivo = window.prompt("Motivo do cancelamento (fica no histórico):", Number(h.valor) > 0 ? "Recibo com valor errado — reemitido com o valor do contrato" : "Recibo saiu com valor zerado — reemitido com o valor do contrato");
+    if (motivo == null) return;
+    setCorrigindo(h.id);
+    const r = await post({ acao: "corrigir_recibo", id: c.id, comp_id: h.id, motivo });
+    setCorrigindo(null);
+    if (r.error) { avisar(r.error); onMudou(); carregar(); return; }
+    avisar(`${r.recibo_cancelado ? `Recibo nº ${r.recibo_cancelado} cancelado. ` : ""}${r.documento}: ${fmt(Number(r.de))} → ${fmt(Number(r.para))}. Agora clique em “Emitir recibo” para gerar o recibo certo.`);
+    onMudou(); carregar();
+  }
   async function reajustar() {
-    const r = await post({ acao: "reajustar", id: c.id, desde: rj.desde, valor: Number(String(rj.valor).replace(/\./g, "").replace(",", ".")), indice: rj.indice, obs: rj.obs });
+    const valor = numBR(rj.valor);
+    if (!(valor > 0)) { avisar(`Não entendi o novo valor “${rj.valor}”. Digite só o número, por exemplo 2.720,64 ou 2720,64.`); return; }
+    const r = await post({ acao: "reajustar", id: c.id, desde: rj.desde, valor, indice: rj.indice, obs: rj.obs });
     if (r.error) avisar(r.error); else { avisar(`Reajuste registrado: novo valor ${fmt(Number(r.valor))}`); setReaj(false); onMudou(); carregar(); }
   }
 
@@ -382,6 +420,18 @@ function Gaveta({ c, fechar, faturar, ocupado, avisar, post, onMudou, editar, em
           </div>
         </div>
         <div className="db">
+          {!(c.valor > 0) && <div className="alert bad">Este contrato está com valor <b>R$ 0,00</b> — a OS e o recibo sairiam sem preço. Clique em <b>Editar</b>, informe o valor do serviço (ex.: 2.720,64) e grave.</div>}
+          {d && d.historico_faturas.filter((h) => h.origem === "painel" && h.venda_id && !h.nfse && (!(Number(h.valor) > 0) || (h.status === "gerado" && Math.abs(Number(h.valor) - c.valor) > 0.005))).map((h) => (
+            <div key={`z${h.id}`} className="alert bad">
+              <b>{h.documento}</b> ({comp(h.competencia)}) {h.emissao?.status === "autorizada" ? <>saiu com o recibo nº <b>{h.emissao.numero}</b> de </> : <>está com </>}<b>{fmt(Number(h.valor))}</b>
+              {c.valor > 0 ? <> — o contrato hoje vale <b>{fmt(c.valor)}</b>.</> : <> — corrija primeiro o valor do contrato (Editar).</>}
+              {c.valor > 0 && <div style={{ marginTop: 6, display: "flex", gap: 6, flexWrap: "wrap" }}>
+                {h.emissao?.status === "autorizada" && h.emissao.tipo === "recibo"
+                  ? <button className="btn sm pri" disabled={corrigindo === h.id} onClick={() => corrigirRecibo(h)}>{corrigindo === h.id ? "Corrigindo…" : `Cancelar recibo nº ${h.emissao.numero} e corrigir a ${h.documento}`}</button>
+                  : h.status === "gerado" && <button className="btn sm pri" disabled={corrigindo === h.id} onClick={() => atualizarOs(h)}>{corrigindo === h.id ? "Atualizando…" : `Atualizar ${h.documento} para ${fmt(c.valor)}`}</button>}
+              </div>}
+            </div>
+          ))}
           {c.vencido && <div className="alert bad">Vigência terminou em {dataBR(c.vig_fim)} — renove (Editar) ou encerre o contrato.</div>}
           {c.reajuste_proximo && <div className="alert">Reajuste {c.proximo_reajuste && c.proximo_reajuste < (new Date().toISOString().slice(0, 10)) ? "vencido desde" : "previsto para"} {dataBR(c.proximo_reajuste)}{c.indice ? ` (${c.indice})` : ""}.</div>}
           {reaj && (
@@ -389,7 +439,7 @@ function Gaveta({ c, fechar, faturar, ocupado, avisar, post, onMudou, editar, em
               <h3>Reajuste</h3>
               <div className="ctr-form">
                 <label>Vigente desde (competência)<input type="date" value={rj.desde} onChange={(e) => setRj({ ...rj, desde: e.target.value })} /></label>
-                <label>Novo valor do período<input value={rj.valor} placeholder={String(c.valor).replace(".", ",")} onChange={(e) => setRj({ ...rj, valor: e.target.value })} /></label>
+                <label>Novo valor do período<input value={rj.valor} placeholder={c.valor.toLocaleString("pt-BR", { minimumFractionDigits: 2 })} inputMode="decimal" onChange={(e) => setRj({ ...rj, valor: e.target.value })} /></label>
                 <label>Índice<input value={rj.indice} placeholder="IPCA, IGP-M, negociado…" onChange={(e) => setRj({ ...rj, indice: e.target.value })} /></label>
                 <label className="w">Observação<input value={rj.obs} onChange={(e) => setRj({ ...rj, obs: e.target.value })} /></label>
               </div>
@@ -453,6 +503,9 @@ function Gaveta({ c, fechar, faturar, ocupado, avisar, post, onMudou, editar, em
                       const j = await fetch(`/api/faturamento/nfse/${h.nfse!.id}`, { cache: "no-store" }).then((x) => x.json()).catch((e) => ({ error: String(e) }));
                       if (j.error) avisar(j.error); else if (j.pdf_url) window.open(j.pdf_url, "_blank"); else avisar(`NFS-e ${h.nfse!.numero} registrada sem PDF anexado`);
                     }}>NFS-e nº {h.nfse.numero}{h.nfse.tem_pdf ? " (PDF)" : " · sem PDF"}</button>}
+                    {h.origem === "painel" && h.venda_id && !h.nfse && h.emissao?.status === "autorizada" && h.emissao.tipo === "recibo" && h.emissao.ambiente === "producao" && Number(h.valor) > 0 &&
+                      <button className="btn sm ghost" disabled={corrigindo === h.id} title="Valor errado no recibo? Cancela este recibo (o número não volta), tira o título do Contas a receber e põe na OS o valor atual do contrato — depois emita de novo"
+                        onClick={() => corrigirRecibo(h)}>{corrigindo === h.id ? "Corrigindo…" : "Cancelar recibo e corrigir"}</button>}
                     {h.status === "gerado" && h.venda_id && !h.nfse && h.emissao?.status !== "autorizada" && (<>
                       {h.emissao && ["erro", "rejeitada"].includes(h.emissao.status) && <span className="flag bad" title={h.emissao.mensagem ?? ""}>
                         recibo não saiu ({dataBR(h.emissao.em)}): {(h.emissao.mensagem ?? h.emissao.status).slice(0, 80)}</span>}
@@ -467,7 +520,7 @@ function Gaveta({ c, fechar, faturar, ocupado, avisar, post, onMudou, editar, em
 
           {d && d.log.length > 0 && (<>
             <h4>Registro</h4>
-            {d.log.slice(0, 15).map((l, i) => <div key={i} className="orig">{new Date(l.em).toLocaleString("pt-BR")} · {l.por ?? "—"} · {l.acao}{l.detalhe ? ` · ${JSON.stringify(l.detalhe)}` : ""}</div>)}
+            {d.log.slice(0, 20).map((l, i) => <div key={i} className="orig">{new Date(l.em).toLocaleString("pt-BR")} · {l.por ?? "—"} · {textoLog(l)}</div>)}
           </>)}
         </div>
       </aside>
@@ -490,43 +543,79 @@ function FormContrato({ empresa, c, fechar, post, avisar, feito }: {
   });
   const [itens, setItens] = useState<Item[]>([]);
   const [salvando, setSalvando] = useState(false);
+  const [erroForm, setErroForm] = useState<string | null>(null);
+  // OS geradas por este contrato e ainda não faturadas (podem receber o valor novo ao gravar)
+  const [abertas, setAbertas] = useState<{ documento: string | null; valor: number }[]>([]);
+  const [aplicarOs, setAplicarOs] = useState(true);
+  const [gravado, setGravado] = useState<{ id: number; numero: string; valor: number; mudancas: string[]; registro: boolean;
+    os_atualizadas: { documento: string; de: number; para: number }[]; os_erros: string[];
+    zerados: { comp_id: number; documento: string | null; recibo: string | null }[] } | null>(null);
 
   useEffect(() => {
     fetch(`/api/vendas/opcoes?emp=${empresa}`, { cache: "no-store" }).then((x) => x.json()).then((j) => setOp(j)).catch(() => null);
     if (c) {
       fetch(`/api/faturamento/contratos?id=${c.id}`, { cache: "no-store" }).then((x) => x.json()).then((j) => {
         if (j.error) return;
-        setItens(j.itens ?? []);
+        // valor no formato brasileiro (2.720,64) — o campo aceita 2.720,64, 2720,64 ou 2720.64
+        setItens(((j.itens ?? []) as Item[]).map((i) => ({ ...i, valor_unitario: Number(i.valor_unitario).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) as unknown as number })));
         setF((s) => ({ ...s, categoria_codigo: String(j.contrato?.categoria_codigo ?? "") }));
+        setAbertas(((j.historico_faturas ?? []) as Detalhe["historico_faturas"])
+          .filter((h) => h.origem === "painel" && h.status === "gerado" && h.venda_id && !h.nfse && h.emissao?.status !== "autorizada")
+          .map((h) => ({ documento: h.documento, valor: Number(h.valor) })));
       }).catch(() => null);
     } else setItens([{ descricao: "VISITA CONTRATUAL PERIÓDICA - TRATAMENTO DE ÁGUA", lc116: "7.15", cod_serv_munic: "", quantidade: 1, valor_unitario: 0 }]);
   }, [empresa, c]);
 
-  const total = itens.reduce((a, i) => a + Number(i.quantidade || 0) * Number(i.valor_unitario || 0), 0);
+  const total = itens.reduce((a, i) => a + (numBR(i.quantidade) || 0) * (numBR(i.valor_unitario) || 0), 0);
+  const valorRuim = (i: Item) => String(i.valor_unitario ?? "").trim() !== "" && !Number.isFinite(numBR(i.valor_unitario));
   async function salvar() {
-    if (!cli) { avisar("Escolha o cliente"); return; }
+    setErroForm(null);
+    if (!cli) { setErroForm("Escolha o cliente (campo Cliente, no topo)."); return; }
+    // 09/10/26: antes "2.720,64" virava 0 sem aviso (CM180321 · OS4893 · recibo 4657 com R$ 0,00)
+    const inval = validarItensContrato(itens);
+    if (inval) { setErroForm(inval); return; }
+    const muda = c && Math.abs(total - Number(c.valor)) > 0.005;
+    if (muda && !window.confirm(`Gravar o contrato ${c!.numero} com o valor ${fmt(total)} (antes ${fmt(Number(c!.valor))})?` +
+      (abertas.length ? `\n\n${aplicarOs ? "As OS ainda não faturadas também passam para o valor novo" : "As OS já geradas ficam com o valor antigo"}: ${abertas.map((a) => `${a.documento} (${fmt(a.valor)})`).join(", ")}.` : ""))) return;
     setSalvando(true);
-    const r = await post({ acao: "salvar", contrato: {
+    const r = await post({ acao: "salvar", aplicar_os: aplicarOs, contrato: {
       id: c?.id ?? null, empresa, cliente_codigo: cli.codigo, cliente_nome: cli.nome, ...f,
-      itens: itens.map((i) => ({ ...i, quantidade: Number(i.quantidade), valor_unitario: Number(String(i.valor_unitario).replace(",", ".")) })),
+      itens: itens.map((i) => ({ ...i, quantidade: numBR(i.quantidade), valor_unitario: numBR(i.valor_unitario) })),
     } });
     setSalvando(false);
-    if (r.error) { avisar(r.error); return; }
-    avisar(`Contrato ${r.numero} gravado (${fmt(Number(r.valor))})`);
-    feito(Number(r.id) || null);
+    if (r.error) { setErroForm(String(r.error)); return; }
+    avisar(`Contrato ${r.numero} gravado — ${fmt(Number(r.valor))}`);
+    setGravado(r as unknown as NonNullable<typeof gravado>);
   }
+  const sair = () => (gravado ? feito(Number(gravado.id) || null) : fechar());
   const set = (k: keyof typeof f) => (e: { target: { value: string } }) => setF({ ...f, [k]: e.target.value });
 
   return (
     <>
-      <div className="fpv-scrim" onClick={fechar} />
+      <div className="fpv-scrim" onClick={sair} />
       <aside className="fpv-drawer">
         <div className="dh">
-          <button className="x" onClick={fechar}>✕</button>
+          <button className="x" onClick={sair}>✕</button>
           <h2>{c ? `Editar contrato ${c.numero}` : "Novo contrato recorrente"}</h2>
+          {c && <div className="c">Valor atual: <b className="mono">{fmt(Number(c.valor))}</b> · altere o valor do serviço nos itens abaixo e clique em <b>Gravar contrato</b>.</div>}
           {c?.origem === "omie" && <div className="c">Importado do Omie: depois de editado aqui, a releitura do Omie não o sobrescreve mais.</div>}
         </div>
         <div className="db">
+          {gravado && (
+            <div className="panel" style={{ margin: "4px 0 12px", borderColor: "var(--f-ok)" }}>
+              <h3 style={{ color: "var(--f-ok)" }}>✓ Contrato {gravado.numero} gravado — {fmt(Number(gravado.valor))}</h3>
+              {gravado.mudancas.length > 0
+                ? <ul style={{ margin: "4px 0 6px 18px", fontSize: 12.5 }}>{gravado.mudancas.map((m, i) => <li key={i}>{m}</li>)}</ul>
+                : c && <div className="orig">Nada mudou em relação ao que estava gravado.</div>}
+              {!gravado.registro && <div className="orig">O histórico “de → para” passa a ficar guardado no Registro quando o banco for atualizado (sql/160).</div>}
+              {gravado.os_atualizadas.map((o) => <div key={o.documento} className="orig">✓ {o.documento}: {fmt(o.de)} → {fmt(o.para)} (ainda não faturada — emita o recibo)</div>)}
+              {gravado.os_erros.map((e, i) => <div key={i} className="flag bad">{e}</div>)}
+              {gravado.zerados.filter((z) => z.recibo).map((z) => (
+                <div key={z.comp_id} className="alert bad" style={{ marginTop: 6 }}>O recibo nº <b>{z.recibo}</b> da <b>{z.documento}</b> já saiu com R$ 0,00. Feche este formulário e, no contrato, clique em <b>Cancelar recibo nº {z.recibo} e corrigir</b>; depois em <b>Emitir recibo</b>.</div>
+              ))}
+              <div style={{ marginTop: 8 }}><button className="btn sm pri" onClick={() => feito(Number(gravado.id) || null)}>Fechar e abrir o contrato</button></div>
+            </div>
+          )}
           <div className="ctr-form">
             <label className="w">Cliente
               {cli ? <div className="ctr-cli"><b>{limpo(cli.nome)}</b> <button className="btn sm ghost" onClick={() => setCli(null)}>trocar</button></div>
@@ -558,14 +647,24 @@ function FormContrato({ empresa, c, fechar, post, avisar, feito }: {
               <input className="w" value={it.descricao} onChange={(e) => setItens(itens.map((x, k) => (k === i ? { ...x, descricao: e.target.value } : x)))} placeholder="Descrição (o “REFERENTE AO MÊS” é posto a cada fatura)" />
               <input value={it.lc116 ?? ""} onChange={(e) => setItens(itens.map((x, k) => (k === i ? { ...x, lc116: e.target.value } : x)))} placeholder="LC116" />
               <input value={String(it.quantidade)} onChange={(e) => setItens(itens.map((x, k) => (k === i ? { ...x, quantidade: Number(e.target.value) || 0 } : x)))} placeholder="Qtd" />
-              <input value={String(it.valor_unitario)} onChange={(e) => setItens(itens.map((x, k) => (k === i ? { ...x, valor_unitario: e.target.value as unknown as number } : x)))} placeholder="Valor" />
+              <input value={String(it.valor_unitario)} inputMode="decimal" aria-invalid={valorRuim(it)} style={valorRuim(it) ? { borderColor: "var(--f-bad)" } : undefined}
+                title={valorRuim(it) ? "Não entendi este valor — digite por exemplo 2.720,64 ou 2720,64" : "Valor do serviço no período (ex.: 2.720,64)"}
+                onChange={(e) => setItens(itens.map((x, k) => (k === i ? { ...x, valor_unitario: e.target.value as unknown as number } : x)))} placeholder="Valor (ex.: 2.720,64)" />
               <button className="btn sm ghost" onClick={() => setItens(itens.filter((_, k) => k !== i))}>✕</button>
             </div>
           ))}
           <button className="btn sm" onClick={() => setItens([...itens, { descricao: "", lc116: "7.15", cod_serv_munic: "", quantidade: 1, valor_unitario: 0 }])}>+ item</button>
+          {c && abertas.length > 0 && (
+            <label style={{ display: "flex", gap: 8, alignItems: "flex-start", marginTop: 12, fontSize: 13 }}>
+              <input type="checkbox" checked={aplicarOs} onChange={(e) => setAplicarOs(e.target.checked)} style={{ marginTop: 3 }} />
+              <span>Aplicar também às OS já geradas e ainda não faturadas: {abertas.map((a) => `${a.documento} (${fmt(a.valor)})`).join(", ")}
+                <span className="orig" style={{ display: "block" }}>Recibo já emitido não muda por aqui: no contrato use “Cancelar recibo e corrigir”.</span></span>
+            </label>
+          )}
+          {erroForm && <div className="alert bad" style={{ marginTop: 12 }}>{erroForm}</div>}
           <div style={{ marginTop: 14, display: "flex", gap: 10, alignItems: "center" }}>
             <button className="btn pri" disabled={salvando} onClick={salvar}>{salvando ? "Gravando…" : "Gravar contrato"}</button>
-            <span className="mono">Total do período: <b>{fmt(total)}</b></span>
+            <span className="mono" style={{ color: total > 0 ? undefined : "var(--f-bad)" }}>Total do período: <b>{fmt(total)}</b>{c && Math.abs(total - Number(c.valor)) > 0.005 ? <span className="orig"> (antes {fmt(Number(c.valor))})</span> : null}</span>
           </div>
         </div>
       </aside>

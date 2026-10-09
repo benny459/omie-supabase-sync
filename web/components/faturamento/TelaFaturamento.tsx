@@ -1317,6 +1317,30 @@ function Emissoes({ lista, q, onMudou, avisar, naoEnv = null }: { lista: Emissao
     setOcup(null);
     if (r.error) avisar(r.error); else onMudou();
   }
+  /** Recibo de produção (09/10/26): documento interno — cancela, tira o título do Receber e reabre a OS para reemitir. */
+  async function cancelarRecibo(e: Emissao) {
+    setOcup(e.id);
+    const pv = await fetch(`/api/faturamento/emissoes/${e.id}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ acao: "cancelar_previa" }) })
+      .then((x) => x.json()).catch((er) => ({ error: String(er) }));
+    setOcup(null);
+    if (pv.error) { avisar(pv.error); return; }
+    if (pv.tem_baixa) { avisar(`O recibo nº ${e.numero} já tem recebimento baixado. Estorne a baixa em Financeiro › Contas a receber (REC ${e.numero}) e depois cancele o recibo.`); return; }
+    const env = (pv.envios ?? []) as { para: string[] | null; enviado_em: string }[];
+    const origem = e.origem_rotulo ?? "documento de origem";
+    if (!window.confirm(`Cancelar o recibo nº ${e.numero} (${fmt(Number(e.valor_total))}) — ${limpo(e.cliente?.nome ?? "")}?\n\n` +
+      `• O recibo fica CANCELADO e o número ${e.numero} não volta: o próximo recibo sai com o número seguinte.\n` +
+      `• O título REC ${e.numero} sai do Contas a receber.\n• A ${origem} volta a “aberta”: corrija o valor (contrato recorrente: Contratos recorrentes › Editar; OS avulsa: Vendas) e emita o recibo de novo.` +
+      (env.length ? `\n\n⚠ Este recibo já foi enviado ao cliente em ${new Date(env[0].enviado_em).toLocaleDateString("pt-BR")} (${(env[0].para ?? []).slice(0, 2).join(", ")}${(env[0].para ?? []).length > 2 ? "…" : ""}). Ao enviar o novo, avise que o nº ${e.numero} foi cancelado.` : "\n\nEste recibo não foi enviado ao cliente."))) return;
+    const motivo = window.prompt("Motivo do cancelamento (fica no histórico):", Number(e.valor_total) > 0 ? "Recibo com valor errado — será reemitido" : "Recibo saiu com valor zerado — será reemitido com o valor certo");
+    if (motivo == null) return;
+    setOcup(e.id);
+    const r = await fetch(`/api/faturamento/emissoes/${e.id}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ acao: "cancelar", justificativa: motivo }) })
+      .then((x) => x.json()).catch((er) => ({ error: String(er) }));
+    setOcup(null);
+    if (r.error) { avisar(r.error); return; }
+    avisar(`Recibo nº ${e.numero} cancelado. A ${origem} voltou a “aberta”: corrija o valor e emita o recibo de novo na carteira.`);
+    onMudou();
+  }
   async function cancelar(e: Emissao) {
     const just = window.prompt("Justificativa do cancelamento (mín. 15 caracteres):", "Teste de homologação cancelado pelo painel");
     if (!just) return;
@@ -1360,6 +1384,9 @@ function Emissoes({ lista, q, onMudou, avisar, naoEnv = null }: { lista: Emissao
                   {e.status === "autorizada" && e.ambiente === "producao" && !e.ensaio &&
                     <EnviarAoCliente className="btn ghost sm" id={e.id} rotulo={falta(e) ? "✉ Enviar" : "✉ Reenviar"} onFechado={(env) => { if (env) onMudou(); }} />}
                   {e.status === "autorizada" && e.ambiente === "homologacao" && <button className="btn ghost sm danger" disabled={ocup === e.id} onClick={() => cancelar(e)}>Cancelar</button>}
+                  {e.status === "autorizada" && e.ambiente === "producao" && e.tipo === "recibo" && !e.ensaio &&
+                    <button className="btn ghost sm danger" disabled={ocup === e.id} title="Recibo com valor errado? Cancela (o número não volta), tira o título do Contas a receber e reabre a OS para emitir de novo"
+                      onClick={() => cancelarRecibo(e)}>Cancelar recibo</button>}
                 </div></td>
               </tr>
             ))}

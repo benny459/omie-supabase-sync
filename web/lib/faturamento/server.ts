@@ -141,6 +141,10 @@ export async function emitir(doc: DocFat, o: EmitirOpts): Promise<Emissao> {
   const tipo: TipoDoc = o.tipo ?? (origemTipo === "os" ? cfg.tipo_os : "nfe");
   const inval = validar(doc);
   if (inval) throw new Error(inval);
+  // 09/10/26: o recibo nº 4657 (OS4893, contrato CM180321) saiu com R$ 0,00 — documento de venda sem preço não sai.
+  if (op0(doc) && !(Math.round(totalDoc(doc.itens) * 100) > 0) && tipo !== "nfe") {
+    throw new Error(`${tipo === "recibo" ? "Recibo" : "NFS-e"} com total R$ 0,00 não é emitido. Corrija o valor ${doc.rotulo ? `da ${doc.rotulo}` : "dos itens"} (contrato recorrente: Faturamento › Contratos recorrentes › Editar o contrato e “Atualizar OS com o valor do contrato”) e emita de novo.`);
+  }
   if (tipo === "nfse" && !doc.cliente.email) throw new Error("NFS-e (Barueri) exige e-mail do tomador");
   const op = operacaoDe(doc);
   if (op !== "venda" && tipo !== "nfe") throw new Error("Devolução/remessa só existem como NF-e");
@@ -320,6 +324,9 @@ async function emitirRecibo(row: Emissao, doc: DocFat, em: Emitente, cfg: Config
   return await posAutorizacao(aut);
 }
 
+/** Venda comum (não devolução/remessa). */
+const op0 = (doc: DocFat) => operacaoDe(doc) === "venda";
+
 const MAPA_STATUS: Record<string, string> = {
   autorizado: "autorizada", cancelado: "cancelada",
   erro_autorizacao: "rejeitada", denegado: "rejeitada", erro_cancelamento: "autorizada",
@@ -431,10 +438,10 @@ async function marcarOrigemFaturada(row: Emissao) {
 }
 
 /** Desfaz o "faturado" do PV/OS de origem quando a nota é cancelada. */
-async function desfazerOrigemFaturada(row: Emissao) {
+async function desfazerOrigemFaturada(row: Emissao, extra: Record<string, unknown> = {}) {
   if (!row.origem_id || !["pv", "os", "venda"].includes(row.origem_tipo) || !/^\d+$/.test(row.origem_id)) return;
   await supaAdmin().schema("orders").rpc("vendas_desfazer_faturado", {
-    p_id: Number(row.origem_id), p_doc: { emissao_id: row.id, tipo: row.tipo, numero: row.numero, ambiente: row.ambiente },
+    p_id: Number(row.origem_id), p_doc: { emissao_id: row.id, tipo: row.tipo, numero: row.numero, ambiente: row.ambiente, ...extra },
   }).then(() => null, () => null);
   await supaAdmin().schema("orders").rpc("vendas_refrescar").then(() => null, () => null);
 }
@@ -459,6 +466,53 @@ export async function cancelar(id: number, justificativa: string): Promise<Emiss
   }
   await desfazerOrigemFaturada(row);
   return await patch(id, { status: "cancelada", cancelada_em: new Date().toISOString(), receber_ids: null, mensagem: `Cancelada: ${justificativa.trim()}` });
+}
+
+/** Situação de um recibo de produção antes de cancelar: recebimentos e envios ao cliente. */
+export async function situacaoRecibo(id: number) {
+  const row = await buscar(id);
+  const ids = row.receber_ids ?? [];
+  const fin = supaAdmin().schema("finance");
+  const [{ data: rec }, { data: bx }, { data: env }] = await Promise.all([
+    ids.length ? fin.from("receber").select("id,valor,valor_pago,pago_em,numero_documento").in("id", ids) : Promise.resolve({ data: [] as never[] }),
+    ids.length ? fin.from("baixas").select("id,receber_id").in("receber_id", ids).limit(5) : Promise.resolve({ data: [] as never[] }),
+    db().from("fat_envios").select("id,para,enviado_em,status").eq("emissao_id", id).order("enviado_em", { ascending: false }).limit(5),
+  ]);
+  const pagos = ((rec ?? []) as { valor_pago: number | null; pago_em: string | null }[]).filter((r) => Number(r.valor_pago ?? 0) > 0 || r.pago_em);
+  return { row, receber: rec ?? [], tem_baixa: (bx ?? []).length > 0 || pagos.length > 0, envios: (env ?? []) as { para: string[] | null; enviado_em: string; status: string }[] };
+}
+
+/**
+ * Cancela um RECIBO de produção (09/10/26). Recibo é documento interno (não passa
+ * pela SEFAZ/prefeitura): o número cancelado não é reaproveitado — o próximo recibo
+ * sai com o próximo número —, as parcelas a receber que ele criou saem do Receber
+ * e a OS/PV de origem volta a "aberta" para corrigir e emitir de novo.
+ * NF-e e NFS-e continuam fora (cancelamento fiscal é outro processo).
+ */
+export async function cancelarRecibo(id: number, motivo: string, por: string): Promise<Emissao & { envios_cliente: number }> {
+  const { row, receber, tem_baixa, envios } = await situacaoRecibo(id);
+  if (row.tipo !== "recibo") throw new Error("Só recibos podem ser cancelados por aqui. NF-e/NFS-e de produção: cancele na SEFAZ/prefeitura e fale com o administrador.");
+  if (row.status === "cancelada") throw new Error(`O recibo nº ${row.numero ?? "?"} já está cancelado — emita o novo recibo pela OS (${row.origem_rotulo ?? "carteira"}).`);
+  if (row.status !== "autorizada") throw new Error(`O recibo #${row.id} está “${row.status}”: não há o que cancelar. Use “Emitir recibo de novo” na OS.`);
+  if (motivo.trim().length < 10) throw new Error("Escreva o motivo do cancelamento (pelo menos 10 letras) — ex.: “recibo saiu com valor zerado; reemitido com o valor do contrato”.");
+  if (tem_baixa) {
+    throw new Error(`O recibo nº ${row.numero} já tem recebimento baixado no Financeiro. Estorne a baixa em Financeiro › Contas a receber (${row.numero ? `REC ${row.numero}` : "título do recibo"}) e tente de novo — assim o caixa não fica com um pagamento sem título.`);
+  }
+  const ids = (receber as { id: string }[]).map((r) => r.id);
+  if (ids.length) {
+    const { error } = await supaAdmin().schema("finance").from("receber").delete().in("id", ids).eq("origem", "painel");
+    if (error) throw new Error(`Não consegui tirar o título REC ${row.numero} do Contas a receber (${error.message}) — nada foi cancelado; tente de novo.`);
+  }
+  await desfazerOrigemFaturada(row, { cancelado_por: por, motivo: motivo.trim(), valor: Number(row.valor_total) });
+  const quando = new Date().toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo", dateStyle: "short", timeStyle: "short" });
+  const aut = await patch(id, {
+    status: "cancelada", cancelada_em: new Date().toISOString(), receber_ids: null,
+    mensagem: `Recibo nº ${row.numero} cancelado por ${por} em ${quando}: ${motivo.trim()}`,
+    payload: { ...((row.payload as Record<string, unknown> | null) ?? {}),
+      cancelamento: { por, em: new Date().toISOString(), motivo: motivo.trim(), receber_removidos: receber, valor: Number(row.valor_total), envios_cliente: envios.length } },
+  });
+  // A OS de origem ganha no histórico "faturamento_desfeito" com quem/porquê (p_doc acima).
+  return { ...aut, envios_cliente: envios.length };
 }
 
 /** URL assinada (1 h) de um arquivo do bucket. */
