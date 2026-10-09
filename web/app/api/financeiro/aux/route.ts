@@ -29,14 +29,18 @@ export async function GET(req: Request) {
   );
 
   // Contrapartes: só busca com q (base tem milhares); nome fantasia OU razão OU CNPJ.
+  // 09/10/26: busca no cadastro do painel (orders.cadastros_listar) — o mesmo da tela Cadastros,
+  // com o espelho do Omie E os cadastrados no painel. Antes lia finance.clientes (só Omie) e o
+  // fornecedor novo (ex.: GABRIEL AGUA MENESES, cód. 9000…) não aparecia na Nova conta a pagar.
   const clientesPromise = q.length >= 2
-    ? admin.from("clientes")
-        .select("codigo_cliente_omie, nome_fantasia, razao_social, cnpj_cpf")
-        .eq("empresa", empresa)
-        .neq("inativo", "S")
-        .or(`nome_fantasia.ilike.%${q}%,razao_social.ilike.%${q}%,cnpj_cpf.ilike.%${q}%`)
-        .order("nome_fantasia")
-        .limit(20)
+    ? createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!,
+        { auth: { persistSession: false }, db: { schema: "orders" } })
+        .rpc("cadastros_listar", { p_papel: null, p_empresa: empresa, p_q: q, p_ativos: true, p_lim: 20, p_off: 0 })
+        .then(({ data, error }) => ({
+          error,
+          data: ((data as { linhas?: { codigo: number; fantasia: string | null; razao: string | null; doc: string | null }[] } | null)?.linhas ?? [])
+            .map((l) => ({ codigo_cliente_omie: l.codigo, nome_fantasia: l.fantasia ?? l.razao, razao_social: l.razao, cnpj_cpf: l.doc })),
+        }))
     : Promise.resolve({ data: [], error: null });
 
   const catFiltro = tipo === "pagar" ? "conta_despesa" : "conta_receita";

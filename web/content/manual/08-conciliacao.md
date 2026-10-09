@@ -5,7 +5,7 @@ icone: 🏦
 area: erp
 rotas: /financeiro/conciliacao
 caminhos: web/components/navy/tela/TelaConciliacaoBancaria.tsx, web/components/financeiro/pagar-v3-motor.ts, web/components/financeiro/receber-v1-motor.ts, web/components/financeiro/CasarPainel.tsx, web/lib/ofx.ts, web/app/api/financeiro/ofx, web/app/api/financeiro/conciliacao
-atualizado: 2026-10-06
+atualizado: 2026-10-09
 ---
 
 Conciliar é ligar cada lançamento do extrato ao título que ele paga ou recebe. Quando você concilia, o título fica **PAGO** ou **RECEBIDO** em todo o sistema (telas, BI e fluxo de caixa).
@@ -33,7 +33,7 @@ Conciliar é ligar cada lançamento do extrato ao título que ele paga ou recebe
 4. Se a conta não for reconhecida, escolha uma ou **+ cadastrar conta**.
 5. Confirme.
 
-> **Dica:** lançamentos que já estavam importados não entram de novo.
+> **Dica:** lançamentos que já estavam importados não entram de novo. Pode reimportar o mesmo período sem medo: alguns bancos, como o Bradesco, mudam o código interno (FITID) do lançamento a cada arquivo. Por isso o painel também reconhece pela **data, valor, nº do documento e histórico**. Duas tarifas iguais no mesmo dia continuam entrando como duas; só entra de novo o que passar do que já existe.
 
 ## Como faço para casar um lançamento com o título
 
@@ -49,7 +49,9 @@ Atalhos: **j/k** navegam, **/** vai para a busca, **Enter** casa, **Esc** fecha.
 ## Quando não existe título
 
 - **Criar título e conciliar**: escolha o cliente/fornecedor e a categoria (tarifa, juros, rendimento…).
-- **Transferência entre contas**: o sistema procura o lançamento do outro lado.
+- **Transferência entre contas** (PIX/TED entre contas nossas, por exemplo do Bradesco para o C6): o sistema procura o lançamento do outro lado, com o mesmo valor e até 3 dias de diferença, e liga os dois.
+  - Se um lado já foi marcado como transferência **sem** o par, ele aparece na busca do outro com *"já marcado como transferência, falta ligar"*. Clique **é este**.
+  - O botão rápido **Marcar transferência** existe para entradas e para saídas, no Contas a pagar e no Contas a receber. Quando só há um candidato do outro lado, liga os dois sozinho.
 - **Ignorar** com motivo.
 
 ## Regras e conciliação automática

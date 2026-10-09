@@ -35,7 +35,7 @@ type Grupo = { grupo: true; chave: string; contraparte: string | null; cnpj: str
 type MovInfo = { id: number; empresa: string; cod_cc: number; data: string; valor: number; memo: string | null; nome: string | null;
   natureza: "P" | "R"; restante: number; chave: string | null; omie?: boolean; ignorado?: boolean; ignorado_motivo?: string | null };
 type Resp = { movimento: MovInfo; aliases: { contraparte: string; cnpj: string | null; usos: number }[]; candidatos: Cand[]; grupos: Grupo[]; pode_baixar?: boolean };
-type Transf = { id: number; empresa: string; cod_cc: number; data: string; valor: number; memo: string | null; conta: string | null };
+type Transf = { id: number; empresa: string; cod_cc: number; data: string; valor: number; memo: string | null; conta: string | null; ja_marcado?: boolean };
 type Pessoa = { codigo: number; razao: string; fantasia: string | null; doc: string | null };
 
 export function abrirCasar(movimentoId: number) {
@@ -454,7 +454,7 @@ function Transferencia({ m, ocupado, post, onFeito }: {
       {lista && !lista.length && <div style={{ color: C.tx3 }}>Nenhum movimento oposto de {brl(Math.abs(m.valor))} em outra conta (±3 dias). O extrato da outra conta pode não ter sido importado.</div>}
       {lista?.map((t) => (
         <div key={t.id} style={{ display: "flex", gap: 10, alignItems: "center", border: `1px solid ${C.line}`, borderRadius: 10, padding: "8px 10px" }}>
-          <span style={{ flex: 1 }}>{t.conta ?? t.cod_cc} ({t.empresa}) · {dm(t.data)} · {t.memo ?? "—"}</span>
+          <span style={{ flex: 1 }}>{t.conta ?? t.cod_cc} ({t.empresa}) · {dm(t.data)} · {t.memo ?? "—"}{t.ja_marcado && <span style={{ color: C.tx3 }}> · já marcado como transferência, falta ligar</span>}</span>
           <b style={{ color: t.valor < 0 ? C.bad : C.ok }}>{t.valor < 0 ? "−" : "+"}{brl(Math.abs(t.valor))}</b>
           <button type="button" disabled={ocupado} style={btn(C.ok, true)}
             onClick={async () => { if (await post({ acao: "transferencia", movimento_id: m.id, par: t.id }, "Transferência entre contas marcada nos dois extratos")) setTimeout(onFeito, 600); }}>

@@ -5,7 +5,7 @@ icone: 💸
 area: erp
 rotas: /financeiro/pagar
 caminhos: web/components/financeiro/TelaPagarV3.tsx, web/components/financeiro/pagar-v3-motor.ts, web/components/financeiro/RemessaC6.tsx, web/components/financeiro/SerieDialog.tsx, web/components/financeiro/EditarTituloModal.tsx, web/lib/financeiro-editar.ts, web/components/NovoTituloModal.tsx, web/app/api/financeiro/pagar, web/app/api/financeiro/provisao, sql/141_provisao_confirmar.sql
-atualizado: 2026-10-08
+atualizado: 2026-10-09
 ---
 
 **Financeiro → Títulos a Pagar** junta os títulos do Omie (até o corte) e as contas nascidas no painel (previsões de PC e contas lançadas aqui).
@@ -15,6 +15,8 @@ atualizado: 2026-10-08
 - **Indicadores clicáveis**: vencidos, hoje, 7, 30 e 90 dias e bloqueados — clique para filtrar.
 - **Próximos 30 dias · por empresa**: agenda por dia ou semana. Clique num dia para ver o detalhe e **Baixar liberados**.
 - **Bancos**: saldo de cada conta, último extrato e quanto está programado.
+  - **Conta com extrato importado (OFX/CSV):** o saldo é o do **extrato**, e não mais o do Omie. Se o arquivo traz o saldo final (Bradesco), usa esse saldo mais o que entrou depois. Se não traz (C6), soma o que o extrato trouxe ao último saldo conhecido antes dele. O mesmo saldo vale no Contas a receber e no Fluxo de caixa.
+  - **"N mov. a conciliar"** conta só as saídas do extrato ainda sem título casado. Boleto pago com juros ou multa, já casado, não conta mais como pendente.
 - **Vencidos · onde está o dinheiro**: ranking por fornecedor, categoria, projeto ou status.
 - **Pagamentos**: a tabela, com filtros estilo Excel, colunas de **Compra** e **NF**, e exportação.
 
@@ -84,6 +86,7 @@ O título da CD fica **PAGO** e o sistema registra sozinho "**CD deve à SF**" e
 ## Nova conta e contas recorrentes
 
 1. Clique em **+ Nova conta**, escolha fornecedor, categoria, conta, projeto, vencimento e valor.
+   - A busca de **Fornecedor** usa o mesmo cadastro da tela **Cadastros**: aparecem os que vieram do Omie e os **cadastrados no painel**, na hora.
    - **Nº documento ou nº da nota fiscal é obrigatório.** Sem documento? Clique em **Gerar nº** — sai um número único (ex.: PG-SF-2610-000001) que fica registrado.
    - **Emissão**: se não preencher, fica a data do lançamento (hoje) — ela aparece no formulário e na gaveta do título.
    - **Código de barras / linha digitável** (boleto, 44/47/48 dígitos): cole no campo. Se o valor estiver vazio e o vencimento for o de hoje, o sistema lê **valor e vencimento do próprio código**. O código aparece na gaveta com **copiar** e vai sozinho para o **Arquivo C6** como pagamento de boleto. Dá para corrigir depois em **Editar título**.
