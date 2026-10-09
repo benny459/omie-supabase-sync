@@ -53,6 +53,10 @@ export async function reaplicarNaOs(d: DetalheContrato, h: HistFatura, por: stri
   // Sem "parcelas": o banco recalcula pela condição de pagamento com o total novo.
   const p: Record<string, unknown> = { ...o, id, itens };
   for (const k of ["parcelas", "historico", "emissoes", "rcs", "pessoa", "cliente", "condicao", "projeto", "categoria", "label"]) delete p[k];
+  // Condição de pagamento, projeto e categoria também vêm do contrato (a OS4893 saiu "A Vista" e o contrato é "Para 45 dias").
+  const ct = d.contrato as Record<string, string | null>;
+  for (const k of ["condicao_codigo", "projeto_codigo", "categoria_codigo"]) if (ct[k]) p[k] = ct[k];
+  if (ct.condicao_codigo && ct.condicao_codigo !== o.condicao_codigo) { delete p.condicao_descricao; delete p.qtd_parcelas; }
   const { data: r, error: e2 } = await db().rpc("vendas_salvar", { p, p_por: por });
   if (e2) throw new Error(`${o.label}: ${e2.message}`);
   const para = Number((r as { valor_total: number }).valor_total);

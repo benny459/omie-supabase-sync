@@ -276,7 +276,7 @@ Recibo é um documento interno (não passa pela SEFAZ). Ele pode ser cancelado e
 
 1. Abra o contrato. Se o valor do contrato estiver errado, corrija primeiro em **Editar** (veja acima).
 2. A gaveta mostra em vermelho a OS que saiu errada. Clique em **Cancelar recibo nº … e corrigir a OS…** e confirme o motivo. Para outros recibos, use **Cancelar recibo e corrigir** no Histórico de faturamento.
-3. O painel cancela o recibo, tira o título **REC …** do Contas a receber e põe na OS o valor atual do contrato.
+3. O painel cancela o recibo, tira o título **REC …** do Contas a receber e põe na OS o valor e a condição de pagamento atuais do contrato.
 4. Clique em **Emitir recibo**. O recibo novo sai com o **próximo número**, porque o número cancelado não volta. Depois use **✉ Enviar** para mandá-lo ao cliente.
 
 Também dá para cancelar um recibo de produção em **Faturamento › Emissões › Cancelar recibo**. A OS volta para "aberta". Corrija o valor e emita de novo pela carteira.

@@ -378,7 +378,7 @@ function Gaveta({ c, fechar, faturar, ocupado, avisar, post, onMudou, editar, em
     const num = h.emissao?.numero ?? "";
     if (!window.confirm(`Cancelar o recibo nº ${num} (${fmt(Number(h.valor))}) da ${h.documento} e corrigir a OS para ${fmt(c.valor)}?\n\n` +
       `• O recibo nº ${num} fica CANCELADO (o número não é reaproveitado; o novo recibo sai com o próximo número).\n` +
-      `• O título REC ${num} sai do Contas a receber.\n• A ${h.documento} volta a “aberta” com o valor do contrato.\n\n` +
+      `• O título REC ${num} sai do Contas a receber.\n• A ${h.documento} volta a “aberta” com o valor e a condição de pagamento do contrato.\n\n` +
       `Depois é só clicar em “Emitir recibo” e enviar ao cliente.`)) return;
     const motivo = window.prompt("Motivo do cancelamento (fica no histórico):", Number(h.valor) > 0 ? "Recibo com valor errado — reemitido com o valor do contrato" : "Recibo saiu com valor zerado — reemitido com o valor do contrato");
     if (motivo == null) return;
@@ -544,6 +544,7 @@ function FormContrato({ empresa, c, fechar, post, avisar, feito }: {
   const [itens, setItens] = useState<Item[]>([]);
   const [salvando, setSalvando] = useState(false);
   const [erroForm, setErroForm] = useState<string | null>(null);
+  const [pronto, setPronto] = useState(!c); // edição: só grava depois de carregar os itens gravados
   // OS geradas por este contrato e ainda não faturadas (podem receber o valor novo ao gravar)
   const [abertas, setAbertas] = useState<{ documento: string | null; valor: number }[]>([]);
   const [aplicarOs, setAplicarOs] = useState(true);
@@ -555,7 +556,8 @@ function FormContrato({ empresa, c, fechar, post, avisar, feito }: {
     fetch(`/api/vendas/opcoes?emp=${empresa}`, { cache: "no-store" }).then((x) => x.json()).then((j) => setOp(j)).catch(() => null);
     if (c) {
       fetch(`/api/faturamento/contratos?id=${c.id}`, { cache: "no-store" }).then((x) => x.json()).then((j) => {
-        if (j.error) return;
+        if (j.error) { setErroForm(`Não consegui carregar os itens do contrato (${j.error}) — feche e abra de novo antes de gravar.`); return; }
+        setPronto(true);
         // valor no formato brasileiro (2.720,64) — o campo aceita 2.720,64, 2720,64 ou 2720.64
         setItens(((j.itens ?? []) as Item[]).map((i) => ({ ...i, valor_unitario: Number(i.valor_unitario).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) as unknown as number })));
         setF((s) => ({ ...s, categoria_codigo: String(j.contrato?.categoria_codigo ?? "") }));
@@ -663,7 +665,7 @@ function FormContrato({ empresa, c, fechar, post, avisar, feito }: {
           )}
           {erroForm && <div className="alert bad" style={{ marginTop: 12 }}>{erroForm}</div>}
           <div style={{ marginTop: 14, display: "flex", gap: 10, alignItems: "center" }}>
-            <button className="btn pri" disabled={salvando} onClick={salvar}>{salvando ? "Gravando…" : "Gravar contrato"}</button>
+            <button className="btn pri" disabled={salvando || !pronto} onClick={salvar}>{salvando ? "Gravando…" : !pronto ? "Carregando itens…" : "Gravar contrato"}</button>
             <span className="mono" style={{ color: total > 0 ? undefined : "var(--f-bad)" }}>Total do período: <b>{fmt(total)}</b>{c && Math.abs(total - Number(c.valor)) > 0.005 ? <span className="orig"> (antes {fmt(Number(c.valor))})</span> : null}</span>
           </div>
         </div>
