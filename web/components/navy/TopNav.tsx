@@ -36,6 +36,8 @@ import SeletorPaleta from "../viz/SeletorPaleta";
 import { useCesar } from "../cesar/CesarProvider";
 import { supaBrowser } from "@/lib/supabase";
 import { slugDaRota } from "@/lib/manual-rotas";
+import SinoOrdem, { useEstadoOrdem, type EstadoOrdem } from "../ordem/SinoOrdem";
+import type { ModuloOrdem } from "@/lib/ordem/tipos";
 import BarraAllka, {
   Avatar, BotaoAssistente, IconeOpcoes, useFechaFora,
   type ItemModulo, type ModuloBarra,
@@ -85,6 +87,9 @@ export default function TopNav({ userEmail, isPlatformAdmin }: { userEmail?: str
   const router = useRouter();
   const perms = useUserPerms();
   const telasRh = useTelasRh();
+  /* Central de Ordem (09/10/26): aba a mais nos módulos em que a pessoa já entra
+     e que o administrador ligou (admin vê todos, em pré-visualização). Nada sai do menu. */
+  const ordem = useEstadoOrdem(pathname ?? "");
   const [pendingHref, setPendingHref] = useState<string | null>(null);
   const [, startTransition] = useTransition();
 
@@ -176,8 +181,11 @@ export default function TopNav({ userEmail, isPlatformAdmin }: { userEmail?: str
         },
       }];
     }
+    // Central de Ordem do módulo (aba a mais, no fim da lista).
+    const daCentral = itensOrdem(ordem, g);
+    if (daCentral.length) lista = [...lista, ...daCentral];
     // Um item só (Compras, BI simples): sem lista, como no portal.
-    const semLista = itens.length === 1 && g !== "estoque";
+    const semLista = itens.length === 1 && g !== "estoque" && daCentral.length === 0;
     modulos.push({
       id: g, nome: def.label, href: itens[0].href, titulo: def.desc,
       itens: semLista ? undefined : lista,
@@ -194,7 +202,9 @@ export default function TopNav({ userEmail, isPlatformAdmin }: { userEmail?: str
   // Faturamento (05/10/26): aba própria, a seguir a Financeiro — emissão de NF pela Focus.
   const fat = FINANCEIRO.find((m) => m.href === "/faturamento");
   if (fat && visivel(fat)) {
-    modulos.push({ id: "faturamento", nome: "Faturamento", href: fat.href, titulo: "Emitir NF-e / NFS-e / recibo e acompanhar emissões" });
+    const fatOrdem = itensOrdem(ordem, "faturamento");
+    modulos.push({ id: "faturamento", nome: "Faturamento", href: fat.href, titulo: "Emitir NF-e / NFS-e / recibo e acompanhar emissões",
+      itens: fatOrdem.length ? [{ label: "Faturamento", href: fat.href, activo: pathname === fat.href }, ...fatOrdem] : undefined });
   }
   modulos.push({ id: "servicos", nome: "Serviços", href: "https://app.waterworks.com.br", externo: true, titulo: "Plataforma de serviços (login próprio)" });
   // RH (03/10/26): módulo próprio, logo a seguir a Serviços, igual ao portal.
@@ -216,7 +226,7 @@ export default function TopNav({ userEmail, isPlatformAdmin }: { userEmail?: str
       navegar={navegar}
       aquecer={aquecer}
       pendente={pendingHref}
-      direita={<Direita />}
+      direita={<Direita ordem={ordem} />}
       avatar={<MenuUtilizador email={userEmail} iniciais={iniciaisDe(userEmail)} />}
     />
   );
@@ -232,11 +242,12 @@ function iniciaisDe(email?: string | null) {
    engrenagem do Sistema e o avatar vêm a seguir, desenhados pela barra. O
    lançador de apps saiu — o símbolo do menu, à esquerda, leva ao Início do
    portal com todos os módulos. */
-function Direita() {
+function Direita({ ordem }: { ordem: EstadoOrdem | null }) {
   const { abrir, aberto } = useCesar();
   return (
     <>
       <GlobalSearch gatilho="campo" />
+      {ordem?.central && <SinoOrdem estado={ordem} />}
       <BotaoAssistente nome="Pergunte ao Cesar" onClick={() => abrir()} activo={aberto} />
       <BotaoManual />
       <Opcoes />
@@ -328,4 +339,20 @@ function MenuUtilizador({ email, iniciais }: { email?: string | null; iniciais: 
       )}
     </div>
   );
+}
+
+/** Barra → módulos da Central de Ordem (Operação leva também Projetos). */
+const ORDEM_DA_BARRA: Record<string, ModuloOrdem[]> = {
+  operacao: ["operacao", "projetos"], compras: ["compras"], estoque: ["estoque"],
+  financeiro: ["financeiro"], cadastros: ["cadastros"], faturamento: ["faturamento"],
+};
+const ROT_ORDEM: Record<string, string> = { operacao: "Operação", projetos: "Projetos" };
+
+function itensOrdem(ordem: EstadoOrdem | null, g: string): ItemModulo[] {
+  if (!ordem?.central) return [];
+  const mods = (ORDEM_DA_BARRA[g] ?? []).filter((m) => ordem.modulos.includes(m));
+  return mods.map((m, i) => ({
+    label: mods.length > 1 ? `✦ Central de Ordem · ${ROT_ORDEM[m] ?? m}` : "✦ Central de Ordem",
+    href: `/ordem?m=${m}`, secao: i === 0 ? "Aria" : undefined,
+  }));
 }

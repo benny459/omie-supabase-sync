@@ -4,6 +4,12 @@
 
 ---
 
+## [2026-10-09] [painel] feat | Central de Ordem (Aria por módulo) — Fases 0–4, tudo desligado
+
+- Nova aba **✦ Central de Ordem** em cada módulo + **Meu dia** (`/ordem`), ver [[Painel/40-Central-de-Ordem]]. Desvio da SPEC pedido pelo Benny: dentro do painel, não no portal.
+- Fase 0: inventário/mapa de permissões/fontes em `docs/plans/CENTRAL_DE_ORDEM.md`. Gate: nenhuma tela mudou; `/api/financeiro/pagar` manteve 533 linhas e a mesma distribuição de estados depois de extrair `carregar()`.
+- Detetores Compras (7) e Financeiro (8) a chamar as funções das telas; schema `ordem` (sql/162). Tudo nasce desligado, configuração com histórico (`/ordem/config`).
+
 ## [2026-09-21] [painel] feat | Simples Nacional — projeção do DAS do mês
 
 - **Origem:** Benny pediu conferência dos extratos PGDAS de 07 e 08/2026 da Safe Water contra o faturamento real, e depois "estimar no mês qual será o Simples apurado" e "monitorar as notas de serviço".
