@@ -464,7 +464,17 @@ export default function TelaOperacao({ modulo, title, rows: rowsIniciais, parcia
       codigoProjeto: Number(c.row.codigo_projeto ?? c.row.pv_codigo_projeto ?? 0) || null, pedidoId: c.pedidoId });
   }, [podeAjustarPc, mostrar, ehAdmin, podeAprovar]);
   const setStatus = useCallback(async (c: Compra, status: string) => {
-    if (abrirPcNativo(c.row.ncod_ped)) return;
+    // PC do Compras (sql/148-149): decide pela rota do Compras, com a regra de projeto (Marcelo/budget).
+    if (Number(c.row.ncod_ped) < 0) {
+      const st = STATUS_COMPRAS[status];
+      if (!st) { abrirPcNativo(c.row.ncod_ped); return; }
+      const antesN = c.statusCodigo;
+      aplicar(c.key, { status });
+      const e = await decidirPcNativo([c.row], st);
+      if (e) { aplicar(c.key, { status: antesN }); mostrar({ msg: `Não gravou (PC ${c.pc}): ${e}`, erro: true }); return; }
+      mostrar({ msg: `PC ${c.pc}: ${OPCOES_STATUS.find((o) => o.v === status)?.l.toLowerCase() ?? status}` });
+      return;
+    }
     if (!podeAprovar) { mostrar({ msg: "Sem permissão para aprovar neste módulo.", erro: true }); return; }
     // "Cancelar pedido" cancela de verdade (sql/146) — abre o motivo em vez de só gravar o rótulo
     if (status === "CANCELAR_PEDIDO" && c.pc) { abrirAjustePc("cancelar", [c]); return; }
@@ -562,7 +572,15 @@ export default function TelaOperacao({ modulo, title, rows: rowsIniciais, parcia
 
   const selCompras = useMemo(() => [...sel].map((k) => compraPorKey.get(k)).filter(Boolean) as Compra[], [sel, compraPorKey]);
   const emMassa = async (status: string, lista?: Compra[]) => {
-    const alvo = (lista ?? selCompras).filter((c) => c.temPc && Number(c.row.ncod_ped) > 0);
+    const todos = (lista ?? selCompras).filter((c) => c.temPc);
+    const nativos = todos.filter((c) => Number(c.row.ncod_ped) < 0);
+    if (nativos.length && STATUS_COMPRAS[status]) {
+      const e = await decidirPcNativo(nativos.map((c) => c.row), STATUS_COMPRAS[status]);
+      if (e) mostrar({ msg: `PCs do Compras: ${e}`, erro: true });
+      else for (const c of nativos) aplicar(c.key, { status });
+    }
+    const alvo = todos.filter((c) => Number(c.row.ncod_ped) > 0);
+    if (!alvo.length && nativos.length) { setSel(new Set()); return; }
     if (!alvo.length) { mostrar({ msg: "Nenhuma das selecionadas tem PC — sem PC não há o que aprovar.", erro: true }); return; }
     const antes = new Map(alvo.map((c) => [c.key, c.statusCodigo]));
     for (const c of alvo) aplicar(c.key, { status });
@@ -2900,4 +2918,19 @@ function abrirPcNativo(ncod: unknown): boolean {
   if (!(n < 0)) return false;
   window.location.assign(`/erp/compras?pedido=${-n - 9_000_000_000_000}`);
   return true;
+}
+
+const STATUS_COMPRAS: Record<string, string> = { APROVADO: "aprovado", NAO_APROVADO: "nao_aprovado", PENDENTE: "aguardando" };
+
+/** Aprova/reprova PCs do Compras pela /api/compras/acao. null = ok; senão o erro. */
+async function decidirPcNativo(rows: Record<string, unknown>[], status: string): Promise<string | null> {
+  const ids = rows.map((r) => -Number(r.ncod_ped) - 9_000_000_000_000).filter((n) => n > 0);
+  try {
+    const r = await fetch("/api/compras/acao", { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ acao: "aprovar", ids, status }) });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) return String(j.error ?? r.statusText);
+    const f = (j.falhas ?? []) as { num: string; erro: string }[];
+    return f.length ? f.map((x) => `PC ${x.num}: ${x.erro}`).join(" · ") : null;
+  } catch (e) { return e instanceof Error ? e.message : String(e); }
 }

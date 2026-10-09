@@ -213,7 +213,15 @@ Em **/pcs** ficam os pedidos de compra que não pertencem a projeto nem a pedido
 
 - A lista abre **dos mais recentes para os mais antigos**, pela data de inclusão. No mesmo dia, o número maior vem primeiro.
 - Entram tanto os PCs que vieram do Omie quanto os criados na tela **Compras** do painel (por exemplo, um PC de 47_CONTRATUAL lançado pela compradora). O PC do Compras aparece até 10 minutos depois de criado.
-- Ao clicar num PC criado no Compras, o painel abre a **folha desse pedido no Compras**. A aprovação e as edições dele são feitas lá. O **Aprovar em lote** daqui ignora esses PCs.
+- **Aprovar, Não aprovado e voltar para Aguardando** funcionam aqui mesmo, também em lote, com a regra do Compras: um PC de projeto PJ é aprovado pelo Marcelo e, se estourar o budget, só pelo admin. Para editar ou ver os detalhes, o clique abre a **folha do pedido no Compras**.
+
+### Onde cada PC aparece
+
+Vale para os PCs do Omie e para os criados no **Compras**, nesta ordem:
+1. Projeto começa com **PJ** → **Projetos**. É lá que o Marcelo aprova.
+2. Tem **PV/OS** → **Avulsos**, dentro do pedido de venda.
+3. Projeto **40_VS** ou **41_VP**, sem PV/OS → **Standby**.
+4. O resto → **PCs Standalone**.
 
 ## Pedidos · PV/OS
 
