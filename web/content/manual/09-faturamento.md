@@ -131,7 +131,7 @@ A janela acompanha: **1 · Enviando à Focus → 2 · Processando na SEFAZ → A
 3. Vão anexados o **DANFE (PDF) e o XML** da NF-e, ou o **recibo em PDF**. Dá para incluir mais um anexo, como o boleto.
 4. **👁 Visualizar o arquivo** mostra o PDF. **✉ Enviar agora** manda.
 
-**De onde sai:** *WaterWorks Faturamento <contasareceber@waterworks.com.br>*. Todo envio vai com **cópia oculta para o contasareceber@ e para quem enviou**, com os anexos. A resposta do cliente chega para quem enviou.
+**De onde sai:** *WaterWorks Faturamento <noreply@waterworks.com.br>*. Se o cliente clicar em responder, a resposta vai para quem enviou. Todo envio vai com **cópia oculta para o contasareceber@ e para quem enviou**, com os anexos. A resposta do cliente chega para quem enviou.
 
 **Histórico de envios** (na mesma janela): data, quem enviou, para quem, anexos e a situação do e-mail:
 - **Enviado — aguardando entrega**;

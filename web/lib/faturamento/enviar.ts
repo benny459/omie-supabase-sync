@@ -12,10 +12,10 @@ import { emailConfigurado, emailOk, enviarResend, lista, novoMessageId, resendGe
 // "marcar como enviado" por outro caminho) fica registrado na emissão.
 
 /** Remetente do faturamento (o domínio waterworks.com.br já está validado no Resend). */
-// Como o Omie fazia (ele mandava de noreply@omie.com.br com contasareceber@ em cópia): sai do
-// contasareceber@ — caixa que existe, então o que voltar para o remetente chega à equipe — e ele
-// fica com a cópia oculta de todo envio, além de quem enviou.
-export const remetenteFat = () => process.env.FATURAMENTO_EMAIL_REMETENTE || "WaterWorks Faturamento <contasareceber@waterworks.com.br>";
+// Como o Omie fazia (noreply@omie.com.br com contasareceber@ em cópia): sai do noreply@waterworks
+// (Benny, 09/10/26); "responder para" = quem enviou, e o contasareceber@ e quem enviou ficam com a
+// cópia oculta de todo envio.
+export const remetenteFat = () => process.env.FATURAMENTO_EMAIL_REMETENTE || "WaterWorks Faturamento <noreply@waterworks.com.br>";
 export const ccoFixoFat = () => lista(process.env.FATURAMENTO_EMAIL_CCO_FIXO ?? "contasareceber@waterworks.com.br").map((x) => x.toLowerCase());
 const nomeDoc = (tipo: string) => (tipo === "nfe" ? "Nota Fiscal Eletrônica (NF-e)" : tipo === "nfse" ? "Nota Fiscal de Serviço (NFS-e)" : "Recibo de Prestação de Serviço");
 
