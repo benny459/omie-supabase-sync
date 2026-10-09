@@ -20,6 +20,7 @@
  */
 
 import GerarPcDaRc from "@/components/operacao/GerarPcDaRc";
+import OndeEsta from "./OndeEsta";
 import "./operacao.css";
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
@@ -115,7 +116,12 @@ export default function TelaOperacao({ modulo, title, rows: rowsIniciais, parcia
   const [escopo, setEscopo] = useState<Escopo>("aberto");
   const [q, setQ] = useState("");
   // ?q=PV1966 (vindo do cartão da RC/PC em Compras) já abre a tela filtrada.
-  useEffect(() => { const v = new URLSearchParams(window.location.search).get("q"); if (v) setQ(v); }, []);
+  // ?escopo=todos (09/10/26): vem do guia "Onde está?" — o achado pode estar faturado.
+  useEffect(() => {
+    const qs = new URLSearchParams(window.location.search);
+    const v = qs.get("q"); if (v) setQ(v);
+    const e = qs.get("escopo"); if (e === "aberto" || e === "faturado" || e === "todos") setEscopo(e);
+  }, []);
   const [periodo, setPeriodo] = useState<Periodo>("tudo");
   /* Ordem da lista: mais novo primeiro; clicar no cabeçalho reordena, de novo
      inverte (como no Excel). Gravada por módulo e nas visões salvas (06/10/26). */
@@ -236,6 +242,8 @@ export default function TelaOperacao({ modulo, title, rows: rowsIniciais, parcia
   useEffect(() => {
     if (modulo !== "projetos") return;
     try { if (localStorage.getItem("op:projetos:soAtivos") === "0") setSoAtivosSt(false); } catch { /* */ }
+    // Chegou com uma busca na URL (guia "Onde está?"): procura em todos, sem gravar a preferência.
+    if (new URLSearchParams(window.location.search).has("q")) setSoAtivosSt(false);
   }, [modulo]);
   const setSoAtivos = (v: boolean, gravar = true) => { setSoAtivosSt(v); if (gravar) try { localStorage.setItem("op:projetos:soAtivos", v ? "1" : "0"); } catch { /* */ } };
   const projDe = useCallback((p: Pedido) => {
@@ -402,6 +410,12 @@ export default function TelaOperacao({ modulo, title, rows: rowsIniciais, parcia
     if (modulo !== "projetos" || filtroAtivos || !pa.chaves.size) return o;
     return [...o.filter((x) => ehAtivo(x.p)), ...o.filter((x) => !ehAtivo(x.p))];
   }, [filtrarPor, marcados, ordem, modulo, filtroAtivos, pa.chaves, ehAtivo]);
+  /* Guia "Onde está?" (09/10/26): a busca sozinha, sem aba/filtros/★ ativos, acha algo aqui? */
+  const naTelaSemFiltros = useMemo(() => {
+    const qq = q.trim().toLowerCase();
+    if (!qq || visiveis.length) return 0;
+    return pedidos.filter((p) => (p.compras.length ? p.compras.some((c) => passa(p, c, qq, "tudo", {}, "todos")) : passa(p, null, qq, "tudo", {}, "todos"))).length;
+  }, [q, visiveis.length, pedidos]);
   const opcoes = useMemo(() => {
     const uniq = (a: string[]) => [...new Set(a.filter(Boolean))].sort((x, y) => x.localeCompare(y, "pt-BR"));
     return {
@@ -1120,7 +1134,13 @@ export default function TelaOperacao({ modulo, title, rows: rowsIniciais, parcia
       </>}
 
       {visiveis.length === 0 && (
-        <div style={{ padding: 40, textAlign: "center", color: "var(--ww-text-faint)" }}>Nada com estes filtros.</div>
+        <div style={{ padding: "32px 16px", textAlign: "center", color: "var(--ww-text-faint)" }}>
+          Nada com estes filtros.
+          {q.trim().length >= 2 && (
+            <OndeEsta q={q} modulo={modulo} naTela={naTelaSemFiltros}
+              onMostrarTudo={() => { setMarcados([]); setPeriodo("tudo"); setFiltros({}); setEscopo("todos"); if (modulo === "projetos") setSoAtivosSt(false); }} />
+          )}
+        </div>
       )}
 
       {vista === "lista" && (

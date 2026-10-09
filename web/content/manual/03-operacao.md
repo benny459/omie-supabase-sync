@@ -5,7 +5,7 @@ icone: 📋
 area: operacao
 rotas: /avulsos, /projetos, /pcs, /erp/vendas
 caminhos: web/components/BoldAvulsosView.tsx, web/components/projeto, web/components/operacao, web/app/(app)/avulsos, web/app/(app)/projetos, web/app/(app)/pcs, web/app/(app)/erp/vendas, web/components/vendas
-atualizado: 2026-10-08
+atualizado: 2026-10-09
 ---
 
 ## Avulsos
@@ -15,6 +15,7 @@ A lista de **pedidos de venda (PV/OS)** com as compras ligadas a cada um.
 - Cada pedido mostra a **barra da cadeia**: Requisição → Pedido de compra → Aprovação → Recebido → Conferido → **Pago** → Faturado → **Recebido**.
 - A coluna **M.B.** é a margem bruta (venda menos compras ligadas).
 - Use as abas **Em aberto / Faturados / Todos**, a busca e os filtros rápidos (Pode faturar, Venda em atraso, Compra em atraso, Minha aprovação, Sem PC, etc.).
+- **Não achou?** Quando a busca não encontra nada (em Vendas avulsas, PCs standalone ou Projetos), a tela diz **onde o número está**: nesta tela mas fora da aba/filtros (botão **Mostrar**), ou **noutra tela** — ex.: *PC 7119 está em Vendas avulsas › PV1861 (UNIMED CAMPINA GRANDE)* — com o link **Abrir em …** que já abre a tela certa com a busca. Procura PC, RC, PV/OS, PJ, NF do fornecedor e NF de venda (com ou sem zeros à esquerda). Lembre: **PCs standalone** só mostra PCs sem PV/OS e sem projeto (PJ, 40_VS, 41_VP). Se não estiver em lugar nenhum, avisa se o PC existe só no Omie (link para Compras), se está escondido em PCs excluídos, ou que não existe no painel.
 - Alterne a visão entre **Lista, Tabela, Kanban e Linha do tempo**.
 
 ### Período e ordem da lista

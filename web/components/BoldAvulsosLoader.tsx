@@ -36,7 +36,7 @@ function iniciarEtapas(view: string, countMode: string): Etapas {
   let soAtivos = false;
   if (view === "v_pc_projetos") {
     try { soAtivos = localStorage.getItem("op:projetos:soAtivos") !== "0"; } catch { soAtivos = true; }
-    if (qs.has("abrir")) soAtivos = false; // vai abrir um projeto específico: melhor a lista toda
+    if (qs.has("abrir") || qs.has("q")) soAtivos = false; // vai abrir um projeto específico: melhor a lista toda
   }
   const rapida = qs.has("classica") ? null : buscar(soAtivos ? "&ativos=1&aberto=1&rapido=1" : "&aberto=1&rapido=1");
   rapida?.catch(() => { /* a completa resolve */ });
