@@ -447,3 +447,8 @@
   .fpv .fl .c-emi { width: 120px; } .fpv .fl .c-prev { width: 140px; } .fpv .fl .c-val { width: 210px; }
   .fpv .fl .c-rec { width: 210px; } .fpv .fl .c-st { width: 190px; } .fpv .fl .c-acao { width: 210px; }
 }
+/* 09/10/26: a 2.ª linha cabe numa linha só em ~1440px também com o filtro "Não enviados" */
+.fpv .fbar-r2 { gap: 6px; }
+.fpv .flab select { max-width: 132px; }
+.fpv .qpill { padding: 0 5px 0 10px; gap: 6px; font-size: 12.5px; }
+.fpv .fsep { margin: 0 2px; }
