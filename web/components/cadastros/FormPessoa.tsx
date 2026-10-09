@@ -25,7 +25,10 @@ const VAZIO: Form = {
   telefone: "", telefone2: "", email: "", emailCobranca: "", emailNfe: "", contato: "", contatos: [], obs: "", ativo: true,
 };
 const UFS = ["AC", "AL", "AM", "AP", "BA", "CE", "DF", "ES", "GO", "MA", "MG", "MS", "MT", "PA", "PB", "PE", "PI", "PR", "RJ", "RN", "RO", "RR", "RS", "SC", "SE", "SP", "TO"];
-const emailOk = (e: string) => !e.trim() || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e.trim());
+// Aceita vários e-mails separados por vírgula ou ponto e vírgula (09/10/26 — hospitais
+// mandam operacional, financeiro e suprimentos no mesmo campo, como no Omie).
+const emailOk = (e: string) => e.split(/[,;]/).map((x) => x.trim()).filter(Boolean)
+  .every((x) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(x));
 
 /** emOverlay: aberto por cima de outra tela (ex.: folha do pedido de compra) —
  *  salvar/cancelar fecham a janela em vez de navegar. */
@@ -212,9 +215,9 @@ export default function FormPessoa({ id, emOverlay }: { id?: number; emOverlay?:
           <label className="f s3">Telefone<input className="inp" {...campo("telefone")} placeholder="11 99999-0000" /></label>
           <label className="f s3">Telefone 2<input className="inp" {...campo("telefone2")} /></label>
           <label className="f s6">Contato principal<input className="inp" {...campo("contato")} /></label>
-          <label className="f s4">E-mail<input className="inp" type="email" {...campo("email")} /></label>
-          <label className="f s4">E-mail de cobrança<input className="inp" type="email" {...campo("emailCobranca")} placeholder="Recebe boletos e cobranças" /></label>
-          <label className="f s4">E-mail para NF-e<input className="inp" type="email" {...campo("emailNfe")} placeholder="Recebe o XML/DANFE" /></label>
+          <label className="f s4">E-mail<input className="inp" type="text" inputMode="email" {...campo("email")} /></label>
+          <label className="f s4">E-mail de cobrança<input className="inp" type="text" inputMode="email" {...campo("emailCobranca")} placeholder="Recebe boletos e cobranças" /></label>
+          <label className="f s4">E-mail para NF-e<input className="inp" type="text" inputMode="email" {...campo("emailNfe")} placeholder="Recebe o XML/DANFE" /></label>
 
           <div className="f s12" style={{ display: "grid", gap: 8, gridColumn: "span 12" }}>
             <span style={{ fontSize: 12, fontWeight: 600, color: "var(--ww-text-2)" }}>Outros contatos</span>

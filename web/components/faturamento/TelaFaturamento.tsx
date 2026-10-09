@@ -1,5 +1,6 @@
 "use client";
 
+import EnviarAoCliente from "./EnviarAoCliente";
 import { useCallback, useEffect, useMemo, useState, type MouseEvent, type ReactNode } from "react";
 import { PaginaNavy } from "@/components/navy/tela/KitTela";
 import { limpo } from "@/lib/faturamento/montar";
@@ -1119,7 +1120,7 @@ function Gaveta({ d, r, empresa, prod, ocupado, agir, fechar, avisar, onMudou, r
               {semNfse(d) && <button className="btn pri" onClick={registrar}>Registrar NFS-e</button>}</>
           ) : (
             <><div className="sum">Documento 100% faturado<b style={{ color: "var(--f-ok)" }}>✓ {nfsAut(d).length} nota(s)</b></div>
-              <button className="btn" disabled title="Depende do Resend (RESEND_API_KEY)">Enviar ao cliente</button></>
+              <EnviarAoCliente className="btn" id={nfsAut(d).filter((n) => n.fonte === "painel" && n.id).slice(-1)[0]?.id ?? null} /></>
           )}
         </div>
       </aside>

@@ -1,5 +1,6 @@
 "use client";
 
+import EnviarAoCliente from "./EnviarAoCliente";
 import { useEffect, useMemo, useRef, useState } from "react";
 import AcertoItemEstoque from "./AcertoItemEstoque";
 import type { ClienteFat, CondicaoFat, DocFat, ItemFat, OperacaoNfe, OperacaoTipo, ParcelaDoc, RetencoesFat, TransporteFat } from "@/lib/faturamento/montar";
@@ -234,6 +235,8 @@ export default function NovaEmissao({ config, aberto, fechar, avisar, onEmitido,
   const [centro, setCentro] = useState("");
   const [vendedor, setVendedor] = useState("");
   const [contrato, setContrato] = useState("");
+  // Proposta do CRM de onde veio o pedido (09/10/26) — para a equipe saber o que está faturando.
+  const [propOrigem, setPropOrigem] = useState<string | null>(null);
   const [desconto, setDesconto] = useState(0);
   const [frete, setFrete] = useState(0);
   const [outras, setOutras] = useState(0);
@@ -295,7 +298,7 @@ export default function NovaEmissao({ config, aberto, fechar, avisar, onEmitido,
     setCli(VAZIO); setItens([ITEM0]); setParcs([]); setCond(""); condHint.current = null; setForma("BOL"); setConta("");
     setCategoria(""); setProjeto(""); setCentro(""); setVendedor(""); setContrato(""); setDesconto(0); setFrete(0); setOutras(0);
     setTransp({ modalidade: 9 }); setRet({ iss_retido: false }); setPedidoCli(""); setObs(""); setInfoContrib("");
-    setHist(null); setPre(null); setAviso(null); setCliCodigo(""); setProposta(""); setBase(hoje());
+    setHist(null); setPre(null); setAviso(null); setCliCodigo(""); setProposta(""); setPropOrigem(null); setBase(hoje());
     setNfRef(null); setNfBusca(""); setNfLista(null); setMotivo(""); setCliProjeto(""); setGeraCob(false);
     setFormaPorParcela(false); setItBusca(null); setItSug(null); setDicas({}); setParcelaDoc(null); setParcsProj(null);
   }
@@ -324,6 +327,8 @@ export default function NovaEmissao({ config, aberto, fechar, avisar, onEmitido,
     setCategoria(c?.categoria ?? "");
     setProjeto(c?.projeto ?? "");
     if (c?.vendedor) setVendedor(c.vendedor);
+    if (c?.contrato) setContrato(c.contrato);
+    setPropOrigem(d.proposta ?? c?.contrato ?? null);
     // condição do pedido (ex.: A28 · "Para 28 dias") — vira a condição escolhida, sem pedir de novo
     setCond(c?.codigo ?? "");
     condHint.current = c?.codigo || c?.descricao ? { codigo: c?.codigo ?? null, descricao: c?.descricao ?? null } : null;
@@ -1018,7 +1023,7 @@ export default function NovaEmissao({ config, aberto, fechar, avisar, onEmitido,
                     {(tx.pdf || tx.xml) && <button className="ne-btn" onClick={() => { navigator.clipboard.writeText(String(tx.pdf ?? tx.xml)); avisar("Link copiado (vale por algumas horas)"); }}>Copiar link</button>}
                     {e.chave && !recibo && <a className="ne-btn" href="https://www.nfe.fazenda.gov.br/portal/consultaRecaptcha.aspx?tipoConsulta=resumo&tipoConteudo=7PhJ+gAVw2g=" target="_blank" rel="noopener"
                       onClick={() => navigator.clipboard.writeText(String(e.chave))}>Consultar na SEFAZ (chave copiada)</a>}
-                    <button className="ne-btn" disabled title="Depende do Resend (RESEND_API_KEY)">Enviar ao cliente</button>
+                    <EnviarAoCliente id={Number(e.id ?? tx.id) || null} />
                   </div>
                   <div>
                     <div style={{ fontSize: 12.5, fontWeight: 700, margin: "6px 0" }}>Contas a receber criadas</div>
@@ -1102,6 +1107,7 @@ export default function NovaEmissao({ config, aberto, fechar, avisar, onEmitido,
                 </div>
               )}
               {chave && rotulo && <div className="ne-nums"><span className="k">Faturando</span><b>{rotulo}</b>
+                {propOrigem && <span title="Proposta do CRM que originou este pedido">· proposta <b>{propOrigem}</b></span>}
                 {chave.startsWith("os_omie:") && !teste && prod && <b>· Recibo nº {prox?.recibo ?? "…"}</b>}
                 {chave.startsWith("os_omie:") && teste && <span>· teste: numeração real não é usada</span>}
                 {!inicial && <button className="ne-lk" onClick={() => { setChave(null); setRotulo(null); setCarteira(null); }}>trocar</button>}</div>}

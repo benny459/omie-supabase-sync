@@ -5,7 +5,7 @@ icone: 🗂️
 area: erp
 rotas: /cadastros
 caminhos: web/components/cadastros, web/app/(app)/cadastros, web/app/api/cadastros, web/lib/cadastros-server.ts
-atualizado: 2026-10-08
+atualizado: 2026-10-09
 ---
 
 Tudo o que era cadastrado no Omie agora é cadastrado aqui e vale para o painel, o CRM e os Serviços.
@@ -24,6 +24,8 @@ Tudo o que era cadastrado no Omie agora é cadastrado aqui e vale para o painel,
 2. Digite o **CNPJ** e use **Buscar na Receita** para preencher; o CEP completa o endereço.
 3. Se o CNPJ ou um nome muito parecido já existir, aparece **“já existe — abrir este”**. Use o existente.
 4. Salve.
+
+**Vários e-mails no mesmo campo:** E-mail, E-mail de cobrança e E-mail para NF-e aceitam mais de um endereço, separados por vírgula ou ponto e vírgula. Exemplo: `operacional@hospital.com.br, financeiro@hospital.com.br`. Cada endereço é conferido; o aviso **E-mail inválido** só aparece se algum deles estiver errado.
 
 > **Atenção:** **não é possível duplicar** um cadastro (mesmo CNPJ/CPF ou nome muito parecido). Só um administrador pode forçar, com motivo.
 

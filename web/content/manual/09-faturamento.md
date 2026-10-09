@@ -5,7 +5,7 @@ icone: 🧾
 area: erp
 rotas: /faturamento
 caminhos: web/components/faturamento, web/app/(app)/faturamento, web/app/api/faturamento, web/lib/faturamento
-atualizado: 2026-10-07
+atualizado: 2026-10-09
 ---
 
 > **Atenção:** a **NF-e da SF está em PRODUÇÃO** — o que você emitir é documento fiscal real. A numeração é sequencial e automática (NF-e, recibo, PV e OS continuam de onde o Omie parou). **Não emita mais NF-e nem recibo pelo Omie.**
@@ -122,6 +122,19 @@ A janela acompanha: **1 · Enviando à Focus → 2 · Processando na SEFAZ → A
 
 - **Autorizada**: número/série, **chave de acesso**, protocolo, **DANFE**, **Baixar XML**, **Consultar na SEFAZ** e as **contas a receber criadas**.
 - **Rejeitada**: o motivo em português e **Corrigir e reenviar** (o formulário continua preenchido).
+
+### Como faço para enviar a nota ou o recibo ao cliente
+
+**Nada é enviado sozinho.** Com o documento autorizado, clique em **Enviar ao cliente**. Ele está na janela de emissão e também na carteira, quando o pedido está 100% faturado.
+1. O painel mostra os e-mails do cadastro do cliente. Dá para corrigir ou acrescentar outros, separados por vírgula.
+2. Clique em **Enviar**. A NF-e vai com o DANFE (PDF) e o XML; o recibo vai em PDF.
+3. Você recebe uma cópia oculta. Se o cliente responder, a resposta chega no seu e-mail.
+
+O envio fica registrado. Na próxima vez que abrir, o painel avisa quando e para quem já foi enviado.
+
+### De qual proposta é este pedido?
+
+Ao faturar um PV ou OS, o topo da emissão mostra **Faturando PV… · proposta OPS…**. É a proposta do CRM que originou o pedido; no Omie, esse número fica no campo **Contrato**.
 
 ## Como faço uma NF-e de devolução ou de simples remessa
 

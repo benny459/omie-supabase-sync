@@ -47,6 +47,7 @@ export function docFat(d: VendaDoc): DocFat {
     },
     observacoes: [d.obs_nf, d.proposta ? `Proposta ${d.proposta}` : null, d.label].filter(Boolean).join(" · "),
     pedido_cliente: d.num_pedido_cliente,
+    proposta: d.proposta ?? null,
   };
 }
 

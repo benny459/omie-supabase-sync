@@ -135,6 +135,8 @@ export type DocFat = {
   condicao?: CondicaoFat | null;
   observacoes?: string | null;
   pedido_cliente?: string | null;   // nº do pedido/OC do cliente
+  /** Proposta do CRM que originou o pedido (Omie guarda em "contrato") — só para mostrar. */
+  proposta?: string | null;
   /** PV marcado "consumidor final" (Omie: consumidor_final = S). */
   consumidor_final?: boolean | null;
   transporte?: TransporteFat | null;
