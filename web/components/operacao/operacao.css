@@ -868,3 +868,6 @@ html[data-vidro] .op :is(.pop,.fpanel,.pcmenu-pop){--ap-a:1;--ww-panel:rgb(var(-
 .op .grid td.stk.act{background:linear-gradient(var(--ww-info-soft),var(--ww-info-soft)) rgb(var(--color-ww-panel))}
 .op .grid .stk-ult{box-shadow:8px 0 10px -8px rgb(0 0 0 / .3),inset -1px 0 0 var(--ww-border)}
 .op .grid td.stk.err{background:linear-gradient(var(--ww-crit-soft),var(--ww-crit-soft)) rgb(var(--color-ww-panel))}
+/* "grid" colidia com o .grid do Tailwind (display: grid) — a planilha volta a ser tabela */
+.op table.grid{display:table}
+.op .grid th.stk,.op .grid td.stk{box-sizing:border-box}

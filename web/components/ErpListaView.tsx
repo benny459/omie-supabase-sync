@@ -13,7 +13,7 @@ import { OcAnexosPainel } from "@/components/vendas/OcAnexos";
 const PRIO: Record<string, string> = {
   previsao: "tf-p3", categoria: "tf-p3", contato: "tf-p3", cnpj_cpf: "tf-p3", cliente_cidade: "tf-p3", cliente_uf: "tf-p3", codigo_vendedor: "tf-p3",
   codigo_parcela: "tf-p3", numero_contrato: "tf-p3", natureza_operacao: "tf-p3", chave_nfe: "tf-p3", dt_registro: "tf-p3", serie: "tf-p3",
-  projeto: "tf-p2", empresa: "tf-p2", qtd_itens: "tf-p2", valor_mercadorias: "tf-p2", valor_desconto: "tf-p2", valor_frete: "tf-p2", dt_fat: "tf-p2",
+  projeto: "tf-p1", empresa: "tf-p2", qtd_itens: "tf-p2", valor_mercadorias: "tf-p2", valor_desconto: "tf-p2", valor_frete: "tf-p2", dt_fat: "tf-p2",
   qtd_parcelas: "tf-p2", num_pedido_cliente: "tf-p2", total_produtos: "tf-p2", vlr_frete: "tf-p2", vlr_icms: "tf-p2", vlr_ipi: "tf-p2",
 };
 

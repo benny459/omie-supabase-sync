@@ -400,7 +400,7 @@
   font-size: 13px; font-weight: 600; cursor: pointer; margin-left: auto;
 }
 .fpv .fclear:hover { color: var(--f-bad); background: var(--f-card2); }
-@container fbar (max-width: 760px) {
+@container fbar (max-width: 1000px) {
   .fpv .fsearch { flex-basis: 100%; max-width: none; }
   .fpv .vseg { margin-left: 0; overflow-x: auto; max-width: 100%; }
   .fpv .fsep { display: none; }
@@ -427,7 +427,7 @@
 .fpv .fl .c-rec { width: 176px; }
 .fpv .fl .c-st { width: 164px; }
 .fpv .fl .c-acao { width: 190px; }
-.fpv .fl .c-doc .c-etapa { margin-left: auto; max-width: 45%; flex: 0 1 auto; }
+.fpv .fl .c-doc .c-etapa { margin-left: 6px; max-width: 45%; flex: 0 1 auto; }
 .fpv .fl td.c-doc .doc { min-width: 0; overflow: hidden; }
 .fpv .fl td.c-doc .doc b { white-space: nowrap; }
 .fpv .fl .c-doc .doc { min-width: 0; }
@@ -443,3 +443,7 @@
 .fpv .vals small { font-size: 11px; color: var(--f-tx3); white-space: nowrap; }
 .fpv .tbl-fit .rowact { justify-content: flex-end; }
 .fpv .tbl-fit .rec-cel { flex-wrap: wrap; white-space: normal; row-gap: 2px; }
+@container tbl (min-width: 1500px) {
+  .fpv .fl .c-emi { width: 120px; } .fpv .fl .c-prev { width: 140px; } .fpv .fl .c-val { width: 210px; }
+  .fpv .fl .c-rec { width: 210px; } .fpv .fl .c-st { width: 190px; } .fpv .fl .c-acao { width: 210px; }
+}

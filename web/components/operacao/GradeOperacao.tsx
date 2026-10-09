@@ -77,7 +77,7 @@ export default function GradeOperacao({ visiveis, modulo, $, podeAprovar, podeEd
   const cols = COLS.filter((c) => !ocultos.has(c.g));
   /* 09/10/26 (Benny: "a coluna da esquerda tem que ficar congelada"): seleção +
      PV/OS + Cliente presas à esquerda; o resto da planilha rola por baixo. */
-  const FIXA: Record<string, { left: number; w: number }> = { pv: { left: 56, w: 96 }, cli: { left: 172, w: 190 } };
+  const FIXA: Record<string, { left: number; w: number }> = { pv: { left: 36, w: 96 }, cli: { left: 132, w: 190 } };
   const fixa = (k: string) => (FIXA[k] && cols.some((c) => c.k === "pv") ? FIXA[k] : null);
   const estiloCol = (c: Col): React.CSSProperties => {
     const f = fixa(c.k);
@@ -249,7 +249,7 @@ export default function GradeOperacao({ visiveis, modulo, $, podeAprovar, podeEd
           <thead>
             <tr className="gh">
               <th className="blank stk" style={{ width: 36, left: 0 }} />
-              {gruposVis.map(({ g, n }) => <th key={g} colSpan={n} className={g === "Venda" && fixa("pv") ? "stk stk-ult" : undefined} style={g === "Venda" && fixa("pv") ? { left: 56 } : undefined}>{g}</th>)}
+              {gruposVis.map(({ g, n }) => <th key={g} colSpan={n} className={g === "Venda" && fixa("pv") ? "stk stk-ult" : undefined} style={g === "Venda" && fixa("pv") ? { left: 36 } : undefined}>{g}</th>)}
               <th className="blank" />
             </tr>
             <tr className="ch">

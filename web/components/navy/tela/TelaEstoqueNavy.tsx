@@ -66,11 +66,11 @@ const COLS: Col[] = [
   { k: "item", rotulo: "Item", v: (p) => p.descricao },
   { k: "sit", rotulo: "Situação", v: (p) => situacao(p)[0] },
   { k: "saldo", rotulo: "Saldo ⓘ", v: (p) => p.saldo, cls: "r" },
-  { k: "pend", rotulo: "Pendente", v: (p) => p.pendente, cls: "r opt tf-p2" },
+  { k: "pend", rotulo: "Pendente", v: (p) => p.pendente, cls: "r opt tf-p1" },
   { k: "al", rotulo: "Alarme", v: (p) => alarme(p)[0], cls: "opt tf-p3" },
   { k: "cob", rotulo: "Cobertura", v: (p) => cobertura(p) ?? 1e9 },
   { k: "ult", rotulo: "Última mov.", v: (p) => p.ult_mov ?? "", cls: "opt tf-p3" },
-  { k: "cmc", rotulo: "CMC", v: (p) => p.cmc, cls: "r opt tf-p2" },
+  { k: "cmc", rotulo: "CMC", v: (p) => p.cmc, cls: "r opt tf-p1" },
   { k: "valor", rotulo: "Valor", v: valorItem, cls: "r" },
 ];
 
@@ -334,7 +334,7 @@ function LinhaItem({ p, abrir }: { p: ItemEstoque; abrir: (p: ItemEstoque) => vo
       </td>
       <td><Pill t={st} tom={tom} /></td>
       <td className="r" style={{ fontWeight: 600, color: p.saldo < 0 ? "var(--ww-crit-text)" : undefined }}>{q(p.saldo)}{p.reservado_proj ? <div className="disp-res" title={`Separado para ${p.n_projetos} projeto(s) — disponível = saldo − separado`}>disp. {q(p.saldo - p.reservado_proj)} · sep. {q(p.reservado_proj)}</div> : null}</td>
-      <td className="r opt tf-p2">{p.pendente ? q(p.pendente) : <span className="mini">—</span>}</td>
+      <td className="r opt tf-p1">{p.pendente ? q(p.pendente) : <span className="mini">—</span>}</td>
       <td className="opt tf-p3"><Pill t={al} tom={atom} /></td>
       <td>
         {cob === null ? <span className="mini">sem consumo</span> : (
@@ -347,7 +347,7 @@ function LinhaItem({ p, abrir }: { p: ItemEstoque; abrir: (p: ItemEstoque) => vo
         )}
       </td>
       <td className="opt tf-p3"><span className="num">{ddmmaa(p.ult_mov)}</span>{p.ult_mov && <span className="mini"> · {dias(p.ult_mov)} d</span>}</td>
-      <td className="r opt tf-p2">{brl(p.cmc)}</td>
+      <td className="r opt tf-p1">{brl(p.cmc)}</td>
       <td className="r" style={{ fontWeight: 600 }}>{brl(valorItem(p))}</td>
     </tr>
   );

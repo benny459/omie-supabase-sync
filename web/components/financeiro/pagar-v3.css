@@ -357,7 +357,8 @@ html:not(.dark) .cp3 .nflink{color:#7c3aed}
    seleção + fornecedor/cliente presos à esquerda, fundo opaco também com vidro. */
 .cp3 .tbl.tbl-fit{max-height:calc(100vh - 160px)}
 .cp3 .tbl.tbl-fit table{min-width:0}
-.cp3 .tbl .c-ck{width:22px;min-width:22px;max-width:22px;padding-left:10px;padding-right:2px}
+.cp3 .tbl .c-ck{box-sizing:border-box;width:34px;min-width:34px;max-width:34px;padding-left:10px;padding-right:2px}
 .cp3 .tbl .c-forn{--tf-left:34px;min-width:150px;max-width:220px}
 .cp3 .tbl .c-forn .emp{margin-right:4px}
-.cp3 .tbl.tbl-fit .bsel{max-width:170px}
+.cp3 .tbl.tbl-fit .bsel{max-width:160px}
+@container tbl (max-width: 1000px){.cp3 .tbl.tbl-fit .bsel{max-width:140px}.cp3 .tbl .c-forn{max-width:190px}}

@@ -821,7 +821,7 @@ function VisaoContas({ resumo, conta, onEscolher }: { resumo: ResumoConta[] | nu
       <TblFit className="tf-col1">
       <table style={{ width: "100%", borderCollapse: "collapse" }}>
         <thead><tr>
-          <th style={th}>Conta</th><th style={th}>Extrato até</th><th className="tf-p2" style={{ ...th, textAlign: "right" }}>Movimentos</th>
+          <th style={th}>Conta</th><th style={th}>Extrato até</th><th className="tf-p1" style={{ ...th, textAlign: "right" }}>Movimentos</th>
           <th style={th}>Conciliado</th><th style={{ ...th, textAlign: "right" }}>Falta conciliar</th><th className="tf-p3" style={th}>Último extrato importado</th>
         </tr></thead>
         <tbody>
@@ -833,7 +833,7 @@ function VisaoContas({ resumo, conta, onEscolher }: { resumo: ResumoConta[] | nu
               <tr key={k} onClick={() => onEscolher(k)} style={{ cursor: "pointer", background: sel ? "var(--ww-panel-sunken)" : undefined }}>
                 <td style={{ ...td, fontWeight: sel ? 700 : 500, maxWidth: 260, overflow: "hidden", textOverflow: "ellipsis" }} title={`${r.empresa} · ${r.descricao}`}>{r.empresa} · {r.descricao}</td>
                 <td style={td}>{r.extrato_ate ? ddmmaa(r.extrato_ate) : "—"}{dias != null && dias > 3 && <span style={{ color: "var(--ww-crit-text)", fontSize: 11.5 }}> · {dias} dias sem extrato</span>}</td>
-                <td className="tf-p2" style={{ ...td, textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{r.n}</td>
+                <td className="tf-p1" style={{ ...td, textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{r.n}</td>
                 <td style={td}>
                   <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
                     <span style={{ width: 90, height: 6, borderRadius: 99, background: "var(--ww-panel-sunken)", overflow: "hidden", display: "inline-block" }}>

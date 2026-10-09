@@ -399,6 +399,10 @@
 
 /* 09/10/26 — tabela no utilitário .tbl-fit (app/tbl-fit.css): seleção + Número
    presos à esquerda; colunas de apoio somem primeiro quando a tabela estreita. */
-.cmp .tbl-wrap.tbl-fit { --tf-left: 48px; max-height: calc(100vh - 180px); }
-.cmp .tbl-wrap.tbl-fit table.grid > * > tr > :first-child { width: 34px; min-width: 34px; padding: 0 4px 0 10px; }
+.cmp .tbl-wrap.tbl-fit { --tf-left: 34px; max-height: calc(100vh - 180px); }
+.cmp .tbl-wrap.tbl-fit table.grid > * > tr > :first-child { box-sizing: border-box; width: 34px; min-width: 34px; padding: 0 4px 0 10px; }
 .cmp .busca { width: 340px; }
+/* A classe "grid" da tabela colidia com o utilitário .grid do Tailwind (display: grid):
+   cabeçalho e linhas saíam com larguras diferentes. A tabela volta a ser tabela. */
+.cmp table.grid { display: table; }
+.cmp table.grid > thead { display: table-header-group; }

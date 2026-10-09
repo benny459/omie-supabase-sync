@@ -84,7 +84,7 @@ export default function TelaCadastros({ papel }: { papel: Papel | "transportador
         <TblFit className="tf-col1" style={{ maxHeight: "calc(100vh - 220px)" }}>
         <table className="tabela">
           <thead>
-            <tr><th>Nome</th><th>CNPJ / CPF</th><th className="tf-p1">Cidade</th><th className="tf-p2">Contato</th><th className="tf-p3">Papel</th><th className="tf-p2">Origem</th><th>Situação</th></tr>
+            <tr><th>Nome</th><th>CNPJ / CPF</th><th className="tf-p2">Cidade</th><th className="tf-p1">Contato</th><th className="tf-p3">Papel</th><th className="tf-p2">Origem</th><th>Situação</th></tr>
           </thead>
           <tbody>
             {!dados && <tr><td colSpan={7} className="vazio">Carregando…</td></tr>}
@@ -104,8 +104,8 @@ export default function TelaCadastros({ papel }: { papel: Papel | "transportador
                   </div>
                 </td>
                 <td className="mono" style={{ whiteSpace: "nowrap" }}>{l.doc ?? <span className="mini">—</span>}</td>
-                <td className="tf-p1" style={{ whiteSpace: "nowrap" }}>{l.cidade ? `${l.cidade}${l.uf ? `/${l.uf}` : ""}` : <span className="mini">—</span>}</td>
-                <td className="tf-p2"><div className="tf-ell" style={{ fontSize: 12.5, ["--tf-ell" as string]: "240px" }} title={l.email ?? ""}>{l.email ?? ""}</div><div className="mini">{l.telefone ?? ""}</div></td>
+                <td className="tf-p2" style={{ whiteSpace: "nowrap" }}>{l.cidade ? `${l.cidade}${l.uf ? `/${l.uf}` : ""}` : <span className="mini">—</span>}</td>
+                <td className="tf-p1"><div className="tf-ell" style={{ fontSize: 12.5, ["--tf-ell" as string]: "220px" }} title={l.email ?? ""}>{l.email ?? ""}</div><div className="mini">{l.telefone ?? ""}</div></td>
                 <td className="tf-p3"><Papeis p={l} /></td>
                 <td className="tf-p2"><Origem o={l.origem} />{l.origem === "painel" && <div className="mini">{ddmmaa(l.criadoEm)}</div>}</td>
                 <td>{l.ativo ? <Pill t="Ativo" tom="ok" /> : <Pill t="Inativo" tom="off" />}</td>
