@@ -7,6 +7,7 @@ import type { ClienteFat, CondicaoFat, DocFat, ItemFat, OperacaoNfe, OperacaoTip
 import { BuscaPessoa, BuscaProposta, clienteDaPessoa, pessoaCompleta } from "@/components/vendas/BuscasCrmCadastro";
 import { BotaoNovoProjeto } from "@/components/cadastros/NovoProjetoRapido";
 import LocalizarNcm, { ncmFmt } from "@/components/fiscal/LocalizarNcm";
+import { historicoDoCliente, herancaRecebimento } from "@/lib/faturamento/historico";
 import "./nova-emissao.css";
 
 /* Folha dedicada da Nova emissão (05/10/26). Pedido do Benny:
@@ -48,6 +49,7 @@ type Opcoes = {
 };
 type ParcelaHist = { numero?: string; vencimento?: string; valor?: number; dias?: number; forma?: string | null };
 type Hist = {
+  cliente_doc?: string | null;
   fonte: "omie" | "painel"; emissao: string | null; tipo: string; documento: string; numero_fiscal?: string | null; origem?: string | null;
   valor: number; itens: Partial<ItemFat>[]; parcelas: ParcelaHist[]; forma?: string | null; condicao?: CondicaoFat | null;
   categoria_codigo?: string | null; categoria?: string | null; conta_codigo?: number | null; conta?: string | null;
@@ -474,16 +476,17 @@ export default function NovaEmissao({ config, aberto, fechar, avisar, onEmitido,
     const t = window.setTimeout(() => {
       fetch(`/api/faturamento/nova?op=historico&emp=${empresa}&doc=${docCli}`, { cache: "no-store" })
         .then((x) => x.json()).then((j) => {
-          const hs: Hist[] = j.historico ?? [];
+          // segunda trava: só entradas do MESMO CNPJ/CPF (lib/faturamento/historico)
+          const hs: Hist[] = historicoDoCliente<Hist>(j.historico ?? [], docCli);
           setHist(hs);
-          // sem forma/conta definidas: herda do último faturamento do cliente (editável)
-          const h = hs[0];
-          if (h && !formaDefinida.current) {
-            const f = h.condicao?.forma_recebimento ?? h.forma ?? h.parcelas?.[0]?.forma ?? null;
-            const ct = h.condicao?.conta_corrente ?? h.conta_codigo ?? null;
+          // sem forma/conta definidas: herda do último faturamento do cliente (editável),
+          // só com forma de recebimento válida (o Omie traz "NFE"/"REC" como tipo do título)
+          if (hs.length && !formaDefinida.current) {
+            const { forma: f, conta: ct, de } = herancaRecebimento(hs, 3);
+            const h = hs[de ?? 0];
             if (f) { setForma(f); setParcs((ps) => ps.map((p) => ({ ...p, forma: f }))); }
-            if (ct) setConta(ct);
-            if (f || ct) { formaDefinida.current = true; setAviso(`Forma e conta herdadas do último faturamento (${h.tipo} ${h.documento}) — confira em Recebimento.`); }
+            if (ct != null) setConta(ct);
+            if (f || ct != null) { formaDefinida.current = true; setAviso(`Forma e conta herdadas do último faturamento (${h.tipo} ${h.documento ?? ""}) — confira em Recebimento.`); }
           }
         }).catch(() => setHist([]));
     }, 250);

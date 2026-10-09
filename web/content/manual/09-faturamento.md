@@ -42,7 +42,7 @@ atualizado: 2026-10-09
    - **NFS-e da prefeitura (registrar)** — gera a OS; a NFS-e você registra depois.
 4. O quadro **Será gerado** mostra os números (ex.: “OS nº 4885 · Recibo nº 4646”) — confirmados na emissão.
 5. Busque a **Proposta do CRM** (puxa cliente, itens e condição) e/ou o **cliente** pelo nome, fantasia ou CNPJ.
-6. Ao escolher o cliente, aparecem os **últimos faturamentos**. **Usar como modelo →** copia itens, prazos e forma de recebimento, recalculando as datas a partir de hoje.
+6. Ao escolher o cliente, aparecem os **últimos faturamentos desse mesmo CNPJ/CPF** (outra filial, mesmo nome ou mesmo número de PV/OS de outro cliente não entram; sem histórico aparece "Nenhum faturamento anterior para este CNPJ/CPF"). **Usar como modelo →** copia itens, prazos e forma de recebimento, recalculando as datas a partir de hoje.
 7. Em **Recebimento**, a **condição de pagamento** já vem do PV/OS (ex.: "Para 28 dias") e gera as parcelas. Depois escolha a **forma** (boleto, Pix, transferência…) e a **conta**. As parcelas herdam a forma; marque **formas diferentes por parcela** só se precisar. Com **Pix** ou transferência, os dados da conta saem no documento.
 8. **Projeto** e **categoria de receita** são **obrigatórios** — vêm do PV/OS (CRM); se faltarem, a emissão fica bloqueada até você escolher (ou criar o projeto em **+ Novo projeto**). Para boleto, Pix e transferência a **conta de recebimento** também é obrigatória. A **forma de recebimento** (boleto, Pix, transferência…) e a **conta** escolhidas no CRM ao criar o PV/OS já chegam preenchidas aqui.
 
@@ -103,7 +103,7 @@ PV e OS de **projeto** criados pelo CRM a partir do **Fechamento** trazem as par
 3. Ele abre a emissão (**Revisar e emitir**) já na seção certa, destacada.
 4. Em **Recebimento**, no topo, escolha a **Forma de recebimento** (boleto, PIX, transferência…) e a **Conta de recebimento**. A instrução de pagamento sai na nota e em cada parcela.
 
-> **Dica:** se o pedido não tem forma/conta, a emissão herda as do **último faturamento do cliente** — confira antes de emitir.
+> **Dica:** se o pedido não tem forma/conta, a emissão herda as do **último faturamento do mesmo CNPJ/CPF** — confira antes de emitir.
 
 ## Como faço para salvar uma nota como rascunho e continuar depois
 

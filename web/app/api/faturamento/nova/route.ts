@@ -5,6 +5,7 @@ import { supaAdmin } from "@/lib/supabase-admin";
 import type { DocFat } from "@/lib/faturamento/montar";
 import { buscarItensEstoque, codigosSemEstoque, MSG_SEM_ESTOQUE, type CodigoCompra } from "@/lib/estoque-vinculos";
 import { buscarItensCrm, casarTopCrm, vincularCrm } from "@/lib/catalogo-crm";
+import { historicoDoCliente, type HistBase } from "@/lib/faturamento/historico";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
@@ -226,7 +227,8 @@ export async function GET(req: NextRequest) {
       if (doc.length < 11) return NextResponse.json({ historico: [] });
       const { data, error } = await a.schema("orders").rpc("fat_historico_cliente", { p_empresa: emp, p_doc: doc, p_lim: 10 });
       if (error) throw new Error(error.message);
-      return NextResponse.json({ historico: data ?? [] });
+      // só o MESMO CNPJ/CPF (segunda trava; o SQL já filtra — sql/155)
+      return NextResponse.json({ historico: historicoDoCliente((data ?? []) as HistBase[], doc) });
     }
     // cadastros.* não é exposto no PostgREST: lê pela função orders.cad_aux_opcoes.
     const aux = async (registro: string) => {

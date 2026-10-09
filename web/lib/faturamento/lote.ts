@@ -4,11 +4,10 @@
 // para o lote emitir pelo MESMO caminho da emissão avulsa, com o documento pronto.
 import { supaAdmin } from "@/lib/supabase-admin";
 import type { DocFat } from "@/lib/faturamento/montar";
+import { herancaRecebimento, historicoDoCliente, type HistBase } from "@/lib/faturamento/historico";
 
 const BANCOS: Record<string, string> = { "001": "Banco do Brasil", "033": "Santander", "104": "Caixa", "237": "Bradesco", "260": "Nubank", "301": "Conta Simples", "336": "C6 Bank", "341": "Itaú", "450": "Omie.CASH", "077": "Inter", "208": "BTG" };
 const FORMAS_BANCO = ["TRA", "TED", "DEP"];
-/** Formas da folha (nova/route FORMAS). */
-const FORMAS_VALIDAS = ["BOL", "PIX", "TRA", "TED", "DEP", "CRC", "CRD", "DIN", "CHQ", "DUP"];
 
 type DadosConta = { banco?: string | null; agencia?: string | null; conta?: string | null; pix_tipo?: string | null; pix_chave?: string | null; beneficiario?: string | null };
 
@@ -30,23 +29,17 @@ export async function dadosConta(empresa: string, codigo: number | string | null
   return (data ?? null) as DadosConta | null;
 }
 
-type Hist = { forma?: string | null; conta_codigo?: number | null; parcelas?: { forma?: string | null }[] | null;
-  condicao?: { forma_recebimento?: string | null; conta_corrente?: number | null } | null };
-
 export async function completarRecebimento(doc: DocFat): Promise<DocFat> {
   const db = supaAdmin();
   const cond = { ...(doc.condicao ?? {}) } as NonNullable<DocFat["condicao"]>;
   const cpfCnpj = String(doc.cliente.cnpj || doc.cliente.cpf || "").replace(/\D/g, "");
   if ((!cond.forma_recebimento || cond.conta_corrente == null) && cpfCnpj.length >= 11) {
-    // Últimos faturamentos do cliente: a primeira forma válida (o Omie às vezes
-    // traz o tipo do título, ex. "NFE") e a primeira conta informada.
+    // Últimos faturamentos do MESMO CNPJ/CPF (lib/faturamento/historico): a primeira
+    // forma válida (o Omie às vezes traz o tipo do título, ex. "NFE") e a primeira conta.
     const { data } = await db.schema("orders").rpc("fat_historico_cliente", { p_empresa: doc.empresa, p_doc: cpfCnpj, p_lim: 5 });
-    const hs = (data ?? []) as Hist[];
-    if (!cond.forma_recebimento) {
-      const cands = hs.flatMap((h) => [h.condicao?.forma_recebimento, h.forma, ...(h.parcelas ?? []).map((p) => p.forma)]);
-      cond.forma_recebimento = cands.map((f) => String(f ?? "").toUpperCase()).find((f) => FORMAS_VALIDAS.includes(f)) ?? null;
-    }
-    if (cond.conta_corrente == null) cond.conta_corrente = hs.map((h) => h.condicao?.conta_corrente ?? h.conta_codigo ?? null).find((c) => c != null) ?? null;
+    const her = herancaRecebimento(historicoDoCliente((data ?? []) as HistBase[], cpfCnpj));
+    if (!cond.forma_recebimento) cond.forma_recebimento = her.forma;
+    if (cond.conta_corrente == null) cond.conta_corrente = her.conta;
   }
   if (!cond.forma_recebimento) cond.forma_recebimento = "BOL"; // padrão da folha
   const forma = cond.forma_recebimento;
