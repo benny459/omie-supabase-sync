@@ -79,3 +79,28 @@ test("comprador sem can_approve não reprova pela Operação (dry-run do set-sta
   const aprovador: UserPerms = { role: "aprovador", is_admin: false, module_roles: [] };
   assert.equal(motivoSemPermissao({ ehAdmin: false, temPermissao: canApprove(aprovador, "projetos"), valor: 100, teto: null }, "reprovar"), null);
 });
+
+// 09/10/26: aprovar PC do Compras pela Operação › Projetos sem a área ERP (Marcelo).
+import { caminhoAprovacaoCompras, motivoForaDoCaminho, SO_PC_DE_PROJETO } from "../../web/lib/aprovacao-permissao";
+
+test("caminho: admin e quem tem ERP + Compras → compras", () => {
+  assert.equal(caminhoAprovacaoCompras({ ehAdmin: true, areaErp: false, comprasAcesso: false, aprovaProjetos: false }), "compras");
+  assert.equal(caminhoAprovacaoCompras({ ehAdmin: false, areaErp: true, comprasAcesso: true, aprovaProjetos: true }), "compras");
+});
+test("caminho: sem ERP mas aprova em Projetos → projetos; sem nada → null", () => {
+  assert.equal(caminhoAprovacaoCompras({ ehAdmin: false, areaErp: false, comprasAcesso: false, aprovaProjetos: true }), "projetos");
+  assert.equal(caminhoAprovacaoCompras({ ehAdmin: false, areaErp: true, comprasAcesso: false, aprovaProjetos: true }), "projetos");
+  assert.equal(caminhoAprovacaoCompras({ ehAdmin: false, areaErp: false, comprasAcesso: true, aprovaProjetos: false }), null);
+  assert.equal(caminhoAprovacaoCompras({ ehAdmin: false, areaErp: true, comprasAcesso: false, aprovaProjetos: false }), null);
+});
+test("caminho projetos: só PC de projeto de obra; o resto fica para Compras", () => {
+  assert.equal(motivoForaDoCaminho("projetos", false), SO_PC_DE_PROJETO);
+  assert.equal(motivoForaDoCaminho("projetos", true), null);
+  assert.equal(motivoForaDoCaminho("compras", false), null);
+});
+test("caminho projetos + PC de obra: a regra do budget continua mandando", () => {
+  const e: EntradaPermissao = { ehAdmin: false, temPermissao: true, valor: 5000, teto: null };
+  assert.equal(motivoSemPermissao({ ...e, projeto: { estouro: 0, motivo: "dentro" } }, "aprovar"), null);
+  assert.match(motivoSemPermissao({ ...e, projeto: { estouro: 10, motivo: "estoura o budget do projeto em R$ 10,00" } }, "reprovar")!, /administradores/);
+  assert.match(motivoSemPermissao({ ...e, projeto: "indisponivel" }, "aprovar")!, /budget/);
+});

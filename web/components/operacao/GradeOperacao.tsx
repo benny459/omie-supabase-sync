@@ -13,6 +13,7 @@
  * o Omie é a fonte e sobrescreveria no próximo sync.
  */
 
+import { ehLinhaManual } from "@/lib/pc-compras-id";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { diasAte, dBR, isoDia, type Compra, type Pedido } from "@/lib/operacao-modelo";
 import type { CAMPOS, Modulo } from "@/lib/approvals-write";
@@ -53,7 +54,7 @@ export default function GradeOperacao({ visiveis, modulo, $, podeAprovar, podeEd
     { k: "qtd", l: "Qtd", g: "Requisição", w: 58, al: "r", tipo: "number", ro: () => semEdicaoRc, valor: (c) => String(c.qtd) },
     { k: "unit", l: "Custo unit.", g: "Requisição", w: 108, al: "r", tipo: "number", ro: () => semEdicaoRc, valor: (c) => String(c.unit), mostra: (c) => $(c.unit) },
     { k: "val", l: "Total", g: "Requisição", w: 108, al: "r", ro: () => true, valor: (c) => String(c.rcTotal), mostra: (c) => $(c.rcTotal) },
-    { k: "pc", l: "PC #", g: "Pedido de compra", w: 88, tipo: "text", ro: (c) => semEdicaoRc || (c.temPc && Number(c.row.ncod_ped) > 0),
+    { k: "pc", l: "PC #", g: "Pedido de compra", w: 88, tipo: "text", ro: (c) => semEdicaoRc || (c.temPc && !ehLinhaManual(c.row)),
       valor: (c) => c.pc, mostra: (c) => c.pc || <span className="ph">+ nº PC</span> },
     { k: "pcVal", l: "Valor PC", g: "Pedido de compra", w: 108, al: "r", ro: () => true, valor: (c) => (c.pcValor == null ? "" : String(c.pcValor)),
       mostra: (c) => (c.pcValor == null ? <span className="ph">—</span> : $(c.pcValor)) },

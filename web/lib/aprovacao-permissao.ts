@@ -67,3 +67,23 @@ export function aprovPainelExigeAprovador(atual: string | null | undefined, novo
 
 export const acaoDoStatus = (novo: string): DecisaoAcao =>
   STATUS_APROVADOS.has(novo) || novo === "aprovado" ? "aprovar" : "reprovar";
+
+/* Caminho de quem aprova PC do Compras (09/10/26, Benny).
+   "compras": área ERP + compras.acesso — tudo como sempre (alçada, compras.aprovar, projeto).
+   "projetos": SEM a área ERP, mas com can_approve no módulo Projetos (Operação › Projetos,
+   ex.: Marcelo). Só decide PC de projeto de obra (PJ…), com a mesma regra do budget
+   (motivoSemPermissao + lib/aprovacao-projeto-regra). Nenhuma outra ação do Compras abre. */
+export type CaminhoCompras = "compras" | "projetos";
+
+export function caminhoAprovacaoCompras(e: { ehAdmin: boolean; areaErp: boolean; comprasAcesso: boolean; aprovaProjetos: boolean }): CaminhoCompras | null {
+  if (e.ehAdmin || (e.areaErp && e.comprasAcesso)) return "compras";
+  if (e.aprovaProjetos) return "projetos";
+  return null;
+}
+
+export const SO_PC_DE_PROJETO = "por Operação › Projetos você só decide PC de projeto de obra (PJ) — este fica com quem aprova em Compras";
+
+/** Pelo caminho "projetos", o PC tem de ser de projeto de obra; null = segue para a regra. */
+export function motivoForaDoCaminho(caminho: CaminhoCompras, pcDeProjetoDeObra: boolean): string | null {
+  return caminho === "projetos" && !pcDeProjetoDeObra ? SO_PC_DE_PROJETO : null;
+}

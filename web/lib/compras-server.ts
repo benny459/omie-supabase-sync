@@ -7,7 +7,9 @@ import { loadPerms } from "@/lib/require-area";
 import { canViewArea, type UserPerms } from "@/lib/permissions";
 import { permissoesDe, semValores } from "@/lib/acessos";
 import type { Chave } from "@/lib/acessos-catalogo";
-import { motivoSemPermissao, type DecisaoAcao, type EntradaPermissao } from "@/lib/aprovacao-permissao";
+import { motivoSemPermissao, caminhoAprovacaoCompras, motivoForaDoCaminho, type CaminhoCompras, type DecisaoAcao, type EntradaPermissao } from "@/lib/aprovacao-permissao";
+import { permsAprovacao } from "@/lib/aprovacao-permissao-server";
+import { canApprove } from "@/lib/permissions";
 import { avaliarPcProjeto } from "@/lib/aprovacao-projeto";
 import { ehProjetoDeObra } from "@/lib/aprovacao-projeto-regra";
 
@@ -15,7 +17,17 @@ import { ehProjetoDeObra } from "@/lib/aprovacao-projeto-regra";
 // orders.compras_* (security definer, só service_role). Estas rotas validam
 // a sessão e a área ERP antes de chamar.
 
-export type Quem = { perms: UserPerms; email: string; uid: string | null; nome: string; pode: Record<Chave, boolean> };
+/** `caminho`: "compras" = área ERP + compras.acesso (o normal); "projetos" = só aprovar/reprovar
+ *  PC de projeto de obra, para quem aprova no módulo Projetos sem a área ERP (exigirAprovacaoCompras). */
+export type Quem = { perms: UserPerms; email: string; uid: string | null; nome: string; pode: Record<Chave, boolean>; caminho: CaminhoCompras };
+
+async function quem(perms: UserPerms, pode: Record<Chave, boolean>, caminho: CaminhoCompras): Promise<Quem> {
+  const supa = await supaServer("platform");
+  const { data: { user } } = await supa.auth.getUser();
+  const { data: prof } = await supaAdmin().schema("platform").from("user_profiles").select("nome").eq("id", perms.id ?? "").maybeSingle();
+  const email = user?.email ?? "painel";
+  return { perms, email, uid: perms.id ?? null, nome: (prof as { nome?: string } | null)?.nome || email, pode, caminho };
+}
 
 export async function exigirCompras(): Promise<Quem | NextResponse> {
   const perms = await loadPerms();
@@ -23,11 +35,24 @@ export async function exigirCompras(): Promise<Quem | NextResponse> {
   if (!canViewArea(perms, "erp")) return NextResponse.json({ error: "Sem acesso à área ERP" }, { status: 403 });
   const pode = await permissoesDe(perms);
   if (!pode["compras.acesso"]) return NextResponse.json({ error: "Sem acesso a Compras" }, { status: 403 });
-  const supa = await supaServer("platform");
-  const { data: { user } } = await supa.auth.getUser();
-  const { data: prof } = await supaAdmin().schema("platform").from("user_profiles").select("nome").eq("id", perms.id ?? "").maybeSingle();
-  const email = user?.email ?? "painel";
-  return { perms, email, uid: perms.id ?? null, nome: (prof as { nome?: string } | null)?.nome || email, pode };
+  return quem(perms, pode, "compras");
+}
+
+/** Só para aprovar/reprovar PC (acao "aprovar"): quem tem Compras entra como sempre; quem não
+ *  tem a área ERP mas aprova no módulo Projetos entra pelo caminho "projetos" (09/10/26) —
+ *  e motivoNaoDecide só o deixa decidir PC de projeto de obra, dentro do budget. */
+export async function exigirAprovacaoCompras(): Promise<Quem | NextResponse> {
+  const perms = await loadPerms();
+  if (!perms) return NextResponse.json({ error: "Sessão expirada — entre de novo" }, { status: 401 });
+  const areaErp = canViewArea(perms, "erp");
+  const pode = await permissoesDe(perms);
+  const papeis = perms.id ? await permsAprovacao(perms.id) : null;
+  const caminho = caminhoAprovacaoCompras({
+    ehAdmin: perms.is_admin, areaErp, comprasAcesso: !!pode["compras.acesso"],
+    aprovaProjetos: !!papeis?.ativo && canApprove(papeis, "projetos"),
+  });
+  if (!caminho) return NextResponse.json({ error: !areaErp ? "Sem acesso à área ERP" : "Sem acesso a Compras" }, { status: 403 });
+  return quem(perms, pode, caminho);
 }
 
 export async function rpc<T = unknown>(fn: string, args: Record<string, unknown> = {}): Promise<T> {
@@ -56,7 +81,10 @@ async function tetoPcs(uid: string | null): Promise<number | null> {
  *  projeto estoura o budget de materiais, só admin. */
 export async function motivoNaoDecide(q: Quem, p: { emp: string; num: string; valor: number; projCod: number | null; proj: string | null }, acao: DecisaoAcao): Promise<string | null> {
   const ehAdmin = q.perms.is_admin;
-  const temPermissao = !!q.pode["compras.aprovar"];
+  const deObra = !!p.projCod && ehProjetoDeObra(p.proj);
+  if (!ehAdmin) { const fora = motivoForaDoCaminho(q.caminho, deObra); if (fora) return fora; }
+  // caminho "projetos": a permissão é o can_approve do módulo Projetos (já conferido na entrada)
+  const temPermissao = q.caminho === "projetos" ? true : !!q.pode["compras.aprovar"];
   if (ehAdmin || !temPermissao) return motivoSemPermissao({ ehAdmin, temPermissao, valor: null, teto: null }, acao);
   if (p.projCod && ehProjetoDeObra(p.proj)) {
     let projeto: EntradaPermissao["projeto"];

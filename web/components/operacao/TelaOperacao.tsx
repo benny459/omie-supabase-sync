@@ -26,7 +26,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { createPortal } from "react-dom";
 import { STATUS_META } from "@/lib/columns";
 import { useUserPerms } from "../UserPermsProvider";
-import { canApprove, canEdit, canReleasePv, canViewValues } from "@/lib/permissions";
+import { canApprove, canEdit, canReleasePv, canViewArea, canViewValues } from "@/lib/permissions";
 import {
   montarPedido, fases, financeiro, margensProjeto, passa, noEscopo, dataMs, diasAte, dBR, isoDia, brl, pct, encerrado,
   ESTADO_LABEL, FILTRO_LABEL,
@@ -38,6 +38,7 @@ import {
 import { chaveRentab, type RentabResumo } from "@/lib/rentabilidade";
 import { mudarStatus, mudarStatusEmMassa, salvarCampo, CAMPOS, type Modulo } from "@/lib/approvals-write";
 import { SO_QUEM_APROVA } from "@/lib/aprovacao-permissao";
+import { comprasIdDaLinha, comprasIdDoNcod, ehLinhaManual, ehPcDoCompras } from "@/lib/pc-compras-id";
 import { buildBuckets, BucketTotals, projetoDoBucket, LinkAbrirProjeto, type Bucket, type BudgetSummary } from "../BoldAvulsosView";
 import KpisNavy from "../navy/KpisNavy";
 import LinhaDoTempo from "../navy/LinhaDoTempo";
@@ -141,7 +142,15 @@ export default function TelaOperacao({ modulo, title, rows: rowsIniciais, parcia
   const [toast, setToast] = useState<Toast>(null);
   const [drawer, setDrawerSt] = useState<string | null>(null);
   // PC nativo do Compras (sql/148, ncod_ped negativo) abre a folha dele no Compras.
-  const setDrawer = useCallback((k: string | null) => { if (!k || !abrirPcNativo(k.split("|")[1])) setDrawerSt(k); }, []);
+  // Sem a área ERP (ex.: quem só aprova PC de projeto) não há Compras para abrir: avisa em vez de ir.
+  const temErp = canViewArea(user, "erp");
+  const irAoCompras = useCallback((ncod: unknown): boolean => {
+    if (!comprasIdDoNcod(ncod)) return false;
+    if (temErp) return abrirPcNativo(ncod);
+    setToast({ msg: "PC criado no Compras: aqui você aprova ou recusa (✓ / ✕). Os detalhes e a edição ficam em Compras — peça a quem tem acesso ao ERP.", erro: true });
+    return true;
+  }, [temErp]);
+  const setDrawer = useCallback((k: string | null) => { if (!k || !irAoCompras(k.split("|")[1])) setDrawerSt(k); }, [irAoCompras]);
   /* Cancelar pedido / Devolver material (08/10/26, sql/146): o modal aberto, os PCs que
      acabaram de ser cancelados (somem já, sem esperar a recarga) e um tique para o resumo
      do budget e a seção "Cancelados / devolvidos" buscarem de novo. */
@@ -479,9 +488,10 @@ export default function TelaOperacao({ modulo, title, rows: rowsIniciais, parcia
   }, [podeAjustarPc, mostrar, ehAdmin, podeAprovar]);
   const setStatus = useCallback(async (c: Compra, status: string) => {
     // PC do Compras (sql/148-149): decide pela rota do Compras, com a regra de projeto (Marcelo/budget).
-    if (Number(c.row.ncod_ped) < 0) {
+    // Linha manual (ncod_ped negativo, mas não do Compras) segue a rota de sempre (lib/pc-compras-id).
+    if (ehPcDoCompras(c.row)) {
       const st = STATUS_COMPRAS[status];
-      if (!st) { abrirPcNativo(c.row.ncod_ped); return; }
+      if (!st) { irAoCompras(c.row.ncod_ped); return; }
       const antesN = c.statusCodigo;
       aplicar(c.key, { status });
       const e = await decidirPcNativo([c.row], st);
@@ -510,10 +520,10 @@ export default function TelaOperacao({ modulo, title, rows: rowsIniciais, parcia
       },
     });
     if (RECUSAS.has(status) && !c.justificativa) setTimeout(() => document.getElementById(`jr-${c.key}`)?.focus(), 40);
-  }, [aplicar, modulo, mostrar, podeAprovar, abrirAjustePc]);
+  }, [aplicar, modulo, mostrar, podeAprovar, abrirAjustePc, irAoCompras]);
 
   const gravar = useCallback(async (c: Compra, campo: keyof typeof CAMPOS, valor: unknown, patch: AnyRow) => {
-    if (abrirPcNativo(c.row.ncod_ped)) return false;
+    if (irAoCompras(c.row.ncod_ped)) return false;
     const def = CAMPOS[campo] as { campo: string; historico?: boolean };
     const antes: AnyRow = Object.fromEntries(Object.keys(patch).map((k) => [k, c.row[k]]));
     aplicar(c.key, patch);
@@ -525,7 +535,7 @@ export default function TelaOperacao({ modulo, title, rows: rowsIniciais, parcia
         body: JSON.stringify({ empresa: c.row.empresa, numero: c.pc, data: valor }) }).catch(() => null);
     }
     return true;
-  }, [aplicar, modulo, mostrar]);
+  }, [aplicar, modulo, mostrar, irAoCompras]);
 
   /* Incluir um PC numa RC (01/10/2026): vai para as linhas da RC ainda sem
      PC; se todas já têm, cria uma linha manual só com RC + nº do PC. Depois
@@ -587,14 +597,22 @@ export default function TelaOperacao({ modulo, title, rows: rowsIniciais, parcia
   const selCompras = useMemo(() => [...sel].map((k) => compraPorKey.get(k)).filter(Boolean) as Compra[], [sel, compraPorKey]);
   const emMassa = async (status: string, lista?: Compra[]) => {
     const todos = (lista ?? selCompras).filter((c) => c.temPc);
-    const nativos = todos.filter((c) => Number(c.row.ncod_ped) < 0);
-    if (nativos.length && STATUS_COMPRAS[status]) {
-      const e = await decidirPcNativo(nativos.map((c) => c.row), STATUS_COMPRAS[status]);
-      if (e) mostrar({ msg: `PCs do Compras: ${e}`, erro: true });
+    // PC do Compras decide pela rota do Compras; linha do Omie e linha manual, pela de sempre.
+    const nativos = todos.filter((c) => ehPcDoCompras(c.row));
+    let erroNativos: string | null = null;
+    if (nativos.length) {
+      erroNativos = STATUS_COMPRAS[status]
+        ? await decidirPcNativo(nativos.map((c) => c.row), STATUS_COMPRAS[status])
+        : `"${OPCOES_STATUS.find((o) => o.v === status)?.l ?? status}" não existe para PC criado no Compras — use Aprovar, Recusar ou Pendente`;
+      if (erroNativos) mostrar({ msg: `PCs do Compras: ${erroNativos}`, erro: true });
       else for (const c of nativos) aplicar(c.key, { status });
     }
-    const alvo = todos.filter((c) => Number(c.row.ncod_ped) > 0);
-    if (!alvo.length && nativos.length) { setSel(new Set()); return; }
+    const alvo = todos.filter((c) => !ehPcDoCompras(c.row));
+    if (!alvo.length && nativos.length) {
+      setSel(new Set());
+      if (!erroNativos) mostrar({ msg: `${nativos.length} PC(s) do Compras: ${OPCOES_STATUS.find((o) => o.v === status)?.l.toLowerCase() ?? status}` });
+      return;
+    }
     if (!alvo.length) { mostrar({ msg: "Nenhuma das selecionadas tem PC — sem PC não há o que aprovar.", erro: true }); return; }
     const antes = new Map(alvo.map((c) => [c.key, c.statusCodigo]));
     for (const c of alvo) aplicar(c.key, { status });
@@ -629,7 +647,7 @@ export default function TelaOperacao({ modulo, title, rows: rowsIniciais, parcia
     window.location.reload();
   };
   const apagarManuais = async () => {
-    const alvo = selCompras.filter((c) => Number(c.row.ncod_ped) < 0);
+    const alvo = selCompras.filter((c) => ehLinhaManual(c.row));
     if (!alvo.length || !window.confirm(`Apagar ${alvo.length} linha(s) manual(is)? Linhas do Omie não são apagadas.`)) return;
     const r = await fetch("/api/approvals/batch-delete", { method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ rows: alvo.map((c) => ({ empresa: c.row.empresa, ncod_ped: c.row.ncod_ped })) }) });
@@ -1212,7 +1230,7 @@ export default function TelaOperacao({ modulo, title, rows: rowsIniciais, parcia
 
       {/* ── barra de seleção em massa ── */}
       <BarraMassa n={sel.size} podeAprovar={podeAprovar} podeEditar={podeEditar || ehAdmin || podeAprovar}
-        temManual={selCompras.some((c) => Number(c.row.ncod_ped) < 0)}
+        temManual={selCompras.some((c) => ehLinhaManual(c.row))}
         onAprovar={() => void emMassa("APROVADO")} onRecusar={() => void emMassa("NAO_APROVADO")}
         onPrevisao={(iso) => void previsaoEmMassa(iso)} onEsconder={() => void esconderPcs()} onApagar={() => void apagarManuais()}
         onMaterial={modulo !== "pcs" && podeEditar ? (st) => { void marcarMaterialLote(selCompras, st); setSel(new Set()); } : undefined}
@@ -2037,7 +2055,7 @@ function LinhaCompra({ c, sel, toggleSel, podeAprovar, podeEditar, ehAdmin, setS
           </small>
         </div>
         <div>
-          {c.temPc && Number(c.row.ncod_ped) > 0
+          {c.temPc && !ehLinhaManual(c.row)
             ? <span className="mono">{c.pc}</span>
             : podeEditar && modulo !== "pcs"
               ? <InputTexto id={`pc-${c.key}`} mono valor={s(c.row.pc_numero_manual)} placeholder="nº PC"
@@ -2936,23 +2954,29 @@ function LogAlteracoes({ aberto, onFechar, compras }: { aberto: boolean; onFecha
     (sql/148). Aprovar e editar daqui gravaria na aprovação do Omie, então ele abre
     a folha do pedido no Compras. Devolve true quando redirecionou. */
 function abrirPcNativo(ncod: unknown): boolean {
-  const n = Number(ncod);
-  if (!(n < 0)) return false;
-  window.location.assign(`/erp/compras?pedido=${-n - 9_000_000_000_000}`);
+  // Só o PC do Compras (-(9e12 + id)); linha manual também tem ncod_ped negativo e fica aqui.
+  const id = comprasIdDoNcod(ncod);
+  if (!id) return false;
+  window.location.assign(`/erp/compras?pedido=${id}`);
   return true;
 }
 
 const STATUS_COMPRAS: Record<string, string> = { APROVADO: "aprovado", NAO_APROVADO: "nao_aprovado", PENDENTE: "aguardando" };
 
-/** Aprova/reprova PCs do Compras pela /api/compras/acao. null = ok; senão o erro. */
+/** Aprova/reprova PCs do Compras pela /api/compras/acao. null = ok; senão o erro.
+ *  Nunca "dá certo" sem gravar: sem id para mandar, ou servidor sem nada alterado, é erro. */
 async function decidirPcNativo(rows: Record<string, unknown>[], status: string): Promise<string | null> {
-  const ids = rows.map((r) => -Number(r.ncod_ped) - 9_000_000_000_000).filter((n) => n > 0);
+  const ids = rows.map((r) => comprasIdDaLinha(r)).filter((n): n is number => n != null);
+  if (!ids.length) return "não identifiquei o PC no Compras — recarregue a página; se continuar, abra um chamado com o nº do PC";
   try {
     const r = await fetch("/api/compras/acao", { method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ acao: "aprovar", ids, status }) });
     const j = await r.json().catch(() => ({}));
     if (!r.ok) return String(j.error ?? r.statusText);
     const f = (j.falhas ?? []) as { num: string; erro: string }[];
-    return f.length ? f.map((x) => `PC ${x.num}: ${x.erro}`).join(" · ") : null;
+    if (f.length) return f.map((x) => `PC ${x.num}: ${x.erro}`).join(" · ");
+    if (Number(j.alterados ?? 0) === 0) return "o servidor não gravou nenhum PC — recarregue a página e tente de novo";
+    if (ids.length < rows.length) return `${rows.length - ids.length} PC(s) não identificados no Compras — recarregue a página`;
+    return null;
   } catch (e) { return e instanceof Error ? e.message : String(e); }
 }

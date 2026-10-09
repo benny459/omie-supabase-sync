@@ -11,10 +11,11 @@
 // etapa_manual. Nada aqui chama o Omie.
 import { postWebexMessage, buildApprovalMarkdown } from "@/lib/webex";
 import { NextResponse } from "next/server";
-import { exigirCompras, rpc, erro, motivoNaoDecide, posGravar, type Quem } from "@/lib/compras-server";
+import { exigirCompras, exigirAprovacaoCompras, rpc, erro, motivoNaoDecide, posGravar, type Quem } from "@/lib/compras-server";
 import { supaAdmin } from "@/lib/supabase-admin";
 import { ordemEtapa, type Pedido } from "@/lib/compras";
-import { aprovPainelExigeAprovador, acaoDoStatus } from "@/lib/aprovacao-permissao";
+import { aprovPainelExigeAprovador, acaoDoStatus, motivoForaDoCaminho } from "@/lib/aprovacao-permissao";
+import { ehProjetoDeObra } from "@/lib/aprovacao-projeto-regra";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -29,10 +30,12 @@ async function pedido(id: number) {
 }
 
 export async function POST(req: Request) {
-  const q = await exigirCompras();
-  if (q instanceof NextResponse) return q;
   let b: Record<string, unknown>;
   try { b = await req.json(); } catch { return NextResponse.json({ error: "JSON inválido" }, { status: 400 }); }
+  // Aprovar/reprovar aceita também quem aprova no módulo Projetos sem a área ERP — só PC de
+  // projeto de obra (motivoNaoDecide). Todas as outras ações continuam exigindo Compras.
+  const q = b.acao === "aprovar" ? await exigirAprovacaoCompras() : await exigirCompras();
+  if (q instanceof NextResponse) return q;
   try {
     const r = await executar(q, req, b);
     // previsões a pagar e RCs na operação acompanham qualquer mudança
@@ -105,16 +108,25 @@ async function mover(q: Quem, id: number, etapa: string) {
 
 async function aprovar(q: Quem, req: Request, ids: number[], status: string) {
   if (!STATUS_OMIE[status]) throw new Error("status inválido");
+  if (!Array.isArray(ids) || !ids.length) throw new Error("Nenhum PC informado — recarregue a página e tente de novo");
   const pedidos = await Promise.all(ids.map((id) => pedido(Number(id))));
   const falhas: { num: string; erro: string }[] = [];
   const okPainel: number[] = [];
   const doOmie: Pedido[] = [];
   for (const p of pedidos) {
     if (p.tipo !== "PC") { falhas.push({ num: p.num, erro: "requisição não é aprovada" }); continue; }
-    if (p.origem === "omie") { doOmie.push(p); continue; }
+    if (p.origem === "omie") {
+      // PC do Omie decide pela set-status (Operação); pelo caminho "projetos" não passa por aqui
+      if (q.caminho === "projetos" && !q.perms.is_admin) { falhas.push({ num: p.num, erro: "PC do Omie: aprove pela lista da Operação" }); continue; }
+      doOmie.push(p); continue;
+    }
     /* 08/10/26 (Benny): só pode reprovar quem aprova. Aprovar, "não aprovado" e devolver um
        aprovado para "aguardando" passam pela MESMA checagem (lib/aprovacao-permissao), com a
        regra do projeto (estourou o budget → só admin). Pedir aprovação continua livre. */
+    if (!q.perms.is_admin) {
+      const fora = motivoForaDoCaminho(q.caminho, !!p.projCod && ehProjetoDeObra(p.proj));
+      if (fora) { falhas.push({ num: p.num, erro: fora }); continue; }
+    }
     if (aprovPainelExigeAprovador(p.aprov, status)) {
       const nao = await motivoNaoDecide(q, { emp: p.emp, num: p.num, valor: Number(p.valor) || 0, projCod: p.projCod, proj: p.proj }, acaoDoStatus(status));
       if (nao) { falhas.push({ num: p.num, erro: nao }); continue; }
