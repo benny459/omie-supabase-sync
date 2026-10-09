@@ -45,7 +45,7 @@ test("corpo: nº, valor, OC, vencimento, dados de pagamento, texto complementar 
   const h = corpoEnvio(REC, "Ref. <contrato> 12");
   assert.match(h, /o recibo nº <b>4659<\/b>, referente ao pedido OS4880, no valor de <b>R\$\s?2\.364,40<\/b>/);
   assert.match(h, /ordem de compra: <b>4500123<\/b>/);
-  assert.match(h, /<b>Vencimento<\/b>/);
+  assert.equal((h.match(/>Vencimento</g) ?? []).length, 1);
   assert.match(h, /23\/10\/2026/);
   assert.match(h, /Forma de pagamento: Depósito<br>Transferência\/depósito: Bradesco \(237\) Ag 0368 CC 0266910-2/);
   assert.match(h, /Ref\. &lt;contrato&gt; 12/);
@@ -55,7 +55,7 @@ test("corpo NF-e: chave; NFS-e: líquido a pagar e prefeitura; vários venciment
   const nfe = corpoEnvio({ ...REC, doc: "NF-e", chave: "3526", oc: null, vencimentos: [{ vencimento: "2026-11-01", valor: 50 }, { vencimento: "2026-12-01", valor: 50 }] });
   assert.match(nfe, /a NF-e nº/);
   assert.match(nfe, /Chave de acesso: <span[^>]*>3526<\/span>/);
-  assert.match(nfe, /<b>Vencimentos<\/b>/);
+  assert.match(nfe, /01\/12\/2026/);
   assert.doesNotMatch(nfe, /ordem de compra/);
   const nfse = corpoEnvio({ ...REC, doc: "NFS-e", valor: 1000, liquido: 940, municipio: "São Paulo" });
   assert.match(nfse, /a NFS-e nº <b>4659<\/b> \(prefeitura de São Paulo\)/);

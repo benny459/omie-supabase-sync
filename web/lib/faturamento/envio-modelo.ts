@@ -102,7 +102,7 @@ ${vs.map((v) => `<tr><td style="padding:3px 14px 3px 0">${esc(dataBR(v.venciment
 <p>Prezados${m.cliente ? ` da ${esc(m.cliente)}` : ""},</p>
 <p>Segue em anexo ${artigo(m.doc)} nº <b>${esc(m.numero)}</b>${m.municipio ? ` (prefeitura de ${esc(m.municipio)})` : ""}${m.origem ? `, referente ao pedido ${esc(m.origem)}` : ""}, no valor de <b>${brl(m.valor)}</b>${aPagar != null ? ` (valor líquido a pagar: <b>${brl(aPagar)}</b>)` : ""}.</p>
 ${m.oc ? `<p>Seu pedido / ordem de compra: <b>${esc(m.oc)}</b></p>` : ""}
-${vs.length ? `<p style="margin-bottom:2px"><b>${vs.length > 1 ? "Vencimentos" : "Vencimento"}</b></p>\n${tab}` : ""}
+${tab}
 ${pag.length ? `<p style="background:#EEF4F7;border-left:3px solid #1C7FA0;padding:10px 12px;font-size:13px"><b>Dados para pagamento</b><br>${pag.map(esc).join("<br>")}</p>` : ""}
 ${m.chave ? `<p style="font-size:13px">Chave de acesso: <span style="font-family:monospace">${esc(m.chave)}</span></p>` : ""}
 ${texto?.trim() ? `<p style="white-space:pre-wrap">${esc(texto.trim())}</p>` : ""}
