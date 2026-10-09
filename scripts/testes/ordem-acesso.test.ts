@@ -131,6 +131,10 @@ test("ações: só com o interruptor ligado E a permissão da tela", () => {
   assert.equal(podeExecutar(pessoa({ uid: "c", pode: { "financeiro.conciliar": true } }), cfg, "financeiro.conciliar").ok, false); // falta baixar
   assert.equal(podeExecutar(bpo, cfg, "financeiro.conciliar").ok, true);
   assert.equal(podeExecutar(benny, cfg, "acao.inexistente").ok, false);
+  const cfgAp = normalizarConfig({ ...ligadoTudo, acoes: { "compras.aprovar": true } });
+  assert.equal(podeExecutar(gabriel, cfgAp, "compras.aprovar").ok, false);   // sem compras.aprovar
+  const marceloAp = { ...marcelo, perms: { ...marcelo.perms, module_roles: [{ modulo: "projetos" as const, can_edit_pv: false, can_edit_rc: false, can_edit_pc: false, can_approve: true, can_edit_log: false, can_view_values: true, can_view_margin: true, approval_ceiling_brl: null, weekly_budget_brl: null }] } };
+  assert.equal(podeExecutar(marceloAp, cfgAp, "compras.aprovar").ok, true);   // aprova pelo caminho Projetos
 });
 
 test("M1: tolerância = o menor entre R$ e % do PC", () => {

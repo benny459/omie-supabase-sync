@@ -3,7 +3,7 @@
 // a permissoesDe (platform.permissoes_usuario + catálogo) e a canViewValues
 // (platform.user_module_roles), exactamente como as telas de hoje.
 // Funções puras (testáveis); o carregamento do utilizador fica em acesso-server.ts.
-import { canViewArea, canViewValues, type UserPerms } from "@/lib/permissions";
+import { canApprove, canViewArea, canViewValues, type UserPerms } from "@/lib/permissions";
 import type { ConfigOrdem } from "./config";
 import { MODULOS } from "./modulos";
 import type { ModuloOrdem } from "./tipos";
@@ -78,6 +78,11 @@ export function podeExecutar(q: Pick<Quem, "perms" | "pode" | "admin">, cfg: Con
   const exige = PERMISSAO_DA_ACAO[chave];
   if (exige === undefined) return { ok: false, motivo: "Ação desconhecida." };
   if (!q.admin && exige.some((k) => q.pode[k] !== true)) return { ok: false, motivo: "O seu perfil não tem esta permissão na tela tradicional." };
+  // Aprovar PC: quem aprova em Compras (compras.aprovar) ou no módulo Projetos (caminho "projetos" da
+  // rota) — o mesmo filtro de exigirAprovacaoCompras; alçada e budget a rota decide PC a PC.
+  if (chave === "compras.aprovar" && !q.admin && q.pode["compras.aprovar"] !== true && !canApprove(q.perms, "projetos")) {
+    return { ok: false, motivo: "O seu perfil não aprova pedidos de compra." };
+  }
   return { ok: true, motivo: null };
 }
 

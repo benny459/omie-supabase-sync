@@ -92,7 +92,7 @@ export default function ConfigOrdemTela() {
         <Interruptor v={cfg.ativo} on={(v) => set((c) => ({ ...c, ativo: v }))} rotulo="Central visível para a equipa (com os módulos ligados abaixo)" />
         <Interruptor v={cfg.decisoes} on={(v) => set((c) => ({ ...c, decisoes: v }))} rotulo="Decisões no cartão: Recusar com motivo, Adiar (só mudam o estado do item, com Desfazer)" />
         <Interruptor v={cfg.encaminhar} on={(v) => set((c) => ({ ...c, encaminhar: v }))} rotulo="Encaminhar a outro módulo (cria o item no destino e “a acompanhar” na origem)" />
-        <Interruptor v={cfg.sino} on={(v) => set((c) => ({ ...c, sino: v }))} rotulo="Sino de avisos na barra do topo" />
+        <Interruptor v={cfg.sino} on={(v) => set((c) => ({ ...c, sino: v }))} rotulo="Avisos (número vermelho na bolinha da conta + lista no menu da conta)" />
         <Interruptor v={cfg.dialogo_entrada} on={(v) => set((c) => ({ ...c, dialogo_entrada: v }))} rotulo="Diálogo de entrada (“Bom dia…”, uma vez por dia ou com aviso novo)" />
         <Interruptor v={cfg.pedido_acesso} on={(v) => set((c) => ({ ...c, pedido_acesso: v }))} rotulo="Botão “Pedir acesso” no diálogo Sem acesso" />
         <Interruptor v={cfg.comandos} on={(v) => set((c) => ({ ...c, comandos: v }))} rotulo="Barra de comandos da Aria (pré-visualiza e pede “Confirmar N”)" />
