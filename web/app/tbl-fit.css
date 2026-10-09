@@ -79,7 +79,9 @@
 .tbl-fit .tf-num { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .tbl-fit.tbl-fit .tf-so-estreito { display: none; }
 
-/* Prioridades — larguras do contentor da tabela, não da janela. */
+/* Prioridades — larguras do contentor da tabela, não da janela.
+   tf-p4 só para tabelas muito largas (Compras com colunas escolhidas). */
+@container tbl (max-width: 1600px) { .tbl-fit.tbl-fit .tf-p4 { display: none; } }
 @container tbl (max-width: 1360px) { .tbl-fit.tbl-fit .tf-p3 { display: none; } }
 @container tbl (max-width: 1180px) {
   .tbl-fit.tbl-fit .tf-p2 { display: none; }

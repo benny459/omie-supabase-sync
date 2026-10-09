@@ -38,10 +38,11 @@ const lsGet = (k: string) => { try { return localStorage.getItem(k); } catch { r
 const lsSet = (k: string, v: string) => { try { localStorage.setItem(k, v); } catch { /* sem storage */ } };
 /** Ordem em que as colunas somem quando a tabela estreita (tf-p3 primeiro). */
 const PRIO_COL: Record<string, string> = {
-  numForn: "tf-p3", contato: "tf-p3", conta: "tf-p3", comprador: "tf-p3", rcs: "tf-p3", contrato: "tf-p3", obsInt: "tf-p3", parc: "tf-p3", cnpj: "tf-p3",
-  aprov: "tf-p2", cat: "tf-p2", pv: "tf-p2", itens: "tf-p2", origem: "tf-p2", dtRec: "tf-p2", enviado: "tf-p2",
-  proj: "tf-p1", emissao: "tf-p1", tipo: "tf-p1",
-};
+  numForn: "tf-p4", contato: "tf-p4", conta: "tf-p4", comprador: "tf-p4", rcs: "tf-p4", contrato: "tf-p4", obsInt: "tf-p4", parc: "tf-p4", cnpj: "tf-p4",
+  aprov: "tf-p3", cat: "tf-p3", pv: "tf-p3", proj: "tf-p3",
+  emissao: "tf-p2", itens: "tf-p2", origem: "tf-p2", dtRec: "tf-p2", enviado: "tf-p2",
+  tipo: "tf-p1", nf: "tf-p1",
+}
 const COLS_PADRAO = ["situacao", "aprov", "num", "forn", "valor", "etapaNome", "previsao", "numForn", "contato", "cat", "conta", "comprador", "proj", "rcs", "pv"];
 
 export default function TelaCompras() {
@@ -603,7 +604,7 @@ export default function TelaCompras() {
                     checked={tabelaLinhas.length > 0 && tabelaLinhas.every((p) => sel.has(p.id))}
                     onChange={(e) => setSel((s) => { const n = new Set(s); tabelaLinhas.forEach((p) => (e.target.checked ? n.add(p.id) : n.delete(p.id))); return n; })} /></th>
                   {colsVis.map((c) => (
-                    <th key={c.k} className={`${c.r ? "r" : ""} ${PRIO_COL[c.k] ?? ""}`} onClick={() => setSort((s) => (s.k === c.k ? { k: c.k, dir: (-s.dir) as 1 | -1 } : { k: c.k, dir: 1 }))}>
+                    <th key={c.k} title={c.l} className={`${c.r ? "r" : ""} ${PRIO_COL[c.k] ?? ""}`} onClick={() => setSort((s) => (s.k === c.k ? { k: c.k, dir: (-s.dir) as 1 | -1 } : { k: c.k, dir: 1 }))}>
                       {c.l} {sort.k === c.k ? (sort.dir > 0 ? "↑" : "↓") : ""}</th>
                   ))}
                   <th style={{ width: 70 }} />
