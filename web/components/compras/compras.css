@@ -413,3 +413,5 @@
 /* Situação (pill + "atrasada") e Etapa podem quebrar linha em vez de alargar a tabela */
 .cmp .tbl-wrap.tbl-fit table.grid td.c-situacao { white-space: normal; min-width: 140px; line-height: 22px; }
 .cmp .tbl-wrap.tbl-fit table.grid td.c-etapaNome { white-space: normal; min-width: 96px; }
+/* 🖨 e ⋮ lado a lado (o ⋮ era display:grid e descia para outra linha) */
+.cmp table.grid td .kebab { display: inline-grid; vertical-align: middle; margin-left: 2px; }
