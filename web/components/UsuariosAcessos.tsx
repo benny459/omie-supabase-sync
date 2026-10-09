@@ -6,7 +6,7 @@
 import { useEffect, useMemo, useState } from "react";
 
 type Efetiva = { valor: boolean; explicito: boolean; padrao: boolean };
-type ItemCat = { chave: string; modulo: "compras" | "estoque" | "financeiro"; rotulo: string; descricao: string };
+type ItemCat = { chave: string; modulo: "compras" | "estoque" | "financeiro" | "faturamento" | "projetos"; rotulo: string; descricao: string };
 type Pessoa = {
   id: string; email: string; nome: string | null; is_admin: boolean; ativo: boolean; role: string;
   semPerfilPainel: boolean; teste: boolean;
@@ -22,6 +22,8 @@ type Dados = { pessoas: Pessoa[]; catalogo: ItemCat[]; perfis: Record<string, st
 const MODS: { id: "compras" | "estoque" | "financeiro"; rotulo: string }[] = [
   { id: "compras", rotulo: "Compras" }, { id: "estoque", rotulo: "Estoque" }, { id: "financeiro", rotulo: "Financeiro" },
 ];
+// Permissões finas: os módulos do ERP + as chaves de Operação › Projetos (fora do ERP).
+const MODS_FINOS: { id: ItemCat["modulo"]; rotulo: string }[] = [...MODS, { id: "projetos", rotulo: "Operação › Projetos" }];
 // Áreas do painel (platform.user_area_access). Operação/Vendas são abertas por padrão; Financeiro, ERP e BI exigem liberação.
 const AREAS: { id: string; rotulo: string; padraoAberta: boolean; ajuda: string }[] = [
   { id: "operacao", rotulo: "Operação", padraoAberta: true, ajuda: "Avulsos, Projetos, PCs" },
@@ -223,7 +225,7 @@ export default function UsuariosAcessos({ meuId }: { meuId: string }) {
               {/* Permissões finas */}
               <div>
                 <div className="flex items-center justify-between gap-2 flex-wrap mb-2">
-                  <h3 className="text-xs font-semibold uppercase tracking-wider text-ww-textMuted">O que vê e faz dentro do ERP</h3>
+                  <h3 className="text-xs font-semibold uppercase tracking-wider text-ww-textMuted">O que vê e faz (ERP e Operação › Projetos)</h3>
                   <div className="flex gap-2 items-center">
                     <select defaultValue="" disabled={ocupado || sel.is_admin}
                             onChange={(e) => { if (e.target.value) { acao({ acao: "perfil", user_id: sel.id, perfil: e.target.value }, "Perfil aplicado — ajuste o que precisar"); e.target.value = ""; } }}
@@ -235,7 +237,7 @@ export default function UsuariosAcessos({ meuId }: { meuId: string }) {
                             className="px-2 py-1 text-xs rounded border border-ww-border">Voltar ao padrão</button>
                   </div>
                 </div>
-                {MODS.map((m) => (
+                {MODS_FINOS.map((m) => (
                   <div key={m.id} className="mb-3">
                     <div className="text-sm font-medium mb-1">{m.rotulo}</div>
                     <div className="grid sm:grid-cols-2 gap-x-4">

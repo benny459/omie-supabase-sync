@@ -77,6 +77,7 @@ const NIVEIS: Record<ModuloPerm, Record<"ver" | "usar", Chave[]>> = {
   estoque:    { ver: ["estoque.acesso", "estoque.ver_custos"], usar: ["estoque.acesso", "estoque.ver_custos", "estoque.ajustar"] },
   financeiro: { ver: ["financeiro.ver_pagar", "financeiro.ver_receber"], usar: ["financeiro.ver_pagar", "financeiro.ver_receber", "financeiro.editar_titulo"] },
   faturamento: { ver: ["faturamento.acesso"], usar: ["faturamento.acesso"] },
+  projetos:   { ver: [], usar: [] },
 };
 
 async function fotografia(userId: string) {
@@ -209,7 +210,8 @@ export async function POST(req: Request) {
         if (!CATALOGO.some((c) => c.chave === chave)) throw new Error("permissão inválida");
         const antes = await fotografia(userId);
         const valor = b.valor === null ? null : !!b.valor;
-        if (valor) await garantirErp(userId);
+        // chave fora do ERP (Operação › Projetos) não abre a área ERP
+        if (valor && !CATALOGO.find((c) => c.chave === chave)?.semErp) await garantirErp(userId);
         await setPerm(userId, chave, valor, por);
         await auditar(por, userId, await emailDe(userId), `${chave} → ${valor === null ? "padrão" : valor ? "sim" : "não"}`, antes, await fotografia(userId));
         break;

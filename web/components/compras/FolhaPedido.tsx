@@ -9,6 +9,7 @@
  * duplicar, aprovar, receber e imprimir). Pedido do painel grava em compras.*.
  */
 
+import { aprovarComprasComAviso } from "@/lib/acima-budget-cliente";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import CodigoHoje from "./CodigoHoje";
 import GerarPcDaRc from "@/components/operacao/GerarPcDaRc";
@@ -354,10 +355,7 @@ export default function FolhaPedido({
       }));
       let msg = o.msg ?? `${isRC ? "Requisição" : "Pedido"} ${r.num} salvo${rcLigadas.length && !isRC ? ` · atende ${rcLigadas.map((n) => "RC " + n).join(", ")}` : ""}`;
       if (o.aprovar) {
-        const a = await json<{ alterados: number; falhas: { erro: string }[] }>(await fetch("/api/compras/acao", {
-          method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ acao: "aprovar", ids: [r.id], status: "aprovado" }),
-        }));
+        const a = await aprovarComprasComAviso([r.id], "aprovado");
         msg = a.falhas.length ? `Pedido ${r.num} salvo, mas não aprovado: ${a.falhas[0].erro}` : `Pedido ${r.num} aprovado`;
       }
       onSalvo(r.id, msg, o.gerarPc ? r.id : undefined);
@@ -1022,8 +1020,7 @@ export default function FolhaPedido({
                 {!isRC && ro && D.aprov !== "aprovado" && D.id && (
                   <button className="btn ok" onClick={async () => {
                     try {
-                      const a = await json<{ falhas: { erro: string }[] }>(await fetch("/api/compras/acao", { method: "POST", headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({ acao: "aprovar", ids: [D.id], status: "aprovado" }) }));
+                      const a = await aprovarComprasComAviso([D.id!], "aprovado");
                       if (a.falhas.length) toast(a.falhas[0].erro, true); else onSalvo(D.id!, `Pedido ${D.num} aprovado`);
                     } catch (e) { toast((e as Error).message, true); }
                   }}>✓ Aprovar pedido</button>

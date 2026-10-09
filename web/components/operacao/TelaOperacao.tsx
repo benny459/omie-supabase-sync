@@ -37,6 +37,7 @@ import {
 } from "@/lib/operacao-modelo";
 import { chaveRentab, type RentabResumo } from "@/lib/rentabilidade";
 import { mudarStatus, mudarStatusEmMassa, salvarCampo, CAMPOS, type Modulo } from "@/lib/approvals-write";
+import { aprovarComprasComAviso, pedirMotivoAcimaBudget, CODIGO_CONFIRMAR } from "@/lib/acima-budget-cliente";
 import { SO_QUEM_APROVA } from "@/lib/aprovacao-permissao";
 import { comprasIdDaLinha, comprasIdDoNcod, ehLinhaManual, ehPcDoCompras } from "@/lib/pc-compras-id";
 import { buildBuckets, BucketTotals, projetoDoBucket, LinkAbrirProjeto, type Bucket, type BudgetSummary } from "../BoldAvulsosView";
@@ -527,7 +528,13 @@ export default function TelaOperacao({ modulo, title, rows: rowsIniciais, parcia
     if (status === "CANCELAR_PEDIDO" && c.pc) { abrirAjustePc("cancelar", [c]); return; }
     const antes = c.statusCodigo;
     aplicar(c.key, { status });
-    const r = await mudarStatus(c.row, status, modulo);
+    let r = await mudarStatus(c.row, status, modulo);
+    // 09/10/26: PC de projeto acima do budget, para quem tem a autonomia — aviso + motivo e reenvia
+    if (!r.ok && r.codigo === CODIGO_CONFIRMAR && r.aviso) {
+      const motivo = pedirMotivoAcimaBudget([{ aviso: r.aviso.aviso, num: c.pc }]);
+      if (motivo == null) { aplicar(c.key, { status: antes }); mostrar({ msg: `PC ${c.pc}: aprovação acima do budget cancelada` }); return; }
+      r = await mudarStatus(c.row, status, modulo, motivo);
+    }
     if (!r.ok) {
       aplicar(c.key, { status: antes });
       mostrar({ msg: `Não gravou (${c.pc ? `PC ${c.pc}` : c.desc}): ${r.erro}`, erro: true });
@@ -640,6 +647,18 @@ export default function TelaOperacao({ modulo, title, rows: rowsIniciais, parcia
     const antes = new Map(alvo.map((c) => [c.key, c.statusCodigo]));
     for (const c of alvo) aplicar(c.key, { status });
     const r = await mudarStatusEmMassa(alvo.map((c) => c.row), status, modulo);
+    // 09/10/26: os que estouram o budget (quem tem a autonomia) — um aviso só, um motivo, reenvia esses
+    const acima = r.falhas.filter((f) => f.codigo === CODIGO_CONFIRMAR && f.aviso);
+    if (acima.length) {
+      const motivo = pedirMotivoAcimaBudget(acima.map((f) => ({ aviso: f.aviso!.aviso, num: s(f.row.pc_numero) || s(f.row.pc_numero_manual) || null })));
+      if (motivo != null) {
+        const r2 = await mudarStatusEmMassa(acima.map((f) => f.row), status, modulo, motivo);
+        r.ok += r2.ok;
+        r.falhas = [...r.falhas.filter((f) => !acima.includes(f)), ...r2.falhas];
+      } else {
+        for (const f of acima) f.erro = "aprovação acima do budget cancelada";
+      }
+    }
     for (const f of r.falhas) aplicar(`${s(f.row.empresa)}|${s(f.row.ncod_ped)}`, { status: antes.get(`${s(f.row.empresa)}|${s(f.row.ncod_ped)}`) });
     setSel(new Set());
     mostrar(r.falhas.length
@@ -1689,7 +1708,29 @@ export function FinStrip({ p, $, projeto }: { p: Pedido; $: (v: number | null) =
 // ─────────────────────────────────────────────────────────────────────────
 type Gravar = (c: Compra, campo: keyof typeof CAMPOS, valor: unknown, patch: AnyRow) => Promise<boolean>;
 
-export function SeletorStatus({ c, podeAprovar, ehAdmin, setStatus }: {
+type AcimaBudgetReg = { projeto?: string | null; estouro?: number; total?: number | null; teto?: number | null; motivo?: string; por?: string | null; em?: string | null };
+
+/** 09/10/26: marca "acima do budget" para administradores — PC de projeto aprovado acima do budget
+ *  por quem tem projetos.aprovar_acima_budget (custom_fields.acima_budget, gravado no servidor). */
+function MarcaAcimaBudget({ cs, ehAdmin }: { cs: Compra[]; ehAdmin: boolean }) {
+  if (!ehAdmin) return null;
+  const c = cs.find((x) => /^APROVADO/.test(x.statusCodigo) && (x.row.custom_fields as { acima_budget?: unknown } | null)?.acima_budget);
+  if (!c) return null;
+  const a = (c.row.custom_fields as { acima_budget: AcimaBudgetReg }).acima_budget;
+  const brl = (v: number | null | undefined) => v != null ? Number(v).toLocaleString("pt-BR", { style: "currency", currency: "BRL" }) : "—";
+  const titulo = [`Aprovado acima do budget${a.projeto ? ` do projeto ${a.projeto}` : ""}: estouro ${brl(a.estouro)}`
+    + (a.total != null && a.teto != null ? ` (total ${brl(a.total)} de ${brl(a.teto)})` : ""),
+    a.motivo ? `Motivo: ${a.motivo}` : "", a.por ? `Por ${a.por}${a.em ? ` em ${new Date(a.em).toLocaleString("pt-BR")}` : ""}` : ""].filter(Boolean).join("\n");
+  return <span className="st recusado" style={{ marginLeft: 4, whiteSpace: "nowrap" }} title={titulo}>⚠ acima do budget</span>;
+}
+
+export function SeletorStatus(props: {
+  c: Compra; podeAprovar: boolean; ehAdmin: boolean; setStatus: (c: Compra, v: string) => void;
+}) {
+  return <><SeletorStatusBase {...props} /><MarcaAcimaBudget cs={[props.c]} ehAdmin={props.ehAdmin} /></>;
+}
+
+function SeletorStatusBase({ c, podeAprovar, ehAdmin, setStatus }: {
   c: Compra; podeAprovar: boolean; ehAdmin: boolean; setStatus: (c: Compra, v: string) => void;
 }) {
   if (c.estado === "sem_pc") return <span className="st sem_pc">Sem PC</span>;
@@ -2742,7 +2783,13 @@ function itensVisiveis(itens: Compra[]): Compra[] {
 }
 
 /** Status de um PC que cobre várias linhas: muda todas de uma vez. */
-function SeletorStatusLote({ cs, podeAprovar, ehAdmin, statusLote }: {
+function SeletorStatusLote(props: {
+  cs: Compra[]; podeAprovar: boolean; ehAdmin: boolean; statusLote: (lista: Compra[], status: string) => void;
+}) {
+  return <><SeletorStatusLoteBase {...props} /><MarcaAcimaBudget cs={props.cs} ehAdmin={props.ehAdmin} /></>;
+}
+
+function SeletorStatusLoteBase({ cs, podeAprovar, ehAdmin, statusLote }: {
   cs: Compra[]; podeAprovar: boolean; ehAdmin: boolean; statusLote: (lista: Compra[], status: string) => void;
 }) {
   const c = cs.find((x) => x.estado === "recusado") ?? cs.find((x) => x.estado === "pendente") ?? cs[0];
@@ -2992,11 +3039,9 @@ async function decidirPcNativo(rows: Record<string, unknown>[], status: string):
   const ids = rows.map((r) => comprasIdDaLinha(r)).filter((n): n is number => n != null);
   if (!ids.length) return "não identifiquei o PC no Compras — recarregue a página; se continuar, abra um chamado com o nº do PC";
   try {
-    const r = await fetch("/api/compras/acao", { method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ acao: "aprovar", ids, status }) });
-    const j = await r.json().catch(() => ({}));
-    if (!r.ok) return String(j.error ?? r.statusText);
-    const f = (j.falhas ?? []) as { num: string; erro: string }[];
+    // PC de projeto acima do budget: aviso + motivo para quem tem a autonomia (09/10/26)
+    const j = await aprovarComprasComAviso(ids, status);
+    const f = j.falhas;
     if (f.length) return f.map((x) => `PC ${x.num}: ${x.erro}`).join(" · ");
     if (Number(j.alterados ?? 0) === 0) return "o servidor não gravou nenhum PC — recarregue a página e tente de novo";
     if (ids.length < rows.length) return `${rows.length - ids.length} PC(s) não identificados no Compras — recarregue a página`;

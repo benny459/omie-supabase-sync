@@ -10,6 +10,7 @@
  * recebimento com a NF que chega pela Focus.
  */
 
+import { aprovarComprasComAviso } from "@/lib/acima-budget-cliente";
 import { estadoPc, dicaEstadoPc } from "@/lib/situacao-pc";
 import { ModalCancelarPc, ModalDevolverPc } from "./PcCancelarDevolver";
 import PagamentoAntecipado from "@/components/compras/PagamentoAntecipado";
@@ -216,7 +217,8 @@ export default function TelaCompras() {
   const aprovar = useCallback(async (ids: number[]) => {
     if (!ids.length) { toast("Nada a aprovar"); return; }
     try {
-      const r = await acao({ acao: "aprovar", ids, status: "aprovado" }) as { alterados: number; falhas: { num: string; erro: string }[] };
+      // PC de projeto acima do budget: aviso + motivo para quem tem a autonomia (09/10/26)
+      const r = await aprovarComprasComAviso(ids, "aprovado");
       toast(r.falhas.length ? `${r.alterados} aprovado(s); ${r.falhas.length} não: ${r.falhas[0].num} — ${r.falhas[0].erro}` : `${r.alterados} pedido(s) aprovados`, r.falhas.length > 0);
       carregar();
     } catch (e) { toast((e as Error).message, true); }

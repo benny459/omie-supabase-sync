@@ -3,7 +3,7 @@
 // o que a pessoa não pode ver. O banco (platform.permissoes_catalogo) só
 // espelha estas chaves para a FK das escolhas.
 
-export type ModuloPerm = "compras" | "estoque" | "financeiro" | "faturamento";
+export type ModuloPerm = "compras" | "estoque" | "financeiro" | "faturamento" | "projetos";
 
 export type Chave =
   | "compras.acesso" | "compras.ver_valores" | "compras.aprovar" | "compras.gerar_pc_nf"
@@ -13,12 +13,14 @@ export type Chave =
   | "estoque.separar_projeto"
   | "faturamento.acesso" | "faturamento.sem_proposta" | "faturamento.homologacao"
   | "financeiro.ver_pagar" | "financeiro.ver_receber" | "financeiro.editar_titulo" | "financeiro.ver_fluxo"
-  | "financeiro.baixar" | "financeiro.conciliar";
+  | "financeiro.baixar" | "financeiro.conciliar"
+  | "projetos.aprovar_acima_budget";
 
 /** Como o padrão (sem escolha explícita) é calculado — reproduz o que cada um podia fazer até hoje. */
 export type Padrao = "erp" | "aprovador" | "admin";
 
-export type ItemCatalogo = { chave: Chave; modulo: ModuloPerm; rotulo: string; descricao: string; padrao: Padrao };
+/** `semErp`: a chave vale fora do ERP (ex.: Operação › Projetos) — não exige a área ERP. */
+export type ItemCatalogo = { chave: Chave; modulo: ModuloPerm; rotulo: string; descricao: string; padrao: Padrao; semErp?: true };
 
 export const CATALOGO: ItemCatalogo[] = [
   { chave: "compras.acesso",            modulo: "compras", rotulo: "Abrir Compras",                 descricao: "Requisições e pedidos de compra",                 padrao: "erp" },
@@ -46,9 +48,12 @@ export const CATALOGO: ItemCatalogo[] = [
   { chave: "faturamento.acesso",        modulo: "faturamento", rotulo: "Abrir e emitir no Faturamento", descricao: "Carteira de PV/OS, emissão de NF-e, recibo e registro de NFS-e", padrao: "admin" },
   { chave: "faturamento.sem_proposta",  modulo: "faturamento", rotulo: "Emitir venda sem proposta do CRM", descricao: "PV/OS novo sem proposta, com motivo registrado", padrao: "admin" },
   { chave: "faturamento.homologacao",   modulo: "faturamento", rotulo: "Emitir em homologação (teste)", descricao: "Forçar homologação: sai de teste, sem usar a numeração real", padrao: "admin" },
+  // 09/10/26 (Benny): "O Marcelo me avisa, mas tem sim autonomia para aprovar para projetos."
+  { chave: "projetos.aprovar_acima_budget", modulo: "projetos", rotulo: "Aprovar PC de projeto acima do budget",
+    descricao: "PC de projeto de obra (PJ) que estoura o budget de materiais: aprova com aviso e motivo; o Benny é avisado no Webex", padrao: "admin", semErp: true },
 ];
 
-export const MODULO_LABEL: Record<ModuloPerm, string> = { compras: "Compras", estoque: "Estoque", financeiro: "Financeiro", faturamento: "Faturamento" };
+export const MODULO_LABEL: Record<ModuloPerm, string> = { compras: "Compras", estoque: "Estoque", financeiro: "Financeiro", faturamento: "Faturamento", projetos: "Operação › Projetos" };
 
 /** Perfis prontos: aplicar e depois ajustar à mão. */
 export const PERFIS: Record<string, { rotulo: string; chaves: Chave[] }> = {

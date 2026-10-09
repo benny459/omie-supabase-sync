@@ -18,10 +18,12 @@ export type Modulo = "avulsos" | "projetos" | "pcs";
 const moduloDaLinha = (row: AnyRow, fallback: Modulo) =>
   (String(row.modulo ?? "") || fallback) as Modulo;
 
-export type ResultadoStatus = { ok: true } | { ok: false; erro: string; codigo?: string };
+export type ResultadoStatus = { ok: true } | { ok: false; erro: string; codigo?: string; aviso?: { aviso: string } };
 
-/** Muda o status de aprovação de UMA compra (mesma chamada do popover antigo). */
-export async function mudarStatus(row: AnyRow, status: string, modulo: Modulo): Promise<ResultadoStatus> {
+/** Muda o status de aprovação de UMA compra (mesma chamada do popover antigo).
+ *  `motivoAcimaBudget` (09/10/26): motivo ao confirmar o aviso de PC de projeto acima do budget —
+ *  sem ele, o servidor responde codigo ACIMA_BUDGET_CONFIRMAR com o `aviso` para mostrar. */
+export async function mudarStatus(row: AnyRow, status: string, modulo: Modulo, motivoAcimaBudget?: string | null): Promise<ResultadoStatus> {
   try {
     const r = await fetch("/api/approvals/set-status", {
       method: "POST", headers: { "Content-Type": "application/json" },
@@ -29,11 +31,12 @@ export async function mudarStatus(row: AnyRow, status: string, modulo: Modulo): 
         empresa: row.empresa, ncod_ped: row.ncod_ped, status,
         modulo: moduloDaLinha(row, modulo),
         valorPc: row.valor_total != null ? Number(row.valor_total) : null,
+        ...(motivoAcimaBudget ? { motivoAcimaBudget } : {}),
       }),
     });
     if (r.ok) return { ok: true };
     const j = await r.json().catch(() => ({}));
-    return { ok: false, erro: String(j.error ?? j.message ?? r.statusText), codigo: j.code };
+    return { ok: false, erro: String(j.error ?? j.message ?? r.statusText), codigo: j.code, aviso: j.aviso };
   } catch (e) {
     return { ok: false, erro: e instanceof Error ? e.message : String(e) };
   }
@@ -41,16 +44,16 @@ export async function mudarStatus(row: AnyRow, status: string, modulo: Modulo): 
 
 /** Várias compras, com as travas da aprovação individual valendo para cada uma. */
 export async function mudarStatusEmMassa(
-  rows: AnyRow[], status: string, modulo: Modulo,
-): Promise<{ ok: number; falhas: { row: AnyRow; erro: string }[] }> {
-  const falhas: { row: AnyRow; erro: string }[] = [];
+  rows: AnyRow[], status: string, modulo: Modulo, motivoAcimaBudget?: string | null,
+): Promise<{ ok: number; falhas: { row: AnyRow; erro: string; codigo?: string; aviso?: { aviso: string } }[] }> {
+  const falhas: { row: AnyRow; erro: string; codigo?: string; aviso?: { aviso: string } }[] = [];
   let ok = 0;
   const fila = [...rows];
   const trabalhador = async () => {
     while (fila.length) {
       const row = fila.shift()!;
-      const r = await mudarStatus(row, status, modulo);
-      if (r.ok) ok++; else falhas.push({ row, erro: r.erro });
+      const r = await mudarStatus(row, status, modulo, motivoAcimaBudget);
+      if (r.ok) ok++; else falhas.push({ row, erro: r.erro, codigo: r.codigo, aviso: r.aviso });
     }
   };
   await Promise.all(Array.from({ length: Math.min(4, rows.length) }, trabalhador));

@@ -1,9 +1,10 @@
 import { NextResponse } from "next/server";
-import { permsAprovacao, motivoNaoDecideLinha } from "@/lib/aprovacao-permissao-server";
+import { permsAprovacao, decidirLinha } from "@/lib/aprovacao-permissao-server";
+import { CODIGO_CONFIRMAR_ACIMA_BUDGET, type RegistroAcimaBudget } from "@/lib/aprovacao-permissao";
 import { ehProjetoDeObra } from "@/lib/aprovacao-projeto-regra";
 import { supaServer } from "@/lib/supabase-server";
 import { supaAdmin } from "@/lib/supabase-admin";
-import { postWebexMessage, buildApprovalMarkdown } from "@/lib/webex";
+import { postWebexMessage, buildApprovalMarkdown, avisarAcimaBudgetDireto, markdownAvisoAcimaBudget } from "@/lib/webex";
 
 export const runtime = "nodejs";
 
@@ -14,6 +15,8 @@ type Body = {
   modulo?: string;
   // snapshot do valor no momento da aprovação (do row na UI)
   valorPc?: number | null;
+  /** 09/10/26: motivo digitado ao confirmar o aviso de PC de projeto acima do budget. */
+  motivoAcimaBudget?: string | null;
 };
 
 // Status que contam como "aprovado" — precisam notificação Webex
@@ -40,12 +43,18 @@ export async function POST(req: Request) {
   // MESMA permissão de aprovar (can_approve no módulo + alçada; PC de projeto de obra que
   // estoura o budget: só admin). Só pôr "Pendente" numa compra sem decisão fica livre.
   // Regra única em lib/aprovacao-permissao (a mesma do Compras).
+  // 09/10/26: com projetos.aprovar_acima_budget, o PC de projeto que estoura o budget é
+  // aprovado depois do aviso + motivo (409 ACIMA_BUDGET_CONFIRMAR até vir o motivo).
+  let acimaBudget: RegistroAcimaBudget | null = null;
   {
     const perms = await permsAprovacao(user.id);
     if (!perms) return NextResponse.json({ error: "Sem perfil no painel" }, { status: 403 });
-    const nao = await motivoNaoDecideLinha(perms,
-      { empresa: body.empresa, ncod_ped: Number(body.ncod_ped), modulo: body.modulo ?? "avulsos", valorPc: body.valorPc ?? null }, body.status);
-    if (nao) return NextResponse.json({ error: nao, code: "SEM_PERMISSAO_APROVAR" }, { status: 403 });
+    const dec = await decidirLinha(perms,
+      { empresa: body.empresa, ncod_ped: Number(body.ncod_ped), modulo: body.modulo ?? "avulsos", valorPc: body.valorPc ?? null },
+      body.status, undefined, body.motivoAcimaBudget ?? null);
+    if (dec.confirmar) return NextResponse.json({ error: dec.motivo, code: CODIGO_CONFIRMAR_ACIMA_BUDGET, aviso: dec.confirmar }, { status: 409 });
+    if (dec.motivo) return NextResponse.json({ error: dec.motivo, code: "SEM_PERMISSAO_APROVAR" }, { status: 403 });
+    acimaBudget = dec.acimaBudget ?? null;
   }
 
   // Gate admin-only pra CANCELAR_PEDIDO
@@ -198,6 +207,18 @@ export async function POST(req: Request) {
   }
 
   if (becomingApproved) patch.aprovador_id = user.id;
+  // 09/10/26: a aprovação acima do budget fica registrada em custom_fields.acima_budget
+  // (flag, estouro, total/teto, motivo, quem e quando). Aprovar de novo dentro do budget limpa.
+  if (becomingApproved) {
+    const { data: atual } = await supaAdmin().schema("approval").from("approvals").select("custom_fields")
+      .eq("empresa", body.empresa).eq("ncod_ped", body.ncod_ped).maybeSingle();
+    const cf = { ...(((atual as { custom_fields?: Record<string, unknown> | null } | null)?.custom_fields) ?? {}) };
+    if (acimaBudget || "acima_budget" in cf) {
+      if (acimaBudget) cf.acima_budget = { ...acimaBudget, por: user.email ?? null, por_id: user.id, em: nowIso };
+      else delete cf.acima_budget;
+      patch.custom_fields = cf;
+    }
+  }
   const { error: uErr } = await supa.from("approvals").upsert(
     {
       empresa: body.empresa,
@@ -245,9 +266,18 @@ export async function POST(req: Request) {
     pv_os_label: row.pv_os_label,
     aprovador_email: user.email ?? null,
     status_label: row.status_label ?? body.status,
+    acima_budget: acimaBudget,
   });
 
   const webex = await postWebexMessage(markdown);
+  // 09/10/26: aprovado acima do budget → aviso direto ao Benny (além do canal de aprovações)
+  if (acimaBudget) {
+    await avisarAcimaBudgetDireto(markdownAvisoAcimaBudget({
+      pc: row.pc_numero ?? null, fornecedor: row.nome_fornecedor ?? row.contato_fornecedor ?? null,
+      valor: body.valorPc ?? row.valor_total ?? null, projetoNome: row.projeto_nome ?? null,
+      ...acimaBudget, aprovador: user.email ?? "—",
+    })).catch(() => null);
+  }
   // Não falha a request se o Webex falhar — a aprovação no banco já foi persistida.
   return NextResponse.json({ ok: true, webex });
 }

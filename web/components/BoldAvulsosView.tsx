@@ -1,5 +1,6 @@
 "use client";
 
+import { batchApproveComAviso } from "@/lib/acima-budget-cliente";
 import { BadgeSeparadoProjeto } from "@/components/navy/estoque/Separacao";
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
@@ -1816,12 +1817,10 @@ export default function BoldAvulsosView({
       const [empresa, ncodStr, valorStr] = k.split("|");
       return { empresa, ncod_ped: Number(ncodStr), modulo, valorPc: valorStr ? Number(valorStr) : null };
     });
-    const res = await fetch("/api/approvals/batch-approve", {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ rows: rowsBatch, status }),
-    });
-    const j = await res.json().catch(() => ({}));
-    if (!res.ok) { alert(`Erro: ${j.error ?? res.statusText}`); return; }
+    // PC de projeto acima do budget: aviso + motivo para quem tem a autonomia (09/10/26)
+    const { httpOk, j } = await batchApproveComAviso(rowsBatch, status);
+    if (!httpOk) { alert(`Erro: ${j.error ?? "falha"}`); return; }
+    if (j.failed?.length) alert(`${j.count ?? 0} alterados, ${j.failed.length} não: ${j.failed.map((f) => f.error).join(" · ")}`);
     setSelected(new Set());
     if (typeof window !== "undefined") window.location.reload();
   }

@@ -1,13 +1,16 @@
 import { NextResponse } from "next/server";
 import { supaServer } from "@/lib/supabase-server";
 import { supaAdmin } from "@/lib/supabase-admin";
-import { postWebexMessage, buildApprovalMarkdown } from "@/lib/webex";
-import { permsAprovacao, motivoNaoDecideLinha } from "@/lib/aprovacao-permissao-server";
+import { postWebexMessage, buildApprovalMarkdown, linhasAcimaBudget, avisarAcimaBudgetDireto, markdownAvisoAcimaBudget } from "@/lib/webex";
+import { permsAprovacao, decidirLinha } from "@/lib/aprovacao-permissao-server";
+import { CODIGO_CONFIRMAR_ACIMA_BUDGET, type AvisoAcimaBudget, type RegistroAcimaBudget } from "@/lib/aprovacao-permissao";
 
 export const runtime = "nodejs";
 
 type Row = { empresa: string; ncod_ped: number; modulo?: string; valorPc?: number | null };
-type Body = { rows: Row[]; status: string };
+/** motivoAcimaBudget (09/10/26): motivo digitado ao confirmar o aviso de PC de projeto acima do
+ *  budget (projetos.aprovar_acima_budget) — vale para todas as linhas do lote que estouram. */
+type Body = { rows: Row[]; status: string; motivoAcimaBudget?: string | null };
 
 const APPROVED_SET = new Set(["APROVADO", "APROVADO_FAT_DIRETO"]);
 const ADMIN_ONLY_STATUS = new Set(["CANCELAR_PEDIDO"]);
@@ -101,20 +104,34 @@ export async function POST(req: Request) {
   // (can_approve no módulo, alçada, projeto que estoura o budget → só admin).
   const perms = await permsAprovacao(user.id);
   if (!perms) return NextResponse.json({ error: "Sem perfil no painel" }, { status: 403 });
-  const results = await Promise.all(body.rows.map(async (r) => {
+  type Res = { empresa: string; ncod_ped: number; ok: boolean; error?: string; code?: string; aviso?: AvisoAcimaBudget; acima?: RegistroAcimaBudget };
+  const results: Res[] = await Promise.all(body.rows.map(async (r): Promise<Res> => {
     const trava = bloqueados.get(`${r.empresa}|${r.ncod_ped}`);
     if (trava) return { empresa: r.empresa, ncod_ped: r.ncod_ped, ok: false, error: trava };
-    const nao = await motivoNaoDecideLinha(perms, { empresa: r.empresa, ncod_ped: Number(r.ncod_ped), modulo: r.modulo ?? "avulsos", valorPc: r.valorPc ?? null }, body.status);
-    if (nao) return { empresa: r.empresa, ncod_ped: r.ncod_ped, ok: false, error: nao };
+    const dec = await decidirLinha(perms, { empresa: r.empresa, ncod_ped: Number(r.ncod_ped), modulo: r.modulo ?? "avulsos", valorPc: r.valorPc ?? null },
+      body.status, undefined, body.motivoAcimaBudget ?? null);
+    if (dec.confirmar) return { empresa: r.empresa, ncod_ped: r.ncod_ped, ok: false, error: dec.motivo ?? "", code: CODIGO_CONFIRMAR_ACIMA_BUDGET, aviso: dec.confirmar };
+    if (dec.motivo) return { empresa: r.empresa, ncod_ped: r.ncod_ped, ok: false, error: dec.motivo };
 
-    const patch = becomingApproved
+    const patch: Record<string, unknown> = becomingApproved
       ? { ...patchBase, valor_aprovado: r.valorPc ?? null }
       : patchBase;
+    // 09/10/26: registra a aprovação acima do budget em custom_fields.acima_budget (ou limpa)
+    if (becomingApproved) {
+      const { data: atual } = await supaAdmin().schema("approval").from("approvals").select("custom_fields")
+        .eq("empresa", r.empresa).eq("ncod_ped", r.ncod_ped).maybeSingle();
+      const cf = { ...(((atual as { custom_fields?: Record<string, unknown> | null } | null)?.custom_fields) ?? {}) };
+      if (dec.acimaBudget || "acima_budget" in cf) {
+        if (dec.acimaBudget) cf.acima_budget = { ...dec.acimaBudget, por: user.email ?? null, por_id: user.id, em: nowIso };
+        else delete cf.acima_budget;
+        patch.custom_fields = cf;
+      }
+    }
     const { error } = await supa.from("approvals").upsert(
       { empresa: r.empresa, ncod_ped: r.ncod_ped, modulo: r.modulo ?? "avulsos", source: "native", ...patch },
       { onConflict: "empresa,ncod_ped" },
     );
-    return { empresa: r.empresa, ncod_ped: r.ncod_ped, ok: !error, error: error?.message };
+    return { empresa: r.empresa, ncod_ped: r.ncod_ped, ok: !error, error: error?.message, acima: dec.acimaBudget };
   }));
   const failed = results.filter(x => !x.ok);
   const ok = results.filter(x => x.ok);
@@ -131,6 +148,7 @@ export async function POST(req: Request) {
       .in("ncod_ped", ok.map(o => o.ncod_ped));
 
     const list = (pcs ?? []) as Array<{
+      empresa?: string; ncod_ped?: number;
       pc_numero?: string | null;
       contato_fornecedor?: string | null;
       nome_fornecedor?: string | null;
@@ -141,6 +159,15 @@ export async function POST(req: Request) {
       status_label?: string | null;
     }>;
 
+    const acimaDe = (p: { empresa?: string; ncod_ped?: number }) => ok.find((o) => o.empresa === p.empresa && Number(o.ncod_ped) === Number(p.ncod_ped))?.acima ?? null;
+    // 09/10/26: aprovados acima do budget → aviso direto ao Benny, um por PC
+    for (const p of list) {
+      const a = acimaDe(p);
+      if (a) await avisarAcimaBudgetDireto(markdownAvisoAcimaBudget({
+        pc: p.pc_numero ?? null, fornecedor: p.nome_fornecedor ?? p.contato_fornecedor ?? null, valor: p.valor_total ?? null,
+        projetoNome: p.projeto_nome ?? null, ...a, aprovador: user.email ?? "—",
+      })).catch(() => null);
+    }
     if (list.length === 1) {
       const p = list[0];
       webex = await postWebexMessage(buildApprovalMarkdown({
@@ -148,7 +175,7 @@ export async function POST(req: Request) {
         nome_fornecedor: p.nome_fornecedor, pc_forma_pagamento: p.pc_forma_pagamento,
         valor: p.valor_total ?? null, projeto_nome: p.projeto_nome,
         pv_os_label: p.pv_os_label, aprovador_email: user.email ?? null,
-        status_label: p.status_label ?? body.status,
+        status_label: p.status_label ?? body.status, acima_budget: acimaDe(p),
       }));
     } else {
       const total = list.reduce((s, p) => s + (Number(p.valor_total) || 0), 0);
@@ -163,12 +190,17 @@ export async function POST(req: Request) {
           const forn = p.nome_fornecedor ?? p.contato_fornecedor ?? "—";
           const pgto = p.pc_forma_pagamento ? ` · pgto: ${p.pc_forma_pagamento}` : "";
           const proj = p.projeto_nome ? ` · ${p.projeto_nome}` : "";
-          return `- **${p.pc_numero ?? "—"}** · ${forn} · ${fmtBRL(Number(p.valor_total) || 0)}${pgto}${proj}`;
+          const a = acimaDe(p);
+          const acima = a ? `\n  ${linhasAcimaBudget(a).filter(Boolean).join(" · ")}` : "";
+          return `- **${p.pc_numero ?? "—"}** · ${forn} · ${fmtBRL(Number(p.valor_total) || 0)}${pgto}${proj}${acima}`;
         }),
       ];
       webex = await postWebexMessage(lines.join("\n"));
     }
   }
 
-  return NextResponse.json({ ok: failed.length === 0, count: ok.length, failed, webex });
+  // sem o motivo, as linhas acima do budget voltam com o aviso: a tela pede o motivo e reenvia só elas
+  const avisos = failed.filter((f) => f.code === CODIGO_CONFIRMAR_ACIMA_BUDGET);
+  return NextResponse.json({ ok: failed.length === 0, count: ok.length, failed: failed.map(({ acima: _a, ...f }) => f), webex,
+    ...(avisos.length ? { code: CODIGO_CONFIRMAR_ACIMA_BUDGET, avisos: avisos.map((f) => ({ empresa: f.empresa, ncod_ped: f.ncod_ped, ...f.aviso })) } : {}) });
 }

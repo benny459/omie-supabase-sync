@@ -96,6 +96,8 @@ export function buildApprovalMarkdown(args: {
   pv_os_label?: string | null;
   aprovador_email?: string | null;
   status_label: string;
+  /** 09/10/26: aprovado acima do budget do projeto (projetos.aprovar_acima_budget). */
+  acima_budget?: { projeto: string | null; estouro: number; total: number | null; teto: number | null; motivo: string } | null;
 }): string {
   const fmtBRL = (n: number) => n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
   const valorStr = args.valor != null ? fmtBRL(args.valor) : "—";
@@ -113,5 +115,56 @@ export function buildApprovalMarkdown(args: {
   ];
   if (args.pv_os_label) lines.push(`**PV/OS:** ${args.pv_os_label}`);
   if (args.aprovador_email) lines.push(`**Aprovado por:** ${args.aprovador_email}`);
+  if (args.acima_budget) lines.push(...linhasAcimaBudget(args.acima_budget));
   return lines.join("\n");
+}
+
+const brlW = (n: number) => n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+
+/** Linhas do aviso "aprovado acima do budget" (cartão de aprovação e aviso direto ao Benny). */
+export function linhasAcimaBudget(a: { projeto: string | null; estouro: number; total: number | null; teto: number | null; motivo: string }): string[] {
+  const tot = a.total != null && a.teto != null ? ` (total ${brlW(a.total)} de ${brlW(a.teto)})` : "";
+  return [
+    ``,
+    `**⚠️ Aprovado ACIMA do budget${a.projeto ? ` do projeto ${a.projeto}` : ""}:** estouro de ${brlW(a.estouro)}${tot}`,
+    `**Motivo:** ${a.motivo}`,
+  ];
+}
+
+/**
+ * Aviso direto (DM do bot) — 09/10/26: PC de projeto aprovado acima do budget avisa o Benny.
+ * Destinatários: AVISO_ACIMA_BUDGET_EMAILS (vírgula), padrão benny@waterworks.com.br.
+ * Mesmo padrão de toPersonEmail dos alertas do Compras. Nunca lança.
+ */
+export async function avisarAcimaBudgetDireto(markdown: string): Promise<{ ok: number; erros: string[] }> {
+  const token = process.env.WEBEX_TOKEN;
+  const erros: string[] = [];
+  if (!token) return { ok: 0, erros: ["WEBEX_TOKEN não configurado"] };
+  const para = (process.env.AVISO_ACIMA_BUDGET_EMAILS || "benny@waterworks.com.br").split(/[,;\s]+/).map((x) => x.trim()).filter(Boolean);
+  let ok = 0;
+  for (const e of para) {
+    try {
+      const r = await fetch("https://webexapis.com/v1/messages", { method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ toPersonEmail: e, markdown }) });
+      if (r.ok) ok++; else erros.push(`${e}: ${r.status}`);
+    } catch (x) { erros.push(`${e}: ${x instanceof Error ? x.message : String(x)}`); }
+  }
+  return { ok, erros };
+}
+
+/** Texto do aviso direto ao Benny. */
+export function markdownAvisoAcimaBudget(a: { pc: string | null; fornecedor?: string | null; valor?: number | null; projetoNome?: string | null;
+  projeto: string | null; estouro: number; total: number | null; teto: number | null; motivo: string; aprovador: string }): string {
+  return [
+    `### ⚠️ PC ${a.pc ?? "—"} aprovado acima do budget`,
+    ``,
+    `**Projeto:** ${a.projetoNome ?? a.projeto ?? "—"}`,
+    `**Fornecedor:** ${a.fornecedor ?? "—"}`,
+    `**Valor do PC:** ${a.valor != null ? brlW(a.valor) : "—"}`,
+    `**Aprovado por:** ${a.aprovador}`,
+    ...linhasAcimaBudget(a),
+    ``,
+    `Abrir: https://painel.waterworks.com.br/projetos`,
+  ].join("\n");
 }

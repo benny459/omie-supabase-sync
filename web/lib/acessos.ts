@@ -6,7 +6,8 @@ import { CATALOGO, type Chave } from "@/lib/acessos-catalogo";
 // Permissões finas efetivas de uma pessoa (03/10/26).
 // Três estados por chave: sem linha em platform.permissoes_usuario = padrão
 // (o que a pessoa já podia fazer até hoje); linha = escolha do administrador.
-// Admin (user_profiles.is_admin) pode tudo. Toda chave exige a área ERP.
+// Admin (user_profiles.is_admin) pode tudo. Toda chave exige a área ERP, menos as
+// marcadas `semErp` no catálogo (ex.: projetos.aprovar_acima_budget, Operação › Projetos).
 
 export type Efetiva = { valor: boolean; explicito: boolean; padrao: boolean };
 export type Efetivas = Record<Chave, Efetiva>;
@@ -28,9 +29,10 @@ export async function permissoesEfetivas(perms: UserPerms | null | undefined): P
   }
   for (const c of CATALOGO) {
     if (perms?.is_admin) { out[c.chave] = { valor: true, explicito: false, padrao: true }; continue; }
-    const padrao = erp && (c.padrao === "erp" || (c.padrao === "aprovador" && aprovador));
+    const base = erp || c.semErp === true;
+    const padrao = base && (c.padrao === "erp" || (c.padrao === "aprovador" && aprovador));
     const ex = explicitas.get(c.chave);
-    out[c.chave] = { valor: erp && (ex ?? padrao), explicito: ex !== undefined, padrao };
+    out[c.chave] = { valor: base && (ex ?? padrao), explicito: ex !== undefined, padrao };
   }
   return out;
 }

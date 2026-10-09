@@ -104,3 +104,66 @@ test("caminho projetos + PC de obra: a regra do budget continua mandando", () =>
   assert.match(motivoSemPermissao({ ...e, projeto: { estouro: 10, motivo: "estoura o budget do projeto em R$ 10,00" } }, "reprovar")!, /administradores/);
   assert.match(motivoSemPermissao({ ...e, projeto: "indisponivel" }, "aprovar")!, /budget/);
 });
+
+// ── 09/10/26: projetos.aprovar_acima_budget ("O Marcelo me avisa, mas tem sim autonomia") ──
+import { decidirAprovacao, avisoAcimaBudget, codigoPj, textoAcimaBudget, MIN_MOTIVO_ACIMA_BUDGET } from "../../web/lib/aprovacao-permissao";
+import { CATALOGO } from "../../web/lib/acessos-catalogo";
+
+const estourado: EntradaPermissao = { ...base, projeto: { estouro: 1710.77, motivo: "estoura o budget do projeto em R$ 1.710,77", total: 51710.77, teto: 50000, nome: "PJ361_Diaverum Sorocaba" } };
+
+test("acima do budget SEM a chave: continua só administradores (aprovar e reprovar)", () => {
+  for (const acimaBudget of [undefined, null, { pode: false, motivo: "cliente pediu urgência" }]) {
+    const e = { ...estourado, acimaBudget };
+    assert.match(decidirAprovacao(e, "aprovar").motivo!, /administradores/);
+    assert.match(decidirAprovacao(e, "reprovar").motivo!, /administradores/);
+    assert.equal(decidirAprovacao(e, "aprovar").confirmar, undefined);
+  }
+});
+test("acima do budget COM a chave e sem motivo: pede confirmação com o aviso, não aprova", () => {
+  const d = decidirAprovacao({ ...estourado, acimaBudget: { pode: true } }, "aprovar");
+  assert.ok(d.motivo); assert.ok(d.confirmar); assert.equal(d.acimaBudget, undefined);
+  assert.equal(d.confirmar!.aviso,
+    "Este PC estoura o budget do projeto PJ361 em R$ 1.710,77 (total R$ 51.710,77 de R$ 50.000,00). Você tem autonomia para aprovar — o Benny será avisado.");
+  assert.equal(d.confirmar!.estouro, 1710.77); assert.equal(d.confirmar!.projeto, "PJ361");
+});
+test("acima do budget COM a chave: motivo curto (< 5) ainda pede confirmação", () => {
+  for (const motivo of ["", "   ", "ok", "abcd", "  ab  "]) {
+    const d = decidirAprovacao({ ...estourado, acimaBudget: { pode: true, motivo } }, "aprovar");
+    assert.ok(d.confirmar, `motivo "${motivo}"`); assert.ok(d.motivo);
+  }
+  assert.equal(MIN_MOTIVO_ACIMA_BUDGET, 5);
+});
+test("acima do budget COM a chave e motivo: aprova e devolve o registro (flag, estouro, motivo)", () => {
+  const d = decidirAprovacao({ ...estourado, acimaBudget: { pode: true, motivo: "  material urgente da obra  " } }, "aprovar");
+  assert.equal(d.motivo, null); assert.equal(d.confirmar, undefined);
+  assert.deepEqual({ ...d.acimaBudget, aviso: undefined }, { projeto: "PJ361", estouro: 1710.77, total: 51710.77, teto: 50000, motivo: "material urgente da obra", aviso: undefined });
+  assert.match(textoAcimaBudget(d.acimaBudget!, "marcelo@waterworks.com.br"), /^⚠️ Aprovado acima do budget do projeto PJ361: estouro R\$ 1\.710,77 .*motivo: material urgente da obra · por marcelo@/);
+});
+test("acima do budget COM a chave: reprovar não pede aviso nem motivo", () => {
+  const d = decidirAprovacao({ ...estourado, acimaBudget: { pode: true } }, "reprovar");
+  assert.deepEqual(d, { motivo: null });
+});
+test("a chave não muda o resto: sem permissão de aprovar, dentro do budget, alçada, indisponível, admin", () => {
+  const k = { acimaBudget: { pode: true, motivo: "motivo válido" } };
+  assert.ok(decidirAprovacao({ ...estourado, ...k, temPermissao: false }, "aprovar").motivo);
+  assert.deepEqual(decidirAprovacao({ ...base, ...k, projeto: { estouro: 0, motivo: "dentro" } }, "aprovar"), { motivo: null });
+  assert.match(decidirAprovacao({ ...base, ...k, valor: 9000, teto: 5000 }, "aprovar").motivo!, /alçada/);
+  assert.ok(decidirAprovacao({ ...base, ...k, projeto: "indisponivel" }, "aprovar").motivo);
+  // admin segue sem aviso (decide sempre)
+  assert.deepEqual(decidirAprovacao({ ...estourado, ehAdmin: true }, "aprovar"), { motivo: null });
+});
+test("motivoSemPermissao = decidirAprovacao().motivo (rotas antigas sem mudança)", () => {
+  const e = { ...estourado, acimaBudget: { pode: true, motivo: "motivo válido" } };
+  assert.equal(motivoSemPermissao(e, "aprovar"), null);
+  assert.equal(motivoSemPermissao(estourado, "aprovar"), decidirAprovacao(estourado, "aprovar").motivo);
+});
+test("aviso sem total/teto e código do projeto", () => {
+  assert.equal(avisoAcimaBudget({ nome: "PJ 364_Diaverum Bosque Maia", estouro: 10 }).aviso,
+    "Este PC estoura o budget do projeto PJ364 em R$ 10,00. Você tem autonomia para aprovar — o Benny será avisado.");
+  assert.equal(codigoPj("PJ362_Diaverum X"), "PJ362");
+  assert.equal(codigoPj(null), null);
+});
+test("catálogo: projetos.aprovar_acima_budget existe, padrão admin, fora do ERP", () => {
+  const c = CATALOGO.find((x) => x.chave === "projetos.aprovar_acima_budget");
+  assert.ok(c); assert.equal(c!.padrao, "admin"); assert.equal(c!.semErp, true); assert.equal(c!.modulo, "projetos");
+});

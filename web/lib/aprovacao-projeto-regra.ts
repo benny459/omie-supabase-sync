@@ -4,7 +4,8 @@
 // compras do projeto (Marcelo) aprova, desde que o projeto inteiro caiba no budget
 // de materiais. Não há comparação item a item (nem PC × RC, nem PC × lista).
 //   aprova  ⇔ comprometido (sem este PC) + este PC ≤ budget × (1 + tolerância)
-//   estourou → só administrador aprova, com "estoura o budget do projeto em R$ X".
+//   estourou → só administrador aprova, com "estoura o budget do projeto em R$ X" — ou quem tem
+//   projetos.aprovar_acima_budget (09/10/26), com aviso + motivo (lib/aprovacao-permissao).
 // O fluxo aprovado NÃO é condição (EXIGE_FLUXO_APROVADO = false, 07/10/26).
 // Usada na aprovação manual (Operação/Projetos e Compras). A Aria não aprova PC de projeto.
 // Testada em scripts/testes/aprovacao-projeto.test.ts.

@@ -1,6 +1,9 @@
 // POST /api/compras/acao — ações sobre requisições e pedidos:
 //   mover      {id, etapa}                   etapa do Kanban (regras do Omie)
-//   aprovar    {ids, status}                 aprovado | aguardando | nao_aprovado
+//   aprovar    {ids, status, motivoAcimaBudget?}  aprovado | aguardando | nao_aprovado
+//              PC de projeto acima do budget (projetos.aprovar_acima_budget, 09/10/26): sem o
+//              motivo volta em `avisos` (code ACIMA_BUDGET_CONFIRMAR) sem gravar; a tela mostra o
+//              aviso, pede o motivo e reenvia só esses ids.
 //   receber    {id, nf, chave?, dt, qtds, final, chaveFocus?}
 //   cancelar   {id}   ·  excluir {id}  ·  duplicar {id}
 //   nf         {chave, pedido, status}       confirmar/descartar NF da Focus
@@ -9,12 +12,13 @@
 // (histórico): só leitura nos campos; aprovação continua pela rota de sempre
 // (/api/approvals/set-status, com alçada e teto semanal) e etapa avança pela
 // etapa_manual. Nada aqui chama o Omie.
-import { postWebexMessage, buildApprovalMarkdown } from "@/lib/webex";
+import { postWebexMessage, buildApprovalMarkdown, avisarAcimaBudgetDireto, markdownAvisoAcimaBudget } from "@/lib/webex";
 import { NextResponse } from "next/server";
-import { exigirCompras, exigirAprovacaoCompras, rpc, erro, motivoNaoDecide, posGravar, type Quem } from "@/lib/compras-server";
+import { exigirCompras, exigirAprovacaoCompras, rpc, erro, decidirPc, posGravar, type Quem } from "@/lib/compras-server";
 import { supaAdmin } from "@/lib/supabase-admin";
 import { ordemEtapa, type Pedido } from "@/lib/compras";
-import { aprovPainelExigeAprovador, acaoDoStatus, motivoForaDoCaminho } from "@/lib/aprovacao-permissao";
+import { aprovPainelExigeAprovador, acaoDoStatus, motivoForaDoCaminho, textoAcimaBudget, CODIGO_CONFIRMAR_ACIMA_BUDGET,
+  type AvisoAcimaBudget, type RegistroAcimaBudget } from "@/lib/aprovacao-permissao";
 import { ehProjetoDeObra } from "@/lib/aprovacao-projeto-regra";
 
 export const runtime = "nodejs";
@@ -49,7 +53,7 @@ async function executar(q: Quem, req: Request, b: Record<string, unknown>): Prom
   {
     switch (b.acao) {
       case "mover": return mover(q, Number(b.id), String(b.etapa));
-      case "aprovar": return aprovar(q, req, (b.ids as number[]) ?? [], String(b.status));
+      case "aprovar": return aprovar(q, req, (b.ids as number[]) ?? [], String(b.status), b.motivoAcimaBudget != null ? String(b.motivoAcimaBudget) : null);
       case "venda": return rpc("compras_vincular_venda", { p_id: Number(b.id), p_pv: String(b.pv ?? ""), p_cliente: String(b.cliente ?? ""), p_por: q.email });
       case "receber": {
         const p = await pedido(Number(b.id));
@@ -106,13 +110,17 @@ async function mover(q: Quem, id: number, etapa: string) {
   return rpc("compras_mover", { p_id: id, p_etapa: etapa, p_por: q.email });
 }
 
-async function aprovar(q: Quem, req: Request, ids: number[], status: string) {
+type AvisoPc = AvisoAcimaBudget & { id: number; num: string };
+
+async function aprovar(q: Quem, req: Request, ids: number[], status: string, motivoAcimaBudget: string | null) {
   if (!STATUS_OMIE[status]) throw new Error("status inválido");
   if (!Array.isArray(ids) || !ids.length) throw new Error("Nenhum PC informado — recarregue a página e tente de novo");
   const pedidos = await Promise.all(ids.map((id) => pedido(Number(id))));
   const falhas: { num: string; erro: string }[] = [];
   const okPainel: number[] = [];
   const doOmie: Pedido[] = [];
+  const avisos: AvisoPc[] = [];
+  const acima = new Map<number, RegistroAcimaBudget>();
   for (const p of pedidos) {
     if (p.tipo !== "PC") { falhas.push({ num: p.num, erro: "requisição não é aprovada" }); continue; }
     if (p.origem === "omie") {
@@ -128,8 +136,10 @@ async function aprovar(q: Quem, req: Request, ids: number[], status: string) {
       if (fora) { falhas.push({ num: p.num, erro: fora }); continue; }
     }
     if (aprovPainelExigeAprovador(p.aprov, status)) {
-      const nao = await motivoNaoDecide(q, { emp: p.emp, num: p.num, valor: Number(p.valor) || 0, projCod: p.projCod, proj: p.proj }, acaoDoStatus(status));
-      if (nao) { falhas.push({ num: p.num, erro: nao }); continue; }
+      const dec = await decidirPc(q, { emp: p.emp, num: p.num, valor: Number(p.valor) || 0, projCod: p.projCod, proj: p.proj }, acaoDoStatus(status), motivoAcimaBudget);
+      if (dec.confirmar) { avisos.push({ ...dec.confirmar, id: p.id!, num: p.num }); continue; }
+      if (dec.motivo) { falhas.push({ num: p.num, erro: dec.motivo }); continue; }
+      if (dec.acimaBudget && status === "aprovado") acima.set(p.id!, dec.acimaBudget);
     }
     okPainel.push(p.id!);
   }
@@ -148,18 +158,31 @@ async function aprovar(q: Quem, req: Request, ids: number[], status: string) {
           pc_numero: p.num, nome_fornecedor: p.forn ?? null, pc_forma_pagamento: (pa as { descricao?: string } | null)?.descricao ?? p.parc ?? null,
           valor: Number(p.valor) || null, projeto_nome: p.proj ?? null, pv_os_label: p.pv ?? null,
           aprovador_email: q.email, status_label: status === "aprovado" ? "Aprovado" : "Não aprovado",
+          acima_budget: acima.get(p.id!) ?? null,
         })).catch(() => null);
       }
     }
+    // 09/10/26: aprovado acima do budget → histórico do PC (aparece na folha do Compras), marca
+    // no pedido (sql/161; sem a migração só o histórico) e aviso direto ao Benny.
+    for (const p of pedidos.filter((x) => acima.has(x.id!) && !travados.has(x.num))) {
+      const a = acima.get(p.id!)!;
+      await rpc("compras_registrar", { p_id: p.id, p_texto: textoAcimaBudget(a, q.email), p_por: q.email }).catch(() => null);
+      await rpc("compras_marcar_acima_budget", { p_id: p.id, p_info: { ...a, por: q.email, por_id: q.uid, em: new Date().toISOString() } }).catch(() => null);
+      await avisarAcimaBudgetDireto(markdownAvisoAcimaBudget({
+        pc: p.num, fornecedor: p.forn ?? null, valor: Number(p.valor) || null, projetoNome: p.proj ?? null, ...a, aprovador: q.email,
+      })).catch(() => null);
+    }
   }
-  const okOmie = await gravarAprovacaoOmie(q, req, doOmie, status, falhas);
-  return { alterados: okPainel.length - bloqueados + okOmie, falhas };
+  const okOmie = await gravarAprovacaoOmie(q, req, doOmie, status, falhas, motivoAcimaBudget, avisos);
+  return { alterados: okPainel.length - bloqueados + okOmie, falhas,
+    ...(avisos.length ? { code: CODIGO_CONFIRMAR_ACIMA_BUDGET, avisos } : {}) };
 }
 
 /** Pedido do Omie: aprovação pelo caminho de sempre (set-status valida
  *  alçada, teto semanal, atribuição de cliente e fluxo do projeto). */
 async function gravarAprovacaoOmie(q: Quem, req: Request | null, ps: Pedido[], status: string,
-                                   falhas: { num: string; erro: string }[] = []) {
+                                   falhas: { num: string; erro: string }[] = [],
+                                   motivoAcimaBudget: string | null = null, avisos: AvisoPc[] = []) {
   if (!ps.length) return 0;
   let ok = 0;
   const okIds: number[] = [];
@@ -179,10 +202,14 @@ async function gravarAprovacaoOmie(q: Quem, req: Request | null, ps: Pedido[], s
     } else {
       const r = await fetch(`${origem}/api/approvals/set-status`, {
         method: "POST", headers: { "Content-Type": "application/json", cookie },
-        body: JSON.stringify({ empresa: p.emp, ncod_ped: p.ncodPed, status: STATUS_OMIE[status], modulo, valorPc: p.valor }),
+        body: JSON.stringify({ empresa: p.emp, ncod_ped: p.ncodPed, status: STATUS_OMIE[status], modulo, valorPc: p.valor, motivoAcimaBudget }),
       });
       if (!r.ok) {
         const j = await r.json().catch(() => ({}));
+        if ((j as { code?: string }).code === CODIGO_CONFIRMAR_ACIMA_BUDGET && (j as { aviso?: AvisoAcimaBudget }).aviso) {
+          avisos.push({ ...(j as { aviso: AvisoAcimaBudget }).aviso, id: p.id!, num: p.num });
+          continue;
+        }
         falhas.push({ num: p.num, erro: String((j as { error?: string }).error ?? r.statusText) });
         continue;
       }

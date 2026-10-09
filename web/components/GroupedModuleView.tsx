@@ -1,5 +1,6 @@
 "use client";
 
+import { batchApproveComAviso } from "@/lib/acima-budget-cliente";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   formatCell,
@@ -86,13 +87,10 @@ export default function GroupedModuleView({
         valorPc: valorStr ? Number(valorStr) : null,
       };
     });
-    const res = await fetch("/api/approvals/batch-approve", {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ rows: rowsBatch, status }),
-    });
+    // PC de projeto acima do budget: aviso + motivo para quem tem a autonomia (09/10/26)
+    const { httpOk, j } = await batchApproveComAviso(rowsBatch, status);
     setBatchBusy(false);
-    const j = await res.json().catch(() => ({}));
-    if (!res.ok) { alert(`Erro: ${j.error ?? res.statusText}`); return; }
+    if (!httpOk) { alert(`Erro: ${j.error ?? "falha"}`); return; }
     if (j.failed && j.failed.length > 0) {
       alert(`${j.count} alterados, ${j.failed.length} falharam.\n${j.failed.map((f: { error?: string }) => f.error).join("\n")}`);
     }

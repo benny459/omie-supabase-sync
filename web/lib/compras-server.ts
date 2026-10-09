@@ -7,7 +7,7 @@ import { loadPerms } from "@/lib/require-area";
 import { canViewArea, type UserPerms } from "@/lib/permissions";
 import { permissoesDe, semValores } from "@/lib/acessos";
 import type { Chave } from "@/lib/acessos-catalogo";
-import { motivoSemPermissao, caminhoAprovacaoCompras, motivoForaDoCaminho, type CaminhoCompras, type DecisaoAcao, type EntradaPermissao } from "@/lib/aprovacao-permissao";
+import { decidirAprovacao, caminhoAprovacaoCompras, motivoForaDoCaminho, type CaminhoCompras, type DecisaoAcao, type EntradaPermissao, type ResultadoDecisao } from "@/lib/aprovacao-permissao";
 import { permsAprovacao } from "@/lib/aprovacao-permissao-server";
 import { canApprove } from "@/lib/permissions";
 import { avaliarPcProjeto } from "@/lib/aprovacao-projeto";
@@ -80,19 +80,30 @@ async function tetoPcs(uid: string | null): Promise<number | null> {
  *  admin; ou compras.aprovar + alçada; PC de projeto de obra: compras.aprovar e, se o
  *  projeto estoura o budget de materiais, só admin. */
 export async function motivoNaoDecide(q: Quem, p: { emp: string; num: string; valor: number; projCod: number | null; proj: string | null }, acao: DecisaoAcao): Promise<string | null> {
+  return (await decidirPc(q, p, acao)).motivo;
+}
+
+/** A decisão completa (com o aviso de acima do budget, 09/10/26): `motivoAcimaBudget` = o motivo
+ *  digitado ao confirmar o aviso (projetos.aprovar_acima_budget). */
+export async function decidirPc(q: Quem, p: { emp: string; num: string; valor: number; projCod: number | null; proj: string | null }, acao: DecisaoAcao,
+                                motivoAcimaBudget?: string | null): Promise<ResultadoDecisao> {
   const ehAdmin = q.perms.is_admin;
   const deObra = !!p.projCod && ehProjetoDeObra(p.proj);
-  if (!ehAdmin) { const fora = motivoForaDoCaminho(q.caminho, deObra); if (fora) return fora; }
+  if (!ehAdmin) { const fora = motivoForaDoCaminho(q.caminho, deObra); if (fora) return { motivo: fora }; }
   // caminho "projetos": a permissão é o can_approve do módulo Projetos (já conferido na entrada)
   const temPermissao = q.caminho === "projetos" ? true : !!q.pode["compras.aprovar"];
-  if (ehAdmin || !temPermissao) return motivoSemPermissao({ ehAdmin, temPermissao, valor: null, teto: null }, acao);
+  if (ehAdmin || !temPermissao) return decidirAprovacao({ ehAdmin, temPermissao, valor: null, teto: null }, acao);
   if (p.projCod && ehProjetoDeObra(p.proj)) {
     let projeto: EntradaPermissao["projeto"];
-    try { projeto = await avaliarPcProjeto(p.emp, Number(p.projCod), p.num, Number(p.valor) || 0); }
-    catch { projeto = "indisponivel"; }
-    return motivoSemPermissao({ ehAdmin, temPermissao, valor: Number(p.valor) || 0, teto: null, projeto }, acao);
+    try {
+      const av = await avaliarPcProjeto(p.emp, Number(p.projCod), p.num, Number(p.valor) || 0);
+      projeto = { estouro: av.estouro, motivo: av.motivo, total: av.total, teto: av.teto, nome: p.proj };
+    } catch { projeto = "indisponivel"; }
+    const acimaBudget = projeto !== "indisponivel" && projeto.estouro > 0
+      ? { pode: !!q.pode["projetos.aprovar_acima_budget"], motivo: motivoAcimaBudget ?? null } : null;
+    return decidirAprovacao({ ehAdmin, temPermissao, valor: Number(p.valor) || 0, teto: null, projeto, acimaBudget }, acao);
   }
-  return motivoSemPermissao({ ehAdmin, temPermissao, valor: Number(p.valor) || 0, teto: await tetoPcs(q.uid) }, acao);
+  return decidirAprovacao({ ehAdmin, temPermissao, valor: Number(p.valor) || 0, teto: await tetoPcs(q.uid) }, acao);
 }
 
 /** Depois de gravar: previsões a pagar do pedido e RCs nos baldes de PV/OS
