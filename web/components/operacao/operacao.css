@@ -123,6 +123,7 @@
 .op .st{display:inline-flex;gap:6px;align-items:center;font-size:12px;border-radius:999px;padding:3px 9px;white-space:nowrap}
 .op .st::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor}
 .op .st.sem_pc{background:var(--ww-border);color:var(--ww-text-muted)}
+.op .st.historico{background:var(--ww-border);color:var(--ww-text-muted)}
 .op .st.pendente{background:var(--ww-warn-soft);color:var(--ww-warn)}
 .op .st.aprovado{background:var(--ww-info-soft);color:var(--ww-info-text)}
 .op .st.recebido{background:var(--ww-ok-soft);color:var(--ww-ok)}

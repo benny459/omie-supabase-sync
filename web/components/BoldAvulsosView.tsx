@@ -5264,7 +5264,8 @@ function InkUnderline({ value, placeholder }: { value: string; placeholder?: str
 function BoldStatusButton({ row, modulo, onClick }: { row: AnyRow; modulo: string; onClick: (e: React.MouseEvent<HTMLButtonElement>) => void }) {
   const status = String(row.status ?? "PENDENTE");
   const meta = STATUS_META[status] ?? STATUS_META.PENDENTE;
-  const short = STATUS_SHORT[status] ?? meta.label;
+  // 09/10/26 (sql/159): PC do espelho do Omie sem aprovação própria → N_A "Histórico Omie".
+  const short = status === "N_A" && row.status_label === "Histórico Omie" ? "Histórico Omie" : (STATUS_SHORT[status] ?? meta.label);
   // 08/10/26: só quem aprova muda o status (aprovar ou reprovar) — o servidor também barra.
   const pode = canApprove(useUserPerms(), String(row.modulo || modulo) as "avulsos");
   return (

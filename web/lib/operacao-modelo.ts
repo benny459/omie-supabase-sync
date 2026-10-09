@@ -20,11 +20,17 @@ const s = (v: unknown) => String(v ?? "").trim();
 const n = (v: unknown) => { const x = Number(v ?? 0); return Number.isFinite(x) ? x : 0; };
 const DIA = 86_400_000;
 
-export type Estado = "sem_pc" | "pendente" | "aprovado" | "recebido" | "recusado";
+// "historico" (09/10/26, sql/159): PC do espelho do Omie sem aprovação própria — status
+// N_A com status_label "Histórico Omie". Não entra na fila de aprovação, não conta como
+// aprovado nem como pendente nas margens, e não acende "compra em atraso".
+export type Estado = "sem_pc" | "pendente" | "aprovado" | "recebido" | "recusado" | "historico";
 export const ESTADO_LABEL: Record<Estado, string> = {
   sem_pc: "Sem PC", pendente: "Aguarda aprovação", aprovado: "Aprovado",
-  recebido: "Recebido", recusado: "Recusado",
+  recebido: "Recebido", recusado: "Recusado", historico: "Histórico Omie",
 };
+/** Linha do espelho do Omie que virou histórico (sql/159). */
+export const ehHistoricoOmie = (r: { status?: unknown; status_label?: unknown }) =>
+  String(r.status ?? "") === "N_A" && String(r.status_label ?? "") === "Histórico Omie";
 
 /** Data do Omie (dd/mm/aaaa ou ISO) → ms à meia-noite, ou null. */
 export function dataMs(v: unknown): number | null {
@@ -116,6 +122,7 @@ export function materialDoItem(c: Compra): MatItem {
 
 function materialDoPc(c: Compra): MatItem {
   if (c.recebidoEm != null) return { k: "recebido", t: "Recebido", tom: "ok", manual: false };
+  if (c.estado === "historico") return { k: "sem_previsao", t: "Histórico Omie", tom: "mute", manual: false };
   if (c.estado === "pendente" || c.estado === "recusado") return { k: "aguarda", t: "Aguarda aprovação", tom: "mute", manual: false };
   if (c.prev != null && (diasAte(c.prev) ?? 0) < 0) return { k: "atrasado", t: "Atrasado", tom: "crit", manual: false };
   if (c.prev != null) return { k: "a_caminho", t: "A caminho", tom: "info", manual: false };
@@ -160,7 +167,7 @@ export function compraDaLinha(r: AnyRow, pedidoId: string): Compra {
   const status = s(r.status);
   const recebidoEm = dataMs(r.mt_data_recebimento_nf);
   const estado: Estado = !pc ? "sem_pc" : recebidoEm != null ? "recebido"
-    : APROV(status) ? "aprovado" : RECUSA.has(status) ? "recusado" : "pendente";
+    : APROV(status) ? "aprovado" : RECUSA.has(status) ? "recusado" : ehHistoricoOmie(r) ? "historico" : "pendente";
   const unit = n(r.rc_custo);
   // 07/10/26 (PV1934): rc_qtd vazio virava "1" — quando o total da RC não bate com qtd × unitário, a quantidade é total ÷ unitário.
   const totRc = n(r.rc_custo_total);
@@ -317,6 +324,7 @@ export function estrutura(p: Pedido) {
   const rcsSemPc = [...rcs.values()].filter((cs) => !cs.some((c) => c.pc)).length;
   const estadoPc = (cs: Compra[]) =>
     cs.every((c) => c.estado === "recebido") ? "recebido"
+      : cs.every((c) => c.estado === "historico") ? "historico"
       : cs.some((c) => c.estado === "recusado") ? "recusado"
       : cs.some((c) => c.estado === "pendente") ? "pendente" : "aprovado";
   const pcsLista = [...pcs.entries()].map(([pc, cs]) => ({ pc, cs, estado: estadoPc(cs) }));
@@ -333,7 +341,7 @@ export function fases(p: Pedido, modulo: string, cadeia?: RentabResumo | null): 
   const nRec = E.pcs.filter((x) => x.estado === "recusado").length;
   const nAp = E.pcs.filter((x) => x.estado === "aprovado" || x.estado === "recebido").length;
   const nRcb = E.pcs.filter((x) => x.estado === "recebido").length;
-  const matLate = E.pcs.filter((x) => x.estado !== "recebido" && x.cs.some((c) => c.prev != null && (diasAte(c.prev) ?? 0) < 0)).length;
+  const matLate = E.pcs.filter((x) => x.estado !== "recebido" && x.estado !== "historico" && x.cs.some((c) => c.prev != null && (diasAte(c.prev) ?? 0) < 0)).length;
   const srv = it.filter((c) => c.servico), srvOk = srv.filter((c) => c.estado === "recebido").length;
   const plural = (n: number, a: string, b: string) => `${n} ${n === 1 ? a : b}`;
   const L: Fase[] = [];
