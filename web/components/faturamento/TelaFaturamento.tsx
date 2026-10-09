@@ -536,7 +536,7 @@ export default function TelaFaturamento() {
 
         <p style={{ color: "var(--f-tx3)", fontSize: 12, marginTop: 12 }}>
           Carteira: PV/OS em aberto (todas as datas) + faturados no período. PV do Omie fatura pelo painel (NF-e, Focus); OS (do Omie ou do painel) emite recibo pelo painel (Revisar e emitir recibo). NFS-e: emita no portal da prefeitura e registre-a aqui (Registrar NFS-e) — cria o contas a receber pelo líquido e marca a OS como faturada no painel.
-          Envio ao cliente por e-mail depende do Resend (RESEND_API_KEY) — até lá, abra o PDF/XML e envie o link.
+          Nada é enviado ao cliente sozinho: com o documento autorizado, use Enviar ao cliente (PDF e XML para os e-mails do cadastro, que dá para editar antes de enviar).
         </p>
         </>}
 

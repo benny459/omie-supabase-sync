@@ -833,7 +833,7 @@ export default function NovaEmissao({ config, aberto, fechar, avisar, onEmitido,
     return {
       v: 1, empresa, tipo, modo, cliCodigo, semProp, semPropMotivo, chave, rotulo, cli, itens, proposta, base, cond, forma,
       parcs, formaPorParcela, conta, categoria, projeto, centro, vendedor, contrato, desconto, frete, outras, transp, ret,
-      pedidoCli, obs, infoContrib, operacao, nfRef, motivo, cliProjeto, geraCob, criado, parcelaDoc, parcsProj,
+      pedidoCli, obs, infoContrib, operacao, nfRef, motivo, cliProjeto, geraCob, criado, parcelaDoc, parcsProj, propOrigem,
     };
   }
   type EstadoRasc = ReturnType<typeof estadoRascunho>;
@@ -851,6 +851,7 @@ export default function NovaEmissao({ config, aberto, fechar, avisar, onEmitido,
     if (p.transp) setTransp(p.transp); if (p.ret) setRet(p.ret); setPedidoCli(p.pedidoCli ?? ""); setObs(p.obs ?? ""); setInfoContrib(p.infoContrib ?? "");
     setNfRef(p.nfRef ?? null); setMotivo(p.motivo ?? ""); setCliProjeto(p.cliProjeto ?? ""); setGeraCob(!!p.geraCob);
     setParcelaDoc(p.parcelaDoc ?? null); setParcsProj(p.parcsProj ?? null);
+    setPropOrigem(p.propOrigem ?? (p.contrato || null));
     // Rascunho de projeto salvo antes de guardar a parcela (07/10/26): busca as parcelas do fechamento
     // de novo — sem elas a emissão não sabe qual parcela a nota fatura.
     if (p.chave && !p.parcelaDoc) {
