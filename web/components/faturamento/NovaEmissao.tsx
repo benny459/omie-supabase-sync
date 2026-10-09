@@ -8,6 +8,8 @@ import { BuscaPessoa, BuscaProposta, clienteDaPessoa, pessoaCompleta } from "@/c
 import { BotaoNovoProjeto } from "@/components/cadastros/NovoProjetoRapido";
 import LocalizarNcm, { ncmFmt } from "@/components/fiscal/LocalizarNcm";
 import { historicoDoCliente, herancaRecebimento } from "@/lib/faturamento/historico";
+import { avaliarIe, CONSULTA_IE, type IeInfo } from "@/lib/faturamento/ie-regra";
+import TipoVenda from "./TipoVenda";
 import "./nova-emissao.css";
 
 /* Folha dedicada da Nova emissão (05/10/26). Pedido do Benny:
@@ -156,8 +158,8 @@ function dicaRejeicao(msg: string): string | null {
   if (/778|ncm/.test(m)) return "NCM inexistente ou inválido em algum item. Corrija o NCM no item (cadastro do produto) e reenvie.";
   if (/cep/.test(m)) return "CEP do destinatário inválido. Confira no cadastro do cliente.";
   if (/munic|ibge/.test(m)) return "Código IBGE do município inválido ou diferente da UF. Use a busca de CEP no cadastro do cliente.";
-  if (/ie do destinat.rio n.o informada/.test(m)) return "A SEFAZ diz que este cliente tem Inscrição Estadual ativa — a nota não pode sair sem ela. Clique em Corrigir e reenviar, preencha o campo Inscrição estadual do cliente (a mesma das notas anteriores; veja em Últimos faturamentos ou no cadastro) e emita de novo. Depois corrija também o cadastro do cliente.";
-  if (/inscri|\bie\b|232|233|209/.test(m)) return "Inscrição estadual do destinatário inválida ou incompatível. Se o cliente é isento/não contribuinte, deixe a IE vazia.";
+  if (/ie do destinat.rio n.o informada/.test(m)) return "A SEFAZ diz que este cliente tem Inscrição Estadual ativa — a nota não pode sair sem ela. Use a IE sugerida abaixo (preenche a nota e corrige o cadastro) e clique em Emitir de novo.";
+  if (/inscri|\bie\b|232|233|209/.test(m)) return "Inscrição estadual do destinatário inválida ou incompatível com o cadastro da SEFAZ. Confira a IE sugerida abaixo; se o cliente é isento/não contribuinte, deixe a IE vazia.";
   if (/certificad/.test(m)) return "Problema no certificado digital A1 (vence 23/10/2026). Renove e envie o .pfx à Focus.";
   if (/schema|225/.test(m)) return "Algum campo está fora do formato da SEFAZ. Veja a mensagem completa e corrija o campo indicado.";
   return null;
@@ -259,6 +261,12 @@ export default function NovaEmissao({ config, aberto, fechar, avisar, onEmitido,
   const [geraCob, setGeraCob] = useState(false);
   // histórico
   const [hist, setHist] = useState<Hist[] | null>(null);
+  // IE conhecida do cliente (09/10/26): NF-e autorizada › cadastro › Omie — avisa e sugere antes da SEFAZ rejeitar
+  const [ieInfo, setIeInfo] = useState<IeInfo | null>(null);
+  const [iePerm, setIePerm] = useState<{ pode: boolean; quem: string } | null>(null);
+  const [ieSalvando, setIeSalvando] = useState(false);
+  /** Rascunho reaberto: campos do cliente que mudaram no cadastro desde que foi salvo. */
+  const [cliDifs, setCliDifs] = useState<{ novo: ClienteFat; campos: { rot: string; antes: string; agora: string }[] } | null>(null);
   // pré-voo e transmissão
   const [pre, setPre] = useState<{ checagens: Checagem[]; pode_emitir: boolean; error?: string } | null>(null);
   /** Projeto: parcelas do fechamento e as que esta nota fatura (06/10/26). */
@@ -305,7 +313,7 @@ export default function NovaEmissao({ config, aberto, fechar, avisar, onEmitido,
     setTransp({ modalidade: 9 }); setRet({ iss_retido: false }); setPedidoCli(""); setObs(""); setInfoContrib("");
     setHist(null); setPre(null); setAviso(null); setCliCodigo(""); setProposta(""); setPropOrigem(null); setBase(hoje());
     setNfRef(null); setNfBusca(""); setNfLista(null); setMotivo(""); setCliProjeto(""); setGeraCob(false);
-    setFormaPorParcela(false); setItBusca(null); setItSug(null); setDicas({}); setParcelaDoc(null); setParcsProj(null);
+    setFormaPorParcela(false); setItBusca(null); setItSug(null); setDicas({}); setParcelaDoc(null); setParcsProj(null); setCliDifs(null);
   }
 
   /** Preenche a folha a partir de um PV/OS da carteira (gaveta ou "Faturar um existente"). */
@@ -496,6 +504,40 @@ export default function NovaEmissao({ config, aberto, fechar, avisar, onEmitido,
     return () => window.clearTimeout(t);
   }, [docCli, empresa, aberto]);
 
+  // IE conhecida do cliente pelo CNPJ (09/10/26).
+  useEffect(() => {
+    if (!aberto || docCli.length !== 14) { setIeInfo(null); return; }
+    const t = window.setTimeout(() => {
+      fetch(`/api/faturamento/nova?op=ie_cliente&emp=${empresa}&doc=${docCli}`, { cache: "no-store" }).then((x) => x.json())
+        .then((j) => { if (j.info) { setIeInfo(j.info); setIePerm({ pode: !!j.pode_editar_cadastro, quem: String(j.quem_edita ?? "") }); } })
+        .catch(() => setIeInfo(null));
+    }, 300);
+    return () => window.clearTimeout(t);
+  }, [docCli, empresa, aberto]);
+
+  /** Usa a IE na nota e grava no cadastro do cliente (quem pode); quem não pode, só a nota. */
+  async function usarIe(ie: string, gravarCadastro = true): Promise<string> {
+    setCli((c) => ({ ...c, ie }));
+    if (!gravarCadastro || !docCli) return `IE ${ie} aplicada nesta nota.`;
+    setIeSalvando(true);
+    const r = await fetch("/api/faturamento/nova", { method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ op: "salvar_ie", doc: docCli, ie }) }).then((x) => x.json()).catch((e) => ({ error: String(e) }));
+    setIeSalvando(false);
+    let msg: string;
+    if (r.sem_permissao || r.error) msg = `IE ${ie} aplicada nesta nota. ${r.error ?? ""}`;
+    else {
+      const partes = [r.atualizados?.length ? `cadastro corrigido (${r.atualizados.join(", ")})` : r.ja_tinham?.length ? "o cadastro já tinha esta IE" : "nenhum cadastro com este CNPJ para corrigir",
+        r.diferentes?.length ? `atenção: ${r.diferentes.join(", ")} tem outra IE — confira no cadastro` : ""].filter(Boolean);
+      msg = `IE ${ie} aplicada nesta nota · ${partes.join(" · ")}.`;
+      // relê as fontes (o banner some quando o cadastro fica certo)
+      fetch(`/api/faturamento/nova?op=ie_cliente&emp=${empresa}&doc=${docCli}`, { cache: "no-store" }).then((x) => x.json())
+        .then((j) => { if (j.info) setIeInfo(j.info); }).catch(() => null);
+    }
+    avisar(msg);
+    return msg;
+  }
+  const ieAlerta = tipo === "nfe" ? avaliarIe(cli.ie, ieInfo) : null;
+
   // Autocompletar de itens: catálogo nativo (código novo/Omie ou descrição).
   useEffect(() => {
     if (!aberto || !itBusca || itBusca.q.trim().length < 2) { setItSug(null); return; }
@@ -592,6 +634,8 @@ export default function NovaEmissao({ config, aberto, fechar, avisar, onEmitido,
   const somaParc = r2(parcs.reduce((a, p) => a + p.valor, 0));
   const parcOk = parcs.length > 0 && Math.abs(somaParc - liquido) < 0.005;
   const contaSel = opc?.contas.find((c) => c.codigo === conta);
+  /** O “vendedor” da SF é o tipo da venda (Mix / Mercantil / Serviços). */
+  const ehTipoVenda = (opc?.vendedores ?? []).some((v) => v.nome === "Mix");
   const [pagEdit, setPagEdit] = useState<{ pix: boolean } | null>(null);
   const formasUsadas = Array.from(new Set([forma, ...parcs.map((p) => p.forma)].filter(Boolean)));
   const instr = instrucoes(formasUsadas, contaSel);
@@ -914,6 +958,21 @@ export default function NovaEmissao({ config, aberto, fechar, avisar, onEmitido,
       if (a.saldo != null && Number(a.saldo) < Number(it.quantidade))
         difs.push(`${it.codigo}: disponível hoje ${a.saldo} (rascunho pede ${it.quantidade})`);
     }
+    // Cliente do rascunho × cadastro de hoje (09/10/26): IE, endereço… podem ter sido corrigidos depois.
+    const docR = String(p.cli?.cnpj || p.cli?.cpf || "").replace(/\D/g, "");
+    if (docR.length >= 11 && p.cli) {
+      const pr = await fetch(`/api/faturamento/nova?op=pessoa_doc&emp=${p.empresa ?? empresa}&doc=${docR}`, { cache: "no-store" }).then((x) => x.json()).catch(() => null);
+      const pes = pr?.id ? await pessoaCompleta(pr.id) : null;
+      if (pes && vivo.current) {
+        const novo = clienteDaPessoa(pes);
+        const ROT: [keyof ClienteFat, string][] = [["ie", "Inscrição estadual"], ["nome", "Razão social"], ["logradouro", "Logradouro"], ["numero", "Nº"],
+          ["bairro", "Bairro"], ["municipio", "Município"], ["codigo_municipio", "Cód. IBGE"], ["uf", "UF"], ["cep", "CEP"]];
+        const norm = (v: unknown) => String(v ?? "").trim().toUpperCase();
+        const campos = ROT.filter(([k]) => norm(novo[k]) && norm(novo[k]) !== norm(p.cli?.[k]))
+          .map(([k, rot]) => ({ rot, antes: String(p.cli?.[k] ?? "") || "vazio", agora: String(novo[k] ?? "") }));
+        setCliDifs(campos.length ? { novo: { ...p.cli, ...Object.fromEntries(ROT.map(([k]) => [k, norm(novo[k]) ? novo[k] : p.cli?.[k]])) } as ClienteFat, campos } : null);
+      }
+    }
     if (!vivo.current) return;
     setRascDifs([`Rascunho salvo em ${new Date(salvoEm).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })} — revalidado agora.`, ...difs]);
     validarRef.current();
@@ -1056,6 +1115,31 @@ export default function NovaEmissao({ config, aberto, fechar, avisar, onEmitido,
                   <h3>✕ {st === "rejeitada" ? "Rejeitada pela SEFAZ" : "Não foi possível emitir"}</h3>
                   <div style={{ fontSize: 13.5 }}>{e.focus_status ? <b>{String(e.focus_status)}: </b> : null}{msg || "Sem mensagem da SEFAZ."}</div>
                   {dica && <div className="ne-aviso">💡 {dica}</div>}
+                  {tipo === "nfe" && /inscri|\bie\b|232|233|209/i.test(`${e.focus_status ?? ""} ${msg}`) && (() => {
+                    // Rejeição de IE (09/10/26): a sugestão vem pronta — preenche, corrige o cadastro e volta à folha (o usuário clica Emitir).
+                    const sug = ieInfo?.sugestao;
+                    const atual = String(cli.ie ?? "").replace(/\D/g, "");
+                    if (sug && sug.ie !== atual) return (
+                      <div className="ne-aviso">
+                        <div><b>IE sugerida: {sug.ie}</b> ({sug.rotulo}).</div>
+                        <div className="ne-linha" style={{ marginTop: 6, alignItems: "center" }}>
+                          <button className="ne-btn pri" disabled={ieSalvando} onClick={async () => {
+                            const m = await usarIe(sug.ie, true);
+                            corrigir(); setVerCliente(true);
+                            setAviso(`${m} Confira e clique em Emitir.`);
+                          }}>{ieSalvando ? "Aplicando…" : `Usar IE ${sug.ie} e reenviar`}</button>
+                          <span className="ne-dica">volta para a nota com a IE preenchida — nada é emitido até você clicar em Emitir</span>
+                        </div>
+                      </div>);
+                    return (
+                      <div className="ne-aviso">
+                        <b>Falta a Inscrição Estadual do cliente{cli.uf ? ` (${cli.uf})` : ""}.</b> Não achei nenhuma IE deste CNPJ no sistema (cadastro, notas autorizadas, Omie).
+                        {" "}Consulte o CNPJ {docCli} no <a className="ne-lk" href={CONSULTA_IE.ccc} target="_blank" rel="noopener">Cadastro Centralizado de Contribuintes (CCC)</a> ou no{" "}
+                        <a className="ne-lk" href={CONSULTA_IE.sintegra} target="_blank" rel="noopener">SINTEGRA{cli.uf ? `/${cli.uf}` : ""}</a>, preencha a IE em “Corrigir e reenviar” (Cliente › ver/editar dados) e corrija o{" "}
+                        <a className="ne-lk" href={`/cadastros/clientes?busca=${encodeURIComponent(docCli || cli.nome)}`} target="_blank" rel="noopener">cadastro do cliente ↗</a>.
+                        {sug && sug.ie === atual && <> A nota já foi com a IE {sug.ie} ({sug.rotulo}) — confira se ela está ativa na SEFAZ-{cli.uf || "UF"}.</>}
+                      </div>);
+                  })()}
                   {criado && <div className="ne-aviso">{criado.label} foi criado e continua <b>aberto</b> na carteira — corrija e emita de lá (ou aqui, em “Faturar um PV/OS existente”).</div>}
                   {!recibo && <div style={{ fontSize: 12, color: "var(--ww-text-muted)" }}>O número reservado foi devolvido à sequência (nenhuma nota ficou registrada na SEFAZ).</div>}
                   <div className="ne-linha"><button className="ne-btn pri" onClick={corrigir}>Corrigir e reenviar</button></div>
@@ -1249,6 +1333,27 @@ export default function NovaEmissao({ config, aberto, fechar, avisar, onEmitido,
             <section className="ne-sec" id="ne-sec-cliente">
               <h3>Cliente {cli.nome ? <small>{cli.nome} · {cli.cnpj || cli.cpf} · {cli.municipio}/{cli.uf}</small> : <small>escolha no cadastro acima</small>}
                 <button className="ne-lk" style={{ marginLeft: "auto" }} onClick={() => setVerCliente((v) => !v)}>{verCliente ? "recolher" : "ver/editar dados"}</button></h3>
+              {cliDifs && (
+                <div className="ne-aviso" style={{ borderColor: "var(--f-warn, #f59e0b)" }}>
+                  <div style={{ fontWeight: 600 }}>O cadastro deste cliente mudou desde que o rascunho foi salvo:</div>
+                  {cliDifs.campos.map((c) => <div key={c.rot}>• {c.rot}: <s>{c.antes}</s> → <b>{c.agora}</b></div>)}
+                  <div className="ne-linha" style={{ marginTop: 6 }}>
+                    <button className="ne-btn pri" onClick={() => { setCli(cliDifs.novo); setCliDifs(null); avisar("Cliente atualizado com o cadastro de hoje — valide de novo."); }}>Atualizar a nota com o cadastro</button>
+                    <button className="ne-lk" onClick={() => setCliDifs(null)}>manter como está no rascunho</button>
+                  </div>
+                </div>
+              )}
+              {ieAlerta && (
+                <div className={`ne-aviso${ieAlerta.nivel === "erro" ? " mal" : ""}`} style={ieAlerta.nivel === "erro" ? undefined : { borderColor: "var(--f-warn, #f59e0b)" }}>
+                  <div>{ieAlerta.nivel === "erro" ? "⛔" : "⚠"} {ieAlerta.texto}</div>
+                  <div className="ne-linha" style={{ marginTop: 6, alignItems: "center" }}>
+                    <button className="ne-btn pri" disabled={ieSalvando} onClick={() => usarIe(ieAlerta.sugerida, true)}>
+                      {ieAlerta.tipo === "cadastro_vazio" ? `Salvar IE ${ieAlerta.sugerida} no cadastro` : ieSalvando ? "Salvando…" : `Usar esta IE (${ieAlerta.sugerida})`}</button>
+                    {ieAlerta.tipo !== "cadastro_vazio" && <span className="ne-dica">{iePerm?.pode ? "preenche a nota e corrige o cadastro do cliente (todas as linhas deste CNPJ sem IE)" : `preenche a nota; o cadastro só pode ser corrigido por ${iePerm?.quem || "quem edita cadastros"}`}</span>}
+                    {ieAlerta.tipo === "cadastro_vazio" && !iePerm?.pode && <span className="ne-dica">peça a {iePerm?.quem || "quem edita cadastros"} para salvar</span>}
+                  </div>
+                </div>
+              )}
               {(verCliente || !cli.nome) && (
                 <div className="ne-linha">
                   {campo("nome", "Razão social", 300)}{campo("cnpj", "CNPJ", 150)}{campo("cpf", "CPF", 130)}{campo("ie", "Inscrição estadual", 140)}{campo("email", "E-mail", 230)}
@@ -1440,7 +1545,9 @@ export default function NovaEmissao({ config, aberto, fechar, avisar, onEmitido,
                       setProjeto(String(p.codigo));
                     }} />
                 </div>
-                {sel("Vendedor", vendedor, setVendedor, opc?.vendedores ?? [], 170)}
+                {chave && /^(venda|pv_omie|os_omie):/.test(chave)
+                  ? <div style={{ alignSelf: "flex-end", minWidth: 240 }}><TipoVenda compacto empresa={empresa} chave={chave} avisar={avisar} onMudou={(cod) => { if (cod) setVendedor(cod); }} /></div>
+                  : sel(ehTipoVenda ? "Tipo da venda" : "Vendedor", vendedor, setVendedor, opc?.vendedores ?? [], 170)}
                 <label className="ne-rot" style={{ width: 180 }} title="Nº da proposta do CRM que originou o pedido (no Omie, campo Contrato)">Proposta Aprovada<input className="ne-in" value={contrato} onChange={(e) => setContrato(e.target.value)} placeholder="ex.: OPS1708261801" /></label>
               </div>
               {(instr.linhas.length > 0 || instr.faltas.length > 0) && (
@@ -1594,8 +1701,9 @@ export default function NovaEmissao({ config, aberto, fechar, avisar, onEmitido,
           {!naoVenda && faltaVenda() && <span className="ne-dica" style={{ color: "var(--ap-t-red)", maxWidth: 360 }}>{faltaVenda()}</span>}
           {!faltaVenda() && !faltaNcm() && faltaEstoque() && <span className="ne-dica" style={{ color: "var(--ap-t-red)", maxWidth: 360 }}>{faltaEstoque()}</span>}
           {!faltaVenda() && faltaNcm() && <span className="ne-dica" style={{ color: "var(--ap-t-red)", maxWidth: 360 }}>{faltaNcm()}</span>}
-          <button className={`ne-btn ${prod ? "perigo" : "pri"}`} disabled={!cli.nome || !itens.some((i) => i.descricao) || (precisaParcelas && !parcOk) || !!faltaVenda() || !!faltaNcm() || !!faltaEstoque()}
-            title={faltaVenda() ?? faltaNcm() ?? faltaEstoque() ?? undefined} onClick={emitirAgora}>
+          {!faltaVenda() && !faltaNcm() && !faltaEstoque() && ieAlerta?.nivel === "erro" && <span className="ne-dica" style={{ color: "var(--ap-t-red)", maxWidth: 360 }}>Falta a Inscrição Estadual — use a IE sugerida em Cliente.</span>}
+          <button className={`ne-btn ${prod ? "perigo" : "pri"}`} disabled={!cli.nome || !itens.some((i) => i.descricao) || (precisaParcelas && !parcOk) || !!faltaVenda() || !!faltaNcm() || !!faltaEstoque() || ieAlerta?.nivel === "erro"}
+            title={faltaVenda() ?? faltaNcm() ?? faltaEstoque() ?? (ieAlerta?.nivel === "erro" ? ieAlerta.texto : undefined)} onClick={emitirAgora}>
             {`Emitir ${naoVenda ? OP_ROT[operacao as Exclude<OperacaoTipo, "venda">] : TIPO[tipo]}${prod ? " (PRODUÇÃO)" : " (homologação)"}`}
           </button>
         </div>

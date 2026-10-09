@@ -6,6 +6,7 @@ import type { DocFat } from "@/lib/faturamento/montar";
 import { buscarItensEstoque, codigosSemEstoque, MSG_SEM_ESTOQUE, type CodigoCompra } from "@/lib/estoque-vinculos";
 import { buscarItensCrm, casarTopCrm, vincularCrm } from "@/lib/catalogo-crm";
 import { historicoDoCliente, type HistBase } from "@/lib/faturamento/historico";
+import { ieConhecida, podeEditarCadastro, QUEM_EDITA_CADASTRO, salvarIeNoCadastro } from "@/lib/faturamento/ie-cliente";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
@@ -21,7 +22,9 @@ export const maxDuration = 30;
  *  GET ?op=sem_estoque&emp=SF&cods=…  → códigos fora do estoque (com o produto de compra) + "resolvidos" (código antigo que já
  *                                      aponta para um item nosso — ex.: id do Omie de um serviço → SV0013; a folha troca sozinha)
  *  GET ?op=sugerir&emp=SF&q=…&custo=&un= → 3 itens NOSSOS mais parecidos (mesmo motor do "Compatibilizar" do CRM)
+ *  GET ?op=ie_cliente&doc=CNPJ         → IE conhecida do cliente (NF-e autorizada › cadastro › Omie) + se pode gravar no cadastro
  *  POST { op: "previa", documento }   → pré-voo (payload + checagens + parcelas), sem enviar nada
+ *  POST { op: "salvar_ie", doc, ie }  → grava a IE no cadastro das linhas deste CNPJ sem IE (permissão de editar cadastros)
  *  POST { op: "trocar_item", empresa, chave, codigo_antigo, descricao, n_cod_prod, codigo } → grava a troca no PV/OS (venda:N) e o de-para
  */
 
@@ -222,6 +225,11 @@ export async function GET(req: NextRequest) {
       const l = ((data as { linhas?: { id: number; codigo: number; razao: string }[] } | null)?.linhas ?? [])[0];
       return NextResponse.json({ id: l?.id ?? null, codigo: l?.codigo ?? null, razao: l?.razao ?? null });
     }
+    if (op === "ie_cliente") {
+      const doc = (sp.get("doc") ?? "").replace(/\D/g, "");
+      const [info, pode] = await Promise.all([ieConhecida(doc), podeEditarCadastro()]);
+      return NextResponse.json({ info, pode_editar_cadastro: pode, quem_edita: QUEM_EDITA_CADASTRO });
+    }
     if (op === "historico") {
       const doc = (sp.get("doc") ?? "").replace(/\D/g, "");
       if (doc.length < 11) return NextResponse.json({ historico: [] });
@@ -316,6 +324,17 @@ export async function POST(req: NextRequest) {
       const r = await a.schema("orders").rpc("cad_aux_salvar", { p: { id, dados }, p_por: q.email });
       if (r.error) throw new Error(r.error.message);
       return NextResponse.json({ ok: true, conta: r.data });
+    } catch (e) { return falha(e); }
+  }
+  // IE sugerida → cadastro do cliente (09/10/26): só quem edita cadastros; os outros só preenchem a nota.
+  if (body.op === "salvar_ie") {
+    try {
+      const b = body as unknown as { doc?: string; ie?: string };
+      if (!(await podeEditarCadastro())) {
+        return NextResponse.json({ ok: false, sem_permissao: true,
+          error: `Você não pode editar cadastros — a IE foi usada só nesta nota. Peça a ${QUEM_EDITA_CADASTRO} para corrigir o cadastro do cliente.` });
+      }
+      return NextResponse.json({ ok: true, ...(await salvarIeNoCadastro(String(b.doc ?? ""), String(b.ie ?? ""), q.email)) });
     } catch (e) { return falha(e); }
   }
   if (body.op !== "previa" || !body.documento) return falha("op/documento inválidos");

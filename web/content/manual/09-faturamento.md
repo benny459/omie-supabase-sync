@@ -20,7 +20,7 @@ atualizado: 2026-10-09
   - **Previsão fat.**: quando deve ser faturado — **clique para mudar**. Alerta **atrasado N dias** ou **vence em N dias**.
   - **Recebimento**: **recebido**, **a receber**, **vencido** ou **parcial**, com a data.
 - Visões: **Lista, Kanban, Emissões, NFS-e registradas**. Filtro rápido **Previsão atrasada** e **OS sem NFS-e**.
-- Clique num documento para abrir a gaveta. Ela mostra **o que vai sair na nota**: destinatário completo (CNPJ, IE, endereço, município/IBGE, e-mail, com **editar cadastro**), recebimento (condição, forma de pagamento, conta, parcelas com datas e valores, instrução de Pix/banco), operação (natureza, CFOP, frete/transportadora, OC, projeto, vendedor), itens com NCM e CFOP e as **informações complementares exatamente como saem**. Pendências (falta IE, CEP, IBGE, e-mail, NCM, forma de pagamento) aparecem no topo.
+- Clique num documento para abrir a gaveta. Ela mostra **o que vai sair na nota**: destinatário completo (CNPJ, IE, endereço, município/IBGE, e-mail, com **editar cadastro**), recebimento (condição, forma de pagamento, conta, parcelas com datas e valores, instrução de Pix/banco), operação (natureza, CFOP, frete/transportadora, OC, projeto, tipo da venda), itens com NCM e CFOP e as **informações complementares exatamente como saem**. Pendências (falta IE, CEP, IBGE, e-mail, NCM, forma de pagamento) aparecem no topo.
 - A gaveta também traz as notas (DANFE, XML, recibo — inclusive os antigos do Omie), recebimento e histórico.
 - **OC do cliente e anexos:** na coluna Cliente aparece **OC nº** (ou "sem OC") e o clipe **📎** com o número de anexos — clique para ver ou anexar. Na gaveta, a seção **OC do cliente e anexos** permite corrigir o nº da OC (nos do Omie fica guardado no painel, sem mexer no Omie), subir arquivo ou colar link.
 
@@ -106,12 +106,52 @@ PV e OS de **projeto** criados pelo CRM a partir do **Fechamento** trazem as par
 
 > **Dica:** se o pedido não tem forma/conta, a emissão herda as do **último faturamento do mesmo CNPJ/CPF** — confira antes de emitir.
 
+## Como faço para mudar o tipo da venda (Mix, Mercantil ou Serviços)
+
+O tipo da venda diz se o pedido tem serviço da nossa equipe. Na gaveta do PV/OS (logo abaixo dos valores) e na folha de emissão (em **Recebimento**) aparece **Tipo da venda** com a cor do tipo.
+
+1. Clique em **trocar**.
+2. Escolha o tipo novo:
+   - **Mix**: material + serviço da nossa equipe (instalação, visita).
+   - **Mercantil**: só material.
+   - **Serviços**: só serviço (OS).
+3. Escreva o **motivo** (obrigatório) e clique em **Ver o que muda**. O sistema mostra o que vai acontecer **antes** de gravar.
+4. Clique em **Confirmar: virar …**. Fica registrado quem trocou, quando e de qual tipo para qual ("trocado de Mercantil por fulano em 09/10").
+
+O que muda quando você troca:
+
+- **Virou Mix (ou Serviços)**: o pedido passa a aparecer para a **área de Serviços**, no **Painel de Vendas** do app de Serviços, onde a equipe gera a OS e agenda. Ele também entra nos **avisos das 8h/14h da Aria**. É o mesmo caminho de quando o PV já nasce Mix na venda. Se a OS já existe, nada é criado de novo.
+- **Saiu de Mix/Serviços**: o pedido sai do Painel de Vendas de Serviços. Se a equipe já gerou a OS, o sistema **avisa e pergunta** o que fazer com ela. A OS **não é cancelada** sozinha: se o serviço não vai acontecer, avise a equipe para cancelar no app de Serviços.
+- **Pedido de projeto (PJ…)**: o serviço segue pelo módulo de Projetos. O Painel de Vendas de Serviços só mostra vendas avulsas.
+- **A nota não muda**: o PV continua saindo em NF-e de produto (mesma natureza e CFOP) e a OS em recibo/NFS-e. BI e Operação passam a mostrar o tipo novo. **Nada vai ao Omie.**
+
+Regras (o sistema explica se você tentar):
+
+- **PV** só pode ser **Mix** ou **Mercantil**. Se é só serviço, ele deveria ser uma OS (Nova emissão › Recibo de serviço).
+- **OS** só pode ser **Serviços** ou **Mix**. Material sozinho sai num PV com NF-e.
+- Documento **cancelado** não muda de tipo.
+
+## Inscrição Estadual (IE) do cliente: o sistema avisa e sugere
+
+Se a nota vai sair **sem IE** (ou como **ISENTO**), mas o sistema conhece a IE do cliente, aparece um aviso no bloco **Cliente**. Exemplo: "Falta a Inscrição Estadual — a SEFAZ vai rejeitar. Sugerido: 080048633 (da NF-e 2212 autorizada em 09/10)". O sistema procura a IE nesta ordem:
+
+1. a última **NF-e autorizada** para o mesmo CNPJ;
+2. o **cadastro do cliente**;
+3. o cadastro antigo do Omie.
+
+- Clique em **Usar esta IE**. A IE entra na nota e o **cadastro do cliente** é corrigido (todas as linhas desse CNPJ que estavam sem IE), para as próximas notas saírem certas.
+- Quando a IE vem de uma NF-e autorizada ou do cadastro, a emissão fica **bloqueada** até você usar a IE. Assim a nota não vai à SEFAZ para ser rejeitada.
+- Se a IE da nota é **diferente** da última NF-e autorizada, ou se o cadastro está sem a IE que você digitou, aparece um aviso com o botão para corrigir.
+- Quem **não pode editar cadastros** (só administrador, Compras ou quem edita títulos no Financeiro) também vê o botão. Para essa pessoa ele preenche só a nota, e o aviso diz quem pode corrigir o cadastro.
+
+**Se a SEFAZ rejeitar por IE** ("IE do destinatário não informada", 232, 233, 209), a janela de transmissão mostra a IE sugerida e o botão **Usar IE … e reenviar**. Ele preenche a nota, corrige o cadastro e volta para a folha. **Nada é emitido sozinho**: confira e clique em **Emitir**. Se o sistema não conhece nenhuma IE, ele diz o que falta e onde consultar: o CNPJ no **CCC** (Cadastro Centralizado de Contribuintes) ou no **SINTEGRA** da UF do cliente, com o link para o cadastro do cliente.
+
 ## Como faço para salvar uma nota como rascunho e continuar depois
 
 1. Na folha de emissão, clique em **Salvar rascunho** (ao lado de Cancelar). Nada é emitido e nenhum número (PV, OS, NF-e, recibo) é reservado.
 2. A folha também **salva sozinha a cada ~20 segundos** quando algo mudou, e ao **fechar sem emitir** — o rodapé mostra "rascunho salvo às hh:mm".
 3. Para continuar: aba **✎ Rascunhos** (ao lado de NFS-e registradas) → **Continuar**. A folha reabre exatamente como estava.
-4. Ao reabrir, o sistema **revalida** a nota e avisa o que mudou desde o rascunho (ex.: "o CMC mudou", saldo do estoque menor que a quantidade).
+4. Ao reabrir, o sistema **revalida** a nota e avisa o que mudou desde o rascunho (ex.: "o CMC mudou", saldo do estoque menor que a quantidade). Também compara o **cliente** com o cadastro de hoje (IE, endereço, município, CEP…). Se algo mudou, mostra o antes → agora e o botão **Atualizar a nota com o cadastro**.
 5. Um PV/OS da carteira com rascunho aparece com o selo **rascunho**; em **Revisar e emitir** você escolhe continuar o rascunho ou começar do zero.
 6. Na lista de rascunhos também dá para **Duplicar** (usar como base para outra nota) e **Descartar**. Depois de emitida, a nota sai da lista sozinha.
 
@@ -122,7 +162,7 @@ PV e OS de **projeto** criados pelo CRM a partir do **Fechamento** trazem as par
 A janela acompanha: **1 · Enviando à Focus → 2 · Processando na SEFAZ → Autorizada** (ou Rejeitada).
 
 - **Autorizada**: número/série, **chave de acesso**, protocolo, **DANFE**, **Baixar XML**, **Consultar na SEFAZ** e as **contas a receber criadas**.
-- **Rejeitada**: o motivo em português e **Corrigir e reenviar** (o formulário continua preenchido).
+- **Rejeitada**: o motivo em português e **Corrigir e reenviar** (o formulário continua preenchido). Se a rejeição for de IE, a janela já traz a IE sugerida com **Usar IE … e reenviar** (veja "Inscrição Estadual").
 
 ### Como faço para enviar a nota ou o recibo ao cliente
 

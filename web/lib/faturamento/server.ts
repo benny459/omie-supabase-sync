@@ -5,6 +5,8 @@ import { NATUREZA_OP, montarNfe, montarNfse, operacaoDe, parcelas, reciboHtml, s
 import { codigosSemEstoque, MSG_SEM_ESTOQUE, trocarParaCodigoNosso } from "@/lib/estoque-vinculos";
 import { checarDoc, docFatPvOmie, type Checagem, type PvOmieDoc } from "./pv-omie";
 import { docFatOsOmie, type OsOmieDoc } from "./os-omie";
+import { ieConhecida } from "./ie-cliente";
+import { avaliarIe } from "./ie-regra";
 
 /**
  * Motor de faturamento do painel (P5, 05/10/2026).
@@ -259,6 +261,12 @@ export async function prevoo(doc: DocFat, extra: Parameters<typeof checarDoc>[1]
   const add = (item: string, ok: boolean, detalhe: string, nivel: "erro" | "aviso" = "erro") => checagens.push({ item, ok, nivel, detalhe });
   const inval = validar(doc);
   add("Documento válido", !inval, inval ?? "ok");
+  // IE do destinatário vs. a IE conhecida do cliente (09/10/26, HECI/PV1865): avisa antes da SEFAZ rejeitar.
+  const docDest = (doc.cliente.cnpj || doc.cliente.cpf || "").replace(/\D/g, "");
+  if (docDest.length === 14) {
+    const ieAl = avaliarIe(doc.cliente.ie, await ieConhecida(docDest).catch(() => null));
+    if (ieAl) add("Inscrição estadual do destinatário", false, ieAl.texto, ieAl.nivel);
+  }
   const op = operacaoDe(doc);
   if (op !== "venda") {
     const o = doc.operacao;

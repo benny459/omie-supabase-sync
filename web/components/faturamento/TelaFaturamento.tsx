@@ -9,6 +9,7 @@ import Rascunhos from "@/components/faturamento/Rascunhos";
 import RegistrarNfse from "@/components/faturamento/RegistrarNfse";
 import ContratosRecorrentes from "@/components/faturamento/ContratosRecorrentes";
 import LoteRecibos from "@/components/faturamento/LoteRecibos";
+import TipoVenda from "@/components/faturamento/TipoVenda";
 import { baixarPdfs, baixarZip, pdfDoLink, type Baixado } from "@/lib/faturamento/baixar";
 import { OcAnexosPainel, OcChip, useOcResumo } from "@/components/vendas/OcAnexos";
 import "./faturamento.css";
@@ -1068,6 +1069,8 @@ function Gaveta({ d, r, empresa, prod, ocupado, agir, fechar, avisar, onMudou, r
             <div><span>Falta faturar</span><b className="mono" style={{ color: sd > 0.01 ? "var(--f-warn)" : "var(--f-tx3)" }}>{fmt(sd)}</b></div>
           </div>
           <div style={{ marginTop: 12 }}><Prog d={d} largura="100%" /></div>
+          {/* Tipo da venda (Mix/Mercantil/Serviços) com troca auditada — 09/10/26, sql/158 */}
+          <TipoVenda empresa={empresa} chave={d.chave} avisar={avisar} onMudou={() => onMudou()} />
         </div>
 
         <div className="db">
@@ -1455,6 +1458,8 @@ type Resumo = {
   proximo?: { nfe: number | null; serie: string; recibo: number | null };
   checagens?: { item: string; ok: boolean; nivel: "erro" | "aviso"; detalhe: string }[];
 };
+/** Códigos do "vendedor" do Omie que são o tipo da venda (só a SF tem). */
+const TIPO_VENDA_SF: Record<string, string> = { "12533290350": "Mix", "12533290404": "Mercantil", "12533290375": "Serviços" };
 const FRETE: Record<number, string> = { 0: "por conta do emitente (CIF)", 1: "por conta do destinatário (FOB)", 2: "terceiros", 3: "próprio (remetente)", 4: "próprio (destinatário)", 9: "sem frete" };
 const TPAG: Record<string, string> = { "01": "dinheiro", "02": "cheque", "03": "cartão de crédito", "04": "cartão de débito", "15": "boleto", "17": "PIX", "18": "transferência", "90": "sem pagamento", "99": "outros" };
 const docFmt = (c?: string | null) => { const x = (c ?? "").replace(/\D/g, ""); return x.length === 14 ? x.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, "$1.$2.$3/$4-$5") : x.length === 11 ? x.replace(/^(\d{3})(\d{3})(\d{3})(\d{2})$/, "$1.$2.$3-$4") : (c ?? ""); };
@@ -1508,7 +1513,7 @@ function ResumoNota({ res, tipo, editar }: { res: Resumo | null; tipo: string; e
           {rec && linha("Categoria", cond?.categoria)}
           {rec && linha("Proposta Aprovada", cond?.contrato)}
           {linha("Projeto", cond?.projeto)}
-          {linha("Vendedor", cond?.vendedor)}
+          {linha("Tipo da venda", TIPO_VENDA_SF[cond?.vendedor ?? ""] ?? cond?.vendedor)}
           {linha(rec ? "Total do recibo" : "Total da nota", fmt(res.total ?? 0))}
         </div>
       </div>
