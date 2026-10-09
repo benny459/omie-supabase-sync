@@ -410,3 +410,6 @@
 .cmp .tbl-wrap.tbl-fit table.grid thead tr:first-child th { max-width: 130px; overflow: hidden; text-overflow: ellipsis; }
 .cmp .tbl-wrap.tbl-fit table.grid td.trunc { max-width: 200px; }
 @container tbl (max-width: 1180px) { .cmp .tbl-wrap.tbl-fit table.grid td.trunc { max-width: 160px; } }
+/* Situação (pill + "atrasada") e Etapa podem quebrar linha em vez de alargar a tabela */
+.cmp .tbl-wrap.tbl-fit table.grid td.c-situacao { white-space: normal; min-width: 140px; line-height: 22px; }
+.cmp .tbl-wrap.tbl-fit table.grid td.c-etapaNome { white-space: normal; min-width: 96px; }

@@ -39,7 +39,7 @@ const lsSet = (k: string, v: string) => { try { localStorage.setItem(k, v); } ca
 /** Ordem em que as colunas somem quando a tabela estreita (tf-p3 primeiro). */
 const PRIO_COL: Record<string, string> = {
   numForn: "tf-p4", contato: "tf-p4", conta: "tf-p4", comprador: "tf-p4", rcs: "tf-p4", contrato: "tf-p4", obsInt: "tf-p4", parc: "tf-p4", cnpj: "tf-p4",
-  aprov: "tf-p3", cat: "tf-p3", pv: "tf-p3", proj: "tf-p3",
+  aprov: "tf-p4", cat: "tf-p4", pv: "tf-p4", proj: "tf-p3",
   emissao: "tf-p2", itens: "tf-p2", origem: "tf-p2", dtRec: "tf-p2", enviado: "tf-p2",
   tipo: "tf-p1", nf: "tf-p1",
 }
@@ -621,7 +621,7 @@ export default function TelaCompras() {
                       <td><input type="checkbox" aria-label="Selecionar" checked={sel.has(p.id)}
                         onChange={(e) => setSel((s) => { const n = new Set(s); if (e.target.checked) n.add(p.id); else n.delete(p.id); return n; })} /></td>
                       {colsVis.map((c) => (
-                        <td key={c.k} className={`${c.r ? "r" : ""}${c.tr ? " trunc" : ""} ${PRIO_COL[c.k] ?? ""}`} title={c.tr ? String(c.v(p) ?? "") : undefined}>
+                        <td key={c.k} className={`${c.r ? "r" : ""}${c.tr ? " trunc" : ""} ${PRIO_COL[c.k] ?? ""} c-${c.k}`} title={c.tr ? String(c.v(p) ?? "") : undefined}>
                           {c.h ? c.h(p) : String(c.v(p) ?? "")}</td>))}
                       <td style={{ whiteSpace: "nowrap" }}>
                         {p.tipo === "PC" && <button className="btn sm ghost" title="Imprimir / PDF / enviar ao fornecedor" onClick={(e) => { e.stopPropagation(); setEnviar(p.id); }}>🖨</button>}
