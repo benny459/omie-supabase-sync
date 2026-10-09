@@ -96,13 +96,13 @@ Em **⚙ Configurar** (só admin) liga-se tudo aos poucos — **tudo nasce desli
 6. **Mensagens** — modo **desligado → ensaio** (só regista o que seria enviado) **→ teste** (um resumo só para o e-mail de teste, com [TESTE]) **→ ligado**; horários, limite por dia e escada da cobrança. **Pré-visualizar (não envia)** mostra já o que cada pessoa receberia numa janela (07:30, 11:30, 16:00, 18:00), filtrado pelo perfil dela.
 7. **Diretoria e supervisão**, **Pedidos de acesso** e o **Histórico de mudanças** (quem mudou o quê e quando).
 
-**↻ Atualizar agora** corre os detetores na hora (o sistema atualiza sozinho a cada 15 minutos). Os detetores só **leem** os módulos.
+**↻ Atualizar agora** corre os detetores na hora (o sistema atualiza sozinho a cada 15 minutos; Operação e Projetos, que são mais pesados, de hora a hora). Os detetores só **leem** os módulos.
 
 ## Perguntas frequentes
 
 **A Central mudou alguma regra?** Não. Quem vê e quem pode fazer o quê sai das mesmas permissões de hoje (áreas, Usuários e acessos, alçadas).
 
-**Resolvi o item na tela tradicional. Some da Central?** Sim, na próxima atualização (até 15 min): a Aria vê que já está em ordem.
+**Resolvi o item na tela tradicional. Some da Central?** Sim, na próxima atualização (até 15 min; Operação e Projetos até 1 hora): a Aria vê que já está em ordem.
 
 **Porque um item não tem dono?** O tipo ainda não tem dono configurado e o dado não indica ninguém — aparece para a equipa do módulo.
 

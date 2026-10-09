@@ -30,5 +30,8 @@ export async function GET(req: NextRequest) {
     const { rodarMensagens } = await import("@/lib/ordem/mensagens");
     out.mensagens = await rodarMensagens({ simular });
   } catch (e) { out.mensagens = { erro: e instanceof Error ? e.message : String(e) }; }
+  // Resumo no log da Vercel (sem dados de negócio: só contagens e erros por detetor).
+  const sy = out.sync as { detetados?: number; novos?: number; fechados?: number; erros?: Record<string, string>; ms?: number } | undefined;
+  console.log(`[ordem/cron] detetados=${sy?.detetados} novos=${sy?.novos} fechados=${sy?.fechados} ms=${sy?.ms} erros=${JSON.stringify(sy?.erros ?? (out.sync as { erro?: string })?.erro ?? {})}`);
   return NextResponse.json({ ok: true, simular, ...out });
 }

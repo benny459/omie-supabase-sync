@@ -75,3 +75,20 @@ Legado só leitura: espelho do Omie (`orders.pedidos_compra`, trigger sql/159), 
 | fat_pendencia_cadastro | `orders.fat_carteira` (pend) → encaminha a Cadastros |
 | est_abaixo_minimo | `orders.v_estoque_item` + `alarme()` de `lib/estoque.ts` |
 | cad_duplicados | `orders.cadastros_duplicidades_v2('provavel')` |
+
+## 7. Validação em produção (09/10/26, só leitura)
+
+**Gate de não-regressão:** `GET /api/financeiro/pagar` antes e depois: 533 linhas, mesmos estados (dir 335 · ok 101 · sempc 62 · nf 29 · bloq 6) e as mesmas chaves. Telas de Compras/Financeiro/Operação sem mudança de código. Barra: mesma largura (módulos de um item ganham lista sem seta).
+
+**Matriz de permissões** (funções reais `quemPorId` → `filtrarItens`/`podeExecutar`, com tudo ligado em simulação):
+
+| Pessoa | Módulos na Central | Cadeados (sem contagem) | Financeiro (`?m=financeiro`) | Aprovar / Enviar / Conciliar |
+|---|---|---|---|---|
+| benny (admin) | todos | Comercial (CRM ainda sem a rota) | ok (23) | ✓ / ✓ / ✓ |
+| marcelo (aprovador projetos, sem ERP) | Operação, Projetos | Compras, Financeiro, Faturamento, Estoque, Cadastros, Comercial | 403, 0 itens | ✓ (caminho Projetos) / ✗ / ✗ |
+| gabriel (estoque) | Compras, Estoque, Cadastros | Financeiro, Operação, Projetos, Faturamento, Comercial | 403 | ✗ / ✓ / ✗ |
+| fernanda (faturamento) | Compras, Operação, Projetos, Faturamento, Estoque, Cadastros | Financeiro, Comercial | 403 | ✓ / ✓ / ✗ |
+| suporte@ Cristina (compras) | Compras, Operação, Projetos, Estoque, Cadastros | Financeiro, Faturamento, Comercial | 403 | ✗ / ✓ / ✗ |
+| bpofinanceiro | Compras, Financeiro, Operação, Projetos, Faturamento, Estoque, Cadastros | Comercial | ok (23) | ✗ / ✗ / ✓ |
+
+Hoje (tudo desligado) cada não-admin vê **0** itens; o admin vê 302 em pré-visualização. API: `?m=comercial` → 403 sem itens; "executar" → 403 "Ação ainda desligada"; "recusar" → 400 "Decisões desligadas". Valores mascarados testados em unidade (ninguém real sem `compras.ver_valores` hoje).

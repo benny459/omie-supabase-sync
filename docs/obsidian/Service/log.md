@@ -4,6 +4,11 @@
 
 ---
 
+## [2026-10-09] [painel] fix | Central de Ordem — validação e carga no banco
+
+- Gate OK (Pagar 533 linhas, mesmos estados) e matriz de permissões por pessoa real em `docs/plans/CENTRAL_DE_ORDEM.md` §7.
+- A 1ª versão recalculava a fila em segundo plano a cada abertura da tela (estourava 60 s e somava carga): agora só o cron (15 min, com trava; Operação/Projetos de hora a hora) e o "Atualizar agora" do admin.
+
 ## [2026-10-09] [painel] feat | Central de Ordem — Fases 5–6 e roteiro dos outros módulos
 
 - Comandos à Aria (`/api/ordem/comando`, interpretação determinística em `lib/ordem/comandos.ts`): pré-visualização, itens fora por falta de acesso, "Confirmar N", desfazer em lote.
