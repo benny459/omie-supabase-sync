@@ -1,5 +1,6 @@
 import "server-only";
-import { NextResponse } from "next/server";
+import { NextResponse, after } from "next/server";
+import { pontePedido } from "@/lib/ponte-pc";
 import { supaServer } from "@/lib/supabase-server";
 import { supaAdmin } from "@/lib/supabase-admin";
 import { loadPerms } from "@/lib/require-area";
@@ -76,6 +77,13 @@ export async function posGravar(id: number, tipo?: string) {
     rpc("compras_publicar_rcs").catch(() => null),
     tipo !== "RC" ? vincularListaDoProjeto(id).catch(() => null) : null,
   ]);
+  /* Ponte PC → lista (09/10/26, lib/ponte-pc): PC com projeto que não nasceu da lista traz
+     os itens para a lista — depois do vínculo automático acima (o que já está na lista só
+     liga) e DEPOIS da resposta (não atrasa quem gravou). Fora de uma requisição, roda já. */
+  if (tipo !== "RC") {
+    const rodar = () => pontePedido(id).catch(() => null);
+    try { after(rodar); } catch { void rodar(); }
+  }
 }
 
 /** PC de projeto (06/10/26): casa os itens dele com a lista de materiais do

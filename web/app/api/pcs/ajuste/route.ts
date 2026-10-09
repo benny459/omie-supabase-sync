@@ -13,10 +13,11 @@
 // `simular: true` roda a função no banco e desfaz tudo no fim (dry-run).
 // Permissão: devolver = admin, aprovador e comprador (a mesma do "Excluir PC"); cancelar = só quem aprova
 // (admin ou compras.aprovar — 08/10/26, Benny); desfazer, só admin.
-import { NextResponse } from "next/server";
+import { NextResponse, after } from "next/server";
 import { supaServer } from "@/lib/supabase-server";
 import { supaAdmin } from "@/lib/supabase-admin";
 import { lerAjustes } from "@/lib/pc-ajustes";
+import { ponteProjeto } from "@/lib/ponte-pc";
 import { loadPerms } from "@/lib/require-area";
 import { permissoesDe } from "@/lib/acessos";
 
@@ -81,13 +82,19 @@ export async function POST(req: Request) {
       case "cancelar": {
         if (!q.aprova) return NextResponse.json({ error: "Só quem aprova pode cancelar o pedido de compra" }, { status: 403 });
         if (!String(b.motivo ?? "").trim()) return NextResponse.json({ error: "Informe o motivo" }, { status: 400 });
-        return NextResponse.json(await rpc("compras_pc_cancelar", {
+        const r = await rpc("compras_pc_cancelar", {
           p_empresa: empresa, p_numero: numero, p_motivo: String(b.motivo), p_por: por, p_uid: q.user.id,
-          p_codigo_projeto: codigo, p_simular: simular }));
+          p_codigo_projeto: codigo, p_simular: simular });
+        if (!simular) ponteDepois(empresa, numero, codigo, por);
+        return NextResponse.json(r);
       }
       case "desfazer_cancelamento":
         if (!q.admin) return NextResponse.json({ error: "Só administrador desfaz um cancelamento" }, { status: 403 });
-        return NextResponse.json(await rpc("compras_pc_cancelar_desfazer", { p_empresa: empresa, p_numero: numero, p_por: por, p_simular: simular }));
+        {
+          const r = await rpc("compras_pc_cancelar_desfazer", { p_empresa: empresa, p_numero: numero, p_por: por, p_simular: simular });
+          if (!simular) ponteDepois(empresa, numero, codigo, por);
+          return NextResponse.json(r);
+        }
       case "devolver": {
         if (!q.pode) return NextResponse.json({ error: "Sem permissão para registrar devolução" }, { status: 403 });
         const itens = (Array.isArray(b.itens) ? b.itens : [])
@@ -110,4 +117,21 @@ export async function POST(req: Request) {
   } catch (e) {
     return NextResponse.json({ error: e instanceof Error ? e.message : String(e) }, { status: 400 });
   }
+}
+
+/* Ponte PC → lista (09/10/26, lib/ponte-pc): depois de cancelar, a linha que a ponte tinha
+   trazido SÓ deste PC vai para a lixeira (não fica "sem PC" somando no projetado); depois de
+   desfazer o cancelamento, o item volta. Roda depois da resposta. */
+function ponteDepois(empresa: string, numero: string, codigo: number | null, por: string) {
+  const rodar = async () => {
+    let pj = codigo;
+    if (!pj) {
+      const { data } = await supaAdmin().schema("compras").from("pedidos").select("projeto_cod")
+        .eq("empresa", empresa).eq("numero", numero).eq("tipo", "PC").maybeSingle();
+      pj = Number((data as { projeto_cod?: number | null } | null)?.projeto_cod) || null;
+    }
+    if (!pj) return;
+    await ponteProjeto(empresa, pj, { por: `ponte PC (${por})` });
+  };
+  try { after(() => rodar().catch(() => null)); } catch { void rodar().catch(() => null); }
 }

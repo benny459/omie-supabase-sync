@@ -2392,7 +2392,8 @@ function ResumoBudgetProjeto({ empresa, codigo, $, valorPv, resultadoPct }: {
     const buscar = async () => {
       for (let k = 0; k < 3; k++) {
         try {
-          const r = await fetch(`/api/rc-projetos/compras?empresa=${encodeURIComponent(empresa)}&codigo=${codigo}`, { cache: "no-store" });
+          // 1ª tentativa passa pela ponte PC → lista (09/10/26): compra direta entra na lista antes do resumo
+          const r = await fetch(`/api/rc-projetos/compras?empresa=${encodeURIComponent(empresa)}&codigo=${codigo}${k === 0 ? "&ponte=1" : ""}`, { cache: "no-store" });
           if (r.ok) return await r.json();
         } catch { /* tenta de novo */ }
         await new Promise((ok) => setTimeout(ok, 1500 * (k + 1)));

@@ -17,6 +17,7 @@ import { fetchItensCp } from "@/lib/crm-fechamento";
 import { casarItensProjeto, resolverItensProjeto } from "@/lib/catalogo-projeto";
 import { textoCasar, SUG_MIN } from "@/lib/texto-casar";
 import { gerarPcsDaLista } from "@/lib/lista-gerar-pc";
+import { ponteProjeto } from "@/lib/ponte-pc";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -36,6 +37,12 @@ export async function GET(req: Request) {
   const empresa = (sp.get("empresa") ?? "SF").toUpperCase();
   const codigo = Number(sp.get("codigo"));
   if (!codigo) return NextResponse.json({ error: "codigo obrigatório" }, { status: 400 });
+  /* ?ponte=1 (09/10/26): o cartão do projeto em Operação › Projetos passa antes pela ponte
+     PC → lista (lib/ponte-pc) — compra direta entra na lista e o resumo já a conta. */
+  let ponte: Awaited<ReturnType<typeof ponteProjeto>> | null = null;
+  if (sp.get("ponte") === "1") {
+    try { ponte = await ponteProjeto(empresa, codigo, { por: "ponte PC (Operação)" }); } catch { ponte = null; }
+  }
   // 07/10/26: o banco às vezes estoura o statement timeout (refresh das MVs de compras
   // na mesma hora) — tenta de novo duas vezes antes de desistir.
   let { data, error } = await approval().rpc("rc_projetos_compras", { p_empresa: empresa, p_projeto: codigo });
@@ -45,7 +52,8 @@ export async function GET(req: Request) {
   }
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   try {
-    return NextResponse.json(await completarPcs(data as DadosPcs, empresa, codigo));
+    const d = await completarPcs(data as DadosPcs, empresa, codigo);
+    return NextResponse.json(ponte ? { ...d, ponte } : d);
   } catch {
     return NextResponse.json(data); // sem o detalhe dos PCs, a lista continua de pé
   }
@@ -242,6 +250,11 @@ export async function POST(req: Request) {
       if ("erro" in r) return NextResponse.json({ error: r.erro }, { status: 400 });
       return NextResponse.json(r);
     }
+
+    /* ── Ponte PC → lista (09/10/26, lib/ponte-pc) ──────────────────────────
+       Itens de PC do projeto que nenhuma linha cobre (compra direta) entram na lista
+       como origem "PC". simular=true: só diz o que entraria. A grade chama ao abrir. */
+    if (b.acao === "ponte_pc") return NextResponse.json(await ponteProjeto(empresa, codigo, { simular: !!b.simular, por: `ponte PC (${por})` }));
 
     return NextResponse.json({ error: "acao inválida" }, { status: 400 });
   } catch (e) { return erro(e); }

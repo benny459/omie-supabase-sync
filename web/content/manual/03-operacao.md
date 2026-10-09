@@ -177,7 +177,20 @@ Tudo fica numa aba só: **Lista de materiais** (a antiga aba “Compras × lista
 - **Fornecedor**: o do PC; sem PC, o sugerido pelo catálogo (em itálico) com entrega/fatura médias. **Comprado**: valor da linha do PC (**≠** quando a quantidade do PC difere da lista).
 - Linha ligada só pelo **número do PC** também mostra valor: o sistema acha a linha do item dentro do PC (código, senão descrição).
 - Marque as linhas e clique **🧾 Gerar pedido de compra**; **⇄ Vincular PCs automaticamente** liga as linhas aos PCs do projeto — o que sobrar fica com **+ vincular PC** na própria linha.
-- Abaixo da lista: o **Fluxo de compras do projeto** mês a mês. Itens de PCs do projeto que nenhuma linha cobre: **⋯ › Ver PCs com itens fora da lista** (já contam no comprometido).
+- Abaixo da lista: o **Fluxo de compras do projeto** mês a mês. Itens de PCs do projeto que nenhuma linha cobre: **⋯ › Ver PCs com itens fora da lista** (já contam no comprometido) — com a ponte abaixo, essa lista normalmente fica vazia.
+
+### Compra direta (PC fora da lista): os itens entram sozinhos
+
+Quando o material é urgente e o PC é feito direto, ligado ao projeto, sem passar pela lista, o painel faz a **ponte PC → lista**: cada item de PC do projeto que nenhuma linha cobre entra na Lista de materiais sozinho.
+- A linha nova tem o selo **PC** (azul) na coluna **Orig.**; passe o mouse para ver o número do PC, e clique para abrir o pedido. O 💬 da linha diz **“Item trazido do PC nnnn (compra direta, fora da lista)”**.
+- A linha já nasce ligada ao item do PC: quantidade, unidade e valor unit. do pedido (com desconto/IPI/ST rateados, então o **Projetado** da linha é igual ao **Comprado**), **Necessário em** = previsão do PC e o fornecedor do PC. Código: o nosso, quando o produto do PC já é (ou está ligado a) um item do estoque; senão fica “sem código” com a sugestão para ✓/✕ e o código do PC na observação.
+- Equipamento: o do item do PC (“Equip.: …”), senão o da RC com a mesma descrição, senão o grupo **Compras diretas**.
+- “Coberto” quer dizer: linha ligada ao item do PC, linha que veio de uma RC atendida por ele, ou linha antiga com o número do PC que casa com o item (código, senão descrição). Se já existe uma linha **sem PC** que é o mesmo item com certeza (mesmo código, ou descrição com as mesmas medidas), a ponte **liga** essa linha ao PC em vez de criar outra.
+- Quando roda: ao gravar um PC com projeto no Compras, ao abrir a Lista de materiais ou o cartão do projeto em **Operação › Projetos**, e todo dia às 06:30 (pega PC do Omie ligado ao projeto depois). Um aviso verde diz **“N item(ns) de compras diretas entraram na lista (PC 7xxx)”**.
+- Nunca duplica: item de PC já trazido não volta — nem se você excluir a linha de propósito. Não entram itens de PC escondido nem itens devolvidos por inteiro (devolução parcial entra com o que ficou).
+- **PC cancelado**: a linha que a ponte trouxe só daquele PC vai para **Itens removidos** (recuperável), com o motivo; se o cancelamento for desfeito, o item volta.
+- Totais: o comprometido não muda (o PC já contava). O **projetado** = PCs + estimado das linhas **sem** PC — a linha da ponte tem PC, então conta uma vez só.
+- Filtro: no ▾ da coluna **Orig.**, escolha **RC**, **PC** ou **novo**.
 
 ### Como faço para cancelar um pedido de compra do projeto
 

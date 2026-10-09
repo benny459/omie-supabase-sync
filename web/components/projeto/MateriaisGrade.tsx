@@ -55,6 +55,7 @@ import { normGrupo, dataDoGrupo, aplicarDataGrupo, nomePadrao } from "@/lib/grup
 import { estadoPc, dicaEstadoPc, LEGENDA_SITUACAO } from "@/lib/situacao-pc";
 import { sinalEntrega, FOLGA_ENTREGA_DIAS, type SinalEntrega } from "@/lib/sinal-entrega";
 import { textoCasar, SUG_MIN } from "@/lib/texto-casar";
+import { avisoPonte } from "@/lib/ponte-pc-decidir";
 import { planejarItem, prazoEfetivo, prazoAuto, normFornecedor, ROTULO_FONTE, type PrazoFornecedor, type PlanoItem, type FontePrazo } from "@/lib/planejamento-compras";
 import PlanejamentoCompras, { resumoPlano, type ItemPlano } from "./PlanejamentoCompras";
 import PrazosFornecedorModal from "./PrazosFornecedorModal";
@@ -179,13 +180,13 @@ const emBranco = (l: LinhaGrade) => !String(l.item ?? "").trim() && !String(l.ca
 /** Colunas que não dá para esconder (08/10/26) e o nome de cada uma no menu "Colunas ▾". */
 const COLUNAS_FIXAS = new Set(["item", "qtd"]);
 const ROTULO_COLUNA: Record<string, string> = {
-  _orig: "Origem (RC)", equipamento: "Equipamento", cat_codigo: "Código", un: "Un", data_necessaria: "Necessário em",
+  _orig: "Origem (RC / PC / novo)", equipamento: "Equipamento", cat_codigo: "Código", un: "Un", data_necessaria: "Necessário em",
   cat_valor_unit: "Valor unit.", _prazo: "Prazo (dias)", _comprar: "Comprar até", _cheg: "Chegada prev.", _ent: "Sinal ✓/⚠/✕",
   _proj: "Projetado", _pc: "PC", _sit: "Situação", _forn: "Fornecedor", _comprado: "Comprado (PC)", _delta: "Δ", _obs: "💬 Comentários",
 };
 /** Filtro estilo Excel por coluna (08/10/26, Benny): o tipo de cada coluna filtrável. */
 const TIPO_FILTRO: Record<string, TipoFiltro> = {
-  equipamento: "texto", cat_codigo: "texto", item: "texto", qtd: "num", un: "texto", data_necessaria: "data",
+  _orig: "texto", equipamento: "texto", cat_codigo: "texto", item: "texto", qtd: "num", un: "texto", data_necessaria: "data",
   cat_valor_unit: "num", _prazo: "num", _comprar: "data", _cheg: "data", _proj: "num", _pc: "texto", _sit: "texto",
   _forn: "texto", _comprado: "num",
 };
@@ -367,6 +368,8 @@ export default function MateriaisGrade({
   const cpPorChave = useMemo(() => new Set((cpBase?.itens ?? []).map((i) => chaveItem(i.equipamento, i.item))), [cpBase]);
   const cpPorTexto = useMemo(() => new Set((cpBase?.itens ?? []).flatMap((i) => [normT(i.item), normT(textoCasar(i.item, i.modelo))])), [cpBase]);
   const origemCp = useCallback((l: Record<string, string>): string | null => {
+    // Ponte PC → lista (09/10/26): linha trazida de um PC de compra direta — origem "PC"
+    if (l._origem === "pc") return `PC ${l._origem_pc || ""}`.trim();
     const c = cmpPorId.get(String(l._id ?? ""));
     if (c?.rc) return `RC ${c.rc}`;
     if (!String(l.item ?? "").trim()) return null;
@@ -628,11 +631,19 @@ export default function MateriaisGrade({
   const COLS: ColunaGrade[] = useMemo(() => [
     // Origem da linha: selo "RC" (veio da RC) — vazio = item novo, digitado na lista.
     { key: "_orig", label: "Orig.", w: 30, fixa: true,
-      dicaCab: "Origem da linha: RC = veio da RC (composição de preço da proposta) do projeto; vazio = item novo, digitado na lista.",
-      dica: (l) => origemCp(l) ?? (String(l.item ?? "").trim() ? "novo — não veio da RC" : undefined),
+      dicaCab: "Origem da linha: RC = veio da RC (composição de preço da proposta) do projeto; PC = trazida de um pedido de compra direto do projeto (compra fora da lista, pela ponte PC → lista); vazio = item novo, digitado na lista.",
+      dica: (l) => (l._origem === "pc" ? `PC ${l._origem_pc} — compra direta: o item veio do pedido de compra (não nasceu da lista)`
+        : origemCp(l) ?? (String(l.item ?? "").trim() ? "novo — não veio da RC" : undefined)),
       render: (l) => {
         const o = origemCp(l);
         if (!o) return null;
+        if (l._origem === "pc") {
+          const n = String(l._origem_pc ?? "");
+          return n
+            ? <a target="_blank" rel="noreferrer" href={`/erp/compras?abrir=${encodeURIComponent(n)}&tipo=PC&emp=${empresa}`} title={`PC ${n} — compra direta (fora da lista)`}
+                className="inline-block px-0.5 rounded bg-sky-500/20 text-[8.5px] font-bold text-sky-700 dark:text-sky-300 hover:text-ww-accent">PC</a>
+            : <span className="inline-block px-0.5 rounded bg-sky-500/20 text-[8.5px] font-bold text-sky-700 dark:text-sky-300">PC</span>;
+        }
         const c = cmpPorId.get(l._id);
         return c?.rc
           ? <a target="_blank" rel="noreferrer" href={`/erp/compras?abrir=${c.rc}&tipo=RC&emp=${empresa}`}
@@ -919,8 +930,30 @@ export default function MateriaisGrade({
   /** Linhas (id + texto) que já passaram pelo casamento automático nesta tela. */
   const sugTentadasRef = useRef<Set<string>>(new Set());
 
+  const ponteEmRef = useRef(0);
+  const carregadoEmRef = useRef<string | null>(null);
   const carregar = useCallback(async () => {
     setCarregando(true);
+    /* Ponte PC → lista (09/10/26, lib/ponte-pc): ANTES de ler a lista, os itens dos PCs do
+       projeto que nenhuma linha cobre (compra direta) entram como origem "PC" — assim a
+       grade já abre com eles. No máximo a cada 2 min por tela; falhar não impede de abrir.
+       `carregadoEm` (hora do servidor) vai no salvar: linha da ponte criada depois disso a
+       grade não conhecia e não é apagada por "não vir no corpo". */
+    let avisoDaPonte: string | null = null;
+    if (Date.now() - ponteEmRef.current > 120_000) {
+      ponteEmRef.current = Date.now();
+      try {
+        const ctrl = new AbortController();
+        const t = setTimeout(() => ctrl.abort(), 20000);
+        const r = await fetch("/api/rc-projetos/ponte-pc", { method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ empresa, codigo: codigoProjeto }), signal: ctrl.signal });
+        clearTimeout(t);
+        const j = r.ok ? await r.json() : null;
+        avisoDaPonte = avisoPonte(j);
+        carregadoEmRef.current = j?.agora ?? new Date().toISOString();
+      } catch { carregadoEmRef.current = new Date().toISOString(); }
+    } else carregadoEmRef.current = new Date().toISOString();
+    if (avisoDaPonte) setAviso(avisoDaPonte);
     // compras do projeto saem JUNTO com a lista (não depois): é a chamada mais demorada
     const pCompras = carregarCompras();
     void carregarComentarios();
@@ -928,7 +961,7 @@ export default function MateriaisGrade({
       const supa = supaBrowser();
       const approval = supa.schema("approval" as never);
       // a sugestão gravada (sql/127) vem da tabela, em paralelo — sem a migração, segue sem ela
-      const [itens, sugs, prazosMan] = await Promise.all([
+      const [itens, sugs, prazosMan, origens] = await Promise.all([
         approval.from("v_rc_projetos_itens")
           .select("id, equipamento, item, qtd, modelo, observacao, pc_numero, nome_fornecedor, dt_previsao, nova_prev_materiais, mt_data_recebimento_nf, pc_etapa_texto, cat_ncod_prod, cat_codigo, cat_valor_unit, cat_fornecedor, cat_entrega_dias, cat_fat_dias, un, data_necessaria")
           .eq("empresa", empresa).eq("codigo_projeto", codigoProjeto)
@@ -940,8 +973,13 @@ export default function MateriaisGrade({
         approval.from("rc_projetos_itens")
           .select("id, prazo_dias_manual, prazo_por, prazo_em")
           .eq("empresa", empresa).eq("codigo_projeto", codigoProjeto).not("prazo_dias_manual", "is", null),
+        // origem gravada da linha (sql/156: 'pc' = trazida de PC pela ponte) — sem a migração, segue sem ela
+        approval.from("rc_projetos_itens")
+          .select("id, origem, pc_numero")
+          .eq("empresa", empresa).eq("codigo_projeto", codigoProjeto).not("origem", "is", null),
       ]);
       const sugPorId = new Map(((sugs.error ? [] : sugs.data ?? []) as SugRow[]).map((x) => [x.id, x]));
+      const origemPorId = new Map(((origens.error ? [] : origens.data ?? []) as { id: string; origem: string; pc_numero: string | null }[]).map((x) => [x.id, x]));
       const prazoPorId = new Map(((prazosMan.error ? [] : prazosMan.data ?? []) as { id: string; prazo_dias_manual: number; prazo_por: string | null; prazo_em: string | null }[]).map((x) => [x.id, x]));
       // Sem marcar a carga como OK, a tela fica indistinguível de "projeto
       // vazio" — e foi assim que salvar por cima apagou lista alheia.
@@ -982,6 +1020,7 @@ export default function MateriaisGrade({
           cat_valor_unit: moeda(r.cat_valor_unit), cat_fornecedor: deHtml(s(r.cat_fornecedor)),
           cat_entrega_dias: s(r.cat_entrega_dias), cat_fat_dias: s(r.cat_fat_dias),
           _match: r.cat_ncod_prod ? "ok" : "", _alts: "", _vu_fonte: "",
+          _origem: s(origemPorId.get(r.id)?.origem), _origem_pc: s(origemPorId.get(r.id)?.pc_numero),
           _prazo_man: s(prazoPorId.get(r.id)?.prazo_dias_manual), _prazo_por: s(prazoPorId.get(r.id)?.prazo_por), _prazo_em: s(prazoPorId.get(r.id)?.prazo_em),
           ...gravada, ...omiePend, ...manter,
         }); }) as LinhaGrade[],
@@ -1140,6 +1179,7 @@ export default function MateriaisGrade({
   const valorCol = useCallback((l: LinhaGrade, k: string): string | number | null => {
     const c = cmpPorId.get(l._id);
     switch (k) {
+      case "_orig": return !String(l.item ?? "").trim() ? null : l._origem === "pc" ? "PC" : origemCp(l) ? "RC" : "novo";
       case "equipamento": return String(l.equipamento || "Geral").trim();
       case "cat_codigo": return semCodigoNosso(l) ? "" : String(l.cat_codigo ?? "").trim();
       case "item": return String(l.cat_ncod_prod && l._match !== "omie" && l._cat_desc ? l._cat_desc : l.item ?? "").trim();
@@ -1157,7 +1197,7 @@ export default function MateriaisGrade({
       case "_comprado": return c?.valor_pc ?? null;
       default: return null;
     }
-  }, [cmpPorId, prazoDe, planoDaLinha, sinais]);
+  }, [cmpPorId, prazoDe, planoDaLinha, sinais, origemCp]);
   const chaveFiltros = `painel.materiais.filtros.${empresa}.${codigoProjeto}`;
   const [filtrosCol, setFiltrosCol] = useState<Record<string, FiltroCol>>({});
   const [ordem, setOrdem] = useState<Ordem>(null);
@@ -1258,6 +1298,7 @@ export default function MateriaisGrade({
         body: JSON.stringify({
           empresa, codigo_projeto: codigoProjeto,
           confirmar_remocao: confirmarRemocao || intencional,
+          carregado_em: carregadoEmRef.current,
           esvaziar: intencional && validas.length === 0,
           items: validas.map((l) => {
             const sg = lerSug(l);

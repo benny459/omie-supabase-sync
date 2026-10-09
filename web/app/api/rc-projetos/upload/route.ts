@@ -73,6 +73,9 @@ type Body = {
   /** Lista inteira excluída pela grade (🗑 em todas as linhas, 07/10/26): items vazio vale,
    *  e tudo vai para a lixeira. Só com confirmar_remocao. Planilha vazia continua recusada. */
   esvaziar?: boolean;
+  /** Quando a grade carregou a lista (ISO). Linha que a ponte PC → lista (sql/156) criou
+   *  DEPOIS disso a grade nem conhecia: não sai por não vir no corpo (09/10/26). */
+  carregado_em?: string;
 };
 
 const HARD_CAP = 2000;
@@ -252,7 +255,16 @@ export async function POST(req: Request) {
   // alguém subiu uma planilha só com a aba "Eletrica". Restaram 36 itens de
   // painel num projeto de tratamento de água. Não havia rastro, e 48 dias
   // depois já estava fora de qualquer janela de recuperação do banco.
-  const aRemover = existingRows.filter((r) => !mantidos.has(r.id));
+  /* Ponte PC → lista (09/10/26): a linha de compra direta que entrou enquanto a grade estava
+     aberta não estava na tela — o "não veio no corpo" dela não é uma exclusão. */
+  const novasDaPonte = new Set<string>();
+  if (body.carregado_em && !Number.isNaN(Date.parse(body.carregado_em))) {
+    const desde = new Date(Date.parse(body.carregado_em)).toISOString();
+    const { data: pcs } = await approval.from("rc_projetos_itens").select("id")
+      .eq("empresa", empresa).eq("codigo_projeto", codigoProjeto).eq("origem", "pc").gt("criado_em", desde) as unknown as { data: { id: string }[] | null };
+    for (const r of pcs ?? []) novasDaPonte.add(r.id);
+  }
+  const aRemover = existingRows.filter((r) => !mantidos.has(r.id) && !novasDaPonte.has(r.id));
 
   /** Trava contra o apagão.
    *

@@ -23,6 +23,9 @@
     },
     "app/api/cron/agente-compras/route.ts": {
       "maxDuration": 120
+    },
+    "app/api/cron/ponte-pc/route.ts": {
+      "maxDuration": 300
     }
   },
   "crons": [
@@ -53,6 +56,10 @@
     {
       "path": "/api/cron/agente-compras",
       "schedule": "0 10 * * *"
+    },
+    {
+      "path": "/api/cron/ponte-pc",
+      "schedule": "30 9 * * *"
     }
   ]
 }

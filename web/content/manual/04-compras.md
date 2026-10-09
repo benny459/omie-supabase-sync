@@ -106,6 +106,10 @@ O novo valor passa a valer em Operação (Vendas avulsas / Projetos), na fila de
 - O número em **Compras** na barra soma NF sem pedido + requisições novas.
 - Uma faixa avisa **PCs criados no Omie depois de 01/10** — os pedidos devem nascer só no painel.
 
+## PC de projeto feito direto (fora da lista de materiais)
+
+Gravou um PC ligado a um projeto sem passar pela Lista de materiais? Logo depois de salvar, os itens do pedido que a lista não tem entram nela sozinhos, com o selo **PC** e o comentário “Item trazido do PC nnnn (compra direta, fora da lista)” — ver **Operação › Projetos › Compra direta**. Não é preciso fazer nada; o que a lista já tinha (mesmo código ou mesma descrição) só é ligado ao pedido. Cancelar o PC tira da lista as linhas que tinham vindo só dele (vão para Itens removidos).
+
 ## Pedidos criados pelo agente de compras (projetos)
 
 Na **Lista de materiais** de um projeto (etapa Planejamento), o **✨ Agente de compras** junta os itens do mesmo fornecedor em lotes, cada um com a data certa de pedir. Um lote **agendado** vira pedido de compra sozinho no dia, às 07:00, pelo mesmo caminho do “Gerar pedido de compra” da lista: fornecedor do cadastro, a última categoria e condição usadas com ele, e previsão = o primeiro “necessário em”. O pedido entra **em rascunho** — etapa **Pedido de Compra**, “Aprovação não solicitada” —: revise e use **Solicitar aprovação** para mandá-lo à aprovação. Avisos pelo Webex:

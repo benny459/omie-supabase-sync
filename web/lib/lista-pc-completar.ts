@@ -70,6 +70,14 @@ export async function completarPcs(d: DadosPcs, empresa = "SF", projeto?: number
   ]);
   const cancelados = new Set(((excAll.data ?? []) as { pc_numero: string; tipo?: string }[]).filter((x) => x.tipo === "cancelado").map((x) => String(x.pc_numero)));
   const devPc = new Map<string, ResumoDev>([...devolvidoPorPc(ajustes.devolucoes)].map(([k, v]) => [k.split("|")[1], v]));
+  /* Item de PC devolvido por inteiro (09/10/26) não é "comprado fora da lista": a ponte
+     PC → lista (lib/ponte-pc) não o traz, e ele sai daqui também. */
+  { const devItem = new Map<number, number>();
+    for (const dv of ajustes.devolucoes) if (!dv.desfeito_em) for (const it of dv.itens ?? []) devItem.set(Number(it.pc_item_id), (devItem.get(Number(it.pc_item_id)) ?? 0) + (Number(it.qtd) || 0));
+    if (devItem.size) d.fora_da_lista = d.fora_da_lista.filter((f) => {
+      const x = f as { pc_item_id?: number; qtd?: number | null };
+      return !(x.pc_item_id && Number(x.qtd) > 0 && (devItem.get(Number(x.pc_item_id)) ?? 0) >= Number(x.qtd));
+    }); }
   for (const l of d.itens) {
     if (cancelados.size) l.pcs = l.pcs.filter((p) => !cancelados.has(String(p.pc)));
     for (const p of l.pcs) { const dv = devPc.get(String(p.pc)); if (dv) p.devolucao = dv.tipo; }
