@@ -125,16 +125,29 @@ A janela acompanha: **1 · Enviando à Focus → 2 · Processando na SEFAZ → A
 
 ### Como faço para enviar a nota ou o recibo ao cliente
 
-**Nada é enviado sozinho.** Com o documento autorizado, clique em **Enviar ao cliente**. Ele está na janela de emissão e também na carteira, quando o pedido está 100% faturado.
-1. O painel mostra os e-mails do cadastro do cliente. Dá para corrigir ou acrescentar outros, separados por vírgula.
-2. Clique em **Enviar**. A NF-e vai com o DANFE (PDF) e o XML; o recibo vai em PDF.
-3. Você recebe uma cópia oculta. Se o cliente responder, a resposta chega no seu e-mail.
+**Nada é enviado sozinho.** Com o documento autorizado, clique em **✉ Enviar ao cliente**. O botão fica na janela de emissão e na carteira, quando o pedido está 100% faturado. Abre a mesma janela de envio do pedido de compra:
+1. **Para** vem com os e-mails do cadastro do cliente. Dá para tirar, acrescentar, e usar **Cc** e **Cco**.
+2. **Assunto** e **Texto complementar** são editáveis. O assunto segue o padrão do Omie: *SAFE WATER BRASIL LTDA - Recibo de Prestação de Serviço nº …*.
+3. Vão anexados o **DANFE (PDF) e o XML** da NF-e, ou o **recibo em PDF**. Dá para incluir mais um anexo, como o boleto.
+4. **👁 Visualizar o arquivo** mostra o PDF. **✉ Enviar agora** manda.
 
-O envio fica registrado. Na próxima vez que abrir, o painel avisa quando e para quem já foi enviado.
+**De onde sai:** *WaterWorks Faturamento <contasareceber@waterworks.com.br>*. Todo envio vai com **cópia oculta para o contasareceber@ e para quem enviou**, com os anexos. A resposta do cliente chega para quem enviou.
+
+**Histórico de envios** (na mesma janela): data, quem enviou, para quem, anexos e a situação do e-mail:
+- **Enviado — aguardando entrega**;
+- **✓ Entregue**;
+- **Entrega atrasada** (o servidor do cliente ainda está recebendo);
+- **✕ Devolvido** (o e-mail não existe ou recusou);
+- **✕ Marcado como spam**;
+- **✕ Falhou**.
+
+A situação se atualiza sozinha cada vez que a janela é aberta.
+
+**Enviou por WhatsApp ou pelo portal do cliente?** Use **✓ Marcar como enviado**. Ele só registra no histórico.
 
 ### De qual proposta é este pedido?
 
-Ao faturar um PV ou OS, o topo da emissão mostra **Faturando PV… · proposta OPS…**. É a proposta do CRM que originou o pedido; no Omie, esse número fica no campo **Contrato**.
+Ao faturar um PV ou OS, o topo da emissão mostra **Faturando PV… · Proposta Aprovada OPS…**: é a proposta do CRM que originou o pedido. O mesmo número aparece no campo **Proposta Aprovada** da seção Recebimento. No Omie, esse campo se chama **Contrato**.
 
 ## Como faço uma NF-e de devolução ou de simples remessa
 

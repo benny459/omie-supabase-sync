@@ -72,6 +72,8 @@ type Anexo = { filename: string; content: string };
 export async function enviarResend(m: {
   para: string[]; cc?: string[]; cco?: string[]; assunto: string; html: string; texto?: string;
   replyTo: string | string[]; messageId: string; inReplyTo?: string | null; references?: string[]; anexos?: Anexo[];
+  /** Remetente; padrão COMPRAS_EMAIL_REMETENTE (o Faturamento usa o seu). */
+  de?: string;
 }) {
   const headers: Record<string, string> = { "Message-ID": m.messageId };
   if (m.inReplyTo) headers["In-Reply-To"] = m.inReplyTo;
@@ -79,7 +81,7 @@ export async function enviarResend(m: {
   const r = await fetch("https://api.resend.com/emails", {
     method: "POST", headers: { Authorization: `Bearer ${process.env.RESEND_API_KEY}`, "Content-Type": "application/json" },
     body: JSON.stringify({
-      from: process.env.COMPRAS_EMAIL_REMETENTE, to: m.para, cc: m.cc?.length ? m.cc : undefined,
+      from: m.de || process.env.COMPRAS_EMAIL_REMETENTE, to: m.para, cc: m.cc?.length ? m.cc : undefined,
       bcc: m.cco?.length ? m.cco : undefined, reply_to: m.replyTo, subject: m.assunto, html: m.html,
       text: m.texto || undefined, headers, attachments: m.anexos?.length ? m.anexos : undefined,
     }),

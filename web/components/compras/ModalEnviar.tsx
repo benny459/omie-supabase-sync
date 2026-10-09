@@ -19,7 +19,7 @@ type Dados = {
 
 const emailOk = (e: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e);
 
-function CampoEmails({ valor, onChange, placeholder }: { valor: string[]; onChange: (v: string[]) => void; placeholder?: string }) {
+export function CampoEmails({ valor, onChange, placeholder }: { valor: string[]; onChange: (v: string[]) => void; placeholder?: string }) {
   const [t, setT] = useState("");
   const add = (txt: string) => {
     const novos = txt.split(/[,;\s]+/).map((x) => x.trim()).filter(Boolean);

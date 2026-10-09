@@ -1108,7 +1108,7 @@ export default function NovaEmissao({ config, aberto, fechar, avisar, onEmitido,
                 </div>
               )}
               {chave && rotulo && <div className="ne-nums"><span className="k">Faturando</span><b>{rotulo}</b>
-                {propOrigem && <span title="Proposta do CRM que originou este pedido">· proposta <b>{propOrigem}</b></span>}
+                {propOrigem && <span title="Proposta do CRM que originou este pedido">· Proposta Aprovada <b>{propOrigem}</b></span>}
                 {chave.startsWith("os_omie:") && !teste && prod && <b>· Recibo nº {prox?.recibo ?? "…"}</b>}
                 {chave.startsWith("os_omie:") && teste && <span>· teste: numeração real não é usada</span>}
                 {!inicial && <button className="ne-lk" onClick={() => { setChave(null); setRotulo(null); setCarteira(null); }}>trocar</button>}</div>}
@@ -1429,7 +1429,7 @@ export default function NovaEmissao({ config, aberto, fechar, avisar, onEmitido,
                     }} />
                 </div>
                 {sel("Vendedor", vendedor, setVendedor, opc?.vendedores ?? [], 170)}
-                <label className="ne-rot" style={{ width: 160 }}>Contrato (CT)<input className="ne-in" value={contrato} onChange={(e) => setContrato(e.target.value)} /></label>
+                <label className="ne-rot" style={{ width: 180 }} title="Nº da proposta do CRM que originou o pedido (no Omie, campo Contrato)">Proposta Aprovada<input className="ne-in" value={contrato} onChange={(e) => setContrato(e.target.value)} placeholder="ex.: OPS1708261801" /></label>
               </div>
               {(instr.linhas.length > 0 || instr.faltas.length > 0) && (
                 <div className="ne-pag">

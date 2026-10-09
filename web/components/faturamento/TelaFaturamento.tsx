@@ -1388,7 +1388,7 @@ function ResumoNota({ res, tipo, editar }: { res: Resumo | null; tipo: string; e
           {!rec && linha("Frete", t ? `${FRETE[t.modalidade] ?? t.modalidade}${t.nome ? ` · ${t.nome}` : ""}` : "sem frete")}
           {!rec && linha("Pedido do cliente (OC)", res.pedido_cliente)}
           {rec && linha("Categoria", cond?.categoria)}
-          {rec && linha("Contrato", cond?.contrato)}
+          {rec && linha("Proposta Aprovada", cond?.contrato)}
           {linha("Projeto", cond?.projeto)}
           {linha("Vendedor", cond?.vendedor)}
           {linha(rec ? "Total do recibo" : "Total da nota", fmt(res.total ?? 0))}
