@@ -62,6 +62,11 @@ console.log(`✓ vídeo: ${out} (${t.toFixed(0)}s)`);
 /** Fala em pt-BR; as palavras de INGLES saem na voz americana e são emendadas na frase. */
 function falar(texto, mp3, base) {
   const tts = (voz, t, out) => {
+    if (process.env.TUTORIAL_TTS === "gemini") { // 13/10/26: voz neural do Gemini (mais natural)
+      const r = spawnSync("python3", [join(dirname(new URL(import.meta.url).pathname), "tts-gemini.py"), t, out], { stdio: "inherit" });
+      if (r.status) throw new Error(`Gemini TTS falhou: ${t.slice(0, 40)}`);
+      return;
+    }
     if (!semEdge) {
       const r = spawnSync(EDGE, ["--voice", voz, "--rate", "+4%", "--text", t, "--write-media", out], { stdio: "pipe" });
       if (!r.status && existsSync(out) && statSync(out).size > 1000) return;
@@ -73,7 +78,7 @@ function falar(texto, mp3, base) {
     if (r2.status) throw new Error(`say falhou: ${t.slice(0, 40)}`);
     execFileSync("ffmpeg", ["-y", "-loglevel", "error", "-i", aiff, "-ar", "24000", "-ac", "1", "-c:a", "libmp3lame", "-q:a", "2", out]);
   };
-  if (semEdge) return tts(VOZ, texto, mp3); // voz do macOS: a frase inteira numa voz só (sem emenda em inglês)
+  if (semEdge || process.env.TUTORIAL_TTS === "gemini") return tts(VOZ, texto, mp3); // frase inteira numa voz só // voz do macOS: a frase inteira numa voz só (sem emenda em inglês)
   const partes = texto.split(INGLES).filter((t) => t && /[\p{L}\p{N}]/u.test(t));
   if (partes.length === 1) return tts(VOZ, texto, mp3);
   const arqs = partes.map((t, k) => {
