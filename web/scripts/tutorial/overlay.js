@@ -24,12 +24,17 @@
   };
   window.__tut = {
     limpar,
-    passo({ sel, texto, legenda, fala, n, total, titulo }) {
+    passo({ sel, texto, legenda, fala, n, total, titulo, rolar }) {
       limpar();
-      const alvo = sel ? document.querySelector(sel) : texto ? achar(texto) : null;
+      // sel com vírgula = vários elementos → um anel só em volta de todos (13/10/26)
+      const todos = sel ? [...document.querySelectorAll(sel)].filter((e) => e.offsetParent !== null) : [];
+      const alvo = sel ? todos[0] || null : texto ? achar(texto) : null;
       if (alvo) {
-        alvo.scrollIntoView({ block: "center", inline: "nearest" });
-        const r = alvo.getBoundingClientRect();
+        if (!rolar || rolar !== "nao") alvo.scrollIntoView({ block: "center", inline: "nearest" });
+        const rs = (todos.length ? todos : [alvo]).map((e) => e.getBoundingClientRect());
+        const r = { left: Math.min(...rs.map((x) => x.left)), top: Math.min(...rs.map((x) => x.top)),
+          right: Math.max(...rs.map((x) => x.right)), bottom: Math.max(...rs.map((x) => x.bottom)) };
+        r.width = r.right - r.left; r.height = r.bottom - r.top;
         Object.assign(el("__tut_ring").style, { left: r.left - 6 + "px", top: r.top - 6 + "px", width: r.width + 12 + "px", height: r.height + 12 + "px" });
         Object.assign(el("__tut_cur").style, { left: r.left + r.width / 2 + "px", top: r.top + r.height / 2 + "px" });
       }

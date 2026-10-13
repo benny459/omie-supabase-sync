@@ -1,0 +1,65 @@
+{
+ "titulo": "Cobrança (inadimplentes) — como funciona",
+ "passos": [
+  {
+   "img": "img/01.jpg",
+   "fala": "Esta tela, no Financeiro, é a Cobrança de inadimplentes. Ela junta, por cliente, os títulos a receber que já venceram e ainda não foram pagos. Aqui você registra o que o cliente disse e quando promete pagar."
+  },
+  {
+   "img": "img/02.jpg",
+   "fala": "No topo ficam os números da lista: o total vencido, quantos clientes e quantos títulos, quantos estão sem previsão, quantos com a previsão vencida, e quantos clientes ainda não têm nenhuma posição registrada. Esses números acompanham os filtros."
+  },
+  {
+   "img": "img/03.jpg",
+   "fala": "Na busca, você procura pelo nome do cliente, CNPJ, número do documento, nota fiscal ou pedido."
+  },
+  {
+   "img": "img/04.jpg",
+   "fala": "Os filtros separam por empresa, por faixa de atraso, pela situação da previsão e por responsável, que é quem registrou a última posição. Em Responsável, a opção Eu mostra só os clientes que você está cobrando."
+  },
+  {
+   "img": "img/05.jpg",
+   "fala": "Cada linha é um cliente: quanto ele deve em títulos vencidos e quantos títulos são. A lista já vem do maior valor para o menor. Clique no título de qualquer coluna para mudar a ordem."
+  },
+  {
+   "img": "img/06.jpg",
+   "fala": "O atraso é contado pelo título mais antigo do cliente. Amarelo vai até trinta dias, vermelho de trinta e um a noventa, e o vermelho forte passa de noventa dias, como a Biogesp e a Hapvida."
+  },
+  {
+   "img": "img/07.jpg",
+   "fala": "Em Última posição aparece o último registro feito para o cliente: o que ele disse, o tipo do contato, quem registrou e quando. Aqui, na Biogesp, o título foi enviado para protesto, e o registro foi feito como contestação."
+  },
+  {
+   "img": "img/08.jpg",
+   "fala": "Próxima previsão é a data em que o dinheiro deve entrar, a mesma que o Fluxo de Caixa usa. Sem previsão quer dizer que ninguém combinou nada ainda. Previsão vencida quer dizer que o cliente prometeu e a data passou. É por esses que vale começar."
+  },
+  {
+   "img": "img/09.jpg",
+   "fala": "Clique no cliente para abrir a ficha de cobrança. No topo da ficha estão o total vencido, em quantos títulos, o maior atraso e a situação da previsão. Lembre: nada desta tela é enviado ao cliente."
+  },
+  {
+   "img": "img/10.jpg",
+   "fala": "Em Contatos estão o e-mail de cobrança, os outros e-mails, os telefones e as pessoas do cadastro do cliente. Pelo link Ficha do cliente você abre o cadastro completo, para corrigir ou completar um contato."
+  },
+  {
+   "img": "img/11.jpg",
+   "fala": "Em Títulos vencidos aparecem o número, o pedido, a emissão, o vencimento, o valor em aberto, o atraso e a previsão de cada título. A marcação à esquerda define em quais títulos vale o registro que você fizer. Clicar no número filtra o histórico só daquele título."
+  },
+  {
+   "img": "img/12.jpg",
+   "fala": "Copiar mensagem de cobrança monta um texto pronto com os títulos marcados e já copia para você colar. O tom muda com o atraso: cordial até quinze dias, firme até trinta, e formal acima disso. Você envia pelo seu e-mail ou WhatsApp; daqui nada sai."
+  },
+  {
+   "img": "img/13.jpg",
+   "fala": "Depois de falar com o cliente, registre aqui: o tipo do contato, o que ele disse e, se prometeu uma data, a nova previsão. Ao clicar em Registrar, ficam gravados quem e quando, e a nova previsão passa a valer no Fluxo de Caixa. O vencimento original não muda. Neste vídeo, o exemplo não foi gravado."
+  },
+  {
+   "img": "img/14.jpg",
+   "fala": "No Histórico fica tudo o que já foi registrado para o cliente: o tipo, quem registrou, quando, e as mudanças de previsão. Nada se apaga. Se algo saiu errado, clique em corrigir: a correção entra como um registro novo, ligado ao original."
+  },
+  {
+   "img": "img/15.jpg",
+   "fala": "No rodapé aparece o que ficou fora da cobrança: títulos muito antigos do Omie, que são assunto da conciliação. Uma boa rotina é filtrar Previsão vencida, depois Sem previsão, falar com cada cliente e registrar o que ele disse. Assim o Fluxo de Caixa fica com a data real."
+  }
+ ]
+}

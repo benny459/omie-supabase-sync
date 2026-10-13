@@ -7,7 +7,7 @@
 // Saída: tutoriais/<slug>/<slug>.mp4 (1440×900, legenda como faixa liga/desliga) + audio/ e partes/.
 
 import { execFileSync, spawnSync } from "node:child_process";
-import { readFileSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
+import { readFileSync, writeFileSync, mkdirSync, existsSync, statSync } from "node:fs";
 import { join, dirname, basename, resolve } from "node:path";
 import { homedir } from "node:os";
 
@@ -19,6 +19,8 @@ const VOZ = process.env.TUTORIAL_VOZ || "pt-BR-AntonioNeural";
 const EDGE = process.env.EDGE_TTS_BIN || (existsSync(join(homedir(), "Library/Python/3.9/bin/edge-tts")) ? join(homedir(), "Library/Python/3.9/bin/edge-tts") : "edge-tts");
 const PAUSA = 0.6; // segundos de respiro depois de cada fala
 const VOZ_EN = process.env.TUTORIAL_VOZ_EN || "en-US-AndrewMultilingualNeural";
+const VOZ_MAC = process.env.TUTORIAL_VOZ_MAC || "Luciana";
+let semEdge = process.env.TUTORIAL_TTS === "mac";
 // palavras ditas em inglês (voz americana encaixada na frase): "budget" soa "bâdjet", não "budjé"
 const INGLES = /\b(budget)\b/gi;
 const W = Number(process.env.TUTORIAL_W || 1920), H = Number(process.env.TUTORIAL_H || 1200);
@@ -60,9 +62,18 @@ console.log(`✓ vídeo: ${out} (${t.toFixed(0)}s)`);
 /** Fala em pt-BR; as palavras de INGLES saem na voz americana e são emendadas na frase. */
 function falar(texto, mp3, base) {
   const tts = (voz, t, out) => {
-    const r = spawnSync(EDGE, ["--voice", voz, "--rate", "+4%", "--text", t, "--write-media", out], { stdio: "inherit" });
-    if (r.status) throw new Error(`edge-tts falhou: ${t.slice(0, 40)}`);
+    if (!semEdge) {
+      const r = spawnSync(EDGE, ["--voice", voz, "--rate", "+4%", "--text", t, "--write-media", out], { stdio: "pipe" });
+      if (!r.status && existsSync(out) && statSync(out).size > 1000) return;
+      semEdge = true; // 13/10/26: o serviço da Microsoft passou a responder 403 — cai para a voz do macOS
+      console.warn("⚠ edge-tts indisponível — usando a voz do macOS (" + VOZ_MAC + ")");
+    }
+    const aiff = out.replace(/\.mp3$/, ".aiff");
+    const r2 = spawnSync("say", ["-v", VOZ_MAC, "-r", "182", "-o", aiff, t], { stdio: "inherit" });
+    if (r2.status) throw new Error(`say falhou: ${t.slice(0, 40)}`);
+    execFileSync("ffmpeg", ["-y", "-loglevel", "error", "-i", aiff, "-ar", "24000", "-ac", "1", "-c:a", "libmp3lame", "-q:a", "2", out]);
   };
+  if (semEdge) return tts(VOZ, texto, mp3); // voz do macOS: a frase inteira numa voz só (sem emenda em inglês)
   const partes = texto.split(INGLES).filter((t) => t && /[\p{L}\p{N}]/u.test(t));
   if (partes.length === 1) return tts(VOZ, texto, mp3);
   const arqs = partes.map((t, k) => {
